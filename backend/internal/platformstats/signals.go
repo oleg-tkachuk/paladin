@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oleg-tkachuk/limes"
 )
 
 // Signal names one of the census counts the console flags for an operator's
@@ -42,11 +43,6 @@ var signalQueries = map[Signal]string{
 		FROM ` + allQuotaRowsSQL + `
 		WHERE ` + quotaNearLimitSQL + ` AND NOT ` + quotaAtLimitSQL + `
 		GROUP BY 1`,
-	SignalCapabilitiesExpiring: `
-		SELECT c.tenant_id::text, count(*)
-		FROM limes.capabilities c
-		WHERE ` + capabilityExpiringSQL + `
-		GROUP BY 1`,
 	SignalAPITokensExpiring: `
 		SELECT tenant_id::text, count(*)
 		FROM api_tokens
@@ -63,7 +59,7 @@ var signalArgs = map[Signal][]any{
 func ParseSignal(s string) (Signal, bool) {
 	sig := Signal(s)
 	_, ok := signalQueries[sig]
-	return sig, ok
+	return sig, ok || sig == SignalCapabilitiesExpiring
 }
 
 // TenantCount is one tenant's share of a signal.
@@ -88,6 +84,9 @@ type SignalTenants struct {
 // CollectSignalTenants groups one signal's rows by tenant. It runs on the
 // worker's BYPASSRLS pool for the same reason CollectRLS does.
 func CollectSignalTenants(ctx context.Context, pool *pgxpool.Pool, signal Signal, page TenantPage) (*SignalTenants, error) {
+	if signal == SignalCapabilitiesExpiring {
+		return collectExpiringCapabilities(ctx, pool, page)
+	}
 	query, ok := signalQueries[signal]
 	if !ok {
 		return nil, fmt.Errorf("census: unknown signal %q", signal)
@@ -116,6 +115,12 @@ func CollectSignalTenants(ctx context.Context, pool *pgxpool.Pool, signal Signal
 		return nil, fmt.Errorf("census: %s: %w", signal, err)
 	}
 
+	rankTenants(out, tenants, page)
+	return out, nil
+}
+
+// rankTenants pages tenants into out, biggest share first.
+func rankTenants(out *SignalTenants, tenants []TenantCount, page TenantPage) {
 	sort.Slice(tenants, func(i, j int) bool {
 		return tenantBefore(tenants[i].Count, tenants[i].TenantID, tenants[j].Count, tenants[j].TenantID)
 	})
@@ -124,7 +129,34 @@ func CollectSignalTenants(ctx context.Context, pool *pgxpool.Pool, signal Signal
 	if out.Tenants == nil {
 		out.Tenants = []TenantCount{}
 	}
+}
+
+// collectExpiringCapabilities is SignalCapabilitiesExpiring by tenant, from
+// the same census the card's count comes from.
+func collectExpiringCapabilities(ctx context.Context, pool *pgxpool.Pool, page TenantPage) (*SignalTenants, error) {
+	ctx, census, err := capabilityCensus(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := countRecords(ctx, census, limes.CountRecordsRequest{ByTenant: true})
+	if err != nil {
+		return nil, fmt.Errorf("census: %s: %w", SignalCapabilitiesExpiring, err)
+	}
+	out := &SignalTenants{Signal: SignalCapabilitiesExpiring}
+	rankTenants(out, expiringByTenant(counts), page)
 	return out, nil
+}
+
+// expiringByTenant is each tenant's active records expiring soon, for the
+// tenants with any.
+func expiringByTenant(counts []limes.RecordCount) []TenantCount {
+	var out []TenantCount
+	for _, c := range counts {
+		if c.ExpiringSoon > 0 {
+			out = append(out, TenantCount{TenantID: c.TenantID.String(), Count: c.ExpiringSoon})
+		}
+	}
+	return out
 }
 
 // signalParam carries the signal on the worker's drill-down endpoint, beside
