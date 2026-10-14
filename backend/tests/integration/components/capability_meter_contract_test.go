@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/metertest"
@@ -28,6 +29,16 @@ WITH unhooked AS (
     UPDATE limes.capabilities SET parent_id = NULL WHERE parent_id = $1
 )
 DELETE FROM limes.capabilities WHERE id = $1`
+
+// newLedger is the server's reader of the charges ledger over pool.
+func newLedger(t *testing.T, pool *pgxpool.Pool, opts ...capstore.Option) limes.LedgerReader {
+	t.Helper()
+	l, err := capstore.NewLedger(pool, opts...)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	return l
+}
 
 // The module's Meter contract, on the app role under row-level security, as
 // the server runs the store, on a clock the suite moves.
@@ -57,6 +68,8 @@ func TestMeterContract(t *testing.T) {
 			ListCtx:       capstore.ReadAllTenants(ctx),
 			ScopesTenants: true,
 			Advance:       clock.Advance,
+			Now:           clock.Now,
+			Ledger:        newLedger(t, pool, capstore.WithClock(clock.Now)),
 			NewCapability: func(spec metertest.CapabilitySpec) (uuid.UUID, error) {
 				owner := tenant
 				if spec.Tenant != uuid.Nil {

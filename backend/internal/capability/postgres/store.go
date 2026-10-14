@@ -68,6 +68,16 @@ func New(pool *pgxpool.Pool, opts ...Option) (*pgstore.Store, error) {
 	return pgstore.NewStore(cfg)
 }
 
+// NewLedger is the reader of the charges ledger, for billing and reports,
+// scoped as the stores are.
+func NewLedger(pool *pgxpool.Pool, opts ...Option) (*pgstore.Ledger, error) {
+	cfg, _, err := config(pool, opts)
+	if err != nil {
+		return nil, err
+	}
+	return pgstore.NewLedger(cfg)
+}
+
 // UsageStore is pgstore's meter, a tenant budget set with no unit written in
 // the platform's currency.
 type UsageStore struct {
