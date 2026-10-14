@@ -139,7 +139,9 @@ describe("CollectionTrashPage confirmations", () => {
     renderPage();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select old.pdf" }));
 
-    const restore = await openDialog(/Restore all/);
+    const bar = () => within(screen.getByRole("toolbar"));
+    fireEvent.click(bar().getByRole("button", { name: /^Restore$/ }));
+    const restore = await screen.findByRole("alertdialog");
     expect(restore).toHaveTextContent("Restore this object?");
     expect(h.bulkRestoreObjects).not.toHaveBeenCalled();
     fireEvent.click(
@@ -153,7 +155,8 @@ describe("CollectionTrashPage confirmations", () => {
     expect(h.restoreObject).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select old.pdf" }));
-    const purge = await openDialog(/Purge all/);
+    fireEvent.click(bar().getByRole("button", { name: /^Purge$/ }));
+    const purge = await screen.findByRole("alertdialog");
     fireEvent.click(
       within(purge).getByRole("button", { name: "Purge permanently" }),
     );

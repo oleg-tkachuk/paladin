@@ -102,9 +102,9 @@ describe("ConfirmModal", () => {
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
-  // The object inspector (z-60) and the bulk-actions bar (z-80) open
+  // The object inspector (z-60) and a selection bar (z-50) open
   // confirmations; neither may cover one.
-  it("stacks above the inspector panel and the bulk-actions bar", () => {
+  it("stacks above the inspector panel and the selection bar", () => {
     render(
       <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
     );

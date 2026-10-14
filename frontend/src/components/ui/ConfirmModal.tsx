@@ -67,8 +67,8 @@ export function ConfirmModal({
   return (
     <AlertDialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       {/* Above every panel and bar it can be opened from — the object
-          inspector (z-60), the bulk-actions bar (z-80) — so neither covers
-          the question it raised. */}
+          inspector (z-60), a selection bar (z-50) — so none covers the
+          question it raised. */}
       <AlertDialogContent
         overlayClassName="z-100"
         className="z-100 max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6"

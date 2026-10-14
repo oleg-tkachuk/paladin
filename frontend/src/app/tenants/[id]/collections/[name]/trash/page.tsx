@@ -40,6 +40,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 import { useCollection } from "../collection-context";
@@ -364,48 +365,44 @@ export default function CollectionTrashPage() {
         </Table>
       </Card>
 
-      {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-          <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 shadow-lg">
-            <Badge variant="secondary" className="font-mono tabular-nums">
-              {selected.size} selected
-            </Badge>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={Boolean(changesBlocked) || bulkBusy}
-              title={changesBlocked ?? undefined}
-              onClick={() =>
-                setPending({
-                  kind: "restore",
-                  ids: Array.from(selected),
-                  selection: true,
-                })
-              }
-            >
-              <ArrowUturnLeftIcon className="size-4" />
-              Restore all
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={Boolean(changesBlocked) || bulkBusy}
-              title={changesBlocked ?? undefined}
-              onClick={() =>
-                setPending({
-                  kind: "purge",
-                  ids: Array.from(selected),
-                  selection: true,
-                })
-              }
-            >
-              <TrashIcon className="size-4" />
-              Purge all
-            </Button>
-          </div>
-        </div>
-      )}
+      <SelectionBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+      >
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={Boolean(changesBlocked) || bulkBusy}
+          title={changesBlocked ?? undefined}
+          onClick={() =>
+            setPending({
+              kind: "restore",
+              ids: Array.from(selected),
+              selection: true,
+            })
+          }
+        >
+          <ArrowUturnLeftIcon />
+          Restore
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          disabled={Boolean(changesBlocked) || bulkBusy}
+          title={changesBlocked ?? undefined}
+          onClick={() =>
+            setPending({
+              kind: "purge",
+              ids: Array.from(selected),
+              selection: true,
+            })
+          }
+        >
+          <TrashIcon />
+          Purge
+        </Button>
+      </SelectionBar>
 
       <ConfirmModal
         isOpen={pending?.kind === "restore"}
