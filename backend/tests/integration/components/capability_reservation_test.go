@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
@@ -108,8 +109,8 @@ const (
 	holdLapse    = 20 * time.Millisecond
 )
 
-// The sweep runs with no request tenant, on the app role, marked
-// platform-wide as the purger marks it: the scope then covers every tenant.
+// The sweep runs with no request tenant, on the app role, scoped to write
+// every tenant as the purger scopes it; a platform-wide read is refused.
 func TestExpiredReservationsAreReleased(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
@@ -131,7 +132,11 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 	if res, err := f.usage.ReleaseExpired(ctx, limes.ReleaseExpiredRequest{}); err != nil || res.Released != 0 {
 		t.Fatalf("ReleaseExpired on a bare context = %d, %v; want 0 — the scope is not engaging", res.Released, err)
 	}
-	res, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), limes.ReleaseExpiredRequest{})
+	if _, err := f.usage.ReleaseExpired(capstore.ReadAllTenants(ctx), limes.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
+		t.Fatalf("ReleaseExpired under a read-only scope: err = %v, want ErrScopeMismatch", err)
+	}
+	// Housekeeping, as the purger scopes it.
+	res, err := f.usage.ReleaseExpired(pgstore.WithAllTenants(ctx), limes.ReleaseExpiredRequest{})
 	if err != nil || res.Released != 1 {
 		t.Fatalf("ReleaseExpired = %d, %v; want 1", res.Released, err)
 	}
