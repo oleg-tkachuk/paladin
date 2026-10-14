@@ -27,6 +27,9 @@ interface ConfirmModalProps {
   children?: ReactNode;
   type?: "danger" | "warning";
   confirmText?: string;
+  // Holds the confirm button while the action's own input is not ready, such
+  // as an empty field the action needs.
+  confirmDisabled?: boolean;
   cancelText?: string;
   loading?: boolean;
 }
@@ -48,6 +51,7 @@ export function ConfirmModal({
   children,
   type = "warning",
   confirmText = "Confirm",
+  confirmDisabled = false,
   cancelText = "Cancel",
   loading = false,
 }: ConfirmModalProps) {
@@ -128,7 +132,7 @@ export function ConfirmModal({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={cn(
               "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50",
               isDanger

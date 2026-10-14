@@ -168,4 +168,18 @@ describe("ConfirmModal", () => {
       ),
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
+
+  it("holds only the confirm button while confirmDisabled", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        confirmText="Revoke copy"
+        confirmDisabled
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Revoke copy" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  });
 });
