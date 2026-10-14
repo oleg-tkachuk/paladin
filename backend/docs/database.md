@@ -28,6 +28,14 @@ not supported — see [upgrading.md](../../docs/upgrading.md).
 Migrations run under [Goose](https://github.com/pressly/goose) as
 `paladin_migrate`, which holds DDL rights. The application role does not.
 
+Capabilities are the exception: their records, revocations, meter, charges
+and tenant budgets live in the `limes` schema, which
+[limes/pgstore](https://github.com/oleg-tkachuk/limes/tree/main/pgstore)
+creates and migrates itself (its own version table, `limes.schema_version`).
+The migrate step runs it first, as the same role, then Goose: `076` grants
+the runtime roles pgstore's tables and hangs Paladin's revocation triggers on
+them, so they must exist before it runs.
+
 ### After the baseline
 
 | File | Change |
@@ -62,6 +70,7 @@ Migrations run under [Goose](https://github.com/pressly/goose) as
 | `040`–`042` | `audit_log.resource_tenant_id`, its backfill and index |
 | `043` | `rabbitmq` in the `event_sink_kind` enum |
 | `044` | `bucket_quotas`: bucket caps move out of `quotas`, outside RLS ([ADR-0025](../../docs/adr/0025-bucket-quotas-are-platform-configuration.md)) |
+| `076` | the capability tables are dropped, their rows with them; capabilities move to the `limes` schema |
 
 Each file's header comment says why it exists.
 
@@ -82,7 +91,7 @@ the OAuth protocol itself defines.
 ## Table groups
 
 **Tenancy** — `tenants`, `tenant_slug_history`, `tenant_default_bindings`,
-`tenant_storage_migrations`, `tenant_budgets`. A tenant's slug is unique
+`tenant_storage_migrations`. A tenant's slug is unique
 among live tenants only; a soft-deleted tenant keeps its slug so the audit
 trail stays resolvable, and renames are recorded in `tenant_slug_history`.
 
@@ -108,17 +117,18 @@ either order within one transaction but can never disagree at commit.
 
 **Governance** — `quotas` (one per tenant), `bucket_quotas` (one per bucket,
 deliberately not RLS'd: a bucket's cap is platform configuration, like the
-bucket), `capability_records`, `capability_revocations`,
-`capability_biscuit_revocations` (revoked copies of a capability's Biscuit,
-by block revocation id), `capability_usage`, `capability_copy_usage` (the
-counters of Biscuit copies with limits of their own),
-`capability_reservations` (open budget holds), `charges`, `charge_refunds`,
-`tenant_rate_buckets`. Quota caps are `NOT NULL DEFAULT 0` where 0
+bucket), `tenant_rate_buckets`. Quota caps are `NOT NULL DEFAULT 0` where 0
 means "no cap" — the convention every reader uses (`max_x > 0 AND usage_x >=
 max_x`). Nullable caps would poison those comparisons three-valued.
-`charges` captures `tenant_slug` at charge time: the ledger must stay
-readable after a rename, and history is not rewritten by a later `UPDATE`
-elsewhere.
+
+**Capabilities** — the `limes` schema, pgstore's: `capabilities`,
+`revocations`, `biscuit_revocations` (revoked copies of a capability's
+Biscuit, by block revocation id), `usage`, `copy_usage` (the counters of
+Biscuit copies with limits of their own), `reservations` (open budget holds),
+`charges` (the ledger billing reads), `tenant_budgets`. Every table carries
+its tenant and none refers to `tenants`: purging a tenant deletes its rows
+there explicitly (`capability/postgres.DeleteTenant`). The ledger and the
+counters outlive a purged capability record.
 
 **Events** — `event_subscriptions`, `event_deliveries`, `ingested_events`.
 `event_deliveries` is the transactional outbox ([ADR-0003](../../docs/adr/0003-transactional-outbox.md)):
@@ -168,10 +178,14 @@ matches no row — the safe direction. Most policies also admit
 only, so an authorised platform-wide read can see every tenant while a write
 stays pinned to one.
 
-Four tables are isolated through their capability rather than a local
-`tenant_id`: `capability_usage`, `capability_revocations`,
-`capability_biscuit_revocations` and `capability_copy_usage`. The duplication
-of `tenant_id` elsewhere is for the hot path, not a reflex.
+The `limes` schema has policies of its own, on settings pgstore sets per
+transaction (`limes.tenant_id`, `limes.all_tenants`).
+`capability/postgres.Scope` sets them from the same request context the
+`paladin.*` settings come from: the acting tenant, or every tenant for a
+platform-wide call. Unlike `paladin.cross_tenant`, `limes.all_tenants` widens
+writes too, so only housekeeping and the platform-wide reads set it. The
+revocation checks the verifier makes before it knows a token's tenant are
+`SECURITY DEFINER` functions of the schema, which read every tenant.
 
 ### Acting on another tenant's behalf
 
@@ -220,7 +234,7 @@ See [db-roles.md](db-roles.md) for the role split.
 | `*_notify_policy_changed` | `tenants`, `collections`, `buckets` | `pg_notify('policy_changed', …)` so the Cedar engine invalidates its cache |
 | `multipart_uploads_abort_debt` | `multipart_uploads` | A cascade delete records the S3 abort it still owes in `pending_multipart_aborts` |
 | `audit_log_notify` | `audit_log` | `pg_notify('paladin_audit', …)` for the live audit stream |
-| `capability_revocations_notify`, `capability_biscuit_revocations_notify` | those tables | `pg_notify('capability_revoked', '*')` so every replica clears its revocation cache |
+| `revocations_notify`, `biscuit_revocations_notify` | `limes.revocations`, `limes.biscuit_revocations` | `pg_notify('capability_revoked', '*')` so every replica clears its revocation cache |
 
 The policy-invalidation payload is a contract with
 `internal/policy/cedar/store.go`: `"<tenant_uuid>"` for a tenant,

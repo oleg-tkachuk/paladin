@@ -5,17 +5,14 @@ package components
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // rlsUsage is a usage store on the app role, without BYPASSRLS, as the
@@ -23,8 +20,7 @@ import (
 // tenant scoping the interceptor's ledger context sets.
 func rlsUsage(t *testing.T, ctx context.Context, f lineageFixture) *capstore.UsageStore {
 	t.Helper()
-	pool := rlsPool(t, ctx, f.pool)
-	return capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop())
+	return newUsageStore(t, rlsPool(t, ctx, f.pool))
 }
 
 func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
@@ -79,7 +75,7 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 		t.Errorf("parent after settle = %+v, want 4 spent, 0 held", root)
 	}
 	var op, actor string
-	if err := f.pool.QueryRow(ctx, `SELECT op, actor_subject FROM charges WHERE id = $1`, receipt.ChargeID).Scan(&op, &actor); err != nil {
+	if err := f.pool.QueryRow(ctx, `SELECT op, actor FROM limes.charges WHERE id = $1`, receipt.ChargeID).Scan(&op, &actor); err != nil {
 		t.Fatalf("settled charge not in the ledger: %v", err)
 	}
 	if op != "llm" || actor != "agent" {
@@ -105,8 +101,15 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	}
 }
 
-// The sweep runs with no request tenant, on the app role: it lists across
-// tenants and releases each reservation under that reservation's tenant.
+// shortHoldTTL is how long the sweep test's hold lives, and holdLapse how
+// long the test waits, past it, before the sweep.
+const (
+	shortHoldTTL = time.Millisecond
+	holdLapse    = 20 * time.Millisecond
+)
+
+// The sweep runs with no request tenant, on the app role, marked
+// platform-wide as the purger marks it: the scope then covers every tenant.
 func TestExpiredReservationsAreReleased(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
@@ -115,15 +118,18 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 
 	child := f.subject(t, ctx, f.child)
 	r, err := f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
-		Subject: child, Amount: limes.MustParseAmount("20"), TTL: time.Millisecond,
+		Subject: child, Amount: limes.MustParseAmount("20"), TTL: shortHoldTTL,
 	})
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(holdLapse)
 
 	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
 		t.Fatalf("settle after expiry: err = %v, want ErrReservationNotFound", err)
+	}
+	if res, err := f.usage.ReleaseExpired(ctx, limes.ReleaseExpiredRequest{}); err != nil || res.Released != 0 {
+		t.Fatalf("ReleaseExpired on a bare context = %d, %v; want 0 — the scope is not engaging", res.Released, err)
 	}
 	res, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), limes.ReleaseExpiredRequest{})
 	if err != nil || res.Released != 1 {
@@ -133,38 +139,5 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 		if u, _ := f.usage.GetUsage(ledgerCtx, id); u.ReservedAmount != 0 {
 			t.Errorf("%s still holds %v after the sweep", id, u.ReservedAmount)
 		}
-	}
-}
-
-// Holds are counted under the counter row's lock, so concurrent reservations
-// cannot together pass a ceiling.
-func TestConcurrentReservationsNeverOvercommit(t *testing.T) {
-	t.Parallel()
-	ctx, f := newLineageFixture(t)
-	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	child := f.subject(t, ctx, f.child)
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	granted := 0
-	for range 20 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err := f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
-				Subject: child, Amount: limes.MustParseAmount("3"),
-			})
-			if err == nil {
-				mu.Lock()
-				granted++
-				mu.Unlock()
-			} else if !errors.Is(err, limes.ErrBudgetExceeded) {
-				t.Errorf("reserve: %v", err)
-			}
-		}()
-	}
-	wg.Wait()
-	if granted != 6 {
-		t.Fatalf("granted %d holds of 3 under a ceiling of 20, want exactly 6", granted)
 	}
 }

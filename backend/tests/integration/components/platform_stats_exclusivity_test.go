@@ -5,9 +5,11 @@ package components
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
 
@@ -48,29 +50,21 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 		tenantID, "t-"+hex, "tn-"+hex)
 
 	// ─── capabilities ───────────────────────────────────────────────────
-	issue := func(kind, expires string, parent *uuid.UUID) uuid.UUID {
+	now := time.Now()
+	issue := func(kind limes.PrincipalType, expires time.Time, parent uuid.UUID) uuid.UUID {
 		t.Helper()
-		id := uuid.New()
-		mustExec(t, ctx, pool, `
-			INSERT INTO capability_records
-				(id, tenant_id, parent_id, issuer, principal_kind, principal_subject,
-				 audience, caveats, created_by, expires_at)
-			VALUES ($1, $2, $3, 'test', $4, 'subj', ARRAY['paladin-data'], '{}'::jsonb,
-			        'test', now() + $5::interval)`,
-			id, tenantID, parent, kind, expires)
-		return id
+		return seedCapability(t, ctx, pool, tenantID, kind, expires, parent)
 	}
-	revoke := func(id uuid.UUID) {
-		t.Helper()
-		mustExec(t, ctx, pool, `INSERT INTO capability_revocations (id) VALUES ($1)`, id)
-	}
+	revoke := func(id uuid.UUID) { seedRevocation(t, ctx, pool, id) }
+	month, hour := now.Add(30*24*time.Hour), now.Add(time.Hour)
+	lapsed := now.Add(-time.Hour)
 
-	live := issue("agent", "30 days", nil) // active, not expiring soon
-	issue("agent", "1 hour", nil)          // active AND expiring within 24h
-	issue("agent", "-1 hour", nil)         // expired, never revoked
-	revoke(issue("agent", "30 days", nil)) // revoked while still valid
-	revoke(issue("agent", "-1 hour", nil)) // revoked AND expired — revocation wins
-	issue("service", "30 days", &live)     // active, delegated from `live`
+	live := issue(limes.PrincipalAgent, month, uuid.Nil)  // active, not expiring soon
+	issue(limes.PrincipalAgent, hour, uuid.Nil)           // active AND expiring within 24h
+	issue(limes.PrincipalAgent, lapsed, uuid.Nil)         // expired, never revoked
+	revoke(issue(limes.PrincipalAgent, month, uuid.Nil))  // revoked while still valid
+	revoke(issue(limes.PrincipalAgent, lapsed, uuid.Nil)) // revoked AND expired — revocation wins
+	issue(limes.PrincipalService, month, live)            // active, delegated from `live`
 
 	// ─── api tokens ─────────────────────────────────────────────────────
 	tok := func(expires string, lastUsed, revoked bool) {
@@ -108,9 +102,9 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 	// ByPrincipalKind covers ACTIVE rows only, which is what the three
 	// non-active "agent" rows above are there to prove.
 	assertDelta(t, "capabilities.by_kind[agent]",
-		bc.ByPrincipalKind["agent"], c.ByPrincipalKind["agent"], 2)
+		bc.ByPrincipalKind[string(limes.PrincipalAgent)], c.ByPrincipalKind[string(limes.PrincipalAgent)], 2)
 	assertDelta(t, "capabilities.by_kind[service]",
-		bc.ByPrincipalKind["service"], c.ByPrincipalKind["service"], 1)
+		bc.ByPrincipalKind[string(limes.PrincipalService)], c.ByPrincipalKind[string(limes.PrincipalService)], 1)
 
 	a, ba := got.APITokens, base.APITokens
 	assertDelta(t, "api_tokens.total", ba.Total, a.Total, 5)

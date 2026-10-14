@@ -5,13 +5,15 @@
 # The e2e suite drives the console; this drives the APIs directly, for the
 # contracts the console does not exercise: who may read the health snapshot,
 # what an update mask may name, what a read-only capability may not do, and
-# that an event reaches the dispatcher and can be sent again.
+# that an event reaches the dispatcher and can be sent again; and the
+# capability paths the store's tenant scoping decides: a request ceiling,
+# delegation from the admin plane, the Biscuit form, a revoked chain and the
+# platform-wide budget summary.
 #
 # It creates its own tenant, bucket, collection, subscription and two
-# capabilities, and removes them on exit — except the tenant itself, which ends
-# in the trash: the capability calls are billed, and a tenant with charges is
-# kept for them (charges.tenant_id is ON DELETE RESTRICT). Endpoints and the admin credential
-# come from the cluster, the way scripts/e2e-cluster.sh finds them:
+# capabilities, and removes them on exit, the tenant purged with its charges.
+# Endpoints and the admin credential come from the cluster, the way
+# scripts/e2e-cluster.sh finds them:
 #
 #   KUBE_CONTEXT=orbstack ./scripts/live-smoke.sh
 #
@@ -41,6 +43,13 @@ readonly POLL_SECONDS=2
 # A capability lives long enough for the run and no longer.
 readonly CAPABILITY_TTL_SECONDS=900
 readonly CAPABILITY_MAX_REQUESTS=50
+# The request ceiling the ceiling check spends to the last request, and the
+# one a delegated child gets.
+readonly CEILING_REQUESTS=3
+readonly CHILD_MAX_REQUESTS=2
+readonly CHILD_TTL_SECONDS=600
+# A threshold the budget summary filters at, in percent.
+readonly SUMMARY_THRESHOLD_PCT=80
 # The object every check that needs one uses.
 readonly OBJECT_BODY=hello
 readonly COLLECTION=docs
@@ -50,6 +59,10 @@ readonly CHECKSUM_ALGORITHM=CHECKSUM_ALGORITHM_SHA256
 readonly CODE_INVALID_ARGUMENT=invalid_argument
 readonly CODE_PERMISSION_DENIED=permission_denied
 readonly CODE_NOT_FOUND=not_found
+readonly CODE_RESOURCE_EXHAUSTED=resource_exhausted
+readonly CODE_FAILED_PRECONDITION=failed_precondition
+# The ErrorInfo reason a revoked capability is refused with.
+readonly REASON_CAPABILITY_REVOKED=ERROR_REASON_CAPABILITY_REVOKED
 readonly HTTP_OK=200
 readonly HTTP_UNAUTHORIZED=401
 
@@ -87,6 +100,12 @@ rpc() { curl -sk "$1/$2" -H 'Content-Type: application/json' -H "Authorization: 
 admin_rpc() { rpc "$admin" "paladin.admin.v1.$1" "$2"; }
 cap_rpc() { curl -sk "$api/paladin.data.v1.$2" -H 'Content-Type: application/json' -H "X-Paladin-Capability: $1" \
     -H "Idempotency-Key: $(uuidgen)" -d "$3"; }
+# admin_cap_rpc <capability> <procedure> <body>: as the admin, presenting a
+# capability, as Delegate takes one.
+admin_cap_rpc() { curl -sk "$admin/paladin.admin.v1.$2" -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $token" -H "X-Paladin-Capability: $1" -H "Idempotency-Key: $(uuidgen)" -d "$3"; }
+# reason_of is the ErrorInfo reason of a refusal, or its code without one.
+reason_of() { printf %s "$1" | jq -r '.details[0].debug.reason // .code // "ok"' 2>/dev/null || echo unparsable; }
 
 slug="" sub="" collection_name="" object="" bucket="" capabilities=()
 # note reports a teardown step that did not succeed, without failing the run.
@@ -268,6 +287,67 @@ expect "dispatcher attempted the event ($failed failed against the dead sink)" "
 r=$(admin_rpc EventSubscriptionService/RedriveFailedDeliveries "{\"name\":\"$sub\"}")
 n=$(printf %s "$r" | jq -r '(.requeued // "0") | tonumber' 2>/dev/null || echo 0)
 expect "redrive queued $n" "$r" test "$n" -ge 1
+
+# ── a request ceiling, delegation, the Biscuit form and a revoked chain ─────
+# Each capability is also for the admin plane, where Delegate takes it.
+issue_for() {
+    admin_rpc CapabilityService/Issue "$(jq -cn --arg t "$tenant" --arg s "$1" --argjson ops "$2" \
+        --argjson ttl "$CAPABILITY_TTL_SECONDS" --argjson max "$3" \
+        '{subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:$s,agentType:"live-smoke"},audience:["data","admin"],caveats:{ops:$ops,maxRequests:$max,unlimitedBudget:{}},ttlSeconds:$ttl}')"
+}
+list_with() { cap_rpc "$1" ObjectService/ListObjects "{\"parent\":\"tenants/$tenant/collections/$COLLECTION\"}"; }
+delegate() {
+    admin_cap_rpc "$1" CapabilityService/Delegate "$(jq -cn --arg p "$2" --arg t "$tenant" \
+        --argjson max "$CHILD_MAX_REQUESTS" --argjson ttl "$CHILD_TTL_SECONDS" \
+        '{parentId:$p,subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:"live-smoke-child",agentType:"live-smoke"},audience:["data"],caveats:{ops:["list"],maxRequests:$max},ttlSeconds:$ttl}')"
+}
+
+r=$(issue_for live-smoke-ceiling '["list"]' "$CEILING_REQUESTS")
+capped=$(printf %s "$r" | jq -r '.token // empty')
+capped_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+capabilities+=("$capped_id")
+admitted=0
+for _ in $(seq "$CEILING_REQUESTS"); do
+    [[ "$(code_of "$(list_with "$capped")")" == ok ]] && admitted=$((admitted + 1))
+done
+expect "a ceiling of $CEILING_REQUESTS admits $admitted" "admitted=$admitted" test "$admitted" -eq "$CEILING_REQUESTS"
+r=$(list_with "$capped")
+expect "the request past the ceiling is refused" "$r" test "$(code_of "$r")" = "$CODE_RESOURCE_EXHAUSTED"
+r=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$capped_id\"}")
+expect "usage counts the admitted requests" "$r" test "$(printf %s "$r" | jq -r '.requestCount // "0"')" = "$CEILING_REQUESTS"
+
+r=$(issue_for live-smoke-parent '["get","list","share"]' "$CAPABILITY_MAX_REQUESTS")
+parent=$(printf %s "$r" | jq -r '.token // empty')
+parent_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+parent_biscuit=$(printf %s "$r" | jq -r '.biscuit // empty')
+capabilities+=("$parent_id")
+expect "the parent has a Biscuit form" "$r" test -n "$parent_biscuit"
+r=$(delegate "$parent" "$parent_id")
+child=$(printf %s "$r" | jq -r '.token // empty')
+expect "delegate from the admin plane" "$r" test -n "$child"
+r=$(list_with "$child")
+expect "the child is admitted" "$r" test "$(code_of "$r")" = ok
+r=$(list_with "$parent_biscuit")
+expect "the Biscuit form is admitted" "$r" test "$(code_of "$r")" = ok
+r=$(issue_for live-smoke-noshare '["get","list"]' "$CAPABILITY_MAX_REQUESTS")
+capabilities+=("$(printf %s "$r" | jq -r '.capability.id // empty')")
+r=$(delegate "$(printf %s "$r" | jq -r '.token // empty')" "$(printf %s "$r" | jq -r '.capability.id // empty')")
+expect "delegate without share is refused" "$r" test "$(code_of "$r")" = "$CODE_PERMISSION_DENIED"
+r=$(admin_cap_rpc "" CapabilityService/Delegate "{\"parentId\":\"$parent_id\"}")
+expect "delegate with no capability presented is refused" "$r" test "$(code_of "$r")" = "$CODE_FAILED_PRECONDITION"
+
+r=$(admin_rpc CapabilityService/Revoke "{\"id\":\"$parent_id\",\"reason\":\"live smoke\"}")
+expect "revoke the parent" "$r" test "$(code_of "$r")" = ok
+r=$(list_with "$child")
+expect "the child of a revoked parent is refused" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
+r=$(list_with "$parent_biscuit")
+expect "the Biscuit of a revoked capability is refused" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
+
+# ── the platform-wide budget summary, with each filter ──────────────────────
+for body in '{}' '{"unlimitedOnly":true}' "{\"thresholdPct\":$SUMMARY_THRESHOLD_PCT}"; do
+    r=$(admin_rpc TenantBudgetService/Summarize "$body")
+    expect "budget summary $body" "$r" test "$(code_of "$r")" = ok
+done
 
 echo "== $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]

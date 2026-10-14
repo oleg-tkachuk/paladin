@@ -5,12 +5,36 @@ package components
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
+
+// seedCapability puts a capability of tenant, issued to a principal of kind,
+// on record through the capability store as issuance does, and returns its
+// id. parent is uuid.Nil for a root capability.
+func seedCapability(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant uuid.UUID, kind limes.PrincipalType, expires time.Time, parent uuid.UUID) uuid.UUID {
+	t.Helper()
+	c := mkCap(tenant, "sub", expires)
+	c.Subject.Type = kind
+	c.ParentID = parent
+	if err := newCapStore(t, pool).Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
+		t.Fatalf("seed capability: %v", err)
+	}
+	return c.ID
+}
+
+// seedRevocation revokes the capability id through the capability store.
+func seedRevocation(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) {
+	t.Helper()
+	if err := newCapStore(t, pool).Revoke(ctx, limes.RevokeRequest{CapabilityID: id, Note: "fixture", Actor: "fixture-issuer"}); err != nil {
+		t.Fatalf("seed revocation: %v", err)
+	}
+}
 
 // TestCollectControlPlane proves the inventory aggregates that back the
 // console's /stats page count the right things: the tenant active/trashed
@@ -241,26 +265,13 @@ func TestCollectRLSSiblings(t *testing.T) {
 		uuid.New(), backendOf(t, ctx, pool, f), "bkt-q-"+hex)
 
 	// ─── capabilities ───────────────────────────────────────────────────
-	active := uuid.New()
-	expired := uuid.New()
-	revoked := uuid.New()
-	insertCap := func(id uuid.UUID, kind string, expiresIn string, parent any) {
-		t.Helper()
-		mustExec(t, ctx, pool,
-			`INSERT INTO capability_records
-			   (id, tenant_id, issuer, principal_kind, principal_subject,
-			    audience, caveats, parent_id, created_by, expires_at)
-			 VALUES ($1, $2, 'paladin', $3, 'sub', '{a}', '{}'::jsonb, $4,
-			         'fixture-issuer', now() + $5::interval)`,
-			id, f.tenantID, kind, parent, expiresIn)
-	}
-	insertCap(active, "service_account", "48 hours", nil)
-	insertCap(expired, "service_account", "-1 hour", nil)
-	insertCap(revoked, "user", "48 hours", nil)
+	now := time.Now()
+	active := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(48*time.Hour), uuid.Nil)
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(-time.Hour), uuid.Nil)
+	revoked := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalUser, now.Add(48*time.Hour), uuid.Nil)
 	// Delegated child of the active one, expiring inside the 24h window.
-	insertCap(uuid.New(), "service_account", "1 hour", active)
-	mustExec(t, ctx, pool,
-		`INSERT INTO capability_revocations (id) VALUES ($1)`, revoked)
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(time.Hour), active)
+	seedRevocation(t, ctx, pool, revoked)
 
 	// ─── api tokens ─────────────────────────────────────────────────────
 	insertToken := func(expiresIn string, revokedAt any, lastUsed any) {
@@ -339,8 +350,8 @@ func TestCollectRLSSiblings(t *testing.T) {
 	}
 	// by_principal_kind counts ACTIVE rows only — the expired
 	// service_account and the revoked user must not appear.
-	if c.ByPrincipalKind["service_account"] != 2 || c.ByPrincipalKind["user"] != 0 {
-		t.Errorf("capabilities by kind = %v, want service_account:2 only",
+	if c.ByPrincipalKind[string(limes.PrincipalService)] != 2 || c.ByPrincipalKind[string(limes.PrincipalUser)] != 0 {
+		t.Errorf("capabilities by kind = %v, want service:2 only",
 			c.ByPrincipalKind)
 	}
 

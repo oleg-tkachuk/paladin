@@ -87,6 +87,7 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 	goose.SetBaseFS(migrations.FS)
 	// Apply EVERY migration — including the baseline's partitioning — so the schema
 	// matches production exactly.
+	migrateLimes(t, dsn)
 	if err := goose.Up(db, "."); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}

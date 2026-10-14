@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
@@ -36,7 +37,7 @@ type copyMinter struct {
 	verifier *limes.Verifier
 }
 
-func newCopyMinter(t *testing.T, records *capstore.Store) *copyMinter {
+func newCopyMinter(t *testing.T, records *pgstore.Store) *copyMinter {
 	t.Helper()
 	key, err := limes.GenerateKey()
 	if err != nil {
@@ -118,17 +119,16 @@ func (m *copyMinter) verify(t *testing.T, ctx context.Context, token string) lim
 // copyID is the revocation id the copy's counters are keyed by.
 func copyID(s limes.MeterSubject) []byte { return s.Copies()[0].RevocationID }
 
-// copyRow reads one copy's counters as they are stored, past RLS.
-func copyRow(t *testing.T, ctx context.Context, f lineageFixture, id []byte) (requests int64, spent, reserved limes.Nanos) {
+// copyRequestCount reads one copy's request counter as it is stored, past RLS.
+func copyRequestCount(t *testing.T, ctx context.Context, f lineageFixture, id []byte) int64 {
 	t.Helper()
-	var s, r pgtype.Numeric
-	err := f.pool.QueryRow(ctx,
-		`SELECT request_count, spent, reserved FROM capability_copy_usage WHERE revocation_id = $1`,
-		id).Scan(&requests, &s, &r)
-	if err != nil {
+	var n int64
+	if err := f.pool.QueryRow(ctx,
+		`SELECT request_count FROM limes.copy_usage WHERE revocation_id = $1`, id,
+	).Scan(&n); err != nil {
 		t.Fatalf("copy %x: %v", id, err)
 	}
-	return requests, nanosFrom(t, s), nanosFrom(t, r)
+	return n
 }
 
 // copyRequests and copyBudget are the limits an attenuation gives a copy.
@@ -160,7 +160,7 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	if err := bump(one); !errors.Is(err, limes.ErrRequestLimitExceeded) {
 		t.Fatalf("past the copy's limit: err = %v", err)
 	}
-	if n, _, _ := copyRow(t, ctx, f, copyID(one)); n != 1 {
+	if n := copyRequestCount(t, ctx, f, copyID(one)); n != 1 {
 		t.Fatalf("a refused request left the copy at %d", n)
 	}
 	if u, err := f.usage.GetUsage(ledgerCtx, root.Capability().ID); err != nil || u.RequestCount != 1 {
@@ -177,116 +177,34 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	}
 }
 
-// A copy's budget is held to on charge, returned on refund, and recorded on
-// the ledger row so the refund finds it.
-func TestCopyBudgetChargeAndRefund(t *testing.T) {
-	t.Parallel()
-	ctx, f := newLineageFixture(t)
-	m := newCopyMinter(t, f.records)
-	root := m.issue(t, ctx, f.tenant)
-	f.usage = rlsUsage(t, ctx, f)
-	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	c := m.copyOf(t, ctx, root, limes.Attenuation{Budget: copyBudget("2")})
-	charge := func(amount string) (limes.ChargeReceipt, error) {
-		return f.usage.Charge(ledgerCtx, limes.ChargeRequest{Subject: c, Amount: limes.MustParseAmount(amount)}, nil)
-	}
-	r, err := charge("1.5")
-	if err != nil {
-		t.Fatalf("charge: %v", err)
-	}
-	if _, err := charge("1"); !errors.Is(err, limes.ErrBudgetExceeded) {
-		t.Fatalf("past the copy's budget: err = %v", err)
-	}
-	if f.spent(t, ledgerCtx, root.Capability().ID) != limes.MustParseAmount("1.5") {
-		t.Fatalf("a refused charge moved the capability")
-	}
-	var recorded [][]byte
-	if err := f.pool.QueryRow(ctx, `SELECT copy_ids FROM charges WHERE id = $1`, r.ChargeID).Scan(&recorded); err != nil {
-		t.Fatal(err)
-	}
-	if len(recorded) != 1 || string(recorded[0]) != string(copyID(c)) {
-		t.Fatalf("ledger copy_ids = %x, want [%x]", recorded, copyID(c))
-	}
-	if _, err := f.usage.Refund(ledgerCtx, limes.RefundRequest{ChargeID: r.ChargeID, Remaining: true}); err != nil {
-		t.Fatalf("refund: %v", err)
-	}
-	if _, spent, _ := copyRow(t, ctx, f, copyID(c)); spent != 0 {
-		t.Fatalf("copy spend after refund = %v", spent)
-	}
-	if _, err := charge("2"); err != nil {
-		t.Fatalf("after refund: %v", err)
-	}
-}
-
-// A hold counts against the copy's budget; settle checks and charges it,
-// and the expiry sweep returns a lapsed hold to it. Only the copy that made
-// a hold settles it: the capability without the copy finds no reservation.
-func TestCopyBudgetReservations(t *testing.T) {
-	t.Parallel()
-	ctx, f := newLineageFixture(t)
-	m := newCopyMinter(t, f.records)
-	root := m.issue(t, ctx, f.tenant)
-	f.usage = rlsUsage(t, ctx, f)
-	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	c := m.copyOf(t, ctx, root, limes.Attenuation{Budget: copyBudget("2")})
-	reserve := func(amount string, ttl time.Duration) (limes.Reservation, error) {
-		return f.usage.Reserve(ledgerCtx, limes.ReserveRequest{Subject: c, Amount: limes.MustParseAmount(amount), TTL: ttl})
-	}
-	r, err := reserve("1.5", time.Hour)
-	if err != nil {
-		t.Fatalf("reserve: %v", err)
-	}
-	if _, err := reserve("1", time.Hour); !errors.Is(err, limes.ErrBudgetExceeded) {
-		t.Fatalf("a hold past the copy's budget: err = %v", err)
-	}
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: root.MeterSubject(), ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
-		t.Fatalf("settle without the copy that held: err = %v, want ErrReservationNotFound", err)
-	}
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: c, ReservationID: r.ID, Amount: limes.MustParseAmount("2.5")}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
-		t.Fatalf("settle past the copy's budget: err = %v", err)
-	}
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: c, ReservationID: r.ID, Amount: limes.MustParseAmount("1.75")}, nil); err != nil {
-		t.Fatalf("settle: %v", err)
-	}
-	if _, spent, reserved := copyRow(t, ctx, f, copyID(c)); spent != limes.MustParseAmount("1.75") || reserved != 0 {
-		t.Fatalf("copy after settle: spent %v, reserved %v", spent, reserved)
-	}
-
-	if _, err := reserve("0.25", time.Millisecond); err != nil {
-		t.Fatalf("reserve: %v", err)
-	}
-	time.Sleep(20 * time.Millisecond)
-	if res, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), limes.ReleaseExpiredRequest{}); err != nil || res.Released != 1 {
-		t.Fatalf("ReleaseExpired = %d, %v", res.Released, err)
-	}
-	if _, _, reserved := copyRow(t, ctx, f, copyID(c)); reserved != 0 {
-		t.Fatalf("copy still holds %v after the sweep", reserved)
-	}
-}
-
-// The copy table's own policy: another tenant can neither write a counter
-// for this tenant's capability nor read one.
+// The copy table's own policy, through the scope Paladin puts on a
+// transaction: another tenant can neither write a counter for this tenant's
+// capability nor read one.
 func TestCopyUsageIsTenantScoped(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
 	pool := rlsPool(t, ctx, f.pool)
 	other, _ := mkTenant(t, ctx, f.pool, "shared")
 	otherCtx := auth.WithActingTenant(ctx, other)
-
-	if _, err := pool.Exec(otherCtx,
-		`INSERT INTO capability_copy_usage (revocation_id, capability_id) VALUES ($1, $2)`,
-		[]byte("foreign"), f.root); err == nil {
-		t.Fatal("another tenant wrote a copy counter for this tenant's capability")
+	insert := func(ctx context.Context, revocationID string) error {
+		return capstore.InScope(ctx, pool, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx,
+				`INSERT INTO limes.copy_usage (revocation_id, capability_id, tenant_id) VALUES ($1, $2, $3)`,
+				[]byte(revocationID), f.root, f.tenant)
+			return err
+		})
 	}
 
-	ownCtx := auth.WithActingTenant(ctx, f.tenant)
-	if _, err := pool.Exec(ownCtx,
-		`INSERT INTO capability_copy_usage (revocation_id, capability_id) VALUES ($1, $2)`,
-		[]byte("own"), f.root); err != nil {
+	if err := insert(otherCtx, "foreign"); err == nil {
+		t.Fatal("another tenant wrote a copy counter for this tenant's capability")
+	}
+	if err := insert(auth.WithActingTenant(ctx, f.tenant), "own"); err != nil {
 		t.Fatalf("the owning tenant: %v", err)
 	}
 	var seen int
-	if err := pool.QueryRow(otherCtx, `SELECT count(*) FROM capability_copy_usage`).Scan(&seen); err != nil {
+	if err := capstore.InScope(otherCtx, pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(otherCtx, `SELECT count(*) FROM limes.copy_usage`).Scan(&seen)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if seen != 0 {

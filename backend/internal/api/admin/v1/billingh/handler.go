@@ -19,17 +19,21 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
 )
+
+// ledger is the charges ledger, limes/pgstore's table: one row per committed
+// charge, with its tenant, capability, actor, operation, time and amount in
+// nanos, which the sums read back as limes.Nanos.
+const ledger = "limes.charges"
 
 // defaultPeriod is the lookback when the caller omits period_start /
 // period_end. Picked as 30d to match the typical billing close.
@@ -40,8 +44,8 @@ const defaultPeriod = 30 * 24 * time.Hour
 const topN = 10
 
 // Handler is the BillingService backend. Owns the pool + Cedar gate
-// + a UsageStore for the tenant_budgets cap join (cheap re-use vs.
-// reaching for tenant_budgets directly).
+// + a UsageStore for the tenant budget cap join (cheap re-use vs.
+// reaching for limes.tenant_budgets directly).
 type Handler struct {
 	pool   *pgxpool.Pool
 	usage  limes.UsageStore[pgx.Tx]
@@ -178,26 +182,41 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	// Total + count + dominant unit_code. We pick the unit_code that
 	// covers the most rows — mixed-unit tenants are degenerate today
 	// (no FX) and the operator's choice is which unit to read the
-	// total in. tenant_budgets.unit_code (when present) is preferred.
-	row := h.pool.QueryRow(ctx,
-		`SELECT
-		   COALESCE(SUM(amount), 0),
-		   COUNT(*),
-		   COALESCE(
-		     (SELECT unit_code FROM charges
-		        WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
-		        GROUP BY unit_code ORDER BY COUNT(*) DESC LIMIT 1),
-		     '')
-		 FROM charges
-		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3`,
-		tenantID, start, end,
-	)
-	var total pgtype.Numeric
-	if err := row.Scan(&total, &out.ChargeCount, &out.UnitCode); err != nil {
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
-	}
-	if out.TotalAmount, err = pgmoney.NanosFromNumeric(total); err != nil {
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
+	// total in. The tenant budget's unit (when present) is preferred.
+	err = capabilitypg.InScope(ctx, h.pool, func(tx pgx.Tx) error {
+		row := tx.QueryRow(ctx,
+			`SELECT
+			   COALESCE(SUM(amount), 0)::bigint,
+			   COUNT(*),
+			   COALESCE(
+			     (SELECT unit_code FROM `+ledger+`
+			        WHERE tenant_id = $1 AND at >= $2 AND at < $3
+			        GROUP BY unit_code ORDER BY COUNT(*) DESC LIMIT 1),
+			     '')
+			 FROM `+ledger+`
+			 WHERE tenant_id = $1 AND at >= $2 AND at < $3`,
+			tenantID, start, end,
+		)
+		if err := row.Scan(&out.TotalAmount, &out.ChargeCount, &out.UnitCode); err != nil {
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
+		}
+		var err error
+		for _, top := range []struct {
+			into *[]TopEntry
+			col  string
+		}{
+			{&out.TopCapabilities, "capability_id::text"},
+			{&out.TopActors, "actor"},
+			{&out.TopOps, "op"},
+		} {
+			if *top.into, err = queryTopBy(ctx, tx, tenantID, start, end, top.col); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Tenant budget cap join — best-effort. Missing row ⇒ out.Ceiling stays
@@ -212,19 +231,6 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	if out.UnitCode == "" {
 		out.UnitCode = h.currency
 	}
-
-	out.TopCapabilities, err = h.queryTopBy(ctx, tenantID, start, end, "capability_id::text")
-	if err != nil {
-		return nil, err
-	}
-	out.TopActors, err = h.queryTopBy(ctx, tenantID, start, end, "actor_subject")
-	if err != nil {
-		return nil, err
-	}
-	out.TopOps, err = h.queryTopBy(ctx, tenantID, start, end, "op")
-	if err != nil {
-		return nil, err
-	}
 	return out, nil
 }
 
@@ -233,29 +239,23 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 // the value comes from a closed three-element constant set, no user
 // input. Filter blanks out empty labels so unknown actors / ops
 // don't dominate the top-N.
-func (h *Handler) queryTopBy(ctx context.Context, tenantID uuid.UUID, start, end time.Time, col string) ([]TopEntry, error) {
+func queryTopBy(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, start, end time.Time, col string) ([]TopEntry, error) {
 	q := fmt.Sprintf(
-		`SELECT %s AS label, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
-		 FROM charges
-		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
+		`SELECT %s AS label, COALESCE(SUM(amount), 0)::bigint AS amount, COUNT(*) AS n
+		 FROM `+ledger+`
+		 WHERE tenant_id = $1 AND at >= $2 AND at < $3
 		 GROUP BY %s
 		 ORDER BY amount DESC
 		 LIMIT %d`, col, col, topN)
-	rows, err := h.pool.Query(ctx, q, tenantID, start, end)
+	rows, err := tx.Query(ctx, q, tenantID, start, end)
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top by %s: %w", col, err))
 	}
 	defer rows.Close()
 	out := make([]TopEntry, 0, topN)
 	for rows.Next() {
-		var (
-			e      TopEntry
-			amount pgtype.Numeric
-		)
-		if err := rows.Scan(&e.Label, &amount, &e.ChargeCount); err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
-		}
-		if e.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
+		var e TopEntry
+		if err := rows.Scan(&e.Label, &e.Amount, &e.ChargeCount); err != nil {
 			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
 		}
 		out = append(out, e)
@@ -350,49 +350,48 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	}
 
 	q := fmt.Sprintf(
-		`SELECT date_trunc('%s', occurred_at) AS bucket,
-		        COALESCE(SUM(amount), 0) AS amount,
+		`SELECT date_trunc('%s', at) AS bucket,
+		        COALESCE(SUM(amount), 0)::bigint AS amount,
 		        COUNT(*) AS n
-		 FROM charges
-		 WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
+		 FROM `+ledger+`
+		 WHERE tenant_id = $1 AND at >= $2 AND at < $3
 		 GROUP BY bucket
 		 ORDER BY bucket`, granularity)
-	rows, err := h.pool.Query(ctx, q, tenantID, start, end)
-	if err != nil {
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries: %w", err))
-	}
-	defer rows.Close()
-
 	out := &TimeSeries{Buckets: make([]TimeBucket, 0, 32)}
-	for rows.Next() {
-		var (
-			b      TimeBucket
-			amount pgtype.Numeric
-		)
-		if err := rows.Scan(&b.Start, &amount, &b.ChargeCount); err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
+	err = capabilitypg.InScope(ctx, h.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, q, tenantID, start, end)
+		if err != nil {
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries: %w", err))
 		}
-		if b.Amount, err = pgmoney.NanosFromNumeric(amount); err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
+		defer rows.Close()
+		for rows.Next() {
+			var b TimeBucket
+			if err := rows.Scan(&b.Start, &b.Amount, &b.ChargeCount); err != nil {
+				return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
+			}
+			out.Buckets = append(out.Buckets, b)
 		}
-		out.Buckets = append(out.Buckets, b)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
+		if err := rows.Err(); err != nil {
+			return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		}
 
-	// Unit_code derivation mirrors the summary path — take the
-	// dominant unit over the period, fall back to tenant_budget,
-	// then the platform's currency.
-	if err := h.pool.QueryRow(ctx,
-		`SELECT COALESCE(
-		    (SELECT unit_code FROM charges
-		       WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at < $3
-		       GROUP BY unit_code ORDER BY COUNT(*) DESC LIMIT 1),
-		    '')`,
-		tenantID, start, end,
-	).Scan(&out.UnitCode); err != nil {
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
+		// Unit_code derivation mirrors the summary path — take the
+		// dominant unit over the period, fall back to tenant_budget,
+		// then the platform's currency.
+		if err := tx.QueryRow(ctx,
+			`SELECT COALESCE(
+			    (SELECT unit_code FROM `+ledger+`
+			       WHERE tenant_id = $1 AND at >= $2 AND at < $3
+			       GROUP BY unit_code ORDER BY COUNT(*) DESC LIMIT 1),
+			    '')`,
+			tenantID, start, end,
+		).Scan(&out.UnitCode); err != nil {
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	if out.UnitCode == "" {
 		if tb, ok := h.tenantBudget(ctx, tenantID); ok {

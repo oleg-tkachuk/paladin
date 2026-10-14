@@ -101,6 +101,7 @@ func TestMigrations_ApplyWithoutSuperuser(t *testing.T) {
 		t.Fatalf("dialect: %v", err)
 	}
 	goose.SetBaseFS(migrations.FS)
+	migrateLimes(t, migrateDSN)
 	if err := goose.Up(db, "."); err != nil {
 		t.Fatalf("migrations as a non-superuser owner: %v", err)
 	}

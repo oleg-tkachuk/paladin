@@ -12,12 +12,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/limes"
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgmoney"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
@@ -31,15 +27,10 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
 
-	// Use the BYPASSRLS migrate pool so we don't have to thread
-	// tenant context for capability_records seeding.
-	q := sqlc.New(h.PoolMigrate)
-	// Real pool: the store requires one (a nil pool used to mean "ledger
-	// insert disabled", which made Charge behave differently depending on how
-	// the store was built — the LSP violation that removed the option). The
-	// ledger rows it writes are incidental here; this test is about the
+	// The BYPASSRLS migrate pool, so the calls need no tenant in context.
+	// The ledger rows it writes are incidental here; this test is about the
 	// running-total compensation path.
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-charge")
 	capID := uuid.New()
@@ -106,13 +97,9 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	q := sqlc.New(h.PoolMigrate)
-	// Real pool: the store requires one (a nil pool used to mean "ledger
-	// insert disabled", which made Charge behave differently depending on how
-	// the store was built — the LSP violation that removed the option). The
-	// ledger rows it writes are incidental here; this test is about the
+	// The ledger rows it writes are incidental here; this test is about the
 	// running-total compensation path.
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-refund")
 	capID := uuid.New()
@@ -152,13 +139,9 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	q := sqlc.New(h.PoolMigrate)
-	// Real pool: the store requires one (a nil pool used to mean "ledger
-	// insert disabled", which made Charge behave differently depending on how
-	// the store was built — the LSP violation that removed the option). The
-	// ledger rows it writes are incidental here; this test is about the
+	// The ledger rows it writes are incidental here; this test is about the
 	// running-total compensation path.
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-period")
 
@@ -206,9 +189,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	q := sqlc.New(h.PoolMigrate)
-	// Pool wired so the ledger insert fires.
-	store := capabilitypg.NewUsageStore(q, h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-ledger")
 	capID := uuid.New()
@@ -222,25 +203,25 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 
 	var (
 		count    int64
-		amount   pgtype.Numeric
+		amount   limes.Nanos
 		unitCode string
 		op       string
 		actor    string
 	)
 	if err := h.PoolMigrate.QueryRow(ctx,
-		`SELECT COUNT(*), COALESCE(SUM(amount), 0),
-		        COALESCE((SELECT unit_code FROM charges WHERE tenant_id = $1 LIMIT 1), ''),
-		        COALESCE((SELECT op FROM charges WHERE tenant_id = $1 LIMIT 1), ''),
-		        COALESCE((SELECT actor_subject FROM charges WHERE tenant_id = $1 LIMIT 1), '')
-		 FROM charges WHERE tenant_id = $1`, tenantID,
+		`SELECT COUNT(*), COALESCE(SUM(amount), 0)::bigint,
+		        COALESCE((SELECT unit_code FROM limes.charges WHERE tenant_id = $1 LIMIT 1), ''),
+		        COALESCE((SELECT op FROM limes.charges WHERE tenant_id = $1 LIMIT 1), ''),
+		        COALESCE((SELECT actor FROM limes.charges WHERE tenant_id = $1 LIMIT 1), '')
+		 FROM limes.charges WHERE tenant_id = $1`, tenantID,
 	).Scan(&count, &amount, &unitCode, &op, &actor); err != nil {
 		t.Fatalf("ledger probe: %v", err)
 	}
 	if count != 1 {
 		t.Errorf("ledger rows = %d, want 1", count)
 	}
-	if got, err := pgmoney.NanosFromNumeric(amount); err != nil || got != limes.MustParseAmount("2.5") {
-		t.Errorf("ledger amount = %v (%v), want 2.50", got, err)
+	if amount != limes.MustParseAmount("2.5") {
+		t.Errorf("ledger amount = %v, want 2.50", amount)
 	}
 	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
 		t.Errorf("ledger metadata = (%q, %q, %q), want (USD, presign.put, agent-1)",
@@ -255,7 +236,7 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 func TestCharge_RefusesCapabilityNoLongerOnRecord(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
-	store := capabilitypg.NewUsageStore(sqlc.New(h.PoolMigrate), h.PoolMigrate, nil)
+	store := newUsageStore(t, h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-gone")
 	capID := uuid.New()
@@ -263,7 +244,7 @@ func TestCharge_RefusesCapabilityNoLongerOnRecord(t *testing.T) {
 	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); err != nil {
 		t.Fatalf("charge on record: %v", err)
 	}
-	if _, err := h.PoolMigrate.Exec(ctx, `DELETE FROM capability_records WHERE id = $1`, capID); err != nil {
+	if _, err := h.PoolMigrate.Exec(ctx, `DELETE FROM limes.capabilities WHERE id = $1`, capID); err != nil {
 		t.Fatalf("drop record: %v", err)
 	}
 

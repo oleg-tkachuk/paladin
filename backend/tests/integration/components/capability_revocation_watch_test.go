@@ -42,7 +42,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 		t.Fatalf("revoke: %v", err)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(notifyDeadline)
 	for {
 		r, err := cache.IsRevoked(ctx, f.child)
 		if err != nil {
@@ -52,8 +52,8 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the child's cached 'live' answer survived its parent's revocation for 5s; the notification never cleared the cache")
+			t.Fatalf("the child's cached 'live' answer survived its parent's revocation for %s; the notification never cleared the cache", notifyDeadline)
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(notifyPoll)
 	}
 }

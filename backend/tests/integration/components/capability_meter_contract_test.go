@@ -9,17 +9,25 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/metertest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // contractTTL is how long the capabilities the contract checks record live.
 const contractTTL = time.Hour
+
+// deleteCapabilityRecord removes a capability's record. The suite also removes
+// an ancestor whose children stay, which Purge never does and the parent_id
+// foreign key refuses; the children are unhooked first, so their lineage
+// stops where it would at an ancestor not on record.
+const deleteCapabilityRecord = `
+WITH unhooked AS (
+    UPDATE limes.capabilities SET parent_id = NULL WHERE parent_id = $1
+)
+DELETE FROM limes.capabilities WHERE id = $1`
 
 // The module's Meter contract, on the app role under row-level security, as
 // the server runs the store, on a clock the suite moves.
@@ -37,7 +45,7 @@ func TestMeterContract(t *testing.T) {
 		expires := clock.Now().Add(contractTTL)
 		return metertest.Env[pgx.Tx]{
 			Ctx:    auth.WithActingTenant(ctx, tenant),
-			Usage:  capstore.NewUsageStore(sqlc.New(pool), pool, zap.NewNop(), capstore.WithUsageClock(clock.Now)),
+			Usage:  newUsageStore(t, pool, capstore.WithClock(clock.Now)),
 			Tenant: tenant,
 			// Each tenant's rows are written as that tenant, and the list
 			// across tenants is a platform-wide read, as the admin plane does.
@@ -62,7 +70,7 @@ func TestMeterContract(t *testing.T) {
 			// As Store.Purge removes an expired record: the meter's rows stay
 			// behind for PurgeOrphans.
 			DeleteCapability: func(id uuid.UUID) error {
-				_, err := admin.Exec(ctx, `DELETE FROM capability_records WHERE id = $1`, id)
+				_, err := admin.Exec(ctx, deleteCapabilityRecord, id)
 				return err
 			},
 		}

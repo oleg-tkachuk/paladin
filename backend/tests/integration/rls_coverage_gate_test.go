@@ -13,7 +13,8 @@
 //
 // This gate asks Postgres, not the source: every table with a tenant_id
 // column must either carry a policy or be named in the allow-list below, with
-// a reason. Adding a table without either fails here.
+// a reason. Adding a table without either fails here — Paladin's own, and the
+// capability tables limes/pgstore adds to the limes schema.
 package integration
 
 import (
@@ -63,19 +64,21 @@ func TestEveryTenantScopedTableHasAPolicy(t *testing.T) {
 	// Partitions inherit their parent's policies, and pg_policies lists the
 	// policy only against the parent, so a partition would otherwise read as
 	// unprotected. pg_inherits filters them out.
+	// A table of the limes schema is named with its schema.
 	const q = `
-SELECT DISTINCT c.relname
+SELECT DISTINCT CASE WHEN n.nspname = 'public' THEN c.relname
+                     ELSE n.nspname || '.' || c.relname END AS name
 FROM   pg_class c
 JOIN   pg_namespace n ON n.oid = c.relnamespace
 JOIN   pg_attribute a ON a.attrelid = c.oid
-WHERE  n.nspname = 'public'
+WHERE  n.nspname IN ('public', 'limes')
   AND  c.relkind IN ('r', 'p')
   AND  a.attname = 'tenant_id'
   AND  a.attnum > 0 AND NOT a.attisdropped
   AND  NOT EXISTS (SELECT 1 FROM pg_policies p
-                   WHERE p.schemaname = 'public' AND p.tablename = c.relname)
+                   WHERE p.schemaname = n.nspname AND p.tablename = c.relname)
   AND  NOT EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhrelid = c.oid)
-ORDER  BY c.relname;
+ORDER  BY name;
 `
 	rows, err := pool.Query(ctx, q)
 	if err != nil {

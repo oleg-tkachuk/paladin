@@ -220,7 +220,7 @@ type AuditEntry struct {
 	// JWT- or API-token-authenticated (no capability presented).
 	// Required for per-tool-call rollups in the agentic-plane
 	// positioning — every MCP / agent action gets attributed to the
-	// cap that authorised it without joining across capability_records
+	// cap that authorised it without joining across the capability records
 	// by request_id.
 	CapabilityID uuid.UUID
 

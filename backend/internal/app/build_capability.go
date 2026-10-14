@@ -188,7 +188,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		AcceptBiscuit:      true,
 		BiscuitRevocations: copies,
 		// The capability interceptor passes a copy's own limits to the usage
-		// store, which counts them (capability_copy_usage).
+		// store, which counts them (limes.copy_usage).
 		MeterCopies: true,
 		DPoP:        proofs,
 	})
@@ -201,10 +201,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
 	// Labelled by tenant, as every Paladin meter of tenant activity is.
-	usage, err := limes.Instrument[pgx.Tx](
-		capabilitypg.NewUsageStore(deps.DB.Queries, deps.Pool, deps.Logger.Named("capability-usage"),
-			capabilitypg.WithDefaultUnit(cfg.Currency)),
-		limes.WithTenantAttribute())
+	meter, err := capabilitypg.NewUsageStore(deps.Pool, capabilitypg.WithDefaultUnit(cfg.Currency))
+	if err != nil {
+		return nil, fmt.Errorf("app: capability usage store: %w", err)
+	}
+	usage, err := limes.Instrument[pgx.Tx](meter, limes.WithTenantAttribute())
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
