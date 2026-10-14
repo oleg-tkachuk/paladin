@@ -23,7 +23,7 @@ func TestPlatformCurrency_IsWhatAnUnnamedUnitMeans(t *testing.T) {
 	h := pgharness.Setup(t)
 	ctx := context.Background()
 	store := newUsageStore(t, h.PoolMigrate, capabilitypg.WithDefaultUnit(platformCurrency))
-	handler := billingh.NewHandler(h.PoolMigrate, store, allowAuth{}).WithCurrency(platformCurrency)
+	handler := billingh.NewHandler(newLedger(t, h.PoolMigrate), store, allowAuth{}).WithCurrency(platformCurrency)
 
 	t.Run("an empty summary", func(t *testing.T) {
 		tenant := mustCreateTenant(t, h.PoolMigrate, "cur-empty")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
@@ -177,6 +178,17 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	}
 }
 
+// inScope runs fn in a transaction on pool, scoped as the stores scope
+// theirs (capstore.Scope).
+func inScope(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		if err := capstore.Scope(ctx, tx); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
 // The copy table's own policy, through the scope Paladin puts on a
 // transaction: another tenant can neither write a counter for this tenant's
 // capability nor read one.
@@ -187,7 +199,7 @@ func TestCopyUsageIsTenantScoped(t *testing.T) {
 	other, _ := mkTenant(t, ctx, f.pool, "shared")
 	otherCtx := auth.WithActingTenant(ctx, other)
 	insert := func(ctx context.Context, revocationID string) error {
-		return capstore.InScope(ctx, pool, func(tx pgx.Tx) error {
+		return inScope(ctx, pool, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx,
 				`INSERT INTO limes.copy_usage (revocation_id, capability_id, tenant_id) VALUES ($1, $2, $3)`,
 				[]byte(revocationID), f.root, f.tenant)
@@ -202,7 +214,7 @@ func TestCopyUsageIsTenantScoped(t *testing.T) {
 		t.Fatalf("the owning tenant: %v", err)
 	}
 	var seen int
-	if err := capstore.InScope(otherCtx, pool, func(tx pgx.Tx) error {
+	if err := inScope(otherCtx, pool, func(tx pgx.Tx) error {
 		return tx.QueryRow(otherCtx, `SELECT count(*) FROM limes.copy_usage`).Scan(&seen)
 	}); err != nil {
 		t.Fatal(err)

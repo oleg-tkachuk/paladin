@@ -44,7 +44,16 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities run on limes v0.61.0 and pgstore v0.7.0
+## Unreleased — billing reads the charges ledger through pgstore
+
+- **Behaviour, billing.** `GetTenantSummary` and `GetTenantTimeSeries` read
+  the ledger through pgstore's `Ledger` instead of its table. Amounts are net
+  of refunds. The total, the charge count, the top lists and the series are
+  all in the unit most of the period's charges are in; a mixed-unit tenant
+  used to have every unit summed into one figure. Week buckets start on
+  Monday 00:00 UTC, as before.
+
+## v34.4.0 — capabilities run on limes v0.61.0 and pgstore v0.7.0
 
 - **Behaviour, tenants.** `PurgeTenant` erases the tenant through pgstore
   (`EraseTenant`), in the transaction that removes the tenant row: every

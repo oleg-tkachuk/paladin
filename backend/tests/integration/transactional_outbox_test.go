@@ -69,6 +69,16 @@ func newUsageStore(t *testing.T, pool *pgxpool.Pool, opts ...capabilitypg.Option
 	return store
 }
 
+// newLedger is the server's reader of the charges ledger over pool.
+func newLedger(t *testing.T, pool *pgxpool.Pool) limes.LedgerReader {
+	t.Helper()
+	l, err := capabilitypg.NewLedger(pool)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	return l
+}
+
 func countCharges(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) int64 {
 	t.Helper()
 	var n int64

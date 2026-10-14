@@ -58,7 +58,7 @@ func setupBilling(t *testing.T) *billingFixture {
 	t.Helper()
 	h := pgharness.Setup(t)
 	store := newUsageStore(t, h.PoolMigrate)
-	handler := billingh.NewHandler(h.PoolMigrate, store, allowAuth{})
+	handler := billingh.NewHandler(newLedger(t, h.PoolMigrate), store, allowAuth{})
 	return &billingFixture{h: h, store: store, handler: handler}
 }
 
@@ -362,6 +362,34 @@ func TestBilling_GetTenantTimeSeries_BucketsByDay(t *testing.T) {
 	}
 }
 
+// TestBilling_GetTenantTimeSeries_BucketsByWeek: a Sunday and the Monday
+// after it fall in two ISO weeks, each starting Monday 00:00 UTC.
+func TestBilling_GetTenantTimeSeries_BucketsByWeek(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-week")
+	cap := f.seedCapability(t, tenant, "agent")
+	sunday := time.Date(2026, 1, 4, 12, 0, 0, 0, time.UTC)
+	monday := time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)
+	f.chargeAt(t, cap, tenant, sunday, limes.MustParseAmount("2.0"), "USD", "get", "agent")
+	f.chargeAt(t, cap, tenant, monday, limes.MustParseAmount("12.0"), "USD", "get", "agent")
+
+	ts := f.timeSeries(t, tenant, sunday.Add(-time.Hour), monday.Add(time.Hour), "week")
+	want := []billingh.TimeBucket{
+		{Start: time.Date(2025, 12, 29, 0, 0, 0, 0, time.UTC), Amount: limes.MustParseAmount("2.0"), ChargeCount: 1},
+		{Start: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), Amount: limes.MustParseAmount("12.0"), ChargeCount: 1},
+	}
+	if len(ts.Buckets) != len(want) {
+		t.Fatalf("buckets = %+v, want %+v", ts.Buckets, want)
+	}
+	for i, w := range want {
+		if got := ts.Buckets[i]; !got.Start.Equal(w.Start) || got.Amount != w.Amount || got.ChargeCount != w.ChargeCount {
+			t.Errorf("bucket[%d] = %+v, want %+v", i, got, w)
+		}
+	}
+}
+
 // TestBilling_GetTenantTimeSeries_GranularityValidation: granularities
 // outside the closed allowlist (hour|day|week) come back as
 // InvalidArgument before any SQL fires.
@@ -547,7 +575,7 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
 	appStore := newUsageStore(t, f.h.PoolApp)
-	handler := billingh.NewHandler(f.h.PoolApp, appStore, allowAuth{})
+	handler := billingh.NewHandler(newLedger(t, f.h.PoolApp), appStore, allowAuth{})
 
 	home := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-home")
 	other := mustCreateTenant(t, f.h.PoolMigrate, "bil-rls-other")
