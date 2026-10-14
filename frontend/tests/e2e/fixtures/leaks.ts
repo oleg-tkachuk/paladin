@@ -33,9 +33,9 @@ export interface FixtureInventory {
   /** Tenants that take changes. */
   activeTenants: string[];
   /**
-   * Tenants in the trash. Some stay there by product rule — a tenant with
-   * charges keeps them (charges.tenant_id is RESTRICT) — so these are
-   * reported, not failed on.
+   * Tenants in the trash. A fixture's teardown purges what it trashes, and
+   * nothing a fixture tenant holds can refuse that purge, so one left here
+   * is a leak like any other.
    */
   trashedTenants: string[];
   /** Buckets, as storageBackends/{backend}/buckets/{bucket}. */
