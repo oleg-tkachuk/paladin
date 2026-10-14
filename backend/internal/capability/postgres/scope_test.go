@@ -54,8 +54,6 @@ func TestScope(t *testing.T) {
 		{"platform-wide read while acting on a tenant",
 			auth.WithCrossTenantRead(auth.WithActingTenant(context.Background(), tenant)),
 			[]setting{{settingAllTenants, allTenantsRead}}},
-		{"read across tenants", ReadAllTenants(context.Background()),
-			[]setting{{settingAllTenants, allTenantsRead}}},
 		// Housekeeping carries no principal; its pgstore scope decides.
 		{"housekeeping", pgstore.WithAllTenants(context.Background()),
 			[]setting{{settingAllTenants, allTenantsWrite}}},
@@ -74,13 +72,5 @@ func TestScope(t *testing.T) {
 				t.Errorf("settings = %v, want %v", tx.set, tc.want)
 			}
 		})
-	}
-}
-
-// ReadAllTenants is a platform-wide read to Paladin's own pool as well, so a
-// handler that reads its own tables with it sees every tenant there too.
-func TestReadAllTenantsIsACrossTenantRead(t *testing.T) {
-	if !auth.CrossTenantRead(ReadAllTenants(context.Background())) {
-		t.Error("ReadAllTenants does not mark a cross-tenant read")
 	}
 }

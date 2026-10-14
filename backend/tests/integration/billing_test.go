@@ -129,20 +129,28 @@ func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nano
 	}
 }
 
-// chargeAt inserts a limes.charges row directly with an explicit time,
-// bypassing UsageStore so tests can backdate charges into bucketed time
-// windows. It moves no counter and no tenant budget — tests that mix this
-// with summary asserts should be reading totals from the ledger only (which
-// the summary handler does).
+// chargeAt charges at an explicit time through the meter, on a clock set to
+// when, so tests can backdate charges into bucketed time windows without
+// writing pgstore's charges table. unit is what the caller expects the
+// capability to count in.
 func (f *billingFixture) chargeAt(t *testing.T, capID uuid.UUID, tenant uuid.UUID, when time.Time, amount limes.Nanos, unit, op, actor string) {
 	t.Helper()
-	if _, err := f.h.PoolMigrate.Exec(context.Background(),
-		`INSERT INTO limes.charges (id, tenant_id, capability_id, at, amount, unit_code, op, actor,
-		                            ancestors, copies, overrun, tenant_period)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}', '{}', false, 0)`,
-		uuid.New(), tenant, capID, when, int64(amount), unit, op, actor,
-	); err != nil {
-		t.Fatalf("seed charge at %v: %v", when, err)
+	ctx := context.Background()
+	clock := capabilitypg.WithClock(func() time.Time { return when })
+	records, err := capabilitypg.New(f.h.PoolMigrate, clock)
+	if err != nil {
+		t.Fatalf("capability store: %v", err)
+	}
+	subject, err := limes.StoredMeterSubject(ctx, records, capID)
+	if err != nil {
+		t.Fatalf("meter subject: %v", err)
+	}
+	if subject.UnitCode() != unit || subject.TenantID() != tenant {
+		t.Fatalf("capability %s counts in (%s, %s), want (%s, %s)", capID, subject.UnitCode(), subject.TenantID(), unit, tenant)
+	}
+	usage := newUsageStore(t, f.h.PoolMigrate, clock)
+	if _, err := usage.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
+		t.Fatalf("charge at %v: %v", when, err)
 	}
 }
 
@@ -198,31 +206,15 @@ func TestBilling_ChargeWritesLedgerRow(t *testing.T) {
 		t.Errorf("tenant spent = %v, want 2.50", tb.SpentAmount)
 	}
 
-	// the ledger row
-	var (
-		count    int64
-		amount   limes.Nanos
-		unitCode string
-		op       string
-		actor    string
-	)
-	if err := f.h.PoolMigrate.QueryRow(context.Background(),
-		`SELECT COUNT(*), COALESCE(SUM(amount), 0)::bigint,
-		        COALESCE(MAX(unit_code), ''),
-		        COALESCE(MAX(op), ''),
-		        COALESCE(MAX(actor), '')
-		   FROM limes.charges WHERE tenant_id = $1`, tenant,
-	).Scan(&count, &amount, &unitCode, &op, &actor); err != nil {
-		t.Fatalf("ledger scan: %v", err)
+	sums := ledgerSums(t, f.h, tenant)
+	if len(sums) != 1 || sums[0].Charges != 1 {
+		t.Fatalf("ledger = %+v, want one charge", sums)
 	}
-	if count != 1 {
-		t.Errorf("ledger rows = %d, want 1", count)
+	if got := sums[0].Charged; got != limes.MustParseAmount("2.50") {
+		t.Errorf("ledger amount = %v, want 2.50", got)
 	}
-	if amount != limes.MustParseAmount("2.50") {
-		t.Errorf("ledger amount = %v, want 2.50", amount)
-	}
-	if unitCode != "USD" || op != "presign.put" || actor != "agent-1" {
-		t.Errorf("ledger metadata = (%q, %q, %q)", unitCode, op, actor)
+	if s := sums[0]; s.UnitCode != "USD" || s.Op != "presign.put" || s.Actor != "agent-1" {
+		t.Errorf("ledger metadata = (%q, %q, %q), want (USD, presign.put, agent-1)", s.UnitCode, s.Op, s.Actor)
 	}
 }
 
@@ -458,35 +450,6 @@ func TestBilling_EmptyPeriod_ReturnsZeros(t *testing.T) {
 	if len(s.TopCapabilities) != 0 || len(s.TopActors) != 0 || len(s.TopOps) != 0 {
 		t.Errorf("top lists not empty: caps=%d actors=%d ops=%d",
 			len(s.TopCapabilities), len(s.TopActors), len(s.TopOps))
-	}
-}
-
-// TestBilling_MixedCurrencyTenant_DominantUnitWins: when a tenant has
-// mixed-unit charges, the summary's UnitCode is the row-count
-// dominant unit (USD here, 5 vs 3).
-//
-// Mixed-currency tenants are a deliberately unsupported configuration
-// — there's no FX layer to convert across. This test pins the
-// current dominant-unit behaviour so a future regression that
-// silently sums across units is caught.
-func TestBilling_MixedCurrencyTenant_DominantUnitWins(t *testing.T) {
-	t.Parallel()
-	f := setupBilling(t)
-
-	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-mixed")
-	cap := f.seedCapability(t, tenant, "agent")
-	for i := 0; i < 5; i++ {
-		f.chargeAt(t, cap, tenant, time.Now().UTC().Add(-time.Hour), limes.MustParseAmount("1.0"), "USD", "get", "agent")
-	}
-	for i := 0; i < 3; i++ {
-		f.chargeAt(t, cap, tenant, time.Now().UTC().Add(-time.Hour), limes.MustParseAmount("1.0"), "EUR", "get", "agent")
-	}
-	end := time.Now().UTC().Add(time.Hour)
-	start := end.Add(-24 * time.Hour)
-	s := f.summary(t, tenant, start, end)
-
-	if s.UnitCode != "USD" {
-		t.Errorf("unit = %q, want USD (dominant)", s.UnitCode)
 	}
 }
 

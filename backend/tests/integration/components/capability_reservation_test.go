@@ -132,7 +132,7 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 	if res, err := f.usage.ReleaseExpired(ctx, limes.ReleaseExpiredRequest{}); err != nil || res.Released != 0 {
 		t.Fatalf("ReleaseExpired on a bare context = %d, %v; want 0 — the scope is not engaging", res.Released, err)
 	}
-	if _, err := f.usage.ReleaseExpired(capstore.ReadAllTenants(ctx), limes.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
+	if _, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), limes.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
 		t.Fatalf("ReleaseExpired under a read-only scope: err = %v, want ErrScopeMismatch", err)
 	}
 	// Housekeeping, as the purger scopes it.

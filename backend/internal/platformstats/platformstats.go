@@ -28,8 +28,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oleg-tkachuk/limes"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // ─── Control-plane census (admin pod, RLS-exempt tables) ────────────────────
@@ -460,13 +465,12 @@ func collectQuotas(ctx context.Context, pool *pgxpool.Pool, out *QuotaCensus) er
 
 // ─── Capabilities ───────────────────────────────────────────────────────────
 
-// CapabilityCensus counts issued capability tokens by disposition.
-//
-// Active / Expired / Revoked are mutually exclusive and sum to Total:
-// a revocation row wins over expiry (an operator who revoked a token wants
-// to see it counted as revoked, not quietly reclassified when it lapses),
-// and expiry wins over active. The census runs on the BYPASSRLS pool, so
-// limes.capabilities and limes.revocations show every tenant's rows.
+// CapabilityCensus counts issued capability tokens by disposition, as
+// limes.RecordCensus counts them: Active / Expired / Revoked are mutually
+// exclusive and sum to Total. A revoked record — or one below a revoked
+// ancestor, which the verifier refuses as well — wins over expiry (an
+// operator who revoked a token wants to see it counted as revoked, not
+// quietly reclassified when it lapses), and expiry wins over active.
 type CapabilityCensus struct {
 	Total   int64 `json:"total"`
 	Active  int64 `json:"active"`
@@ -474,8 +478,8 @@ type CapabilityCensus struct {
 	Revoked int64 `json:"revoked"`
 	// Delegated rows have a parent capability (attenuated re-issue).
 	Delegated int64 `json:"delegated"`
-	// Active rows expiring within ExpiringSoonWindow — the set an agent
-	// runtime is about to lose unless something re-issues.
+	// Active rows expiring within capabilityExpiringWindow — the set an
+	// agent runtime is about to lose unless something re-issues.
 	ExpiringSoon int64 `json:"expiring_soon"`
 	// principal type → count, over ACTIVE rows only. A census of expired
 	// tokens by kind is archaeology, not an operational signal.
@@ -485,41 +489,66 @@ type CapabilityCensus struct {
 // capabilityExpiringWindow is how far ahead "expiring soon" looks for a
 // capability. Capabilities are short-lived by design (minutes to hours),
 // so a day of warning covers any realistic re-issue loop.
-const capabilityExpiringWindow = "24 hours"
+const capabilityExpiringWindow = 24 * time.Hour
 
-// capabilityRevokedSQL and capabilityExpiringSQL read a limes.capabilities row
-// aliased `c` — limes/pgstore's table of capability records; shared with the
-// per-tenant drill-down like the quota fragments.
-const (
-	capabilityRevokedSQL  = `EXISTS (SELECT 1 FROM limes.revocations r WHERE r.capability_id = c.id)`
-	capabilityExpiringSQL = `(NOT ` + capabilityRevokedSQL + ` AND c.expires_at > now()
-		AND c.expires_at <= now() + interval '` + capabilityExpiringWindow + `')`
-)
+// capabilityCensus is pgstore's census of capability records over pool,
+// read across every tenant and writing none.
+func capabilityCensus(ctx context.Context, pool *pgxpool.Pool) (context.Context, limes.RecordCensus, error) {
+	census, err := capabilitypg.NewCensus(pool)
+	if err != nil {
+		return nil, nil, fmt.Errorf("census: capabilities: %w", err)
+	}
+	return auth.WithCrossTenantRead(ctx), census, nil
+}
+
+// countRecords reads every page of req's counts.
+func countRecords(ctx context.Context, census limes.RecordCensus, req limes.CountRecordsRequest) ([]limes.RecordCount, error) {
+	var out []limes.RecordCount
+	req.AllTenants = true
+	req.ExpiringWithin = capabilityExpiringWindow
+	req.Limit = limes.MaxListLimit
+	for {
+		page, err := census.CountRecords(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page.Items...)
+		if page.Next == "" {
+			return out, nil
+		}
+		req.Cursor = page.Next
+	}
+}
 
 func collectCapabilities(ctx context.Context, pool *pgxpool.Pool, out *CapabilityCensus) error {
-	out.ByPrincipalKind = map[string]int64{}
-	const revoked = capabilityRevokedSQL
-	err := pool.QueryRow(ctx, `
-		SELECT count(*),
-		       count(*) FILTER (WHERE NOT `+revoked+` AND c.expires_at >  now()),
-		       count(*) FILTER (WHERE NOT `+revoked+` AND c.expires_at <= now()),
-		       count(*) FILTER (WHERE     `+revoked+`),
-		       count(*) FILTER (WHERE c.parent_id IS NOT NULL),
-		       count(*) FILTER (WHERE `+capabilityExpiringSQL+`)
-		FROM limes.capabilities c`,
-	).Scan(&out.Total, &out.Active, &out.Expired, &out.Revoked,
-		&out.Delegated, &out.ExpiringSoon)
+	ctx, census, err := capabilityCensus(ctx, pool)
+	if err != nil {
+		return err
+	}
+	counts, err := countRecords(ctx, census, limes.CountRecordsRequest{ByPrincipalType: true})
 	if err != nil {
 		return fmt.Errorf("census: capabilities: %w", err)
 	}
-	if err := scanCounts(ctx, pool, `
-		SELECT c.principal_type, count(*)
-		FROM limes.capabilities c
-		WHERE c.expires_at > now() AND NOT `+revoked+`
-		GROUP BY c.principal_type`, out.ByPrincipalKind); err != nil {
-		return fmt.Errorf("census: capabilities by principal kind: %w", err)
-	}
+	*out = foldCapabilities(counts)
 	return nil
+}
+
+// foldCapabilities sums counts by principal type into the census, keeping
+// each type's active records.
+func foldCapabilities(counts []limes.RecordCount) CapabilityCensus {
+	out := CapabilityCensus{ByPrincipalKind: map[string]int64{}}
+	for _, c := range counts {
+		out.Total += c.Total
+		out.Active += c.Active
+		out.Expired += c.Expired
+		out.Revoked += c.Revoked
+		out.Delegated += c.Delegated
+		out.ExpiringSoon += c.ExpiringSoon
+		if c.Active > 0 {
+			out.ByPrincipalKind[string(c.PrincipalType)] += c.Active
+		}
+	}
+	return out
 }
 
 // ─── API tokens (M2M) ───────────────────────────────────────────────────────

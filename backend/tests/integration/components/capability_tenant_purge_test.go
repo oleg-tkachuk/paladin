@@ -191,7 +191,7 @@ func TestPurgingATenantErasesItsCapabilityRows(t *testing.T) {
 	if revoked, err := records.IsRevoked(ctx, live.ID); err != nil || !revoked {
 		t.Errorf("the live capability of the purged tenant: revoked = %v, %v; want its token refused", revoked, err)
 	}
-	if _, err := records.GetRecord(capstore.ReadAllTenants(ctx), expired.ID); !errors.Is(err, limes.ErrNotFound) {
+	if _, err := records.GetRecord(auth.WithCrossTenantRead(ctx), expired.ID); !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("the expired capability of the purged tenant reads back (%v); the erase removes what Purge would", err)
 	}
 	if after := limesRows(t, ctx, admin, bystander); !maps.Equal(after, kept) {
