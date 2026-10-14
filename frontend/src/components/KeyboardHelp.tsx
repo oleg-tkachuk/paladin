@@ -4,8 +4,10 @@
 // shortcut on the platform. Mounted once at the root layout; it
 // listens for the ? key globally and pops itself.
 //
-// New shortcuts on this app should be added to SHORTCUTS below
-// (keep the source of truth + the help dialog in one place).
+// SHORTCUTS lists only keys that a real handler serves: this
+// component (?), CommandPalette (⌘K) and useGlobalShortcuts (the
+// g-prefix jumps, read from NAV_JUMPS so they cannot drift).
+// KeyboardHelp.test.tsx fails when a listed key loses its handler.
 
 import React, { useEffect, useState } from "react";
 
@@ -15,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NAV_JUMPS, NAV_PREFIX } from "@/lib/navShortcuts";
 import { cn } from "@/lib/utils";
 
 interface Shortcut {
@@ -22,36 +25,13 @@ interface Shortcut {
   desc: string;
 }
 
-const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
+export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   {
     group: "Navigation",
     items: [
       { keys: ["?"], desc: "Show this help" },
       { keys: ["⌘", "K"], desc: "Open command palette" },
-      { keys: ["g", "d"], desc: "Go to dashboard" },
-      { keys: ["g", "t"], desc: "Go to tenants" },
-      { keys: ["g", "b"], desc: "Go to buckets" },
-      { keys: ["g", "s"], desc: "Go to storage backends" },
-    ],
-  },
-  {
-    group: "Tables",
-    items: [
-      { keys: ["j", "↓"], desc: "Move down a row" },
-      { keys: ["k", "↑"], desc: "Move up a row" },
-      { keys: ["g", "g"], desc: "Jump to first row" },
-      { keys: ["⇧", "G"], desc: "Jump to last row" },
-      { keys: ["Enter"], desc: "Open active row" },
-      { keys: ["Esc"], desc: "Clear selection" },
-      { keys: ["/"], desc: "Focus search" },
-    ],
-  },
-  {
-    group: "File browser",
-    items: [
-      { keys: ["x"], desc: "Toggle row selection" },
-      { keys: ["⇧", "X"], desc: "Range-select" },
-      { keys: ["u"], desc: "Upload (file picker)" },
+      ...NAV_JUMPS.map((j) => ({ keys: [NAV_PREFIX, j.key], desc: j.label })),
     ],
   },
 ];

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 // The palette had no test at all, which is how it kept searching the first
 // page of each resource and calling it a global search.
@@ -36,6 +36,8 @@ const h = vi.hoisted(() => ({
   ),
   push: vi.fn(),
   roles: ["platform.admin"] as string[],
+  tenant: undefined as
+    { slug: string; tenantId: string; displayName: string } | undefined,
 }));
 export type { Rows };
 
@@ -43,7 +45,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: h.push }) }));
 vi.mock("@/context/ActionsContext", () => ({
   useActions: () => ({ actions: [] }),
 }));
-vi.mock("@/context/ScopeContext", () => ({ useScope: () => ({}) }));
+vi.mock("@/context/ScopeContext", () => ({
+  useScope: () => ({ tenant: h.tenant }),
+}));
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: { roles: h.roles } }),
 }));
@@ -53,6 +57,8 @@ vi.mock("@/lib/connect/client", () => ({
   collectionClient: { listCollections: h.listCollections },
   backendClient: { listBackends: h.listBackends },
 }));
+
+import { CHORD_KEY_SEPARATOR, NAV_PREFIX } from "@/lib/navShortcuts";
 
 import { CommandPalette } from "./CommandPalette";
 
@@ -220,5 +226,58 @@ describe("CommandPalette for a principal without the admin audience", () => {
     expect(screen.queryByText(/health/i)).not.toBeNull();
     expect(screen.queryByText("Resources")).toBeNull();
     expect(screen.queryByText(/Platform stat/i)).toBeNull();
+  });
+});
+
+// The palette used to serve the g-prefix itself, with its own map, alongside
+// useGlobalShortcuts. It now only labels its navs, from the table the hook
+// serves, so a label names exactly the key that lands on that nav.
+describe("CommandPalette chord labels", () => {
+  const ACME = { slug: "acme", tenantId: "u-1", displayName: "Acme" };
+
+  const chordOf = (title: string) =>
+    within(screen.getByText(title).closest("button")!)
+      .queryAllByText(/^[A-Z]$/)
+      .map((el) => el.textContent)
+      .join(CHORD_KEY_SEPARATOR);
+  const chord = (key: string) =>
+    [NAV_PREFIX, key].join(CHORD_KEY_SEPARATOR).toUpperCase();
+
+  const open = () =>
+    act(() => {
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+    });
+
+  afterEach(() => {
+    h.tenant = undefined;
+    h.push.mockClear();
+  });
+
+  it("labels the cross-tenant pages with no tenant in scope", () => {
+    render(<CommandPalette />);
+    open();
+    expect(chordOf("Buckets (cross-tenant)")).toBe(chord("b"));
+    expect(chordOf("Collections (cross-tenant)")).toBe(chord("k"));
+    expect(chordOf("Resources")).toBe(chord("t"));
+    expect(chordOf("Upload Assets")).toBe("");
+  });
+
+  it("moves the labels to the tenant's pages while one is in scope", () => {
+    h.tenant = ACME;
+    render(<CommandPalette />);
+    open();
+    expect(chordOf("Buckets in Acme")).toBe(chord("b"));
+    expect(chordOf("Collections in Acme")).toBe(chord("k"));
+    expect(chordOf("Open Acme")).toBe(chord("t"));
+    expect(chordOf("Buckets (cross-tenant)")).toBe("");
+    expect(chordOf("Resources")).toBe("");
+  });
+
+  it("does not navigate on the prefix itself", () => {
+    h.tenant = ACME;
+    render(<CommandPalette />);
+    fireEvent.keyDown(document.body, { key: NAV_PREFIX });
+    fireEvent.keyDown(document.body, { key: "b" });
+    expect(h.push).not.toHaveBeenCalled();
   });
 });
