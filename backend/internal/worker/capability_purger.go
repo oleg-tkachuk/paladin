@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/limes/pgstore"
 )
 
 // ReplayPurger drops DPoP proof ids that can no longer be replayed, at most
@@ -67,13 +67,11 @@ func (p *CapabilityPurger) Run(ctx context.Context) error {
 // metric.
 func (p *CapabilityPurger) tick(ctx context.Context) error {
 	// The purger runs on a timer, not on a request, so it carries no
-	// principal and the RLS pool has no session tenant to install.
-	// The capability tables it sweeps are tenant-scoped, which without this flag
-	// means every statement matches zero rows and the job reports
-	// success while the tables grow without bound. The flag widens
-	// USING only — a purger can remove rows across tenants, and still
-	// cannot write into one.
-	ctx = auth.WithCrossTenantRead(ctx)
+	// principal: scoped to no tenant, every statement would match zero rows
+	// and the job would report success while the tables grow without bound.
+	// Housekeeping reads and writes every tenant's rows (pgstore's
+	// WithAllTenants); a platform-wide read would remove nothing.
+	ctx = pgstore.WithAllTenants(ctx)
 
 	// Each housekeeping call handles at most one batch; a batch short of
 	// the limit is the last, and a backlog drains over several.
@@ -126,8 +124,8 @@ func (p *CapabilityPurger) tick(ctx context.Context) error {
 		}
 	}
 	if p.Replay != nil {
-		// The table is not tenant-scoped, so the cross-tenant flag above
-		// neither helps nor hurts here.
+		// The table is not tenant-scoped, so the scope above neither helps
+		// nor hurts here.
 		for {
 			n, err := p.Replay.PurgeExpired(ctx)
 			if err != nil {

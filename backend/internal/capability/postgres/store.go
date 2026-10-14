@@ -53,7 +53,9 @@ func config(pool *pgxpool.Pool, opts []Option) (pgstore.Config, options, error) 
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return pgstore.Config{DB: pool, Now: o.now, Scope: Scope, CheckTenant: checkTenant}, o, nil
+	return pgstore.Config{
+		DB: pool, Now: o.now, Scope: Scope, CheckScope: pgstore.CheckSchemaScope, CheckTenant: checkTenant,
+	}, o, nil
 }
 
 // New is the store of capability records, their revocations and those of
@@ -103,22 +105,34 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, req limes.SetTenantBud
 }
 
 // Scope scopes a transaction pgstore opens the way the request pool's
-// PrepareConn hook scopes every other connection (store/postgres.EnableRLS):
-// to every tenant for a platform-wide call (auth.WithCrossTenantRead — the
-// purger's housekeeping, the budget summary, an admin finding a capability's
-// tenant), to the tenant the request acts on otherwise, and to none — seeing
-// no row — for a call with neither. The limes schema has one setting for
-// every tenant, so unlike paladin.cross_tenant it widens writes too; only the
-// callers above set it.
+// PrepareConn hook scopes every other connection (store/postgres.EnableRLS),
+// from the request's auth context: a platform-wide read (auth.WithCrossTenantRead)
+// reads every tenant and writes none, as paladin.cross_tenant widens only
+// reads; a request acting on a tenant (auth.EffectiveTenant) is scoped to it.
+// A call with neither — housekeeping, which runs on a timer with no principal
+// — is scoped as its pgstore context says (pgstore.WithAllTenants), and with
+// none sees no row.
+//
+// It sets the schema's own settings, so the stores check every call whose
+// request names a tenant against them (pgstore.CheckSchemaScope): a call
+// scoped to another tenant fails as limes.ErrScopeMismatch rather than as
+// rows that are not there.
 func Scope(ctx context.Context, tx pgx.Tx) error {
 	if auth.CrossTenantRead(ctx) {
-		return pgstore.ScopeFromContext(pgstore.WithAllTenants(ctx), tx)
+		return pgstore.ScopeFromContext(pgstore.WithAllTenantsReadOnly(ctx), tx)
 	}
-	tenant, err := auth.EffectiveTenant(ctx)
-	if err != nil {
-		return nil
+	if tenant, err := auth.EffectiveTenant(ctx); err == nil {
+		return pgstore.ScopeFromContext(pgstore.WithTenant(ctx, tenant), tx)
 	}
-	return pgstore.ScopeFromContext(pgstore.WithTenant(ctx, tenant), tx)
+	return pgstore.ScopeFromContext(ctx, tx)
+}
+
+// ReadAllTenants is ctx for a platform-wide read of the stores — a lookup of
+// a capability's tenant, the budget summary: every tenant's rows to read and
+// none to write. The stores refuse a call that writes under it with
+// limes.ErrScopeMismatch before it begins.
+func ReadAllTenants(ctx context.Context) context.Context {
+	return pgstore.WithAllTenantsReadOnly(auth.WithCrossTenantRead(ctx))
 }
 
 // InScope runs fn in a transaction on pool, scoped by Scope: for a reader of

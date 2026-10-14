@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
+	"github.com/oleg-tkachuk/limes"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -103,4 +104,14 @@ func TestEveryMappedSentinelHasAReason(t *testing.T) {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	check(registry)
+}
+
+// A store call scoped to another tenant than its request names is a wiring
+// bug in the server, not the client's request: Internal, never NotFound or
+// InvalidArgument, which would send the client to fix what is not broken.
+func TestMapErrorScopeMismatchIsInternal(t *testing.T) {
+	err := MapError(fmt.Errorf("insert: %w", limes.ErrScopeMismatch))
+	if got := connect.CodeOf(err); got != connect.CodeInternal {
+		t.Errorf("code = %v, want %v", got, connect.CodeInternal)
+	}
 }

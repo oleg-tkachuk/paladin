@@ -40,8 +40,10 @@ func storeContractEnv(t *testing.T, admin, pool *pgxpool.Pool, scoped bool) stor
 			return id, nil
 		},
 		TenantCtx: tenantCtx,
-		Now:       clock.Now,
-		Advance:   clock.Advance,
+		// Scoped, a call under another tenant's context is refused.
+		ScopesTenants: scoped,
+		Now:           clock.Now,
+		Advance:       clock.Advance,
 		DeleteTenant: func(id uuid.UUID) error {
 			_, err := admin.Exec(ctx, `UPDATE tenants SET deleted_at = now() WHERE id = $1`, id)
 			return err

@@ -53,9 +53,10 @@ func TestMeterContract(t *testing.T) {
 				id, _ := mkTenant(t, ctx, admin, "shared")
 				return id, nil
 			},
-			TenantCtx: func(tenant uuid.UUID) context.Context { return auth.WithActingTenant(ctx, tenant) },
-			ListCtx:   auth.WithCrossTenantRead(ctx),
-			Advance:   clock.Advance,
+			TenantCtx:     func(tenant uuid.UUID) context.Context { return auth.WithActingTenant(ctx, tenant) },
+			ListCtx:       capstore.ReadAllTenants(ctx),
+			ScopesTenants: true,
+			Advance:       clock.Advance,
 			NewCapability: func(spec metertest.CapabilitySpec) (uuid.UUID, error) {
 				owner := tenant
 				if spec.Tenant != uuid.Nil {
