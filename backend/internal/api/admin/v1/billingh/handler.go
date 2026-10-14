@@ -1,11 +1,7 @@
 // Package billingh implements the admin BillingService — read-only
-// aggregation over the charges ledger (the schema baseline (001_initial_schema.sql)).
-//
-// The handler runs raw SQL against the *pgxpool.Pool because the
-// queries are aggregation-only, lightly parameterised, and the time
-// pressure to ship the billing surface didn't justify a sqlc
-// regeneration round-trip. Future iterations may move the queries
-// behind sqlc once the access patterns stabilise.
+// aggregation over the charges ledger, read through limes.LedgerReader
+// (pgstore's Ledger) rather than the ledger's table, whose columns are
+// pgstore's own.
 package billingh
 
 import (
@@ -14,26 +10,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
-
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
-
-// ledger is the charges ledger, limes/pgstore's table: one row per committed
-// charge, with its tenant, capability, actor, operation, time and amount in
-// nanos, which the sums read back as limes.Nanos.
-const ledger = "limes.charges"
 
 // defaultPeriod is the lookback when the caller omits period_start /
 // period_end. Picked as 30d to match the typical billing close.
@@ -43,11 +30,10 @@ const defaultPeriod = 30 * 24 * time.Hour
 // callers that need more can paginate via a future RPC.
 const topN = 10
 
-// Handler is the BillingService backend. Owns the pool + Cedar gate
-// + a UsageStore for the tenant budget cap join (cheap re-use vs.
-// reaching for limes.tenant_budgets directly).
+// Handler is the BillingService backend: the charges ledger, the Cedar gate,
+// and a UsageStore for the tenant budget cap join.
 type Handler struct {
-	pool   *pgxpool.Pool
+	ledger limes.LedgerReader
 	usage  limes.UsageStore[pgx.Tx]
 	policy cedar.Authorizer
 	// currency is the platform's (capability.currency): what a summary with
@@ -62,15 +48,15 @@ func (h *Handler) WithCurrency(unit string) *Handler {
 	return h
 }
 
-// NewHandler wires the dependencies. policy MUST be non-nil; pool may
+// NewHandler wires the dependencies. policy MUST be non-nil; ledger may
 // be nil only when the capability subsystem is disabled (the listener
 // builder still needs to register a stub so the BFF allowlist doesn't
 // 404).
-func NewHandler(pool *pgxpool.Pool, usage limes.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
+func NewHandler(ledger limes.LedgerReader, usage limes.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("billingh: policy authorizer is required")
 	}
-	return &Handler{pool: pool, usage: usage, policy: policy, currency: limes.DefaultUnitCode}
+	return &Handler{ledger: ledger, usage: usage, policy: policy, currency: limes.DefaultUnitCode}
 }
 
 // authorize gates the RPC against Cedar. Resource is the Tenant
@@ -160,16 +146,19 @@ type TopEntry struct {
 	ChargeCount int64
 }
 
-// GetTenantSummary aggregates the charges ledger over the period.
-// Cedar gate runs first (security before subsystem availability);
-// pool == nil then short-circuits to Unavailable (capability
+// GetTenantSummary sums the charges ledger over the period, in the unit most
+// of its charges are in: mixed-unit tenants are degenerate today (no FX), and
+// a sum across units would mean nothing. Amounts are net of refunds. The
+// tenant budget's unit stands in when the period has no charge, then the
+// platform's currency. Cedar gate runs first (security before subsystem
+// availability); no ledger then short-circuits to Unavailable (capability
 // subsystem disabled in this deployment).
 func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time) (*Summary, error) {
 	ctx, err := h.authorize(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	if h.pool == nil {
+	if h.ledger == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
@@ -178,45 +167,36 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	}
 
 	out := &Summary{}
-
-	// Total + count + dominant unit_code. We pick the unit_code that
-	// covers the most rows — mixed-unit tenants are degenerate today
-	// (no FX) and the operator's choice is which unit to read the
-	// total in. The tenant budget's unit (when present) is preferred.
-	err = capabilitypg.InScope(ctx, h.pool, func(tx pgx.Tx) error {
-		row := tx.QueryRow(ctx,
-			`SELECT
-			   COALESCE(SUM(amount), 0)::bigint,
-			   COUNT(*),
-			   COALESCE(
-			     (SELECT unit_code FROM `+ledger+`
-			        WHERE tenant_id = $1 AND at >= $2 AND at < $3
-			        GROUP BY unit_code ORDER BY COUNT(*) DESC LIMIT 1),
-			     '')
-			 FROM `+ledger+`
-			 WHERE tenant_id = $1 AND at >= $2 AND at < $3`,
-			tenantID, start, end,
-		)
-		if err := row.Scan(&out.TotalAmount, &out.ChargeCount, &out.UnitCode); err != nil {
-			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: summary: %w", err))
+	if start.Before(end) {
+		period := limes.SumChargesRequest{TenantID: tenantID, From: start, To: end}
+		var totals []limes.ChargeSum
+		if err := h.sumCharges(ctx, period, func(s limes.ChargeSum) bool {
+			totals = append(totals, s)
+			return true
+		}); err != nil {
+			return nil, err
 		}
-		var err error
-		for _, top := range []struct {
-			into *[]TopEntry
-			col  string
-		}{
-			{&out.TopCapabilities, "capability_id::text"},
-			{&out.TopActors, "actor"},
-			{&out.TopOps, "op"},
-		} {
-			if *top.into, err = queryTopBy(ctx, tx, tenantID, start, end, top.col); err != nil {
-				return err
+		if total, ok := dominant(totals); ok {
+			out.UnitCode, out.TotalAmount, out.ChargeCount = total.UnitCode, net(total), total.Charges
+			for _, top := range []struct {
+				into  *[]TopEntry
+				group func(*limes.SumChargesRequest)
+				label func(limes.ChargeSum) string
+			}{
+				{&out.TopCapabilities, func(r *limes.SumChargesRequest) { r.ByCapability = true },
+					func(s limes.ChargeSum) string { return s.CapabilityID.String() }},
+				{&out.TopActors, func(r *limes.SumChargesRequest) { r.ByActor = true },
+					func(s limes.ChargeSum) string { return s.Actor }},
+				{&out.TopOps, func(r *limes.SumChargesRequest) { r.ByOp = true },
+					func(s limes.ChargeSum) string { return string(s.Op) }},
+			} {
+				req := period
+				top.group(&req)
+				if *top.into, err = h.topBy(ctx, req, out.UnitCode, top.label); err != nil {
+					return nil, err
+				}
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 
 	// Tenant budget cap join — best-effort. Missing row ⇒ out.Ceiling stays
@@ -234,36 +214,18 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	return out, nil
 }
 
-// queryTopBy runs the GROUP BY+ORDER BY+LIMIT query for one
-// dimension. col is interpolated into the SQL (not parameterised) —
-// the value comes from a closed three-element constant set, no user
-// input. Filter blanks out empty labels so unknown actors / ops
-// don't dominate the top-N.
-func queryTopBy(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, start, end time.Time, col string) ([]TopEntry, error) {
-	q := fmt.Sprintf(
-		`SELECT %s AS label, COALESCE(SUM(amount), 0)::bigint AS amount, COUNT(*) AS n
-		 FROM `+ledger+`
-		 WHERE tenant_id = $1 AND at >= $2 AND at < $3
-		 GROUP BY %s
-		 ORDER BY amount DESC
-		 LIMIT %d`, col, col, topN)
-	rows, err := tx.Query(ctx, q, tenantID, start, end)
-	if err != nil {
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top by %s: %w", col, err))
-	}
-	defer rows.Close()
+// topBy is the topN groups req asks for in unit, the largest first, each
+// named by label. The ledger hands the groups of every unit back largest
+// first, so the first topN in unit are its top.
+func (h *Handler) topBy(ctx context.Context, req limes.SumChargesRequest, unit string, label func(limes.ChargeSum) string) ([]TopEntry, error) {
 	out := make([]TopEntry, 0, topN)
-	for rows.Next() {
-		var e TopEntry
-		if err := rows.Scan(&e.Label, &e.Amount, &e.ChargeCount); err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: top scan: %w", err))
+	err := h.sumCharges(ctx, req, func(s limes.ChargeSum) bool {
+		if s.UnitCode == unit {
+			out = append(out, TopEntry{Label: label(s), Amount: net(s), ChargeCount: s.Charges})
 		}
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return out, nil
+		return len(out) < topN
+	})
+	return out, err
 }
 
 // TimeSeries is the in-memory shape returned by GetTenantTimeSeries.
@@ -279,13 +241,11 @@ type TimeBucket struct {
 	ChargeCount int64
 }
 
-// allowedGranularities is the closed set the SQL date_trunc accepts
-// for this RPC. Bigger windows (month / year) are deliberately
-// excluded — charts at that resolution come from a different
-// dashboard surface and would benefit from a downsampled rollup
-// table rather than scanning the raw ledger.
-var allowedGranularities = map[string]bool{
-	"hour": true, "day": true, "week": true,
+// granularityStep maps a validated granularity to its bucket width, used to
+// pre-flight the bucket count. Returns 0 for an unknown value (the caller has
+// already validated it, so 0 only skips the check).
+func granularityStep(granularity string) time.Duration {
+	return granularitySteps[granularity]
 }
 
 // maxTimeSeriesBuckets caps the number of (period ÷ granularity) buckets a
@@ -295,27 +255,10 @@ var allowedGranularities = map[string]bool{
 // rejecting the pathological "hour granularity over years" request.
 const maxTimeSeriesBuckets = 1000
 
-// granularityStep maps a validated granularity to its bucket width, used to
-// pre-flight the bucket count. Returns 0 for an unknown value (the caller has
-// already validated against allowedGranularities, so 0 only skips the check).
-func granularityStep(granularity string) time.Duration {
-	switch granularity {
-	case "hour":
-		return time.Hour
-	case "day":
-		return 24 * time.Hour
-	case "week":
-		return 7 * 24 * time.Hour
-	default:
-		return 0
-	}
-}
-
-// GetTenantTimeSeries buckets charges.amount + count by time.
-// granularity is validated against the closed allowlist before
-// reaching the SQL — date_trunc would silently accept "minute" /
-// "year" and we don't want to expose those without a deliberate
-// product call.
+// GetTenantTimeSeries buckets the charges of the unit most of them are in,
+// net of refunds, and their count by time, as GetTenantSummary sums them.
+// granularity is validated against the closed allowlist before the ledger
+// is read.
 func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time, granularity string) (*TimeSeries, error) {
 	ctx, err := h.authorize(ctx, tenantID)
 	if err != nil {
@@ -325,9 +268,9 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	// subsystem-availability check so a malformed request is rejected the same
 	// way whether or not the capability subsystem is wired.
 	if granularity == "" {
-		granularity = "day"
+		granularity = granularityDay
 	}
-	if !allowedGranularities[granularity] {
+	if _, ok := ledgerBuckets[granularity]; !ok {
 		return nil, connect.Errorf(connect.CodeInvalidArgument, "granularity must be one of hour|day|week, got %q", granularity)
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
@@ -345,53 +288,21 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 				granularity, buckets, maxTimeSeriesBuckets)
 		}
 	}
-	if h.pool == nil {
+	if h.ledger == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
 	}
 
-	q := fmt.Sprintf(
-		`SELECT date_trunc('%s', at) AS bucket,
-		        COALESCE(SUM(amount), 0)::bigint AS amount,
-		        COUNT(*) AS n
-		 FROM `+ledger+`
-		 WHERE tenant_id = $1 AND at >= $2 AND at < $3
-		 GROUP BY bucket
-		 ORDER BY bucket`, granularity)
-	out := &TimeSeries{Buckets: make([]TimeBucket, 0, 32)}
-	err = capabilitypg.InScope(ctx, h.pool, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, q, tenantID, start, end)
-		if err != nil {
-			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries: %w", err))
+	out := &TimeSeries{Buckets: make([]TimeBucket, 0)}
+	if start.Before(end) {
+		var sums []limes.ChargeSum
+		req := limes.SumChargesRequest{TenantID: tenantID, From: start, To: end, Bucket: ledgerBuckets[granularity]}
+		if err := h.sumCharges(ctx, req, func(s limes.ChargeSum) bool {
+			sums = append(sums, s)
+			return true
+		}); err != nil {
+			return nil, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var b TimeBucket
-			if err := rows.Scan(&b.Start, &b.Amount, &b.ChargeCount); err != nil {
-				return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries scan: %w", err))
-			}
-			out.Buckets = append(out.Buckets, b)
-		}
-		if err := rows.Err(); err != nil {
-			return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-
-		// Unit_code derivation mirrors the summary path — take the
-		// dominant unit over the period, fall back to tenant_budget,
-		// then the platform's currency.
-		if err := tx.QueryRow(ctx,
-			`SELECT COALESCE(
-			    (SELECT unit_code FROM `+ledger+`
-			       WHERE tenant_id = $1 AND at >= $2 AND at < $3
-			       GROUP BY unit_code ORDER BY COUNT(*) DESC LIMIT 1),
-			    '')`,
-			tenantID, start, end,
-		).Scan(&out.UnitCode); err != nil {
-			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: timeseries unit: %w", err))
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		out.UnitCode, out.Buckets = series(sums)
 	}
 	if out.UnitCode == "" {
 		if tb, ok := h.tenantBudget(ctx, tenantID); ok {

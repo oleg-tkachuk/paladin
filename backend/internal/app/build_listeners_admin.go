@@ -24,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -288,11 +289,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			admin.NewTenantBudgetServer(usageStore, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
 
 		// BillingService — read-only aggregation over the charges
-		// ledger (the schema baseline (001_initial_schema.sql)). Only mounted with a real handler
-		// when the capability subsystem is wired (pool + usage).
+		// ledger. Only mounted with a real handler when the capability
+		// subsystem is wired.
 		var billingHandler *billingh.Handler
 		if deps.Capability != nil {
-			billingHandler = billingh.NewHandler(deps.Pool, usageStore, polEngine).
+			ledger, err := capabilitypg.NewLedger(deps.Pool)
+			if err != nil {
+				return nil, nil, fmt.Errorf("app: charges ledger: %w", err)
+			}
+			billingHandler = billingh.NewHandler(ledger, usageStore, polEngine).
 				WithCurrency(deps.Cfg.Capability.Currency)
 		}
 		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler))

@@ -49,10 +49,10 @@ func TestNewHandler_PolicyRequired(t *testing.T) {
 	_ = NewHandler(nil, nil, nil)
 }
 
-// TestGetTenantSummary_NilPool returns Unavailable when the
+// TestGetTenantSummary_NoLedger returns Unavailable when the
 // capability subsystem is disabled (deps.Capability == nil → no
-// pool wired into the billing handler).
-func TestGetTenantSummary_NilPool(t *testing.T) {
+// ledger wired into the billing handler).
+func TestGetTenantSummary_NoLedger(t *testing.T) {
 	h := NewHandler(nil, nil, allowAuthorizer{})
 	_, err := h.GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{})
 	if err == nil {
@@ -63,8 +63,8 @@ func TestGetTenantSummary_NilPool(t *testing.T) {
 	}
 }
 
-// TestGetTenantTimeSeries_NilPool same shape as the summary case.
-func TestGetTenantTimeSeries_NilPool(t *testing.T) {
+// TestGetTenantTimeSeries_NoLedger same shape as the summary case.
+func TestGetTenantTimeSeries_NoLedger(t *testing.T) {
 	h := NewHandler(nil, nil, allowAuthorizer{})
 	_, err := h.GetTenantTimeSeries(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{}, "day")
 	if err == nil {

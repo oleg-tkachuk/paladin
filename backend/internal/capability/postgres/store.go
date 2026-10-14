@@ -140,17 +140,6 @@ func ReadAllTenants(ctx context.Context) context.Context {
 	return pgstore.WithAllTenantsReadOnly(auth.WithCrossTenantRead(ctx))
 }
 
-// InScope runs fn in a transaction on pool, scoped by Scope: for a reader of
-// the limes schema outside the stores, such as billing.
-func InScope(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
-	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		if err := Scope(ctx, tx); err != nil {
-			return fmt.Errorf("capability/postgres: scope: %w", err)
-		}
-		return fn(tx)
-	})
-}
-
 // checkTenant refuses a capability for a tenant Paladin does not hold or holds
 // in the trash, and keeps the tenant from being purged until the record is
 // written.
