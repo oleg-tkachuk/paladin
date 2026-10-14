@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ExclamationTriangleIcon,
   TrashIcon,
@@ -47,9 +47,19 @@ export function ConfirmModal({
   cancelText = "Cancel",
   loading = false,
 }: ConfirmModalProps) {
+  // Held while onConfirm runs, so a second click cannot start the action
+  // twice even when the caller passes no loading state of its own.
+  const [running, setRunning] = useState(false);
+  const busy = loading || running;
+
   const handleConfirm = async () => {
-    await onConfirm();
-    onClose();
+    setRunning(true);
+    try {
+      await onConfirm();
+      onClose();
+    } finally {
+      setRunning(false);
+    }
   };
 
   const isDanger = type === "danger";
@@ -105,14 +115,14 @@ export function ConfirmModal({
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            disabled={loading}
+            disabled={busy}
             className="flex-1 px-4 py-2.5 rounded-xl bg-muted/50 border border-border text-sm font-semibold text-foreground hover:bg-muted transition-all disabled:opacity-50"
           >
             {cancelText}
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={busy}
             className={cn(
               "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50",
               isDanger
@@ -120,7 +130,7 @@ export function ConfirmModal({
                 : "bg-warning text-warning-foreground hover:bg-warning/90",
             )}
           >
-            {loading ? "Processing..." : confirmText}
+            {busy ? "Processing..." : confirmText}
           </button>
         </div>
       </AlertDialogContent>

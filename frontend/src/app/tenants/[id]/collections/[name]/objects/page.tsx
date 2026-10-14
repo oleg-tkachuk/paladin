@@ -32,8 +32,12 @@ import { useCollection } from "../collection-context";
 import { SavedViewSchema, type SavedView } from "./_view";
 import { useObjectListState } from "./useObjectListState";
 import { CopyMoveDialog } from "./CopyMoveDialog";
-import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
+
+const STAYS_RESTORABLE =
+  "It stays restorable from the Trash tab until it is purged.";
+const CANNOT_BE_UNDONE = "This cannot be undone.";
 
 function CollectionObjectsContent() {
   const { collection: collectionResource } = useCollection();
@@ -139,6 +143,7 @@ function CollectionObjectsContent() {
     title: string;
     message: string;
     type: "danger" | "warning";
+    warning?: string;
     confirmText: string;
     onConfirm: () => Promise<void>;
   }>({
@@ -159,7 +164,8 @@ function CollectionObjectsContent() {
       open: true,
       type: "warning",
       title: "Move to Trash",
-      message: `Move "${obj.key.split("/").pop()}" to the trash bin? You can restore it later from the Trash tab.`,
+      message: `Move "${obj.key.split("/").pop()}" to the trash bin? It can no longer be read.`,
+      warning: STAYS_RESTORABLE,
       confirmText: "Move to Trash",
       onConfirm: async () => {
         const full = objects.find((o) => o.objectId === obj.objectId);
@@ -177,7 +183,8 @@ function CollectionObjectsContent() {
       open: true,
       type: "danger",
       title: "Permanently delete object?",
-      message: `This will PERMANENTLY delete "${obj.key.split("/").pop()}". This action cannot be undone.`,
+      message: `This will permanently delete "${obj.key.split("/").pop()}".`,
+      warning: CANNOT_BE_UNDONE,
       confirmText: "Purge permanently",
       onConfirm: async () => {
         const full = objects.find((o) => o.objectId === obj.objectId);
@@ -313,7 +320,9 @@ function CollectionObjectsContent() {
         type: "danger",
         title: `Permanently delete ${ids.length} objects?`,
         message:
-          "This collection is public: its objects have no trash. They are deleted for good, and their public URLs stop answering — though a CDN may serve a cached copy until it expires.",
+          "This collection is public: its objects have no trash. They are deleted for good.",
+        warning:
+          "Their public URLs stop answering, though a CDN may serve a cached copy until it expires. This cannot be undone.",
         confirmText: "Delete permanently",
         onConfirm: async () => {
           await bulkDeleteObjects(deletePayload, { permanent: true });
@@ -327,32 +336,56 @@ function CollectionObjectsContent() {
       });
       return;
     }
-    try {
-      setIsBulkDeleting(true);
-      await bulkDeleteObjects(deletePayload);
-      setSelectedIds(new Set());
-      registerAction({
-        id: "objects.bulk_restore_last",
-        label: "Undo: Restore Objects",
-        category: "operation",
-        perform: async () => {
-          await bulkRestoreObjects(deletePayload);
-          await refresh();
-        },
-      });
-      showNotification({
-        type: "success",
-        title: "Moved to Trash",
-        message: `${ids.length} objects moved to trash.`,
-        action: {
-          label: "Undo",
-          onClick: () => executeAction("objects.bulk_restore_last"),
-        },
-      });
-    } finally {
-      setIsBulkDeleting(false);
-    }
+    setConfirm({
+      open: true,
+      type: "warning",
+      title: `Move ${ids.length} objects to Trash?`,
+      message: "The selected objects can no longer be read.",
+      warning: STAYS_RESTORABLE,
+      confirmText: `Move ${ids.length} to Trash`,
+      onConfirm: async () => {
+        try {
+          setIsBulkDeleting(true);
+          await bulkDeleteObjects(deletePayload);
+          setSelectedIds(new Set());
+          // Undo is a restore, so it is confirmed like any other.
+          registerAction({
+            id: "objects.bulk_restore_last",
+            label: "Undo: Restore Objects",
+            category: "operation",
+            perform: () => confirmBulkRestore(deletePayload),
+          });
+          showNotification({
+            type: "success",
+            title: "Moved to Trash",
+            message: `${ids.length} objects moved to trash.`,
+            action: {
+              label: "Undo",
+              onClick: () => executeAction("objects.bulk_restore_last"),
+            },
+          });
+        } finally {
+          setIsBulkDeleting(false);
+        }
+      },
+    });
   };
+
+  const confirmBulkRestore = (items: { name: string; collection: string }[]) =>
+    setConfirm({
+      open: true,
+      type: "warning",
+      title: `Restore ${items.length} objects?`,
+      message:
+        "They return to the collection's active objects and can be read again.",
+      warning:
+        "A restore is refused for an object that changed since it was trashed.",
+      confirmText: `Restore ${items.length} objects`,
+      onConfirm: async () => {
+        await bulkRestoreObjects(items);
+        await refresh();
+      },
+    });
 
   const handleBulkPatch = async () => {
     if (selectedIds.size === 0) return;
@@ -685,18 +718,16 @@ function CollectionObjectsContent() {
         onClose={() => setCopyMove((p) => ({ ...p, open: false }))}
       />
 
-      {/* ─── Confirmation (soft + hard delete) ───────────────────────── */}
-      <DeleteConfirmDialog
-        open={confirm.open}
+      {/* ─── Confirmation (trash, purge, restore) ────────────────────── */}
+      <ConfirmModal
+        isOpen={confirm.open}
         type={confirm.type}
         title={confirm.title}
         message={confirm.message}
+        warning={confirm.warning}
         confirmText={confirm.confirmText}
-        onConfirm={async () => {
-          await confirm.onConfirm();
-          setConfirm((p) => ({ ...p, open: false }));
-        }}
-        onOpenChange={(o) => !o && setConfirm((p) => ({ ...p, open: false }))}
+        onConfirm={confirm.onConfirm}
+        onClose={() => setConfirm((p) => ({ ...p, open: false }))}
       />
     </div>
   );

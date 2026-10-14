@@ -117,4 +117,29 @@ describe("ConfirmModal", () => {
     expect(overlay).toHaveClass("z-70");
     expect(overlay).not.toHaveClass("z-50");
   });
+
+  it("holds both buttons while the action runs", async () => {
+    let finish!: () => void;
+    const onConfirm = vi.fn(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    const onClose = vi.fn();
+    render(
+      <ConfirmModal
+        {...baseProps}
+        confirmText="Delete"
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(
+      screen.getByRole("button", { name: "Processing..." }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    finish();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
 });
