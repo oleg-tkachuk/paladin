@@ -4,8 +4,10 @@
 // shortcut on the platform. Mounted once at the root layout; it
 // listens for the ? key globally and pops itself.
 //
-// New shortcuts on this app should be added to SHORTCUTS below
-// (keep the source of truth + the help dialog in one place).
+// SHORTCUTS lists only keys that a real handler serves: this
+// component (?), CommandPalette (⌘K) and useGlobalShortcuts (the
+// g-prefix jumps). A shortcut added there is added here, and
+// KeyboardHelp.test.tsx fails when the two drift apart.
 
 import React, { useEffect, useState } from "react";
 
@@ -22,7 +24,7 @@ interface Shortcut {
   desc: string;
 }
 
-const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
+export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   {
     group: "Navigation",
     items: [
@@ -32,26 +34,6 @@ const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
       { keys: ["g", "t"], desc: "Go to tenants" },
       { keys: ["g", "b"], desc: "Go to buckets" },
       { keys: ["g", "s"], desc: "Go to storage backends" },
-    ],
-  },
-  {
-    group: "Tables",
-    items: [
-      { keys: ["j", "↓"], desc: "Move down a row" },
-      { keys: ["k", "↑"], desc: "Move up a row" },
-      { keys: ["g", "g"], desc: "Jump to first row" },
-      { keys: ["⇧", "G"], desc: "Jump to last row" },
-      { keys: ["Enter"], desc: "Open active row" },
-      { keys: ["Esc"], desc: "Clear selection" },
-      { keys: ["/"], desc: "Focus search" },
-    ],
-  },
-  {
-    group: "File browser",
-    items: [
-      { keys: ["x"], desc: "Toggle row selection" },
-      { keys: ["⇧", "X"], desc: "Range-select" },
-      { keys: ["u"], desc: "Upload (file picker)" },
     ],
   },
 ];

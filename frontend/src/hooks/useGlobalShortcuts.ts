@@ -19,7 +19,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-const G_TARGETS: Record<string, string> = {
+export const G_TARGETS: Record<string, string> = {
   d: "/",
   t: "/tenants",
   b: "/buckets",
