@@ -23,6 +23,12 @@ import (
 
 // Func serves one whole unary call. Request and response metadata are on the
 // context's connect.CallInfo.
+//
+// req is shared, not copied: every Interceptor around the call sees the one
+// message decoded from the wire. A Func reads it and never changes it, and
+// hands the same message to next. The handler at the end of the chain gets
+// its own copy, so nothing it does to its request reaches a layer that reads
+// req after next returns, as the audit log does.
 type Func func(ctx context.Context, spec connect.Spec, req proto.Message) (proto.Message, error)
 
 // Interceptor adapts wrap, which acts on whole unary calls, to a
@@ -51,11 +57,8 @@ func Interceptor(
 			if spec.StreamType != connect.StreamTypeUnary {
 				return streaming(ctx, spec, s)
 			}
-			req, err := NewRequest(spec)
+			req, err := receive(spec, s)
 			if err != nil {
-				return err
-			}
-			if err := s.Receive(req); err != nil {
 				return err
 			}
 			res, err := call(ctx, spec, req)
@@ -65,6 +68,25 @@ func Interceptor(
 			return s.Send(res)
 		}
 	}
+}
+
+// receive is the call's request. Behind an enclosing Interceptor the stream
+// already holds it, and it is taken as it is: copying it into a fresh message
+// at every layer cost the data plane, five layers deep, about six times the
+// rest of a maximum-size call. Otherwise it is decoded from the stream.
+func receive(spec connect.Spec, s connect.ServerStream) (proto.Message, error) {
+	if held, ok := s.(*heldStream); ok && !held.received {
+		held.received = true
+		return held.req, nil
+	}
+	req, err := NewRequest(spec)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Receive(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
 // NewRequest is an empty request message of the method spec describes.
@@ -97,6 +119,8 @@ type heldStream struct {
 	res      proto.Message
 }
 
+// Receive copies the request into the handler's own message, so the handler
+// cannot change the one the layers around it share.
 func (s *heldStream) Receive(msg any) error {
 	if s.received {
 		return io.EOF
