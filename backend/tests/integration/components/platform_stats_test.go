@@ -396,3 +396,29 @@ func backendOf(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture)
 	}
 	return id
 }
+
+// A child of a revoked capability counts as revoked, not active, since the
+// verifier refuses it with its parent; and it leaves the expiring-soon count,
+// which only active records are in.
+func TestCollectRLSCountsAChildOfARevokedCapabilityAsRevoked(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+	now := time.Now()
+	parent := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(48*time.Hour), uuid.Nil)
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalAgent, now.Add(time.Hour), parent)
+	seedRevocation(t, ctx, pool, parent)
+
+	got, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
+	if err != nil {
+		t.Fatalf("CollectRLS: %v", err)
+	}
+	c := got.Capabilities
+	if c.Total != 2 || c.Revoked != 2 || c.Active != 0 || c.Delegated != 1 || c.ExpiringSoon != 0 {
+		t.Errorf("capability census = %+v, want 2 revoked of 2, 1 delegated, none active or expiring", c)
+	}
+	if len(c.ByPrincipalKind) != 0 {
+		t.Errorf("active by principal kind = %v, want none", c.ByPrincipalKind)
+	}
+}
