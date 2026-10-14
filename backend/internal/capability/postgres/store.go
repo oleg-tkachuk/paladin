@@ -41,14 +41,9 @@ func WithDefaultUnit(unit string) Option {
 	return func(o *options) { o.defaultUnit = unit }
 }
 
-// errNoPool is a store built over no pool. pgstore cannot tell: a nil
-// *pgxpool.Pool is a non-nil DB to it, and fails on the first call instead.
-var errNoPool = errors.New("capability/postgres: pool required")
-
+// config is the stores' configuration over pool. pgstore refuses a nil pool
+// when a store is built.
 func config(pool *pgxpool.Pool, opts []Option) (pgstore.Config, options, error) {
-	if pool == nil {
-		return pgstore.Config{}, options{}, errNoPool
-	}
 	var o options
 	for _, opt := range opts {
 		opt(&o)
