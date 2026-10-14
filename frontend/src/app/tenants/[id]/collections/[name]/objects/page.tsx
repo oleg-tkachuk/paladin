@@ -37,6 +37,8 @@ import { ObjectsTable } from "./ObjectsTable";
 
 const STAYS_RESTORABLE =
   "It stays restorable from the Trash tab until it is purged.";
+const STAY_RESTORABLE =
+  "They stay restorable from the Trash tab until they are purged.";
 const CANNOT_BE_UNDONE = "This cannot be undone.";
 
 function CollectionObjectsContent() {
@@ -341,7 +343,7 @@ function CollectionObjectsContent() {
       type: "warning",
       title: `Move ${ids.length} objects to Trash?`,
       message: "The selected objects can no longer be read.",
-      warning: STAYS_RESTORABLE,
+      warning: STAY_RESTORABLE,
       confirmText: `Move ${ids.length} to Trash`,
       onConfirm: async () => {
         try {

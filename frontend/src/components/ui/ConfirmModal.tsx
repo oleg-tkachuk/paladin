@@ -66,11 +66,12 @@ export function ConfirmModal({
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      {/* Above every panel, the object inspector (z-60) included: a
-          confirmation opened from a panel must not open behind it. */}
+      {/* Above every panel and bar it can be opened from — the object
+          inspector (z-60), the bulk-actions bar (z-80) — so neither covers
+          the question it raised. */}
       <AlertDialogContent
-        overlayClassName="z-70"
-        className="z-70 max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6"
+        overlayClassName="z-100"
+        className="z-100 max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6"
       >
         <div className="flex flex-col items-center text-center space-y-4">
           <div
