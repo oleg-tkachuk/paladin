@@ -44,7 +44,17 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — billing reads the charges ledger through pgstore
+## Unreleased — capabilities run on limes v0.64.0 and pgstore v0.9.0
+
+- **Behaviour, stats.** The platform stats count capability records through
+  pgstore's census instead of its tables. A record below a revoked ancestor
+  now counts as revoked rather than active or expired, since the verifier
+  refuses it, and the capabilities-expiring drill-down sums to that count.
+- **Behaviour, admin.** A write to the capability stores under a platform-wide
+  read is refused with `CodeInternal` (pgstore's `ErrScopeMismatch`); before,
+  housekeeping writes under it changed nothing and reported success.
+
+## v34.5.0 — billing reads the charges ledger through pgstore
 
 - **Behaviour, billing.** `GetTenantSummary` and `GetTenantTimeSeries` read
   the ledger through pgstore's `Ledger` instead of its table. Amounts are net
