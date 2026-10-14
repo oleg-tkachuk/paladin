@@ -384,6 +384,23 @@ describe("StorageBackendsPage", () => {
     expect(screen.queryByRole("button", { name: "Bulk disable" })).toBeNull();
   });
 
+  // The bulk actions sit in the shared selection bar, which also drops the
+  // selection.
+  it("offers the bulk actions in the selection bar, and clears it", async () => {
+    h.backends = [makeBackend({ backendId: "a" })];
+    render(<StorageBackendsPage />);
+    await userEvent.click(screen.getByRole("checkbox", { name: /select a$/i }));
+    const bar = screen.getByRole("toolbar", { name: "Selection actions" });
+    expect(bar).toHaveTextContent("1 selected");
+    expect(
+      within(bar).getByRole("button", { name: "Bulk disable" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(bar).getByRole("button", { name: "Clear selection" }),
+    );
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+  });
+
   // Operator-set maintenance flag (`001_initial_schema.sql`) — advisory, orthogonal.
   it("flags a backend for maintenance from its row menu", async () => {
     h.backends = [makeBackend({ maintenance: false, resourceVersion: "7" })];
