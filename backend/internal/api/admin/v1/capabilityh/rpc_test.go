@@ -463,24 +463,6 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	}
 }
 
-// Counters that hold only requests carry no unit yet; the spend is shown in
-// the capability's own unit, not a default.
-func TestGetUsageOfRequestsOnlyIsInTheCapabilitysUnit(t *testing.T) {
-	const capabilityUnit = "JPY"
-	c := limes.Capability{ID: uuid.New(), Caveats: limes.Caveats{UnitCode: capabilityUnit}}
-	store := &fakeStore{cap: &c}
-	usage := &fakeUsage{out: limes.Usage{CapabilityID: c.ID, RequestCount: 1}}
-	h := mkHandler(t, store, usage, &allowAuthorizer{})
-
-	resp, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{Id: c.ID.String()})
-	if err != nil {
-		t.Fatalf("GetUsage: %v", err)
-	}
-	if got := resp.GetSpent().GetCurrencyCode(); got != capabilityUnit {
-		t.Errorf("unit = %q, want the capability's %q", got, capabilityUnit)
-	}
-}
-
 func TestGetUsageNotFound(t *testing.T) {
 	store := &fakeStore{}
 	usage := &fakeUsage{err: limes.ErrUsageNotFound}

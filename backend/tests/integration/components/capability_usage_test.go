@@ -231,3 +231,21 @@ func TestTenantBudgetIsFirstWrittenInThePlatformCurrency(t *testing.T) {
 		})
 	}
 }
+
+// Counters that hold only requests are in the capability's unit: the admin
+// plane shows usage in the unit the meter records, with no fallback of its
+// own.
+func TestRequestsOnlyUsageIsInTheCapabilitysUnit(t *testing.T) {
+	t.Parallel()
+	ctx, f := newUsageFixture(t)
+	if _, err := f.usage.Bump(ctx, limes.BumpRequest{Subject: f.subject}); err != nil {
+		t.Fatalf("bump: %v", err)
+	}
+	u, err := f.usage.GetUsage(ctx, f.capID)
+	if err != nil {
+		t.Fatalf("get usage: %v", err)
+	}
+	if u.RequestCount != 1 || u.UnitCode != f.subject.UnitCode() {
+		t.Errorf("usage = %d requests in %q, want 1 in %q", u.RequestCount, u.UnitCode, f.subject.UnitCode())
+	}
+}

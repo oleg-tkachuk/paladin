@@ -333,20 +333,6 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	return h.issued(ctx, res)
 }
 
-// usageUnit is the unit a capability's spend is shown in. The meter records
-// one with the first amount it counts, so counters that hold only requests
-// carry none; those are in the capability's own unit, or, for a record gone
-// or naming none, the platform's.
-func (h *Handler) usageUnit(ctx context.Context, id uuid.UUID, counted string) string {
-	if counted != "" {
-		return counted
-	}
-	if rec, err := h.store.GetRecord(ctx, id); err == nil && rec.Capability.Caveats.UnitCode != "" {
-		return rec.Capability.Caveats.UnitCode
-	}
-	return h.currency
-}
-
 // Revoke adds the capability ID to the revocation list. Idempotent for a
 // capability the caller can see; NotFound for one it cannot.
 func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevokeRequest) (*adminv1.CapabilityServiceRevokeResponse, error) {
@@ -497,7 +483,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGe
 	return &adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
 		RequestCount: u.RequestCount,
-		Spent:        apiutil.MoneyOf(h.usageUnit(ctx, id, u.UnitCode), u.SpentAmount),
+		Spent:        apiutil.MoneyOf(u.UnitCode, u.SpentAmount),
 		// updated_at not surfaced today — the UsageStore.Get value
 		// doesn't carry it consistently across the postgres /
 		// metering decorators. Add when telemetry needs it.
