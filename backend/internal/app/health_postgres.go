@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/pressly/goose/v3"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
@@ -144,6 +145,76 @@ func schemaCheck(v schemaVersions) health.Check {
 			}
 			mu.Unlock()
 			return append(d, health.Detail{Name: detailSchemaWanted, Value: strconv.FormatInt(wanted, 10)})
+		},
+	}
+}
+
+// limesSchemaVersion reads the limes schema's version as pgstore records it,
+// beside the one this build's pgstore queries. pgstore.ReadSchemaVersion is
+// one.
+type limesSchemaVersion func(ctx context.Context) (pgstore.SchemaVersion, error)
+
+// limesSchemaComponent checks the limes schema — pgstore's, which the migrate
+// Job brings up before goose runs — is at least the version this build's
+// pgstore queries. It reads the version as pgstore.CheckSchema does but, like
+// the goose check above, fails only behind: CheckSchema refuses a schema
+// ahead too, which is every old pod while a rollout's new pgstore has
+// migrated, and would take them all out of service at once.
+func limesSchemaComponent(db *postgres.DB) health.Check {
+	if db == nil || db.Pool == nil {
+		return health.Check{
+			Name:     limesSchemaName,
+			Category: health.CategoryDatabase,
+			Critical: true,
+			Func:     func(context.Context) error { return errors.New("no database") },
+		}
+	}
+	return limesSchemaCheck(func(ctx context.Context) (pgstore.SchemaVersion, error) {
+		return pgstore.ReadSchemaVersion(ctx, db.Pool)
+	})
+}
+
+// limesSchemaName is the component's name on the health page.
+const limesSchemaName = "postgres-limes-schema"
+
+func limesSchemaCheck(read limesSchemaVersion) health.Check {
+	// The version the last check read, for Describe, shared under a lock as
+	// schemaCheck shares its own.
+	var (
+		mu   sync.Mutex
+		last *pgstore.SchemaVersion
+	)
+	return health.Check{
+		Name:     limesSchemaName,
+		Category: health.CategoryDatabase,
+		Critical: true,
+		Func: func(ctx context.Context) error {
+			v, err := read(ctx)
+			mu.Lock()
+			last = nil
+			if err == nil {
+				last = &v
+			}
+			mu.Unlock()
+			if err != nil {
+				return fmt.Errorf("read the limes schema version: %w", err)
+			}
+			if v.Applied < v.Expected {
+				return fmt.Errorf("%w: limes schema at %d, this build needs %d: migrations have not run",
+					pgstore.ErrSchemaMismatch, v.Applied, v.Expected)
+			}
+			return nil
+		},
+		Describe: func(context.Context) []health.Detail {
+			mu.Lock()
+			defer mu.Unlock()
+			if last == nil {
+				return nil
+			}
+			return []health.Detail{
+				{Name: detailSchemaApplied, Value: strconv.FormatInt(int64(last.Applied), 10)},
+				{Name: detailSchemaWanted, Value: strconv.FormatInt(int64(last.Expected), 10)},
+			}
 		},
 	}
 }
