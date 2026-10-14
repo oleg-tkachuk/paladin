@@ -4,6 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  SIDEBAR_COLLAPSED_ATTR,
+  SIDEBAR_WIDTH,
+} from "@/components/layout/sidebarWidth";
+import {
   HomeIcon,
   CloudArrowUpIcon,
   UsersIcon,
@@ -224,8 +228,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           "hidden lg:flex shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
           "sticky top-0 h-screen self-start",
           "transition-[width] duration-200 ease-out",
-          collapsed ? "w-17" : "w-64",
+          collapsed ? SIDEBAR_WIDTH.collapsed : SIDEBAR_WIDTH.expanded,
         )}
+        {...{ [SIDEBAR_COLLAPSED_ATTR]: collapsed ? "" : undefined }}
       >
         <SidebarBody
           collapsed={collapsed}

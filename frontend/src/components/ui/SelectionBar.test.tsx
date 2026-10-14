@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { SelectionBar } from "./SelectionBar";
+import { CLEAR_SIDEBAR } from "@/components/layout/sidebarWidth";
 
 describe("SelectionBar", () => {
   it("renders nothing while nothing is selected", () => {
@@ -49,5 +50,17 @@ describe("SelectionBar", () => {
       </SelectionBar>,
     );
     expect(screen.getByRole("toolbar").parentElement).toHaveClass("z-50");
+  });
+
+  // Centred on the window, it ran under the sidebar on a narrow desktop.
+  it("centres on the content column, clear of the sidebar", () => {
+    render(
+      <SelectionBar count={1} onClear={vi.fn()}>
+        <button>Delete</button>
+      </SelectionBar>,
+    );
+    const frame = screen.getByRole("toolbar").parentElement!;
+    for (const cls of CLEAR_SIDEBAR.split(" ")) expect(frame).toHaveClass(cls);
+    expect(frame).not.toHaveClass("sm:left-1/2");
   });
 });
