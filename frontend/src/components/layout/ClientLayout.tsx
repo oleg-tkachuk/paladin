@@ -41,6 +41,16 @@ const STANDALONE_ROUTES = new Set<string>(["/login"]);
  *   - TopBar is `sticky top-0 z-30` (handled inside TopBar)
  *   - `<main>` is just regular flow — no overflow trap
  */
+/**
+ * The g-prefix jumps. A component rather than a hook call in Shell: the
+ * handler reads the scoped tenant, so it has to sit inside ScopeProvider,
+ * and behind AuthGate so the login page has no jumps.
+ */
+function GlobalShortcuts() {
+  useGlobalShortcuts();
+  return null;
+}
+
 /** The document title, with the names the page gave its id segments. */
 function PageTitle({ pathname }: { pathname: string }) {
   return <title>{pageTitle(pathname, useCrumbNames())}</title>;
@@ -57,10 +67,6 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 function Shell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  // Wire g-prefix navigation (g+d/t/b/s/p/a/u → routes). Inert in
-  // editable elements; mounted once at the root so every page picks
-  // it up. KeyboardHelp listens for ? and toggles itself.
-  useGlobalShortcuts();
 
   // Rendered here rather than as static metadata: every page is a client
   // component, so the root layout's one title used to name all of them, and
@@ -93,6 +99,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <StatsProvider>
                 <AuthGate publicRoutes={STANDALONE_ROUTES}>
                   <div className="flex min-h-screen w-full bg-background text-foreground">
+                    <GlobalShortcuts />
                     <CommandPalette />
                     <KeyboardHelp />
                     <Sidebar

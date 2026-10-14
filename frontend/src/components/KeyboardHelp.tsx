@@ -6,8 +6,8 @@
 //
 // SHORTCUTS lists only keys that a real handler serves: this
 // component (?), CommandPalette (⌘K) and useGlobalShortcuts (the
-// g-prefix jumps). A shortcut added there is added here, and
-// KeyboardHelp.test.tsx fails when the two drift apart.
+// g-prefix jumps, read from NAV_JUMPS so they cannot drift).
+// KeyboardHelp.test.tsx fails when a listed key loses its handler.
 
 import React, { useEffect, useState } from "react";
 
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { NAV_JUMPS, NAV_PREFIX } from "@/lib/navShortcuts";
 import { cn } from "@/lib/utils";
 
 interface Shortcut {
@@ -30,10 +31,7 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
     items: [
       { keys: ["?"], desc: "Show this help" },
       { keys: ["⌘", "K"], desc: "Open command palette" },
-      { keys: ["g", "d"], desc: "Go to dashboard" },
-      { keys: ["g", "t"], desc: "Go to tenants" },
-      { keys: ["g", "b"], desc: "Go to buckets" },
-      { keys: ["g", "s"], desc: "Go to storage backends" },
+      ...NAV_JUMPS.map((j) => ({ keys: [NAV_PREFIX, j.key], desc: j.label })),
     ],
   },
 ];

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { G_TARGETS } from "@/hooks/useGlobalShortcuts";
+import { NAV_JUMPS, NAV_PREFIX, jumpTarget } from "@/lib/navShortcuts";
 
 import { KeyboardHelp, SHORTCUTS } from "./KeyboardHelp";
 
@@ -14,7 +14,6 @@ import { KeyboardHelp, SHORTCUTS } from "./KeyboardHelp";
 const DIALOG_TITLE = "Keyboard shortcuts";
 // user-event does not add Shift for "?"; the component requires it.
 const OPEN_HELP = "{Shift>}?{/Shift}";
-const NAV_PREFIX = "g";
 const COMMAND_PALETTE_KEYS = ["⌘", "K"];
 const HELP_KEYS = ["?"];
 const UNSERVED_GROUPS = ["Tables", "File browser"];
@@ -69,13 +68,15 @@ describe("KeyboardHelp", () => {
     expect(SHORTCUTS.map((g) => g.group)).toEqual(["Navigation"]);
   });
 
-  it("lists no g-prefix jump that useGlobalShortcuts does not serve", () => {
-    const items = SHORTCUTS.flatMap((g) => g.items);
-    const jumps = items.filter((s) => s.keys[0] === NAV_PREFIX);
-    expect(jumps.length).toBeGreaterThan(0);
+  it("lists every g-prefix jump the handler serves, and no other", () => {
+    const jumps = SHORTCUTS.flatMap((g) => g.items).filter(
+      (s) => s.keys[0] === NAV_PREFIX,
+    );
+    expect(jumps.map((s) => s.keys)).toEqual(
+      NAV_JUMPS.map((j) => [NAV_PREFIX, j.key]),
+    );
     for (const s of jumps) {
-      expect(s.keys).toHaveLength(2);
-      expect(G_TARGETS).toHaveProperty(s.keys[1]);
+      expect(jumpTarget(s.keys[1], null)).not.toBeNull();
     }
   });
 

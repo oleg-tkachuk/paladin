@@ -34,6 +34,7 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
+import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
 interface SearchResult {
   id: string;
   type: "action" | "object" | "nav";
@@ -74,19 +75,31 @@ export function CommandPalette() {
   // pre-date the proto-slug field. TenantLayout's resolver still
   // canonicalises UUID URLs to slug on landing if both present.
   const scopedTenantSlug = scopedTenant?.slug || scopedTenant?.tenantId || null;
+  const scopedBase = tenantBasePath(scopedTenant);
+
+  // A nav's shortcut is whichever g-jump lands on its href in this scope
+  // (useGlobalShortcuts serves the keys), so a label never names a key
+  // that goes elsewhere.
+  const withChord = useCallback(
+    (navs: SearchResult[]): SearchResult[] =>
+      navs.map((n) => ({
+        ...n,
+        shortcut: n.href ? chordFor(n.href, scopedBase) : undefined,
+      })),
+    [scopedBase],
+  );
 
   const tenantScopedNavs: SearchResult[] = useMemo(() => {
-    if (!scopedTenantSlug) return [];
-    const base = `/tenants/${encodeURIComponent(scopedTenantSlug)}`;
+    if (!scopedBase) return [];
+    const base = scopedBase;
     const label = scopedTenant?.displayName || scopedTenantSlug;
-    return [
+    return withChord([
       {
         id: "nav-tenant-overview",
         type: "nav",
         title: `Open ${label}`,
         subtitle: "Tenant overview, identity + quick links",
         icon: BuildingOfficeIcon,
-        shortcut: "G T",
         href: base,
         onSelect: () => router.push(base),
       },
@@ -96,7 +109,6 @@ export function CommandPalette() {
         title: `Buckets in ${label}`,
         subtitle: "S3 buckets owned by this tenant",
         icon: ServerStackIcon,
-        shortcut: "G B",
         href: `${base}/buckets`,
         onSelect: () => router.push(`${base}/buckets`),
       },
@@ -106,7 +118,6 @@ export function CommandPalette() {
         title: `Collections in ${label}`,
         subtitle: "Tenant-scoped namespaces routed to a bucket",
         icon: ServerStackIcon,
-        shortcut: "G K",
         href: `${base}/collections`,
         onSelect: () => router.push(`${base}/collections`),
       },
@@ -128,100 +139,102 @@ export function CommandPalette() {
         href: `${base}/audit-log`,
         onSelect: () => router.push(`${base}/audit-log`),
       },
-    ];
-  }, [router, scopedTenantSlug, scopedTenant?.displayName]);
+    ]);
+  }, [
+    router,
+    scopedBase,
+    withChord,
+    scopedTenant?.displayName,
+    scopedTenantSlug,
+  ]);
 
   const staticNavs: SearchResult[] = useMemo(
-    () => [
-      {
-        id: "nav-tenants",
-        type: "nav",
-        title: "Resources",
-        subtitle: "Tenant index — gateway to all resource subtrees",
-        icon: BuildingOfficeIcon,
-        shortcut: "G R",
-        href: "/tenants",
-        onSelect: () => router.push("/tenants"),
-      },
-      {
-        id: "nav-policies",
-        type: "nav",
-        title: "Policies",
-        subtitle: "System-wide Cedar editor",
-        icon: CommandLineIcon,
-        shortcut: "G P",
-        href: "/policies",
-        onSelect: () => router.push("/policies"),
-      },
-      // Cross-tenant Object Explorer is gone — flat /objects page
-      // was deleted in Phase 5. Object listing now requires an
-      // Collection scope (lives under /tenants/<id>/collections/
-      // <name>/objects). The cross-tenant /buckets and /collections
-      // entries below stay because their RPCs accept empty parents.
-      {
-        id: "nav-buckets",
-        type: "nav",
-        title: "Buckets (cross-tenant)",
-        subtitle: "Platform-admin index of every bucket",
-        icon: ServerStackIcon,
-        href: "/buckets",
-        onSelect: () => router.push("/buckets"),
-      },
-      {
-        id: "nav-collections",
-        type: "nav",
-        title: "Collections (cross-tenant)",
-        subtitle: "Platform-admin index of every Collection",
-        icon: ServerStackIcon,
-        href: "/collections",
-        onSelect: () => router.push("/collections"),
-      },
-      {
-        id: "nav-upload",
-        type: "nav",
-        title: "Upload Assets",
-        subtitle: "Upload new files",
-        icon: DocumentIcon,
-        shortcut: "G U",
-        href: "/upload",
-        onSelect: () => router.push("/upload"),
-      },
-      // /trash and /object-tags removed in Phase 5. Trash is now
-      // a per-Collection tab (/tenants/.../collections/<name>/trash).
-      // Object Tags drop entirely — they were a holdover taxonomy
-      // surface; per the BACKLOG they'll come back as a label
-      // filter on the Objects tab once the cross-bucket index lands.
-      {
-        id: "nav-stats",
-        type: "nav",
-        title: "Platform Stats",
-        subtitle: "Tenant / storage / object census across the fleet",
-        icon: ChartBarIcon,
-        href: "/stats",
-        onSelect: () => router.push("/stats"),
-      },
-      {
-        id: "nav-health",
-        type: "nav",
-        title: "Health Check",
-        subtitle: "Monitor infrastructure status",
-        icon: HeartIcon,
-        shortcut: "G H",
-        href: "/health",
-        onSelect: () => router.push("/health"),
-      },
-      {
-        id: "nav-config",
-        type: "nav",
-        title: "Configuration",
-        subtitle: "View environment and API settings",
-        icon: Cog6ToothIcon,
-        shortcut: "G C",
-        href: "/config",
-        onSelect: () => router.push("/config"),
-      },
-    ],
-    [router],
+    () =>
+      withChord([
+        {
+          id: "nav-tenants",
+          type: "nav",
+          title: "Resources",
+          subtitle: "Tenant index — gateway to all resource subtrees",
+          icon: BuildingOfficeIcon,
+          href: "/tenants",
+          onSelect: () => router.push("/tenants"),
+        },
+        {
+          id: "nav-policies",
+          type: "nav",
+          title: "Policies",
+          subtitle: "System-wide Cedar editor",
+          icon: CommandLineIcon,
+          href: "/policies",
+          onSelect: () => router.push("/policies"),
+        },
+        // Cross-tenant Object Explorer is gone — flat /objects page
+        // was deleted in Phase 5. Object listing now requires an
+        // Collection scope (lives under /tenants/<id>/collections/
+        // <name>/objects). The cross-tenant /buckets and /collections
+        // entries below stay because their RPCs accept empty parents.
+        {
+          id: "nav-buckets",
+          type: "nav",
+          title: "Buckets (cross-tenant)",
+          subtitle: "Platform-admin index of every bucket",
+          icon: ServerStackIcon,
+          href: "/buckets",
+          onSelect: () => router.push("/buckets"),
+        },
+        {
+          id: "nav-collections",
+          type: "nav",
+          title: "Collections (cross-tenant)",
+          subtitle: "Platform-admin index of every Collection",
+          icon: ServerStackIcon,
+          href: "/collections",
+          onSelect: () => router.push("/collections"),
+        },
+        {
+          id: "nav-upload",
+          type: "nav",
+          title: "Upload Assets",
+          subtitle: "Upload new files",
+          icon: DocumentIcon,
+          href: "/upload",
+          onSelect: () => router.push("/upload"),
+        },
+        // /trash and /object-tags removed in Phase 5. Trash is now
+        // a per-Collection tab (/tenants/.../collections/<name>/trash).
+        // Object Tags drop entirely — they were a holdover taxonomy
+        // surface; per the BACKLOG they'll come back as a label
+        // filter on the Objects tab once the cross-bucket index lands.
+        {
+          id: "nav-stats",
+          type: "nav",
+          title: "Platform Stats",
+          subtitle: "Tenant / storage / object census across the fleet",
+          icon: ChartBarIcon,
+          href: "/stats",
+          onSelect: () => router.push("/stats"),
+        },
+        {
+          id: "nav-health",
+          type: "nav",
+          title: "Health Check",
+          subtitle: "Monitor infrastructure status",
+          icon: HeartIcon,
+          href: "/health",
+          onSelect: () => router.push("/health"),
+        },
+        {
+          id: "nav-config",
+          type: "nav",
+          title: "Configuration",
+          subtitle: "View environment and API settings",
+          icon: Cog6ToothIcon,
+          href: "/config",
+          onSelect: () => router.push("/config"),
+        },
+      ]),
+    [router, withChord],
   );
 
   // Default-state list (palette open, no query): show the tenant
@@ -476,10 +489,9 @@ export function CommandPalette() {
     setSelectedIndex(0);
   }, []);
 
+  // The g-prefix jumps are not handled here: useGlobalShortcuts serves
+  // them, and withChord above labels the navs from the same table.
   useEffect(() => {
-    let lastKey = "";
-    let lastKeyTime = 0;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd+K
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -516,48 +528,12 @@ export function CommandPalette() {
             setIsOpen(false);
           }
         }
-        return;
-      }
-
-      // Global Shortcuts (g + ...). Tenant-scoped jumps win over
-      // generic ones — that way "G B" goes to "Buckets in <scope>"
-      // when a tenant is active and to the cross-tenant index when
-      // it isn't.
-      if (
-        !isOpen &&
-        !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)
-      ) {
-        const now = Date.now();
-        const key = e.key.toLowerCase();
-
-        if (lastKey === "g" && now - lastKeyTime < 500) {
-          const pool = [...tenantScopedNavs, ...staticNavs];
-          const nav = pool.find((n) => n.shortcut?.toLowerCase().endsWith(key));
-          if (nav) {
-            e.preventDefault();
-            nav.onSelect();
-          }
-          lastKey = "";
-        } else if (key === "g") {
-          lastKey = "g";
-          lastKeyTime = now;
-        } else {
-          lastKey = "";
-        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    toggle,
-    staticNavs,
-    tenantScopedNavs,
-    defaultNavs,
-    isOpen,
-    searchResults,
-    selectedIndex,
-  ]);
+  }, [toggle, defaultNavs, isOpen, searchResults, selectedIndex]);
 
   // Auto-scroll to selected index
   useEffect(() => {

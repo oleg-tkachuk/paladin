@@ -1,33 +1,25 @@
 "use client";
 
-// useGlobalShortcuts — installs the platform-level keyboard
-// shortcuts (g-prefix nav, Cmd+K for command palette is wired
-// elsewhere). Mounted at the root layout so every page has them.
+// useGlobalShortcuts — the one handler for the g-prefix jumps. The
+// table it serves is NAV_JUMPS in lib/navShortcuts; the command palette
+// and the keyboard help label their entries from the same table.
 //
-// g-prefix: press `g`, then within 800 ms press one of
-//   d → /
-//   t → /tenants
-//   b → /buckets
-//   s → /storage-backends
-//   p → /policies
-//   a → /audit
-//   u → /users
-//
-// Inert while focus is in an editable element so typing "good
-// morning" in a search field doesn't fire navigations.
+// Mounted inside the scope provider: b, k and t go to the scoped
+// tenant's pages while one is in scope. Inert while focus is in an
+// editable element so typing "good morning" in a search field doesn't
+// fire navigations, and with Cmd/Ctrl/Alt held so browser and palette
+// shortcuts pass through.
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-export const G_TARGETS: Record<string, string> = {
-  d: "/",
-  t: "/tenants",
-  b: "/buckets",
-  s: "/storage-backends",
-  p: "/policies",
-  a: "/audit",
-  u: "/users",
-};
+import { useScope } from "@/context/ScopeContext";
+import {
+  NAV_CHORD_WINDOW_MS,
+  NAV_PREFIX,
+  jumpTarget,
+  tenantBasePath,
+} from "@/lib/navShortcuts";
 
 function isEditable(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -39,26 +31,27 @@ function isEditable(el: EventTarget | null): boolean {
 
 export function useGlobalShortcuts() {
   const router = useRouter();
-  const gPending = useRef(false);
+  const tenantBase = tenantBasePath(useScope().tenant);
+  // When the prefix was pressed; null while no chord is pending.
+  const armedAt = useRef<number | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isEditable(e.target)) return;
-      if (e.key === "g") {
-        gPending.current = true;
-        setTimeout(() => {
-          gPending.current = false;
-        }, 800);
+      const pending =
+        armedAt.current !== null &&
+        Date.now() - armedAt.current < NAV_CHORD_WINDOW_MS;
+      armedAt.current = null;
+      const target = pending ? jumpTarget(e.key, tenantBase) : null;
+      if (target !== null) {
+        e.preventDefault();
+        router.push(target);
         return;
       }
-      if (gPending.current && G_TARGETS[e.key]) {
-        e.preventDefault();
-        router.push(G_TARGETS[e.key]);
-        gPending.current = false;
-      }
+      if (e.key === NAV_PREFIX) armedAt.current = Date.now();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [router]);
+  }, [router, tenantBase]);
 }
