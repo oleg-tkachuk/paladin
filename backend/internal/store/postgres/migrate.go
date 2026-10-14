@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/pressly/goose/v3"
@@ -61,31 +60,34 @@ func migrationConnConfig(runtimeCfg *pgx.ConnConfig, migrateCfg *config.Postgres
 	return cc, nil
 }
 
+// The roles the server serves as (002_roles_and_rls.sql creates them):
+// RoleApp under row-level security, RoleReaper with BYPASSRLS for the
+// platform-wide census. Both reach pgstore's tables.
+const (
+	RoleApp    = "paladin_app"
+	RoleReaper = "paladin_reaper"
+)
+
+// RuntimeRoles are the roles MigrateLimes grants pgstore's schema to.
+var RuntimeRoles = []string{RoleApp, RoleReaper}
+
 // MigrateLimes brings the limes schema — capabilities, their meter and the
-// tenant budgets, which pgstore owns — up to the version this build queries.
-// It runs before goose: a goose migration grants the runtime roles pgstore's
-// tables and hangs Paladin's triggers on them, so they must exist first.
-func MigrateLimes(ctx context.Context, cc *pgx.ConnConfig) error {
-	pc, err := pgxpool.ParseConfig("")
+// tenant budgets, which pgstore owns — up to the version this build queries,
+// on one connection of its own, and grants it to roles. It runs twice in a
+// migration: before goose with no roles, because 076 refers to pgstore's
+// tables, and after it with RuntimeRoles, which 002 creates. The second run
+// migrates nothing and grants again, which is idempotent.
+func MigrateLimes(ctx context.Context, cc *pgx.ConnConfig, roles ...string) error {
+	conn, err := pgx.ConnectConfig(ctx, cc)
 	if err != nil {
-		return fmt.Errorf("limes migrate: %w", err)
+		return fmt.Errorf("limes migrate: connect: %w", err)
 	}
-	pc.ConnConfig = cc
-	pc.MaxConns = limesMigrateConns
-	pool, err := pgxpool.NewWithConfig(ctx, pc)
-	if err != nil {
-		return fmt.Errorf("limes migrate: %w", err)
-	}
-	defer pool.Close()
-	if err := pgstore.Migrate(ctx, pool); err != nil {
+	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
+	if err := pgstore.Migrate(ctx, conn, pgstore.MigrateOptions{RuntimeRoles: roles}); err != nil {
 		return fmt.Errorf("limes migrate: %w", err)
 	}
 	return nil
 }
-
-// limesMigrateConns is the connections pgstore.Migrate needs: it migrates on
-// one, under an advisory lock.
-const limesMigrateConns = 1
 
 // gooseLogger adapts goose's Printf to zap, parsing for specific messages
 type gooseLogger struct {
@@ -169,6 +171,9 @@ func (d *DB) runMigrationsTo(ctx context.Context, fs embed.FS, target int64, mig
 	}
 	if err != nil {
 		return fmt.Errorf("goose up: %w", err)
+	}
+	if err := MigrateLimes(ctx, cc, RuntimeRoles...); err != nil {
+		return err
 	}
 
 	d.log.Info("migrations applied",

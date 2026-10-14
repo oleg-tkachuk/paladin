@@ -24,6 +24,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -104,6 +105,26 @@ func TestMigrations_ApplyWithoutSuperuser(t *testing.T) {
 	migrateLimes(t, migrateDSN)
 	if err := goose.Up(db, "."); err != nil {
 		t.Fatalf("migrations as a non-superuser owner: %v", err)
+	}
+	// The grant pass the migrate step makes once goose has created the roles.
+	migrateLimes(t, migrateDSN, postgres.RuntimeRoles...)
+	for _, c := range []struct {
+		role, table, privilege string
+		want                   bool
+	}{
+		{postgres.RoleApp, "limes.capabilities", "INSERT", true},
+		{postgres.RoleReaper, "limes.capabilities", "SELECT", true},
+		{postgres.RoleApp, "limes.schema_version", "SELECT", true},
+		{postgres.RoleApp, "limes.schema_version", "INSERT", false},
+	} {
+		var got bool
+		if err := db.QueryRowContext(ctx, `SELECT has_table_privilege($1, $2, $3)`,
+			c.role, c.table, c.privilege).Scan(&got); err != nil {
+			t.Fatalf("privilege of %s on %s: %v", c.role, c.table, err)
+		}
+		if got != c.want {
+			t.Errorf("%s %s on %s = %v, want %v", c.role, c.privilege, c.table, got, c.want)
+		}
 	}
 }
 
