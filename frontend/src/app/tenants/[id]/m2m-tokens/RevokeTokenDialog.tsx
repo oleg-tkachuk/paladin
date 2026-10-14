@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
 import { apiTokenClient } from "@/lib/connect/client";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
@@ -53,29 +44,22 @@ export function RevokeTokenDialog({
   };
 
   return (
-    <AlertDialog open={!!token} onOpenChange={(o) => !o && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Revoke this token?</AlertDialogTitle>
-          <AlertDialogDescription>
-            The token{" "}
-            <span className="font-mono text-foreground">
-              paladin_pat_{token?.prefix}…
-            </span>{" "}
-            will stop accepting traffic immediately. This cannot be undone —
-            create a new one to replace.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleRevoke}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Revoke
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmModal
+      isOpen={!!token}
+      onClose={onClose}
+      onConfirm={handleRevoke}
+      type="danger"
+      title="Revoke this token?"
+      message={
+        <p>
+          <span className="font-mono text-foreground">
+            paladin_pat_{token?.prefix}…
+          </span>{" "}
+          stops accepting traffic immediately.
+        </p>
+      }
+      warning="A revoke cannot be undone. Whatever uses this token needs a new one to keep working."
+      confirmText="Revoke"
+    />
   );
 }

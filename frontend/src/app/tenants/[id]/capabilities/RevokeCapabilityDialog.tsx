@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
@@ -64,52 +55,52 @@ export function RevokeCapabilityDialog({
     }
   };
 
+  // Every delegation under a revoked capability stops verifying whatever the
+  // checkbox says: the verifier checks the whole chain of ancestors (limes
+  // Store.Revoke). Cascading only writes a revocation entry for each of them,
+  // so the audit trail names everything that stopped. The checkbox used to
+  // read as though leaving it off kept the delegations working.
   return (
-    <AlertDialog open={!!cap} onOpenChange={(o) => !o && handleClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Revoke this capability?</AlertDialogTitle>
-          <AlertDialogDescription>
-            <span className="font-mono text-foreground">{cap?.id}</span> will
-            stop verifying immediately on every plane. Revocation is checked
-            locally by interceptors using a denylist that purges after the
-            natural expiry, so the cost of revoking is bounded.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="revoke-reason">
-              Reason (optional)
-            </Label>
-            <Input
-              id="revoke-reason"
-              placeholder="leaked / superseded / agent retired"
-              value={revokeReason}
-              onChange={(e) => setRevokeReason(e.target.value)}
-            />
-          </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={revokeCascade}
-              onChange={(e) => setRevokeCascade(e.target.checked)}
-              className="size-4 accent-primary"
-            />
-            <span>
-              Cascade to children — revoke every delegation under this one.
-            </span>
-          </label>
+    <ConfirmModal
+      isOpen={!!cap}
+      onClose={handleClose}
+      onConfirm={handleRevoke}
+      type="danger"
+      title="Revoke this capability?"
+      message={
+        <p>
+          <span className="font-mono text-foreground">{cap?.id}</span> stops
+          verifying immediately on every plane.
+        </p>
+      }
+      warning="Every delegation issued under it stops too. A revoke cannot be undone: holders need a new capability."
+      confirmText="Revoke"
+    >
+      <div className="space-y-3 text-left">
+        <div className="space-y-1.5">
+          <Label className="text-xs" htmlFor="revoke-reason">
+            Reason (optional)
+          </Label>
+          <Input
+            id="revoke-reason"
+            placeholder="leaked / superseded / agent retired"
+            value={revokeReason}
+            onChange={(e) => setRevokeReason(e.target.value)}
+          />
         </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleRevoke}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Revoke
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={revokeCascade}
+            onChange={(e) => setRevokeCascade(e.target.checked)}
+            className="mt-0.5 size-4 accent-primary"
+          />
+          <span>
+            Record each delegation under it as revoked too, so the audit trail
+            names them all.
+          </span>
+        </label>
+      </div>
+    </ConfirmModal>
   );
 }

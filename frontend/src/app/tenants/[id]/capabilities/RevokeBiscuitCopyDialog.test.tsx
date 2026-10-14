@@ -82,4 +82,11 @@ describe("RevokeBiscuitCopyDialog", () => {
       ),
     );
   });
+
+  it("warns which copies keep working and that the revoke is final", () => {
+    open();
+    const note = screen.getByRole("note");
+    expect(note).toHaveTextContent(/other copies keep working/);
+    expect(note).toHaveTextContent(/cannot be undone/);
+  });
 });

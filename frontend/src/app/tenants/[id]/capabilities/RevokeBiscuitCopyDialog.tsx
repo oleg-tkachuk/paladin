@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,63 +58,57 @@ export function RevokeBiscuitCopyDialog({
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Revoke one copy of a Biscuit</AlertDialogTitle>
-          <AlertDialogDescription>
-            Paste the Biscuit an agent holds. It stops verifying, and so does
-            every copy narrowed from it. The capability itself, the copy this
-            one was narrowed from and its other copies keep working — revoke the
-            capability to stop them all.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="revoke-copy-token">
-              Biscuit
-            </Label>
-            <Textarea
-              id="revoke-copy-token"
-              rows={4}
-              spellCheck={false}
-              autoComplete="off"
-              className="font-mono text-xs"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              aria-invalid={jwt}
-              aria-describedby={jwt ? "revoke-copy-jwt" : undefined}
-            />
-            {jwt && (
-              <p id="revoke-copy-jwt" className="text-xs text-destructive">
-                This is a JWT, not a Biscuit. A JWT has no copies: revoke its
-                capability instead.
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="revoke-copy-reason">
-              Reason (optional)
-            </Label>
-            <Input
-              id="revoke-copy-reason"
-              placeholder="leaked / sub-agent retired"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </div>
+    <ConfirmModal
+      isOpen={open}
+      onClose={handleClose}
+      onConfirm={handleRevoke}
+      type="danger"
+      title="Revoke one copy of a Biscuit"
+      message={
+        <p>
+          Paste the Biscuit an agent holds. It stops verifying, and so does
+          every copy narrowed from it.
+        </p>
+      }
+      warning="The capability itself, the copy this one was narrowed from and its other copies keep working — revoke the capability to stop them all. A revoke cannot be undone."
+      confirmText="Revoke copy"
+      confirmDisabled={!trimmed || jwt}
+    >
+      <div className="space-y-3 text-left">
+        <div className="space-y-1.5">
+          <Label className="text-xs" htmlFor="revoke-copy-token">
+            Biscuit
+          </Label>
+          <Textarea
+            id="revoke-copy-token"
+            rows={4}
+            spellCheck={false}
+            autoComplete="off"
+            className="font-mono text-xs"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            aria-invalid={jwt}
+            aria-describedby={jwt ? "revoke-copy-jwt" : undefined}
+          />
+          {jwt && (
+            <p id="revoke-copy-jwt" className="text-xs text-destructive">
+              This is a JWT, not a Biscuit. A JWT has no copies: revoke its
+              capability instead.
+            </p>
+          )}
         </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleRevoke}
-            disabled={!trimmed || jwt}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Revoke copy
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        <div className="space-y-1.5">
+          <Label className="text-xs" htmlFor="revoke-copy-reason">
+            Reason (optional)
+          </Label>
+          <Input
+            id="revoke-copy-reason"
+            placeholder="leaked / sub-agent retired"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
+      </div>
+    </ConfirmModal>
   );
 }
