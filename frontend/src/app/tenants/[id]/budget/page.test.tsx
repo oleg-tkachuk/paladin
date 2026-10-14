@@ -30,6 +30,8 @@ const unlimitedToggle = () =>
   screen
     .getByLabelText(/max budget/i)
     .parentElement!.querySelector("button[aria-pressed]") as HTMLElement;
+const unlimitedToggleOrNull = () =>
+  screen.queryByLabelText(/max budget/i) ? unlimitedToggle() : null;
 import { moneyFromDecimal } from "@/lib/format/money";
 
 const usd = (amount: string) => moneyFromDecimal(amount, "USD");
@@ -241,12 +243,12 @@ describe("TenantBudgetPage OCC", () => {
     h.get.mockReturnValue(new Promise(() => {}));
     render(<BudgetPage />);
 
-    // Label is whatever the not-yet-known state renders; what matters is that
-    // it cannot be pressed.
-    const submit = await screen.findByRole("button", {
-      name: /create budget|apply changes/i,
-    });
-    expect(submit).toBeDisabled();
+    // There is nothing to press, and no default to mistake for the budget.
+    expect(await screen.findByLabelText("Loading budget")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /create budget|apply changes/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/max budget/i)).not.toBeInTheDocument();
   });
 
   it("keeps submit usable while a background refetch is in flight", async () => {
@@ -371,12 +373,15 @@ describe("TenantBudgetPage before the budget loads", () => {
     h.get.mockReturnValue(new Promise((resolve) => (answer = resolve)));
     render(<BudgetPage />);
 
-    const cap = screen.getByLabelText(/max budget/i);
-    expect(cap).toBeDisabled();
+    expect(screen.queryByLabelText(/max budget/i)).not.toBeInTheDocument();
+    expect(unlimitedToggleOrNull()).toBeNull();
 
     answer({ budget });
-    await waitFor(() => expect(cap).toBeEnabled());
+    const cap = await screen.findByLabelText(/max budget/i);
+    expect(cap).toBeEnabled();
     expect(cap).toHaveValue(100);
+    // The loaded cap, not a new budget's Unlimited default.
+    expect(unlimitedToggle()).toHaveAttribute("aria-pressed", "false");
 
     await userEvent.clear(cap);
     await userEvent.type(cap, "500");
