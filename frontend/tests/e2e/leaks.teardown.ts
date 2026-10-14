@@ -8,9 +8,10 @@
  * bucket holds SeaweedFS volume slots, and leaked ones are what filled the
  * store until it refused new buckets.
  *
- * Tenants new in the trash are reported, not failed on: a tenant with charges
- * keeps them by product rule (charges.tenant_id is RESTRICT), so the trash is
- * where it honestly ends.
+ * Tenants new in the trash fail it too. They used to be only reported, while
+ * a tenant's charges held it there (charges.tenant_id was RESTRICT); the purge
+ * now removes a tenant's billing rows with it, and a trash that took leftovers
+ * quietly is where they accumulated.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,17 +41,13 @@ test("the run removed what it created", async ({}, testInfo) => {
   ) as FixtureInventory;
   const added = addedSince(before, await fixtureInventory());
 
-  if (added.trashedTenants.length > 0) {
-    console.warn(
-      `[leaks] tenants left in the trash: ${added.trashedTenants.join(", ")}`,
-    );
-  }
   expect(
-    {
-      activeTenants: added.activeTenants,
-      buckets: added.buckets,
-      backends: added.backends,
-    },
+    added,
     "resources this run created and its teardown did not remove",
-  ).toEqual({ activeTenants: [], buckets: [], backends: [] });
+  ).toEqual({
+    activeTenants: [],
+    trashedTenants: [],
+    buckets: [],
+    backends: [],
+  });
 });

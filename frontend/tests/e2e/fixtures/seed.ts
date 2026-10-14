@@ -1658,9 +1658,9 @@ export async function deleteTenants(tenantIds: string[]): Promise<void> {
       });
       // Soft-delete, then purge: PurgeTenant wants a trashed tenant, and
       // DeleteTenant only ever trashes. A refusal is reported by the loop
-      // below with the relation the server named — charges, kept by product
-      // rule, or an object under a COMPLIANCE lock — never swallowed: a
-      // silent refusal is how leftover tenants piled up.
+      // below with the reason the server gave, never swallowed: a silent
+      // refusal is how leftover tenants piled up, and the leaks project
+      // fails the run on the tenant it leaves in the trash.
       await client.purgeTenant({ name });
     }),
   );
