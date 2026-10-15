@@ -27,8 +27,14 @@ test.describe("Tenant switcher", () => {
     await trigger.click();
 
     await expect(page.getByPlaceholder("Search tenants…")).toBeVisible();
-    await expect(page.getByLabel("Signed in")).toBeVisible();
-    await expect(page.getByText(/^Backend$|^Bucket$/i)).toHaveCount(0);
+    // Inside the list: the page names the signed-in user elsewhere too.
+    await expect(
+      page.getByRole("listbox").getByLabel("Signed in"),
+    ).toBeVisible();
+    // The panel only: the version badge says "backend" on its own.
+    await expect(
+      page.getByRole("dialog").getByText(/backend|bucket/i),
+    ).toHaveCount(0);
   });
 
   test("switching to a second tenant re-scopes the session", async ({
