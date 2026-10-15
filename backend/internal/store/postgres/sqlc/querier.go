@@ -955,7 +955,10 @@ type Querier interface {
 	// the API a silent overwrite.
 	//
 	// `enabled` is deliberately absent from the SET, which is what keeps a backend
-	// an operator disabled from coming back enabled after a restart.
+	// an operator disabled from coming back enabled after a restart. So are
+	// display_name, credentials_secret_ref and cedar_policy: the config has no key
+	// for them, they are set through the API, and a config change used to
+	// overwrite them with nothing. An insert takes what the caller passes.
 	//
 	// Keyed on name, not id: the caller knows the config key ("primary"), and the
 	// uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.
