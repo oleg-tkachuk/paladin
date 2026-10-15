@@ -57,7 +57,10 @@
      The binding trigger admits a collection whose tenant owns the bucket or
      holds a grant on it, and nothing else; "NULL admits anyone" goes.
   3. **Grants are admin-plane.** `BucketService.GrantBucket` and
-     `RevokeBucketGrant`, under the owner's `ManageBucket`. A grant is not
+     `RevokeBucketGrant`, under the owner's `ManageBucket`.
+     `platform.tenant-provisioner` may grant, since placing a tenant it
+     provisions on a pool is the decision it already makes with a default
+     binding; revoking stays with the bucket-admin roles. A grant is not
      revoked while the tenant still has collections in the bucket
      (`FAILED_PRECONDITION`), as a collection with objects is not deleted. The
      console's bucket page names the owner and lists the grants.
