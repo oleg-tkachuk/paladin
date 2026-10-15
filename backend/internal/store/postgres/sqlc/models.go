@@ -364,6 +364,13 @@ type Bucket struct {
 	CreatedOnBackend                  bool               `json:"created_on_backend"`
 }
 
+type BucketGrant struct {
+	BucketID  pgtype.UUID        `json:"bucket_id"`
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	GrantedBy string             `json:"granted_by"`
+	GrantedAt pgtype.Timestamptz `json:"granted_at"`
+}
+
 type BucketQuota struct {
 	ID                pgtype.UUID        `json:"id"`
 	BucketID          pgtype.UUID        `json:"bucket_id"`
