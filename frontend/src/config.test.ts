@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { UNSET_META, configSchema, loadConfig, resolveMeta } from "./config";
 
@@ -65,11 +67,20 @@ describe("configSchema", () => {
   });
 });
 
+// The console's package root, where the server runs and the loader's relative
+// path points: one directory above this file's.
+const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
 describe("loadConfig", () => {
+  // Path 2 of the loader is `configs/config.yaml`, relative to the working
+  // directory. The test used to rely on vitest having been started from the
+  // package root, and failed when it was run from the repository's.
+  const startedIn = process.cwd();
+  beforeAll(() => process.chdir(PACKAGE_ROOT));
+  afterAll(() => process.chdir(startedIn));
+
   it("reads the dev config this repo ships", () => {
-    // Path 2 of the loader is `configs/config.yaml`, relative to the working
-    // directory — which is the package root under vitest, so this exercises the
-    // real file rather than a fixture of it.
+    // The real file, not a fixture of it.
     const cfg = loadConfig();
     expect(cfg.runtimeConfig.public.configPath).toBe("configs/config.yaml");
     expect(cfg.runtimeConfig.public.uiMetadata.service).toBe("paladin-console");
