@@ -83,6 +83,17 @@ FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_name')::text)
   AND (sqlc.narg('owner_tenant_id')::uuid IS NULL OR b.owner_tenant_id = sqlc.narg('owner_tenant_id')::uuid)
+  -- used_by_tenant_id: the buckets a tenant stores in — the ones it owns, the
+  -- one it is bound to by default, and every one a collection of it sits in.
+  -- A shared-layout tenant owns no bucket, so ownership alone lists nothing.
+  AND (sqlc.narg('used_by_tenant_id')::uuid IS NULL
+       OR b.owner_tenant_id = sqlc.narg('used_by_tenant_id')::uuid
+       OR EXISTS (SELECT 1 FROM tenant_default_bindings d
+                   WHERE d.bucket_id = b.id
+                     AND d.tenant_id = sqlc.narg('used_by_tenant_id')::uuid)
+       OR EXISTS (SELECT 1 FROM collections c
+                   WHERE c.bucket_id = b.id
+                     AND c.tenant_id = sqlc.narg('used_by_tenant_id')::uuid))
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.

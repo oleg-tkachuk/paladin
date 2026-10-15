@@ -188,3 +188,34 @@ describe("useBuckets accessible list", () => {
     expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
   });
 });
+
+describe("useBuckets tenant scope", () => {
+  beforeEach(() => {
+    h.listBuckets.mockReset();
+    h.listBuckets.mockResolvedValue(page([]));
+  });
+
+  it.each([
+    {
+      name: "no scope lists across tenants",
+      scope: undefined,
+      want: { ownerTenantId: "", usedByTenantId: "" },
+    },
+    {
+      name: "owner scope narrows by ownership",
+      scope: { ownerTenantId: "t-1" },
+      want: { ownerTenantId: "t-1", usedByTenantId: "" },
+    },
+    {
+      name: "used-by scope narrows to the buckets the tenant stores in",
+      scope: { usedByTenantId: "t-1" },
+      want: { ownerTenantId: "", usedByTenantId: "t-1" },
+    },
+  ])("$name", async ({ scope, want }) => {
+    const { result } = renderHook(() => useBuckets());
+    await act(async () => {
+      await result.current.fetchBuckets(undefined, "", "", scope);
+    });
+    expect(h.listBuckets).toHaveBeenCalledWith(expect.objectContaining(want));
+  });
+});

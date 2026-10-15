@@ -104,6 +104,50 @@ func TestListBuckets_ForwardsArgsAndReturns(t *testing.T) {
 	}
 }
 
+// The relations behind used_by_tenant_id are row-level scoped to their tenant.
+// Read as the caller, the filter saw only the caller's own collections and
+// bindings, and a platform admin's view of a shared-layout tenant came back
+// empty — the bug the filter exists to fix.
+func TestListBuckets_UsedByReadsAsThatTenant(t *testing.T) {
+	cases := []struct {
+		name     string
+		role     string
+		sameAsMe bool
+		wantCode connect.Code
+	}{
+		{name: "platform admin, another tenant", role: apiutil.RolePlatformAdmin},
+		{name: "tenant admin, its own tenant", role: apiutil.RoleTenantAdmin, sameAsMe: true},
+		{name: "bucket admin, another tenant", role: apiutil.RoleBucketAdmin, wantCode: connect.CodePermissionDenied},
+		{name: "tenant admin, another tenant", role: apiutil.RoleTenantAdmin, wantCode: connect.CodePermissionDenied},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := uuid.New()
+			target := uuid.New()
+			if tc.sameAsMe {
+				target = caller
+			}
+			repo := &fakeRepo{}
+			h := NewHandler(repo, nil, allowAuthorizer{})
+			_, _, err := h.ListBuckets(ctxTenant(caller, tc.role),
+				admindomain.ListBucketsArgs{UsedByTenantID: &target})
+			if tc.wantCode != 0 {
+				if code(err) != tc.wantCode {
+					t.Fatalf("code = %v, want %v", code(err), tc.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if repo.listActing != target {
+				t.Errorf("listed as tenant %v, want %v — the subqueries would see the "+
+					"caller's rows, not the target's", repo.listActing, target)
+			}
+		})
+	}
+}
+
 // ─── ListAccessibleBuckets ───────────────────────────────────────────────────
 
 func TestListAccessibleBuckets_Unauthenticated(t *testing.T) {

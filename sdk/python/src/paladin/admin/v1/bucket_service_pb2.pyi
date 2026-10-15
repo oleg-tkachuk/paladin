@@ -57,16 +57,18 @@ class DeleteBucketResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class ListBucketsRequest(_message.Message):
-    __slots__ = ("parent", "page", "filter", "owner_tenant_id")
+    __slots__ = ("parent", "page", "filter", "owner_tenant_id", "used_by_tenant_id")
     PARENT_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     OWNER_TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    USED_BY_TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     parent: str
     page: _pagination_pb2.PageRequest
     filter: str
     owner_tenant_id: str
-    def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., owner_tenant_id: _Optional[str] = ...) -> None: ...
+    used_by_tenant_id: str
+    def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., owner_tenant_id: _Optional[str] = ..., used_by_tenant_id: _Optional[str] = ...) -> None: ...
 
 class ListBucketsResponse(_message.Message):
     __slots__ = ("buckets", "page")

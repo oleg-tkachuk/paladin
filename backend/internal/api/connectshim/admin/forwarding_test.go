@@ -69,6 +69,41 @@ func TestListBuckets_ForwardsTheTenantFilterAndCursor(t *testing.T) {
 	}
 }
 
+func TestListBuckets_ForwardsTheUsedByTenantFilter(t *testing.T) {
+	tenant := uuid.New()
+	h := &recordingBuckets{}
+	srv := &BucketServer{H: h}
+
+	_, err := srv.ListBuckets(context.Background(), &pb.ListBucketsRequest{
+		UsedByTenantId: tenant.String(),
+	})
+	if err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if h.listArgs.UsedByTenantID == nil || *h.listArgs.UsedByTenantID != tenant {
+		t.Errorf("used_by_tenant_id did not reach the handler (got %v) — a tenant's "+
+			"bucket list would show every tenant's buckets", h.listArgs.UsedByTenantID)
+	}
+	if h.listArgs.OwnerTenantID != nil {
+		t.Errorf("used_by_tenant_id leaked into the ownership filter (%v) — a "+
+			"shared-layout tenant owns nothing and would list nothing",
+			h.listArgs.OwnerTenantID)
+	}
+}
+
+func TestListBuckets_RefusesAUsedByTenantThatIsNotAUUID(t *testing.T) {
+	h := &recordingBuckets{}
+	srv := &BucketServer{H: h}
+
+	_, err := srv.ListBuckets(context.Background(), &pb.ListBucketsRequest{
+		UsedByTenantId: "acme",
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a slug for used_by_tenant_id: got %v, want InvalidArgument — "+
+			"dropping it silently lists every tenant's buckets", err)
+	}
+}
+
 func TestUpdateBucket_ForwardsTheOwnerTenant(t *testing.T) {
 	owner := uuid.New()
 	h := &recordingBuckets{}

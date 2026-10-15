@@ -1,17 +1,16 @@
 "use client";
 
-// /tenants/<id>/buckets — tenant-scoped bucket list.
+// /tenants/<id>/buckets — the buckets this tenant stores in.
 //
-// Filtering strategy: pushes `owner_tenant_id == tenantId` to the
-// server via ListBucketsRequest.owner_tenant_id (backed by the
-// index on buckets.owner_tenant_id in `001_initial_schema.sql`).
-// The cross-tenant /buckets page omits the filter; the same
-// useBuckets hook serves both.
+// Filtering strategy: pushes ListBucketsRequest.used_by_tenant_id to the
+// server — the buckets the tenant owns, the one it is bound to by default,
+// and every one holding a collection of it. Ownership alone is not the
+// question: a shared-layout tenant (ADR-0015) owns no bucket, so filtering
+// on owner_tenant_id listed nothing for it. The cross-tenant /buckets page
+// omits the filter; the same useBuckets hook serves both.
 //
-// Rows link to the bucket detail subtree under the same tenant. The
-// "Create bucket" affordance pre-fills owner_tenant_id with the
-// current tenant — operators can still un-set it via the cross-tenant
-// page if they want a shared bucket.
+// Rows link to the bucket detail subtree under the same tenant. A shared
+// bucket other tenants store in too is deleted from /buckets, not here.
 
 import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -71,6 +70,7 @@ import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
+import { BucketTenancyBadge } from "@/components/features/buckets/BucketTenancyBadge";
 import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
 
 type SortColumn = "backend" | "name" | "region";
@@ -107,14 +107,14 @@ export default function TenantBucketsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
 
-  // Push the tenant filter to the server. Hook signature is
-  // (backendId?, filter?, pageToken?, ownerTenantId?) — leave
-  // backend/filter/cursor empty to list all buckets owned by
-  // this tenant across backends. One place, so Refresh asks for the same.
+  // Push the tenant filter to the server — backend/filter/cursor stay empty
+  // to list every bucket this tenant stores in, across backends. One place,
+  // so Refresh asks for the same.
   const refetch = useCallback(
-    () => fetchBuckets(undefined, "", "", tenant.tenantId),
+    () => fetchBuckets(undefined, "", "", { usedByTenantId: tenant.tenantId }),
     [fetchBuckets, tenant.tenantId],
   );
+  const ownedByTenant = (b: Bucket) => b.ownerTenantId === tenant.tenantId;
 
   useEffect(() => {
     void refetch();
@@ -127,11 +127,6 @@ export default function TenantBucketsPage() {
     () => void refetch(),
     PROVISION_POLL_MS,
   );
-
-  // The server-side `owner_tenant_id` filter (passed in fetchBuckets
-  // above) already narrows `buckets` to this tenant's rows; we list
-  // them directly. Cross-tenant /buckets uses the same hook without
-  // the filter.
 
   const filtered = useMemo(() => {
     let list = buckets;
@@ -178,7 +173,9 @@ export default function TenantBucketsPage() {
         <div>
           <h2 className="text-lg font-semibold">Buckets</h2>
           <p className={cn(T.helper, "max-w-prose")}>
-            S3 buckets owned by this tenant. Cross-tenant index lives at{" "}
+            S3 buckets this tenant stores in: its own, its default binding, and
+            those holding its collections. Shared buckets are managed from the
+            cross-tenant index at{" "}
             <Link
               href="/buckets"
               className="text-primary hover:underline font-mono"
@@ -294,7 +291,7 @@ export default function TenantBucketsPage() {
                     <p className="text-sm">
                       {search || filterBackend !== ALL_BACKENDS
                         ? "No buckets match your filters."
-                        : "No buckets owned by this tenant yet."}
+                        : "This tenant stores in no bucket yet: it owns none, has no default binding and no collections."}
                     </p>
                     {!search && filterBackend === ALL_BACKENDS && (
                       <Button
@@ -345,6 +342,7 @@ export default function TenantBucketsPage() {
                     {b.region || "—"}
                   </TableCell>
                   <TableCell>
+                    <BucketTenancyBadge owned={ownedByTenant(b)} />
                     <ProvisionStateBadge state={b.provisionState} />
                     {b.publicRead && <PublicReadBadge />}
                   </TableCell>
@@ -367,13 +365,15 @@ export default function TenantBucketsPage() {
                             Lifecycle rules
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => setDeleteTarget(b)}
-                        >
-                          <TrashIcon className="size-4" />
-                          Delete bucket
-                        </DropdownMenuItem>
+                        {ownedByTenant(b) && (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setDeleteTarget(b)}
+                          >
+                            <TrashIcon className="size-4" />
+                            Delete bucket
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

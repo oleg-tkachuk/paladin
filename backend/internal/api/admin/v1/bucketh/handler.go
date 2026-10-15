@@ -409,6 +409,21 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 	if err := h.authorize(ctx, cedar.ActionReadBucket, args.BackendID, "", uuid.Nil); err != nil {
 		return nil, "", err
 	}
+	if args.UsedByTenantID != nil {
+		// What makes a shared bucket a tenant's — its default binding and its
+		// collections — is row-level scoped to that tenant. Read as it, or the
+		// filter sees only the caller's own rows and quietly lists owned
+		// buckets alone. Acting for another tenant is a platform admin's.
+		caller, _, err := apiutil.CallerContext(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		if *args.UsedByTenantID != caller && !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
+			return nil, "", connect.NewError(connect.CodePermissionDenied,
+				"cannot list the buckets another tenant uses")
+		}
+		ctx = auth.WithActingTenant(ctx, *args.UsedByTenantID)
+	}
 	page, next, err := h.repo.List(ctx, args)
 	if err != nil {
 		return nil, "", err
