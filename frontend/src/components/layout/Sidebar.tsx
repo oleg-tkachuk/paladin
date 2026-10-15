@@ -337,10 +337,10 @@ function SidebarBody({
         </div>
       </div>
 
-      {/* Scope picker now lives in the TopBar (see TopBar.tsx) so the
-          breadcrumb and trigger sit alongside the search and user menu.
-          The sidebar header keeps the tenantId-keyed layout below it
-          intact via `key={tenantId}` on the parent component. */}
+      {/* The tenant switcher lives in the TopBar (see TopBar.tsx), beside
+          the search and user menu. The sidebar header keeps the
+          tenantId-keyed layout below it intact via `key={tenantId}` on the
+          parent component. */}
 
       {/*
         Navigation. min-h-0 is load-bearing: without it the flex-1 child

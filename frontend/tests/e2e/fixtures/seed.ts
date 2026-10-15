@@ -353,10 +353,7 @@ export async function seedTenant(opts?: {
 
 // ─── bucket seeding ────────────────────────────────────────
 //
-// Originally planned for US3 (tasks.md T024) but pulled
-// forward into Phase 2 because US2's repurposed scenarios
-// (backend/bucket scope switching) need at least one bucket
-// to exist for the picker to render selectable items.
+// Buckets for the specs that bind, list or delete one.
 
 export interface SeededBucket {
   /** Backend ID this bucket lives in (e.g. "primary"). */
@@ -375,7 +372,7 @@ export interface SeededBucket {
  * The bucket is provisioned: Paladin registers without provisioning only
  * a bucket the backend already holds, and these names are new. In a
  * stack without the worker plane it stays provisioning, which the
- * metadata tests — scope picker, bucket lists, collection binding — do
+ * metadata tests — bucket lists, collection binding — do
  * not mind; a test that moves bytes uses seedPhysicalBucket.
  */
 export async function seedBucket(opts?: {
@@ -634,7 +631,7 @@ export interface SeededMembership {
 
 /**
  * Seed a second tenant + a users row for SEEDED_ADMIN's subject inside it,
- * so the ScopePicker's tenant switcher has a real target. Roles:
+ * so the top bar's tenant switcher has a real target. Roles:
  * tenant.admin — deliberately NOT platform.admin, proving roles are
  * per-membership.
  */

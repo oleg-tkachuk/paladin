@@ -23,7 +23,7 @@ import {
 import { RealTimeStatus } from "@/components/features/RealTimeStatus";
 import { BackgroundOpsDrawer } from "@/components/BackgroundOpsDrawer";
 import { useAuth } from "@/context/AuthContext";
-import { ScopePicker } from "@/components/layout/ScopePicker";
+import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
 
 interface TopBarProps {
   onMenuToggle: () => void;
@@ -99,7 +99,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
       </button>
 
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-        <ScopePicker />
+        <TenantSwitcher />
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <RealTimeStatus />
         <BackgroundOpsDrawer />
