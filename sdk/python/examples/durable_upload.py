@@ -151,8 +151,9 @@ def upload_durably(
 def settle(data: DataPlane, parent: str, key: str, sha256: str) -> types_pb2.Object | None:
     """Deal with the object at ``key``: return it when it is this content,
     complete or completed now; delete it permanently, so the next attempt can
-    register the key again, when it is an attempt that never got its bytes or
-    failed; raise ``KeyTakenError`` when it is another object."""
+    register the key again, when it is an attempt that never got its bytes;
+    raise ``KeyTakenError`` when it is another object. A failed attempt needs
+    nothing: the server deletes it, and its key is free."""
     try:
         existing = paladin.lookup_object(
             data, paladin.ObjectURI(paladin.CollectionName.parse(parent), key)
@@ -173,7 +174,7 @@ def settle(data: DataPlane, parent: str, key: str, sha256: str) -> types_pb2.Obj
             )
         except paladin.FailedPreconditionError:
             pass
-    elif existing.state != types_pb2.OBJECT_STATE_FAILED:
+    else:
         raise KeyTakenError(f"{existing.name} is {types_pb2.ObjectState.Name(existing.state)}")
     # Permanently: an object in the trash keeps its key.
     data.object.delete_object(

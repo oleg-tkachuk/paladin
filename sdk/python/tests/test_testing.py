@@ -346,8 +346,19 @@ def test_the_fake_looks_up_and_fails_pending_objects(fake: FakePaladin) -> None:
 
     # The server finds an object in any state but DELETED.
     assert state() == types_pb2.OBJECT_STATE_PENDING
-    fake.mark_failed(pending.name)
-    assert state() == types_pb2.OBJECT_STATE_FAILED
+    # A failed object is deleted, and its key is free for a retry.
+    fake.fail_upload(pending.name)
+    with pytest.raises(paladin.NotFoundError):
+        state()
+    data.object.upload_object(  # type: ignore[union-attr]
+        object_service_pb2.UploadObjectRequest(
+            parent=str(fake.collection()),
+            key="k",
+            content_type="text/plain",
+            size_hint_bytes=1,
+            checksum_value=paladin.checksum(CHECKSUM_SHA256, b"x"),
+        )
+    )
 
 
 # ─── fail_rpc ───────────────────────────────────────────────────────────────
@@ -555,7 +566,7 @@ def test_presign_download_refuses_what_the_server_refuses(fake: FakePaladin) -> 
 
     pending = register("pending")
     failed = register("failed")
-    fake.mark_failed(failed)
+    fake.fail_upload(failed)
     unknown = str(ObjectName(fake.collection(), "00000000-0000-0000-0000-000000000000"))
 
     def ttl(delta: timedelta) -> duration_pb2.Duration:
@@ -565,7 +576,7 @@ def test_presign_download_refuses_what_the_server_refuses(fake: FakePaladin) -> 
 
     cases = [
         ({"name": pending}, Code.FAILED_PRECONDITION),
-        ({"name": failed}, Code.FAILED_PRECONDITION),
+        ({"name": failed}, Code.NOT_FOUND),
         ({"name": unknown}, Code.NOT_FOUND),
         ({"name": "objects/x"}, Code.INVALID_ARGUMENT),
         ({"name": available.name, "ttl": ttl(-timedelta(seconds=1))}, Code.INVALID_ARGUMENT),

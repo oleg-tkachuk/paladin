@@ -158,16 +158,18 @@ def test_durable_upload_completes_an_object_whose_bytes_landed(
     assert fake.content(obj.name) == body
 
 
-@pytest.mark.parametrize("failed", [False, True], ids=["pending", "failed"])
+# A pending attempt that stored nothing is deleted and the key registered again,
+# on the second attempt. A failed one is already gone, so the first registers it.
+@pytest.mark.parametrize(("failed", "want_attempts"), [(False, 2), (True, 1)], ids=["pending", "failed"])
 def test_durable_upload_replaces_an_attempt_that_stored_nothing(
-    durable: ModuleType, fake: FakePaladin, failed: bool
+    durable: ModuleType, fake: FakePaladin, failed: bool, want_attempts: int
 ) -> None:
     body = b"quarterly report"
     stale = _registered(durable, fake, body, put=False)
     if failed:
-        fake.mark_failed(stale.name)
+        fake.fail_upload(stale.name)
     obj, attempts = _durably(durable, fake, body)
-    assert obj.name != stale.name and attempts == 2
+    assert obj.name != stale.name and attempts == want_attempts
     assert fake.content(obj.name) == body
 
 

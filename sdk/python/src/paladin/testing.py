@@ -135,7 +135,6 @@ _GET = "GET"
 _AVAILABLE = types_pb2.OBJECT_STATE_AVAILABLE
 _PENDING = types_pb2.OBJECT_STATE_PENDING
 _DELETED = types_pb2.OBJECT_STATE_DELETED
-_FAILED = types_pb2.OBJECT_STATE_FAILED
 # The WSGI environ names a request header HTTP_<NAME>, with _ for -.
 _HEADER_PREFIX = "HTTP_"
 # Bounds of a bucket name, as the contract sets them.
@@ -773,14 +772,14 @@ class FakePaladin(
             if o is not None and o.msg.tenant_id != tenant:
                 raise ConnectError(Code.PERMISSION_DENIED, _UPLOAD_TENANT_MISMATCH)
 
-    def mark_failed(self, name: str) -> None:
-        """Fail a PENDING object, as the server's reconciler does when its
-        upload URL expired with no bytes stored."""
+    def fail_upload(self, name: str) -> None:
+        """Remove a PENDING object, as the server does when its upload fails —
+        the reconciler when the upload URL expired with no bytes stored. A
+        failed object is deleted, not kept, and its key is free for a retry."""
         with self._lock:
             o = self._objects.get(name)
             if o is not None and o.msg.state == _PENDING:
-                o.msg.state = _FAILED
-                _bump(o)
+                del self._objects[name]
 
     def storage_ops(self) -> list[StorageOp]:
         """The storage requests received, oldest first."""
