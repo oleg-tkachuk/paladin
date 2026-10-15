@@ -7,6 +7,9 @@
 // /tenants/{slug}/collections/{collection}/objects where files are
 // listed. This page is the "show me what's actually in this bucket"
 // view that platform-admins reach for during an incident or audit.
+//
+// It also names the bucket's owner tenant and lists the tenants the owner
+// granted it (ADR-0032), where a grant is made and revoked.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -48,6 +51,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
+import { failedRead } from "@/components/ui/ListLoadError";
+import { BucketGrantsCard } from "@/components/features/buckets/BucketGrantsCard";
+import { tenantOptionLabel } from "@/components/features/tenants/TenantSelect";
 
 export default function BucketDetailPage() {
   const params = useParams<{ backendId: string; bucketId: string }>();
@@ -55,7 +61,7 @@ export default function BucketDetailPage() {
   const bucketId = decodeURIComponent(params.bucketId);
 
   const { backends } = useBackends();
-  const { tenants, fetchTenants } = useTenants();
+  const { tenants, error: tenantsError, fetchTenants } = useTenants();
 
   const [search, setSearch] = useState("");
 
@@ -120,6 +126,13 @@ export default function BucketDetailPage() {
   const backend = useMemo(
     () => backends.find((b) => b.backendId === backendId),
     [backends, backendId],
+  );
+
+  // Every bucket has an owner (ADR-0032); named by the tenant list once it
+  // has loaded, by UUID until then or if it failed.
+  const owner = useMemo(
+    () => tenants.find((t) => t.tenantId === bucket?.ownerTenantId),
+    [tenants, bucket?.ownerTenantId],
   );
 
   // Server already narrowed by (backend, bucket) — `collections` IS
@@ -233,13 +246,21 @@ export default function BucketDetailPage() {
             <Row k="bucket" v={bucket.bucketId} mono />
             <Row k="backend" v={bucket.backendId} mono />
             {bucket.region && <Row k="region" v={bucket.region} mono />}
-            {bucket.ownerTenantId && (
-              <Row
-                k="owner"
-                v={`tenant ${bucket.ownerTenantId.slice(0, 8)}…`}
-                mono
-              />
-            )}
+            <div className="flex items-center gap-2">
+              <span className="w-20 uppercase tracking-wider text-muted-foreground">
+                owner
+              </span>
+              {owner ? (
+                <Link
+                  href={`/tenants/${encodeURIComponent(owner.slug || owner.tenantId)}`}
+                  className="hover:text-primary"
+                >
+                  {tenantOptionLabel(owner)}
+                </Link>
+              ) : (
+                <span className={T.code}>{bucket.ownerTenantId}</span>
+              )}
+            </div>
             <div className="flex items-center gap-4 pt-2 text-muted-foreground">
               <span>
                 <strong className="text-foreground">{totalTenants}</strong>{" "}
@@ -264,6 +285,15 @@ export default function BucketDetailPage() {
             Bucket not found.
           </CardContent>
         </Card>
+      )}
+
+      {bucket && (
+        <BucketGrantsCard
+          bucketName={bucketRef}
+          ownerTenantId={bucket.ownerTenantId}
+          tenants={tenants}
+          tenantsFailed={failedRead(tenantsError, fetchTenants)}
+        />
       )}
 
       {/* Tenants + Collections (folders) */}
@@ -322,8 +352,8 @@ export default function BucketDetailPage() {
                   : "No data stored in this bucket yet."}
               </p>
               <p className="text-xs">
-                Tenants land here when a Collection is bound to this bucket or
-                when they pick it as their default at creation.
+                Tenants land here when a Collection is bound to this bucket: the
+                owner, or a tenant it granted the bucket.
               </p>
             </div>
           </CardContent>

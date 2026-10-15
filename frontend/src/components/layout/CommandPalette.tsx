@@ -107,7 +107,7 @@ export function CommandPalette() {
         id: "nav-tenant-buckets",
         type: "nav",
         title: `Buckets in ${label}`,
-        subtitle: "S3 buckets owned by this tenant",
+        subtitle: "S3 buckets this tenant owns or was granted",
         icon: ServerStackIcon,
         href: `${base}/buckets`,
         onSelect: () => router.push(`${base}/buckets`),

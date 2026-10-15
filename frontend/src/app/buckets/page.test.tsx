@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 // Monolith list-page smoke pattern: mock the data hooks + the shell pieces
 // (PageHeader pulls scope context) and assert the three render branches —
@@ -14,6 +15,11 @@ const h = vi.hoisted(() => ({
     deleteBucket: vi.fn(),
   },
   backends: { backends: [] as Array<Record<string, unknown>> },
+  tenants: {
+    tenants: [] as Array<Record<string, unknown>>,
+    error: null as string | null,
+    fetchTenants: vi.fn(),
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -27,6 +33,7 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 vi.mock("@/hooks/useBuckets", () => ({ useBuckets: () => h.buckets }));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
+vi.mock("@/hooks/useTenants", () => ({ useTenants: () => h.tenants }));
 
 import BucketsPage from "./page";
 import { PROVISION_POLL_MS, PROVISION_STATE } from "@/lib/bucketProvision";
@@ -64,6 +71,32 @@ describe("BucketsPage", () => {
     expect(screen.getByText("acme-logs")).toBeInTheDocument();
     expect(screen.getByText("primary")).toBeInTheDocument();
     expect(screen.queryByText("No buckets yet.")).not.toBeInTheDocument();
+  });
+
+  // ADR-0032: every bucket has an owner, so the lifecycle link under the
+  // owner's subtree is always offered; it used to be hidden for an ownerless
+  // bucket.
+  it("links each bucket's lifecycle rules under its owner tenant", async () => {
+    h.buckets.buckets = [
+      {
+        backendId: "primary",
+        bucketId: "pool",
+        displayName: "",
+        region: "",
+        ownerTenantId: "t-platform",
+        provisionState: "ready",
+        resourceVersion: "1",
+      },
+    ];
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<BucketsPage />);
+    await user.click(screen.getByRole("button", { name: "Actions for pool" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Lifecycle rules/ }),
+    ).toHaveAttribute(
+      "href",
+      "/tenants/t-platform/buckets/primary/pool/lifecycle",
+    );
   });
 });
 
@@ -190,12 +223,17 @@ describe("BucketsPage create dialog", () => {
   });
 
   // The dialog's own behaviour is BucketCreateDialog.test.tsx.
-  it("opens the shared create dialog", () => {
+  it("opens the create dialog with an owner picker", () => {
     render(<BucketsPage />);
     fireEvent.click(
       screen.getByRole("button", { name: /create the first bucket/i }),
     );
     expect(screen.getByRole("dialog")).toHaveTextContent("New S3 bucket");
+    // ADR-0032: every bucket has an owner; this page lets the operator pick.
+    expect(
+      screen.getByRole("combobox", { name: /Owner tenant/ }),
+    ).toBeInTheDocument();
+    expect(h.tenants.fetchTenants).toHaveBeenCalled();
   });
 });
 

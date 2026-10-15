@@ -69,3 +69,21 @@ describe("BucketOverviewPage public read", () => {
     ).toBeInTheDocument();
   });
 });
+
+// ADR-0032: every bucket has an owner, and its grants are listed on the
+// storage-first bucket page.
+describe("BucketOverviewPage ownership", () => {
+  it("names the owner tenant and never calls the bucket ownerless", () => {
+    render(<BucketOverviewPage />);
+    expect(screen.getByText("t-1")).toBeInTheDocument();
+    expect(screen.queryByText(/no owner/)).not.toBeInTheDocument();
+  });
+
+  it("links to where the bucket's grants are listed", () => {
+    render(<BucketOverviewPage />);
+    expect(screen.getByRole("link", { name: /Sharing/ })).toHaveAttribute(
+      "href",
+      "/storage-backends/primary/buckets/assets",
+    );
+  });
+});

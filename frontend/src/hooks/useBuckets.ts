@@ -49,8 +49,7 @@ export interface BucketTenantScope {
   ownerTenantId?: string;
   /**
    * Buckets the tenant stores in: owned, bound by default, or holding one of
-   * its collections. A shared-layout tenant owns none, so this is what its
-   * own bucket list asks.
+   * its collections.
    */
   usedByTenantId?: string;
 }
@@ -154,11 +153,11 @@ export function useBuckets() {
   );
 
   /**
-   * The buckets a tenant may bind Collections to: every shared bucket plus
-   * the ones it owns (BucketService.ListAccessibleBuckets). Not the same set
-   * as fetchBuckets with an owner filter — a shared-layout tenant (ADR-0015)
-   * owns no bucket, so that filter answers "none" for exactly the tenants
-   * that bind a shared one.
+   * The buckets a tenant may bind Collections to: the ones it owns plus the
+   * ones their owners granted it (BucketService.ListAccessibleBuckets,
+   * ADR-0032). Not the same set as fetchBuckets with an owner filter — a
+   * shared-layout tenant (ADR-0015) owns no bucket and binds only granted
+   * ones, so that filter answers "none" for exactly those tenants.
    *
    * Same paging and state contract as fetchBuckets: follows nextPageToken to
    * the end under MAX_LIST_PAGES, and shares its sequence number, because
@@ -206,10 +205,10 @@ export function useBuckets() {
       displayName: string = "",
       region: string = "",
       provisionOnBackend: boolean = true,
-      publicRead: PublicReadSettings | null = null,
-      // ADR-0015: a dedicated tenant's bucket is its own. Empty creates a
-      // shared bucket any tenant can bind to.
-      ownerTenantId: string = "",
+      publicRead: PublicReadSettings | null,
+      // ADR-0032: every bucket has an owner tenant, by UUID; the server
+      // refuses an empty one. Other tenants bind to it only through a grant.
+      ownerTenantId: string,
     ): Promise<Bucket> => {
       try {
         setError(null);

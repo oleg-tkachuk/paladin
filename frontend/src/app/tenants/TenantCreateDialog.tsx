@@ -256,7 +256,7 @@ export function TenantCreateDialog({
           hint={
             dedicated
               ? "A private bucket is provisioned on the backend, named from the tenant ID."
-              : "Objects live under <bucket>/<tenant_id>/ in a bucket other tenants may share."
+              : "Objects live under <bucket>/<tenant_id>/ in a bucket another tenant owns; the new tenant is granted it."
           }
         >
           {(control) => (

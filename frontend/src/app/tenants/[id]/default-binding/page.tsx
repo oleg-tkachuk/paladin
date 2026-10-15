@@ -86,10 +86,11 @@ export default function DefaultBindingPage() {
   });
   const binding = bindingQuery.data ?? null;
 
-  // The buckets this tenant may bind: shared ones plus its own. An owner
-  // filter answered "none" for every shared-layout tenant (ADR-0015), which
-  // owns no bucket, and left the route impossible to set from here. One
-  // place, so Retry asks for the same list.
+  // The buckets this tenant may bind: its own plus the ones granted to it
+  // (ADR-0032); the server refuses a route to any other. An owner filter
+  // answered "none" for every shared-layout tenant (ADR-0015), which owns no
+  // bucket, and left the route impossible to set from here. One place, so
+  // Retry asks for the same list.
   const loadBuckets = useCallback(
     () => fetchAccessibleBuckets(name),
     [fetchAccessibleBuckets, name],

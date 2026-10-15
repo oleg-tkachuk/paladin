@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 const h = vi.hoisted(() => ({
   buckets: [] as Array<Record<string, unknown>>,
   bucketsError: null as string | null,
-  fetchBuckets: vi.fn(),
+  fetchAccessibleBuckets: vi.fn(),
   createBucket: vi.fn(() => Promise.resolve()),
   deleteBucket: vi.fn(() => Promise.resolve()),
   showNotification: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock("@/hooks/useBuckets", () => ({
     buckets: h.buckets,
     loading: false,
     error: h.bucketsError,
-    fetchBuckets: h.fetchBuckets,
+    fetchAccessibleBuckets: h.fetchAccessibleBuckets,
     createBucket: h.createBucket,
     deleteBucket: h.deleteBucket,
   }),
@@ -55,12 +55,15 @@ import {
 } from "@/lib/storageLayout";
 import {
   OWNED_BUCKET_LABEL,
-  SHARED_BUCKET_LABEL,
+  GRANTED_BUCKET_LABEL,
 } from "@/components/features/buckets/BucketTenancyBadge";
 
 const TENANT_ID = "t-1";
-// The page asks for the buckets the tenant stores in, not the ones it owns.
-const TENANT_SCOPE = { usedByTenantId: TENANT_ID };
+// ADR-0032: the page asks for the buckets the tenant may bind to — owned plus
+// granted — by the tenant's resource name.
+const TENANT_NAME = `tenants/${TENANT_ID}`;
+/** The tenant that owns the buckets granted to this one. */
+const OTHER_OWNER = "t-platform";
 
 const makeBucket = (name: string, ownerTenantId: string = TENANT_ID) => ({
   backendId: "be-1",
@@ -76,7 +79,7 @@ beforeEach(() => {
   h.buckets = [];
   h.bucketsError = null;
   h.storageLayout = STORAGE_LAYOUT_DEDICATED;
-  h.fetchBuckets.mockClear();
+  h.fetchAccessibleBuckets.mockClear();
   h.createBucket.mockClear();
   h.deleteBucket.mockClear();
   h.showNotification.mockClear();
@@ -94,28 +97,18 @@ describe("TenantBucketsPage", () => {
   });
 
   // A shared-layout tenant owns no bucket: asking by owner listed nothing for
-  // a tenant whose every collection sits in a shared bucket.
-  it("fetches this tenant's buckets on mount", () => {
+  // a tenant whose every collection sits in a bucket granted to it.
+  it("fetches the buckets this tenant may bind to on mount", () => {
     render(<TenantBucketsPage />);
-    expect(h.fetchBuckets).toHaveBeenCalledWith(
-      undefined,
-      "",
-      "",
-      TENANT_SCOPE,
-    );
+    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
   });
 
   // Refresh called fetchBuckets() bare, which lists every tenant's buckets.
   it("refreshes this tenant's buckets, not everyone's", () => {
     render(<TenantBucketsPage />);
-    h.fetchBuckets.mockClear();
+    h.fetchAccessibleBuckets.mockClear();
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    expect(h.fetchBuckets).toHaveBeenCalledWith(
-      undefined,
-      "",
-      "",
-      TENANT_SCOPE,
-    );
+    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
   });
 
   // A bucket settles in the reconciler; the list asks again until it has.
@@ -124,14 +117,9 @@ describe("TenantBucketsPage", () => {
     try {
       h.buckets = [{ ...makeBucket("fresh"), provisionState: "pending" }];
       render(<TenantBucketsPage />);
-      h.fetchBuckets.mockClear();
+      h.fetchAccessibleBuckets.mockClear();
       vi.advanceTimersByTime(PROVISION_POLL_MS);
-      expect(h.fetchBuckets).toHaveBeenCalledWith(
-        undefined,
-        "",
-        "",
-        TENANT_SCOPE,
-      );
+      expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
     } finally {
       vi.useRealTimers();
     }
@@ -142,9 +130,9 @@ describe("TenantBucketsPage", () => {
     try {
       h.buckets = [{ ...makeBucket("done"), provisionState: "ready" }];
       render(<TenantBucketsPage />);
-      h.fetchBuckets.mockClear();
+      h.fetchAccessibleBuckets.mockClear();
       vi.advanceTimersByTime(PROVISION_POLL_MS * 2);
-      expect(h.fetchBuckets).not.toHaveBeenCalled();
+      expect(h.fetchAccessibleBuckets).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -216,21 +204,36 @@ describe("TenantBucketsPage", () => {
     );
   });
 
-  it("lists a shared bucket the tenant stores in, marked shared", () => {
-    h.buckets = [makeBucket("mine"), makeBucket("common", "")];
+  it("tells an owned bucket from one granted to the tenant", () => {
+    h.buckets = [makeBucket("mine"), makeBucket("common", OTHER_OWNER)];
     render(<TenantBucketsPage />);
     const mine = screen.getByText("mine").closest("tr")!;
     const common = screen.getByText("common").closest("tr")!;
     expect(mine).toHaveTextContent(OWNED_BUCKET_LABEL);
-    expect(mine).not.toHaveTextContent(SHARED_BUCKET_LABEL);
-    expect(common).toHaveTextContent(SHARED_BUCKET_LABEL);
+    expect(mine).not.toHaveTextContent(GRANTED_BUCKET_LABEL);
+    expect(common).toHaveTextContent(GRANTED_BUCKET_LABEL);
     expect(common).not.toHaveTextContent(OWNED_BUCKET_LABEL);
   });
 
-  // Other tenants' collections sit in a shared bucket; its deletion and its
-  // lifecycle rules reach them all, so neither is offered on one tenant's page.
-  it("offers no delete or lifecycle rules for a shared bucket", async () => {
-    h.buckets = [makeBucket("common", "")];
+  // A granted bucket's subtree lives under its owner, and the bucket layout
+  // redirects there; the row goes straight to the storage-first page.
+  it("links a granted bucket to its bucket page, an owned one to its subtree", () => {
+    h.buckets = [makeBucket("mine"), makeBucket("common", OTHER_OWNER)];
+    render(<TenantBucketsPage />);
+    expect(screen.getByRole("link", { name: /mine/ })).toHaveAttribute(
+      "href",
+      "/tenants/acme/buckets/be-1/mine",
+    );
+    expect(screen.getByRole("link", { name: /common/ })).toHaveAttribute(
+      "href",
+      "/storage-backends/be-1/buckets/common",
+    );
+  });
+
+  // A granted bucket is its owner's: its deletion and its lifecycle rules
+  // reach every tenant in it, so neither is offered on one tenant's page.
+  it("offers no delete or lifecycle rules for a granted bucket", async () => {
+    h.buckets = [makeBucket("common", OTHER_OWNER)];
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(<TenantBucketsPage />);
     await user.click(
@@ -259,8 +262,8 @@ describe("TenantBucketsPage", () => {
     ).toHaveAttribute("href", "/tenants/acme/buckets/be-1/mine/lifecycle");
   });
 
-  // A shared tenant owns no bucket: an unowned one created here would not be
-  // on its list. It is sent to /buckets, or to Collections, which binds one.
+  // A shared tenant owns no bucket; it binds to the ones granted to it, and a
+  // grant is made on the bucket's page, reached from /buckets.
   describe("for a shared-layout tenant", () => {
     beforeEach(() => {
       h.storageLayout = STORAGE_LAYOUT_SHARED;
@@ -277,21 +280,21 @@ describe("TenantBucketsPage", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
 
-    it("links to the shared bucket index", () => {
+    it("links to the bucket index", () => {
       render(<TenantBucketsPage />);
       expect(
-        screen.getByRole("link", { name: /Shared buckets/i }),
+        screen.getByRole("link", { name: /All buckets/i }),
       ).toHaveAttribute("href", "/buckets");
     });
 
-    it("sends an empty list to the tenant's collections", () => {
+    it("sends an empty list to where a bucket is granted", () => {
       render(<TenantBucketsPage />);
-      expect(screen.getByText(/stores in no bucket yet/)).toHaveTextContent(
-        /binds it to a shared bucket/,
+      expect(screen.getByText(/may bind to no bucket yet/)).toHaveTextContent(
+        /owner grants it from the bucket's page/,
       );
       expect(
-        screen.getByRole("link", { name: /Go to collections/i }),
-      ).toHaveAttribute("href", "/tenants/acme/collections");
+        screen.getByRole("link", { name: /Find a bucket to grant/i }),
+      ).toHaveAttribute("href", "/buckets");
     });
 
     // An empty layout is the default, shared.
@@ -306,7 +309,7 @@ describe("TenantBucketsPage", () => {
 
   it("says what an empty list means for a tenant", () => {
     render(<TenantBucketsPage />);
-    expect(screen.getByText(/stores in no bucket yet/)).toBeInTheDocument();
+    expect(screen.getByText(/may bind to no bucket yet/)).toBeInTheDocument();
   });
 
   // A failed read rendered "No buckets owned by this tenant yet." with an
@@ -318,16 +321,11 @@ describe("TenantBucketsPage", () => {
       /Buckets could not be loaded/,
     );
     expect(
-      screen.queryByText(/stores in no bucket yet/),
+      screen.queryByText(/may bind to no bucket yet/),
     ).not.toBeInTheDocument();
-    h.fetchBuckets.mockClear();
+    h.fetchAccessibleBuckets.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     // Retry asks for the same tenant-scoped list the page loaded.
-    expect(h.fetchBuckets).toHaveBeenCalledWith(
-      undefined,
-      "",
-      "",
-      TENANT_SCOPE,
-    );
+    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
   });
 });

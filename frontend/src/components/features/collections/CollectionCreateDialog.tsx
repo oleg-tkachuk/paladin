@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   FormSection,
 } from "@/components/ui/form-dialog";
 import { useNotification } from "@/components/ui/Notification";
+import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useBuckets } from "@/hooks/useBuckets";
 import {
   type FailedRead,
@@ -58,6 +59,9 @@ interface CollectionCreateDialogProps {
  * A Collection's access is its bucket's (ADR-0027): bound to a public bucket
  * it is public, and the dialog says so before it is created. A private
  * bucket is picked by default, so publishing is always a choice.
+ *
+ * The buckets offered are the ones the tenant may bind to — owned or granted
+ * (ADR-0032) — so a bucket Paladin would refuse is never on the list.
  */
 export function CollectionCreateDialog({
   open,
@@ -69,8 +73,21 @@ export function CollectionCreateDialog({
   onCreated,
 }: CollectionCreateDialogProps) {
   const { showNotification } = useNotification();
-  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
-  const bucketsFailed = failedRead(bucketsError, fetchBuckets);
+  const actingTenantId = useActingTenantId();
+  const {
+    buckets,
+    error: bucketsError,
+    fetchBuckets,
+    fetchAccessibleBuckets,
+  } = useBuckets();
+  const readBuckets = useCallback(
+    () =>
+      actingTenantId
+        ? fetchAccessibleBuckets(`tenants/${actingTenantId}`)
+        : fetchBuckets(),
+    [actingTenantId, fetchAccessibleBuckets, fetchBuckets],
+  );
+  const bucketsFailed = failedRead(bucketsError, readBuckets);
   const [backendId, setBackendId] = useState("");
   const [bucketId, setBucketId] = useState("");
   const [path, setPath] = useState("");
@@ -83,8 +100,8 @@ export function CollectionCreateDialog({
   // was the first backend whatever it held, often one with no bucket at all.
   const [bucketsRead, setBucketsRead] = useState(false);
   useEffect(() => {
-    if (open) void fetchBuckets().finally(() => setBucketsRead(true));
-  }, [open, fetchBuckets]);
+    if (open) void readBuckets().finally(() => setBucketsRead(true));
+  }, [open, readBuckets]);
 
   // Default to a backend that has buckets when one exists — a Collection binds
   // to a bucket, so an empty backend is a dialog that cannot be submitted

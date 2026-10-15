@@ -228,12 +228,10 @@ describe("useBuckets createBucket owner", () => {
     h.createBucket.mockImplementation(({ bucket }) => Promise.resolve(bucket));
   });
 
-  // A dedicated tenant's page created an unowned bucket, which its own list
-  // (the buckets the tenant stores in) then did not show.
-  it.each([
-    { name: "no owner creates a shared bucket", owner: undefined, want: "" },
-    { name: "an owner creates the tenant's own", owner: "t-1", want: "t-1" },
-  ])("$name", async ({ owner, want }) => {
+  // ADR-0032: every bucket has an owner tenant. The hook used to default it to
+  // "", which created a bucket any tenant could bind to; the server now refuses
+  // that, so the owner is sent as given.
+  it("sends the owner tenant it is given", async () => {
     const { result } = renderHook(() => useBuckets());
     await act(async () => {
       await result.current.createBucket(
@@ -243,9 +241,9 @@ describe("useBuckets createBucket owner", () => {
         "",
         true,
         null,
-        owner,
+        "t-1",
       );
     });
-    expect(h.createBucket.mock.calls[0][0].bucket.ownerTenantId).toBe(want);
+    expect(h.createBucket.mock.calls[0][0].bucket.ownerTenantId).toBe("t-1");
   });
 });

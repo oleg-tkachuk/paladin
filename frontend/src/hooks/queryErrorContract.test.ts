@@ -32,8 +32,6 @@ const HOOK_LISTS: Record<string, string[]> = {
 const ALLOWED: Record<string, string> = {
   "app/storage-backends/[backendId]/buckets/[bucketId]/page.tsx::useBackends":
     "label only: a miss drops the backend name from the header; the bucket itself comes from its own query, which surfaces errors",
-  "app/storage-backends/[backendId]/buckets/[bucketId]/page.tsx::useTenants":
-    "label only: a miss shows the tenant id instead of its slug; the collections come from their own query, which surfaces errors",
 };
 
 const SRC = join(__dirname, "..");

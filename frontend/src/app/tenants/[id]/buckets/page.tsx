@@ -1,22 +1,21 @@
 "use client";
 
-// /tenants/<id>/buckets — the buckets this tenant stores in.
+// /tenants/<id>/buckets — the buckets this tenant may bind Collections to.
 //
-// Filtering strategy: pushes ListBucketsRequest.used_by_tenant_id to the
-// server — the buckets the tenant owns, the one it is bound to by default,
-// and every one holding a collection of it. Ownership alone is not the
-// question: a shared-layout tenant (ADR-0015) owns no bucket, so filtering
-// on owner_tenant_id listed nothing for it. The cross-tenant /buckets page
-// omits the filter; the same useBuckets hook serves both.
+// Asks BucketService.ListAccessibleBuckets: the buckets the tenant owns plus
+// the ones their owners granted it (ADR-0032). Every bucket it stores in is
+// one of those — a default binding and a collection both need the right to
+// bind — so nothing it uses is missing. Ownership alone is not the question:
+// a shared-layout tenant (ADR-0015) owns no bucket and binds granted ones.
 //
-// Rows link to the bucket detail subtree under the same tenant. A shared
-// bucket other tenants store in too is changed from /buckets, not here: its
-// lifecycle rules and its deletion reach every tenant in it.
+// An owned row links to the bucket detail subtree under this tenant. A
+// granted row belongs to another tenant: its lifecycle rules, deletion and
+// grants are its owner's, so it links to the storage-first bucket page
+// instead of into a subtree that would redirect to the owner's.
 //
 // Creating follows the layout. A dedicated tenant's new bucket is owned by it,
-// so it lands on this list. A shared tenant owns none: an unowned bucket made
-// here would not be on this list either, so the page sends the operator to
-// /buckets for a shared bucket, or to Collections, which binds one.
+// so it lands on this list. A shared tenant binds to buckets it is granted:
+// the page sends the operator to /buckets, where a bucket's page grants it.
 
 import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,7 +27,6 @@ import {
   ArrowPathIcon,
   ClockIcon,
   EllipsisHorizontalIcon,
-  FolderPlusIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   ServerStackIcon,
@@ -72,7 +70,6 @@ import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
-import type { PublicReadSettings } from "@/hooks/useBuckets";
 import { isDedicatedLayout } from "@/lib/storageLayout";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
@@ -86,8 +83,11 @@ type SortColumn = "backend" | "name" | "region";
 
 const ALL_BACKENDS = "__all__";
 
-/** The cross-tenant bucket index, where shared buckets are managed. */
-const SHARED_BUCKETS_HREF = "/buckets";
+/** The cross-tenant bucket index; a bucket's page there grants it. */
+const BUCKET_INDEX_HREF = "/buckets";
+
+/** ListAccessibleBuckets addresses the tenant by resource name. */
+const tenantResourceName = (tenantId: string) => `tenants/${tenantId}`;
 
 /** The storage-first view of a bucket, listing every tenant stored in it. */
 const backendBucketHref = (b: Bucket) =>
@@ -100,7 +100,7 @@ export default function TenantBucketsPage() {
     buckets,
     loading,
     error: bucketsError,
-    fetchBuckets,
+    fetchAccessibleBuckets,
     createBucket,
     deleteBucket,
   } = useBuckets();
@@ -123,38 +123,14 @@ export default function TenantBucketsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
 
-  // Push the tenant filter to the server — backend/filter/cursor stay empty
-  // to list every bucket this tenant stores in, across backends. One place,
-  // so Refresh asks for the same.
+  // Owned plus granted, across backends. One place, so Refresh asks for the
+  // same.
   const refetch = useCallback(
-    () => fetchBuckets(undefined, "", "", { usedByTenantId: tenant.tenantId }),
-    [fetchBuckets, tenant.tenantId],
+    () => fetchAccessibleBuckets(tenantResourceName(tenant.tenantId)),
+    [fetchAccessibleBuckets, tenant.tenantId],
   );
   const ownedByTenant = (b: Bucket) => b.ownerTenantId === tenant.tenantId;
   const dedicated = isDedicatedLayout(tenant.storageLayout);
-  const collectionsHref = `/tenants/${tenant.slug}/collections`;
-
-  // A dedicated tenant's bucket is created owned by it (ADR-0015).
-  const createOwnedBucket = useCallback(
-    (
-      backendId: string,
-      bucketId: string,
-      displayName: string,
-      region: string,
-      provisionOnBackend: boolean,
-      publicRead: PublicReadSettings | null,
-    ) =>
-      createBucket(
-        backendId,
-        bucketId,
-        displayName,
-        region,
-        provisionOnBackend,
-        publicRead,
-        tenant.tenantId,
-      ),
-    [createBucket, tenant.tenantId],
-  );
 
   useEffect(() => {
     void refetch();
@@ -213,9 +189,9 @@ export default function TenantBucketsPage() {
         <div>
           <h2 className="text-lg font-semibold">Buckets</h2>
           <p className={cn(T.helper, "max-w-prose")}>
-            S3 buckets this tenant stores in: its own, its default binding, and
-            those holding its collections. Shared buckets are managed from the
-            cross-tenant index at{" "}
+            S3 buckets this tenant may bind collections to: the ones it owns and
+            the ones their owners granted it. A bucket is granted from its page
+            in the cross-tenant index at{" "}
             <Link
               href="/buckets"
               className="text-primary hover:underline font-mono"
@@ -237,9 +213,9 @@ export default function TenantBucketsPage() {
           </Button>
         ) : (
           <Button size="sm" variant="outline" asChild>
-            <Link href={SHARED_BUCKETS_HREF}>
+            <Link href={BUCKET_INDEX_HREF}>
               <ServerStackIcon className="size-4" />
-              Shared buckets
+              All buckets
             </Link>
           </Button>
         )}
@@ -341,8 +317,8 @@ export default function TenantBucketsPage() {
                       {search || filterBackend !== ALL_BACKENDS
                         ? "No buckets match your filters."
                         : dedicated
-                          ? "This tenant stores in no bucket yet: it owns none, has no default binding and no collections."
-                          : "This tenant stores in no bucket yet: it has no default binding and no collections. A collection binds it to a shared bucket."}
+                          ? "This tenant may bind to no bucket yet: it owns none and holds no grant."
+                          : "This tenant may bind to no bucket yet: it holds no grant. A bucket's owner grants it from the bucket's page."}
                     </p>
                     {!search &&
                       filterBackend === ALL_BACKENDS &&
@@ -359,9 +335,9 @@ export default function TenantBucketsPage() {
                         </Button>
                       ) : (
                         <Button size="sm" variant="outline" asChild>
-                          <Link href={collectionsHref}>
-                            <FolderPlusIcon className="size-4" />
-                            Go to collections
+                          <Link href={BUCKET_INDEX_HREF}>
+                            <ServerStackIcon className="size-4" />
+                            Find a bucket to grant
                           </Link>
                         </Button>
                       ))}
@@ -384,7 +360,9 @@ export default function TenantBucketsPage() {
                   </TableCell>
                   <TableCell>
                     <Link
-                      href={detailHref(b)}
+                      href={
+                        ownedByTenant(b) ? detailHref(b) : backendBucketHref(b)
+                      }
                       className="flex items-center gap-3 hover:text-primary"
                     >
                       <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
@@ -436,7 +414,8 @@ export default function TenantBucketsPage() {
                             </DropdownMenuItem>
                           </>
                         ) : (
-                          // Its rules expire every tenant's objects in it.
+                          // Another tenant's: its rules, deletion and grants
+                          // are the owner's, and reach every tenant in it.
                           <DropdownMenuItem asChild>
                             <Link href={backendBucketHref(b)}>
                               <ServerStackIcon className="size-4" />
@@ -460,8 +439,9 @@ export default function TenantBucketsPage() {
           onOpenChange={setCreateOpen}
           backends={backendRows}
           backendsFailed={failedRead(backendsError, fetchBackends)}
-          description={`Created on the backend and owned by ${tenant.displayName || tenant.slug}: no other tenant stores in it.`}
-          createBucket={createOwnedBucket}
+          description={`Created on the backend and owned by ${tenant.displayName || tenant.slug}. Other tenants bind to it only once granted.`}
+          fixedOwnerTenantId={tenant.tenantId}
+          createBucket={createBucket}
         />
       )}
 

@@ -12,12 +12,18 @@ const h = vi.hoisted(() => ({
   bucketsError: null as string | null,
   showNotification: vi.fn(),
   fetchBuckets: vi.fn(() => Promise.resolve()),
+  fetchAccessibleBuckets: vi.fn((_tenant: string) => Promise.resolve()),
+  actingTenantId: "",
+}));
+vi.mock("@/hooks/useActingTenant", () => ({
+  useActingTenantId: () => h.actingTenantId,
 }));
 vi.mock("@/hooks/useBuckets", () => ({
   useBuckets: () => ({
     buckets: h.buckets,
     error: h.bucketsError,
     fetchBuckets: h.fetchBuckets,
+    fetchAccessibleBuckets: h.fetchAccessibleBuckets,
   }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -53,6 +59,18 @@ describe("CollectionCreateDialog", () => {
     h.buckets = [{ backendId: "full", bucketId: "b1", displayName: "" }];
     h.bucketsError = null;
     h.showNotification.mockReset();
+    h.actingTenantId = "";
+    h.fetchBuckets.mockClear();
+    h.fetchAccessibleBuckets.mockClear();
+  });
+
+  // A tenant binds only to a bucket it owns or was granted (ADR-0032); the
+  // list is those, not every bucket, so a refusal never waits for submit.
+  it("offers the acting tenant only the buckets it may bind to", async () => {
+    h.actingTenantId = "t1";
+    await open();
+    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith("tenants/t1");
+    expect(h.fetchBuckets).not.toHaveBeenCalled();
   });
 
   // An empty backend first in the list used to be the default, which left a

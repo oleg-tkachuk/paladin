@@ -4,7 +4,8 @@
 //
 // Composition:
 //   - Identity (slug + tenant_id + display).
-//   - Counts row: buckets owned, collections provisioned. Each tile
+//   - Counts row: buckets it may bind to (owned or granted, ADR-0032),
+//     collections provisioned. Each tile
 //     links into the matching tab so the number doubles as a CTA.
 //   - Budget tile: cap + current-period spend (or "no budget set").
 //   - Recent audit: top 5 entries scoped to this tenant, link out to
@@ -66,7 +67,7 @@ const QUICK_LINKS: Array<{
   {
     label: "Buckets",
     href: (s) => `/tenants/${s}/buckets`,
-    description: "S3 buckets owned by this tenant.",
+    description: "S3 buckets this tenant owns or was granted.",
     icon: ArchiveBoxIcon,
   },
   {
@@ -178,14 +179,12 @@ export default function TenantOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        // Server-side narrow via owner_tenant_id (backed by the
-        // index in `001_initial_schema.sql`). Skips the cross-backend
-        // scan + client-side filter the previous version did.
-        const res = await bucketClient.listBuckets({
-          parent: "",
+        // The same set the Buckets tab lists: owned plus granted
+        // (ListAccessibleBuckets, ADR-0032), so the tile's number is the
+        // length of the list it links to.
+        const res = await bucketClient.listAccessibleBuckets({
+          tenant: `tenants/${tenant.tenantId}`,
           page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-          filter: "",
-          ownerTenantId: tenant.tenantId,
         });
         if (cancelled) return;
         setBucketCount(res.buckets.length);
@@ -304,7 +303,7 @@ export default function TenantOverviewPage() {
           value={bucketCount}
           icon={ArchiveBoxIcon}
           accent="text-chart-2/85"
-          subtitle="owned by this tenant"
+          subtitle="owned or granted"
         />
         <CountTile
           href={`/tenants/${tenant.slug}/collections`}

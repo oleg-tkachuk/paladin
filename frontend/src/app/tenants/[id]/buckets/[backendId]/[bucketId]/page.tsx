@@ -10,7 +10,11 @@
 // header already convey the human-friendly form.
 
 import Link from "next/link";
-import { ClockIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import {
+  ClockIcon,
+  ShareIcon,
+  ShieldCheckIcon,
+} from "@heroicons/react/24/outline";
 
 import { Card } from "@/components/ui/Card";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
@@ -30,6 +34,10 @@ export default function BucketOverviewPage() {
   const detailBase = `/tenants/${tenant.slug}/buckets/${encodeURIComponent(
     bucket.backendId,
   )}/${encodeURIComponent(bucket.bucketId)}`;
+  // The storage-first bucket page, where its grants are listed and changed.
+  const sharingHref = `/storage-backends/${encodeURIComponent(
+    bucket.backendId,
+  )}/buckets/${encodeURIComponent(bucket.bucketId)}`;
 
   return (
     <div className="space-y-4">
@@ -61,14 +69,10 @@ export default function BucketOverviewPage() {
                 <span className="text-muted-foreground italic">—</span>
               )}
             </Field>
+            {/* ADR-0032: every bucket has an owner; other tenants bind to it
+                only through a grant, listed on the bucket's page. */}
             <Field label="Owner tenant">
-              {bucket.ownerTenantId ? (
-                <code className={T.code}>{bucket.ownerTenantId}</code>
-              ) : (
-                <span className="text-muted-foreground italic">
-                  shared (no owner)
-                </span>
-              )}
+              <code className={T.code}>{bucket.ownerTenantId}</code>
             </Field>
             <Field label="Public read">
               {bucket.publicRead ? (
@@ -122,6 +126,12 @@ export default function BucketOverviewPage() {
           subtitle={
             bucket.cedarPolicy ? "Bucket-level overlay set" : "No overlay"
           }
+        />
+        <QuickLink
+          href={sharingHref}
+          icon={<ShareIcon className="size-5 text-chart-5" />}
+          title="Sharing"
+          subtitle="The tenants granted this bucket"
         />
       </div>
     </div>
