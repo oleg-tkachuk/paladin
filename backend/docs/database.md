@@ -72,6 +72,8 @@ them, so they must exist before it runs.
 | `044` | `bucket_quotas`: bucket caps move out of `quotas`, outside RLS ([ADR-0025](../../docs/adr/0025-bucket-quotas-are-platform-configuration.md)) |
 | `076` | the capability tables are dropped, their rows with them; capabilities move to the `limes` schema |
 | `077` | the `capability_revoked` triggers on the `limes` schema go; pgstore notifies revocations itself |
+| `079` | objects kept as FAILED are deleted and the label leaves `object_state` |
+| `080` | every bucket gets an owner (`owner_tenant_id NOT NULL`) and sharing becomes `bucket_grants` (ADR-0032) |
 
 Each file's header comment says why it exists.
 
@@ -241,7 +243,7 @@ See [db-roles.md](db-roles.md) for the role split.
 | `object_locks_enforce_retention` | `object_locks` | A lock row under legal hold or unexpired retention cannot be deleted; `GOVERNANCE` yields to `paladin.bypass_governance_retention` |
 | `object_locks_enforce_no_weakening` | `object_locks` | A retention window may be extended, never shortened; `COMPLIANCE` has no bypass, `GOVERNANCE` needs the same bypass |
 | `tenants_purge_lock_guard` | `tenants` | A tenant cannot be deleted while anything it owns is under legal hold or unexpired retention; runs before any foreign key, reads across RLS, same `GOVERNANCE` bypass |
-| `collections_enforce_bucket_tenancy` | `collections` | A collection may not bind to a bucket another tenant owns — RLS cannot catch this, because the inserted row carries the *attacker's* `tenant_id` and passes the policy cleanly |
+| `collections_enforce_bucket_tenancy` | `collections` | A collection binds only to a bucket its tenant owns or holds a grant on (`bucket_grants`, ADR-0032), raising the named constraint `collections_bucket_tenancy` otherwise — RLS cannot catch this, because the inserted row carries the *attacker's* `tenant_id` and passes the policy cleanly |
 | `*_notify_policy_changed` | `tenants`, `collections`, `buckets` | `pg_notify('policy_changed', …)` so the Cedar engine invalidates its cache |
 | `multipart_uploads_abort_debt` | `multipart_uploads` | A cascade delete records the S3 abort it still owes in `pending_multipart_aborts` |
 | `audit_log_notify` | `audit_log` | `pg_notify('paladin_audit', …)` for the live audit stream |

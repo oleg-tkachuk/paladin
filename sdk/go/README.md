@@ -359,6 +359,9 @@ the `paladin://` resource space the MCP bridge serves.
 To create a bucket and bind collections to it at every boot, call
 `p.Data.StorageBootstrap.EnsureTenantStorage`: it is idempotent on the
 server, and reports which collections it created and which already existed.
+The bucket is the calling tenant's: a missing one is created owned by it, and
+an existing one is used only when the tenant owns it or was granted it
+(`BucketService.GrantBucket`); otherwise the call is `PermissionDenied`.
 
 ### Verifying webhook deliveries
 

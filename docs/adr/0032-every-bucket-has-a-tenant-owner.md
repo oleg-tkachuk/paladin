@@ -1,6 +1,8 @@
 # ADR-0032: Every bucket has a tenant owner, and sharing is granted
 
-- **Status:** Proposed — 2026-10-15.
+- **Status:** Accepted — implemented 2026-10-16 (`080_bucket_owner_and_grants.sql`,
+  `bucketh/grants.go`, `BucketService.GrantBucket` / `RevokeBucketGrant` /
+  `ListBucketGrants`).
 - **Related:** [ADR-0015](0015-per-tenant-bucket-layout.md) (shared and
   dedicated layouts; this replaces its rule that a bucket with no owner is
   open to every tenant), [ADR-0025](0025-bucket-quotas-are-platform-configuration.md)

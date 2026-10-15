@@ -29,7 +29,7 @@
   | Mechanism | Where | Effect |
   |---|---|---|
   | Key prefix `<tenant_id>/…` | [`s3adapter/s3.go`](../../backend/internal/storage/s3adapter/s3.go) `composeKey` | every object's S3 key is tenant-rooted |
-  | `buckets.owner_tenant_id` + trigger | [`migrations/003_triggers.sql`](../../backend/migrations/003_triggers.sql) `collections_enforce_bucket_tenancy` | NULL ⇒ any tenant may bind; set ⇒ only the owner may |
+  | `buckets.owner_tenant_id` + trigger | [`migrations/003_triggers.sql`](../../backend/migrations/003_triggers.sql) `collections_enforce_bucket_tenancy` | NULL ⇒ any tenant may bind; set ⇒ only the owner may. *Superseded by [ADR-0032](0032-every-bucket-has-a-tenant-owner.md): every bucket has an owner, and only the owner or a tenant it granted the bucket to may bind.* |
   | Per-object_key bucket binding | `object_keys.(backend_id, bucket_name)` FK | each namespace names its own physical bucket |
 
   Concrete state discovered while designing this (do not re-derive):
@@ -61,7 +61,8 @@ Model storage layout as a **per-tenant** property and support `shared` and
 add dedicated as an opt-in tier.
 
 - **`shared`** (default; today's behavior): object_keys bind to a bucket with
-  `owner_tenant_id IS NULL`.
+  `owner_tenant_id IS NULL`. Since [ADR-0032](0032-every-bucket-has-a-tenant-owner.md),
+  a bucket the operator owns (the platform tenant) and granted to the tenant.
 - **`dedicated`**: the tenant owns one physical bucket
   (`owner_tenant_id = tenant`), provisioned on a backend; its object_keys bind
   only there (the existing trigger already enforces this).
