@@ -674,14 +674,14 @@ func (s *Server) claim(parent, key, contentType string, metadata, tags map[strin
 	return o, nil
 }
 
-// MarkFailed fails a PENDING object, as the server's reconciler does when its
-// upload URL expired with no bytes stored.
-func (s *Server) MarkFailed(name string) {
+// FailUpload removes a PENDING object, as the server does when its upload
+// fails — the reconciler when the upload URL expired with no bytes stored. A
+// failed object is deleted, not kept, and its key is free for a retry.
+func (s *Server) FailUpload(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if o, ok := s.objects[name]; ok && o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_PENDING {
-		o.msg.State = datav1.ObjectState_OBJECT_STATE_FAILED
-		bump(o)
+		delete(s.objects, name)
 	}
 }
 

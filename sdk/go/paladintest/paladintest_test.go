@@ -418,9 +418,16 @@ func TestTheFakeLooksUpAndFailsPendingObjects(t *testing.T) {
 	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_PENDING {
 		t.Errorf("lookup = %s, want PENDING: the server finds an object in any state but DELETED", got)
 	}
-	srv.MarkFailed(resp.GetObject().GetName())
-	if got := lookup(); got != datav1.ObjectState_OBJECT_STATE_FAILED {
-		t.Errorf("after MarkFailed = %s, want FAILED", got)
+	srv.FailUpload(resp.GetObject().GetName())
+	if _, err := paladin.LookupObject(ctx, p.Data, paladin.ObjectURI{Collection: srv.Collection(), Key: "k"}); !errors.Is(err, paladin.ErrNotFound) {
+		t.Errorf("after FailUpload: %v, want not found — a failed object is deleted", err)
+	}
+	// Its key is free for a retry.
+	if _, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
+		Parent: srv.Collection().String(), Key: "k", ContentType: "text/plain", SizeHintBytes: 1,
+		ChecksumValue: "LGW4m3CYc5cGdyqLzSa4tqkq2Hj1/jmn6wGAWuR+hEk=",
+	}); err != nil {
+		t.Errorf("a retry at the key of a failed upload: %v", err)
 	}
 }
 
@@ -703,7 +710,7 @@ func TestPresignDownloadRefusesWhatTheServerRefuses(t *testing.T) {
 	}
 	pending := register("pending")
 	failed := register("failed")
-	srv.MarkFailed(failed)
+	srv.FailUpload(failed)
 	unknown := paladin.ObjectName{CollectionName: srv.Collection(), Object: "00000000-0000-0000-0000-000000000000"}.String()
 	cases := []struct {
 		name string
@@ -711,7 +718,7 @@ func TestPresignDownloadRefusesWhatTheServerRefuses(t *testing.T) {
 		code connect.Code
 	}{
 		{"pending", &datav1.PresignDownloadRequest{Name: pending}, connect.CodeFailedPrecondition},
-		{"failed", &datav1.PresignDownloadRequest{Name: failed}, connect.CodeFailedPrecondition},
+		{"failed, so gone", &datav1.PresignDownloadRequest{Name: failed}, connect.CodeNotFound},
 		{"unknown", &datav1.PresignDownloadRequest{Name: unknown}, connect.CodeNotFound},
 		{"not an object name", &datav1.PresignDownloadRequest{Name: "objects/x"}, connect.CodeInvalidArgument},
 		{"a negative ttl", &datav1.PresignDownloadRequest{Name: available.GetName(), Ttl: durationpb.New(-time.Second)}, connect.CodeInvalidArgument},
