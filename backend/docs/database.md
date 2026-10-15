@@ -111,8 +111,9 @@ boundary and carry ids inside.
 
 **Objects** — `objects`, `object_versions`, `object_locks`,
 `multipart_uploads`, `pending_multipart_aborts`, `pending_purges`. State is the
-`object_state` enum: `PENDING` → `AVAILABLE` | `FAILED`, and `DELETED` for
-soft deletion. `objects.current_version_id` carries a deferred composite FK
+`object_state` enum: `PENDING` → `AVAILABLE`, and `DELETED` for soft
+deletion. An object that cannot become available is deleted, not kept in a
+state of its own (`statemachine.DiscardFailed`; FAILED was dropped in 079). `objects.current_version_id` carries a deferred composite FK
 to `object_versions (object_id, id)`, so the two rows can be written in
 either order within one transaction but can never disagree at commit.
 

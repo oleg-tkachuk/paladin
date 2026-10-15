@@ -446,8 +446,8 @@ but deleted. It keeps an upload's metadata and tags. It records the
 checksum an upload completes with — so a download verifies — and answers
 range requests. `ensure_tenant_storage` reports a bucket and collections
 created the first time and existing after, for any backend id. `put` stores
-an object directly; `mark_failed` fails a pending one, as the server's
-reconciler does when its URL expired with nothing stored; `tenant` and `collection()` name the fake's tenant and
+an object directly; `fail_upload` removes a pending one, as the server does
+when its upload fails — a failed object is deleted, and its key is free; `tenant` and `collection()` name the fake's tenant and
 its collections, all of which exist; `requests()` lists the RPCs received,
 each a `Request` with its `procedure`, `headers` by lower-case name and
 `message` — a copy of the request — for a test of what the client sent.

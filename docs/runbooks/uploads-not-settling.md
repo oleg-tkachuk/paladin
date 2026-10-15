@@ -12,7 +12,8 @@ An upload stays `PENDING` until the client's `CompleteObject`, a storage
 event, or the reconciler settles it. The reconciler takes every `PENDING`
 object whose presign expired more than `worker.jobs.reconciler.min_object_age`
 ago — oldest first, `batch_size` per `interval` — HEADs its bytes, and
-promotes it to `AVAILABLE` or fails it. Until then the object cannot be
+promotes it to `AVAILABLE` or discards it — deletes the row, and logs and
+counts why (`paladin_object_failures_total{reason}`). Until then the object cannot be
 downloaded, and its client may be waiting on it.
 
 The worker alerts do not see this. `reconcile()` logs a HEAD or promote that
@@ -44,18 +45,23 @@ uploads* panel on the Operations dashboard shows both.
 2. **What does the reconciler log?** Its lines carry `object_id`:
 
    ```
-   kubectl --context=<ctx> -n paladin logs deploy/paladin-core-worker --tail=500 | grep -E 'failed to (HEAD|promote|mark|delete mismatched|scan|sample)'
+   kubectl --context=<ctx> -n paladin logs deploy/paladin-core-worker --tail=500 | grep -E 'failed to (HEAD|promote|discard|delete mismatched|scan|sample)'
    ```
 
    | Line | Cause |
    |------|-------|
    | `failed to HEAD object` | The backend did not answer: down, unreachable from the worker, or refusing its credentials. The object is left PENDING on purpose — an unanswered HEAD must not fail a live upload. |
    | `failed to promote object` | Postgres refused the transition. |
-   | `failed to mark object as failed` | As above, for an upload whose bytes never arrived. |
+   | `failed to discard object` | As above, for an upload whose bytes never arrived; the row stays PENDING. |
    | `failed to delete mismatched object bytes` | Stored bytes broke the object's registration and could not be removed; the row waits for that. |
-   | `failed to mark mismatched object as failed` | The mismatched bytes were deleted but Postgres refused to fail the row; it stays PENDING. |
+   | `failed to discard mismatched object` | The mismatched bytes were deleted but Postgres refused to delete the row; it stays PENDING. |
    | `failed to scan pending objects` | The reconciler cannot read `objects` at all. |
    | `failed to sample overdue pending objects` | The gauges were not updated this tick, so the alert reads the last sample. |
+
+   A discarded upload logs `object failed and was discarded` with its
+   `object_id`, `tenant_id`, `key` and `reason`: `presign_expired` (no bytes
+   at its path), `content_mismatch`, `storage_copy_failed` or
+   `multipart_aborted`. Its key is free for a retry.
 
 3. **Which backend?** Overdue objects by collection, the oldest first:
 

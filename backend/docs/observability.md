@@ -65,6 +65,7 @@ Prometheus rendering replaces dots with underscores and adds unit and
 | Metric | Kind | What it counts | Defined in |
 |---|---|---|---|
 | `paladin_object_transitions` | counter | object state transitions, by source signal | `internal/statemachine/metrics.go` |
+| `paladin_object_failures` | counter | objects discarded because they could not become available, by `reason` | `internal/statemachine/metrics.go` |
 | `paladin.outbox.pending` | gauge | `event_deliveries` rows pending, cluster-wide | `internal/worker/metrics.go` |
 | `paladin.outbox.pending.max_per_tenant` | gauge | the deepest single tenant's pending backlog | `internal/worker/metrics.go` |
 | `paladin.objects.pending_overdue` | gauge | `PENDING` objects past their presign expiry plus the reconciler's grace | `internal/worker/metrics.go` |
