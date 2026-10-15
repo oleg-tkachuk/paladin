@@ -67,7 +67,11 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
-import { providerLabel } from "@/lib/storageProvider";
+import {
+  GUESSED_PROVIDER_HINT,
+  GUESSED_PROVIDER_LABEL,
+  providerLabel,
+} from "@/lib/storageProvider";
 import { compatibilityBadge, featureWarnings } from "@/lib/storageFeatures";
 import { errorMessage } from "@/hooks/errorContract";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
@@ -569,16 +573,17 @@ function BackendRow({
           {provider.label === "—" ? (
             <span className="text-muted-foreground">{kind}</span>
           ) : (
-            <span
-              title={
-                provider.derived
-                  ? "Inferred from the endpoint (no provider set)"
-                  : undefined
-              }
-            >
+            <span>
               {provider.label}
+              {/* A bare "?" used to say this, and said it to nobody. */}
               {provider.derived && (
-                <span className="ml-0.5 text-muted-foreground">?</span>
+                <span
+                  className="text-muted-foreground"
+                  title={GUESSED_PROVIDER_HINT}
+                >
+                  {" "}
+                  {GUESSED_PROVIDER_LABEL}
+                </span>
               )}
               <span className="text-muted-foreground"> · {kind}</span>
             </span>

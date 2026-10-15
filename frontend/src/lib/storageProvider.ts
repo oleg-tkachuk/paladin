@@ -74,3 +74,9 @@ export function providerLabel(b: { provider: string; endpoint: string }): {
   if (!slug) return { label: "—", derived: false };
   return { label: PROVIDER_LABELS[slug] || slug, derived: !b.provider };
 }
+
+/** What marks a provider guessed from the endpoint (`derived`). */
+export const GUESSED_PROVIDER_LABEL = "(guessed)";
+/** The hover text beside it: why it is a guess, and what makes it certain. */
+export const GUESSED_PROVIDER_HINT =
+  "Guessed from the endpoint: the backend's config sets no provider.";
