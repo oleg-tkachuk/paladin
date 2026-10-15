@@ -563,7 +563,7 @@ what each field means, are documented in the `.proto` files under
 | `AuditLogService` | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `GetBillingSettings` |
-| `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `ListAccessibleBuckets` |
+| `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
 | `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |
 | `CELService` | `Validate` |
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
