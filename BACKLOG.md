@@ -1033,6 +1033,25 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Architecture (post-review 2026-05)
 
+### Every bucket has a tenant owner, and sharing is granted (ADR-0032)
+
+- **Status:** Proposed (2026-10-15).
+- **Reason:** a bucket with no owner is open to every tenant: any tenant with
+  `manage` can bind a collection into another consumer's bucket through
+  `EnsureTenantStorage`, and inherits that bucket's quotas, lifecycle and
+  policy. All four buckets on the dev cluster have no owner.
+- **Definition of Done:** ADR-0032 accepted and implemented —
+  `owner_tenant_id NOT NULL` with the NULL rows migrated, `bucket_grants`
+  and the binding trigger reading it, `GrantBucket` / `RevokeBucketGrant`,
+  `EnsureTenantStorage` creating for its caller and refusing a bucket it may
+  not bind, default bindings checked against grants, the console showing
+  owner and grants, the e2e fixtures moved to grants;
+  live-verified on the cluster.
+- **Blockers:** a collection created in a bucket by mistake has to go before
+  the migration, or that bucket becomes platform-owned and shared; consumers
+  that create shared buckets through `CreateBucket` change their provisioning
+  in step with the release that requires the owner.
+
 ### Audit form (B): staging table + projector (latency mitigation only)
 
 - **Status:** Deferred — crash-durability is DONE via form (A)
