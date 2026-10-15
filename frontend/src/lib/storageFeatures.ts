@@ -79,6 +79,9 @@ export function featureWarnings(
 }
 
 /** The one-word compatibility a backend list row shows. */
+/** The badge variant of a backend with every feature Paladin uses. */
+export const COMPATIBLE_VARIANT = "success";
+
 export function compatibilityBadge(
   backend: Pick<StorageBackend, "features" | "compatibility">,
 ): {
@@ -94,7 +97,7 @@ export function compatibilityBadge(
   if (backend.compatibility === StorageCompatibility.COMPATIBLE) {
     return limited
       ? { label: "Limited", variant: "warning" }
-      : { label: "Compatible", variant: "success" };
+      : { label: "Compatible", variant: COMPATIBLE_VARIANT };
   }
   return { label: "Unverified", variant: "secondary" };
 }

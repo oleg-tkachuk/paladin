@@ -68,7 +68,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { providerLabel } from "@/lib/storageProvider";
-import { compatibilityBadge, featureWarnings } from "@/lib/storageFeatures";
+import {
+  COMPATIBLE_VARIANT,
+  compatibilityBadge,
+  featureWarnings,
+} from "@/lib/storageFeatures";
 import { errorMessage } from "@/hooks/errorContract";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
 import {
@@ -609,7 +613,10 @@ function BackendRow({
       </TableCell>
 
       {/* What the last probes found: connectivity (advisory, does not gate
-          ops) and the S3 features Paladin uses (ADR-0026). */}
+          ops) and the S3 features Paladin uses (ADR-0026). The features
+          badge appears only when they need a look: "Compatible" beside the
+          kind's "S3-compatible" read as the same fact twice, and widened the
+          table to say nothing. The detail page always shows it. */}
       <TableCell className="hidden @lg:table-cell">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span
@@ -622,9 +629,11 @@ function BackendRow({
             />
             {health.label}
           </span>
-          <Badge variant={compat.variant} title={compatWhy || undefined}>
-            {compat.label}
-          </Badge>
+          {compat.variant !== COMPATIBLE_VARIANT && (
+            <Badge variant={compat.variant} title={compatWhy || undefined}>
+              {compat.label}
+            </Badge>
+          )}
         </div>
       </TableCell>
 

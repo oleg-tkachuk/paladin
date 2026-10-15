@@ -289,6 +289,17 @@ describe("StorageBackendsPage", () => {
     );
   });
 
+  // "Compatible" beside "S3-compatible" said one thing twice; the list
+  // stays quiet when every feature is there.
+  it("shows no features badge for a fully compatible backend", () => {
+    h.backends = [
+      makeBackend({ compatibility: StorageCompatibility.COMPATIBLE }),
+    ];
+    render(<StorageBackendsPage />);
+    expect(screen.queryByText("Compatible")).toBeNull();
+    expect(screen.getByText("primary")).toBeInTheDocument();
+  });
+
   it("marks a backend never probed unverified", () => {
     h.backends = [makeBackend()];
     render(<StorageBackendsPage />);
