@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTenants } from "@/hooks/useTenants";
 import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_service_pb";
+import { STORAGE_LAYOUT_SHARED } from "@/lib/storageLayout";
 
 // Terminal states — the copy job is done, so we stop polling. `rolling_back`
 // is not: the worker is still moving the tenant back to its source bucket
@@ -108,7 +109,7 @@ export function StorageMigrationCard({
   if (!mig) {
     // Only a shared tenant can migrate; a dedicated tenant with no migration
     // has nothing to show here.
-    if (storageLayout !== "shared") return null;
+    if (storageLayout !== STORAGE_LAYOUT_SHARED) return null;
     return (
       <Card>
         <CardHeader className="pb-2">

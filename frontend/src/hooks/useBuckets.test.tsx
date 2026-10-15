@@ -4,11 +4,13 @@ import { renderHook, act } from "@testing-library/react";
 const h = vi.hoisted(() => ({
   listBuckets: vi.fn(),
   listAccessibleBuckets: vi.fn(),
+  createBucket: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
   bucketClient: {
     listBuckets: h.listBuckets,
     listAccessibleBuckets: h.listAccessibleBuckets,
+    createBucket: h.createBucket,
   },
 }));
 vi.mock("@/context/RefreshContext", () => ({
@@ -217,5 +219,33 @@ describe("useBuckets tenant scope", () => {
       await result.current.fetchBuckets(undefined, "", "", scope);
     });
     expect(h.listBuckets).toHaveBeenCalledWith(expect.objectContaining(want));
+  });
+});
+
+describe("useBuckets createBucket owner", () => {
+  beforeEach(() => {
+    h.createBucket.mockReset();
+    h.createBucket.mockImplementation(({ bucket }) => Promise.resolve(bucket));
+  });
+
+  // A dedicated tenant's page created an unowned bucket, which its own list
+  // (the buckets the tenant stores in) then did not show.
+  it.each([
+    { name: "no owner creates a shared bucket", owner: undefined, want: "" },
+    { name: "an owner creates the tenant's own", owner: "t-1", want: "t-1" },
+  ])("$name", async ({ owner, want }) => {
+    const { result } = renderHook(() => useBuckets());
+    await act(async () => {
+      await result.current.createBucket(
+        "b1",
+        "logs",
+        "",
+        "",
+        true,
+        null,
+        owner,
+      );
+    });
+    expect(h.createBucket.mock.calls[0][0].bucket.ownerTenantId).toBe(want);
   });
 });

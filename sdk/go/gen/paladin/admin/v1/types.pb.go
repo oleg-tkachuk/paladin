@@ -1040,8 +1040,9 @@ type Bucket struct {
 	BucketId    string `protobuf:"bytes,3,opt,name=bucket_id,json=bucketId,proto3" json:"bucket_id,omitempty"`
 	DisplayName string `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Region      string `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
-	// Optional binding to a single tenant. Empty → shared bucket; tenants
-	// bind Collections to it via prefixes.
+	// Optional binding to a single tenant, by tenant UUID. Empty → shared
+	// bucket; tenants bind Collections to it via prefixes. A value that is
+	// not a UUID (a slug included) is INVALID_ARGUMENT on create and update.
 	OwnerTenantId string `protobuf:"bytes,6,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`
 	// Per-bucket Cedar policy layered on top of tenant policy.
 	CedarPolicy string `protobuf:"bytes,7,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`

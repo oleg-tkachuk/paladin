@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   createBucket: vi.fn(() => Promise.resolve()),
   deleteBucket: vi.fn(() => Promise.resolve()),
   showNotification: vi.fn(),
+  storageLayout: "dedicated",
 }));
 
 vi.mock("@/hooks/useBuckets", () => ({
@@ -35,7 +36,12 @@ vi.mock("@/hooks/useBackends", () => ({
 }));
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,
-  useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
+  useTenant: () => ({
+    tenantId: "t-1",
+    slug: "acme",
+    displayName: "Acme",
+    storageLayout: h.storageLayout,
+  }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -43,6 +49,10 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import TenantBucketsPage from "./page";
 import { PROVISION_POLL_MS } from "@/lib/bucketProvision";
+import {
+  STORAGE_LAYOUT_DEDICATED,
+  STORAGE_LAYOUT_SHARED,
+} from "@/lib/storageLayout";
 import {
   OWNED_BUCKET_LABEL,
   SHARED_BUCKET_LABEL,
@@ -65,6 +75,7 @@ const makeBucket = (name: string, ownerTenantId: string = TENANT_ID) => ({
 beforeEach(() => {
   h.buckets = [];
   h.bucketsError = null;
+  h.storageLayout = STORAGE_LAYOUT_DEDICATED;
   h.fetchBuckets.mockClear();
   h.createBucket.mockClear();
   h.deleteBucket.mockClear();
@@ -153,7 +164,15 @@ describe("TenantBucketsPage", () => {
     expect(h.createBucket).not.toHaveBeenCalled();
   });
 
-  it("creates a bucket when a name is provided", async () => {
+  it("says a dedicated tenant's new bucket is its own", async () => {
+    render(<TenantBucketsPage />);
+    await userEvent.click(screen.getByRole("button", { name: /New bucket/i }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(/owned by Acme/);
+  });
+
+  // ADR-0015: the dedicated tenant owns its bucket. It was created unowned,
+  // so it did not appear on the page it was created from.
+  it("creates a bucket owned by a dedicated tenant", async () => {
     render(<TenantBucketsPage />);
     await userEvent.click(screen.getByRole("button", { name: /New bucket/i }));
     await userEvent.type(screen.getByLabelText(/Bucket name/), "my-bucket");
@@ -166,6 +185,7 @@ describe("TenantBucketsPage", () => {
         "",
         true,
         null,
+        TENANT_ID,
       ),
     );
   });
@@ -207,9 +227,9 @@ describe("TenantBucketsPage", () => {
     expect(common).not.toHaveTextContent(OWNED_BUCKET_LABEL);
   });
 
-  // Other tenants' collections sit in a shared bucket; it is deleted from
-  // /buckets, never from one tenant's page.
-  it("offers no delete for a shared bucket", async () => {
+  // Other tenants' collections sit in a shared bucket; its deletion and its
+  // lifecycle rules reach them all, so neither is offered on one tenant's page.
+  it("offers no delete or lifecycle rules for a shared bucket", async () => {
     h.buckets = [makeBucket("common", "")];
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(<TenantBucketsPage />);
@@ -217,11 +237,71 @@ describe("TenantBucketsPage", () => {
       await screen.findByRole("button", { name: "Actions for common" }),
     );
     expect(
-      await screen.findByRole("menuitem", { name: /Lifecycle rules/i }),
-    ).toBeInTheDocument();
+      await screen.findByRole("menuitem", { name: /Open on the backend/i }),
+    ).toHaveAttribute("href", "/storage-backends/be-1/buckets/common");
+    expect(
+      screen.queryByRole("menuitem", { name: /Lifecycle rules/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: /Delete bucket/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("offers lifecycle rules for a bucket the tenant owns", async () => {
+    h.buckets = [makeBucket("mine")];
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<TenantBucketsPage />);
+    await user.click(
+      await screen.findByRole("button", { name: "Actions for mine" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: /Lifecycle rules/i }),
+    ).toHaveAttribute("href", "/tenants/acme/buckets/be-1/mine/lifecycle");
+  });
+
+  // A shared tenant owns no bucket: an unowned one created here would not be
+  // on its list. It is sent to /buckets, or to Collections, which binds one.
+  describe("for a shared-layout tenant", () => {
+    beforeEach(() => {
+      h.storageLayout = STORAGE_LAYOUT_SHARED;
+    });
+
+    it("offers no bucket creation", () => {
+      render(<TenantBucketsPage />);
+      expect(
+        screen.queryByRole("button", { name: /New bucket/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Create the first bucket/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("links to the shared bucket index", () => {
+      render(<TenantBucketsPage />);
+      expect(
+        screen.getByRole("link", { name: /Shared buckets/i }),
+      ).toHaveAttribute("href", "/buckets");
+    });
+
+    it("sends an empty list to the tenant's collections", () => {
+      render(<TenantBucketsPage />);
+      expect(screen.getByText(/stores in no bucket yet/)).toHaveTextContent(
+        /binds it to a shared bucket/,
+      );
+      expect(
+        screen.getByRole("link", { name: /Go to collections/i }),
+      ).toHaveAttribute("href", "/tenants/acme/collections");
+    });
+
+    // An empty layout is the default, shared.
+    it("treats an unset layout as shared", () => {
+      h.storageLayout = "";
+      render(<TenantBucketsPage />);
+      expect(
+        screen.queryByRole("button", { name: /New bucket/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("says what an empty list means for a tenant", () => {

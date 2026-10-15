@@ -207,6 +207,9 @@ export function useBuckets() {
       region: string = "",
       provisionOnBackend: boolean = true,
       publicRead: PublicReadSettings | null = null,
+      // ADR-0015: a dedicated tenant's bucket is its own. Empty creates a
+      // shared bucket any tenant can bind to.
+      ownerTenantId: string = "",
     ): Promise<Bucket> => {
       try {
         setError(null);
@@ -216,7 +219,7 @@ export function useBuckets() {
           bucketId,
           displayName,
           region,
-          ownerTenantId: "",
+          ownerTenantId,
           cedarPolicy: "",
           lifecycleRules: [],
           labels: {},

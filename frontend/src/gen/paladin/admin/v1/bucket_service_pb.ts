@@ -237,8 +237,8 @@ export type ListBucketsRequest =
 
     /**
      * owner_tenant_id narrows the listing to buckets owned by exactly
-     * this tenant (matches buckets.owner_tenant_id). UUID or slug;
-     * empty = no tenant filter (cross-tenant listing for platform-
+     * this tenant (matches buckets.owner_tenant_id). Tenant UUID only —
+     * a slug is INVALID_ARGUMENT; empty = no tenant filter (cross-tenant listing for platform-
      * admin). Backed by the index on buckets(owner_tenant_id)
      * (`001_initial_schema.sql`), so per-tenant lookups are cheap.
      *
