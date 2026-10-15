@@ -91,8 +91,9 @@ message ListPlatformStatsTenantsResponse {
   paladin.common.v1.PageResponse page = 2;
   // Tenants after this page.
   int64 tenants_truncated = 3;
-  // Rows behind the signal that belong to no tenant: quotas on a shared
-  // bucket. The same on every page.
+  // Rows behind the signal that belong to no tenant. Every bucket has an owner
+  // since ADR-0032, so a bucket quota is attributed to it and this is 0; kept
+  // for the scopes a future signal may add. The same on every page.
   int64 unattributed = 4;
 }
 
@@ -305,9 +306,10 @@ message BucketStats {
   map<string, int64> by_provision_state = 2;
   // backend_id → count.
   map<string, int64> by_backend = 3;
-  // owner_tenant_id IS NOT NULL — a dedicated bucket owned by one tenant.
+  // Buckets only their owner binds to: no grant on them.
   int64 tenant_owned = 4;
-  // owner_tenant_id IS NULL — shared across tenants by prefix.
+  // Buckets shared with other tenants: their owner granted them to at least
+  // one tenant (ADR-0032).
   int64 shared = 5;
   int64 versioning_enabled = 6;
   int64 object_lock_enabled = 7;

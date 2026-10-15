@@ -16,6 +16,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -842,11 +843,316 @@ func (x *ListAccessibleBucketsRequest) GetPage() *v1.PageRequest {
 	return nil
 }
 
+// A tenant other than its owner that may bind Collections to a bucket.
+type BucketGrant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bucket's resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
+	Bucket string `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	// The tenant granted, by UUID.
+	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Who granted it: the subject of the call, or the migration that did.
+	GrantedBy     string                 `protobuf:"bytes,3,opt,name=granted_by,json=grantedBy,proto3" json:"granted_by,omitempty"`
+	GrantedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=granted_at,json=grantedAt,proto3" json:"granted_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BucketGrant) Reset() {
+	*x = BucketGrant{}
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BucketGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BucketGrant) ProtoMessage() {}
+
+func (x *BucketGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BucketGrant.ProtoReflect.Descriptor instead.
+func (*BucketGrant) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_bucket_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *BucketGrant) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
+func (x *BucketGrant) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *BucketGrant) GetGrantedBy() string {
+	if x != nil {
+		return x.GrantedBy
+	}
+	return ""
+}
+
+func (x *BucketGrant) GetGrantedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.GrantedAt
+	}
+	return nil
+}
+
+type GrantBucketRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The tenant to grant, by UUID.
+	TenantId      string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantBucketRequest) Reset() {
+	*x = GrantBucketRequest{}
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantBucketRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantBucketRequest) ProtoMessage() {}
+
+func (x *GrantBucketRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantBucketRequest.ProtoReflect.Descriptor instead.
+func (*GrantBucketRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_bucket_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GrantBucketRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GrantBucketRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+type RevokeBucketGrantRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The tenant whose grant is revoked, by UUID.
+	TenantId      string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeBucketGrantRequest) Reset() {
+	*x = RevokeBucketGrantRequest{}
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeBucketGrantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeBucketGrantRequest) ProtoMessage() {}
+
+func (x *RevokeBucketGrantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeBucketGrantRequest.ProtoReflect.Descriptor instead.
+func (*RevokeBucketGrantRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_bucket_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RevokeBucketGrantRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RevokeBucketGrantRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+type RevokeBucketGrantResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeBucketGrantResponse) Reset() {
+	*x = RevokeBucketGrantResponse{}
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeBucketGrantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeBucketGrantResponse) ProtoMessage() {}
+
+func (x *RevokeBucketGrantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeBucketGrantResponse.ProtoReflect.Descriptor instead.
+func (*RevokeBucketGrantResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_bucket_service_proto_rawDescGZIP(), []int{16}
+}
+
+type ListBucketGrantsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBucketGrantsRequest) Reset() {
+	*x = ListBucketGrantsRequest{}
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBucketGrantsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBucketGrantsRequest) ProtoMessage() {}
+
+func (x *ListBucketGrantsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBucketGrantsRequest.ProtoReflect.Descriptor instead.
+func (*ListBucketGrantsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_bucket_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListBucketGrantsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type ListBucketGrantsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Grants        []*BucketGrant         `protobuf:"bytes,1,rep,name=grants,proto3" json:"grants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBucketGrantsResponse) Reset() {
+	*x = ListBucketGrantsResponse{}
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBucketGrantsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBucketGrantsResponse) ProtoMessage() {}
+
+func (x *ListBucketGrantsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_bucket_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBucketGrantsResponse.ProtoReflect.Descriptor instead.
+func (*ListBucketGrantsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_bucket_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListBucketGrantsResponse) GetGrants() []*BucketGrant {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
 var File_paladin_admin_v1_bucket_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xe9\x01\n" +
+	"%paladin/admin/v1/bucket_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xe9\x01\n" +
 	"\x13CreateBucketRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12E\n" +
 	"\tbucket_id\x18\x02 \x01(\tB(\xbaH%r#\x10\x03\x18?2\x1d^[a-z0-9][a-z0-9.-]*[a-z0-9]$R\bbucketId\x128\n" +
@@ -899,7 +1205,26 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\vreplication\x18\x03 \x01(\v2#.paladin.admin.v1.BucketReplicationB\x06\xbaH\x03\xc8\x01\x01R\vreplication\"s\n" +
 	"\x1cListAccessibleBucketsRequest\x12\x1f\n" +
 	"\x06tenant\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06tenant\x122\n" +
-	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page2\x86\b\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x9c\x01\n" +
+	"\vBucketGrant\x12\x16\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x1b\n" +
+	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x1d\n" +
+	"\n" +
+	"granted_by\x18\x03 \x01(\tR\tgrantedBy\x129\n" +
+	"\n" +
+	"granted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tgrantedAt\"X\n" +
+	"\x12GrantBucketRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12%\n" +
+	"\ttenant_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"^\n" +
+	"\x18RevokeBucketGrantRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12%\n" +
+	"\ttenant_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\"\x1b\n" +
+	"\x19RevokeBucketGrantResponse\"6\n" +
+	"\x17ListBucketGrantsRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"Q\n" +
+	"\x18ListBucketGrantsResponse\x125\n" +
+	"\x06grants\x18\x01 \x03(\v2\x1d.paladin.admin.v1.BucketGrantR\x06grants2\xc2\n" +
+	"\n" +
 	"\rBucketService\x12O\n" +
 	"\fCreateBucket\x12%.paladin.admin.v1.CreateBucketRequest\x1a\x18.paladin.admin.v1.Bucket\x12N\n" +
 	"\tGetBucket\x12\".paladin.admin.v1.GetBucketRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x01\x12T\n" +
@@ -910,7 +1235,10 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\x11SetLifecycleRules\x12*.paladin.admin.v1.SetLifecycleRulesRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n" +
 	"\rSetObjectLock\x12&.paladin.admin.v1.SetObjectLockRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12V\n" +
 	"\rSetVersioning\x12&.paladin.admin.v1.SetVersioningRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12X\n" +
-	"\x0eSetReplication\x12'.paladin.admin.v1.SetReplicationRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12s\n" +
+	"\x0eSetReplication\x12'.paladin.admin.v1.SetReplicationRequest\x1a\x18.paladin.admin.v1.Bucket\"\x03\x90\x02\x02\x12W\n" +
+	"\vGrantBucket\x12$.paladin.admin.v1.GrantBucketRequest\x1a\x1d.paladin.admin.v1.BucketGrant\"\x03\x90\x02\x02\x12q\n" +
+	"\x11RevokeBucketGrant\x12*.paladin.admin.v1.RevokeBucketGrantRequest\x1a+.paladin.admin.v1.RevokeBucketGrantResponse\"\x03\x90\x02\x02\x12n\n" +
+	"\x10ListBucketGrants\x12).paladin.admin.v1.ListBucketGrantsRequest\x1a*.paladin.admin.v1.ListBucketGrantsResponse\"\x03\x90\x02\x01\x12s\n" +
 	"\x15ListAccessibleBuckets\x12..paladin.admin.v1.ListAccessibleBucketsRequest\x1a%.paladin.admin.v1.ListBucketsResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
 var (
@@ -925,7 +1253,7 @@ func file_paladin_admin_v1_bucket_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_bucket_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_bucket_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_paladin_admin_v1_bucket_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_paladin_admin_v1_bucket_service_proto_goTypes = []any{
 	(*CreateBucketRequest)(nil),          // 0: paladin.admin.v1.CreateBucketRequest
 	(*GetBucketRequest)(nil),             // 1: paladin.admin.v1.GetBucketRequest
@@ -940,54 +1268,69 @@ var file_paladin_admin_v1_bucket_service_proto_goTypes = []any{
 	(*SetVersioningRequest)(nil),         // 10: paladin.admin.v1.SetVersioningRequest
 	(*SetReplicationRequest)(nil),        // 11: paladin.admin.v1.SetReplicationRequest
 	(*ListAccessibleBucketsRequest)(nil), // 12: paladin.admin.v1.ListAccessibleBucketsRequest
-	(*Bucket)(nil),                       // 13: paladin.admin.v1.Bucket
-	(*fieldmaskpb.FieldMask)(nil),        // 14: google.protobuf.FieldMask
-	(*v1.PageRequest)(nil),               // 15: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),              // 16: paladin.common.v1.PageResponse
-	(*LifecycleRule)(nil),                // 17: paladin.admin.v1.LifecycleRule
-	(*ObjectLockConfig)(nil),             // 18: paladin.admin.v1.ObjectLockConfig
-	(*BucketVersioning)(nil),             // 19: paladin.admin.v1.BucketVersioning
-	(*BucketReplication)(nil),            // 20: paladin.admin.v1.BucketReplication
+	(*BucketGrant)(nil),                  // 13: paladin.admin.v1.BucketGrant
+	(*GrantBucketRequest)(nil),           // 14: paladin.admin.v1.GrantBucketRequest
+	(*RevokeBucketGrantRequest)(nil),     // 15: paladin.admin.v1.RevokeBucketGrantRequest
+	(*RevokeBucketGrantResponse)(nil),    // 16: paladin.admin.v1.RevokeBucketGrantResponse
+	(*ListBucketGrantsRequest)(nil),      // 17: paladin.admin.v1.ListBucketGrantsRequest
+	(*ListBucketGrantsResponse)(nil),     // 18: paladin.admin.v1.ListBucketGrantsResponse
+	(*Bucket)(nil),                       // 19: paladin.admin.v1.Bucket
+	(*fieldmaskpb.FieldMask)(nil),        // 20: google.protobuf.FieldMask
+	(*v1.PageRequest)(nil),               // 21: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),              // 22: paladin.common.v1.PageResponse
+	(*LifecycleRule)(nil),                // 23: paladin.admin.v1.LifecycleRule
+	(*ObjectLockConfig)(nil),             // 24: paladin.admin.v1.ObjectLockConfig
+	(*BucketVersioning)(nil),             // 25: paladin.admin.v1.BucketVersioning
+	(*BucketReplication)(nil),            // 26: paladin.admin.v1.BucketReplication
+	(*timestamppb.Timestamp)(nil),        // 27: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_bucket_service_proto_depIdxs = []int32{
-	13, // 0: paladin.admin.v1.CreateBucketRequest.bucket:type_name -> paladin.admin.v1.Bucket
-	14, // 1: paladin.admin.v1.UpdateBucketRequest.update_mask:type_name -> google.protobuf.FieldMask
-	13, // 2: paladin.admin.v1.UpdateBucketRequest.bucket:type_name -> paladin.admin.v1.Bucket
-	15, // 3: paladin.admin.v1.ListBucketsRequest.page:type_name -> paladin.common.v1.PageRequest
-	13, // 4: paladin.admin.v1.ListBucketsResponse.buckets:type_name -> paladin.admin.v1.Bucket
-	16, // 5: paladin.admin.v1.ListBucketsResponse.page:type_name -> paladin.common.v1.PageResponse
-	17, // 6: paladin.admin.v1.SetLifecycleRulesRequest.rules:type_name -> paladin.admin.v1.LifecycleRule
-	18, // 7: paladin.admin.v1.SetObjectLockRequest.config:type_name -> paladin.admin.v1.ObjectLockConfig
-	19, // 8: paladin.admin.v1.SetVersioningRequest.versioning:type_name -> paladin.admin.v1.BucketVersioning
-	20, // 9: paladin.admin.v1.SetReplicationRequest.replication:type_name -> paladin.admin.v1.BucketReplication
-	15, // 10: paladin.admin.v1.ListAccessibleBucketsRequest.page:type_name -> paladin.common.v1.PageRequest
-	0,  // 11: paladin.admin.v1.BucketService.CreateBucket:input_type -> paladin.admin.v1.CreateBucketRequest
-	1,  // 12: paladin.admin.v1.BucketService.GetBucket:input_type -> paladin.admin.v1.GetBucketRequest
-	2,  // 13: paladin.admin.v1.BucketService.UpdateBucket:input_type -> paladin.admin.v1.UpdateBucketRequest
-	3,  // 14: paladin.admin.v1.BucketService.DeleteBucket:input_type -> paladin.admin.v1.DeleteBucketRequest
-	5,  // 15: paladin.admin.v1.BucketService.ListBuckets:input_type -> paladin.admin.v1.ListBucketsRequest
-	7,  // 16: paladin.admin.v1.BucketService.SetBucketPolicy:input_type -> paladin.admin.v1.SetBucketPolicyRequest
-	8,  // 17: paladin.admin.v1.BucketService.SetLifecycleRules:input_type -> paladin.admin.v1.SetLifecycleRulesRequest
-	9,  // 18: paladin.admin.v1.BucketService.SetObjectLock:input_type -> paladin.admin.v1.SetObjectLockRequest
-	10, // 19: paladin.admin.v1.BucketService.SetVersioning:input_type -> paladin.admin.v1.SetVersioningRequest
-	11, // 20: paladin.admin.v1.BucketService.SetReplication:input_type -> paladin.admin.v1.SetReplicationRequest
-	12, // 21: paladin.admin.v1.BucketService.ListAccessibleBuckets:input_type -> paladin.admin.v1.ListAccessibleBucketsRequest
-	13, // 22: paladin.admin.v1.BucketService.CreateBucket:output_type -> paladin.admin.v1.Bucket
-	13, // 23: paladin.admin.v1.BucketService.GetBucket:output_type -> paladin.admin.v1.Bucket
-	13, // 24: paladin.admin.v1.BucketService.UpdateBucket:output_type -> paladin.admin.v1.Bucket
-	4,  // 25: paladin.admin.v1.BucketService.DeleteBucket:output_type -> paladin.admin.v1.DeleteBucketResponse
-	6,  // 26: paladin.admin.v1.BucketService.ListBuckets:output_type -> paladin.admin.v1.ListBucketsResponse
-	13, // 27: paladin.admin.v1.BucketService.SetBucketPolicy:output_type -> paladin.admin.v1.Bucket
-	13, // 28: paladin.admin.v1.BucketService.SetLifecycleRules:output_type -> paladin.admin.v1.Bucket
-	13, // 29: paladin.admin.v1.BucketService.SetObjectLock:output_type -> paladin.admin.v1.Bucket
-	13, // 30: paladin.admin.v1.BucketService.SetVersioning:output_type -> paladin.admin.v1.Bucket
-	13, // 31: paladin.admin.v1.BucketService.SetReplication:output_type -> paladin.admin.v1.Bucket
-	6,  // 32: paladin.admin.v1.BucketService.ListAccessibleBuckets:output_type -> paladin.admin.v1.ListBucketsResponse
-	22, // [22:33] is the sub-list for method output_type
-	11, // [11:22] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	19, // 0: paladin.admin.v1.CreateBucketRequest.bucket:type_name -> paladin.admin.v1.Bucket
+	20, // 1: paladin.admin.v1.UpdateBucketRequest.update_mask:type_name -> google.protobuf.FieldMask
+	19, // 2: paladin.admin.v1.UpdateBucketRequest.bucket:type_name -> paladin.admin.v1.Bucket
+	21, // 3: paladin.admin.v1.ListBucketsRequest.page:type_name -> paladin.common.v1.PageRequest
+	19, // 4: paladin.admin.v1.ListBucketsResponse.buckets:type_name -> paladin.admin.v1.Bucket
+	22, // 5: paladin.admin.v1.ListBucketsResponse.page:type_name -> paladin.common.v1.PageResponse
+	23, // 6: paladin.admin.v1.SetLifecycleRulesRequest.rules:type_name -> paladin.admin.v1.LifecycleRule
+	24, // 7: paladin.admin.v1.SetObjectLockRequest.config:type_name -> paladin.admin.v1.ObjectLockConfig
+	25, // 8: paladin.admin.v1.SetVersioningRequest.versioning:type_name -> paladin.admin.v1.BucketVersioning
+	26, // 9: paladin.admin.v1.SetReplicationRequest.replication:type_name -> paladin.admin.v1.BucketReplication
+	21, // 10: paladin.admin.v1.ListAccessibleBucketsRequest.page:type_name -> paladin.common.v1.PageRequest
+	27, // 11: paladin.admin.v1.BucketGrant.granted_at:type_name -> google.protobuf.Timestamp
+	13, // 12: paladin.admin.v1.ListBucketGrantsResponse.grants:type_name -> paladin.admin.v1.BucketGrant
+	0,  // 13: paladin.admin.v1.BucketService.CreateBucket:input_type -> paladin.admin.v1.CreateBucketRequest
+	1,  // 14: paladin.admin.v1.BucketService.GetBucket:input_type -> paladin.admin.v1.GetBucketRequest
+	2,  // 15: paladin.admin.v1.BucketService.UpdateBucket:input_type -> paladin.admin.v1.UpdateBucketRequest
+	3,  // 16: paladin.admin.v1.BucketService.DeleteBucket:input_type -> paladin.admin.v1.DeleteBucketRequest
+	5,  // 17: paladin.admin.v1.BucketService.ListBuckets:input_type -> paladin.admin.v1.ListBucketsRequest
+	7,  // 18: paladin.admin.v1.BucketService.SetBucketPolicy:input_type -> paladin.admin.v1.SetBucketPolicyRequest
+	8,  // 19: paladin.admin.v1.BucketService.SetLifecycleRules:input_type -> paladin.admin.v1.SetLifecycleRulesRequest
+	9,  // 20: paladin.admin.v1.BucketService.SetObjectLock:input_type -> paladin.admin.v1.SetObjectLockRequest
+	10, // 21: paladin.admin.v1.BucketService.SetVersioning:input_type -> paladin.admin.v1.SetVersioningRequest
+	11, // 22: paladin.admin.v1.BucketService.SetReplication:input_type -> paladin.admin.v1.SetReplicationRequest
+	14, // 23: paladin.admin.v1.BucketService.GrantBucket:input_type -> paladin.admin.v1.GrantBucketRequest
+	15, // 24: paladin.admin.v1.BucketService.RevokeBucketGrant:input_type -> paladin.admin.v1.RevokeBucketGrantRequest
+	17, // 25: paladin.admin.v1.BucketService.ListBucketGrants:input_type -> paladin.admin.v1.ListBucketGrantsRequest
+	12, // 26: paladin.admin.v1.BucketService.ListAccessibleBuckets:input_type -> paladin.admin.v1.ListAccessibleBucketsRequest
+	19, // 27: paladin.admin.v1.BucketService.CreateBucket:output_type -> paladin.admin.v1.Bucket
+	19, // 28: paladin.admin.v1.BucketService.GetBucket:output_type -> paladin.admin.v1.Bucket
+	19, // 29: paladin.admin.v1.BucketService.UpdateBucket:output_type -> paladin.admin.v1.Bucket
+	4,  // 30: paladin.admin.v1.BucketService.DeleteBucket:output_type -> paladin.admin.v1.DeleteBucketResponse
+	6,  // 31: paladin.admin.v1.BucketService.ListBuckets:output_type -> paladin.admin.v1.ListBucketsResponse
+	19, // 32: paladin.admin.v1.BucketService.SetBucketPolicy:output_type -> paladin.admin.v1.Bucket
+	19, // 33: paladin.admin.v1.BucketService.SetLifecycleRules:output_type -> paladin.admin.v1.Bucket
+	19, // 34: paladin.admin.v1.BucketService.SetObjectLock:output_type -> paladin.admin.v1.Bucket
+	19, // 35: paladin.admin.v1.BucketService.SetVersioning:output_type -> paladin.admin.v1.Bucket
+	19, // 36: paladin.admin.v1.BucketService.SetReplication:output_type -> paladin.admin.v1.Bucket
+	13, // 37: paladin.admin.v1.BucketService.GrantBucket:output_type -> paladin.admin.v1.BucketGrant
+	16, // 38: paladin.admin.v1.BucketService.RevokeBucketGrant:output_type -> paladin.admin.v1.RevokeBucketGrantResponse
+	18, // 39: paladin.admin.v1.BucketService.ListBucketGrants:output_type -> paladin.admin.v1.ListBucketGrantsResponse
+	6,  // 40: paladin.admin.v1.BucketService.ListAccessibleBuckets:output_type -> paladin.admin.v1.ListBucketsResponse
+	27, // [27:41] is the sub-list for method output_type
+	13, // [13:27] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_bucket_service_proto_init() }
@@ -1002,7 +1345,7 @@ func file_paladin_admin_v1_bucket_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_bucket_service_proto_rawDesc), len(file_paladin_admin_v1_bucket_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

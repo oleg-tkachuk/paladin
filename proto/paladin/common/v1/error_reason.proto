@@ -125,4 +125,11 @@ enum ErrorReason {
   // The capability came under a scheme its binding does not take: a
   // key-bound one not under DPoP, or a bearer one under it.
   ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH = 57;
+  // A bucket was named without the tenant that owns it (ADR-0032).
+  ERROR_REASON_BUCKET_OWNER_REQUIRED = 58;
+  // The tenant neither owns the bucket nor holds a grant on it, so it may not
+  // bind a collection to it (ADR-0032).
+  ERROR_REASON_BUCKET_NOT_GRANTED = 59;
+  // The grant is not revoked: the tenant still has collections in the bucket.
+  ERROR_REASON_BUCKET_GRANT_IN_USE = 60;
 }

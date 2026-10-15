@@ -426,9 +426,11 @@ export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
   region: string;
 
   /**
-   * Optional binding to a single tenant, by tenant UUID. Empty → shared
-   * bucket; tenants bind Collections to it via prefixes. A value that is
-   * not a UUID (a slug included) is INVALID_ARGUMENT on create and update.
+   * The tenant that owns the bucket, by tenant UUID. Required on create
+   * (BUCKET_OWNER_REQUIRED); a value that is not a UUID, a slug included, is
+   * INVALID_ARGUMENT. Only the owner, and the tenants it grants the bucket to
+   * (GrantBucket), may bind Collections to it (ADR-0032). A pool the operator
+   * runs for many tenants is owned by the platform tenant.
    *
    * @generated from field: string owner_tenant_id = 6;
    */

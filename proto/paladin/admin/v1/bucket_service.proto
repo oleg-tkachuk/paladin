@@ -6,6 +6,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1
 
 import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
 import "paladin/admin/v1/types.proto";
 import "paladin/common/v1/pagination.proto";
 
@@ -67,8 +68,25 @@ service BucketService {
     option idempotency_level = IDEMPOTENT;
   }
 
-  // ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-  // the caller's principal/scopes are allowed to bind Collections to.
+  // GrantBucket lets a tenant other than the owner bind Collections to the
+  // bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+  // its first granter and time.
+  rpc GrantBucket(GrantBucketRequest) returns (BucketGrant) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  // RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+  // while the tenant still has Collections in the bucket.
+  rpc RevokeBucketGrant(RevokeBucketGrantRequest) returns (RevokeBucketGrantResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  // ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+  rpc ListBucketGrants(ListBucketGrantsRequest) returns (ListBucketGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+  // a tenant may bind Collections to: the ones it owns and the ones granted
+  // to it.
   rpc ListAccessibleBuckets(ListAccessibleBucketsRequest) returns (ListBucketsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -204,4 +222,40 @@ message ListAccessibleBucketsRequest {
   // Tenant: "tenants/{tenant_id_or_slug}". Required.
   string tenant = 1 [(buf.validate.field).string.min_len = 1];
   paladin.common.v1.PageRequest page = 2;
+}
+
+// A tenant other than its owner that may bind Collections to a bucket.
+message BucketGrant {
+  // The bucket's resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
+  string bucket = 1;
+  // The tenant granted, by UUID.
+  string tenant_id = 2;
+  // Who granted it: the subject of the call, or the migration that did.
+  string granted_by = 3;
+  google.protobuf.Timestamp granted_at = 4;
+}
+
+message GrantBucketRequest {
+  // The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // The tenant to grant, by UUID.
+  string tenant_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeBucketGrantRequest {
+  // The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // The tenant whose grant is revoked, by UUID.
+  string tenant_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeBucketGrantResponse {}
+
+message ListBucketGrantsRequest {
+  // The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListBucketGrantsResponse {
+  repeated BucketGrant grants = 1;
 }

@@ -146,8 +146,9 @@ type ListPlatformStatsTenantsResponse struct {
 	Page *v1.PageResponse `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	// Tenants after this page.
 	TenantsTruncated int64 `protobuf:"varint,3,opt,name=tenants_truncated,json=tenantsTruncated,proto3" json:"tenants_truncated,omitempty"`
-	// Rows behind the signal that belong to no tenant: quotas on a shared
-	// bucket. The same on every page.
+	// Rows behind the signal that belong to no tenant. Every bucket has an owner
+	// since ADR-0032, so a bucket quota is attributed to it and this is 0; kept
+	// for the scopes a future signal may add. The same on every page.
 	Unattributed  int64 `protobuf:"varint,4,opt,name=unattributed,proto3" json:"unattributed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1405,9 +1406,10 @@ type BucketStats struct {
 	ByProvisionState map[string]int64 `protobuf:"bytes,2,rep,name=by_provision_state,json=byProvisionState,proto3" json:"by_provision_state,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	// backend_id → count.
 	ByBackend map[string]int64 `protobuf:"bytes,3,rep,name=by_backend,json=byBackend,proto3" json:"by_backend,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	// owner_tenant_id IS NOT NULL — a dedicated bucket owned by one tenant.
+	// Buckets only their owner binds to: no grant on them.
 	TenantOwned int64 `protobuf:"varint,4,opt,name=tenant_owned,json=tenantOwned,proto3" json:"tenant_owned,omitempty"`
-	// owner_tenant_id IS NULL — shared across tenants by prefix.
+	// Buckets shared with other tenants: their owner granted them to at least
+	// one tenant (ADR-0032).
 	Shared             int64 `protobuf:"varint,5,opt,name=shared,proto3" json:"shared,omitempty"`
 	VersioningEnabled  int64 `protobuf:"varint,6,opt,name=versioning_enabled,json=versioningEnabled,proto3" json:"versioning_enabled,omitempty"`
 	ObjectLockEnabled  int64 `protobuf:"varint,7,opt,name=object_lock_enabled,json=objectLockEnabled,proto3" json:"object_lock_enabled,omitempty"`

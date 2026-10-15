@@ -1,5 +1,8 @@
+import datetime
+
 from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import field_mask_pb2 as _field_mask_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from paladin.admin.v1 import types_pb2 as _types_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.protobuf.internal import containers as _containers
@@ -135,3 +138,47 @@ class ListAccessibleBucketsRequest(_message.Message):
     tenant: str
     page: _pagination_pb2.PageRequest
     def __init__(self, tenant: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ...) -> None: ...
+
+class BucketGrant(_message.Message):
+    __slots__ = ("bucket", "tenant_id", "granted_by", "granted_at")
+    BUCKET_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    GRANTED_BY_FIELD_NUMBER: _ClassVar[int]
+    GRANTED_AT_FIELD_NUMBER: _ClassVar[int]
+    bucket: str
+    tenant_id: str
+    granted_by: str
+    granted_at: _timestamp_pb2.Timestamp
+    def __init__(self, bucket: _Optional[str] = ..., tenant_id: _Optional[str] = ..., granted_by: _Optional[str] = ..., granted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class GrantBucketRequest(_message.Message):
+    __slots__ = ("name", "tenant_id")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    tenant_id: str
+    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ...) -> None: ...
+
+class RevokeBucketGrantRequest(_message.Message):
+    __slots__ = ("name", "tenant_id")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    tenant_id: str
+    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ...) -> None: ...
+
+class RevokeBucketGrantResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListBucketGrantsRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class ListBucketGrantsResponse(_message.Message):
+    __slots__ = ("grants",)
+    GRANTS_FIELD_NUMBER: _ClassVar[int]
+    grants: _containers.RepeatedCompositeFieldContainer[BucketGrant]
+    def __init__(self, grants: _Optional[_Iterable[_Union[BucketGrant, _Mapping]]] = ...) -> None: ...

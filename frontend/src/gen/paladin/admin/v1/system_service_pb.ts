@@ -87,8 +87,9 @@ export type ListPlatformStatsTenantsResponse =
     tenantsTruncated: bigint;
 
     /**
-     * Rows behind the signal that belong to no tenant: quotas on a shared
-     * bucket. The same on every page.
+     * Rows behind the signal that belong to no tenant. Every bucket has an owner
+     * since ADR-0032, so a bucket quota is attributed to it and this is 0; kept
+     * for the scopes a future signal may add. The same on every page.
      *
      * @generated from field: int64 unattributed = 4;
      */
@@ -804,14 +805,15 @@ export type BucketStats = Message<"paladin.admin.v1.BucketStats"> & {
   byBackend: { [key: string]: bigint };
 
   /**
-   * owner_tenant_id IS NOT NULL — a dedicated bucket owned by one tenant.
+   * Buckets only their owner binds to: no grant on them.
    *
    * @generated from field: int64 tenant_owned = 4;
    */
   tenantOwned: bigint;
 
   /**
-   * owner_tenant_id IS NULL — shared across tenants by prefix.
+   * Buckets shared with other tenants: their owner granted them to at least
+   * one tenant (ADR-0032).
    *
    * @generated from field: int64 shared = 5;
    */

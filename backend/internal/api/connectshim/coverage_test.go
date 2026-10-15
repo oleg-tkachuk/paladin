@@ -36,6 +36,9 @@ var gateMarkers = []string{
 	"apiutil.RequireRole",
 	"apiutil.RequireAnyRole",
 	"apiutil.HasRole",
+	// bucketh's grant RPCs: the bucket-admin roles, then the stored owner's
+	// Cedar decision (bucketh/grants.go).
+	"h.grantable",
 }
 
 // preAuthnAllowlist — handler methods that intentionally run before any

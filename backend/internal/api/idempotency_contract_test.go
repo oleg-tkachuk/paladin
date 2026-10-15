@@ -374,6 +374,8 @@ var idempotentByArgument = map[string]string{
 	"RegenerateUploadUrl":     "re-signs a URL for an EXISTING pending row; creates nothing",
 	"PutObjectTags":           "a PUT replaces the whole tag set with the one supplied",
 	"ResetUsage":              "zeroes a counter; zeroing twice lands on zero",
+	"GrantBucket": "ON CONFLICT DO UPDATE keeps the grant as it was — granting a " +
+		"tenant that holds one changes nothing",
 
 	// Read out of the SQL rather than inferred from the verb, because the verb
 	// is what made RotateCredentials look safe.

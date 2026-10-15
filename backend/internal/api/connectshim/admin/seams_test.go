@@ -130,6 +130,15 @@ func (failingBucket) SetVersioning(context.Context, string, string, admindomain.
 func (failingBucket) UpdateBucket(context.Context, bucketh.UpdateBucketInput) (*admindomain.Bucket, error) {
 	return nil, errBoom
 }
+func (failingBucket) GrantBucket(context.Context, string, string, uuid.UUID) (admindomain.BucketGrant, error) {
+	return admindomain.BucketGrant{}, errBoom
+}
+func (failingBucket) RevokeBucketGrant(context.Context, string, string, uuid.UUID) error {
+	return errBoom
+}
+func (failingBucket) ListBucketGrants(context.Context, string, string) ([]admindomain.BucketGrant, error) {
+	return nil, errBoom
+}
 
 type failingCollection struct{}
 

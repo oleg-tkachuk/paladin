@@ -2,9 +2,10 @@
 // self-service storage provisioning for a tenant using its EXISTING data-plane
 // API token (aud=data), with no platform-admin credential.
 //
-// The single RPC, EnsureTenantStorage, idempotently ensures a shared Paladin
-// bucket exists and that each requested object-key is bound to it under the
-// caller's tenant. The core least-privilege guarantee: the tenant is ALWAYS
+// The single RPC, EnsureTenantStorage, idempotently ensures a bucket exists —
+// created owned by the caller's tenant, or an existing one that tenant owns or
+// holds a grant on (ADR-0032) — and that each requested object-key is bound to
+// it under the caller's tenant. The core least-privilege guarantee: the tenant is ALWAYS
 // resolved from the request principal (auth.TenantFromContext), never from the
 // request body, so a caller can only ever provision storage for its OWN
 // tenant. A single Cedar action — EnsureTenantStorage — authorizes the whole
@@ -76,7 +77,7 @@ func NewHandler(buckets BucketEnsurer, collections CollectionEnsurer, backends B
 	return &Handler{buckets: buckets, collections: collections, backends: backends, policy: policy}
 }
 
-// EnsureTenantStorage idempotently ensures the shared bucket + the requested
+// EnsureTenantStorage idempotently ensures the bucket + the requested
 // object-keys exist under the CALLER's tenant. Safe to call on every startup:
 // an already-provisioned tenant/bucket/keys yields an all-no-op success.
 func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket string, collections []string) (*Result, error) {
@@ -123,13 +124,15 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 			"storage backend %q is disabled", backendID)
 	}
 
-	// Ensure the shared bucket. OwnerTenantID is left empty (uuid.Nil) so the
-	// bucket is SHARED — matching how the shared consumer bucket is modeled today.
+	// Ensure the bucket, owned by the caller's tenant (ADR-0032). An existing
+	// bucket it neither owns nor holds a grant on is refused here — a tenant
+	// no longer takes another's bucket by naming it.
 	// provision_on_backend=true reuses the admin physical-provisioning path.
 	_, bucketCreated, err := h.buckets.EnsureBucket(ctx, bucketh.CreateBucketInput{
 		Bucket: admindomain.Bucket{
-			BackendID:  backendID,
-			BucketName: bucket,
+			BackendID:     backendID,
+			BucketName:    bucket,
+			OwnerTenantID: tenantID,
 		},
 		ProvisionOnBackend: true,
 	})

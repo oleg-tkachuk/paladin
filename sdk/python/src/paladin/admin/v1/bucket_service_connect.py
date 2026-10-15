@@ -19,7 +19,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.admin.v1.types_pb2 import Bucket
 from pyqwest import Client, SyncClient
 
-from .bucket_service_pb2 import CreateBucketRequest, DeleteBucketRequest, DeleteBucketResponse, GetBucketRequest, ListAccessibleBucketsRequest, ListBucketsRequest, ListBucketsResponse, SetBucketPolicyRequest, SetLifecycleRulesRequest, SetObjectLockRequest, SetReplicationRequest, SetVersioningRequest, UpdateBucketRequest
+from .bucket_service_pb2 import BucketGrant, CreateBucketRequest, DeleteBucketRequest, DeleteBucketResponse, GetBucketRequest, GrantBucketRequest, ListAccessibleBucketsRequest, ListBucketGrantsRequest, ListBucketGrantsResponse, ListBucketsRequest, ListBucketsResponse, RevokeBucketGrantRequest, RevokeBucketGrantResponse, SetBucketPolicyRequest, SetLifecycleRulesRequest, SetObjectLockRequest, SetReplicationRequest, SetVersioningRequest, UpdateBucketRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -114,10 +114,32 @@ class BucketService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def grant_bucket(self, request: GrantBucketRequest, ctx: RequestContext[GrantBucketRequest, BucketGrant], /) -> BucketGrant:
+        """
+        GrantBucket lets a tenant other than the owner bind Collections to the
+        bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+        its first granter and time.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def revoke_bucket_grant(self, request: RevokeBucketGrantRequest, ctx: RequestContext[RevokeBucketGrantRequest, RevokeBucketGrantResponse], /) -> RevokeBucketGrantResponse:
+        """
+        RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+        while the tenant still has Collections in the bucket.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_bucket_grants(self, request: ListBucketGrantsRequest, ctx: RequestContext[ListBucketGrantsRequest, ListBucketGrantsResponse], /) -> ListBucketGrantsResponse:
+        """
+        ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     async def list_accessible_buckets(self, request: ListAccessibleBucketsRequest, ctx: RequestContext[ListAccessibleBucketsRequest, ListBucketsResponse], /) -> ListBucketsResponse:
         """
-        ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-        the caller's principal/scopes are allowed to bind Collections to.
+        ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+        a tenant may bind Collections to: the ones it owns and the ones granted
+        to it.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -234,6 +256,36 @@ class BucketServiceASGIApplication(ConnectASGIApplication[BucketService]):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=svc.set_replication,
+                ),
+                "/paladin.admin.v1.BucketService/GrantBucket": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GrantBucket",
+                        service_name="paladin.admin.v1.BucketService",
+                        input=GrantBucketRequest,
+                        output=BucketGrant,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.grant_bucket,
+                ),
+                "/paladin.admin.v1.BucketService/RevokeBucketGrant": Endpoint.unary(
+                    method=MethodInfo(
+                        name="RevokeBucketGrant",
+                        service_name="paladin.admin.v1.BucketService",
+                        input=RevokeBucketGrantRequest,
+                        output=RevokeBucketGrantResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.revoke_bucket_grant,
+                ),
+                "/paladin.admin.v1.BucketService/ListBucketGrants": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListBucketGrants",
+                        service_name="paladin.admin.v1.BucketService",
+                        input=ListBucketGrantsRequest,
+                        output=ListBucketGrantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_bucket_grants,
                 ),
                 "/paladin.admin.v1.BucketService/ListAccessibleBuckets": Endpoint.unary(
                     method=MethodInfo(
@@ -535,6 +587,80 @@ class BucketServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def grant_bucket(
+        self,
+        request: GrantBucketRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> BucketGrant:
+        """
+        GrantBucket lets a tenant other than the owner bind Collections to the
+        bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+        its first granter and time.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GrantBucket",
+                service_name="paladin.admin.v1.BucketService",
+                input=GrantBucketRequest,
+                output=BucketGrant,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def revoke_bucket_grant(
+        self,
+        request: RevokeBucketGrantRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> RevokeBucketGrantResponse:
+        """
+        RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+        while the tenant still has Collections in the bucket.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeBucketGrant",
+                service_name="paladin.admin.v1.BucketService",
+                input=RevokeBucketGrantRequest,
+                output=RevokeBucketGrantResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def list_bucket_grants(
+        self,
+        request: ListBucketGrantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListBucketGrantsResponse:
+        """
+        ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListBucketGrants",
+                service_name="paladin.admin.v1.BucketService",
+                input=ListBucketGrantsRequest,
+                output=ListBucketGrantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def list_accessible_buckets(
         self,
         request: ListAccessibleBucketsRequest,
@@ -544,8 +670,9 @@ class BucketServiceClient(ConnectClient):
         use_get: bool = False,
     ) -> ListBucketsResponse:
         """
-        ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-        the caller's principal/scopes are allowed to bind Collections to.
+        ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+        a tenant may bind Collections to: the ones it owns and the ones granted
+        to it.
         """
         return await self.execute_unary(
             request=request,
@@ -640,10 +767,32 @@ class BucketServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def grant_bucket(self, request: GrantBucketRequest, ctx: RequestContext[GrantBucketRequest, BucketGrant], /) -> BucketGrant:
+        """
+        GrantBucket lets a tenant other than the owner bind Collections to the
+        bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+        its first granter and time.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def revoke_bucket_grant(self, request: RevokeBucketGrantRequest, ctx: RequestContext[RevokeBucketGrantRequest, RevokeBucketGrantResponse], /) -> RevokeBucketGrantResponse:
+        """
+        RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+        while the tenant still has Collections in the bucket.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_bucket_grants(self, request: ListBucketGrantsRequest, ctx: RequestContext[ListBucketGrantsRequest, ListBucketGrantsResponse], /) -> ListBucketGrantsResponse:
+        """
+        ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def list_accessible_buckets(self, request: ListAccessibleBucketsRequest, ctx: RequestContext[ListAccessibleBucketsRequest, ListBucketsResponse], /) -> ListBucketsResponse:
         """
-        ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-        the caller's principal/scopes are allowed to bind Collections to.
+        ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+        a tenant may bind Collections to: the ones it owns and the ones granted
+        to it.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -758,6 +907,36 @@ class BucketServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=service.set_replication,
+                ),
+                "/paladin.admin.v1.BucketService/GrantBucket": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GrantBucket",
+                        service_name="paladin.admin.v1.BucketService",
+                        input=GrantBucketRequest,
+                        output=BucketGrant,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.grant_bucket,
+                ),
+                "/paladin.admin.v1.BucketService/RevokeBucketGrant": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="RevokeBucketGrant",
+                        service_name="paladin.admin.v1.BucketService",
+                        input=RevokeBucketGrantRequest,
+                        output=RevokeBucketGrantResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.revoke_bucket_grant,
+                ),
+                "/paladin.admin.v1.BucketService/ListBucketGrants": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListBucketGrants",
+                        service_name="paladin.admin.v1.BucketService",
+                        input=ListBucketGrantsRequest,
+                        output=ListBucketGrantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_bucket_grants,
                 ),
                 "/paladin.admin.v1.BucketService/ListAccessibleBuckets": EndpointSync.unary(
                     method=MethodInfo(
@@ -1049,6 +1228,77 @@ class BucketServiceClientSync(ConnectClientSync):
             headers=headers,
             timeout_ms=timeout_ms,
         )
+    def grant_bucket(
+        self,
+        request: GrantBucketRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> BucketGrant:
+        """
+        GrantBucket lets a tenant other than the owner bind Collections to the
+        bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+        its first granter and time.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GrantBucket",
+                service_name="paladin.admin.v1.BucketService",
+                input=GrantBucketRequest,
+                output=BucketGrant,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def revoke_bucket_grant(
+        self,
+        request: RevokeBucketGrantRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> RevokeBucketGrantResponse:
+        """
+        RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+        while the tenant still has Collections in the bucket.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeBucketGrant",
+                service_name="paladin.admin.v1.BucketService",
+                input=RevokeBucketGrantRequest,
+                output=RevokeBucketGrantResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def list_bucket_grants(
+        self,
+        request: ListBucketGrantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListBucketGrantsResponse:
+        """
+        ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListBucketGrants",
+                service_name="paladin.admin.v1.BucketService",
+                input=ListBucketGrantsRequest,
+                output=ListBucketGrantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
     def list_accessible_buckets(
         self,
         request: ListAccessibleBucketsRequest,
@@ -1058,8 +1308,9 @@ class BucketServiceClientSync(ConnectClientSync):
         use_get: bool = False,
     ) -> ListBucketsResponse:
         """
-        ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-        the caller's principal/scopes are allowed to bind Collections to.
+        ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+        a tenant may bind Collections to: the ones it owns and the ones granted
+        to it.
         """
         return self.execute_unary(
             request=request,

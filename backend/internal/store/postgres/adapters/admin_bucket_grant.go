@@ -45,6 +45,12 @@ func (r *BucketGrantRepoV2) Grant(ctx context.Context, backendID, bucketName str
 	}, nil
 }
 
+// GrantTx is Grant on the caller's transaction: an owner move grants the
+// previous owner in the same transaction that moves the bucket.
+func (r *BucketGrantRepoV2) GrantTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, tenantID uuid.UUID, grantedBy string) (admindomain.BucketGrant, error) {
+	return (&BucketGrantRepoV2{q: r.q.WithTx(tx)}).Grant(ctx, backendID, bucketName, tenantID, grantedBy)
+}
+
 // RevokeGrant deletes the grant unless collections remain; with no row
 // deleted it asks which of the two it was.
 func (r *BucketGrantRepoV2) RevokeGrant(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error {

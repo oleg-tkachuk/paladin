@@ -12,9 +12,10 @@ import (
 // EnsureBucket is idempotent: an existing bucket is a no-op success
 // (created=false) and no CreateTx is attempted.
 func TestEnsureBucket_ExistingIsNoOp(t *testing.T) {
-	repo := &fakeRepo{getBucket: validBucket()} // getErr nil → exists
+	b := validBucket()
+	repo := &fakeRepo{getBucket: b} // getErr nil → exists; the caller owns it
 	h := NewHandler(repo, okProvisioner{}, allowAuthorizer{})
-	got, created, err := h.EnsureBucket(ctxAs(), CreateBucketInput{Bucket: validBucket(), ProvisionOnBackend: true})
+	got, created, err := h.EnsureBucket(ctxAs(), CreateBucketInput{Bucket: b, ProvisionOnBackend: true})
 	if err != nil {
 		t.Fatalf("EnsureBucket: %v", err)
 	}
