@@ -57,6 +57,10 @@ vi.mock("@/components/layout/PageHeader", () => ({
 
 import StorageBackendsPage from "./page";
 import {
+  GUESSED_PROVIDER_HINT,
+  GUESSED_PROVIDER_LABEL,
+} from "@/lib/storageProvider";
+import {
   FeatureSupport,
   StorageCompatibility,
   StorageFeature,
@@ -210,6 +214,27 @@ describe("StorageBackendsPage", () => {
         }),
       ),
     );
+  });
+
+  // A provider guessed from the endpoint was marked with a bare "?".
+  it("says a provider was guessed from the endpoint, and not when it is set", () => {
+    h.backends = [
+      makeBackend({
+        provider: "",
+        endpoint: "http://seaweedfs-s3.storage:8333",
+      }),
+      makeBackend({
+        backendId: "secondary",
+        name: "storageBackends/secondary",
+        provider: "garage",
+      }),
+    ];
+    render(<StorageBackendsPage />);
+    const guessed = screen.getByText(GUESSED_PROVIDER_LABEL);
+    expect(guessed).toHaveAttribute("title", GUESSED_PROVIDER_HINT);
+    expect(guessed.parentElement).toHaveTextContent(/^SeaweedFS \(guessed\)/);
+    expect(screen.getAllByText(GUESSED_PROVIDER_LABEL)).toHaveLength(1);
+    expect(screen.queryByText("?")).toBeNull();
   });
 
   it("shows the display name under the id, and marks an unnamed backend", () => {
