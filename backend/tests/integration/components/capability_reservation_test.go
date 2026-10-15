@@ -87,13 +87,20 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 		t.Errorf("second settle = %+v, %v; want a replay of %s at spend 4", again, err, receipt.ChargeID)
 	}
 
-	// Release is idempotent and frees the room.
+	// Release is idempotent and frees the room — for the capability that
+	// made the hold only: another one's release leaves it held.
 	r2, err := reserve(sibling, "10")
 	if err != nil {
 		t.Fatalf("reserve after settle: %v", err)
 	}
+	if err := f.usage.Release(ledgerCtx, limes.ReleaseRequest{Subject: child, ReservationID: r2.ID}); err != nil {
+		t.Fatalf("release by another capability: %v", err)
+	}
+	if u, _ := f.usage.GetUsage(ledgerCtx, f.root); u.ReservedAmount != limes.MustParseAmount("10") {
+		t.Fatalf("parent hold after another capability's release = %v, want 10", u.ReservedAmount)
+	}
 	for range 2 {
-		if err := f.usage.Release(ledgerCtx, limes.ReleaseRequest{ReservationID: r2.ID}); err != nil {
+		if err := f.usage.Release(ledgerCtx, limes.ReleaseRequest{Subject: sibling, ReservationID: r2.ID}); err != nil {
 			t.Fatalf("release: %v", err)
 		}
 	}

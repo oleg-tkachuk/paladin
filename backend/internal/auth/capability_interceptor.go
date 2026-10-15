@@ -823,17 +823,22 @@ func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount lime
 }
 
 // ReleaseReservation drops a hold made by ReserveCapability without
-// charging. Idempotent.
+// charging. Idempotent. It names the capability releasing, as Settle does: the
+// store releases a hold only for the subject that made it.
 func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
-	cap, ok := CapabilityFromContext(ctx)
+	verified, ok := VerifiedCapabilityFromContext(ctx)
 	if !ok || reservationID == uuid.Nil {
 		return nil
 	}
+	cap, _ := CapabilityFromContext(ctx)
 	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
 	if !ok || store == nil {
 		return nil
 	}
-	if err := store.Release(ledgerContext(ctx, cap), limes.ReleaseRequest{ReservationID: reservationID}); err != nil {
+	if err := store.Release(ledgerContext(ctx, cap), limes.ReleaseRequest{
+		Subject:       verified.MeterSubject(),
+		ReservationID: reservationID,
+	}); err != nil {
 		return capabilityError(connect.CodeUnavailable, err)
 	}
 	return nil
