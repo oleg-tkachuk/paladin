@@ -342,8 +342,8 @@ type ListBucketsRequest struct {
 	// whose rows all fail the predicate still returns next_page_token.
 	Filter string `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"` // CEL over Bucket (reserved — not yet evaluated)
 	// owner_tenant_id narrows the listing to buckets owned by exactly
-	// this tenant (matches buckets.owner_tenant_id). UUID or slug;
-	// empty = no tenant filter (cross-tenant listing for platform-
+	// this tenant (matches buckets.owner_tenant_id). Tenant UUID only —
+	// a slug is INVALID_ARGUMENT; empty = no tenant filter (cross-tenant listing for platform-
 	// admin). Backed by the index on buckets(owner_tenant_id)
 	// (`001_initial_schema.sql`), so per-tenant lookups are cheap.
 	OwnerTenantId string `protobuf:"bytes,4,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`

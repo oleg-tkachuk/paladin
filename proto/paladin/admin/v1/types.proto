@@ -198,8 +198,9 @@ message Bucket {
   string bucket_id = 3 [(google.api.field_behavior) = IMMUTABLE];
   string display_name = 4;
   string region = 5;
-  // Optional binding to a single tenant. Empty → shared bucket; tenants
-  // bind Collections to it via prefixes.
+  // Optional binding to a single tenant, by tenant UUID. Empty → shared
+  // bucket; tenants bind Collections to it via prefixes. A value that is
+  // not a UUID (a slug included) is INVALID_ARGUMENT on create and update.
   string owner_tenant_id = 6;
   // Per-bucket Cedar policy layered on top of tenant policy.
   string cedar_policy = 7;

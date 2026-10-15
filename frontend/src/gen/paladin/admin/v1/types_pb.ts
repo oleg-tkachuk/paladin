@@ -426,8 +426,9 @@ export type Bucket = Message<"paladin.admin.v1.Bucket"> & {
   region: string;
 
   /**
-   * Optional binding to a single tenant. Empty → shared bucket; tenants
-   * bind Collections to it via prefixes.
+   * Optional binding to a single tenant, by tenant UUID. Empty → shared
+   * bucket; tenants bind Collections to it via prefixes. A value that is
+   * not a UUID (a slug included) is INVALID_ARGUMENT on create and update.
    *
    * @generated from field: string owner_tenant_id = 6;
    */

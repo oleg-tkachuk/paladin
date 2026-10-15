@@ -49,10 +49,8 @@ func (s *BucketServer) CreateBucket(ctx context.Context, req *pb.CreateBucketReq
 		PublicRead:    src.GetPublicRead(),
 		PublicBaseURL: src.GetPublicBaseUrl(),
 	}
-	if t := src.GetOwnerTenantId(); t != "" {
-		if id, perr := uuid.Parse(t); perr == nil {
-			b.OwnerTenantID = id
-		}
+	if b.OwnerTenantID, err = ownerTenantID(src.GetOwnerTenantId()); err != nil {
+		return nil, err
 	}
 	out, err := s.H.CreateBucket(ctx, bucketh.CreateBucketInput{
 		Bucket:             b,
@@ -87,16 +85,11 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *pb.ListBucketsReque
 			args.BackendID = backend
 		}
 	}
-	// owner_tenant_id accepts UUID or slug (consistent with the
-	// `tenants/{tenant_id_or_slug}` resource-name convention used by
-	// every other RPC). Slug → UUID resolution would need a tenant
-	// repo handle in this shim; for now we only accept UUID form
-	// here and rely on the frontend (which has the tenant context)
-	// to pass UUID. Empty = no filter (platform-admin path).
+	// Empty = no filter (platform-admin path).
 	if owner := m.GetOwnerTenantId(); owner != "" {
-		id, err := uuid.Parse(owner)
+		id, err := ownerTenantID(owner)
 		if err != nil {
-			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("owner_tenant_id must be a UUID: %w", err))
+			return nil, err
 		}
 		args.OwnerTenantID = &id
 	}
@@ -132,6 +125,21 @@ func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *pb.ListAc
 	return out, nil
 }
 
+// ownerTenantID parses a bucket's owner_tenant_id. Empty is the shared
+// bucket (uuid.Nil). Anything else must be a tenant UUID: a slug used to be
+// dropped without a word, and the bucket was created or left shared while
+// the caller believed it owned.
+func ownerTenantID(s string) (uuid.UUID, error) {
+	if s == "" {
+		return uuid.Nil, nil
+	}
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("owner_tenant_id must be a tenant UUID: %w", err))
+	}
+	return id, nil
+}
+
 // updateBucketPaths are the Bucket fields UpdateBucket applies.
 var updateBucketPaths = []string{"display_name", "labels", "owner_tenant_id"}
 
@@ -157,10 +165,8 @@ func (s *BucketServer) UpdateBucket(ctx context.Context, req *pb.UpdateBucketReq
 		DisplayName: m.GetBucket().GetDisplayName(),
 		Labels:      m.GetBucket().GetLabels(),
 	}
-	if t := m.GetBucket().GetOwnerTenantId(); t != "" {
-		if id, perr := uuid.Parse(t); perr == nil {
-			b.OwnerTenantID = id
-		}
+	if b.OwnerTenantID, err = ownerTenantID(m.GetBucket().GetOwnerTenantId()); err != nil {
+		return nil, err
 	}
 	out, err := s.H.UpdateBucket(ctx, bucketh.UpdateBucketInput{
 		Bucket:          b,
