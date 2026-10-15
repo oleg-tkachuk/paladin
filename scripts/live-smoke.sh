@@ -231,7 +231,11 @@ fi
 slug=$new_slug
 ok "tenant $slug"
 bucket=$new_bucket
-admin_rpc BucketService/CreateBucket "{\"parent\":\"storageBackends/$BACKEND\",\"bucketId\":\"$bucket\",\"provisionOnBackend\":true,\"bucket\":{\"ownerTenantId\":\"$slug\"}}" >/dev/null
+# The owner is the tenant's UUID: a slug is refused (it used to be dropped,
+# leaving the bucket shared), and the answer is checked so a refusal names
+# itself rather than surfacing as a bucket that never provisions.
+r=$(admin_rpc BucketService/CreateBucket "{\"parent\":\"storageBackends/$BACKEND\",\"bucketId\":\"$bucket\",\"provisionOnBackend\":true,\"bucket\":{\"ownerTenantId\":\"$tenant\"}}")
+expect "bucket created, owned by the tenant" "$r" test "$(printf %s "$r" | jq -r '.ownerTenantId // empty')" = "$tenant"
 state=""
 for _ in $(seq "$PROVISION_POLLS"); do
     state=$(admin_rpc BucketService/GetBucket "{\"name\":\"storageBackends/$BACKEND/buckets/$bucket\"}" | jq -r '.provisionState // ""')
