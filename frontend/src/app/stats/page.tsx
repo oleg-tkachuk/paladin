@@ -68,15 +68,13 @@ const SERVER_PAGE_SIZE = 0;
 // order the backend sorts by, so the header row is stable even when a
 // tenant has no rows in a given state. A state the backend reports that
 // isn't listed here still renders — see `stateColumns`.
-const KNOWN_STATES = ["PENDING", "AVAILABLE", "FAILED", "DELETED"] as const;
+const KNOWN_STATES = ["PENDING", "AVAILABLE", "DELETED"] as const;
 
-// Per-state accent. AVAILABLE is the healthy steady state, FAILED always
-// warrants attention, PENDING is only interesting if it stays high, and
-// DELETED is history. Muted everywhere the number is zero (see StateCell).
+// Per-state accent. AVAILABLE is the healthy steady state, PENDING is only
+// interesting if it stays high, and DELETED is history. Muted everywhere the number is zero (see StateCell).
 const STATE_ACCENT: Record<string, string> = {
   PENDING: "text-chart-3",
   AVAILABLE: "text-chart-2",
-  FAILED: "text-destructive",
   DELETED: "text-muted-foreground",
 };
 

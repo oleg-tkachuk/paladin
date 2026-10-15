@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
+import { ObjectState, type Object$ } from "@/gen/paladin/data/v1/types_pb";
 import {
   DocumentIcon,
   TrashIcon,
@@ -72,18 +72,16 @@ interface ObjectTableRowProps {
 
 // Aligned with the global theme tokens (chart-N + destructive) so the
 // state pills match badges, switches, and the rest of the UI.
-const STATUS_STYLES: Record<number, string> = {
-  1: "bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30", // PENDING — info / sky
-  2: "bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30", // AVAILABLE — success / emerald
-  3: "bg-destructive/15 text-destructive ring-1 ring-destructive/30", // FAILED
-  4: "bg-muted text-muted-foreground ring-1 ring-border", // DELETED — neutral, lives in trash
+const STATUS_STYLES: Partial<Record<ObjectState, string>> = {
+  [ObjectState.PENDING]: "bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30", // info / sky
+  [ObjectState.AVAILABLE]: "bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30", // success / emerald
+  [ObjectState.DELETED]: "bg-muted text-muted-foreground ring-1 ring-border", // neutral, lives in trash
 };
 
-const STATUS_LABELS: Record<number, string> = {
-  1: "PENDING",
-  2: "AVAILABLE",
-  3: "FAILED",
-  4: "DELETED",
+const STATUS_LABELS: Partial<Record<ObjectState, string>> = {
+  [ObjectState.PENDING]: "PENDING",
+  [ObjectState.AVAILABLE]: "AVAILABLE",
+  [ObjectState.DELETED]: "DELETED",
 };
 
 export const ObjectTableRow = React.memo(function ObjectTableRow({

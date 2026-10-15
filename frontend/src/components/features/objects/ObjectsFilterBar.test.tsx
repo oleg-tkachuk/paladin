@@ -100,3 +100,20 @@ describe("ObjectsFilterBar layout", () => {
     expect(row).toHaveClass("flex-wrap");
   });
 });
+
+describe("ObjectsFilterBar status", () => {
+  // A failed object is deleted, so there is no FAILED state to filter on.
+  it("offers the states an object can be in, and no Failed", async () => {
+    bar();
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter by status" }),
+    );
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual([
+      "All Statuses",
+      "Pending",
+      "Available",
+      "Deleted",
+    ]);
+  });
+});
