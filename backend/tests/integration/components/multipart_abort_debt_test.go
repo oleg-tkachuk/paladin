@@ -54,7 +54,7 @@ func TestMultipartAbortDebt(t *testing.T) {
 			 SELECT $1, $2, $3, b.id, $4, 5242880, 2, 'e2e', 'user', $5, 'k'
 			 FROM buckets b WHERE b.name = $6`,
 			upload, tenant, object, storageID, collection, bucket)
-		return
+		return tenant, object, upload, storageID
 	}
 
 	debtFor := func(t *testing.T, storageID string) int {

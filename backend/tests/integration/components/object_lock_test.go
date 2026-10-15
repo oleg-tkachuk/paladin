@@ -55,8 +55,8 @@ func newLockFixture(t *testing.T) (context.Context, lockFixture) {
 	// bucket cannot be deleted.
 	owner, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name, versioning_enabled, object_lock_enabled, owner_tenant_id)
-		 SELECT sb.id, 'lock-bucket', true, true, $1 FROM storage_backends sb WHERE sb.name = 'lock-be'`, owner)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id, versioning_enabled, object_lock_enabled)
+		 SELECT sb.id, 'lock-bucket', $1, $2, $2 FROM storage_backends sb WHERE sb.name = 'lock-be'`, owner, true)
 	grantBucket(t, ctx, pool, tenant, "lock-be", "lock-bucket")
 	var collectionID uuid.UUID
 	if err := pool.QueryRow(ctx,
