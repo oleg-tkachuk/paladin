@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
@@ -122,5 +123,48 @@ func TestCollectionCreateRefusedWithoutAGrant(t *testing.T) {
 	})
 	if !errors.Is(err, admindomain.ErrBucketNotGranted) {
 		t.Fatalf("create in a bucket the tenant may not bind: %v, want ErrBucketNotGranted", err)
+	}
+}
+
+// A default binding names a bucket the tenant may bind to: one it owns or
+// holds a grant on. A tenant created on the operator's pool is granted it in
+// the same transaction, so its first collection binds.
+func TestDefaultBindingNeedsAGrant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	q := sqlc.New(pool)
+	tenants := adapters.NewTenantRepo(q, pool)
+	grants := adapters.NewBucketGrantRepoV2(q)
+
+	operator, _ := mkTenant(t, ctx, pool, "shared")
+	stranger, _ := mkTenant(t, ctx, pool, "shared")
+	backend := "be-" + uuid.NewString()[:8]
+	const pooled = "operator-pool"
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		SELECT id, $2, $3 FROM storage_backends WHERE name = $1`, backend, pooled, operator)
+	resource := "storageBackends/" + backend + "/buckets/" + pooled
+
+	if _, err := tenants.SetDefaultBinding(ctx, stranger, resource, grantedBy); !errors.Is(err, admindomain.ErrBucketNotGranted) {
+		t.Fatalf("binding a tenant by default to a bucket it may not bind: %v, want ErrBucketNotGranted", err)
+	}
+	if _, err := grants.Grant(ctx, backend, pooled, stranger, grantedBy); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	if _, err := tenants.SetDefaultBinding(ctx, stranger, resource, grantedBy); err != nil {
+		t.Fatalf("binding by default once granted: %v", err)
+	}
+
+	hex := uuid.NewString()[:8]
+	created, err := tenants.Create(ctx, tenanth.CreateTenantArgs{
+		TenantID: uuid.New(), Slug: "t-" + hex, DisplayName: "tn-" + hex, StorageLayout: "shared",
+		DefaultBackendID: backend, DefaultBucketName: pooled,
+	})
+	if err != nil {
+		t.Fatalf("create a tenant on the pool: %v", err)
+	}
+	if ok, err := grants.MayBind(ctx, backend, pooled, created.TenantID); err != nil || !ok {
+		t.Fatalf("the new tenant may bind = %v, %v; want the pool granted to it", ok, err)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 
@@ -175,6 +177,13 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 			}
 			return fmt.Errorf("create tenant: bind default: %w", err)
 		}
+		// A new tenant owns no bucket, so the shared bucket it is bound to is
+		// granted to it here, in the same transaction (ADR-0032): creating a
+		// tenant on the operator's pool is letting it in.
+		if _, err := qtx.GrantBucket(ctx, pgUUID(args.TenantID), actor,
+			args.DefaultBackendID, args.DefaultBucketName); err != nil {
+			return fmt.Errorf("create tenant: grant default bucket: %w", err)
+		}
 	}
 	return nil
 }
@@ -268,6 +277,17 @@ func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, 
 	backendName, bucketName, err := splitBucketResourceName(bucket)
 	if err != nil {
 		return tenanth.DefaultBinding{}, err
+	}
+	// A default binding is where the tenant's collections go, so it names
+	// only a bucket the tenant owns or holds a grant on (ADR-0032); the
+	// binding trigger would refuse the first collection otherwise.
+	switch may, err := r.q.TenantMayBindBucket(ctx, pgUUID(tenantID), backendName, bucketName); {
+	case errors.Is(err, pgx.ErrNoRows):
+		return tenanth.DefaultBinding{}, tenanth.ErrDefaultBindingBucketMissing
+	case err != nil:
+		return tenanth.DefaultBinding{}, fmt.Errorf("set default binding: may bind: %w", err)
+	case !may:
+		return tenanth.DefaultBinding{}, admindomain.ErrBucketNotGranted
 	}
 	n, err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy)
 	if err != nil {
