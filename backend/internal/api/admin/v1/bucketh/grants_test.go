@@ -127,6 +127,14 @@ func TestGrantBucket(t *testing.T) {
 	if _, err := h.GrantBucket(ctxAs(apiutil.RoleTenantUser), stored.BackendID, stored.BucketName, other); code(err) != connect.CodePermissionDenied {
 		t.Fatalf("a tenant user: %v, want PermissionDenied", err)
 	}
+	// A tenant provisioner lets the tenants it provisions into the pool...
+	if _, err := h.GrantBucket(ctxAs(apiutil.RoleTenantProvisioner), stored.BackendID, stored.BucketName, uuid.New()); err != nil {
+		t.Fatalf("a tenant provisioner granting: %v", err)
+	}
+	// ...and takes nothing back.
+	if err := h.RevokeBucketGrant(ctxAs(apiutil.RoleTenantProvisioner), stored.BackendID, stored.BucketName, other); code(err) != connect.CodePermissionDenied {
+		t.Fatalf("a tenant provisioner revoking: %v, want PermissionDenied", err)
+	}
 	g, err := h.GrantBucket(ctxAs(apiutil.RoleBucketAdmin), stored.BackendID, stored.BucketName, other)
 	if err != nil || g.TenantID != other || grants.grantedBy != "tester" {
 		t.Fatalf("grant = %+v by %q, %v; want the tenant, by the caller", g, grants.grantedBy, err)

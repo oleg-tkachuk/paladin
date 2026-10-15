@@ -861,6 +861,8 @@ when {
 //
 // ManageCollection covers both reading and creating a collection: the
 // collection handler authorises Get with the same action as Create.
+// ManageBucket also lets it grant a bucket to a tenant it provisions
+// (ADR-0032); revoking a grant stays with the bucket-admin roles.
 // ConfigurePublicRead lets it provision a tenant's public bucket and
 // collections (ADR-0027) — publishing is a provisioning decision, made when
 // the tenant's storage is laid out, never a data-plane one.
