@@ -27,6 +27,8 @@ func TestEnumLiteralRejectedAtCompile(t *testing.T) {
 		{"object state under member call", ObjectSchema, `(state == "x" ? "a" : "b").startsWith("a")`, "x"},
 		{"object state in list literal", ObjectSchema, `[state == "x"].all(b, b)`, "x"},
 		{"object state in map literal", ObjectSchema, `{"a": state == "x"}["a"]`, "x"},
+		// A failed object is deleted, so FAILED is not a state any more.
+		{"object state FAILED", ObjectSchema, `state == "FAILED"`, "FAILED"},
 		{"operation state", OperationSchema, `state == "running"`, "running"},
 		{"tenant storage layout", TenantSchema, `storage_layout == "SHARED"`, "SHARED"},
 	}
@@ -60,8 +62,8 @@ func TestEnumLiteralAcceptedValuesCompile(t *testing.T) {
 	}{
 		{ObjectSchema, `state == "AVAILABLE"`},
 		{ObjectSchema, `"DELETED" == state`},
-		{ObjectSchema, `state != "FAILED"`},
-		{ObjectSchema, `state in ["PENDING", "AVAILABLE", "FAILED", "DELETED"]`},
+		{ObjectSchema, `state != "DELETED"`},
+		{ObjectSchema, `state in ["PENDING", "AVAILABLE", "DELETED"]`},
 		// Not a comparison with a literal: nothing to check.
 		{ObjectSchema, `state.startsWith("avail")`},
 		{ObjectSchema, `state == content_type`},
@@ -83,7 +85,7 @@ func TestEnumLiteralAcceptedValuesCompile(t *testing.T) {
 
 func TestEnumValues(t *testing.T) {
 	got, ok := ObjectSchema.EnumValues(fieldState)
-	if !ok || strings.Join(got, ",") != "AVAILABLE,DELETED,FAILED,PENDING" {
+	if !ok || strings.Join(got, ",") != "AVAILABLE,DELETED,PENDING" {
 		t.Errorf("EnumValues(state) = %v, %v", got, ok)
 	}
 	got[0] = "mutated"

@@ -22,7 +22,6 @@ var (
 	objectStates = []string{
 		string(statemachine.StatePending),
 		string(statemachine.StateAvailable),
-		string(statemachine.StateFailed),
 		string(statemachine.StateDeleted),
 	}
 	operationStates = []string{

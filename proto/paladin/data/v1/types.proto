@@ -69,7 +69,13 @@ enum ObjectState {
   OBJECT_STATE_UNSPECIFIED = 0;
   OBJECT_STATE_PENDING = 1;
   OBJECT_STATE_AVAILABLE = 2;
-  OBJECT_STATE_FAILED = 3;
+  // 3 was FAILED. An object that cannot become available — its upload URL
+  // expired with nothing at its path, its bytes broke its registration, its
+  // copy failed, its multipart upload was aborted — is deleted instead, and
+  // its key is free for a retry. The reason is logged and counted in
+  // paladin_object_failures_total.
+  reserved 3;
+  reserved "OBJECT_STATE_FAILED";
   OBJECT_STATE_DELETED = 4;
 }
 

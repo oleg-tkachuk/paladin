@@ -282,7 +282,6 @@ func TestObjectStateProto(t *testing.T) {
 	cases := map[statemachine.State]pb.ObjectState{
 		statemachine.StatePending:   pb.ObjectState_OBJECT_STATE_PENDING,
 		statemachine.StateAvailable: pb.ObjectState_OBJECT_STATE_AVAILABLE,
-		statemachine.StateFailed:    pb.ObjectState_OBJECT_STATE_FAILED,
 		statemachine.StateDeleted:   pb.ObjectState_OBJECT_STATE_DELETED,
 		statemachine.State("weird"): pb.ObjectState_OBJECT_STATE_UNSPECIFIED,
 		statemachine.State(""):      pb.ObjectState_OBJECT_STATE_UNSPECIFIED,

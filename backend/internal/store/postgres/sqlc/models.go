@@ -146,7 +146,6 @@ type ObjectState string
 const (
 	ObjectStatePENDING   ObjectState = "PENDING"
 	ObjectStateAVAILABLE ObjectState = "AVAILABLE"
-	ObjectStateFAILED    ObjectState = "FAILED"
 	ObjectStateDELETED   ObjectState = "DELETED"
 )
 

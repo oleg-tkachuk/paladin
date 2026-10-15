@@ -149,7 +149,6 @@ func TestDownloadObjectRefusesUnavailableStates(t *testing.T) {
 	// are refusals the caller can act on, not Internal.
 	for _, state := range []statemachine.State{
 		statemachine.StatePending,
-		statemachine.StateFailed,
 		statemachine.StateDeleted,
 	} {
 		t.Run(string(state), func(t *testing.T) {
