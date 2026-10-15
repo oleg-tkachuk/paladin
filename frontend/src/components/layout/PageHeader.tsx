@@ -31,10 +31,9 @@ interface PageHeaderProps {
  *   Title                                        [actions…]
  *   Description
  *
- * Scope (backend · bucket · tenant) is deliberately NOT repeated here —
- * it lives once, in the top-bar ScopePicker. Echoing it beside every
- * title was the main source of chrome noise, so it was removed; the
- * breadcrumb already answers "where am I", the ScopePicker "on what".
+ * The signed-in tenant is deliberately NOT repeated here — it lives once,
+ * in the top-bar TenantSwitcher. Echoing it beside every title was the main
+ * source of chrome noise; the breadcrumb already answers "where am I".
  */
 export const PageHeader: React.FC<PageHeaderProps> = ({
   title,

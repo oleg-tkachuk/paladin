@@ -7,7 +7,7 @@ import { iamAuthClient, readSessionCookie } from "@/lib/auth/bff";
  * GET /api/auth/memberships
  *
  * Lists every tenant the signed-in subject belongs to (AuthService.
- * ListMyMemberships), for the ScopePicker's tenant switcher. Reads the
+ * ListMyMemberships), for the top bar's TenantSwitcher. Reads the
  * session cookie, derives a short-lived iam access token from it without
  * consuming it (ExchangeAudience), and calls the RPC. The cookie is left
  * exactly as it was: only /api/auth/me rotates the chain.

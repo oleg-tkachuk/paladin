@@ -56,10 +56,6 @@ export const DEFAULT_OBJECT_KEY = "default";
  * origin (use the `paladin_` prefix consistently).
  */
 export const STORAGE_KEYS = {
-  /** Active backend ID for soft-scope filters (set in TenantSwitcher). */
-  scopeBackend: "paladin_scope_backend",
-  /** Active bucket name for soft-scope filters. */
-  scopeBucket: "paladin_scope_bucket",
   /** Active Collection scope for /objects + sidebar counts + CommandPalette. */
   scopeCollection: "paladin_scope_object_key",
   /** Saved filter views on /objects. */
