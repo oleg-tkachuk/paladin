@@ -31,11 +31,15 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
     page,
     makeTenant,
     makeBucket,
+    makeGrant,
     makeCollection,
   }) => {
     await loginAsAdmin(page);
     const tenant = await makeTenant();
+    // A platform-owned pool shared with the tenant (ADR-0032): the case this
+    // page groups by tenant for.
     const bucket = await makeBucket();
+    await makeGrant(bucket, tenant.tenantId);
     const ok = await makeCollection({ tenantId: tenant.tenantId, bucket });
 
     // Drive through the natural operator path: /buckets →
@@ -65,7 +69,7 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
   }) => {
     await loginAsAdmin(page);
     const tenant = await makeTenant();
-    const bucket = await makeBucket();
+    const bucket = await makeBucket({ ownerTenantId: tenant.tenantId });
     const ok = await makeCollection({ tenantId: tenant.tenantId, bucket });
 
     // Direct nav — the bucket-detail "Browse" link goes to the

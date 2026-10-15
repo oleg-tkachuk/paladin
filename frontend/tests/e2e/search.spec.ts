@@ -102,7 +102,7 @@ test.describe("List search", () => {
   }) => {
     await loginAsAdmin(page);
     const tenant = await makeTenant();
-    const bucket = await makeBucket();
+    const bucket = await makeBucket({ ownerTenantId: tenant.tenantId });
     const collection = await makeCollection({
       tenantId: tenant.tenantId,
       bucket,
