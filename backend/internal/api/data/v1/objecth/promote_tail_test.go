@@ -42,7 +42,7 @@ type fakeStateMachine struct {
 	promoteCalls int
 
 	markedFailed []uuid.UUID
-	markFailedBy []string
+	markFailedBy []statemachine.FailureReason
 	markFailErr  error
 }
 
@@ -66,7 +66,7 @@ func (f *fakeStateMachine) PromoteToAvailableInTx(
 	return f.changed, nil
 }
 
-func (f *fakeStateMachine) MarkFailed(_ context.Context, objectID uuid.UUID, reason string) error {
+func (f *fakeStateMachine) DiscardFailed(_ context.Context, objectID uuid.UUID, reason statemachine.FailureReason) error {
 	f.markedFailed = append(f.markedFailed, objectID)
 	f.markFailedBy = append(f.markFailedBy, reason)
 	return f.markFailErr
@@ -301,7 +301,7 @@ func TestCopyObjectCompensatesWhenTheStorageCopyFails(t *testing.T) {
 		t.Fatalf("code = %v, want Internal", connect.CodeOf(err))
 	}
 	if len(sm.markedFailed) != 1 {
-		t.Fatalf("MarkFailed called %d times, want 1 — the destination row would linger PENDING forever", len(sm.markedFailed))
+		t.Fatalf("DiscardFailed called %d times, want 1 — the destination row would linger PENDING forever", len(sm.markedFailed))
 	}
 	if repo.created == nil || sm.markedFailed[0] == repo.obj.ObjectID {
 		t.Error("compensation marked the wrong object — it must be the DESTINATION, not the source")

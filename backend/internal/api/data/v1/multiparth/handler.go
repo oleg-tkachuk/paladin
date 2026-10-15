@@ -61,7 +61,7 @@ type Storage interface {
 // StateMachine is the slice of *statemachine.Transitioner the handler uses.
 type StateMachine interface {
 	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
-	MarkFailed(ctx context.Context, objectID uuid.UUID, reason string) error
+	DiscardFailed(ctx context.Context, objectID uuid.UUID, reason statemachine.FailureReason) error
 }
 
 // PartBinding is what one part URL is signed for: the part's number, its
@@ -469,16 +469,19 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	// Mark the underlying object FAILED so reconciler won't promote it.
-	if err := h.sm.MarkFailed(ctx, sess.ObjectID, "multipart-aborted"); err != nil {
-		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
+	// The session first, marked as aborted: discarding the object cascades
+	// to it, and a cascade records a debt to abort the upload again.
 	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
 		// Same as the complete path: the abort succeeded, so this must not
 		// fail the RPC — but a systematic failure leaves rows behind, and
-		// silence is what makes that invisible.
+		// silence is what makes that invisible. The discard below still
+		// removes the row, with an abort debt that repeats a landed abort.
 		logger.FromContext(ctx).Warn("multipart session not deleted after abort",
 			zap.String("upload_id", uploadID), zap.Error(err))
+	}
+	// Discard the underlying object so the reconciler has nothing to promote.
+	if err := h.sm.DiscardFailed(ctx, sess.ObjectID, statemachine.FailedMultipartAborted); err != nil {
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return nil
 }
@@ -597,19 +600,21 @@ func (s Session) compositeChecksum(parts []PartETag) (string, error) {
 }
 
 // discardMismatched settles an assembled object whose size is not the one it
-// was registered with: its bytes are deleted, then the row is failed. In that
-// order, so a failure between the two leaves a PENDING row the reconciler
-// will HEAD and fail, never a FAILED row over bytes nothing will remove.
+// was registered with: its bytes are deleted, then the row is discarded. In
+// that order, so a failure between the two leaves a PENDING row the
+// reconciler will HEAD and discard, never a row gone over bytes nothing will
+// remove.
 func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID, bucket, uploadID string, cause error) error {
 	if err := h.storage.DeleteObject(ctx, backendID, bucket, sess.TenantID, sess.Collection, sess.Key); err != nil {
 		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
 	}
-	if err := h.sm.MarkFailed(ctx, sess.ObjectID, statemachine.FailedContentMismatch); err != nil {
-		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; failing the object failed: %w", cause, err))
-	}
+	// The session first, as on abort: discarding the object cascades to it.
 	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
 		logger.FromContext(ctx).Warn("multipart session not deleted after a refused complete",
 			zap.String("upload_id", uploadID), zap.Error(err))
+	}
+	if err := h.sm.DiscardFailed(ctx, sess.ObjectID, statemachine.FailedContentMismatch); err != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; discarding the object failed: %w", cause, err))
 	}
 	return connect.NewError(connect.CodeFailedPrecondition, cause.Error()).WithCause(cause)
 }

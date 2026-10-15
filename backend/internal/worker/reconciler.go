@@ -3,9 +3,8 @@
 //
 //   1. S3 event pipeline outage — promotes PENDING rows whose object is
 //      actually uploaded (HEAD succeeds).
-//   2. Expired presigns with no uploads — marks PENDING → FAILED.
-//   3. Orphan cleanup — flags long-gone PENDING rows for removal by the
-//      retention policy (not deleted here; audit/forensics wants them).
+//   2. Expired presigns with no uploads — discards the PENDING row, logging
+//      and counting why (statemachine.DiscardFailed).
 //
 // Resilient by design: every action is idempotent, so running multiple
 // replicas concurrently is safe — the sequencer/state guards on the SQL
@@ -70,7 +69,7 @@ func NewReconcilerV2(sm *statemachine.Transitioner, probe StorageProbe, cfg Reco
 // Run blocks until ctx is cancelled. Each tick:
 //
 //  1. scans PENDING-expired rows
-//  2. HEADs the backend; if present → PromoteToAvailable, else → MarkFailed
+//  2. HEADs the backend; if present → PromoteToAvailable, else → DiscardFailed
 //
 // Concurrent reconciler replicas both try to advance the same rows — both
 // are safe because the underlying SQL uses state guards.
@@ -128,13 +127,13 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) {
 		}
 		return
 	}
-	if err := r.sm.MarkFailed(ctx, objectID, "presign-expired"); err != nil {
-		r.log.Warn("failed to mark object as failed", zap.String("object_id", objectID.String()), zap.Error(err))
+	if err := r.sm.DiscardFailed(ctx, objectID, statemachine.FailedPresignExpired); err != nil {
+		r.log.Warn("failed to discard object", zap.String("object_id", objectID.String()), zap.Error(err))
 	}
 }
 
 // discardMismatched settles an object whose stored bytes broke its
-// registration: the bytes are deleted, then the row failed. A failed delete
+// registration: the bytes are deleted, then the row discarded. A failed delete
 // leaves the row PENDING, so the next tick tries again rather than failing a
 // row over bytes nothing will remove.
 func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID, cause error) {
@@ -143,8 +142,8 @@ func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID
 		log.Warn("failed to delete mismatched object bytes", zap.Error(err))
 		return
 	}
-	if err := r.sm.MarkFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
-		log.Warn("failed to mark mismatched object as failed", zap.Error(err))
+	if err := r.sm.DiscardFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
+		log.Warn("failed to discard mismatched object", zap.Error(err))
 		return
 	}
 	log.Warn("discarded object whose stored bytes broke its registration")

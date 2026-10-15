@@ -64,7 +64,9 @@ func (f *fakeTransitions) Restore(_ context.Context, id uuid.UUID) error {
 	return f.restErrs[id]
 }
 
-func (f *fakeTransitions) MarkFailed(context.Context, uuid.UUID, string) error { return nil }
+func (f *fakeTransitions) DiscardFailed(context.Context, uuid.UUID, statemachine.FailureReason) error {
+	return nil
+}
 
 func (f *fakeTransitions) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
 	return false, nil

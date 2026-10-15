@@ -76,7 +76,7 @@ func TestExtendPendingPresign(t *testing.T) {
 	// the URL just signed must not be handed out, so the caller is told.
 	t.Run("refuses a row that is no longer PENDING", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		mustExec(t, ctx, pool, `UPDATE objects SET state = 'FAILED', presign_expires_at = $2 WHERE id = $1`, id, base)
+		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE', presign_expires_at = $2 WHERE id = $1`, id, base)
 		err := repo.ExtendPendingPresign(ctx, f.tenantID, id, base.Add(time.Hour))
 		if !errors.Is(err, presignh.ErrNotPending) {
 			t.Fatalf("err = %v, want ErrNotPending", err)

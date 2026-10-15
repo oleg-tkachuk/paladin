@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -71,9 +72,10 @@ func runOneTick(t *testing.T, probe worker.StorageProbe, sm *statemachine.Transi
 	<-done
 }
 
-// TestReconcilerMarksFailedWhenBytesAreAbsent is the regression test: a HEAD
-// that says "no such object" must reach MarkFailed, not the error branch.
-func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
+// TestReconcilerDiscardsWhenBytesAreAbsent is the regression test: a HEAD
+// that says "no such object" must reach DiscardFailed, not the error branch.
+// The object is deleted rather than kept as FAILED, and its key is free again.
+func TestReconcilerDiscardsWhenBytesAreAbsent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
@@ -99,15 +101,22 @@ func TestReconcilerMarksFailedWhenBytesAreAbsent(t *testing.T) {
 
 	runOneTick(t, probe, statemachine.New(pool))
 
-	if got := objectState(t, ctx, pool, id); got != "FAILED" {
-		t.Errorf("object state = %s, want FAILED — MarkFailed was not reached", got)
+	if !objectGone(t, ctx, pool, id) {
+		t.Errorf("the object is still there — DiscardFailed was not reached")
 	}
+	// The key is free: a retry at the same path is not refused.
+	mustExec(t, ctx, pool, `
+		INSERT INTO objects (id, tenant_id, collection_id, path, state,
+		                     content_type, checksum_algorithm)
+		SELECT $1, $2, c.id, 'k-gone', 'PENDING', 'application/octet-stream', 0
+		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
+		uuid.Must(uuid.NewV7()), f.tenantID, f.collection)
 }
 
 // TestReconcilerLeavesPendingWhenBackendIsUnreachable is the safety half, and
 // the more important of the two. A backend that cannot answer must leave the
-// object PENDING for the next tick: FAILED is terminal, and marking a live
-// object FAILED takes it out of service.
+// object PENDING for the next tick: discarding is terminal, and discarding a
+// live object deletes it.
 func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -208,4 +217,15 @@ func TestPendingOverdueCountsWhatTheReconcilerCannotSettle(t *testing.T) {
 	if want := 48 * time.Hour; oldest < want-time.Minute || oldest > want {
 		t.Errorf("oldest = %v, want just under %v", oldest, want)
 	}
+}
+
+// objectGone reports whether the object row no longer exists — what a failed
+// object leaves behind since DiscardFailed deletes it.
+func objectGone(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) bool {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM objects WHERE id = $1`, id).Scan(&n); err != nil {
+		t.Fatalf("count object: %v", err)
+	}
+	return n == 0
 }

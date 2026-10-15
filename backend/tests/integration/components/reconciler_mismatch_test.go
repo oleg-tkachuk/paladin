@@ -63,8 +63,8 @@ func TestReconcilerDiscardsBytesThatBreakTheRegistration(t *testing.T) {
 	prober := &mismatchProber{size: 11}
 	runOneTick(t, adapters.NewReconcilerProbe(sqlc.New(pool), prober), statemachine.New(pool))
 
-	if got := objectState(t, ctx, pool, id); got != "FAILED" {
-		t.Fatalf("state = %s, want FAILED", got)
+	if !objectGone(t, ctx, pool, id) {
+		t.Fatal("the mismatched object is still there, want it discarded")
 	}
 	prober.mu.Lock()
 	defer prober.mu.Unlock()
@@ -97,13 +97,13 @@ func TestReconcilerDiscardsAChecksumMismatch(t *testing.T) {
 	prober := &mismatchProber{size: 10, checksum: "ZIdsV7fkVDpbmwOztBQpJTYMtaHSYOPwqP2wlOYsrdU="}
 	runOneTick(t, adapters.NewReconcilerProbe(sqlc.New(pool), prober), statemachine.New(pool))
 
-	if got := objectState(t, ctx, pool, id); got != "FAILED" {
-		t.Fatalf("state = %s, want FAILED", got)
+	if !objectGone(t, ctx, pool, id) {
+		t.Fatal("the mismatched object is still there, want it discarded")
 	}
 }
 
-// When the bytes cannot be deleted the row stays PENDING: a FAILED row is
-// never revisited, so failing it would leave the bytes stored for good.
+// When the bytes cannot be deleted the row stays PENDING: a discarded row is
+// never revisited, so discarding it would leave the bytes stored for good.
 func TestReconcilerKeepsAMismatchPendingWhileItsBytesRemain(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

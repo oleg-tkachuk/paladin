@@ -14,8 +14,8 @@ import (
 // MultipartReaper aborts abandoned multipart uploads. When a client
 // calls InitiateMultipartUpload but never Completes or Aborts (crash,
 // network loss), the S3-side multipart session stays open and accrues
-// part-storage charges indefinitely — the reconciler MarkFailed's the
-// PENDING object but never tells S3 to drop the parts. This worker
+// part-storage charges indefinitely — the reconciler discards the PENDING
+// object but never tells S3 to drop the parts. This worker
 // closes that leak: it lists sessions past a TTL, calls AbortMultipart
 // on the backend, then deletes the DB session row. The PENDING object is
 // left to the reconciler.

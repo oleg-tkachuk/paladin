@@ -538,7 +538,7 @@ type StateMachine interface {
 	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
 	SoftDeleteInTx(ctx context.Context, objectID uuid.UUID, resourceVersion int64, onDeleted func(ctx context.Context, tx pgx.Tx) error) error
 	RestoreInTx(ctx context.Context, objectID uuid.UUID, onRestored func(ctx context.Context, tx pgx.Tx) error) error
-	MarkFailed(ctx context.Context, objectID uuid.UUID, reason string) error
+	DiscardFailed(ctx context.Context, objectID uuid.UUID, reason statemachine.FailureReason) error
 }
 
 // QuotaUpdater is the post-promote accounting hook. Returns nil on missing
@@ -1006,16 +1006,16 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 
 // discardMismatched settles an object whose stored bytes broke its
 // registration — a size or checksum other than the one admitted. The bytes
-// are deleted first and the row failed second, so a failure between the two
-// leaves a PENDING row the reconciler will HEAD and fail, never a FAILED row
-// over bytes nothing will remove. The caller gets FailedPrecondition naming
+// are deleted first and the row discarded second, so a failure between the
+// two leaves a PENDING row the reconciler will HEAD and discard, never a row
+// gone over bytes nothing will remove. The caller gets FailedPrecondition naming
 // what did not match.
 func (h *Handler) discardMismatched(ctx context.Context, objectID uuid.UUID, loc Location, cause error) error {
 	if err := h.storage.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key); err != nil {
 		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
 	}
-	if err := h.sm.MarkFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
-		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; failing the object failed: %w", cause, err))
+	if err := h.sm.DiscardFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; discarding the object failed: %w", cause, err))
 	}
 	return connect.NewError(connect.CodeFailedPrecondition, cause.Error()).WithCause(cause)
 }
@@ -1369,7 +1369,7 @@ type DownloadObjectOutput struct {
 }
 
 // DownloadObject returns metadata + a presigned GET URL for an AVAILABLE
-// object. PENDING / DELETED / FAILED objects are refused (CodeFailedPrecondition).
+// object. PENDING / DELETED objects are refused (CodeFailedPrecondition).
 // DownloadObject returns the object and a presigned GET for it.
 // requireETagMatch binds the URL to the object's current ETag.
 func (h *Handler) DownloadObject(ctx context.Context, collection, objectID string, ttl time.Duration, disposition string, requireETagMatch bool) (_ *DownloadObjectOutput, err error) {
@@ -2033,7 +2033,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		// Compensate: the destination row was created PENDING. Without this
 		// transition the row would linger forever, since the reconciler only
 		// promotes via HEAD against an object that the failed copy never wrote.
-		if mfErr := h.sm.MarkFailed(ctx, dst.ObjectID, "storage copy failed"); mfErr != nil {
+		if mfErr := h.sm.DiscardFailed(ctx, dst.ObjectID, statemachine.FailedStorageCopy); mfErr != nil {
 			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr))
 		}
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))

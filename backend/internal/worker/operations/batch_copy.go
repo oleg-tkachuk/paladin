@@ -32,7 +32,7 @@ import (
 //     = reuse src.Key under the destination namespace).
 //  3. CreateObject on the destination (state=PENDING). FK to
 //     collections validates before we issue the storage call.
-//  4. storage.CopyObject. On error: MarkFailed on the destination
+//  4. storage.CopyObject. On error: DiscardFailed on the destination
 //     row to compensate (otherwise PENDING leaks).
 //  5. PromoteToAvailable on the destination with the source's etag /
 //     size / checksum (the copied object is bit-identical at S3 level).
@@ -269,7 +269,7 @@ func (e *BatchCopyExecutor) fill(ctx context.Context, job copyJob, dstID uuid.UU
 	if err := e.Storage.CopyObject(ctx, job.from, job.to); err != nil {
 		// Compensate: dst row is PENDING. Without this it lingers
 		// until the reconciler hard-deletes it (`min_object_age`).
-		if mfErr := e.Transitions.MarkFailed(ctx, dstID, "batch copy storage failed"); mfErr != nil {
+		if mfErr := e.Transitions.DiscardFailed(ctx, dstID, statemachine.FailedStorageCopy); mfErr != nil {
 			return fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr)
 		}
 		return fmt.Errorf("storage copy: %w", err)

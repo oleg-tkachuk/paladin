@@ -10,7 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 )
 
-// isNotFoundErr decides whether ReconcilerV2 takes the terminal MarkFailed
+// isNotFoundErr decides whether ReconcilerV2 takes the terminal DiscardFailed
 // branch. It shipped as `return false`, which made that branch unreachable —
 // so the object whose bytes were genuinely gone was retried every 30s
 // forever, logging a HEAD warning each time.
