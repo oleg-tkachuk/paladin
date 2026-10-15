@@ -13,6 +13,7 @@ import (
 	"github.com/pressly/goose/v3"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 )
 
 // beforeBucketOwners is the last migration under which a bucket could have no
@@ -128,7 +129,7 @@ func TestBucketsGetOwnersAndGrantsByTheMigration(t *testing.T) {
 	// A grantee binds; a tenant with no grant is refused by name.
 	bindCollection(t, ctx, pool, first, several)
 	_, err := pool.Exec(ctx, `INSERT INTO collections (tenant_id, name, bucket_id) VALUES ($1, 'refused', $2)`, stranger, several)
-	if !pgerr.Is(err, pgerr.CheckViolation) || !pgerr.ConstraintIs(err, "collections_bucket_tenancy") {
+	if !pgerr.Is(err, pgerr.CheckViolation) || !pgerr.ConstraintIs(err, schema.CollectionsBucketTenancy) {
 		t.Errorf("a tenant without a grant: err = %v, want the collections_bucket_tenancy check", err)
 	}
 	// And a bucket with no owner cannot be written.

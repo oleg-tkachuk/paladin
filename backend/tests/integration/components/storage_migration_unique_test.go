@@ -32,10 +32,12 @@ func TestStorageMigrationsBecomeOnePerTenant(t *testing.T) {
 	single, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind) VALUES ('uniq-be', 's3-compatible')`)
+	// Owned, so migrating up past 080 has no ownerless bucket to hand to a
+	// platform tenant this database does not have (ADR-0032).
 	mustExec(t, ctx, pool, `
-		INSERT INTO buckets (backend_id, name)
-		SELECT sb.id, b FROM storage_backends sb, unnest(ARRAY['uniq-src', 'uniq-dst']) b
-		 WHERE sb.name = 'uniq-be'`)
+		INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		SELECT sb.id, b, $1 FROM storage_backends sb, unnest(ARRAY['uniq-src', 'uniq-dst']) b
+		 WHERE sb.name = 'uniq-be'`, tenant)
 	insert := func(tenant uuid.UUID, state string, created time.Time) uuid.UUID {
 		t.Helper()
 		id := uuid.New()

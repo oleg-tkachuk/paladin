@@ -291,6 +291,9 @@ func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 	})
 
 	seedBackend(t, h.PoolMigrate, "cb-be")
+	// Every bucket has an owner (ADR-0032); without one the refusal below
+	// would be about the missing owner, not the disabled backend.
+	owner := mustCreateTenant(t, h.PoolMigrate, "cb-owner")
 	be := adapters.NewBackendRepoV2(q, h.PoolMigrate)
 	cur, _ := be.Get(ctx, "cb-be")
 	if err := be.SetEnabled(ctx, "cb-be", false, cur.ResourceVersion); err != nil {
@@ -298,7 +301,7 @@ func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 	}
 
 	_, err := handler.CreateBucket(ctx, bucketh.CreateBucketInput{
-		Bucket: admindomain.Bucket{BackendID: "cb-be", BucketName: "nope"},
+		Bucket: admindomain.Bucket{BackendID: "cb-be", BucketName: "nope", OwnerTenantID: owner},
 	})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("create bucket on disabled backend: got %v, want FailedPrecondition", connect.CodeOf(err))
@@ -310,7 +313,7 @@ func TestBackendDisabled_CreateBucketRefused(t *testing.T) {
 		t.Fatalf("re-enable: %v", err)
 	}
 	if _, err := handler.CreateBucket(ctx, bucketh.CreateBucketInput{
-		Bucket: admindomain.Bucket{BackendID: "cb-be", BucketName: "ok-bucket"},
+		Bucket: admindomain.Bucket{BackendID: "cb-be", BucketName: "ok-bucket", OwnerTenantID: owner},
 	}); err != nil {
 		t.Fatalf("create bucket on enabled backend: %v", err)
 	}
@@ -391,13 +394,7 @@ func mustReadObjectFingerprint(t *testing.T, pool *pgxpool.Pool, tenantID uuid.U
 
 func mustSeedBucketAndKey(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName, collection string) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1
-        ON CONFLICT DO NOTHING
-    `, backendID, bucketName); err != nil {
-		t.Fatalf("seed bucket: %v", err)
-	}
+	mustEnsureBindableBucket(t, pool, tenantID, backendID, bucketName)
 	if _, err := pool.Exec(context.Background(), `
         INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, b.id FROM buckets b

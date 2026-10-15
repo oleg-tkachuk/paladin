@@ -344,22 +344,33 @@ func TestStorageMigrationRefusesATargetBucketItMayNotUse(t *testing.T) {
 			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
 				SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, other)
 		}},
-		{"shared", func(t *testing.T, f publicMigrationFixture) {
-			t.Helper()
-			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name)
-				SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated)
-		}},
-		// Owned by this tenant, but only since after another tenant bound a
-		// collection to it: the tenancy trigger checks bindings, not later
-		// changes of owner.
-		{"handed to this tenant while another one uses it", func(t *testing.T, f publicMigrationFixture) {
+		// A grant lets the tenant bind there; it does not make the bucket its own.
+		{"only granted to this tenant", func(t *testing.T, f publicMigrationFixture) {
 			t.Helper()
 			other := f.otherTenant(t, ctx)
-			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name)
-				SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated)
+			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+				SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, other)
+			grantBucket(t, ctx, f.pool, f.tenant, f.backend, f.dedicated)
+		}},
+		// Granted to another tenant, which has bound nothing yet: it may at any
+		// moment, so the bucket is not this tenant's alone.
+		{"this tenant's, granted to another", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
+			other := f.otherTenant(t, ctx)
+			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+				SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, f.tenant)
+			grantBucket(t, ctx, f.pool, other, f.backend, f.dedicated)
+		}},
+		// Owned by this tenant, but another tenant was granted it and bound a
+		// collection there (ADR-0032): owning a bucket is not using it alone.
+		{"this tenant's, but another one uses it", func(t *testing.T, f publicMigrationFixture) {
+			t.Helper()
+			other := f.otherTenant(t, ctx)
+			mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+				SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, f.backend, f.dedicated, f.tenant)
+			grantBucket(t, ctx, f.pool, other, f.backend, f.dedicated)
 			mustExec(t, ctx, f.pool, `INSERT INTO collections (tenant_id, name, bucket_id)
 				SELECT $1, 'theirs', b.id FROM buckets b WHERE b.name = $2`, other, f.dedicated)
-			mustExec(t, ctx, f.pool, `UPDATE buckets SET owner_tenant_id = $2 WHERE name = $1`, f.dedicated, f.tenant)
 		}},
 		{"another tenant's default binding", func(t *testing.T, f publicMigrationFixture) {
 			t.Helper()

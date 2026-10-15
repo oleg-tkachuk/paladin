@@ -35,10 +35,12 @@ func TestGuardedBucketWritesTellMissingFromStale(t *testing.T) {
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,
 		backendID)
+	// Every bucket has an owner (ADR-0032); which one is beside the point.
+	owner, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name)
-		 SELECT id, $2 FROM storage_backends WHERE name = $1`,
-		backendID, bucketName)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT id, $2, $3 FROM storage_backends WHERE name = $1`,
+		backendID, bucketName, owner)
 	current, err := repo.Get(ctx, backendID, bucketName)
 	if err != nil {
 		t.Fatalf("get: %v", err)

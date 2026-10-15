@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -32,7 +33,7 @@ func mkTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, layout stri
 }
 
 // TestAdversarial_CrossTenantDedicatedBucketBindRejected proves the DB trigger
-// enforce_collection_bucket_tenancy is a hard isolation boundary: tenant B
+// collections_enforce_bucket_tenancy is a hard isolation boundary: tenant B
 // cannot bind a collection to tenant A's OWNED (dedicated) bucket, even by a
 // direct INSERT that bypasses the application layer. Without this, a bug or a
 // compromised app role could route B's writes into A's dedicated bucket.
@@ -67,9 +68,9 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("SECURITY: tenant B bound a collection to tenant A's dedicated bucket — tenancy trigger bypassed")
 	}
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "23514" { // check_violation raised by the trigger
-		t.Fatalf("cross-tenant bind failed with the wrong error: %v (want check_violation)", err)
+	if !pgerr.Is(err, pgerr.CheckViolation) || !pgerr.ConstraintIs(err, schema.CollectionsBucketTenancy) {
+		t.Fatalf("cross-tenant bind failed with the wrong error: %v (want check_violation on %s)",
+			err, schema.CollectionsBucketTenancy)
 	}
 
 	// Positive control: tenant A CAN bind to its own dedicated bucket.
@@ -93,10 +94,15 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 
+	tenantA, _ := mkTenant(t, ctx, pool, "shared")
+	tenantB, _ := mkTenant(t, ctx, pool, "shared")
+	// Both tenants' objects live in one bucket, so only RLS keeps them
+	// apart: A owns it and grants B its use (ADR-0032).
 	const backendID, bucket = "be-rls", "shared-rls"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
-	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, bucket)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, backendID, bucket, tenantA)
+	grantBucket(t, ctx, pool, tenantB, backendID, bucket)
 
 	seedObj := func(tid uuid.UUID) {
 		ok := "ok-" + uuid.NewString()[:8]
@@ -110,8 +116,6 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 			   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 			uuid.Must(uuid.NewV7()), tid, ok, "k-"+uuid.NewString()[:8])
 	}
-	tenantA, _ := mkTenant(t, ctx, pool, "shared")
-	tenantB, _ := mkTenant(t, ctx, pool, "shared")
 	seedObj(tenantA)
 	seedObj(tenantB)
 

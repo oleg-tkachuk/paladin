@@ -10,9 +10,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -95,7 +97,30 @@ func TestBucketGrantRepository(t *testing.T) {
 		t.Errorf("revoke a grant that is gone: %v, want not found", err)
 	}
 	_, err = pool.Exec(ctx, `INSERT INTO collections (tenant_id, name, bucket_id) VALUES ($1, 'refused', $2)`, other, bucketID)
-	if !pgerr.ConstraintIs(err, "collections_bucket_tenancy") {
+	if !pgerr.ConstraintIs(err, schema.CollectionsBucketTenancy) {
 		t.Errorf("binding after the revoke: %v, want the tenancy check", err)
+	}
+}
+
+// A collection create the binding trigger refuses comes back as
+// ErrBucketNotGranted, which the API answers PERMISSION_DENIED — not as an
+// unclassified database error, which it answered Internal.
+func TestCollectionCreateRefusedWithoutAGrant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	owner, _ := mkTenant(t, ctx, pool, "shared")
+	other, _ := mkTenant(t, ctx, pool, "shared")
+	backend := "be-" + uuid.NewString()[:8]
+	const bucket = "owned-bucket"
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		SELECT id, $2, $3 FROM storage_backends WHERE name = $1`, backend, bucket, owner)
+
+	_, err := adapters.NewCollectionRepo(sqlc.New(pool), pool).Create(ctx, objectkey.CreateCollectionArgs{
+		TenantID: other, Collection: "refused", BackendID: backend, BucketName: bucket,
+	})
+	if !errors.Is(err, admindomain.ErrBucketNotGranted) {
+		t.Fatalf("create in a bucket the tenant may not bind: %v, want ErrBucketNotGranted", err)
 	}
 }

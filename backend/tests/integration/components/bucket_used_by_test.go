@@ -29,6 +29,9 @@ func TestListBucketsUsedByTenant(t *testing.T) {
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	other, _ := mkTenant(t, ctx, pool, "shared")
+	// Every bucket has an owner (ADR-0032). The buckets neither tenant owns
+	// are a third one's, which grants the use a collection binding needs.
+	platform, _ := mkTenant(t, ctx, pool, "shared")
 	backendID := "be-" + uuid.NewString()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
@@ -42,10 +45,15 @@ func TestListBucketsUsedByTenant(t *testing.T) {
 		othersOnly   = "others-only"
 		unreferenced = "unreferenced"
 	)
-	insertBucket(t, ctx, pool, backendID, owned, &tenant)
+	insertBucket(t, ctx, pool, backendID, owned, tenant)
 	for _, name := range []string{bound, collection, othersOnly, unreferenced} {
-		insertBucket(t, ctx, pool, backendID, name, nil)
+		insertBucket(t, ctx, pool, backendID, name, platform)
 	}
+	// A grant makes a bucket one the tenant may use, so the listing counts it
+	// (ADR-0032); the collection bindings below are what the binding trigger
+	// requires one for.
+	grantBucket(t, ctx, pool, tenant, backendID, collection)
+	grantBucket(t, ctx, pool, other, backendID, othersOnly)
 	mustExec(t, ctx, pool,
 		`INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
 		 SELECT $1, b.id, 'integration-test' FROM buckets b
@@ -100,10 +108,11 @@ func TestListBucketsUsedByTenant(t *testing.T) {
 }
 
 // TestListBucketsUsedByTenantUnderRLS reads through a pool like the runtime's:
-// RLS on, no BYPASSRLS. Bindings and collections are visible only to their own
-// tenant, so the listing must run as the tenant it asks about — as the caller
-// (a platform admin of another tenant) the same query finds owned buckets
-// alone, which is the empty page this filter exists to fix.
+// RLS on, no BYPASSRLS. Default bindings and collections are visible only to
+// their own tenant, so the listing must run as the tenant it asks about — as
+// the caller (a platform admin of another tenant) the same query finds only
+// what is platform configuration: the buckets the tenant owns or holds a grant
+// on (ADR-0032), and not the one it is bound to by default.
 func TestListBucketsUsedByTenantUnderRLS(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -120,8 +129,11 @@ func TestListBucketsUsedByTenantUnderRLS(t *testing.T) {
 		bound      = "bound"
 		collection = "collection"
 	)
-	insertBucket(t, ctx, admin, backendID, bound, nil)
-	insertBucket(t, ctx, admin, backendID, collection, nil)
+	// The caller's tenant owns both buckets and grants the tenant the use its
+	// collection binding needs (ADR-0032).
+	insertBucket(t, ctx, admin, backendID, bound, platform)
+	insertBucket(t, ctx, admin, backendID, collection, platform)
+	grantBucket(t, ctx, admin, tenant, backendID, collection)
 	mustExec(t, ctx, admin,
 		`INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
 		 SELECT $1, b.id, 'integration-test' FROM buckets b
@@ -149,9 +161,10 @@ func TestListBucketsUsedByTenantUnderRLS(t *testing.T) {
 		return names
 	}
 
-	if got := list(asCaller); len(got) != 0 {
-		t.Errorf("as the caller: got %v, want none — RLS no longer hides another "+
-			"tenant's bindings, so this test no longer pins why the handler acts", got)
+	if got := list(asCaller); !equalStrings(got, []string{collection}) {
+		t.Errorf("as the caller: got %v, want only the granted bucket — RLS no longer "+
+			"hides another tenant's default binding, so this test no longer pins why "+
+			"the handler acts", got)
 	}
 	want := []string{bound, collection}
 	if got := list(auth.WithActingTenant(asCaller, tenant)); !equalStrings(got, want) {
@@ -159,7 +172,7 @@ func TestListBucketsUsedByTenantUnderRLS(t *testing.T) {
 	}
 }
 
-func insertBucket(t *testing.T, ctx context.Context, pool *pgxpool.Pool, backendID, name string, owner *uuid.UUID) {
+func insertBucket(t *testing.T, ctx context.Context, pool *pgxpool.Pool, backendID, name string, owner uuid.UUID) {
 	t.Helper()
 	mustExec(t, ctx, pool,
 		`INSERT INTO buckets (backend_id, name, owner_tenant_id)

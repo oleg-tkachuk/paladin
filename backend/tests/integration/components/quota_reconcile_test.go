@@ -115,8 +115,8 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 	emptyQuota := uuid.New()
 	hex := uuid.NewString()[:8]
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, "bkt-e-"+hex)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, backendID, "bkt-e-"+hex, f.tenantID)
 	mustExec(t, ctx, pool,
 		`INSERT INTO bucket_quotas (id, bucket_id, max_total_bytes)
 		 VALUES ($1, (SELECT b.id FROM buckets b

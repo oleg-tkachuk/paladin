@@ -44,8 +44,10 @@ func setupTrashFixture(t *testing.T, pool *pgxpool.Pool) trashFixture {
 			t.Fatalf("%s: %v", sql, err)
 		}
 	}
-	exec(`INSERT INTO buckets (backend_id, name) SELECT id, $2 FROM storage_backends WHERE name = $1`, trashBackend, trashBucket)
 	for _, tenant := range []uuid.UUID{f.live, f.trashed} {
+		// Both tenants bind into one bucket: the live one owns it and the
+		// trashed one is granted use of it (ADR-0032).
+		mustEnsureBindableBucket(t, pool, tenant, trashBackend, trashBucket)
 		exec(`INSERT INTO collections (tenant_id, name, bucket_id)
 		      SELECT $1, 'docs', b.id FROM buckets b WHERE b.name = $2`, tenant, trashBucket)
 		for _, state := range []string{"DELETED", "PENDING"} {

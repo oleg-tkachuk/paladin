@@ -29,13 +29,15 @@ func TestBucketProvisionWritesApplyOnlyToTheListedState(t *testing.T) {
 	h := pgharness.Setup(t)
 	repo := adapters.NewBucketRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	seedBackend(t, h.PoolMigrate, stateTestBackend)
+	// Every bucket has an owner (ADR-0032); which one is beside the point.
+	owner := mustCreateTenant(t, h.PoolMigrate, "provision-state-owner")
 
 	bucketIn := func(name, state string) {
 		t.Helper()
 		if _, err := h.PoolMigrate.Exec(ctx, `
-			INSERT INTO buckets (backend_id, name, provision_state)
-			SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`,
-			stateTestBackend, name, state); err != nil {
+			INSERT INTO buckets (backend_id, name, provision_state, owner_tenant_id)
+			SELECT sb.id, $2, $3, $4 FROM storage_backends sb WHERE sb.name = $1`,
+			stateTestBackend, name, state, owner); err != nil {
 			t.Fatalf("seed bucket %s: %v", name, err)
 		}
 	}
@@ -94,9 +96,10 @@ func TestBucketLockTxHoldsTheRow(t *testing.T) {
 	h := pgharness.Setup(t)
 	repo := adapters.NewBucketRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	seedBackend(t, h.PoolMigrate, stateTestBackend)
+	owner := mustCreateTenant(t, h.PoolMigrate, "bucket-lock-owner")
 	if _, err := h.PoolMigrate.Exec(ctx, `
-		INSERT INTO buckets (backend_id, name, provision_state)
-		SELECT sb.id, 'locked', 'deleting' FROM storage_backends sb WHERE sb.name = $1`, stateTestBackend); err != nil {
+		INSERT INTO buckets (backend_id, name, provision_state, owner_tenant_id)
+		SELECT sb.id, 'locked', 'deleting', $2 FROM storage_backends sb WHERE sb.name = $1`, stateTestBackend, owner); err != nil {
 		t.Fatalf("seed bucket: %v", err)
 	}
 
@@ -145,13 +148,14 @@ func TestABucketRecordsWhetherPaladinCreatesIt(t *testing.T) {
 	repo := adapters.NewBucketRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 	const backend = "be-created-on-backend"
 	seedBackend(t, h.PoolMigrate, backend)
+	owner := mustCreateTenant(t, h.PoolMigrate, "created-on-backend-owner")
 	for name, created := range map[string]bool{"provisioned": true, "adopted": false} {
 		state := admindomain.BucketProvisionStateReady
 		if created {
 			state = admindomain.BucketProvisionStatePending
 		}
 		if err := repo.Create(ctx, admindomain.Bucket{
-			BackendID: backend, BucketName: name, ProvisionState: state, CreatedOnBackend: created,
+			BackendID: backend, BucketName: name, OwnerTenantID: owner, ProvisionState: state, CreatedOnBackend: created,
 		}); err != nil {
 			t.Fatalf("create %s: %v", name, err)
 		}

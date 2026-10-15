@@ -50,9 +50,14 @@ func newLockFixture(t *testing.T) (context.Context, lockFixture) {
 
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind) VALUES ('lock-be', 's3-compatible')`)
+	// Another tenant owns the bucket and grants this one its use (ADR-0032):
+	// the purge tests hard-delete this tenant, and a tenant that owns a
+	// bucket cannot be deleted.
+	owner, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name, versioning_enabled, object_lock_enabled)
-		 SELECT sb.id, 'lock-bucket', true, true FROM storage_backends sb WHERE sb.name = 'lock-be'`)
+		`INSERT INTO buckets (backend_id, name, versioning_enabled, object_lock_enabled, owner_tenant_id)
+		 SELECT sb.id, 'lock-bucket', true, true, $1 FROM storage_backends sb WHERE sb.name = 'lock-be'`, owner)
+	grantBucket(t, ctx, pool, tenant, "lock-be", "lock-bucket")
 	var collectionID uuid.UUID
 	if err := pool.QueryRow(ctx,
 		`INSERT INTO collections (tenant_id, name, bucket_id)

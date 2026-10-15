@@ -129,9 +129,9 @@ func subtestCollectionSearch(ctx context.Context, pool *pgxpool.Pool) func(*test
 			 ON CONFLICT (name) DO NOTHING`, backendID)
 		bucketID := uuid.New()
 		mustExec(t, ctx, pool,
-			`INSERT INTO buckets (id, backend_id, name, display_name)
-			 SELECT $1, sb.id, 'srch-coll-bucket', 'b' FROM storage_backends sb WHERE sb.name = $2`,
-			bucketID, backendID)
+			`INSERT INTO buckets (id, backend_id, name, display_name, owner_tenant_id)
+			 SELECT $1, sb.id, 'srch-coll-bucket', 'b', $3 FROM storage_backends sb WHERE sb.name = $2`,
+			bucketID, backendID, tenantID)
 
 		for _, f := range searchFixtures {
 			mustExec(t, ctx, pool,

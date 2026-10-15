@@ -48,6 +48,13 @@ var exemptFromRLS = map[string]string{
 	"oauth_authorization_codes": "pre-auth: the code hash is the credential; ConsumeCode is single-use and atomic",
 	"tenant_slug_history":       "pre-auth: ResolveRenamedSlug authorises against the resolved tenant, not the query",
 
+	// Platform configuration, like buckets and bucket_quotas (ADR-0025,
+	// ADR-0032). The collection binding trigger reads it under the inserting
+	// tenant's session: a grant RLS hid from that session would read as no
+	// grant and refuse a binding the owner allowed. Writes are gated by the
+	// bucket owner's ManageBucket in the handler (migration 080).
+	"bucket_grants": "platform configuration read by the binding trigger; writes gated by the owner's ManageBucket",
+
 	// Back on the list. 014 gave all four a policy and 015 took it away: the
 	// pre-auth exemption was scoped to SELECT, so login's INSERT into
 	// refresh_tokens was refused and the cluster could not authenticate

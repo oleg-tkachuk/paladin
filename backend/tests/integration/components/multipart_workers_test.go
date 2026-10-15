@@ -77,8 +77,8 @@ func seedMultipart(t *testing.T, ctx context.Context, pool *pgxpool.Pool, age ti
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1,'s3-compatible','garage','http://x.invalid:3900','us-east-1')`, s.backend)
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name) SELECT id, $2 FROM storage_backends WHERE name = $1`,
-		s.backend, s.bucket)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id) SELECT id, $2, $3 FROM storage_backends WHERE name = $1`,
+		s.backend, s.bucket, s.tenant)
 	mustExec(t, ctx, pool,
 		`INSERT INTO collections (tenant_id, name, bucket_id) SELECT $1, $2, id FROM buckets WHERE name = $3`,
 		s.tenant, s.collect, s.bucket)

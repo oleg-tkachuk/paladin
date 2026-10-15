@@ -257,9 +257,9 @@ func TestPushdown_Collections(t *testing.T) {
 		 ON CONFLICT (name) DO NOTHING`, backendID)
 	bucketID := uuid.New()
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (id, backend_id, name, display_name)
-		 SELECT $1, sb.id, 'pd-coll-bucket', 'pd' FROM storage_backends sb WHERE sb.name = $2`,
-		bucketID, backendID)
+		`INSERT INTO buckets (id, backend_id, name, display_name, owner_tenant_id)
+		 SELECT $1, sb.id, 'pd-coll-bucket', 'pd', $3 FROM storage_backends sb WHERE sb.name = $2`,
+		bucketID, backendID, tenantID)
 
 	prefix := "pd" + uuid.NewString()[:8]
 	for i := range 5 {

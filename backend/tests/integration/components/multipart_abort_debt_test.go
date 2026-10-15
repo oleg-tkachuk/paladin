@@ -28,9 +28,14 @@ func TestMultipartAbortDebt(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 			 VALUES ($1,'s3-compatible','garage','http://x.invalid:3900','us-east-1')`, backend)
+		// Another tenant owns the bucket and grants this one its use
+		// (ADR-0032): a test below deletes this tenant, and a tenant that
+		// owns a bucket cannot be deleted.
+		owner, _ := mkTenant(t, ctx, pool, "shared")
 		mustExec(t, ctx, pool,
-			`INSERT INTO buckets (backend_id, name)
-			 SELECT id, $2 FROM storage_backends WHERE name = $1`, backend, bucket)
+			`INSERT INTO buckets (backend_id, name, owner_tenant_id)
+			 SELECT id, $2, $3 FROM storage_backends WHERE name = $1`, backend, bucket, owner)
+		grantBucket(t, ctx, pool, tenant, backend, bucket)
 		collection := "col-" + uuid.NewString()[:8]
 		mustExec(t, ctx, pool,
 			`INSERT INTO collections (tenant_id, name, bucket_id)

@@ -36,8 +36,8 @@ func TestMultipartSessionAnchorsBackend(t *testing.T) {
 	// longer expressible — which is the point of the constraint.
 	const anchorBackend, anchorBucket = "be-anchored", "bkt-anchored"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, anchorBackend)
-	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, anchorBackend, anchorBucket)
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, anchorBackend, anchorBucket, f.tenantID)
 	objectID := uuid.Must(uuid.NewV7())
 	sess, err := repo.InitiateSession(ctx, multiparth.InitiateArgs{
 		TenantID:      f.tenantID,
