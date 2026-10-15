@@ -28,6 +28,9 @@ type Schema struct {
 	Name string
 	// Declarations are returned by buildEnv — a concrete wiring lives below.
 	vars map[string]*cel.Type
+	// enums holds, per string field backed by a SQL enum, the values that
+	// enum accepts. See checkEnums.
+	enums map[string][]string
 }
 
 // Fields returns the variable names this schema declares, sorted.
@@ -65,6 +68,7 @@ var ObjectSchema = &Schema{
 		"committed_at": cel.TimestampType,
 		"external_ref": cel.StringType,
 	},
+	enums: map[string][]string{fieldState: objectStates},
 }
 
 // CollectionSchema is exposed to filters against Collection rows.
@@ -117,6 +121,7 @@ var TenantSchema = &Schema{
 		// should decide on.
 		"purge_eligible": cel.BoolType,
 	},
+	enums: map[string][]string{fieldStorageLayout: storageLayouts},
 }
 
 // StorageBackendSchema is exposed to filters against StorageBackend rows.
@@ -194,6 +199,7 @@ var OperationSchema = &Schema{
 		"created_at":    cel.TimestampType,
 		"updated_at":    cel.TimestampType,
 	},
+	enums: map[string][]string{fieldState: operationStates},
 }
 
 // UserSchema is exposed to filters against User rows.
@@ -315,9 +321,17 @@ type CompileError struct {
 	Message string
 	Line    int
 	Column  int
+	// detail is cel-go's full report of every issue, rendered against the
+	// source, for callers that log the error rather than read its fields.
+	detail string
 }
 
-func (e *CompileError) Error() string { return e.Message }
+func (e *CompileError) Error() string {
+	if e.detail != "" {
+		return e.detail
+	}
+	return e.Message
+}
 
 // CompileFirstError compiles `expr` against `schema` and, on failure,
 // returns a *CompileError carrying the first diagnostic's position.
@@ -330,27 +344,45 @@ func CompileFirstError(schema *Schema, expr string) error {
 	if expr == "" {
 		return nil
 	}
+	_, _, err := compileChecked(schema, expr)
+	return err
+}
+
+// compileChecked is the one compile path behind Compile, Validate and
+// CompileFirstError, so the admin validation RPC accepts exactly the filters
+// the list RPCs accept. Failures are *CompileError with a 1-indexed position
+// where one is known.
+func compileChecked(schema *Schema, expr string) (*cel.Env, *cel.Ast, error) {
 	env, err := buildEnv(schema)
 	if err != nil {
-		return &CompileError{Message: fmt.Sprintf("build env: %v", err)}
+		return nil, nil, &CompileError{Message: fmt.Sprintf("build env: %v", err)}
 	}
 	ast, iss := env.Compile(expr)
 	if iss != nil && iss.Err() != nil {
 		errs := iss.Errors()
 		if len(errs) == 0 {
-			return &CompileError{Message: iss.Err().Error()}
+			return nil, nil, &CompileError{Message: iss.Err().Error()}
 		}
 		first := errs[0]
-		return &CompileError{
+		return nil, nil, &CompileError{
 			Message: first.Message,
 			Line:    first.Location.Line(),
 			Column:  first.Location.Column() + 1, // 0→1-indexed
+			detail:  iss.Err().Error(),
 		}
 	}
 	if ast.OutputType() != cel.BoolType {
-		return &CompileError{Message: fmt.Sprintf("expression must return bool, got %s", ast.OutputType())}
+		return nil, nil, &CompileError{Message: fmt.Sprintf("expression must return bool, got %s", ast.OutputType())}
 	}
-	return nil
+	if v := checkEnums(schema, ast); v != nil {
+		loc := ast.NativeRep().SourceInfo().GetStartLocation(v.exprID)
+		return nil, nil, &CompileError{
+			Message: v.message(),
+			Line:    loc.Line(),
+			Column:  loc.Column() + 1, // 0→1-indexed
+		}
+	}
+	return env, ast, nil
 }
 
 // maxCELCacheEntries bounds the compiled-program cache. Each distinct
@@ -391,16 +423,9 @@ func (e *Evaluator) Compile(schema *Schema, expr string) (cel.Program, error) {
 	}
 	e.mu.Unlock()
 
-	env, err := buildEnv(schema)
+	env, ast, err := compileChecked(schema, expr)
 	if err != nil {
-		return nil, fmt.Errorf("cel: build env: %w", err)
-	}
-	ast, iss := env.Compile(expr)
-	if iss != nil && iss.Err() != nil {
-		return nil, fmt.Errorf("cel: compile %q: %w", expr, iss.Err())
-	}
-	if ast.OutputType() != cel.BoolType {
-		return nil, fmt.Errorf("cel: expression %q must return bool, got %s", expr, ast.OutputType())
+		return nil, fmt.Errorf("cel: compile %q: %w", expr, err)
 	}
 	prog, err := env.Program(ast)
 	if err != nil {
@@ -432,16 +457,8 @@ func Validate(schema *Schema, expr string) error {
 	if expr == "" {
 		return nil
 	}
-	env, err := buildEnv(schema)
-	if err != nil {
-		return fmt.Errorf("cel: build env: %w", err)
-	}
-	ast, iss := env.Compile(expr)
-	if iss != nil && iss.Err() != nil {
-		return fmt.Errorf("cel: compile %q: %w", expr, iss.Err())
-	}
-	if ast.OutputType() != cel.BoolType {
-		return fmt.Errorf("cel: expression %q must return bool, got %s", expr, ast.OutputType())
+	if _, _, err := compileChecked(schema, expr); err != nil {
+		return fmt.Errorf("cel: compile %q: %w", expr, err)
 	}
 	return nil
 }
