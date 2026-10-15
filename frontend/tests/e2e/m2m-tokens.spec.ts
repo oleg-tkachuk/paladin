@@ -125,7 +125,8 @@ test.describe("M2M tokens", () => {
 
     await gotoSettled(page, tokensURL(tenantId));
     await page.getByRole("button", { name: /New token/i }).click();
-    await tokenName(page).fill(`ack-${Date.now().toString(36)}`);
+    const name = `ack-${Date.now().toString(36)}`;
+    await tokenName(page).fill(name);
     await page.getByRole("button", { name: /Create token/i }).click();
 
     const done = page.getByRole("button", { name: /^Done$/ });
@@ -138,9 +139,14 @@ test.describe("M2M tokens", () => {
     await done.click();
     await expect(secretPanel(page)).toHaveCount(0, { timeout: 15_000 });
 
-    for (const t of await m2mTokensOf(tenantId)) {
-      if (!t.revoked) await revokeM2MToken(t.name);
-    }
+    // Revoke only the token this test minted. The admin tenant is shared with
+    // every service credential provisioned into it — revoking all of its live
+    // tokens took those services down whenever the suite ran on a cluster.
+    const minted = (await m2mTokensOf(tenantId)).find(
+      (t) => t.displayName === name,
+    );
+    expect(minted).toBeDefined();
+    await revokeM2MToken(minted!.name);
   });
 
   test("revoking a token marks it revoked rather than deleting it", async ({
