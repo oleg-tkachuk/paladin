@@ -80,3 +80,32 @@ func TestCopiesReachTheMeter(t *testing.T) {
 		t.Errorf("reserve copies = %+v", usage.reserved)
 	}
 }
+
+// A hold is released by the capability that made it. The store releases only
+// for the subject that reserved, so a release naming none left the hold in
+// place until it lapsed.
+func TestReleaseReservationFreesTheCapabilitysHold(t *testing.T) {
+	const (
+		holdNanos = limes.NanosPerUnit / 4
+		holdTTL   = time.Minute
+	)
+	m, store := newMeteredMinter(t)
+	root, token := m.Mint(t, limes.Capability{})
+	v := m.Verify(t, token, root.Capability().Audience[0])
+	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), v), store))
+
+	id, err := ReserveCapability(ctx, holdNanos, holdTTL)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if err := ReleaseReservation(ctx, id); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	u, err := store.GetUsage(ctx, v.Capability().ID)
+	if err != nil {
+		t.Fatalf("usage: %v", err)
+	}
+	if u.ReservedAmount != 0 {
+		t.Errorf("held after release = %v, want 0", u.ReservedAmount)
+	}
+}
