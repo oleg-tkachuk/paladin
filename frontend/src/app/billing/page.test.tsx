@@ -39,7 +39,7 @@ vi.mock("@/hooks/useTenants", () => ({
       Promise.resolve({
         tenants: [
           { tenantId: "t-1", slug: "platform", displayName: "Platform" },
-          { tenantId: "t-2", slug: "caryon", displayName: "Caryon" },
+          { tenantId: "t-2", slug: "globex", displayName: "Globex" },
           {
             tenantId: "t-3",
             slug: "smoke",
@@ -92,7 +92,7 @@ describe("BillingPage", () => {
       expect.objectContaining({ tenantId: "t-2" }),
     );
     expect(
-      await screen.findByText(/Caryon was not billed/),
+      await screen.findByText(/Globex was not billed/),
     ).toBeInTheDocument();
   });
 
@@ -125,7 +125,7 @@ describe("BillingPage", () => {
     expect(
       await screen.findByRole("option", { name: "Smoke · in trash" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("option", { name: "Caryon" }));
+    fireEvent.click(screen.getByRole("option", { name: "Globex" }));
     expect(h.replace).toHaveBeenCalledWith("?tenant=t-2");
   });
 
