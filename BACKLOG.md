@@ -765,14 +765,20 @@ finding moving from "packages you import" to "your code is affected".
   single `GROUP BY (tenant_id, state)` over `objects`, run on the worker's
   BYPASSRLS pool on every poll (30s while the tab is visible). The four
   sibling censuses beside it are cheap counts over small tables; this one is
-  the only O(rows) query in the set. At today's row
-  counts that is a cheap index-less aggregate, and a live number is strictly
-  more useful to an operator than a stale one. It does NOT stay cheap: the scan
-  is O(rows), so a fleet in the tens of millions of objects turns a dashboard
-  poll into a recurring seq-scan. Deliberately not pre-optimised — a
-  materialized rollup is a correctness surface (staleness window, refresh
-  scheduling, backfill on restore) that shouldn't be paid for before the scan
-  actually hurts.
+  the only O(rows) query in the set, and a live number is strictly more useful
+  to an operator than a stale one until the scan hurts.
+- **Measured (2026-10-15, postgres 18.6, the repo's migrations, 200 tenants,
+  85% AVAILABLE):** the census takes ~75 ms at 1M objects and 0.8–1.1 s warm
+  at 10M (2–3 s cold, 4–25 s right after a 5% state churn the vacuum has not
+  reached). A covering `objects (tenant_id, state) INCLUDE (size_bytes)` does
+  not help and is not wanted: the planner keeps the parallel seq scan at both
+  sizes, and forcing the index-only scan (0 heap fetches) takes the same
+  0.8–1.0 s, because the cost is aggregating every row, not reading the heap.
+  The index would also be 7× the one it replaces (474 MB vs 65 MB at 10M:
+  INCLUDE turns off B-tree deduplication). The HOT concern the earlier entry
+  raised does not apply — `state` is already a key of
+  `objects_tenant_state_idx`, so its updates are never HOT (0 of ~426k in the
+  churn run), and `objects` carries no fillfactor setting.
 - **Sequencing (decided):** do NOT introduce a second denormalised counter for
   this. The repo already had one — `quotas.usage_*` — and it drifted into
   uselessness precisely because the reconciler was assumed rather than
@@ -782,20 +788,19 @@ finding moving from "packages you import" to "your code is affected".
   job's intermediate result and have `/stats` read it — one mechanism, two
   consumers, one source of truth — not to add a parallel summary table.
 - **Definition of Done:**
-  - First and cheapest: a covering index on `objects (tenant_id, state)
-    INCLUDE (size_bytes)` to turn the seq scan into an index-only scan.
-    Measure both sides before committing — `state` is a key column and it is
-    UPDATEd on every promote, so the index makes those writes non-HOT, which
-    works against the deliberate `fillfactor` tuning in `001_initial_schema.sql`.
-  - Only if that is not enough: persist the reconciler's per-tenant rollup and
-    read it from `/stats`, with the staleness window shown in the UI ("as of"
-    already has the slot).
-  - A measurement in the runbook that says when to switch: a p95 for the
-    aggregate from `pg_stat_statements`, not a row-count guess. Suggested
-    trigger: mean_exec_time > 1s.
-- **Blockers:** none — needs a real fleet to measure against. Note the load is
-  on-demand, not background: the page polls only while an operator has it open
-  in a visible tab.
+  - Persist the reconciler's per-tenant, per-state rollup and read it from
+    `/stats`, with the staleness window shown in the UI ("as of" already has
+    the slot).
+  - The census query is gone from the poll path; the drill-down may keep its
+    own narrower query.
+- **Trigger:** p95 of `paladin.admin.v1.SystemService/GetPlatformStats` in
+  otelconnect's `rpc_server_duration` above 1 s, which the measurement above
+  puts at roughly 10M objects. The reference deployment's Postgres does not
+  load `pg_stat_statements`, so the RPC histogram is the signal that exists;
+  the runbook says so (`docs/runbooks/platform-stats-unavailable.md`).
+- **Blockers:** none — waits on the trigger. Note the load is on-demand, not
+  background: the page polls only while an operator has it open in a visible
+  tab.
 
 ### Announce that bucket and per-day quota caps now reject
 

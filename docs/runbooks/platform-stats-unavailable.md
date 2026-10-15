@@ -92,8 +92,16 @@ are cheap aggregates over small operator-managed tables; the objects one is a
 `GROUP BY tenant_id, state` over `objects`, which is O(rows). Paging the
 per-tenant breakdown does not shrink that scan — the page is cut after the
 aggregate. A drill-down is one more `GROUP BY` over the flagged table, run
-only when the sheet is opened. There is no cached rollup — see BACKLOG if
-that scan starts showing up in `pg_stat_statements`.
+only when the sheet is opened. There is no cached rollup.
+
+The objects scan grows with the fleet: about 75 ms at 1M objects and about
+1 s at 10M, longer right after a burst of deletes the vacuum has not reached
+yet. An index does not shorten it; aggregating every row is the cost. Watch
+the p95 of `paladin.admin.v1.SystemService/GetPlatformStats` in
+`rpc_server_duration`: above 1 s, the census should move to the reconciler's
+persisted rollup (BACKLOG, "Platform Stats: no cached rollup"). Use
+`pg_stat_statements` instead where the database loads it; the reference
+deployment's does not.
 
 ## Reading the quota card
 
