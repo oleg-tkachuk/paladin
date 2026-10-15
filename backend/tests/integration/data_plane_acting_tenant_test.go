@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,10 +17,12 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/policies"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 	pbdata "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
@@ -41,6 +45,10 @@ type actingTenantFixture struct {
 }
 
 const actingCollection = "docs"
+
+// collectionAdminRole is the role the default tenant policy asks of a member
+// who updates, deletes or restores an object.
+const collectionAdminRole = "collection:admin"
 
 func newActingTenantFixture(t *testing.T) actingTenantFixture {
 	t.Helper()
@@ -247,27 +255,47 @@ func TestDataPlaneAdminIdempotencyKeyIsPerTenant(t *testing.T) {
 	}
 }
 
-// A platform admin's data-plane work inside another tenant is in that
-// tenant's trail; its work in its own tenant, like any tenant's own
-// data-plane writes, is not audited.
-func TestDataPlaneAdminWorkIsInTheTenantsTrail(t *testing.T) {
+// Every data-plane write is in the trail of the tenant it acted on, whoever
+// made it: a tenant's own member, and a platform admin, in its own tenant or
+// in the one it named. A retry answered from the idempotency store writes no
+// second row, and a call that only issues a URL writes none.
+func TestDataPlaneWritesAreInTheTenantsTrail(t *testing.T) {
 	f := newActingTenantFixture(t)
-	admin := f.mint(f.platform, "platform.admin")
+	admin := f.mint(f.platform, apiutil.RolePlatformAdmin)
+	member := f.mint(f.target, collectionAdminRole)
 	ctx, cancel := context.WithTimeout(context.Background(), actingTenantCallTimeout)
 	defer cancel()
+	// The policy CreateTenant gives a tenant, which lets its members write;
+	// the fixture inserts its tenants directly and so has none. Cedar keys the
+	// tenant on its slug as stored.
+	var slug string
+	if err := f.h.PoolMigrate.QueryRow(ctx, `SELECT slug FROM tenants WHERE id = $1`, f.target).Scan(&slug); err != nil {
+		t.Fatalf("target slug: %v", err)
+	}
+	if _, err := f.h.PoolMigrate.Exec(ctx, `UPDATE tenants SET inherited_cedar_policy = $2 WHERE id = $1`,
+		f.target, strings.ReplaceAll(policies.DefaultTenantPolicy, policies.TenantPlaceholder, slug)); err != nil {
+		t.Fatalf("target policy: %v", err)
+	}
 
-	for _, c := range []struct {
-		tenant, object uuid.UUID
-	}{{f.target, f.inTarget}, {f.platform, f.inPlatform}} {
-		if _, err := f.objects.UpdateObject(authed(ctx, admin), &pbdata.UpdateObjectRequest{
-			Name:            objectOf(c.tenant, c.object),
-			ResourceVersion: "1",
+	update := func(callCtx context.Context, tenant, object uuid.UUID, rv string) {
+		t.Helper()
+		if _, err := f.objects.UpdateObject(callCtx, &pbdata.UpdateObjectRequest{
+			Name:            objectOf(tenant, object),
+			ResourceVersion: rv,
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"tags"}},
-			Tags:            map[string]string{"set-by": "platform-admin"},
+			Tags:            map[string]string{"set-by": rv},
 		}); err != nil {
-			t.Fatalf("UpdateObject in %s: %v", c.tenant, err)
+			t.Fatalf("UpdateObject in %s: %v", tenant, err)
 		}
 	}
+	update(authed(ctx, admin), f.target, f.inTarget, "1")
+	update(authed(ctx, admin), f.platform, f.inPlatform, "1")
+	const retryKey = "member-write-retried"
+	update(withIdempotencyKey(authed(ctx, member), retryKey), f.target, f.inTarget, "2")
+	update(withIdempotencyKey(authed(ctx, member), retryKey), f.target, f.inTarget, "2")
+	// Whether or not the fixture's backend can presign, the call is not
+	// recorded: what is skipped is the procedure, not its outcome.
+	_, _ = f.objects.DownloadObject(authed(ctx, member), &pbdata.DownloadObjectRequest{Name: objectOf(f.target, f.inTarget)})
 
 	type row struct {
 		action, resource string
@@ -276,7 +304,7 @@ func TestDataPlaneAdminWorkIsInTheTenantsTrail(t *testing.T) {
 	rowsUnder := func(tenant uuid.UUID) []row {
 		rows, err := f.h.PoolMigrate.Query(ctx,
 			`SELECT action, resource_name, actor_tenant_id FROM audit_log
-			 WHERE resource_tenant_id = $1 AND action LIKE '%ObjectService/UpdateObject'`, tenant)
+			 WHERE resource_tenant_id = $1 AND actor_audience = $2 ORDER BY at`, tenant, auth.AudienceData)
 		if err != nil {
 			t.Fatalf("query: %v", err)
 		}
@@ -292,14 +320,16 @@ func TestDataPlaneAdminWorkIsInTheTenantsTrail(t *testing.T) {
 		return out
 	}
 
-	got := rowsUnder(f.target)
-	if len(got) != 1 {
-		t.Fatalf("%d rows in the target's trail, want 1", len(got))
+	update1 := paladindatav1connect.ObjectServiceUpdateObjectProcedure
+	want := []row{
+		{update1, objectOf(f.target, f.inTarget), f.platform},
+		{update1, objectOf(f.target, f.inTarget), f.target},
 	}
-	if got[0].actor != f.platform || got[0].resource != objectOf(f.target, f.inTarget) {
-		t.Errorf("row = %+v, want the admin's tenant as actor and the object as resource", got[0])
+	if got := rowsUnder(f.target); !slices.Equal(got, want) {
+		t.Errorf("target's trail = %+v, want the admin's write then the member's, once", got)
 	}
-	if own := rowsUnder(f.platform); len(own) != 0 {
-		t.Errorf("the admin's work in its own tenant was audited: %+v", own)
+	wantOwn := []row{{update1, objectOf(f.platform, f.inPlatform), f.platform}}
+	if got := rowsUnder(f.platform); !slices.Equal(got, wantOwn) {
+		t.Errorf("admin's own trail = %+v, want its write in its own tenant", got)
 	}
 }

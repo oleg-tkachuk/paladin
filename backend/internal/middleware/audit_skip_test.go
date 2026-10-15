@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
+
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
 // The audit log is the trail of mutations. A read is skipped when the contract
@@ -41,5 +43,26 @@ func TestAuditSkipsReadsAndSessionOperations(t *testing.T) {
 	all := &auditInterceptor{recordReads: true}
 	if all.shouldSkip(connect.Spec{Procedure: "/x.Y/Summarize", IdempotencyLevel: connect.IdempotencyNoSideEffects}) {
 		t.Error("recordReads skipped a read")
+	}
+}
+
+// A data-plane call that only hands back a presigned URL is access, not
+// change, and is skipped; every other data-plane write is recorded, the one
+// that moves a pending upload's deadline included.
+func TestAuditSkipsURLIssuingDataPlaneCalls(t *testing.T) {
+	a := &auditInterceptor{}
+	for procedure, skip := range map[string]bool{
+		paladindatav1connect.ObjectServiceDownloadObjectProcedure:                   true,
+		paladindatav1connect.PresignServicePresignDownloadProcedure:                 true,
+		paladindatav1connect.MultipartUploadServicePresignPartProcedure:             true,
+		paladindatav1connect.PresignServiceRegenerateUploadUrlProcedure:             false,
+		paladindatav1connect.ObjectServiceUploadObjectProcedure:                     false,
+		paladindatav1connect.ObjectServiceCompleteObjectProcedure:                   false,
+		paladindatav1connect.ObjectServiceDeleteObjectProcedure:                     false,
+		paladindatav1connect.MultipartUploadServiceInitiateMultipartUploadProcedure: false,
+	} {
+		if got := a.shouldSkip(connect.Spec{Procedure: procedure}); got != skip {
+			t.Errorf("%s: shouldSkip = %v, want %v", procedure, got, skip)
+		}
 	}
 }

@@ -326,9 +326,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object).Interceptor(),
 		validateInterceptor,
 		idempotencyInterceptor,
-		// A platform admin's calls inside another tenant only: they are
-		// what that tenant's trail would miss (see AuditActingElsewhere).
-		middleware.AuditActingElsewhere(repos.Audit, auth.AudienceData),
+		// Every write, whoever makes it: a tenant's own agents and users, and
+		// a platform admin acting in the tenant it named. After idempotency,
+		// so a replayed response writes no second row. No mirror: an object
+		// write already emits its own paladin.object.* event.
+		middleware.AuditWithMirror(repos.Audit, auth.AudienceData, false, nil),
 	)
 	// The plane's interceptors; the codec, size limits and compression it
 	// shares with the others are rpcMountOptions.

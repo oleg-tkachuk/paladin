@@ -5,7 +5,8 @@
 // `idempotency_level = NO_SIDE_EFFECTS`, and — for the RPCs that declare
 // nothing yet — one named like a read (`Get…`, `List…`, `Lookup…`, `Count…`,
 // `Validate…`, `Simulate…`). So are the session operations, which mint tokens
-// rather than change state.
+// rather than change state, and the data-plane calls that only issue a URL
+// (urlIssuingProcedures).
 //
 // The interceptor is plane-aware — `audience` is recorded so audits can be
 // filtered per plane.
@@ -30,6 +31,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
 // auditBeforeKey carries a pre-mutation snapshot stashed by a handler so the
@@ -108,30 +110,6 @@ type auditInterceptor struct {
 	audience    string
 	recordReads bool
 	mirror      AuditMirrorEmitter
-	// onlyElsewhere records only calls acting on a tenant other than the
-	// caller's own (AuditActingElsewhere).
-	onlyElsewhere bool
-}
-
-// AuditActingElsewhere audits only the calls a principal makes inside a
-// tenant other than its own — on the data plane, a platform admin's work in a
-// tenant it named (ActOnNamedTenant, which must run before it). Those are the
-// calls the tenant's trail would otherwise miss: its own principals' writes
-// are not audited on the data plane, and auditing every agent upload would
-// put a synchronous insert on the hot path.
-func AuditActingElsewhere(w AuditWriter, audience string) connect.ServerInterceptor {
-	return (&auditInterceptor{w: w, audience: audience, onlyElsewhere: true}).interceptor()
-}
-
-// actingElsewhere reports whether ctx acts on a tenant other than the
-// principal's own.
-func actingElsewhere(ctx context.Context) bool {
-	acting, ok := auth.ActingTenant(ctx)
-	if !ok {
-		return false
-	}
-	p, err := auth.PrincipalFromContext(ctx)
-	return err == nil && acting != p.TenantID
 }
 
 // interceptor records a unary call with its request message, and a stream
@@ -147,7 +125,7 @@ func (a *auditInterceptor) unary(next unary.Func) unary.Func {
 		// after the handler returns (see preferCanonical).
 		ctx = apiutil.WithResourceSlot(ctx)
 		resp, err := next(ctx, spec, req)
-		if a.shouldSkip(spec) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
+		if a.shouldSkip(spec) {
 			return resp, err
 		}
 		// Best-effort in the sense that it never blocks or fails the RPC — NOT
@@ -172,7 +150,7 @@ func (a *auditInterceptor) unary(next unary.Func) unary.Func {
 func (a *auditInterceptor) stream(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		err := next(ctx, spec, stream)
-		if a.shouldSkip(spec) || (a.onlyElsewhere && !actingElsewhere(ctx)) {
+		if a.shouldSkip(spec) {
 			return err
 		}
 		_ = a.writeStream(ctx, spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), err)
@@ -186,11 +164,27 @@ var sessionOperations = map[string]bool{
 	"WhoAmI": true, "Login": true, "RefreshToken": true, "ExchangeAudience": true,
 }
 
+// urlIssuingProcedures hand back a presigned URL and change no object. They are
+// not NO_SIDE_EFFECTS — each records the presign and charges the request to
+// the tenant, which `charges` already keeps — but they are access, not change,
+// and the trail is for change. PresignPart is the sharp case: one row per part
+// of a multipart upload would bury the Initiate and Complete rows that say
+// what happened. RegenerateUploadUrl is deliberately absent: it moves a
+// pending object's deadline, which is a change to that object.
+var urlIssuingProcedures = map[string]bool{
+	paladindatav1connect.ObjectServiceDownloadObjectProcedure:       true,
+	paladindatav1connect.PresignServicePresignDownloadProcedure:     true,
+	paladindatav1connect.MultipartUploadServicePresignPartProcedure: true,
+}
+
 func (a *auditInterceptor) shouldSkip(spec connect.Spec) bool {
 	if a.recordReads {
 		return false
 	}
 	if spec.IdempotencyLevel == connect.IdempotencyNoSideEffects {
+		return true
+	}
+	if urlIssuingProcedures[spec.Procedure] {
 		return true
 	}
 	// Procedure shape: "/paladin.admin.v1.BackendService/GetBackend"
@@ -239,9 +233,9 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 }
 
 // asActor scopes the audit insert to its actor's tenant, which audit_log's
-// insert policy requires: a call acting inside another tenant
-// (AuditActingElsewhere) would otherwise insert under that tenant's scope and
-// be refused.
+// insert policy requires: a platform admin's call acting inside another
+// tenant (ActOnNamedTenant) would otherwise insert under that tenant's scope
+// and be refused.
 func asActor(ctx context.Context, actorTenant uuid.UUID) context.Context {
 	if actorTenant == uuid.Nil {
 		return ctx
