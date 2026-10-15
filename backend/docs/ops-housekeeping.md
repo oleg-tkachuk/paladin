@@ -92,6 +92,11 @@ bytes-per-row. Add 30% for index/wal overhead.
 
 - `audit_log_ttl = 8760h` (365 days). Compliance default; cut to 90 days
   if your audit obligations don't require a full year.
+- The data plane audits every write, so object traffic dominates the log: an
+  object uploaded in one piece is two rows (`UploadObject`, `CompleteObject`),
+  about 1.5 KB with indexes (~770 bytes a row measured on the dev cluster). A
+  million uploads a day is about 1.5 GB a day, about 550 GB at the default
+  TTL.
 
 ### Worked example
 

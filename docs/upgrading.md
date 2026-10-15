@@ -44,6 +44,17 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — every data-plane write is audited
+
+- **Behaviour, audit.** The data plane records every write in the trail of
+  the tenant it acted on: a tenant's own agents and users, not only a platform
+  admin acting in it. `DownloadObject`, `PresignDownload` and `PresignPart`
+  only issue a URL and are not recorded.
+- **Operations.** `audit_log` grows with object traffic, about 1.5 KB per
+  object uploaded in one piece; size `housekeeping.audit_log_ttl` for it
+  (`backend/docs/ops-housekeeping.md`). Each write pays one more synchronous
+  insert, about 1.7 ms on the dev cluster.
+
 ## Unreleased — capabilities run on limes v0.64.0 and pgstore v0.9.0
 
 - **Behaviour, stats.** The platform stats count capability records through

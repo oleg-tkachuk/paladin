@@ -109,8 +109,8 @@ constraints:
 10. **QuotaSoftCheck** — tenant and bucket scope
 11. **Validation** — `buf.validate` rules via `protovalidate`
 12. **Idempotency** — `idempotency_keys` for replayable writes
-13. **AuditActingElsewhere** — audits a platform admin's calls inside another
-    tenant, the ones that tenant's own trail would miss
+13. **Audit** — records every write in the trail of the tenant it acted on,
+    whoever made it; calls that only issue a presigned URL are skipped
 
 The admin and iam chains differ in credentials and audience, and each ends in
 an audit interceptor (`middleware.AuditWithMirror`) that writes the row for a

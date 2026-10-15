@@ -36,6 +36,10 @@ closed with a pointer here.
   `backend/internal/config/weak_secrets.go`. A report that a default
   credential is publicly readable is not a finding; a report that the gate
   can be evaded is.
+- **A presigned URL leaves no audit row.** `DownloadObject`,
+  `PresignDownload` and `PresignPart` are access, not change: the audit log
+  records every data-plane write, and these three only hand back a URL. Each
+  is still counted in the presign metrics.
 - Missing security headers, cookie flags or TLS settings on a stack
   brought up by `task stack:up`. The compose stack is a development
   convenience and is not hardened; report these against the Helm charts,
