@@ -94,12 +94,14 @@ type EventSourceConfig struct {
 // ─── Bucket ─────────────────────────────────────────────────────────────────
 
 type Bucket struct {
-	BackendID      string
-	BucketName     string
-	DisplayName    string
-	Region         string
-	Labels         map[string]string
-	OwnerTenantID  uuid.UUID // uuid.Nil = shared
+	BackendID   string
+	BucketName  string
+	DisplayName string
+	Region      string
+	Labels      map[string]string
+	// OwnerTenantID is the tenant that owns the bucket; every bucket has one
+	// (ADR-0032). Other tenants bind to it through a grant.
+	OwnerTenantID  uuid.UUID
 	CedarPolicy    string
 	Constraints    BucketConstraints
 	LifecycleRules []LifecycleRule

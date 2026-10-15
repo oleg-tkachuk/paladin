@@ -34,6 +34,8 @@ type Querier interface {
 	// declaratively now: objects carry a composite FK to (tenant_id, id), so a
 	// name cannot be moved under a bucket that would orphan them.
 	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, expectedVersion int64) (int64, error)
+	// Whether the tenant holds a grant on the bucket and has a collection in it.
+	BucketGrantInUse(ctx context.Context, backendName string, bucketName string, tenantID pgtype.UUID) (bool, error)
 	// Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
 	//
 	// Shared across replicas: an in-memory bucket gave each pod its own ceiling,
@@ -279,6 +281,13 @@ type Querier interface {
 	// User-settings queries. Lazy 1:1 with users — a missing row at read time
 	// means "user has never customized; serve defaults".
 	GetUserSettings(ctx context.Context, userID pgtype.UUID) (GetUserSettingsRow, error)
+	// Bucket grants (ADR-0032): the tenants other than its owner that may bind a
+	// collection to a bucket. Platform configuration, outside row-level security,
+	// like buckets themselves; the handler gates writes on the owner's
+	// ManageBucket.
+	// Idempotent: granting a tenant that already holds a grant returns the grant
+	// it holds, with its first granter and time.
+	GrantBucket(ctx context.Context, tenantID pgtype.UUID, grantedBy string, backendName string, bucketName string) (GrantBucketRow, error)
 	// Removes the row outright. Caller is responsible for first deleting the
 	// object from the storage backend (S3 DeleteObject). Allowed from any
 	// state. expected_version=0 skips the OCC guard.
@@ -337,7 +346,8 @@ type Querier interface {
 	// ListObjects filter sees.
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	LatestStorageMigration(ctx context.Context, tenantID pgtype.UUID) (LatestStorageMigrationRow, error)
-	// Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
+	// The buckets a tenant may bind a collection to: the ones it owns and the
+	// ones it holds a grant on (ADR-0032).
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 	// still active — the worker must run retention-gated cleanup on it — and so
@@ -354,11 +364,11 @@ type Querier interface {
 	// pushdown only narrows the candidate set; correctness lives in the
 	// handler, not in this WHERE clause.
 	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error)
+	// A bucket's grants, oldest first.
+	ListBucketGrants(ctx context.Context, backendName string, bucketName string) ([]ListBucketGrantsRow, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)
-	// owner_tenant_id is an optional filter (nullable arg → skipped).
-	// Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
-	// (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
-	// below is plain equality so the planner uses the partial index.
+	// owner_tenant_id is an optional filter (nullable arg → skipped). The index on
+	// buckets(owner_tenant_id) (001_initial_schema.sql) makes it cheap.
 	ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, usedByTenantID pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error)
 	// Returns only buckets with a non-empty lifecycle_rules array. The worker
 	// ticks against this set; sweeping all buckets on every tick would be
@@ -737,6 +747,11 @@ type Querier interface {
 	// still 'failed' — the compare-and-set that, behind the tenant lock, lets
 	// exactly one of two concurrent retries through.
 	RetryFailedStorageMigration(ctx context.Context, cleanupRetentionSeconds int64, iD pgtype.UUID, sourceBackendName string, sourceBucketName string, targetBackendName string, targetBucketName string) (TenantStorageMigration, error)
+	// Removes a grant unless the tenant still has a collection in the bucket: the
+	// grant is what lets those collections stay, and the binding trigger checks it
+	// only when a collection is written. Zero rows: no such grant, or collections
+	// remain — BucketGrantInUse tells the two apart.
+	RevokeBucketGrant(ctx context.Context, backendName string, bucketName string, tenantID pgtype.UUID) (int64, error)
 	// Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is
 	// never mistaken for one that was merely rotated.
 	RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error
@@ -871,7 +886,7 @@ type Querier interface {
 	StartStorageMigrationRollback(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// What a start must know before it uses the target bucket: its owner, whether
 	// it is public, its provisioning state, and whether any OTHER tenant reaches
-	// it through a collection or a default binding. Run with the cross-tenant
+	// it through a collection, a default binding or a grant. Run with the cross-tenant
 	// read on, or RLS would hide exactly the rows being looked for.
 	StorageMigrationTargetBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (StorageMigrationTargetBucketRow, error)
 	// Rotation: the holder traded this token for a successor. Distinct from
@@ -897,6 +912,10 @@ type Querier interface {
 	// Public collections are left out: they bind to a public bucket of their own
 	// and the migration leaves them there (ADR-0027).
 	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error)
+	// Whether a tenant may bind a collection to the bucket: it owns it or holds a
+	// grant. The binding trigger enforces the same rule; this asks it first, so a
+	// refusal is a clear answer rather than a failed write.
+	TenantMayBindBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (bool, error)
 	// Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
 	// particular it must not touch progress, which an executor may be writing
 	// concurrently.
