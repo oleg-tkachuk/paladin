@@ -39,6 +39,22 @@ const bucketResourceName = (backendId: string, bucketId: string) =>
  * What makes a bucket public (ADR-0027): anyone reads its objects by URL.
  * Only on a backend whose probe found anonymous reads enforced.
  */
+/**
+ * Narrows a bucket listing to one tenant, on the server. Both fields are
+ * tenant UUIDs and combine by AND; leave both unset for the cross-tenant
+ * listing.
+ */
+export interface BucketTenantScope {
+  /** Buckets the tenant owns — a dedicated-layout tenant's own bucket. */
+  ownerTenantId?: string;
+  /**
+   * Buckets the tenant stores in: owned, bound by default, or holding one of
+   * its collections. A shared-layout tenant owns none, so this is what its
+   * own bucket list asks.
+   */
+  usedByTenantId?: string;
+}
+
 export interface PublicReadSettings {
   /** The content types the bucket serves; none a browser would execute. */
   allowedContentTypes: string[];
@@ -65,7 +81,7 @@ export function useBuckets() {
       backendId?: string,
       filter: string = "",
       pageToken: string = "",
-      ownerTenantId?: string,
+      tenantScope: BucketTenantScope = {},
     ) => {
       const mine = ++seq.current;
       setLoading(true);
@@ -102,15 +118,14 @@ export function useBuckets() {
         let pages = 0;
         const acc: Bucket[] = [];
         do {
-          // ownerTenantId pushes the tenant-narrow filter to the
-          // server (uses the partial index on buckets.owner_tenant_id).
-          // Empty/undefined preserves the cross-tenant listing for
-          // platform-admin views.
+          // The tenant scope narrows on the server; empty preserves the
+          // cross-tenant listing for platform-admin views.
           const res = await bucketClient.listBuckets({
             parent: backendId ? backendParent(backendId) : "",
             page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
             filter,
-            ownerTenantId: ownerTenantId ?? "",
+            ownerTenantId: tenantScope.ownerTenantId ?? "",
+            usedByTenantId: tenantScope.usedByTenantId ?? "",
           });
           acc.push(...res.buckets);
           token = res.page?.nextPageToken ?? "";

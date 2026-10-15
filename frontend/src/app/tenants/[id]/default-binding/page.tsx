@@ -88,7 +88,7 @@ export default function DefaultBindingPage() {
 
   // Tenant-owned buckets only. One place, so Retry asks for the same list.
   const loadBuckets = useCallback(
-    () => fetchBuckets(undefined, "", "", tenantId),
+    () => fetchBuckets(undefined, "", "", { ownerTenantId: tenantId }),
     [fetchBuckets, tenantId],
   );
   useEffect(() => {
