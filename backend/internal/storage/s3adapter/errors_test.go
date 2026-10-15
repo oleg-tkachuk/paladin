@@ -22,7 +22,7 @@ import (
 
 // TestHeadWrapsNotFound drives a real aws-sdk-go-v2 client against a backend
 // answering 404 to HEAD, which is the exact wire exchange the reconciler saw
-// 174 times in four minutes while MarkFailed stayed unreachable.
+// 174 times in four minutes while DiscardFailed stayed unreachable.
 //
 // The fake 404s the OBJECT HEAD only and lets the bucket HEAD succeed, which
 // is what "this key is gone" actually looks like on the wire. That matters

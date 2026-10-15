@@ -76,7 +76,7 @@ function rlsStats(overrides: Record<string, unknown> = {}) {
     $typeName: "paladin.admin.v1.RLSStats",
     available: true,
     objects: {
-      states: [state("AVAILABLE", 12n, 3000n), state("FAILED", 1n, 0n)],
+      states: [state("AVAILABLE", 12n, 3000n), state("PENDING", 1n, 0n)],
       totalCount: 13n,
       totalBytes: 3000n,
       tenants: [

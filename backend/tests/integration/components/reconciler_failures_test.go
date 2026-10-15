@@ -88,16 +88,16 @@ func requireLogged(t *testing.T, logs *observer.ObservedLogs, msg string) {
 
 const registeredSize = 10
 
-// The bytes are absent and the MarkFailed that should follow fails; so does
-// the overdue sample taken after the batch.
-func TestReconcilerLogsAFailedMarkFailedAndSample(t *testing.T) {
+// The bytes are absent and the discard that should follow fails; so does the
+// overdue sample taken after the batch.
+func TestReconcilerLogsAFailedDiscardAndSample(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	seedOverdue(t, ctx, pool, registeredSize)
 
 	logs := reconcileLogged(t, pool, closingProbe{pool: pool})
-	requireLogged(t, logs, "failed to mark object as failed")
+	requireLogged(t, logs, "failed to discard object")
 	requireLogged(t, logs, "failed to sample overdue pending objects")
 }
 
@@ -112,17 +112,17 @@ func TestReconcilerLogsAFailedPromotion(t *testing.T) {
 	requireLogged(t, logs, "failed to promote object")
 }
 
-// The bytes break the registration and are deleted, then failing the row
+// The bytes break the registration and are deleted, then discarding the row
 // fails: the reconciler must say so, and must not claim the object discarded.
-func TestReconcilerLogsAFailedDiscard(t *testing.T) {
+func TestReconcilerLogsAFailedMismatchDiscard(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	pool := startPostgres(t)
 	seedOverdue(t, ctx, pool, registeredSize)
 
 	logs := reconcileLogged(t, pool, closingProbe{pool: pool, found: true, size: registeredSize + 1, closeOnDelete: true})
-	requireLogged(t, logs, "failed to mark mismatched object as failed")
+	requireLogged(t, logs, "failed to discard mismatched object")
 	if n := logs.FilterMessage("discarded object whose stored bytes broke its registration").Len(); n != 0 {
-		t.Errorf("claimed %d discards of an object it failed to mark", n)
+		t.Errorf("claimed %d discards of an object it failed to discard", n)
 	}
 }

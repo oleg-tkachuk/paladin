@@ -139,21 +139,25 @@ func TestAChangeAdvancesTheVersion(t *testing.T) {
 	srv := paladintest.New(t)
 	p := srv.Connect()
 	ctx := context.Background()
-	registered, err := p.Data.Object.UploadObject(ctx, &datav1.UploadObjectRequest{
-		Parent: srv.Collection().String(), Key: "k", ContentType: testContentType, SizeHintBytes: 1,
-		ChecksumAlgorithm: commonv1.ChecksumAlgorithm_CHECKSUM_ALGORITHM_SHA256, ChecksumValue: oneByteSHA256,
+	obj := srv.Put(srv.Collection(), "k", testContentType, []byte("x"))
+	before := obj.GetResourceVersion()
+	// Into the trash: a change.
+	if _, err := p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
+		Name: obj.GetName(), ResourceVersion: before,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The version from before it no longer deletes the object for good.
+	_, err := p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
+		Name: obj.GetName(), ResourceVersion: before, Permanent: true,
 	})
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, paladin.ErrVersionConflict) {
+		t.Fatalf("a permanent delete at the version before the change: %v, want aborted", err)
 	}
-	name := registered.GetObject().GetName()
-	srv.MarkFailed(name)
-	got, err := p.Data.Object.GetObject(ctx, &datav1.GetObjectRequest{Name: name})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := nextVersion(t, registered.GetObject().GetResourceVersion()); got.GetResourceVersion() != want {
-		t.Errorf("version after a change = %q, want %q", got.GetResourceVersion(), want)
+	if _, err := p.Data.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
+		Name: obj.GetName(), ResourceVersion: nextVersion(t, before), Permanent: true,
+	}); err != nil {
+		t.Errorf("a permanent delete at the version after the change: %v", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package statemachine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -412,33 +413,58 @@ func TestSoftDeleteAndRestoreRunOnThePool(t *testing.T) {
 	}
 }
 
-func TestMarkFailed(t *testing.T) {
-	pool := &fakePool{fakeExec: fakeExec{tag: tag("UPDATE 1")}}
+// discardedRow answers DiscardFailed's DELETE … RETURNING tenant_id, path.
+type discardedRow struct {
+	tenant uuid.UUID
+	path   string
+	err    error
+}
+
+func (r discardedRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	*dest[0].(*uuid.UUID) = r.tenant
+	*dest[1].(*string) = r.path
+	return nil
+}
+
+// A failed object is deleted, not kept: the statement removes the PENDING row
+// by its id, and nothing is updated.
+func TestDiscardFailedDeletesThePendingRow(t *testing.T) {
+	pool := &fakePool{fakeExec: fakeExec{row: discardedRow{tenant: uuid.New(), path: "a.txt"}}}
 	sm := &Transitioner{pool: pool}
 
-	if err := sm.MarkFailed(smCtx, objID, "presign expired"); err != nil {
-		t.Fatalf("MarkFailed: %v", err)
+	if err := sm.DiscardFailed(smCtx, objID, FailedPresignExpired); err != nil {
+		t.Fatalf("DiscardFailed: %v", err)
 	}
-	if len(pool.execArgs) != 1 || pool.execArgs[0] != objID {
-		t.Errorf("MarkFailed must key on the object id, got %v", pool.execArgs)
+	if !strings.Contains(pool.querySQL, "DELETE FROM objects") ||
+		!strings.Contains(pool.querySQL, "state = 'PENDING'") {
+		t.Errorf("want a DELETE of the PENDING row, got %q", pool.querySQL)
 	}
-}
-
-// MarkFailed is idempotent by SQL guard, so zero rows is a success, not an
-// error — the reaper re-runs over the same ids on every tick.
-func TestMarkFailedIsIdempotent(t *testing.T) {
-	sm := &Transitioner{pool: &fakePool{fakeExec: fakeExec{tag: tag("UPDATE 0")}}}
-
-	if err := sm.MarkFailed(smCtx, objID, "already failed"); err != nil {
-		t.Fatalf("a zero-row MarkFailed must not error, got %v", err)
+	if len(pool.queryArgs) != 1 || pool.queryArgs[0] != objID {
+		t.Errorf("DiscardFailed must key on the object id, got %v", pool.queryArgs)
+	}
+	if pool.execCalls != 0 {
+		t.Errorf("nothing is updated; got %d Exec calls", pool.execCalls)
 	}
 }
 
-func TestMarkFailedWrapsErrors(t *testing.T) {
+// Idempotent: a row already gone, or no longer PENDING, is not an error —
+// the reconciler re-runs over the same ids on every tick.
+func TestDiscardFailedIsIdempotent(t *testing.T) {
+	sm := &Transitioner{pool: &fakePool{fakeExec: fakeExec{row: discardedRow{err: pgx.ErrNoRows}}}}
+
+	if err := sm.DiscardFailed(smCtx, objID, FailedPresignExpired); err != nil {
+		t.Fatalf("a row that is gone must not error, got %v", err)
+	}
+}
+
+func TestDiscardFailedWrapsErrors(t *testing.T) {
 	boom := errors.New("connection reset")
-	sm := &Transitioner{pool: &fakePool{fakeExec: fakeExec{execErr: boom}}}
+	sm := &Transitioner{pool: &fakePool{fakeExec: fakeExec{row: discardedRow{err: boom}}}}
 
-	if err := sm.MarkFailed(smCtx, objID, "x"); !errors.Is(err, boom) {
+	if err := sm.DiscardFailed(smCtx, objID, FailedPresignExpired); !errors.Is(err, boom) {
 		t.Fatalf("cause must be wrapped, got %v", err)
 	}
 }

@@ -438,7 +438,7 @@ func TestBucketReconciler_LogsTerminalAndTransientDifferently(t *testing.T) {
 // the backend error: the row was not updated, so the terminal/transient
 // verdict was never recorded and announcing it would describe a state that
 // does not exist.
-func TestBucketReconciler_MarkFailedWriteFailureStopsThere(t *testing.T) {
+func TestBucketReconciler_DiscardFailedWriteFailureStopsThere(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
 		del            bool

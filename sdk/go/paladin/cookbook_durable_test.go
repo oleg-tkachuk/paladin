@@ -85,19 +85,25 @@ func TestDurableUploadCompletesAnObjectWhoseBytesLanded(t *testing.T) {
 	stored(t, srv, obj, body)
 }
 
+// A pending attempt that stored nothing is deleted and the key registered
+// again, on the second attempt. A failed one is already gone, so the first
+// attempt registers the key.
 func TestDurableUploadReplacesAnAttemptThatStoredNothing(t *testing.T) {
-	for name, fail := range map[string]bool{"pending": false, "failed": true} {
+	for name, tc := range map[string]struct {
+		fail     bool
+		attempts int
+	}{"pending": {false, 2}, "failed": {true, 1}} {
 		t.Run(name, func(t *testing.T) {
 			srv := paladintest.New(t)
 			p := srv.Connect()
 			body := []byte("quarterly report")
 			stale := registered(t, srv, p, body, false)
-			if fail {
-				srv.MarkFailed(stale.GetName())
+			if tc.fail {
+				srv.FailUpload(stale.GetName())
 			}
 			obj, attempts, err := durably(t, srv, p, body)
-			if err != nil || obj.GetName() == stale.GetName() || attempts != 2 {
-				t.Fatalf("got %s after %d attempts, %v; want a new object on the second", obj.GetName(), attempts, err)
+			if err != nil || obj.GetName() == stale.GetName() || attempts != tc.attempts {
+				t.Fatalf("got %s after %d attempts, %v; want a new object after %d", obj.GetName(), attempts, err, tc.attempts)
 			}
 			stored(t, srv, obj, body)
 		})

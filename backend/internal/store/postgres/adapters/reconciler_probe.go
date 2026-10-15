@@ -83,13 +83,12 @@ func (r *ReconcilerProbe) DeleteByObjectID(ctx context.Context, objectID uuid.UU
 // refusing us.
 //
 // The distinction is terminal: a true here sends ReconcilerV2 down the
-// MarkFailed branch, and FAILED objects stop being served and become
-// eligible for reclamation. So the classification deliberately lives in
+// DiscardFailed branch, which deletes the row. So the classification deliberately lives in
 // s3adapter, next to the SDK error shapes it has to reason about, and this
 // stays a single errors.Is — no AWS types in the persistence layer, and no
 // second place where "is this a 404?" can be got subtly wrong.
 //
-// This used to be a `return false` stub, which made MarkFailed unreachable:
+// This used to be a `return false` stub, which made DiscardFailed unreachable:
 // every object whose bytes were genuinely absent logged a HEAD warning and
 // was retried on the next tick, forever.
 func isNotFoundErr(err error) bool {

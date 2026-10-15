@@ -44,6 +44,24 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a failed object is deleted; FAILED leaves the contract
+
+- **Breaking, API.** `ObjectState.OBJECT_STATE_FAILED` (3) is removed and
+  reserved. An object that cannot become available — its upload URL expired
+  with nothing at its path, its bytes broke its registration, its copy failed,
+  its multipart upload was aborted — is deleted, so a later `GetObject` is
+  `NOT_FOUND`, and its key is free for a retry: an upload at that key used to
+  be refused with `ALREADY_EXISTS` until someone deleted the failed object. A
+  filter naming `state == "FAILED"` is refused as an unknown value.
+- **Behaviour.** The reason is logged (`object failed and was discarded`) and
+  counted in `paladin_object_failures_total{reason}`.
+- **Migration 079** deletes the objects kept as FAILED and drops the label from
+  `object_state`, which rewrites `objects` under an exclusive lock. Replicas of
+  the previous release still running during the rollout can fail queries on
+  `objects` with `cache lookup failed for type` until they are replaced.
+- **SDKs.** The fake servers' `MarkFailed` / `mark_failed` are `FailUpload` /
+  `fail_upload`, and delete the pending object.
+
 ## Unreleased — every data-plane write is audited
 
 - **Behaviour, audit.** The data plane records every write in the trail of

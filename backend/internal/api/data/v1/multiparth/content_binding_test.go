@@ -21,14 +21,14 @@ import (
 type fakeSM struct {
 	promoteErr   error
 	failedID     uuid.UUID
-	failedReason string
+	failedReason statemachine.FailureReason
 }
 
 func (f *fakeSM) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
 	return f.promoteErr == nil, f.promoteErr
 }
 
-func (f *fakeSM) MarkFailed(_ context.Context, id uuid.UUID, reason string) error {
+func (f *fakeSM) DiscardFailed(_ context.Context, id uuid.UUID, reason statemachine.FailureReason) error {
 	f.failedID, f.failedReason = id, reason
 	return nil
 }
@@ -257,5 +257,37 @@ func TestCompleteStopsWhenTheCompositeIsNotRecorded(t *testing.T) {
 	wantCode(t, err, connect.CodeInternal)
 	if storage.lastComplete.storageUploadID != "" {
 		t.Error("the store assembled an object whose checksum was not recorded")
+	}
+}
+
+// orderedSM records when the object is discarded relative to the session.
+type orderedSM struct {
+	fakeSM
+	repo           *fakeRepo
+	sessionGoneYet bool
+}
+
+func (o *orderedSM) DiscardFailed(ctx context.Context, id uuid.UUID, reason statemachine.FailureReason) error {
+	o.sessionGoneYet = o.repo.deleteCalled
+	return o.fakeSM.DiscardFailed(ctx, id, reason)
+}
+
+// An abort deletes the session before it discards the object: the object's
+// delete cascades to the session, and a cascade records a debt to abort the
+// upload a second time.
+func TestAbortDeletesTheSessionBeforeDiscardingTheObject(t *testing.T) {
+	tid := uuid.New()
+	repo := sessionRepo(tid)
+	sm := &orderedSM{repo: repo}
+	h := NewHandler(repo, &fakeStorage{}, allow(), sm, testTTLPolicy(), testUploadLimits)
+
+	if err := h.AbortMultipartUpload(authedCtx(tid), "up-1", SessionRef{}); err != nil {
+		t.Fatalf("abort: %v", err)
+	}
+	if sm.failedReason != statemachine.FailedMultipartAborted {
+		t.Fatalf("discarded with %q, want %q", sm.failedReason, statemachine.FailedMultipartAborted)
+	}
+	if !sm.sessionGoneYet {
+		t.Fatal("the object was discarded while its session still existed")
 	}
 }

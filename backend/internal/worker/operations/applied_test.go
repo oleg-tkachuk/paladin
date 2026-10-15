@@ -219,7 +219,6 @@ func TestBatchCopyOccupiedDestination(t *testing.T) {
 		{name: "different size", dst: copyOf(func(d *objecth.Object) { d.SizeBytes = 11 }), wantReason: "different object"},
 		{name: "different checksum", dst: copyOf(func(d *objecth.Object) { d.Checksum = "sum-b" }), wantReason: "different object"},
 		{name: "a write in progress", dst: copyOf(func(d *objecth.Object) { d.State = statemachine.StatePending }), wantReason: "write in progress"},
-		{name: "a failed write", dst: copyOf(func(d *objecth.Object) { d.State = statemachine.StateFailed }), wantReason: "FAILED"},
 		{name: "a trashed object", dstErr: pgx.ErrNoRows, wantReason: "in the trash"},
 		{name: "a failed lookup", dstErr: errDB, wantReason: errDB.Error()},
 	} {

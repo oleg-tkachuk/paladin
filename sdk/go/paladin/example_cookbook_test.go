@@ -337,7 +337,8 @@ func uploadDurably(ctx context.Context, data *paladin.DataPlane, in paladin.Uplo
 // settle deals with the object at in's key: returned when it is this
 // content, complete or completed now; permanently deleted, so the next
 // attempt can register the key again, when it is an attempt that never got
-// its bytes or failed; errKeyTaken when it is another object.
+// its bytes; errKeyTaken when it is another object. A failed attempt needs
+// nothing: the server deletes it, and its key is free.
 func settle(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput, sum string) (*datav1.Object, error) {
 	collection, err := paladin.ParseCollectionName(in.Parent)
 	if err != nil {
@@ -369,7 +370,6 @@ func settle(ctx context.Context, data *paladin.DataPlane, in paladin.UploadInput
 		if !errors.Is(err, paladin.ErrFailedPrecondition) {
 			return nil, err
 		}
-	case datav1.ObjectState_OBJECT_STATE_FAILED:
 	default:
 		return nil, fmt.Errorf("%w: %s is %s", errKeyTaken, existing.GetName(), existing.GetState())
 	}

@@ -19,7 +19,7 @@ from paladin import (
     download,
     unpack_detail,
 )
-from paladin.common.v1 import error_reason_pb2, pagination_pb2, resource_pb2
+from paladin.common.v1 import error_reason_pb2, pagination_pb2
 from paladin.data.v1 import object_service_pb2
 from paladin.testing import PART_SIZE, TESTING_EXTRA_HINT, FakePaladin, StorageOp
 
@@ -145,21 +145,24 @@ def test_delete_object_at_the_current_version(fake: FakePaladin, permanent: bool
 
 def test_a_change_advances_the_version(fake: FakePaladin) -> None:
     data = fake.connect().data
-    registered = data.object.upload_object(  # type: ignore[union-attr]
-        object_service_pb2.UploadObjectRequest(
-            parent=str(fake.collection()),
-            key="k",
-            content_type=CONTENT_TYPE,
-            size_hint_bytes=len(BODY),
-            checksum_algorithm=resource_pb2.CHECKSUM_ALGORITHM_SHA256,
-            checksum_value=paladin.checksum(paladin.CHECKSUM_SHA256, BODY),
-        )
-    ).object
-    fake.mark_failed(registered.name)
-    got = data.object.get_object(  # type: ignore[union-attr]
-        object_service_pb2.GetObjectRequest(name=registered.name)
+    obj = fake.put(fake.collection(), "k", CONTENT_TYPE, BODY)
+    before = obj.resource_version
+    # Into the trash: a change.
+    data.object.delete_object(  # type: ignore[union-attr]
+        object_service_pb2.DeleteObjectRequest(name=obj.name, resource_version=before)
     )
-    assert got.resource_version == _next_version(registered.resource_version)
+    # The version from before it no longer deletes the object for good.
+    with pytest.raises(paladin.VersionConflictError):
+        data.object.delete_object(  # type: ignore[union-attr]
+            object_service_pb2.DeleteObjectRequest(
+                name=obj.name, resource_version=before, permanent=True
+            )
+        )
+    data.object.delete_object(  # type: ignore[union-attr]
+        object_service_pb2.DeleteObjectRequest(
+            name=obj.name, resource_version=_next_version(before), permanent=True
+        )
+    )
 
 
 def test_the_fake_without_the_extra_says_what_to_install(monkeypatch: pytest.MonkeyPatch) -> None:

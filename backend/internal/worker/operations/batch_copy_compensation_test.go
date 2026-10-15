@@ -110,7 +110,7 @@ type copyFakeTransitioner struct {
 	promoteHit    bool
 }
 
-func (f *copyFakeTransitioner) MarkFailed(context.Context, uuid.UUID, string) error {
+func (f *copyFakeTransitioner) DiscardFailed(context.Context, uuid.UUID, statemachine.FailureReason) error {
 	f.markFailedHit = true
 	return f.markFailedErr
 }
@@ -136,8 +136,8 @@ func availableSrc() objecth.Object {
 	return objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "k"}
 }
 
-// Storage copy fails → compensate by MarkFailed; the returned error names
-// the storage failure and MarkFailed is invoked, promote is NOT.
+// Storage copy fails → compensate by DiscardFailed; the returned error names
+// the storage failure and DiscardFailed is invoked, promote is NOT.
 func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 	tr := &copyFakeTransitioner{}
 	e := &BatchCopyExecutor{
@@ -150,14 +150,14 @@ func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 		t.Fatalf("want storage copy error, got %v", err)
 	}
 	if !tr.markFailedHit {
-		t.Error("compensation MarkFailed was not called")
+		t.Error("compensation DiscardFailed was not called")
 	}
 	if tr.promoteHit {
 		t.Error("promote should not run after a failed copy")
 	}
 }
 
-// Storage copy fails AND the compensating MarkFailed also fails → the
+// Storage copy fails AND the compensating DiscardFailed also fails → the
 // error must surface BOTH so the operator sees the orphaned PENDING row.
 func TestCopyOneDoubleFailureSurfacesBoth(t *testing.T) {
 	tr := &copyFakeTransitioner{markFailedErr: errors.New("mark failed too")}

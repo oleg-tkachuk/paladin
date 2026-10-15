@@ -126,7 +126,7 @@ func TestCollectRLSObjects(t *testing.T) {
 	insert(big.tenantID, big.collection, "AVAILABLE", 200)
 	insert(big.tenantID, big.collection, "PENDING", nil) // size_bytes NULL until commit
 	insert(big.tenantID, big.collection, "DELETED", 50)
-	insert(small.tenantID, small.collection, "FAILED", 7)
+	insert(small.tenantID, small.collection, "AVAILABLE", 7)
 
 	census, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
@@ -147,7 +147,7 @@ func TestCollectRLSObjects(t *testing.T) {
 		t.Errorf("small tenant = %d objects / %d bytes, want 1/7", s.TotalCount, s.TotalBytes)
 	}
 
-	// Per-state, in lifecycle order (PENDING, AVAILABLE, FAILED, DELETED)
+	// Per-state, in lifecycle order (PENDING, AVAILABLE, DELETED)
 	// with the absent states omitted.
 	wantStates := []platformstats.StateStat{
 		{State: "PENDING", Count: 1, Bytes: 0},

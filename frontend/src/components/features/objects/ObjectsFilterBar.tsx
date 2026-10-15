@@ -73,7 +73,6 @@ const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
   { value: "PENDING", label: "Pending" },
   { value: "AVAILABLE", label: "Available" },
-  { value: "FAILED", label: "Failed" },
   { value: "DELETED", label: "Deleted" },
 ];
 

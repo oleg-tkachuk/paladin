@@ -295,8 +295,6 @@ func objectStateProto(s statemachine.State) pb.ObjectState {
 		return pb.ObjectState_OBJECT_STATE_PENDING
 	case statemachine.StateAvailable:
 		return pb.ObjectState_OBJECT_STATE_AVAILABLE
-	case statemachine.StateFailed:
-		return pb.ObjectState_OBJECT_STATE_FAILED
 	case statemachine.StateDeleted:
 		return pb.ObjectState_OBJECT_STATE_DELETED
 	}

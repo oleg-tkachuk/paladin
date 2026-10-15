@@ -30,12 +30,11 @@ func TestReconcileQuotaUsage_DrivesCountersToLiveTruth(t *testing.T) {
 	f := seedFixture(t, ctx, pool)
 
 	// Two AVAILABLE objects (300 bytes) plus rows in every other state,
-	// none of which count as stored: PENDING has no committed size, FAILED
-	// never landed, DELETED is soft-deleted and unreadable.
+	// none of which count as stored: PENDING has no committed size, DELETED
+	// is soft-deleted and unreadable.
 	insertObj(t, ctx, pool, f, "AVAILABLE", 100)
 	insertObj(t, ctx, pool, f, "AVAILABLE", 200)
 	insertObj(t, ctx, pool, f, "PENDING", nil)
-	insertObj(t, ctx, pool, f, "FAILED", 999)
 	insertObj(t, ctx, pool, f, "DELETED", 5000)
 
 	// A counter drifted upward — the exact shape the missing decrement

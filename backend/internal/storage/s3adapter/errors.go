@@ -14,7 +14,7 @@ import (
 //
 // Why its own file rather than a var next to Head() in s3.go: ErrObjectNotFound
 // is consumed across package boundaries — store/postgres/adapters classifies on
-// it, and the reconciler's terminal MarkFailed decision hangs off that
+// it, and the reconciler's terminal DiscardFailed decision hangs off that
 // classification. That makes it public API, and public API buried two hundred
 // lines into a 30 KB all-in-one file is API nobody finds. The classification
 // logic below is also the security-critical half of this change, so it gets to
@@ -30,8 +30,8 @@ import (
 // answered, and the answer was "absent".
 //
 // It does NOT mean "the HEAD failed". Callers use this to make terminal
-// decisions (ReconcilerV2 flips PENDING → FAILED on it, and FAILED objects
-// stop being served and become eligible for reclamation), so anything that
+// decisions (ReconcilerV2 discards a PENDING object on it — the row is
+// deleted), so anything that
 // might instead be a reachability, credential, or availability problem must
 // stay a plain error and be retried. See notFound for the classification, and
 // Client.Head for the bucket-reachability check that qualifies its one
@@ -109,7 +109,7 @@ func httpStatus(err error) int {
 // gone", never "this key is absent". They are checked first and always lose:
 // a missing bucket looks superficially like a missing object (both 404) but
 // implies every object under it is unreachable. Classifying one as
-// not-found would mark an entire tenant's pending uploads FAILED on a
+// not-found would discard an entire tenant's pending uploads on a
 // misconfigured binding.
 var bucketLevelCodes = map[string]struct{}{
 	codeNoSuchBucket:    {},

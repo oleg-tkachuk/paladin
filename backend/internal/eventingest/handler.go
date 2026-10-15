@@ -259,7 +259,7 @@ func (h *PromoteHandler) settleDeleted(ctx context.Context, logger *zap.Logger, 
 		return nil
 	}
 	if obj.State != sqlc.ObjectStateAVAILABLE {
-		// A PENDING or FAILED row's bytes are Paladin's own to discard (the
+		// A PENDING row's bytes are Paladin's own to discard (the
 		// reconciler, a refused multipart), and its delete is no news.
 		logger.Debug("delete event for an object that is not available; skipping", zap.String("state", string(obj.State)))
 		return nil

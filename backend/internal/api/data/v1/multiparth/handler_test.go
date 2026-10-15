@@ -579,7 +579,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 
 // --- AbortMultipartUpload --------------------------------------------------
 //
-// Success tail (sm.MarkFailed) is DB-coupled; these cover the branches before.
+// Success tail (sm.DiscardFailed) is DB-coupled; these cover the branches before.
 
 func TestAbortMultipartUpload(t *testing.T) {
 	tid := uuid.New()

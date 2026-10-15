@@ -3,7 +3,7 @@
 // The simplified automaton:
 //
 //	PENDING ─(event|rpc|reconciler)→ AVAILABLE
-//	PENDING ─(presign expired + no upload)→ FAILED
+//	PENDING ─(presign expired + no upload, bad bytes, failed copy, abort)→ ∅ (row removed, reason logged)
 //	AVAILABLE ─(DeleteObject soft)→ DELETED
 //	AVAILABLE ─(storage delete event, bytes gone)→ DELETED
 //	AVAILABLE ─(DeleteObject permanent)→ ∅ (row removed)
@@ -24,6 +24,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // State mirrors the object_state enum in SQL.
@@ -32,7 +35,6 @@ type State string
 const (
 	StatePending   State = "PENDING"
 	StateAvailable State = "AVAILABLE"
-	StateFailed    State = "FAILED"
 	StateDeleted   State = "DELETED"
 )
 
@@ -45,7 +47,8 @@ const (
 	SourceReconciler Source = "reconciler"
 )
 
-// Transitioner owns PENDING → AVAILABLE, PENDING → FAILED, and DELETED.
+// Transitioner owns PENDING → AVAILABLE, the discarding of a PENDING object
+// that failed, and DELETED.
 //
 // All methods are safe under concurrent producers (event consumer, RPC
 // handler, reconciler poll) — the SQL uses WHERE state/sequencer guards so
@@ -120,9 +123,22 @@ func (e *ContentMismatchError) Error() string {
 
 func (e *ContentMismatchError) Is(target error) bool { return target == ErrContentMismatch }
 
-// FailedContentMismatch is the reason an object is failed with once the
-// bytes that broke its registration have been deleted.
-const FailedContentMismatch = "content mismatch"
+// FailureReason says why an object never became AVAILABLE. It is what the log
+// line and the failure metric carry once the row is gone (DiscardFailed).
+type FailureReason string
+
+const (
+	// FailedPresignExpired: the upload URL expired and the reconciler found
+	// no bytes at the object's path.
+	FailedPresignExpired FailureReason = "presign_expired"
+	// FailedContentMismatch: the bytes that arrived broke the object's
+	// registration (size or checksum), and were deleted.
+	FailedContentMismatch FailureReason = "content_mismatch"
+	// FailedStorageCopy: a copy into the object's path failed in storage.
+	FailedStorageCopy FailureReason = "storage_copy_failed"
+	// FailedMultipartAborted: the multipart upload was aborted.
+	FailedMultipartAborted FailureReason = "multipart_aborted"
+)
 
 // PromoteToAvailableInTx promotes AND runs onPromoted inside ONE
 // transaction, so the caller (an event-producing handler) can write its
@@ -265,20 +281,40 @@ func verifyRegistration(ctx context.Context, exec dbExec, objectID uuid.UUID, si
 	return nil
 }
 
-// MarkFailed transitions PENDING → FAILED after the presign TTL has
-// elapsed with no confirming event/RPC. Idempotent.
-func (t *Transitioner) MarkFailed(ctx context.Context, objectID uuid.UUID, reason string) error {
+// DiscardFailed deletes a PENDING object that will never become AVAILABLE, and
+// records why in the log and in paladin_object_failures_total. Idempotent: a
+// row that is gone, or no longer PENDING, is left alone.
+//
+// The row is deleted rather than kept as FAILED. A failed row told nobody
+// anything — every path that fails an object answers its caller with the error
+// already — and it held its key: (collection_id, path) is unique across every
+// state, so a retry at the same key was refused until someone deleted it.
+//
+// No bytes are left behind to purge: a size or checksum mismatch deletes them
+// before calling this, a failed storage copy writes nothing, an aborted
+// multipart upload removes its parts, and the reconciler fails a row only when
+// HEAD found nothing at its path.
+func (t *Transitioner) DiscardFailed(ctx context.Context, objectID uuid.UUID, reason FailureReason) error {
 	const q = `
-        UPDATE objects
-           SET state = 'FAILED',
-               terminated_at = now()
+        DELETE FROM objects
          WHERE id = $1 AND state = 'PENDING'
+     RETURNING tenant_id, path
     `
-	_, err := t.pool.Exec(ctx, q, objectID)
-	if err != nil {
-		return fmt.Errorf("sm: mark failed: %w", err)
+	var tenantID uuid.UUID
+	var path string
+	err := t.pool.QueryRow(ctx, q, objectID).Scan(&tenantID, &path)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
 	}
-	recordTransition(ctx, string(SourceReconciler), "FAILED")
+	if err != nil {
+		return fmt.Errorf("sm: discard failed object: %w", err)
+	}
+	recordFailure(ctx, reason)
+	logger.FromContext(ctx).Warn("object failed and was discarded",
+		zap.String("object_id", objectID.String()),
+		zap.String("tenant_id", tenantID.String()),
+		zap.String("key", path),
+		zap.String("reason", string(reason)))
 	return nil
 }
 
