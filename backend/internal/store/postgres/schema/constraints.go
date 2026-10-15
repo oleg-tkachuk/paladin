@@ -65,6 +65,10 @@ const (
 	CollectionsBucketVisibility = "collections_bucket_visibility"
 	// CollectionsPublicReadFixed — public_read and cache_control never change.
 	CollectionsPublicReadFixed = "collections_public_read_fixed"
+	// CollectionsBucketTenancy — a collection binds only to a bucket its
+	// tenant owns or holds a grant on (080_bucket_owner_and_grants.sql,
+	// ADR-0032).
+	CollectionsBucketTenancy = "collections_bucket_tenancy"
 	// CollectionsPublicBucketFixed — a public collection never rebinds.
 	CollectionsPublicBucketFixed = "collections_public_bucket_fixed"
 	// BucketsPublicReadFixed — a bucket's public_read and public_base_url

@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 
 	"github.com/google/uuid"
@@ -101,6 +103,9 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 		if err := publicRuleError(err); err != nil {
 			return objectkey.Collection{}, err
 		}
+		if err := tenancyError(err); err != nil {
+			return objectkey.Collection{}, err
+		}
 		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
 	}
 	return r.getWith(ctx, q, args.TenantID, args.Collection)
@@ -184,6 +189,9 @@ func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collect
 	if err != nil {
 		if rule := publicRuleError(err); rule != nil {
 			return rule
+		}
+		if refused := tenancyError(err); refused != nil {
+			return refused
 		}
 		return fmt.Errorf("rebind collection: %w", err)
 	}
@@ -366,6 +374,16 @@ func publicRuleError(err error) error {
 		return publicread.Rulef("a public collection never moves to another bucket: its objects' URLs name it")
 	case pgerr.ConstraintIs(err, schema.CollectionsPublicReadFixed):
 		return publicread.Rulef("a collection's access and cache_control are fixed at creation")
+	}
+	return nil
+}
+
+// tenancyError turns the binding trigger's refusal — a bucket the tenant
+// neither owns nor holds a grant on (ADR-0032) — into ErrBucketNotGranted,
+// and returns nil for any other error.
+func tenancyError(err error) error {
+	if pgerr.Is(err, pgerr.CheckViolation) && pgerr.ConstraintIs(err, schema.CollectionsBucketTenancy) {
+		return fmt.Errorf("%w: %w", admindomain.ErrBucketNotGranted, err)
 	}
 	return nil
 }
