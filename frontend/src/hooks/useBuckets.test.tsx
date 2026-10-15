@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
-const h = vi.hoisted(() => ({ listBuckets: vi.fn() }));
+const h = vi.hoisted(() => ({
+  listBuckets: vi.fn(),
+  listAccessibleBuckets: vi.fn(),
+}));
 vi.mock("@/lib/connect/client", () => ({
-  bucketClient: { listBuckets: h.listBuckets },
+  bucketClient: {
+    listBuckets: h.listBuckets,
+    listAccessibleBuckets: h.listAccessibleBuckets,
+  },
 }));
 vi.mock("@/context/RefreshContext", () => ({
   useBumpRefresh: () => vi.fn(),
 }));
 
-import { useBuckets } from "./useBuckets";
+import { MAX_LIST_PAGES, useBuckets } from "./useBuckets";
 
 function page(ids: string[], nextPageToken = "") {
   return {
@@ -90,5 +96,95 @@ describe("useBuckets pagination", () => {
     expect(h.listBuckets).toHaveBeenCalledTimes(20);
     // The residual token comes back, so a caller can decide to continue.
     expect(out?.nextPageToken).toBe("always-more");
+  });
+});
+
+// The default-binding picker reads this list. A shared-layout tenant owns no
+// bucket, so the owner-filtered list it used to read was always empty.
+describe("useBuckets accessible list", () => {
+  const tenant = "tenants/acme";
+
+  beforeEach(() => {
+    h.listBuckets.mockReset();
+    h.listAccessibleBuckets.mockReset();
+  });
+
+  it("asks for the tenant's bindable buckets and follows nextPageToken", async () => {
+    h.listAccessibleBuckets
+      .mockResolvedValueOnce(page(["shared-a", "own-b"], "tok-2"))
+      .mockResolvedValueOnce(page(["shared-z"]));
+
+    const { result } = renderHook(() => useBuckets());
+    await act(async () => {
+      await result.current.fetchAccessibleBuckets(tenant);
+    });
+
+    expect(h.listBuckets).not.toHaveBeenCalled();
+    expect(h.listAccessibleBuckets).toHaveBeenCalledTimes(2);
+    expect(h.listAccessibleBuckets.mock.calls[0][0]).toMatchObject({
+      tenant,
+      page: { pageToken: "" },
+    });
+    expect(h.listAccessibleBuckets.mock.calls[1][0]).toMatchObject({
+      tenant,
+      page: { pageToken: "tok-2" },
+    });
+    expect(result.current.buckets.map((b) => b.bucketId)).toEqual([
+      "shared-a",
+      "own-b",
+      "shared-z",
+    ]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("stops at the page ceiling and returns the residual token", async () => {
+    h.listAccessibleBuckets.mockResolvedValue(page(["x"], "always-more"));
+
+    const { result } = renderHook(() => useBuckets());
+    let out: { nextPageToken: string } | undefined;
+    await act(async () => {
+      out = await result.current.fetchAccessibleBuckets(tenant);
+    });
+
+    expect(h.listAccessibleBuckets).toHaveBeenCalledTimes(MAX_LIST_PAGES);
+    expect(out?.nextPageToken).toBe("always-more");
+  });
+
+  it("surfaces a failure through error instead of throwing", async () => {
+    h.listAccessibleBuckets.mockRejectedValue(new Error("denied by policy"));
+
+    const { result } = renderHook(() => useBuckets());
+    let out: { buckets: unknown[] } | undefined;
+    await act(async () => {
+      out = await result.current.fetchAccessibleBuckets(tenant);
+    });
+
+    expect(out?.buckets).toEqual([]);
+    expect(result.current.error).toMatch(/denied by policy/);
+  });
+
+  // Both fetches write the one `buckets` list, so they share the sequence
+  // guard: a slow accessible-list read must not overwrite a newer listing.
+  it("loses to a newer fetchBuckets that finishes first", async () => {
+    let releaseFirst: (v: unknown) => void = () => {};
+    h.listAccessibleBuckets.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseFirst = () => resolve(page(["stale"]));
+        }),
+    );
+    h.listBuckets.mockResolvedValueOnce(page(["fresh"]));
+
+    const { result } = renderHook(() => useBuckets());
+    let firstDone: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      firstDone = result.current.fetchAccessibleBuckets(tenant);
+      await result.current.fetchBuckets();
+    });
+    await act(async () => {
+      releaseFirst(null);
+      await firstDone;
+    });
+    expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
   });
 });
