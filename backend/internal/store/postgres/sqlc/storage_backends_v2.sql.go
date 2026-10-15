@@ -562,15 +562,12 @@ ON CONFLICT (name) DO UPDATE SET
     region                  = EXCLUDED.region,
     events_enabled          = EXCLUDED.events_enabled,
     events_target           = EXCLUDED.events_target,
-    display_name            = EXCLUDED.display_name,
     public_endpoint         = EXCLUDED.public_endpoint,
     force_path_style        = EXCLUDED.force_path_style,
-    credentials_secret_ref  = EXCLUDED.credentials_secret_ref,
     sse_type                = EXCLUDED.sse_type,
     sse_key_id              = EXCLUDED.sse_key_id,
     events_queue_url        = EXCLUDED.events_queue_url,
     events_poll_interval_ms = EXCLUDED.events_poll_interval_ms,
-    cedar_policy            = EXCLUDED.cedar_policy,
     provider                = EXCLUDED.provider,
     updated_at              = now()
 `
@@ -582,7 +579,10 @@ ON CONFLICT (name) DO UPDATE SET
 // the API a silent overwrite.
 //
 // `enabled` is deliberately absent from the SET, which is what keeps a backend
-// an operator disabled from coming back enabled after a restart.
+// an operator disabled from coming back enabled after a restart. So are
+// display_name, credentials_secret_ref and cedar_policy: the config has no key
+// for them, they are set through the API, and a config change used to
+// overwrite them with nothing. An insert takes what the caller passes.
 //
 // Keyed on name, not id: the caller knows the config key ("primary"), and the
 // uuid is generated here. ON CONFLICT (name) makes re-seeding idempotent.

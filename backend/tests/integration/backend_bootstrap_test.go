@@ -76,3 +76,63 @@ func TestBootstrapPreservesDisabledState(t *testing.T) {
 		t.Errorf("upsert did not apply config change: endpoint=%q", got.Endpoint)
 	}
 }
+
+// What an operator sets on a backend through the API and the config has no key
+// for — its display name, its Cedar policy, its credentials Secret — survives
+// the upsert a config change runs. It used to be overwritten with the config's
+// nothing: renaming a backend's endpoint in the config erased its name and its
+// policy.
+func TestBootstrapKeepsTheOperatorsBackendFields(t *testing.T) {
+	h := pgharness.Setup(t)
+	q := sqlc.New(h.PoolMigrate)
+	be := adapters.NewBackendRepoV2(q, h.PoolMigrate)
+	ctx := context.Background()
+	deps := bootstrap.BackendDeps{Backends: be}
+	cfg := config.Storage{
+		Backends: map[string]config.StorageBackend{
+			"primary": {Kind: "s3-compatible", Endpoint: "http://localhost", Region: "us-east-1"},
+		},
+	}
+	if err := bootstrap.EnsureBackends(ctx, cfg, deps); err != nil {
+		t.Fatalf("first EnsureBackends: %v", err)
+	}
+
+	const (
+		name   = "Primary backend"
+		policy = `permit (principal, action, resource);`
+		creds  = "paladin/primary-s3"
+	)
+	cur, err := be.Get(ctx, "primary")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	cur.DisplayName, cur.CedarPolicy, cur.CredentialsSecretRef = name, policy, creds
+	if err := be.Update(ctx, cur, cur.ResourceVersion,
+		[]string{"display_name", "cedar_policy", "credentials_secret_ref"}); err != nil {
+		t.Fatalf("operator update: %v", err)
+	}
+
+	// A config change, so the upsert path runs.
+	cfg.Backends["primary"] = config.StorageBackend{
+		Kind: "s3-compatible", Provider: "seaweedfs", Endpoint: "http://changed:9000", Region: "us-east-1",
+	}
+	if err := bootstrap.EnsureBackends(ctx, cfg, deps); err != nil {
+		t.Fatalf("second EnsureBackends (upsert): %v", err)
+	}
+	got, err := be.Get(ctx, "primary")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Endpoint != "http://changed:9000" || got.Provider != "seaweedfs" {
+		t.Errorf("config change not applied: endpoint=%q provider=%q", got.Endpoint, got.Provider)
+	}
+	if got.DisplayName != name {
+		t.Errorf("display name = %q, want the operator's %q", got.DisplayName, name)
+	}
+	if got.CedarPolicy != policy {
+		t.Errorf("cedar policy = %q, want the operator's", got.CedarPolicy)
+	}
+	if got.CredentialsSecretRef != creds {
+		t.Errorf("credentials secret = %q, want the operator's %q", got.CredentialsSecretRef, creds)
+	}
+}
