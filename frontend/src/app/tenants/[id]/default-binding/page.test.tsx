@@ -68,7 +68,9 @@ describe("DefaultBindingPage", () => {
       { name: "tenants/acme" },
       expect.objectContaining({ signal: expect.anything() }),
     );
-    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
+    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", {
+      ownerTenantId: "t-1",
+    });
   });
 
   it("renders the current binding when one exists", async () => {
@@ -148,6 +150,8 @@ describe("DefaultBindingPage", () => {
     );
     h.fetchBuckets.mockClear();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", "t-1");
+    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", {
+      ownerTenantId: "t-1",
+    });
   });
 });

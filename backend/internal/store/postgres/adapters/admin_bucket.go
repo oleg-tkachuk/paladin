@@ -298,6 +298,10 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	if args.OwnerTenantID != nil {
 		ownerFilter = pgUUID(*args.OwnerTenantID)
 	}
+	var usedByFilter pgtype.UUID
+	if args.UsedByTenantID != nil {
+		usedByFilter = pgUUID(*args.UsedByTenantID)
+	}
 	// Pushdown: the SQL-expressible conjuncts of the caller's CEL filter
 	// narrow the scan. The handler still evaluates the whole expression over
 	// the returned page, so a hint that is absent costs a wider read and
@@ -322,7 +326,7 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	// wider read, same answer.
 	_, searchLike := pd.StringHint("search")
 
-	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter,
+	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter, usedByFilter,
 		nameIn, nameLike, displayIn, displayLike, searchLike,
 		pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
 		pd.BoolHint("replication_enabled"),

@@ -142,6 +142,12 @@ message ListBucketsRequest {
   // admin). Backed by the index on buckets(owner_tenant_id)
   // (`001_initial_schema.sql`), so per-tenant lookups are cheap.
   string owner_tenant_id = 4;
+  // used_by_tenant_id narrows the listing to the buckets this tenant
+  // stores in: the ones it owns, the one it is bound to by default, and
+  // every one holding a collection of it. A shared-layout tenant owns no
+  // bucket, so owner_tenant_id alone lists nothing for it. UUID only;
+  // empty = no such filter. Combines with owner_tenant_id by AND.
+  string used_by_tenant_id = 5;
 }
 
 message ListBucketsResponse {
