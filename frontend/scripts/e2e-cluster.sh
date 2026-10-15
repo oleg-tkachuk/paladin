@@ -16,7 +16,7 @@
 #     `admin`, not the compose fixture's e2e-admin@local — the weak-secret
 #     deny-list refuses that one outside a disposable environment.
 #
-# Usage:
+# Usage (from frontend/, or as frontend/scripts/e2e-cluster.sh from anywhere):
 #   ./scripts/e2e-cluster.sh                    # whole suite
 #   ./scripts/e2e-cluster.sh tests/e2e/x.spec.ts   # one file
 #   NAMESPACE=other KUBE_CONTEXT=orbstack ./scripts/e2e-cluster.sh --headed
@@ -112,5 +112,21 @@ export PALADIN_E2E_STACK_RUNS_WORKER=1
 workers=()
 [[ -n "${WORKERS:-}" ]] && workers=(--workers="$WORKERS")
 
+# Playwright takes its config and test directory from the working directory,
+# so run it from the console's package wherever the script was started. A
+# path the caller named is resolved where the caller stood first, so
+# `frontend/tests/e2e/x.spec.ts` from the repository root and
+# `tests/e2e/x.spec.ts` from frontend/ name the same file.
+frontend_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+args=()
+for arg in "$@"; do
+    if [[ "$arg" != -* && -e "$arg" ]]; then
+        args+=("$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")")
+    else
+        args+=("$arg")
+    fi
+done
+cd "$frontend_dir"
+
 # Not exec: the EXIT trap has to outlive Playwright to stop the forward.
-npx playwright test "${workers[@]+"${workers[@]}"}" "$@"
+npx playwright test "${workers[@]+"${workers[@]}"}" "${args[@]+"${args[@]}"}"

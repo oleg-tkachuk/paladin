@@ -238,6 +238,7 @@ tasks:
       - task: verify:proto-breaking
       - task: verify:ci-groups
       - task: verify:stack-ports
+      - task: verify:e2e-cluster
       - task: verify:stack-disk
       - task: verify:portable-shell
       - task: verify:lefthook-single-thread
@@ -438,6 +439,13 @@ tasks:
     # until a gate booted on top of whatever was already listening.
     cmds:
       - ./scripts/stack-ports.test.sh
+
+  verify:e2e-cluster:
+    desc: "Fail when the cluster e2e runner does not run Playwright from frontend/"
+    # Started from the repository root it ran Playwright there, which then
+    # collected the console's vitest files and failed as if the suite broke.
+    cmds:
+      - ./scripts/e2e-cluster.test.sh
 
   verify:chart-values:
     desc: "Render every values file and fail on a key the schema does not admit"
