@@ -19,6 +19,8 @@ var tenantNameFields = map[protoreflect.Name]bool{
 var tenantIDFields = map[protoreflect.Name]bool{
 	"tenant_id":       true,
 	"owner_tenant_id": true,
+	// The tenant whose buckets a listing narrows to.
+	"used_by_tenant_id": true,
 	// The tenant a session switches into.
 	"target_tenant_id": true,
 }

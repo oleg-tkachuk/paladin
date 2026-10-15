@@ -347,8 +347,14 @@ type ListBucketsRequest struct {
 	// admin). Backed by the index on buckets(owner_tenant_id)
 	// (`001_initial_schema.sql`), so per-tenant lookups are cheap.
 	OwnerTenantId string `protobuf:"bytes,4,opt,name=owner_tenant_id,json=ownerTenantId,proto3" json:"owner_tenant_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// used_by_tenant_id narrows the listing to the buckets this tenant
+	// stores in: the ones it owns, the one it is bound to by default, and
+	// every one holding a collection of it. A shared-layout tenant owns no
+	// bucket, so owner_tenant_id alone lists nothing for it. UUID only;
+	// empty = no such filter. Combines with owner_tenant_id by AND.
+	UsedByTenantId string `protobuf:"bytes,5,opt,name=used_by_tenant_id,json=usedByTenantId,proto3" json:"used_by_tenant_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListBucketsRequest) Reset() {
@@ -405,6 +411,13 @@ func (x *ListBucketsRequest) GetFilter() string {
 func (x *ListBucketsRequest) GetOwnerTenantId() string {
 	if x != nil {
 		return x.OwnerTenantId
+	}
+	return ""
+}
+
+func (x *ListBucketsRequest) GetUsedByTenantId() string {
+	if x != nil {
+		return x.UsedByTenantId
 	}
 	return ""
 }
@@ -852,12 +865,13 @@ const file_paladin_admin_v1_bucket_service_proto_rawDesc = "" +
 	"\x10resource_version\x18\x02 \x01(\tR\x0fresourceVersion\x12*\n" +
 	"\x11delete_on_backend\x18\x03 \x01(\bR\x0fdeleteOnBackend\x12,\n" +
 	"\x12skip_version_check\x18\x04 \x01(\bR\x10skipVersionCheck\"\x16\n" +
-	"\x14DeleteBucketResponse\"\xa0\x01\n" +
+	"\x14DeleteBucketResponse\"\xcb\x01\n" +
 	"\x12ListBucketsRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12&\n" +
-	"\x0fowner_tenant_id\x18\x04 \x01(\tR\rownerTenantId\"~\n" +
+	"\x0fowner_tenant_id\x18\x04 \x01(\tR\rownerTenantId\x12)\n" +
+	"\x11used_by_tenant_id\x18\x05 \x01(\tR\x0eusedByTenantId\"~\n" +
 	"\x13ListBucketsResponse\x122\n" +
 	"\abuckets\x18\x01 \x03(\v2\x18.paladin.admin.v1.BucketR\abuckets\x123\n" +
 	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\x8c\x01\n" +

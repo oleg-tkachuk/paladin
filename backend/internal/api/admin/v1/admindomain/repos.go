@@ -148,9 +148,14 @@ type ListBucketsArgs struct {
 	// owned by exactly that tenant (matches buckets.owner_tenant_id).
 	// nil = no tenant filter (cross-tenant listing for platform-admin).
 	OwnerTenantID *uuid.UUID
-	PageSize      int32
-	AfterBackend  string
-	AfterName     string
+	// UsedByTenantID — when non-nil, narrows the listing to the buckets
+	// that tenant stores in: owned, bound by default, or holding one of
+	// its collections. A shared-layout tenant owns none, so this is the
+	// question a tenant's own bucket list asks. nil = no such filter.
+	UsedByTenantID *uuid.UUID
+	PageSize       int32
+	AfterBackend   string
+	AfterName      string
 	// Filter is a CEL expression over PhysicalBucketSchema. The repo pushes
 	// its SQL-expressible conjuncts into the query and the handler evaluates
 	// the whole expression over the page it gets back; the repo cursor is

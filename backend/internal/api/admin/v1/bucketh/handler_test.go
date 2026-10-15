@@ -60,6 +60,8 @@ type fakeRepo struct {
 	listToken  string
 	listErr    error
 	listArgs   admindomain.ListBucketsArgs
+	// listActing is the tenant List read as — what the RLS pool binds.
+	listActing uuid.UUID
 
 	listAccResult   []admindomain.Bucket
 	listAccToken    string
@@ -121,8 +123,9 @@ func (f *fakeRepo) BackendEnabled(context.Context, string) (bool, error) {
 
 // BucketRepository — no-op remainder.
 func (f *fakeRepo) Create(context.Context, admindomain.Bucket) error { return nil }
-func (f *fakeRepo) List(_ context.Context, args admindomain.ListBucketsArgs) ([]admindomain.Bucket, string, error) {
+func (f *fakeRepo) List(ctx context.Context, args admindomain.ListBucketsArgs) ([]admindomain.Bucket, string, error) {
 	f.listArgs = args
+	f.listActing, _ = auth.EffectiveTenant(ctx)
 	return f.listResult, f.listToken, f.listErr
 }
 func (f *fakeRepo) ListAccessible(_ context.Context, tenantID uuid.UUID, pageSize int32, afterBackend, afterName string) ([]admindomain.Bucket, string, error) {

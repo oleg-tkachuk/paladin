@@ -250,36 +250,47 @@ FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE ($1::text IS NULL OR sb.name = $1::text)
   AND ($2::uuid IS NULL OR b.owner_tenant_id = $2::uuid)
+  -- used_by_tenant_id: the buckets a tenant stores in — the ones it owns, the
+  -- one it is bound to by default, and every one a collection of it sits in.
+  -- A shared-layout tenant owns no bucket, so ownership alone lists nothing.
+  AND ($3::uuid IS NULL
+       OR b.owner_tenant_id = $3::uuid
+       OR EXISTS (SELECT 1 FROM tenant_default_bindings d
+                   WHERE d.bucket_id = b.id
+                     AND d.tenant_id = $3::uuid)
+       OR EXISTS (SELECT 1 FROM collections c
+                   WHERE c.bucket_id = b.id
+                     AND c.tenant_id = $3::uuid))
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($3::text[] IS NULL OR b.name = ANY($3::text[]))
-  AND ($4::text IS NULL OR b.name LIKE $4::text)
-  AND ($5::text[] IS NULL OR b.display_name = ANY($5::text[]))
-  AND ($6::text IS NULL OR b.display_name LIKE $6::text)
+  AND ($4::text[] IS NULL OR b.name = ANY($4::text[]))
+  AND ($5::text IS NULL OR b.name LIKE $5::text)
+  AND ($6::text[] IS NULL OR b.display_name = ANY($6::text[]))
+  AND ($7::text IS NULL OR b.display_name LIKE $7::text)
   -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
   -- and Postgres lower() are two Unicode implementations and may disagree, and
   -- a disagreement here drops a row the authoritative CEL pass accepts. See
   -- internal/filter/cel/searchtext.go.
-  AND ($7::text IS NULL
+  AND ($8::text IS NULL
        OR lower(b.name COLLATE "C") || chr(10)
           || lower(coalesce(b.display_name, '') COLLATE "C") || chr(10)
           || lower(sb.name COLLATE "C")
-          LIKE $7::text)
-  AND ($8::bool IS NULL OR b.versioning_enabled = $8::bool)
-  AND ($9::bool IS NULL OR b.object_lock_enabled = $9::bool)
-  AND ($10::bool IS NULL OR b.replication_enabled = $10::bool)
+          LIKE $8::text)
+  AND ($9::bool IS NULL OR b.versioning_enabled = $9::bool)
+  AND ($10::bool IS NULL OR b.object_lock_enabled = $10::bool)
+  AND ($11::bool IS NULL OR b.replication_enabled = $11::bool)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($11::timestamptz IS NULL
-       OR b.created_at >= $11::timestamptz)
   AND ($12::timestamptz IS NULL
-       OR b.created_at <= $12::timestamptz)
-  AND (sb.name, b.name) > ($13::text, $14::text)
+       OR b.created_at >= $12::timestamptz)
+  AND ($13::timestamptz IS NULL
+       OR b.created_at <= $13::timestamptz)
+  AND (sb.name, b.name) > ($14::text, $15::text)
 ORDER BY sb.name, b.name
-LIMIT $15
+LIMIT $16
 `
 
 type ListBucketsV2Row struct {
@@ -314,10 +325,11 @@ type ListBucketsV2Row struct {
 // Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
 // (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
 // below is plain equality so the planner uses the partial index.
-func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
+func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerTenantID pgtype.UUID, usedByTenantID pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, versioningEnabled *bool, objectLockEnabled *bool, replicationEnabled *bool, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, afterBackendID string, afterName string, pageSize int32) ([]ListBucketsV2Row, error) {
 	rows, err := q.db.Query(ctx, listBucketsV2,
 		backendName,
 		ownerTenantID,
+		usedByTenantID,
 		nameIn,
 		nameLike,
 		displayNameIn,

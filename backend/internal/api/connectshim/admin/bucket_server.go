@@ -100,6 +100,13 @@ func (s *BucketServer) ListBuckets(ctx context.Context, req *pb.ListBucketsReque
 		}
 		args.OwnerTenantID = &id
 	}
+	if usedBy := m.GetUsedByTenantId(); usedBy != "" {
+		id, err := uuid.Parse(usedBy)
+		if err != nil {
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("used_by_tenant_id must be a UUID: %w", err))
+		}
+		args.UsedByTenantID = &id
+	}
 	if tok := m.GetPage().GetPageToken(); tok != "" {
 		args.AfterBackend, args.AfterName = splitBucketCursor(tok)
 	}
