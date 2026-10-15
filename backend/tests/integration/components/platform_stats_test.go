@@ -70,6 +70,8 @@ func TestCollectControlPlane(t *testing.T) {
 		`INSERT INTO buckets (backend_id, name, owner_tenant_id, provision_state, versioning_enabled)
 		 SELECT sb.id, $2, $3, 'failed', true FROM storage_backends sb WHERE sb.name = $1`,
 		"be-off-"+hex, "bkt-own-"+hex, f.tenantID)
+	// That bucket granted to the trashed tenant: a shared bucket (ADR-0032).
+	grantBucket(t, ctx, pool, trashed, "be-off-"+hex, "bkt-own-"+hex)
 
 	got, err := platformstats.CollectControlPlane(ctx, pool)
 	if err != nil {
@@ -94,11 +96,10 @@ func TestCollectControlPlane(t *testing.T) {
 	assertDelta(t, "backends.aws-s3", base.Backends.ByKind["aws-s3"], got.Backends.ByKind["aws-s3"], 1)
 
 	assertDelta(t, "buckets.total", base.Buckets.Total, got.Buckets.Total, 2)
-	// Every bucket has an owner (ADR-0032): the fixture's and this test's.
-	assertDelta(t, "buckets.tenant_owned", base.Buckets.TenantOwned, got.Buckets.TenantOwned, 2)
-	// ADR-0032: decide whether the census keeps a "shared" bucket count — no
-	// bucket is ownerless any more; granted buckets may be what it should count.
-	assertDelta(t, "buckets.shared", base.Buckets.Shared, got.Buckets.Shared, 0)
+	// Every bucket has an owner (ADR-0032); a shared one is one it granted:
+	// the fixture's is its tenant's alone, this test's is granted.
+	assertDelta(t, "buckets.tenant_owned", base.Buckets.TenantOwned, got.Buckets.TenantOwned, 1)
+	assertDelta(t, "buckets.shared", base.Buckets.Shared, got.Buckets.Shared, 1)
 	assertDelta(t, "buckets.versioning", base.Buckets.VersioningEnabled, got.Buckets.VersioningEnabled, 1)
 	assertDelta(t, "buckets.failed", base.Buckets.ByProvisionState["failed"], got.Buckets.ByProvisionState["failed"], 1)
 	assertDelta(t, "buckets.ready", base.Buckets.ByProvisionState["ready"], got.Buckets.ByProvisionState["ready"], 1)

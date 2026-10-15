@@ -63,7 +63,7 @@ type createBucketArgs struct {
 	BucketID           string            `json:"bucket_id" jsonschema:"bucket name: 3-63 chars of a-z, 0-9, '.' and '-'"`
 	DisplayName        string            `json:"display_name,omitempty" jsonschema:"optional display label"`
 	Region             string            `json:"region,omitempty" jsonschema:"optional region"`
-	OwnerTenantID      string            `json:"owner_tenant_id,omitempty" jsonschema:"optional owning tenant UUID; empty = shared"`
+	OwnerTenantID      string            `json:"owner_tenant_id" jsonschema:"UUID of the tenant that owns the bucket; others reach it through a grant"`
 	Labels             map[string]string `json:"labels,omitempty" jsonschema:"optional labels"`
 	ProvisionOnBackend bool              `json:"provision_on_backend,omitempty" jsonschema:"also create the bucket on the storage backend"`
 }
@@ -175,7 +175,7 @@ func registerBucketTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_accessible_buckets",
-		Description: "List the buckets a tenant can use: the ones it owns and the shared ones.",
+		Description: "List the buckets a tenant can use: the ones it owns and the ones granted to it.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listAccessibleBucketsArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Bucket.ListAccessibleBuckets(ctx, &adminv1.ListAccessibleBucketsRequest{
 			Tenant: tenantNamePrefix + in.TenantID,
@@ -187,12 +187,10 @@ func registerBucketTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 		Name:        "paladin_create_bucket",
 		Description: "Register a bucket on a storage backend, optionally creating it there too.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createBucketArgs) (*mcpsdk.CallToolResult, any, error) {
-		// The plane ignores an owner it cannot parse and creates a shared
-		// bucket; refuse here rather than give away a tenant's bucket.
-		if in.OwnerTenantID != "" {
-			if _, err := uuid.Parse(in.OwnerTenantID); err != nil {
-				return nil, nil, fmt.Errorf("owner_tenant_id %q is not a UUID: %w", in.OwnerTenantID, err)
-			}
+		// Every bucket has an owner (ADR-0032); say what is wrong before the
+		// plane does.
+		if _, err := uuid.Parse(in.OwnerTenantID); err != nil {
+			return nil, nil, fmt.Errorf("owner_tenant_id %q is not a tenant UUID: %w", in.OwnerTenantID, err)
 		}
 		return jsonResult(c.Bucket.CreateBucket(ctx, &adminv1.CreateBucketRequest{
 			Parent:   backendNamePrefix + in.BackendID,

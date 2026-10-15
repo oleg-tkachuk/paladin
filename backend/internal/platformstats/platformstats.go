@@ -72,14 +72,16 @@ type BackendCensus struct {
 }
 
 type BucketCensus struct {
-	Total             int64            `json:"total"`
-	ByProvisionState  map[string]int64 `json:"by_provision_state"`
-	ByBackend         map[string]int64 `json:"by_backend"`
-	TenantOwned       int64            `json:"tenant_owned"`
-	Shared            int64            `json:"shared"`
-	VersioningEnabled int64            `json:"versioning_enabled"`
-	ObjectLockEnabled int64            `json:"object_lock_enabled"`
-	ReplicationOn     int64            `json:"replication_enabled"`
+	Total            int64            `json:"total"`
+	ByProvisionState map[string]int64 `json:"by_provision_state"`
+	ByBackend        map[string]int64 `json:"by_backend"`
+	// TenantOwned: buckets only their owner binds to; Shared: buckets their
+	// owner granted to at least one other tenant (ADR-0032).
+	TenantOwned       int64 `json:"tenant_owned"`
+	Shared            int64 `json:"shared"`
+	VersioningEnabled int64 `json:"versioning_enabled"`
+	ObjectLockEnabled int64 `json:"object_lock_enabled"`
+	ReplicationOn     int64 `json:"replication_enabled"`
 }
 
 type CollectionCensus struct {
@@ -139,12 +141,12 @@ func CollectControlPlane(ctx context.Context, pool *pgxpool.Pool) (*ControlPlane
 
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*),
-		       count(*) FILTER (WHERE owner_tenant_id IS NOT NULL),
-		       count(*) FILTER (WHERE owner_tenant_id IS NULL),
+		       count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM bucket_grants g WHERE g.bucket_id = b.id)),
+		       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM bucket_grants g WHERE g.bucket_id = b.id)),
 		       count(*) FILTER (WHERE versioning_enabled),
 		       count(*) FILTER (WHERE object_lock_enabled),
 		       count(*) FILTER (WHERE replication_enabled)
-		FROM buckets`,
+		FROM buckets b`,
 	).Scan(&out.Buckets.Total, &out.Buckets.TenantOwned, &out.Buckets.Shared,
 		&out.Buckets.VersioningEnabled, &out.Buckets.ObjectLockEnabled,
 		&out.Buckets.ReplicationOn); err != nil {
@@ -426,8 +428,8 @@ const (
 
 // allQuotaRowsSQL is every quota row of both scopes as one relation, with the
 // tenant each belongs to: a tenant quota's own tenant, or the owner of a
-// bucket quota's bucket — NULL for a shared bucket, which no tenant owns. The
-// census and the drill-down both read it, so their counts agree.
+// bucket quota's bucket — every bucket has one (ADR-0032). The census and the
+// drill-down both read it, so their counts agree.
 const allQuotaRowsSQL = `(
 	SELECT '` + quotaScopeTenant + `' AS scope, tenant_id AS owner_tenant_id,
 	       max_total_bytes, max_object_count, max_bytes_per_day, max_objects_per_day,
