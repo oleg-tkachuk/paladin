@@ -227,9 +227,9 @@ describe("TenantBucketsPage", () => {
     expect(common).not.toHaveTextContent(OWNED_BUCKET_LABEL);
   });
 
-  // Other tenants' collections sit in a shared bucket; it is deleted from
-  // /buckets, never from one tenant's page.
-  it("offers no delete for a shared bucket", async () => {
+  // Other tenants' collections sit in a shared bucket; its deletion and its
+  // lifecycle rules reach them all, so neither is offered on one tenant's page.
+  it("offers no delete or lifecycle rules for a shared bucket", async () => {
     h.buckets = [makeBucket("common", "")];
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(<TenantBucketsPage />);
@@ -237,11 +237,26 @@ describe("TenantBucketsPage", () => {
       await screen.findByRole("button", { name: "Actions for common" }),
     );
     expect(
-      await screen.findByRole("menuitem", { name: /Lifecycle rules/i }),
-    ).toBeInTheDocument();
+      await screen.findByRole("menuitem", { name: /Open on the backend/i }),
+    ).toHaveAttribute("href", "/storage-backends/be-1/buckets/common");
+    expect(
+      screen.queryByRole("menuitem", { name: /Lifecycle rules/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: /Delete bucket/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("offers lifecycle rules for a bucket the tenant owns", async () => {
+    h.buckets = [makeBucket("mine")];
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<TenantBucketsPage />);
+    await user.click(
+      await screen.findByRole("button", { name: "Actions for mine" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: /Lifecycle rules/i }),
+    ).toHaveAttribute("href", "/tenants/acme/buckets/be-1/mine/lifecycle");
   });
 
   // A shared tenant owns no bucket: an unowned one created here would not be

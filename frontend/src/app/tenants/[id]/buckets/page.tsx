@@ -10,7 +10,8 @@
 // omits the filter; the same useBuckets hook serves both.
 //
 // Rows link to the bucket detail subtree under the same tenant. A shared
-// bucket other tenants store in too is deleted from /buckets, not here.
+// bucket other tenants store in too is changed from /buckets, not here: its
+// lifecycle rules and its deletion reach every tenant in it.
 //
 // Creating follows the layout. A dedicated tenant's new bucket is owned by it,
 // so it lands on this list. A shared tenant owns none: an unowned bucket made
@@ -87,6 +88,10 @@ const ALL_BACKENDS = "__all__";
 
 /** The cross-tenant bucket index, where shared buckets are managed. */
 const SHARED_BUCKETS_HREF = "/buckets";
+
+/** The storage-first view of a bucket, listing every tenant stored in it. */
+const backendBucketHref = (b: Bucket) =>
+  `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
 
 export default function TenantBucketsPage() {
   const changesBlocked = useTenantChangesBlocked();
@@ -414,19 +419,29 @@ export default function TenantBucketsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`${detailHref(b)}/lifecycle`}>
-                            <ClockIcon className="size-4" />
-                            Lifecycle rules
-                          </Link>
-                        </DropdownMenuItem>
-                        {ownedByTenant(b) && (
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteTarget(b)}
-                          >
-                            <TrashIcon className="size-4" />
-                            Delete bucket
+                        {ownedByTenant(b) ? (
+                          <>
+                            <DropdownMenuItem asChild>
+                              <Link href={`${detailHref(b)}/lifecycle`}>
+                                <ClockIcon className="size-4" />
+                                Lifecycle rules
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => setDeleteTarget(b)}
+                            >
+                              <TrashIcon className="size-4" />
+                              Delete bucket
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          // Its rules expire every tenant's objects in it.
+                          <DropdownMenuItem asChild>
+                            <Link href={backendBucketHref(b)}>
+                              <ServerStackIcon className="size-4" />
+                              Open on the backend
+                            </Link>
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
