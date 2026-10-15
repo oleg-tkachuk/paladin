@@ -9,7 +9,10 @@ vi.mock("@/components/ui/Notification", () => ({
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { BucketCreateDialog } from "./BucketCreateDialog";
+import {
+  BucketCreateDialog,
+  SHARED_BUCKET_DESCRIPTION,
+} from "./BucketCreateDialog";
 import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
 import {
   FeatureSupport,
@@ -58,6 +61,31 @@ const submit = () => screen.getByRole("button", { name: "Create bucket" });
 describe("BucketCreateDialog", () => {
   beforeEach(() => {
     h.showNotification.mockReset();
+  });
+
+  it("says the bucket is shared unless told otherwise", () => {
+    open();
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      SHARED_BUCKET_DESCRIPTION,
+    );
+  });
+
+  // A tenant's own bucket is not one any tenant can bind to.
+  it("shows the caller's description for an owned bucket", () => {
+    const owned = "Owned by Acme.";
+    render(
+      <BucketCreateDialog
+        open
+        onOpenChange={vi.fn()}
+        backends={[backend("primary")]}
+        description={owned}
+        createBucket={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(owned);
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      SHARED_BUCKET_DESCRIPTION,
+    );
   });
 
   // The API refuses a name S3 refuses; the form says so before submit.
