@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
@@ -542,5 +543,65 @@ func TestGetEffectivePolicy_KeepsTheHandlersCode(t *testing.T) {
 	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("code = %v (%v), want PermissionDenied", connect.CodeOf(err), err)
+	}
+}
+
+// owner_tenant_id names the tenant by UUID. A slug used to be parsed, fail,
+// and be dropped: the call succeeded and the bucket was shared, while the
+// caller believed it owned.
+func TestBucketOwnerTenant_RefusesANonUUID(t *testing.T) {
+	const slug = "smoke-t21941"
+	t.Run("create", func(t *testing.T) {
+		srv := &BucketServer{H: &recordingBucketCreate{}}
+		_, err := srv.CreateBucket(context.Background(), &pb.CreateBucketRequest{
+			Parent: "storageBackends/primary", BucketId: "b1",
+			Bucket: &pb.Bucket{OwnerTenantId: slug},
+		})
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("owner by slug: err = %v, want InvalidArgument", err)
+		}
+	})
+	t.Run("update", func(t *testing.T) {
+		srv := &BucketServer{H: &recordingBuckets{}}
+		_, err := srv.UpdateBucket(context.Background(), &pb.UpdateBucketRequest{
+			Name: "storageBackends/primary/buckets/b1", ResourceVersion: "1",
+			Bucket: &pb.Bucket{OwnerTenantId: slug},
+		})
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("owner by slug: err = %v, want InvalidArgument", err)
+		}
+	})
+	t.Run("list", func(t *testing.T) {
+		srv := &BucketServer{H: &recordingBuckets{}}
+		_, err := srv.ListBuckets(context.Background(), &pb.ListBucketsRequest{OwnerTenantId: slug})
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("owner by slug: err = %v, want InvalidArgument", err)
+		}
+	})
+}
+
+// An empty owner is the shared bucket, not an error: create without one, and
+// an update that clears it through the mask.
+func TestBucketOwnerTenant_EmptyIsShared(t *testing.T) {
+	create := &recordingBucketCreate{}
+	if _, err := (&BucketServer{H: create}).CreateBucket(context.Background(), &pb.CreateBucketRequest{
+		Parent: "storageBackends/primary", BucketId: "b1", Bucket: &pb.Bucket{},
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if create.in.Bucket.OwnerTenantID != uuid.Nil {
+		t.Errorf("create without an owner: owner = %v, want none", create.in.Bucket.OwnerTenantID)
+	}
+
+	update := &recordingBuckets{}
+	if _, err := (&BucketServer{H: update}).UpdateBucket(context.Background(), &pb.UpdateBucketRequest{
+		Name: "storageBackends/primary/buckets/b1", ResourceVersion: "1",
+		Bucket:     &pb.Bucket{},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"owner_tenant_id"}},
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if update.updateArgs.Bucket.OwnerTenantID != uuid.Nil {
+		t.Errorf("update clearing the owner: owner = %v, want none", update.updateArgs.Bucket.OwnerTenantID)
 	}
 }
