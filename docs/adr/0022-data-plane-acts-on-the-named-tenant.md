@@ -42,5 +42,5 @@
     both count the admin's call against the target. (Until 2026-10-05 both
     ran on the admin's own tenant.)
   - The admin's data-plane work inside the target is audited and shows in the
-    target's trail (`AuditActingElsewhere`). A tenant's own principals' data-
-    plane writes are not audited; that is recorded in BACKLOG.
+    target's trail. (Since 2026-10-15 every data-plane write is, a tenant's
+    own principals' included; until then only the admin's were.)

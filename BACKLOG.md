@@ -1033,21 +1033,6 @@ finding moving from "packages you import" to "your code is affected".
 
 ## Architecture (post-review 2026-05)
 
-### A tenant's own data-plane writes are not audited
-
-- **Status:** Deferred — a decision, not an oversight.
-- **Reason:** the data plane audits only a principal's calls inside a tenant
-  other than its own (`middleware.AuditActingElsewhere`): a platform admin's
-  work in a tenant it named. Uploads, deletes and batch calls by a tenant's
-  own users and agents leave no audit row. Auditing them is a synchronous
-  insert (ADR-0004) on the hot path of every agent upload, and a matching
-  growth of `audit_log` and its partitions.
-- **Definition of Done:** a decision on whether a tenant's data-plane writes
-  belong in its audit trail; if so, the full audit interceptor on the data
-  plane, with every read declaring `NO_SIDE_EFFECTS`, retention sized for the
-  volume, and a test through the assembled data plane.
-- **Blockers:** the throughput cost, which wants a measurement first.
-
 ### Audit form (B): staging table + projector (latency mitigation only)
 
 - **Status:** Deferred — crash-durability is DONE via form (A)

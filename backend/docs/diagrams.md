@@ -93,8 +93,9 @@ whose reason is a `paladin.common.v1.ErrorReason` (`apiutil.MapError`). The iam 
 limit and an audit of mutations; the admin plane accepts API tokens only when
 they carry roles, and audits its mutations too. On the data plane a platform
 admin's request acts on the tenant it names (`middleware.ActOnNamedTenant`),
-which every later step keys on, and such calls inside another tenant are
-audited there (`middleware.AuditActingElsewhere`).
+which every later step keys on. Every data-plane write is audited in the
+trail of the tenant it acted on, a tenant's own principals' included
+(`middleware.AuditWithMirror`).
 
 ```mermaid
 flowchart TB

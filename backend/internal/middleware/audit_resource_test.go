@@ -160,37 +160,37 @@ func TestAuditRowNamesTheResourceTheHandlerStashed(t *testing.T) {
 	}
 }
 
-// On the data plane only a principal's calls inside another tenant are
-// recorded: those are what the tenant's trail would miss. Its own
-// principals' writes, and an admin's in its own tenant, are not.
-func TestAuditActingElsewhere(t *testing.T) {
+// Every write is recorded, whoever makes it: a tenant's own principal in its
+// own tenant, and a platform admin in the tenant it named. The row is always
+// inserted under its actor's tenant, which audit_log's insert policy requires.
+func TestAuditRecordsWritesWhereverTheyAct(t *testing.T) {
 	own, target := uuid.New(), uuid.New()
 	admin := auth.WithPrincipal(context.Background(), &auth.Principal{
 		TenantID: own, Subject: "ops", Roles: []string{apiutil.RolePlatformAdmin},
 	})
-	cases := map[string]struct {
-		ctx  context.Context
-		rows int
-	}{
-		"inside another tenant":      {auth.WithActingTenant(admin, target), 1},
-		"inside its own tenant":      {admin, 0},
-		"acting on its own, by name": {auth.WithActingTenant(admin, own), 0},
-	}
-	for name, tc := range cases {
+	agent := auth.WithPrincipal(context.Background(), &auth.Principal{
+		TenantID: own, Subject: "agent-7",
+	})
+	for name, ctx := range map[string]context.Context{
+		"an agent inside its own tenant": agent,
+		"an admin inside another tenant": auth.WithActingTenant(admin, target),
+		"an admin inside its own tenant": admin,
+		"an admin naming its own tenant": auth.WithActingTenant(admin, own),
+	} {
 		t.Run(name, func(t *testing.T) {
 			w := &recordingAuditWriter{}
 			client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
 				paladiniamv1connect.RegisterUserSettingsServiceHandler(s, &stubSettings{})
-			}, AuditActingElsewhere(w, auth.AudienceData)))
-			// A mutation, so that only where it acts decides whether it is recorded.
-			if _, err := client.UpdateMine(tc.ctx, &iamv1.UpdateMineRequest{}); err != nil {
+			}, AuditWithMirror(w, auth.AudienceData, false, nil)))
+			if _, err := client.UpdateMine(ctx, &iamv1.UpdateMineRequest{}); err != nil {
 				t.Fatalf("call: %v", err)
 			}
-			if len(w.rows) != tc.rows {
-				t.Fatalf("%d rows written, want %d", len(w.rows), tc.rows)
+			if len(w.rows) != 1 {
+				t.Fatalf("%d rows written, want 1", len(w.rows))
 			}
-			// audit_log admits a row only under its actor's tenant, so the
-			// insert must not run in the tenant the call acted on.
+			if got := w.rows[0].ActorTenantID; got != own {
+				t.Errorf("row names actor tenant %s, want %s", got, own)
+			}
 			for _, ctx := range w.ctxs {
 				if scope, _ := auth.EffectiveTenant(ctx); scope != own {
 					t.Errorf("row inserted under %s, want the actor's tenant %s", scope, own)

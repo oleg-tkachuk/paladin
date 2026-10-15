@@ -58,6 +58,11 @@ unacceptable under load:
     RPC audit cost; it sits well within budget, so form (A) holds and form
     (B) is NOT triggered. Re-run the integration bench in the target
     environment to confirm the gate before scaling.
+  - **2026-10-15, in the dev cluster** (CNPG postgres 18.6 on OrbStack): one
+    audit row with its own commit costs **~1.7 ms** (pgbench, one client;
+    ~4.1 ms with eight), ten times the laptop figure, against a data-plane
+    `UploadObject` p50 of 16–20 ms. Form (A) still holds; the data plane now
+    audits every write on it.
 
 ## Status of implementation (2026-06)
 
