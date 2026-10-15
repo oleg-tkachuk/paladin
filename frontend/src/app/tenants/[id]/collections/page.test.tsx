@@ -15,6 +15,7 @@ vi.mock("@/lib/connect/client", () => ({
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
+  useTenantOptional: () => ({ tenantId: "t-1" }),
 }));
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: { roles: ["platform.admin"], tenantId: "t-1" } }),

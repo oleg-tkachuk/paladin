@@ -35,6 +35,10 @@ vi.mock("@/hooks/useBuckets", () => ({
     fetchBuckets: h.fetchBuckets,
   }),
 }));
+// The create dialog reads the buckets the acting tenant may bind to.
+vi.mock("@/hooks/useActingTenant", () => ({
+  useActingTenantId: () => "",
+}));
 vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({ backends: [], fetchBackends: h.fetchBackends }),
 }));
