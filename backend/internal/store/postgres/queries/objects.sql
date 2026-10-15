@@ -234,7 +234,7 @@ WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
             sqlc.arg('tenant_id')::uuid,
             sqlc.arg('collection')::text,
-            sqlc.narg('state')::object_state,
+            sqlc.narg('state')::text,
             sqlc.narg('prefix')::text,
             sqlc.narg('substr')::text,
             sqlc.narg('content_type')::text,

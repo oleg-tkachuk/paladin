@@ -475,7 +475,7 @@ WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
             $2::uuid,
             $1::text,
-            $3::object_state,
+            $3::text,
             $4::text,
             $5::text,
             $6::text,
@@ -516,7 +516,7 @@ type ListObjectsRow struct {
 // collections scan per returned row (the planner cannot size the id array).
 // The collection is resolved once, by its unique (tenant_id, name), and
 // still checked against every row.
-func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *ObjectState, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		collection,
 		tenantID,

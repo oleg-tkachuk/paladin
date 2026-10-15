@@ -828,7 +828,7 @@ func objectBranchHints(filter string) []objectHints {
 func hintsFrom(pd cel.ObjectPushdown) objectHints {
 	var h objectHints
 	if pd.StateEq != "" {
-		v := sqlc.ObjectState(pd.StateEq)
+		v := pd.StateEq
 		h.state = &v
 	}
 	if p, ok := likeEscape(pd.KeyPrefix); ok {
@@ -856,7 +856,7 @@ func hintsFrom(pd cel.ObjectPushdown) objectHints {
 // objectHints is the SQL-expressible subset of an object filter, in the shape
 // the ListObjects query takes. The zero value narrows nothing.
 type objectHints struct {
-	state             *sqlc.ObjectState
+	state             *string // text: search_object_ids (078) answers an unknown state itself
 	prefix            *string
 	substr            *string
 	contentType       *string
