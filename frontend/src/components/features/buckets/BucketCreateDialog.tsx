@@ -44,6 +44,8 @@ interface BucketCreateDialogProps {
   >[];
   /** Set when the backend list failed to load: `backends` is then unknown. */
   backendsFailed?: FailedRead | null;
+  /** Who the bucket is for; a caller creating an owned bucket says so. */
+  description?: string;
   createBucket: (
     backendId: string,
     bucketId: string,
@@ -77,14 +79,18 @@ const REASON_HINTS: Partial<Record<ErrorReason, string>> = {
     " Turn off Register an existing bucket to create it.",
 };
 
+/** The default description: the bucket is created with no owner tenant. */
+export const SHARED_BUCKET_DESCRIPTION =
+  "Created on the backend and shared: any tenant can bind to it.";
+
 /** The backend page, where its features are probed and shown. */
 const backendHref = (backendId: string) =>
   `/storage-backends/${encodeURIComponent(backendId)}`;
 
 /**
  * New S3 bucket — one dialog for the cross-tenant list and a tenant's own,
- * which each carried a copy. The bucket is created shared (no owner tenant)
- * from either page; the description says so rather than implying otherwise.
+ * which each carried a copy. Whether the bucket is shared or owned is the
+ * caller's `createBucket`; `description` tells the operator which.
  *
  * It may be created public (ADR-0027): anyone reads its objects by URL. That
  * is offered only on a backend whose probe found anonymous reads enforced,
@@ -95,6 +101,7 @@ export function BucketCreateDialog({
   onOpenChange,
   backends,
   backendsFailed = null,
+  description = SHARED_BUCKET_DESCRIPTION,
   createBucket,
 }: BucketCreateDialogProps) {
   const { showNotification } = useNotification();
@@ -203,7 +210,7 @@ export function BucketCreateDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="New S3 bucket"
-      description="Created on the backend and shared: any tenant can bind to it."
+      description={description}
       width="lg"
       onSubmit={() => void handleCreate()}
       submitLabel="Create bucket"

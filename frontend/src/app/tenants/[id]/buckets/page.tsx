@@ -11,6 +11,11 @@
 //
 // Rows link to the bucket detail subtree under the same tenant. A shared
 // bucket other tenants store in too is deleted from /buckets, not here.
+//
+// Creating follows the layout. A dedicated tenant's new bucket is owned by it,
+// so it lands on this list. A shared tenant owns none: an unowned bucket made
+// here would not be on this list either, so the page sends the operator to
+// /buckets for a shared bucket, or to Collections, which binds one.
 
 import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -22,6 +27,7 @@ import {
   ArrowPathIcon,
   ClockIcon,
   EllipsisHorizontalIcon,
+  FolderPlusIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   ServerStackIcon,
@@ -65,6 +71,8 @@ import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
+import type { PublicReadSettings } from "@/hooks/useBuckets";
+import { isDedicatedLayout } from "@/lib/storageLayout";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { SortableHead } from "@/components/ui/SortHeader";
@@ -76,6 +84,9 @@ import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStat
 type SortColumn = "backend" | "name" | "region";
 
 const ALL_BACKENDS = "__all__";
+
+/** The cross-tenant bucket index, where shared buckets are managed. */
+const SHARED_BUCKETS_HREF = "/buckets";
 
 export default function TenantBucketsPage() {
   const changesBlocked = useTenantChangesBlocked();
@@ -115,6 +126,30 @@ export default function TenantBucketsPage() {
     [fetchBuckets, tenant.tenantId],
   );
   const ownedByTenant = (b: Bucket) => b.ownerTenantId === tenant.tenantId;
+  const dedicated = isDedicatedLayout(tenant.storageLayout);
+  const collectionsHref = `/tenants/${tenant.slug}/collections`;
+
+  // A dedicated tenant's bucket is created owned by it (ADR-0015).
+  const createOwnedBucket = useCallback(
+    (
+      backendId: string,
+      bucketId: string,
+      displayName: string,
+      region: string,
+      provisionOnBackend: boolean,
+      publicRead: PublicReadSettings | null,
+    ) =>
+      createBucket(
+        backendId,
+        bucketId,
+        displayName,
+        region,
+        provisionOnBackend,
+        publicRead,
+        tenant.tenantId,
+      ),
+    [createBucket, tenant.tenantId],
+  );
 
   useEffect(() => {
     void refetch();
@@ -185,15 +220,24 @@ export default function TenantBucketsPage() {
             .
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => setCreateOpen(true)}
-          disabled={Boolean(changesBlocked)}
-          title={changesBlocked ?? undefined}
-        >
-          <PlusIcon className="size-4" />
-          New bucket
-        </Button>
+        {dedicated ? (
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            disabled={Boolean(changesBlocked)}
+            title={changesBlocked ?? undefined}
+          >
+            <PlusIcon className="size-4" />
+            New bucket
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" asChild>
+            <Link href={SHARED_BUCKETS_HREF}>
+              <ServerStackIcon className="size-4" />
+              Shared buckets
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Filter bar */}
@@ -291,20 +335,31 @@ export default function TenantBucketsPage() {
                     <p className="text-sm">
                       {search || filterBackend !== ALL_BACKENDS
                         ? "No buckets match your filters."
-                        : "This tenant stores in no bucket yet: it owns none, has no default binding and no collections."}
+                        : dedicated
+                          ? "This tenant stores in no bucket yet: it owns none, has no default binding and no collections."
+                          : "This tenant stores in no bucket yet: it has no default binding and no collections. A collection binds it to a shared bucket."}
                     </p>
-                    {!search && filterBackend === ALL_BACKENDS && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateOpen(true)}
-                        disabled={Boolean(changesBlocked)}
-                        title={changesBlocked ?? undefined}
-                      >
-                        <PlusIcon className="size-4" />
-                        Create the first bucket
-                      </Button>
-                    )}
+                    {!search &&
+                      filterBackend === ALL_BACKENDS &&
+                      (dedicated ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCreateOpen(true)}
+                          disabled={Boolean(changesBlocked)}
+                          title={changesBlocked ?? undefined}
+                        >
+                          <PlusIcon className="size-4" />
+                          Create the first bucket
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={collectionsHref}>
+                            <FolderPlusIcon className="size-4" />
+                            Go to collections
+                          </Link>
+                        </Button>
+                      ))}
                   </div>
                 </TableCell>
               </TableRow>
@@ -384,13 +439,16 @@ export default function TenantBucketsPage() {
         </Table>
       </Card>
 
-      <BucketCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        backends={backendRows}
-        backendsFailed={failedRead(backendsError, fetchBackends)}
-        createBucket={createBucket}
-      />
+      {dedicated && (
+        <BucketCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          backends={backendRows}
+          backendsFailed={failedRead(backendsError, fetchBackends)}
+          description={`Created on the backend and owned by ${tenant.displayName || tenant.slug}: no other tenant stores in it.`}
+          createBucket={createOwnedBucket}
+        />
+      )}
 
       <BucketDeleteDialog
         target={deleteTarget}
