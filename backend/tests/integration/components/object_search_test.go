@@ -263,9 +263,52 @@ func TestListObjects_DisjunctionUnderRLS(t *testing.T) {
 	}
 }
 
+// A state the object_state enum does not hold matches nothing; it does not
+// fail the query. The filter compiler rejects such a literal before a handler
+// gets here, but the pushdown only narrows the scan and must never be the
+// reason a listing fails — before 078 this was 22P02 and an Internal error.
+func TestListObjects_UnknownStateMatchesNothing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+	seedBucketRow(t, ctx, admin)
+	seedCollectionFor(t, ctx, admin, tenant, "docs")
+	mustExec(t, ctx, admin, `
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
+		SELECT $1, c.id, 'k-' || g, 'AVAILABLE', 'text/plain'
+		  FROM generate_series(1, 5) g
+		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant)
+	pool := rlsPool(t, ctx, admin)
+	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
+	asTenant := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant})
+	// Everything passes the in-memory pass, so the count is the pushdown's.
+	matchAll := must(cel.NewEvaluator().Compile(cel.ObjectSchema, `key != ""`))
+
+	for _, tc := range []struct {
+		filter string
+		want   int
+	}{
+		{`state == "AVAILABLE"`, 5},
+		{`state == "NOT_A_STATE"`, 0},
+		{`state == "available"`, 0},
+		{`state in ["NOT_A_STATE", "AVAILABLE"]`, 5},
+	} {
+		objs, _, err := repo.ListObjects(asTenant, objecth.ListObjectsArgs{
+			TenantID: tenant, Collection: "docs", PageSize: 10, CompiledCEL: matchAll, Filter: tc.filter,
+		})
+		if err != nil {
+			t.Fatalf("ListObjects(%s): %v", tc.filter, err)
+		}
+		if len(objs) != tc.want {
+			t.Errorf("ListObjects(%s): %d objects, want %d", tc.filter, len(objs), tc.want)
+		}
+	}
+}
+
 // The function's queries, as its owner runs them, use the indexes 026–028.
 // EXPLAIN cannot see inside a plpgsql call, so this explains the statements
-// it builds — keep them in step with 029.
+// it builds — keep them in step with 029 and 078.
 func TestIndexUsage_ObjectSearch(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -318,7 +361,7 @@ func TestIndexUsage_ObjectsStatePage(t *testing.T) {
 		t.Fatalf("resolve probe collection: %v", err)
 	}
 	plan := explain(t, ctx, pool, `SELECT o.id FROM public.objects o
-		WHERE o.tenant_id = $1 AND o.collection_id = $2 AND o.state = $3::object_state
+		WHERE o.tenant_id = $1 AND o.collection_id = $2 AND o.state = $3::text::object_state
 		ORDER BY o.id LIMIT 100`, f.tenantID, probe, "AVAILABLE")
 	assertPlanUses(t, plan, "Index Only Scan using idx_objects_keyset_state", "status-filtered page")
 }
