@@ -16,7 +16,7 @@ import { errorMessage } from "@/hooks/errorContract";
 // Ceiling on how many pages one fetchBuckets call will follow. At the maximum
 // page size this is 10k buckets — far past any console list that stays usable,
 // and a backstop against paging forever if a token ever fails to terminate.
-const MAX_LIST_PAGES = 20;
+export const MAX_LIST_PAGES = 20;
 
 /**
  * useBuckets — wrapper around admin/v1.BucketService.
@@ -153,6 +153,52 @@ export function useBuckets() {
     [],
   );
 
+  /**
+   * The buckets a tenant may bind Collections to: every shared bucket plus
+   * the ones it owns (BucketService.ListAccessibleBuckets). Not the same set
+   * as fetchBuckets with an owner filter — a shared-layout tenant (ADR-0015)
+   * owns no bucket, so that filter answers "none" for exactly the tenants
+   * that bind a shared one.
+   *
+   * Same paging and state contract as fetchBuckets: follows nextPageToken to
+   * the end under MAX_LIST_PAGES, and shares its sequence number, because
+   * both write the one `buckets` list.
+   */
+  const fetchAccessibleBuckets = useCallback(
+    async (tenant: string, pageToken: string = "") => {
+      const mine = ++seq.current;
+      setLoading(true);
+      setError(null);
+      try {
+        let token = pageToken;
+        let pages = 0;
+        const acc: Bucket[] = [];
+        do {
+          const res = await bucketClient.listAccessibleBuckets({
+            tenant,
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+          });
+          acc.push(...res.buckets);
+          token = res.page?.nextPageToken ?? "";
+          pages += 1;
+        } while (token && pages < MAX_LIST_PAGES);
+        if (mine === seq.current) {
+          setBuckets(acc);
+        }
+        return { buckets: acc, nextPageToken: token };
+      } catch (err) {
+        // Query contract (state-only): surface via `error`, never throw.
+        if (mine === seq.current) {
+          setError(errorMessage(err, "Failed to fetch buckets"));
+        }
+        return { buckets: [], nextPageToken: "" };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
   const createBucket = useCallback(
     async (
       backendId: string,
@@ -247,6 +293,7 @@ export function useBuckets() {
     loading,
     error,
     fetchBuckets,
+    fetchAccessibleBuckets,
     createBucket,
     updateBucket,
     deleteBucket,

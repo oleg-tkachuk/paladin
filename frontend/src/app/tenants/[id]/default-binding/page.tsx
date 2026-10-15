@@ -46,7 +46,7 @@ export default function DefaultBindingPage() {
   const { tenantId, slug } = useTenant();
   const name = `tenants/${slug}`;
   const { showNotification } = useNotification();
-  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
+  const { buckets, error: bucketsError, fetchAccessibleBuckets } = useBuckets();
 
   const [selected, setSelected] = useState(-1); // index into buckets, -1 = none
   const [busy, setBusy] = useState(false);
@@ -86,10 +86,13 @@ export default function DefaultBindingPage() {
   });
   const binding = bindingQuery.data ?? null;
 
-  // Tenant-owned buckets only. One place, so Retry asks for the same list.
+  // The buckets this tenant may bind: shared ones plus its own. An owner
+  // filter answered "none" for every shared-layout tenant (ADR-0015), which
+  // owns no bucket, and left the route impossible to set from here. One
+  // place, so Retry asks for the same list.
   const loadBuckets = useCallback(
-    () => fetchBuckets(undefined, "", "", { ownerTenantId: tenantId }),
-    [fetchBuckets, tenantId],
+    () => fetchAccessibleBuckets(name),
+    [fetchAccessibleBuckets, name],
   );
   useEffect(() => {
     void loadBuckets();
@@ -169,7 +172,7 @@ export default function DefaultBindingPage() {
         )}
 
         {/* A failed read left the select holding only "Select a bucket…" and
-            Set disabled, which read as a tenant that owns no buckets. */}
+            Set disabled, which read as a tenant with nothing to bind. */}
         {bucketsError ? (
           <ListLoadError
             variant="inline"

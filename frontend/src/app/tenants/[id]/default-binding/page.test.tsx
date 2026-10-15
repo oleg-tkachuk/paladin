@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
   get: vi.fn(),
   set: vi.fn(),
   clear: vi.fn(),
-  fetchBuckets: vi.fn(),
+  fetchAccessibleBuckets: vi.fn(),
   showNotification: vi.fn(),
   buckets: [] as Array<{ backendId: string; bucketId: string }>,
   bucketsError: null as string | null,
@@ -32,7 +32,7 @@ vi.mock("@/hooks/useBuckets", () => ({
   useBuckets: () => ({
     buckets: h.buckets,
     error: h.bucketsError,
-    fetchBuckets: h.fetchBuckets,
+    fetchAccessibleBuckets: h.fetchAccessibleBuckets,
   }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -47,7 +47,7 @@ beforeEach(() => {
   h.get.mockReset();
   h.set.mockReset();
   h.clear.mockReset();
-  h.fetchBuckets.mockReset();
+  h.fetchAccessibleBuckets.mockReset();
   h.bucketsError = null;
   h.showNotification.mockReset();
   h.buckets = [
@@ -63,14 +63,14 @@ describe("DefaultBindingPage", () => {
     expect(
       await screen.findByText(/bare-name creation will be rejected/i),
     ).toBeInTheDocument();
-    // Get is keyed by canonical tenant name, buckets scoped to the tenant.
+    // Get is keyed by canonical tenant name; the picker offers what the
+    // tenant may bind (shared + owned), not only what it owns — a
+    // shared-layout tenant owns nothing and the picker came up empty.
     expect(h.get).toHaveBeenCalledWith(
       { name: "tenants/acme" },
       expect.objectContaining({ signal: expect.anything() }),
     );
-    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", {
-      ownerTenantId: "t-1",
-    });
+    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith("tenants/acme");
   });
 
   it("renders the current binding when one exists", async () => {
@@ -141,17 +141,15 @@ describe("DefaultBindingPage", () => {
 
   // A failed read left only "Select a bucket…" and a disabled Set: a tenant
   // that seemed to own no buckets.
-  it("says the bucket list failed, and retries the same tenant-scoped list", async () => {
+  it("says the bucket list failed, and retries the same bindable list", async () => {
     h.get.mockRejectedValue(notFound());
     h.bucketsError = "unavailable: upstream";
     render(<DefaultBindingPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Buckets could not be loaded/,
     );
-    h.fetchBuckets.mockClear();
+    h.fetchAccessibleBuckets.mockClear();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(h.fetchBuckets).toHaveBeenCalledWith(undefined, "", "", {
-      ownerTenantId: "t-1",
-    });
+    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith("tenants/acme");
   });
 });
