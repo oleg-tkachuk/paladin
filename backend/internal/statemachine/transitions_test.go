@@ -287,7 +287,7 @@ func TestStateAndSourceConstants(t *testing.T) {
 	// These strings are the SQL enum labels and the metric dimension values —
 	// a rename here silently breaks the UPDATE guards and the dashboards.
 	if StatePending != "PENDING" || StateAvailable != "AVAILABLE" ||
-		StateFailed != "FAILED" || StateDeleted != "DELETED" {
+		StateDeleted != "DELETED" {
 		t.Error("State constants must match the object_state SQL enum")
 	}
 	if SourceEvent != "event" || SourceRPC != "rpc" || SourceReconciler != "reconciler" {

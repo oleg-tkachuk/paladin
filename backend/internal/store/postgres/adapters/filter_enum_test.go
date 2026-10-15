@@ -21,7 +21,7 @@ func TestFilterEnumsMatchSQLEnums(t *testing.T) {
 	}{
 		{cel.ObjectSchema, "state", []string{
 			string(sqlc.ObjectStatePENDING), string(sqlc.ObjectStateAVAILABLE),
-			string(sqlc.ObjectStateFAILED), string(sqlc.ObjectStateDELETED),
+			string(sqlc.ObjectStateDELETED),
 		}},
 		{cel.OperationSchema, "state", []string{
 			string(sqlc.OperationStatePENDING), string(sqlc.OperationStateRUNNING),

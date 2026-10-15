@@ -13,11 +13,11 @@ import "testing"
 func TestSortStates_PinsTheLifecycleOrder(t *testing.T) {
 	in := []StateStat{
 		{State: "ZETA"}, {State: "DELETED"}, {State: "PENDING"},
-		{State: "ALPHA"}, {State: "AVAILABLE"}, {State: "FAILED"},
+		{State: "ALPHA"}, {State: "AVAILABLE"},
 	}
 	sortStates(in)
 
-	want := []string{"PENDING", "AVAILABLE", "FAILED", "DELETED", "ALPHA", "ZETA"}
+	want := []string{"PENDING", "AVAILABLE", "DELETED", "ALPHA", "ZETA"}
 	for i, w := range want {
 		if in[i].State != w {
 			got := make([]string, len(in))

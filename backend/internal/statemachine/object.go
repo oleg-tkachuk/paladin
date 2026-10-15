@@ -35,7 +35,6 @@ type State string
 const (
 	StatePending   State = "PENDING"
 	StateAvailable State = "AVAILABLE"
-	StateFailed    State = "FAILED"
 	StateDeleted   State = "DELETED"
 )
 

@@ -165,7 +165,7 @@ func TestCompleteObjectSurvivesAnUnresolvableBucketOnTheNoOpPath(t *testing.T) {
 }
 
 func TestCompleteObjectRefusesATerminalState(t *testing.T) {
-	for _, state := range []statemachine.State{statemachine.StateDeleted, statemachine.StateFailed} {
+	for _, state := range []statemachine.State{statemachine.StateDeleted} {
 		t.Run(string(state), func(t *testing.T) {
 			obj := Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", State: state}
 			h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{})
@@ -285,7 +285,7 @@ func TestCopyObjectDefaultsTheDestinationKeyToTheSourceKey(t *testing.T) {
 
 func TestCopyObjectRefusesANonAvailableSource(t *testing.T) {
 	for _, state := range []statemachine.State{
-		statemachine.StatePending, statemachine.StateFailed, statemachine.StateDeleted,
+		statemachine.StatePending, statemachine.StateDeleted,
 	} {
 		t.Run(string(state), func(t *testing.T) {
 			src := availableSource()

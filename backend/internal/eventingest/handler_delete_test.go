@@ -128,10 +128,10 @@ func TestHandle_DeleteEventLeavesAnObjectWhoseBytesAreThere(t *testing.T) {
 	}
 }
 
-// A pending or failed object's bytes are Paladin's own to discard; the store
-// is not even asked.
+// A pending object's bytes are Paladin's own to discard; the store is not even
+// asked.
 func TestHandle_DeleteEventSkipsAnObjectThatIsNotAvailable(t *testing.T) {
-	for _, state := range []sqlc.ObjectState{sqlc.ObjectStatePENDING, sqlc.ObjectStateFAILED} {
+	for _, state := range []sqlc.ObjectState{sqlc.ObjectStatePENDING} {
 		t.Run(string(state), func(t *testing.T) {
 			_, lookup, ev := deleteFixture(state)
 			probe, deleter := &fakeProbe{}, &fakeDeleter{}

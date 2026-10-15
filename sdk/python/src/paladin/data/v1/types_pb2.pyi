@@ -24,7 +24,6 @@ class ObjectState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     OBJECT_STATE_UNSPECIFIED: _ClassVar[ObjectState]
     OBJECT_STATE_PENDING: _ClassVar[ObjectState]
     OBJECT_STATE_AVAILABLE: _ClassVar[ObjectState]
-    OBJECT_STATE_FAILED: _ClassVar[ObjectState]
     OBJECT_STATE_DELETED: _ClassVar[ObjectState]
 TAINT_SIGNAL_UNSPECIFIED: TaintSignal
 TAINT_SIGNAL_PROMPT_INJECTION: TaintSignal
@@ -33,7 +32,6 @@ TAINT_SIGNAL_SECRETS: TaintSignal
 OBJECT_STATE_UNSPECIFIED: ObjectState
 OBJECT_STATE_PENDING: ObjectState
 OBJECT_STATE_AVAILABLE: ObjectState
-OBJECT_STATE_FAILED: ObjectState
 OBJECT_STATE_DELETED: ObjectState
 
 class Object(_message.Message):

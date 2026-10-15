@@ -88,7 +88,6 @@ const (
 	ObjectState_OBJECT_STATE_UNSPECIFIED ObjectState = 0
 	ObjectState_OBJECT_STATE_PENDING     ObjectState = 1
 	ObjectState_OBJECT_STATE_AVAILABLE   ObjectState = 2
-	ObjectState_OBJECT_STATE_FAILED      ObjectState = 3
 	ObjectState_OBJECT_STATE_DELETED     ObjectState = 4
 )
 
@@ -98,14 +97,12 @@ var (
 		0: "OBJECT_STATE_UNSPECIFIED",
 		1: "OBJECT_STATE_PENDING",
 		2: "OBJECT_STATE_AVAILABLE",
-		3: "OBJECT_STATE_FAILED",
 		4: "OBJECT_STATE_DELETED",
 	}
 	ObjectState_value = map[string]int32{
 		"OBJECT_STATE_UNSPECIFIED": 0,
 		"OBJECT_STATE_PENDING":     1,
 		"OBJECT_STATE_AVAILABLE":   2,
-		"OBJECT_STATE_FAILED":      3,
 		"OBJECT_STATE_DELETED":     4,
 	}
 )
@@ -776,13 +773,12 @@ const file_paladin_data_v1_types_proto_rawDesc = "" +
 	"\x18TAINT_SIGNAL_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTAINT_SIGNAL_PROMPT_INJECTION\x10\x01\x12\x14\n" +
 	"\x10TAINT_SIGNAL_PII\x10\x02\x12\x18\n" +
-	"\x14TAINT_SIGNAL_SECRETS\x10\x03*\x94\x01\n" +
+	"\x14TAINT_SIGNAL_SECRETS\x10\x03*\x96\x01\n" +
 	"\vObjectState\x12\x1c\n" +
 	"\x18OBJECT_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14OBJECT_STATE_PENDING\x10\x01\x12\x1a\n" +
-	"\x16OBJECT_STATE_AVAILABLE\x10\x02\x12\x17\n" +
-	"\x13OBJECT_STATE_FAILED\x10\x03\x12\x18\n" +
-	"\x14OBJECT_STATE_DELETED\x10\x04BJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3"
+	"\x16OBJECT_STATE_AVAILABLE\x10\x02\x12\x18\n" +
+	"\x14OBJECT_STATE_DELETED\x10\x04\"\x04\b\x03\x10\x03*\x13OBJECT_STATE_FAILEDBJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_types_proto_rawDescOnce sync.Once

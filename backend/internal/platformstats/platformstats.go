@@ -254,8 +254,8 @@ type ObjectCensus struct {
 }
 
 // StateStat is one (state, count, bytes) triple. `State` carries the
-// object_state enum's wire name ("PENDING", "AVAILABLE", "FAILED",
-// "DELETED") verbatim, so a new enum member surfaces without a code change.
+// object_state enum's wire name ("PENDING", "AVAILABLE", "DELETED")
+// verbatim, so a new enum member surfaces without a code change.
 type StateStat struct {
 	State string `json:"state"`
 	Count int64  `json:"count"`
@@ -640,8 +640,7 @@ func collectSubscriptions(ctx context.Context, pool *pgxpool.Pool, out *Subscrip
 var stateOrder = map[string]int{
 	"PENDING":   0,
 	"AVAILABLE": 1,
-	"FAILED":    2,
-	"DELETED":   3,
+	"DELETED":   2,
 }
 
 func sortStates(s []StateStat) {

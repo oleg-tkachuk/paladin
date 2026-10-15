@@ -4,6 +4,7 @@ package components
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,7 +13,7 @@ import (
 )
 
 // beforeDiscardingFailed is the last migration under which an object could be
-// kept as FAILED; 079 deletes the rows kept until then.
+// kept as FAILED; 079 deletes the rows kept until then and drops the label.
 const beforeDiscardingFailed = 78
 
 // Migrating a database that still holds FAILED objects removes them, frees
@@ -46,6 +47,10 @@ func TestFailedObjectsAreDiscardedByTheMigration(t *testing.T) {
 	if err := goose.Up(db, "."); err != nil {
 		t.Fatalf("migrate up: %v", err)
 	}
+	// The type was replaced, and a connection that prepared statements against
+	// the old one fails them ("cache lookup failed for type"); a deploy starts
+	// its pods after the migration, on fresh connections.
+	pool.Reset()
 
 	if !objectGone(t, ctx, pool, failed) {
 		t.Error("the FAILED object survived the migration")
@@ -57,4 +62,14 @@ func TestFailedObjectsAreDiscardedByTheMigration(t *testing.T) {
 	}
 	// Its key is free again.
 	insert("failed.txt", "PENDING")
+
+	// And the label is gone from object_state.
+	var labels []string
+	if err := pool.QueryRow(ctx,
+		`SELECT enum_range(NULL::object_state)::text[]`).Scan(&labels); err != nil {
+		t.Fatalf("read labels: %v", err)
+	}
+	if want := []string{"PENDING", "AVAILABLE", "DELETED"}; !slices.Equal(labels, want) {
+		t.Errorf("object_state labels = %v, want %v", labels, want)
+	}
 }
