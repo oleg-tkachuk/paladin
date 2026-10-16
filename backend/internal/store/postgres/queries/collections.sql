@@ -66,9 +66,15 @@ SELECT sqlc.embed(collections),
 FROM collections
 JOIN buckets b           ON b.id = collections.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE collections.tenant_id = $1
+-- tenant_id is optional: NULL lists every tenant's collections, which the
+-- handler allows only a platform admin reading across tenants. Rows and the
+-- cursor run in (tenant_id, name) order, so a page boundary between two
+-- tenants loses nothing; within one tenant that is the name order.
+WHERE (sqlc.narg('tenant_id')::uuid IS NULL
+       OR collections.tenant_id = sqlc.narg('tenant_id')::uuid)
   AND (sqlc.narg('after_id')::text IS NULL
-       OR collections.name > sqlc.narg('after_id')::text)
+       OR (collections.tenant_id, collections.name)
+          > (sqlc.narg('after_tenant')::uuid, sqlc.narg('after_id')::text))
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
@@ -92,7 +98,7 @@ WHERE collections.tenant_id = $1
        OR collections.created_at >= sqlc.narg('created_at_gte')::timestamptz)
   AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
        OR collections.created_at <= sqlc.narg('created_at_lte')::timestamptz)
-ORDER BY collections.name
+ORDER BY collections.tenant_id, collections.name
 LIMIT sqlc.arg('page_size');
 
 -- name: BindCollectionToBucket :execrows

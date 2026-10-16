@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 const h = vi.hoisted(() => ({
   fetchTenants: vi.fn(),
   fetchBuckets: vi.fn(),
+  collectionOptions: [] as unknown[],
   fetchCollections: vi.fn(),
   showNotification: vi.fn(),
   tenantsError: null as string | null,
@@ -34,11 +35,14 @@ vi.mock("@/hooks/useBuckets", () => ({
   }),
 }));
 vi.mock("@/hooks/useCollections", () => ({
-  useCollections: () => ({
-    collections: [],
-    fetchCollections: h.fetchCollections,
-    loading: false,
-  }),
+  useCollections: (options: unknown) => (
+    h.collectionOptions.push(options),
+    {
+      collections: [],
+      fetchCollections: h.fetchCollections,
+      loading: false,
+    }
+  ),
 }));
 vi.mock("@/hooks/useCedarValidation", () => ({
   useCedarValidation: () => ({ status: "idle" }),
@@ -128,5 +132,13 @@ describe("PoliciesPage failed policy read", () => {
     );
     expect(screen.getByRole("button", { name: /^Save/ })).toBeDisabled();
     h.tenants = [];
+  });
+});
+
+describe("PoliciesPage collection targets", () => {
+  // The system-wide editor may target any tenant's Collection.
+  it("reads every tenant's collections", () => {
+    render(<PoliciesPage />);
+    expect(h.collectionOptions).toContainEqual({ catalogue: true });
   });
 });

@@ -316,3 +316,28 @@ func mergeMap(a, b map[string]string) map[string]string {
 	}
 	return out
 }
+
+// ObjectFilterMentions reports whether expr names field anywhere — in a
+// conjunct, a disjunct, an `in` list or a negation — which the pushdown,
+// reading only what it can turn into SQL, cannot say. A parse error is the
+// caller's to treat; the compiled program rejects the same expression.
+func ObjectFilterMentions(expr, field string) (bool, error) {
+	if expr == "" {
+		return false, nil
+	}
+	env, err := buildEnv(ObjectSchema)
+	if err != nil {
+		return false, fmt.Errorf("cel: build env: %w", err)
+	}
+	parsed, iss := env.Parse(expr)
+	if iss != nil && iss.Err() != nil {
+		return false, fmt.Errorf("cel: parse %q: %w", expr, iss.Err())
+	}
+	found := false
+	celast.PreOrderVisit(parsed.NativeRep().Expr(), celast.NewExprVisitor(func(e celast.Expr) {
+		if e.Kind() == celast.IdentKind && e.AsIdent() == field {
+			found = true
+		}
+	}))
+	return found, nil
+}

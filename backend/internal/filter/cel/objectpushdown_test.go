@@ -216,3 +216,27 @@ func branchAdmits(b ObjectPushdown, r ObjectRow) bool {
 	}
 	return true
 }
+
+func TestObjectFilterMentions(t *testing.T) {
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{``, false},
+		{`key.startsWith("a")`, false},
+		{`state == "AVAILABLE"`, true},
+		{`state in ["AVAILABLE", "DELETED"]`, true},
+		{`key == "a" || state != "DELETED"`, true},
+		{`!(state == "DELETED") && size_bytes > 0`, true},
+		// A tag named like the field is not the field.
+		{`tags["state"] == "x"`, false},
+	} {
+		got, err := ObjectFilterMentions(tc.expr, "state")
+		if err != nil {
+			t.Fatalf("%q: %v", tc.expr, err)
+		}
+		if got != tc.want {
+			t.Errorf("%q mentions state = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}

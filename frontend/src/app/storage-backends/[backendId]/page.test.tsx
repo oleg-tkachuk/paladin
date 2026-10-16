@@ -111,6 +111,16 @@ describe("StorageBackendDetailPage bucket rows", () => {
   });
 });
 
+describe("StorageBackendDetailPage bucket read", () => {
+  // The backend's buckets, asked of the server by backend — not every
+  // bucket on every backend, filtered here.
+  it("asks the server for this backend's buckets only", () => {
+    h.buckets.fetchBuckets.mockClear();
+    render(<StorageBackendDetailPage />);
+    expect(h.buckets.fetchBuckets).toHaveBeenCalledWith("primary");
+  });
+});
+
 describe("StorageBackendDetailPage features", () => {
   // The probe is read when a capability is in question, not on every visit:
   // the overview shows its verdict and links to the tab that lists it.

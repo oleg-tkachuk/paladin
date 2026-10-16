@@ -67,10 +67,18 @@ WHERE o.tenant_id = $1
   AND c.name = $2
   AND ($3::object_state IS NULL
        OR o.state = $3::object_state)
+  -- A filter that names no state counts the live objects, as ListObjects
+  -- lists them (081).
+  AND (NOT $4::boolean OR o.state <> 'DELETED')
 `
 
-func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState) (int64, error) {
-	row := q.db.QueryRow(ctx, countObjects, tenantID, name, state)
+func (q *Queries) CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, liveOnly bool) (int64, error) {
+	row := q.db.QueryRow(ctx, countObjects,
+		tenantID,
+		name,
+		state,
+		liveOnly,
+	)
 	var n int64
 	err := row.Scan(&n)
 	return n, err
@@ -483,7 +491,8 @@ WHERE o.id = ANY (ARRAY(
             $8::jsonb,
             $9::jsonb,
             $10::uuid,
-            $11::integer)))
+            $11::integer,
+            $12::boolean)))
   AND o.tenant_id = $2::uuid
   AND o.collection_id = (
         SELECT c.id FROM collections c
@@ -516,7 +525,7 @@ type ListObjectsRow struct {
 // collections scan per returned row (the planner cannot size the id array).
 // The collection is resolved once, by its unique (tenant_id, name), and
 // still checked against every row.
-func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		collection,
 		tenantID,
@@ -529,6 +538,7 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 		metadataContains,
 		afterID,
 		pageSize,
+		liveOnly,
 	)
 	if err != nil {
 		return nil, err

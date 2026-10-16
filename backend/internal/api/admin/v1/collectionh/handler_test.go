@@ -580,6 +580,24 @@ func TestListCollections(t *testing.T) {
 		}
 	})
 
+	// The platform's collection catalogue: an admin's empty parent lists every
+	// tenant's collections. It used to pin the admin's own tenant, so the
+	// console's cross-tenant list showed one tenant.
+	t.Run("platform.admin with an empty parent lists across tenants", func(t *testing.T) {
+		var crossed bool
+		fr := &fakeRepo{listFn: func(ctx context.Context, _ ListCollectionsArgs) ([]Collection, string, error) {
+			crossed = auth.CrossTenantRead(ctx)
+			return nil, "", nil
+		}}
+		h := NewHandler(fr, allowAll())
+		if _, _, err := h.ListCollections(adminCtx(tid), ListCollectionsArgs{}); err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if fr.lastList.TenantID != uuid.Nil || !crossed {
+			t.Fatalf("tenant %v, cross-tenant %v; want every tenant", fr.lastList.TenantID, crossed)
+		}
+	})
+
 	t.Run("platform.admin cross-tenant bucket list allowed", func(t *testing.T) {
 		fr := &fakeRepo{listFn: func(_ context.Context, args ListCollectionsArgs) ([]Collection, string, error) {
 			return nil, "", nil

@@ -6,7 +6,9 @@ import userEvent from "@testing-library/user-event";
 // data hooks + scope + notifications and pin the shell, the on-mount fetch, and
 // the provision dialog.
 const h = vi.hoisted(() => ({
-  fetchCollections: vi.fn(),
+  fetchCollections: vi.fn((_filter?: string) => Promise.resolve()),
+  collections: [] as Array<Record<string, unknown>>,
+  options: undefined as unknown,
   createCollection: vi.fn(() => Promise.resolve()),
   deleteCollection: vi.fn(() => Promise.resolve()),
   fetchBuckets: vi.fn(() => Promise.resolve()),
@@ -18,14 +20,26 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useCollections", () => ({
-  useCollections: () => ({
-    collections: [],
-    nextPageToken: "",
-    loading: false,
-    error: h.error,
-    fetchCollections: h.fetchCollections,
-    createCollection: h.createCollection,
-    deleteCollection: h.deleteCollection,
+  useCollections: (options: unknown) => {
+    h.options = options;
+    return {
+      collections: h.collections,
+      nextPageToken: "",
+      loading: false,
+      error: h.error,
+      fetchAllCollections: h.fetchCollections,
+      createCollection: h.createCollection,
+      deleteCollection: h.deleteCollection,
+    };
+  },
+}));
+vi.mock("@/hooks/useTenants", () => ({
+  useTenants: () => ({
+    tenants: [
+      { tenantId: "t-a", slug: "tenant-a", displayName: "Tenant A" },
+      { tenantId: "t-b", slug: "tenant-b", displayName: "" },
+    ],
+    fetchTenants: vi.fn(),
   }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
@@ -66,6 +80,7 @@ vi.mock("@/components/layout/PageHeader", () => ({
 import CollectionsPage from "./page";
 
 beforeEach(() => {
+  h.collections = [];
   h.fetchCollections.mockClear();
   h.createCollection.mockClear();
   h.deleteCollection.mockClear();
@@ -179,5 +194,37 @@ describe("CollectionsPage load failure", () => {
   it("still says 'none yet' when the list really is empty", () => {
     render(<CollectionsPage />);
     expect(screen.getByText("No Collections yet.")).toBeInTheDocument();
+  });
+});
+
+describe("CollectionsPage catalogue", () => {
+  const row = (tenantId: string) => ({
+    tenantId,
+    collection: "docs",
+    displayName: "",
+    bucket: "storageBackends/primary/buckets/pool",
+    resourceVersion: "1",
+  });
+
+  // The platform's catalogue: every tenant's, not the session tenant's.
+  it("reads every tenant's collections", () => {
+    render(<CollectionsPage />);
+    expect(h.options).toEqual({ catalogue: true });
+  });
+
+  // One name in two tenants is two collections, each its tenant's.
+  it("names each row's tenant and links it to that tenant's page", () => {
+    h.collections = [row("t-a"), row("t-b")];
+    render(<CollectionsPage />);
+    expect(screen.getByRole("link", { name: "Tenant A" })).toHaveAttribute(
+      "href",
+      "/tenants/t-a",
+    );
+    expect(screen.getByRole("link", { name: "tenant-b" })).toBeInTheDocument();
+    const docs = screen.getAllByRole("link", { name: "docs" });
+    expect(docs.map((l) => l.getAttribute("href"))).toEqual([
+      "/tenants/t-a/collections/docs",
+      "/tenants/t-b/collections/docs",
+    ]);
   });
 });

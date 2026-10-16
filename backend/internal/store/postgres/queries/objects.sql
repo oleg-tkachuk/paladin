@@ -242,7 +242,8 @@ WHERE o.id = ANY (ARRAY(
             sqlc.narg('tags_contains')::jsonb,
             sqlc.narg('metadata_contains')::jsonb,
             sqlc.narg('after_id')::uuid,
-            sqlc.arg('page_size')::integer)))
+            sqlc.arg('page_size')::integer,
+            sqlc.arg('live_only')::boolean)))
   AND o.tenant_id = sqlc.arg('tenant_id')::uuid
   AND o.collection_id = (
         SELECT c.id FROM collections c
@@ -257,7 +258,10 @@ JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
   AND c.name = $2
   AND (sqlc.narg('state')::object_state IS NULL
-       OR o.state = sqlc.narg('state')::object_state);
+       OR o.state = sqlc.narg('state')::object_state)
+  -- A filter that names no state counts the live objects, as ListObjects
+  -- lists them (081).
+  AND (NOT sqlc.arg('live_only')::boolean OR o.state <> 'DELETED');
 
 -- name: ScanPendingExpired :many
 -- Reconciler picks up PENDING rows whose presign has expired.

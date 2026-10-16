@@ -44,10 +44,11 @@ import { T } from "@/lib/ui/typography";
 
 import {
   bucketClient,
-  collectionClient,
   auditClient,
   tenantBudgetClient,
 } from "@/lib/connect/client";
+import { listAllCollections } from "@/lib/listAllCollections";
+import { MAX_LIST_PAGES } from "@/hooks/useBuckets";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
 import type {
   TenantBudget,
@@ -172,8 +173,8 @@ export default function TenantOverviewPage() {
   const tenant = useTenant();
 
   // ── counts (buckets, collections) ──────────────────────────────
-  const [bucketCount, setBucketCount] = useState<number | null>(null);
-  const [okCount, setOkCount] = useState<number | null>(null);
+  const [bucketCount, setBucketCount] = useState<TileCount>(COUNTING);
+  const [okCount, setOkCount] = useState<TileCount>(COUNTING);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,14 +183,24 @@ export default function TenantOverviewPage() {
         // The same set the Buckets tab lists: owned plus granted
         // (ListAccessibleBuckets, ADR-0032), so the tile's number is the
         // length of the list it links to.
-        const res = await bucketClient.listAccessibleBuckets({
-          tenant: `tenants/${tenant.tenantId}`,
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-        });
+        // Every page: the Buckets tab reads them all.
+        let n = 0;
+        let token = "";
+        let pages = 0;
+        do {
+          const res = await bucketClient.listAccessibleBuckets({
+            tenant: `tenants/${tenant.tenantId}`,
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+          });
+          n += res.buckets.length;
+          token = res.page?.nextPageToken ?? "";
+          pages += 1;
+        } while (token && pages < MAX_LIST_PAGES);
         if (cancelled) return;
-        setBucketCount(res.buckets.length);
+        setBucketCount({ kind: "count", n });
       } catch {
-        if (!cancelled) setBucketCount(0);
+        // A failed count is unknown, not zero.
+        if (!cancelled) setBucketCount(COUNT_FAILED);
       }
     })();
     return () => {
@@ -201,15 +212,13 @@ export default function TenantOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await collectionClient.listCollections({
+        const all = await listAllCollections({
           parent: `tenants/${tenant.tenantId}`,
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-          filter: "",
         });
         if (cancelled) return;
-        setOkCount(res.collections.length);
+        setOkCount({ kind: "count", n: all.length });
       } catch {
-        if (!cancelled) setOkCount(0);
+        if (!cancelled) setOkCount(COUNT_FAILED);
       }
     })();
     return () => {
@@ -393,6 +402,15 @@ export default function TenantOverviewPage() {
 
 // ─── tiles ──────────────────────────────────────────────────────
 
+/** A tile's number: still counting, counted, or not countable. */
+export type TileCount =
+  { kind: "counting" } | { kind: "count"; n: number } | { kind: "failed" };
+const COUNTING: TileCount = { kind: "counting" };
+const COUNT_FAILED: TileCount = { kind: "failed" };
+/** What a tile shows when its list could not be read: not a zero. */
+const UNKNOWN_COUNT = "—";
+const COUNT_FAILED_HINT = "Could not be counted: the list failed to load.";
+
 function CountTile({
   href,
   label,
@@ -403,7 +421,7 @@ function CountTile({
 }: {
   href: string;
   label: string;
-  value: number | null;
+  value: TileCount;
   icon: React.ElementType;
   accent: string;
   subtitle: string;
@@ -420,10 +438,17 @@ function CountTile({
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-2xl font-semibold tabular-nums leading-none">
-              {value === null ? (
+              {value.kind === "counting" ? (
                 <Skeleton className="h-7 w-12" />
+              ) : value.kind === "failed" ? (
+                <span
+                  className="text-muted-foreground"
+                  title={COUNT_FAILED_HINT}
+                >
+                  {UNKNOWN_COUNT}
+                </span>
               ) : (
-                formatCount(value)
+                formatCount(value.n)
               )}
             </div>
             <div className="mt-1 flex items-baseline gap-2">

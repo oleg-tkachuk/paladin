@@ -18,8 +18,13 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useCollections } from "@/hooks/useCollections";
+import { useTenants } from "@/hooks/useTenants";
+import {
+  tenantLabel,
+  tenantLabelMap,
+} from "@/components/features/buckets/BucketTable";
+import { collectionHref, tenantHref } from "@/lib/navigation/hrefs";
 import { useBackends } from "@/hooks/useBackends";
-import { useScope } from "@/context/ScopeContext";
 import { useNotification } from "@/components/ui/Notification";
 
 import { Button } from "@/components/ui/button";
@@ -51,21 +56,29 @@ import { SortableHead } from "@/components/ui/SortHeader";
 
 type SortColumn = "name" | "displayName" | "backendId";
 
+/** Collection, tenant, display name, bucket, actions. */
+const COLUMNS = 5;
+
 export default function CollectionsPage() {
   const {
     collections,
     loading,
     error: listError,
-    fetchCollections,
+    fetchAllCollections,
     createCollection,
     deleteCollection,
-  } = useCollections();
+  } = useCollections({ catalogue: true });
+  // The rows span tenants; each names its own.
+  const { tenants, fetchTenants } = useTenants();
+  useEffect(() => {
+    void fetchTenants();
+  }, [fetchTenants]);
+  const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
   const {
     backends: backendRows,
     error: backendsError,
     fetchBackends,
   } = useBackends();
-  const { tenantId } = useScope();
   const { showNotification } = useNotification();
 
   // Only backends that can take a Collection: a disabled or draining one
@@ -107,8 +120,8 @@ export default function CollectionsPage() {
   }, [search]);
 
   useEffect(() => {
-    fetchCollections(searchFilter(debouncedSearch));
-  }, [fetchCollections, debouncedSearch]);
+    void fetchAllCollections(searchFilter(debouncedSearch));
+  }, [fetchAllCollections, debouncedSearch]);
 
   const sorted = useMemo(() => {
     const list = [...collections];
@@ -142,6 +155,8 @@ export default function CollectionsPage() {
       await deleteCollection(
         deleteTarget.collection,
         deleteTarget.resourceVersion,
+        false,
+        deleteTarget.tenantId,
       );
       showNotification({
         type: "success",
@@ -164,7 +179,7 @@ export default function CollectionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Collections"
-        description="Tenant-scoped namespaces routed to a physical bucket."
+        description="Every tenant's Collections, each routed to a bucket. A new one is created in your tenant."
         showDefaultActions={false}
         actions={
           <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -189,7 +204,9 @@ export default function CollectionsPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => fetchCollections(searchFilter(debouncedSearch))}
+          onClick={() =>
+            void fetchAllCollections(searchFilter(debouncedSearch))
+          }
           aria-label="Refresh"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
@@ -207,6 +224,7 @@ export default function CollectionsPage() {
                 current={sort}
                 onSort={handleSort}
               />
+              <TableHead>Tenant</TableHead>
               <SortableHead
                 className="hidden @xs:table-cell"
                 label="Display name"
@@ -230,24 +248,26 @@ export default function CollectionsPage() {
             {loading && collections.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={4} className="py-3">
+                  <TableCell colSpan={COLUMNS} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
               ))
             ) : listError ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-48 text-center">
+                <TableCell colSpan={COLUMNS} className="h-48 text-center">
                   <ListLoadError
                     what="Collections"
                     reason={listError}
-                    onRetry={() => void fetchCollections()}
+                    onRetry={() =>
+                      void fetchAllCollections(searchFilter(debouncedSearch))
+                    }
                   />
                 </TableCell>
               </TableRow>
             ) : sorted.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-48 text-center">
+                <TableCell colSpan={COLUMNS} className="h-48 text-center">
                   <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <ServerStackIcon className="size-10 opacity-40" />
                     <p className="text-sm">
@@ -270,14 +290,17 @@ export default function CollectionsPage() {
               </TableRow>
             ) : (
               sorted.map((ok) => (
-                <TableRow key={ok.collection} className="group">
+                <TableRow
+                  key={`${ok.tenantId}/${ok.collection}`}
+                  className="group"
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
                         <ServerStackIcon className="size-4" />
                       </div>
                       <Link
-                        href={`/tenants/${encodeURIComponent(ok.tenantId || tenantId || "")}/collections/${encodeURIComponent(ok.collection)}`}
+                        href={collectionHref(ok.tenantId, ok.collection)}
                         className="font-mono text-xs hover:text-primary hover:underline"
                         title={ok.collection}
                       >
@@ -287,6 +310,15 @@ export default function CollectionsPage() {
                         <PublicReadBadge />
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={tenantHref(ok.tenantId)}
+                      title={ok.tenantId}
+                      className="block max-w-48 truncate text-sm hover:text-primary"
+                    >
+                      {tenantLabel(tenantNames, ok.tenantId)}
+                    </Link>
                   </TableCell>
                   <TableCell className="hidden @xs:table-cell">
                     {ok.displayName || (
@@ -318,7 +350,7 @@ export default function CollectionsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
                           <Link
-                            href={`/tenants/${encodeURIComponent(ok.tenantId || tenantId || "")}/collections/${encodeURIComponent(ok.collection)}`}
+                            href={collectionHref(ok.tenantId, ok.collection)}
                           >
                             View details
                           </Link>
@@ -348,7 +380,9 @@ export default function CollectionsPage() {
         backendsFailed={failedRead(backendsError, fetchBackends)}
         bucketsHref="/buckets"
         createCollection={createCollection}
-        onCreated={() => void fetchCollections(searchFilter(debouncedSearch))}
+        onCreated={() =>
+          void fetchAllCollections(searchFilter(debouncedSearch))
+        }
       />
 
       <CollectionDeleteDialog

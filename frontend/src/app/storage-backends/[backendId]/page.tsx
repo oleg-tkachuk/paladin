@@ -52,8 +52,10 @@ export default function StorageBackendDetailPage() {
   } = useBuckets();
 
   useEffect(() => {
-    fetchBuckets();
-  }, [fetchBuckets]);
+    // This backend's buckets, narrowed by the server: every bucket on every
+    // backend, filtered here, read pages that held none of them.
+    void fetchBuckets(backendId);
+  }, [fetchBuckets, backendId]);
 
   const backend = useMemo(
     () => backends.find((b) => b.backendId === backendId),
@@ -149,7 +151,7 @@ export default function StorageBackendDetailPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() => void fetchBuckets()}
+          onClick={() => void fetchBuckets(backendId)}
           aria-label="Refresh"
         >
           <ArrowPathIcon
@@ -163,7 +165,7 @@ export default function StorageBackendDetailPage() {
         tenants={tenantNames}
         loading={loadingBuckets}
         error={bucketsError}
-        onRetry={() => void fetchBuckets()}
+        onRetry={() => void fetchBuckets(backendId)}
         empty={
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
             <CloudIcon className="size-8 opacity-40" />

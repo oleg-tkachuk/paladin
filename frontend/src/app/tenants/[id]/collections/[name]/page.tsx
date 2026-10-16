@@ -61,7 +61,13 @@ export default function CollectionOverviewPage() {
   const changesBlocked = useTenantChangesBlocked();
   const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
-  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
+  // Only the buckets this collection's tenant may bind to (ADR-0032): one it
+  // neither owns nor was granted is refused on Bind, so it is not offered.
+  const { buckets, error: bucketsError, fetchAccessibleBuckets } = useBuckets();
+  const fetchBuckets = useCallback(
+    () => fetchAccessibleBuckets(`tenants/${collection.tenantId}`),
+    [fetchAccessibleBuckets, collection.tenantId],
+  );
 
   const [displayName, setDisplayName] = useState(collection.displayName);
   const [savingMeta, setSavingMeta] = useState(false);

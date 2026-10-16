@@ -179,7 +179,8 @@ export const DeleteCollectionResponseSchema: GenMessage<DeleteCollectionResponse
 export type ListCollectionsRequest =
   Message<"paladin.admin.v1.ListCollectionsRequest"> & {
     /**
-     * "tenants/{tenant_id_or_slug}" or empty for cross-tenant
+     * "tenants/{tenant_id_or_slug}", or empty: every tenant's Collections for a
+     * platform admin, the caller's own tenant's for anyone else.
      *
      * @generated from field: string parent = 1;
      */

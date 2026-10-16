@@ -89,7 +89,7 @@ type Querier interface {
 	// (source and target), so it is matched on both columns and reported once.
 	CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
-	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState) (int64, error)
+	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, liveOnly bool) (int64, error)
 	CountPendingMultipartAborts(ctx context.Context) (int64, error)
 	// Trashed tenants whose trash retention has lapsed as of as_of: the ones the
 	// console marks "Past retention" and an operator should decide on.
@@ -396,7 +396,11 @@ type Querier interface {
 	// not a per-event query on the ingest hot path. collections is small per tenant
 	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
 	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
+	// tenant_id is optional: NULL lists every tenant's collections, which the
+	// handler allows only a platform admin reading across tenants. Rows and the
+	// cursor run in (tenant_id, name) order, so a page boundary between two
+	// tenants loses nothing; within one tenant that is the name order.
+	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, afterTenant pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.
@@ -467,7 +471,7 @@ type Querier interface {
 	// collections scan per returned row (the planner cannot size the id array).
 	// The collection is resolved once, by its unique (tenant_id, name), and
 	// still checked against every row.
-	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query

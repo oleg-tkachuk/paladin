@@ -28,9 +28,8 @@ import { useCollections } from "@/hooks/useCollections";
 import { useBackends } from "@/hooks/useBackends";
 import { useNotification } from "@/components/ui/Notification";
 
-import { collectionClient } from "@/lib/connect/client";
+import { listAllCollections } from "@/lib/listAllCollections";
 import { searchFilter } from "@/lib/cel";
-import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,15 +132,10 @@ export default function TenantCollectionsPage() {
         : undefined,
     queryFn: async ({ signal }) => {
       try {
-        const res = await collectionClient.listCollections(
-          {
-            parent: `tenants/${tenant.tenantId}`,
-            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-            filter: celFilter,
-          },
-          { signal },
+        return await listAllCollections(
+          { parent: `tenants/${tenant.tenantId}`, filter: celFilter },
+          signal,
         );
-        return res.collections;
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:
         // TanStack cancels in-flight reads on unmount and on supersede.

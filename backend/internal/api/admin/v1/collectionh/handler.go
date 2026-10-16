@@ -483,18 +483,20 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	if err != nil {
 		return nil, "", err
 	}
-	// Cross-tenant listing (TenantID==Nil + a (backend, bucket) filter)
-	// is reserved for platform.admin — used by the storage-first
-	// browser to enumerate every OK on a given bucket. Without the
-	// gate any tenant could enumerate sibling tenants' OKs by sending
-	// an empty parent + a known bucket.
+	// An empty parent lists across tenants for a platform admin — every
+	// collection, or with a (backend, bucket) filter every one bound to that
+	// bucket. Anyone else asking without a tenant gets their own tenant's:
+	// without that pin any tenant could enumerate sibling tenants' collections.
 	if args.TenantID == uuid.Nil {
-		if args.BackendID == "" || args.BucketName == "" {
-			// Tenant-scoped list: pin to caller's tenant.
-			args.TenantID = callerTenantID
-		} else if !principal.HasRole(apiutil.RolePlatformAdmin) {
+		byBucket := args.BackendID != "" && args.BucketName != ""
+		switch {
+		case principal.HasRole(apiutil.RolePlatformAdmin):
+			// Stays uuid.Nil: across tenants.
+		case byBucket:
 			return nil, "", connect.NewError(connect.CodePermissionDenied,
 				"cross-tenant ListCollections requires platform.admin")
+		default:
+			args.TenantID = callerTenantID
 		}
 	} else if args.TenantID != callerTenantID {
 		if !principal.HasRole(apiutil.RolePlatformAdmin) {
@@ -515,11 +517,10 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 		return nil, "", err
 	}
 	if crossTenant {
-		// The platform.admin gate above already passed; this is the
-		// storage-first browser enumerating every collection on a bucket.
-		// Scoping to one tenant cannot express that — it returned only the
-		// admin's own collections, so a bucket full of other tenants' data
-		// read as empty.
+		// The platform.admin gate above already passed: the platform's
+		// collection catalogue, or every collection on one bucket. Scoping to
+		// one tenant cannot express either — it returned only the admin's own
+		// collections, so a catalogue of every tenant read as one tenant's.
 		ctx = auth.WithCrossTenantRead(ctx)
 	} else {
 		ctx = auth.WithActingTenant(ctx, authzTenant)

@@ -74,6 +74,7 @@ them, so they must exist before it runs.
 | `077` | the `capability_revoked` triggers on the `limes` schema go; pgstore notifies revocations itself |
 | `079` | objects kept as FAILED are deleted and the label leaves `object_state` |
 | `080` | every bucket gets an owner (`owner_tenant_id NOT NULL`) and sharing becomes `bucket_grants` (ADR-0032) |
+| `081` | an object list whose filter names no state lists the live objects: `search_object_ids` takes `p_live_only` |
 
 Each file's header comment says why it exists.
 

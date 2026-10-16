@@ -13,7 +13,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-import { useScope } from "@/context/ScopeContext";
+import { useActingTenant } from "@/hooks/useActingTenant";
 import {
   NAV_CHORD_WINDOW_MS,
   NAV_PREFIX,
@@ -31,7 +31,8 @@ function isEditable(el: EventTarget | null): boolean {
 
 export function useGlobalShortcuts() {
   const router = useRouter();
-  const tenantBase = tenantBasePath(useScope().tenant);
+  // The tenant on screen, as the command palette names it (ADR-0033).
+  const tenantBase = tenantBasePath(useActingTenant());
   // When the prefix was pressed; null while no chord is pending.
   const armedAt = useRef<number | null>(null);
 
