@@ -25,6 +25,7 @@ import {
 import { UserRolesCard } from "@/components/features/users/UserRolesCard";
 import { UserScopesCard } from "@/components/features/users/UserScopesCard";
 import { tenantClient, userClient } from "@/lib/connect/client";
+import { OAuthGrantsCard } from "@/components/features/OAuthGrantsCard";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
 import { normalizeError } from "@/lib/connect/error";
 import { T } from "@/lib/ui/typography";
@@ -160,6 +161,7 @@ export default function UserDetailPage() {
           </Card>
           <UserRolesCard user={user} onChanged={refresh} />
           <UserScopesCard user={user} onChanged={refresh} />
+          <OAuthGrantsCard userName={name} own={false} />
         </>
       ) : null}
 
