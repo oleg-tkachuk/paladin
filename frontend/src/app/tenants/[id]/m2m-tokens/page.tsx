@@ -1,5 +1,7 @@
 "use client";
 
+import { listAllPages } from "@/lib/listAllPages";
+import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -100,20 +102,27 @@ export default function M2MTokensPage() {
     retry: false, // queryFn toasts real failures.
     queryFn: async ({ signal }) => {
       try {
-        const res = await apiTokenClient.list(
-          {
-            parent: `tenants/${tenantId}`,
-            includeRevoked,
-            includeExpired,
-            pageSize: 100,
-          },
-          { signal },
+        // Every page: a token past the first would be invisible here, and
+        // so could not be revoked from the page that lists them.
+        const apiTokens = await listAllPages((pageToken) =>
+          apiTokenClient
+            .list(
+              {
+                parent: `tenants/${tenantId}`,
+                includeRevoked,
+                includeExpired,
+                pageSize: API_PAGE_SIZE_MAX,
+                pageToken,
+              },
+              { signal },
+            )
+            .then((r) => ({ items: r.apiTokens, next: r.nextPageToken })),
         );
         // Fan-out usage fetches for non-revoked tokens (revoked have no live
         // counters worth showing). NotFound ⇒ "never". The shared signal
         // cancels them if the list query is superseded.
         const entries = await Promise.all(
-          res.apiTokens.map(async (t) => {
+          apiTokens.map(async (t) => {
             if (isRevoked(t)) return null;
             try {
               const u = await apiTokenClient.getUsage(
@@ -147,7 +156,7 @@ export default function M2MTokensPage() {
             (e): e is readonly [string, UsageSnap | "never"] => e !== null,
           ),
         );
-        return { tokens: res.apiTokens, usage };
+        return { tokens: apiTokens, usage };
       } catch (err) {
         showNotification({
           type: "error",

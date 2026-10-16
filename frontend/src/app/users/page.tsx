@@ -21,6 +21,7 @@ import {
   PasswordResetResult,
   type ResetTarget,
 } from "@/components/features/users/UserRowActions";
+import { listAllPages } from "@/lib/listAllPages";
 import { userClient } from "@/lib/connect/client";
 import { userHref } from "@/lib/userPath";
 import { useTenants } from "@/hooks/useTenants";
@@ -56,13 +57,19 @@ export default function UsersPage() {
 
   const usersQuery = useQuery({
     queryKey: ["users"],
+    // Every page: the search below runs over these rows.
     queryFn: ({ signal }) =>
-      userClient
-        .listUsers(
-          { parent: "", page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" } },
-          { signal },
-        )
-        .then((res) => res.users),
+      listAllPages((pageToken) =>
+        userClient
+          .listUsers(
+            { parent: "", page: { pageSize: API_PAGE_SIZE_MAX, pageToken } },
+            { signal },
+          )
+          .then((res) => ({
+            items: res.users,
+            next: res.page?.nextPageToken ?? "",
+          })),
+      ),
   });
   // useMemo keeps the fallback array stable so downstream memos don't churn.
   const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);

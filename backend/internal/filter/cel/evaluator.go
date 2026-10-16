@@ -265,7 +265,9 @@ var EventEnvelopeSchema = &Schema{
 // AuditLogSchema is exposed to filters against AuditLogEntry rows
 // (ListAuditLog, ExportAuditLog). `is_error` is a derived bool — true
 // when the entry has a non-empty error_message — exposed because it's
-// the most common selector in compliance queries.
+// the most common selector in compliance queries. `search` is the entry's
+// text fields folded by SearchText, so a console search box is one
+// case-insensitive conjunct rather than a disjunction over columns.
 var AuditLogSchema = &Schema{
 	Name: "AuditLogEntry",
 	vars: map[string]*cel.Type{
@@ -278,6 +280,7 @@ var AuditLogSchema = &Schema{
 		"source_ip":       cel.StringType,
 		"at":              cel.TimestampType,
 		"is_error":        cel.BoolType,
+		"search":          cel.StringType,
 	},
 }
 

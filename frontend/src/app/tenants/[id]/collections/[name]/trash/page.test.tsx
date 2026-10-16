@@ -10,27 +10,33 @@ const h = vi.hoisted(() => ({
   purgeObject: vi.fn(),
   bulkDeleteObjects: vi.fn(),
   bulkRestoreObjects: vi.fn(),
+  loadMore: undefined as undefined | (() => void),
+  options: [] as Array<{ filter?: string }>,
 }));
 
 vi.mock("@/hooks/useObjects", () => ({
-  useObjects: () => ({
-    objects: [
-      {
-        objectId: "o1",
-        key: "old.pdf",
-        name: "tenants/t-1/collections/docs/objects/old.pdf",
-        collection: "docs",
-        sizeBytes: 1n,
-        state: ObjectState.DELETED,
-        tags: {},
-      },
-    ],
-    loading: false,
-    restoreObject: h.restoreObject,
-    purgeObject: h.purgeObject,
-    bulkDeleteObjects: h.bulkDeleteObjects,
-    bulkRestoreObjects: h.bulkRestoreObjects,
-  }),
+  useObjects: (options: { filter?: string }) => (
+    h.options.push(options),
+    {
+      objects: [
+        {
+          objectId: "o1",
+          key: "old.pdf",
+          name: "tenants/t-1/collections/docs/objects/old.pdf",
+          collection: "docs",
+          sizeBytes: 1n,
+          state: ObjectState.DELETED,
+          tags: {},
+        },
+      ],
+      loading: false,
+      loadMore: h.loadMore,
+      restoreObject: h.restoreObject,
+      purgeObject: h.purgeObject,
+      bulkDeleteObjects: h.bulkDeleteObjects,
+      bulkRestoreObjects: h.bulkRestoreObjects,
+    }
+  ),
 }));
 vi.mock("../collection-context", () => ({
   useCollection: () => ({ collection: { collection: "docs" } }),
@@ -165,5 +171,49 @@ describe("CollectionTrashPage confirmations", () => {
         permanent: true,
       }),
     );
+  });
+});
+
+describe("CollectionTrashPage paging and search", () => {
+  beforeEach(() => {
+    h.options = [];
+    h.loadMore = undefined;
+  });
+
+  // The search was over the fifty rows loaded; it is now the server's, over
+  // every trashed object.
+  it("asks the server for trashed objects matching the search", async () => {
+    render(
+      <TooltipProvider>
+        <CollectionTrashPage />
+      </TooltipProvider>,
+    );
+    expect(h.options.at(-1)?.filter).toBe('state == "DELETED"');
+    fireEvent.change(screen.getByPlaceholderText(/Search by key/), {
+      target: { value: "report" },
+    });
+    await waitFor(() =>
+      expect(h.options.at(-1)?.filter).toBe(
+        'state == "DELETED" && key.contains("report")',
+      ),
+    );
+  });
+
+  it("offers more only while there are more", () => {
+    const { unmount } = render(
+      <TooltipProvider>
+        <CollectionTrashPage />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    unmount();
+    h.loadMore = vi.fn();
+    render(
+      <TooltipProvider>
+        <CollectionTrashPage />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(h.loadMore).toHaveBeenCalled();
   });
 });

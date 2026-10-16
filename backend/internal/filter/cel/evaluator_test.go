@@ -76,6 +76,7 @@ func TestValidateAllSchemas_BasicHappyPaths(t *testing.T) {
 		{ObjectSchema, `state == "AVAILABLE" && size_bytes > 0`},
 		{BucketSchema, `display_name != ""`},
 		{AuditLogSchema, `is_error == true`},
+		{AuditLogSchema, `search.contains("deletetenant")`},
 		{EventEnvelopeSchema, `type == "paladin.object.uploaded"`},
 	}
 	for _, tc := range cases {

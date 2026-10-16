@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -13,6 +13,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
+import { searchFilter } from "@/lib/cel";
 import { useAuditStream } from "@/hooks/useAuditStream";
 import { AuditEntryDetailDialog } from "./AuditEntryDetailDialog";
 import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
@@ -40,20 +41,29 @@ import { Timestamp } from "@/components/Timestamp";
 // The previous page targeted a legacy HTTP-style payload (method/path/
 // httpStatus/logType) that the backend stopped emitting; the table has
 // been rebuilt around the live AuditLogEntry shape (action / actor /
-// resource / error). The free-text search box filters client-side over
-// the loaded page; bigger filtering moves to the CEL `filter` arg in a
-// follow-up if it becomes useful.
+// resource / error). The search box is the server's CEL `filter` over the
+// entry's derived `search` text, applied to every page it reads, so it reaches
+// entries not loaded yet; Load more pages on through the matches.
+
+/** Entries a page of the log holds. */
+const AUDIT_PAGE_SIZE = 100;
+/** How long the search waits after a keystroke before asking the server. */
+const SEARCH_DEBOUNCE_MS = 300;
 
 export default function AuditPage() {
-  const { entries, loading, error, nextCursor, refresh, loadMore } =
-    useAuditLogs(100, "");
-
   // Optional ?audience=… deep-link (used by /mcp → audit) — preset
   // the search box on first mount via the lazy useState initialiser.
   // Chip stays editable; clearing the search input clears the
   // filter.
   const params = useSearchParams();
   const [search, setSearch] = useState(() => params?.get("audience") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [search]);
+  const { entries, loading, error, nextCursor, refresh, loadMore } =
+    useAuditLogs(AUDIT_PAGE_SIZE, searchFilter(debouncedSearch));
 
   // Live feed — SSE events are an invalidation signal, not a data source:
   // each push triggers a trailing-debounced refresh() so a burst of audit
@@ -74,24 +84,7 @@ export default function AuditPage() {
   }, [refresh]);
   const { connected } = useAuditStream(live, onStreamEvent);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((e) => {
-      const blob = [
-        e.action,
-        e.actorSubject,
-        e.actorAudience,
-        e.resourceName,
-        e.requestId,
-        e.sourceIp,
-        e.errorMessage,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return blob.includes(q);
-    });
-  }, [entries, search]);
+  const filtered = entries;
 
   return (
     <div className="space-y-6">

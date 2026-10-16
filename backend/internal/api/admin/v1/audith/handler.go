@@ -191,6 +191,8 @@ func auditEntryRow(e admindomain.AuditEntry) map[string]any {
 		"source_ip":       e.SourceIP,
 		"at":              e.At,
 		"is_error":        e.ErrorMessage != "",
+		"search": celpkg.SearchText(e.Action, e.ActorSubject, e.ActorAudience,
+			e.ResourceName, e.RequestID, e.SourceIP, e.ErrorMessage),
 	}
 }
 

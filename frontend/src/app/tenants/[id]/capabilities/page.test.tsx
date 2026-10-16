@@ -339,3 +339,22 @@ describe("CapabilitiesPage table layout", () => {
     for (const th of always) expect(th.className).not.toMatch(/\bhidden\b/);
   });
 });
+
+describe("CapabilitiesPage paging", () => {
+  // A principal's capabilities past the first hundred were not listed, so
+  // they could not be revoked from the page.
+  it("reads every page of a principal's capabilities", async () => {
+    h.list
+      .mockResolvedValueOnce({ capabilities: [], nextPageToken: "p2" })
+      .mockResolvedValueOnce({ capabilities: [], nextPageToken: "" });
+    render(<CapabilitiesPage />);
+    fireEvent.change(screen.getByPlaceholderText(/agent-id, user subject/), {
+      target: { value: "agent-1" },
+    });
+    fireEvent.submit(
+      screen.getByRole("button", { name: /^Browse$/i }).closest("form")!,
+    );
+    await waitFor(() => expect(h.list).toHaveBeenCalledTimes(2));
+    expect(h.list.mock.calls[1][0].pageToken).toBe("p2");
+  });
+});
