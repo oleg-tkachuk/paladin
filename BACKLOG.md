@@ -80,24 +80,22 @@ the same commit. Treat this file like a runtime invariant.
 
 ### The MCP server is its own audience
 
-- **Status:** In-Progress — design in
-  [ADR-0036](docs/adr/0036-the-mcp-server-is-its-own-audience.md) (Proposed).
-  The Authorization Server's half has landed: `paladin-mcp` for the MCP
-  resource URL, the RFC 8693 grant for a seed client marked
-  `token_exchange`, the `act` claim, and the AS metadata at IAM's origin.
-- **Reason:** the streamable-HTTP MCP server still accepts any plane token
-  and forwards it unchanged, which the MCP authorization specification
-  forbids: the agent's token works against the planes directly, a console
-  token opens an MCP session, and one session reaches only the plane its
-  token names.
-- **Definition of Done:** the edge requires `paladin-mcp`; the bridge, a
-  confidential client, exchanges per plane, cached to expiry and dropped on
-  a refusal; the audit log records the `act` client; the chart and the dev
-  cluster provision the bridge's client secret; the console consent page
-  reaches `/oauth/authorize` on the IAM host; a test shows a `paladin-mcp`
-  token refused by every plane, a plane token refused by the edge, and one
-  session calling a tool on each plane; ADR-0036 accepted and ADR-0008/0009
-  marked superseded where they say otherwise.
+- **Status:** In-Progress —
+  [ADR-0036](docs/adr/0036-the-mcp-server-is-its-own-audience.md) is
+  implemented behind `mcp.oauth.exchange` and runs in the compose stack.
+- **Reason:** three pieces are left. The dev cluster does not run it yet: it
+  needs the MCP server's client secret as a SealedSecret, `mcp.oauth` set,
+  and a route to the MCP server. The audit log records who called but not
+  that the MCP server relayed it: the exchanged token's `act` claim reaches
+  the principal (`Principal.Actor`) and stops there, since storing it means
+  a column on the audit log and a field on its API. And the console consent
+  page posts to `/oauth/authorize` on the console's own origin, which routes
+  nowhere when `auth.oauth.consent_url` points at it.
+- **Definition of Done:** the dev cluster runs the exchange and
+  `frontend/tests/e2e/mcp-exchange.spec.ts` passes against it; an audit
+  entry made through the MCP server names the relaying client, shown in the
+  console's audit view; the consent page reaches the IAM origin's
+  `/oauth/authorize`, with an e2e test through the page.
 - **Blockers:** none.
 
 ### The console shows the MCP server's newer contract
