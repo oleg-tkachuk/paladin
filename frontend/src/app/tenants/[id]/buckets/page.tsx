@@ -39,16 +39,6 @@ import { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/Card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,24 +52,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
-import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isDedicatedLayout } from "@/lib/storageLayout";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
-import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
-import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
-import { BucketTenancyBadge } from "@/components/features/buckets/BucketTenancyBadge";
-import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
+import {
+  BucketTable,
+  tenantLabelMap,
+  type BucketSortColumn,
+} from "@/components/features/buckets/BucketTable";
+import { useTenants } from "@/hooks/useTenants";
+import { bucketHref } from "@/lib/navigation/hrefs";
 
-type SortColumn = "backend" | "name" | "region";
+/** The bucket tab the row menu opens. */
+const LIFECYCLE_TAB = "lifecycle";
 
 const ALL_BACKENDS = "__all__";
 
@@ -88,10 +80,6 @@ const BUCKET_INDEX_HREF = "/buckets";
 
 /** ListAccessibleBuckets addresses the tenant by resource name. */
 const tenantResourceName = (tenantId: string) => `tenants/${tenantId}`;
-
-/** The storage-first view of a bucket, listing every tenant stored in it. */
-const backendBucketHref = (b: Bucket) =>
-  `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
 
 export default function TenantBucketsPage() {
   const changesBlocked = useTenantChangesBlocked();
@@ -117,7 +105,7 @@ export default function TenantBucketsPage() {
 
   const [search, setSearch] = useState("");
   const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
-  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
+  const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>();
 
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -144,6 +132,25 @@ export default function TenantBucketsPage() {
     PROVISION_POLL_MS,
   );
 
+  // Owners and grantees by name: every tenant a platform admin may list, and
+  // this one, which a tenant's own admin can read when it may list no other.
+  const { tenants, fetchTenants } = useTenants();
+  useEffect(() => {
+    void fetchTenants();
+  }, [fetchTenants]);
+  const tenantNames = useMemo(
+    () =>
+      tenantLabelMap([
+        ...tenants,
+        {
+          tenantId: tenant.tenantId,
+          slug: tenant.slug,
+          displayName: tenant.displayName,
+        },
+      ]),
+    [tenants, tenant.tenantId, tenant.slug, tenant.displayName],
+  );
+
   const filtered = useMemo(() => {
     let list = buckets;
     if (filterBackend !== ALL_BACKENDS) {
@@ -160,28 +167,13 @@ export default function TenantBucketsPage() {
     if (sort.column && sort.direction) {
       const dir = sort.direction === "asc" ? 1 : -1;
       list = [...list].sort((a, b) => {
-        const va =
-          sort.column === "backend"
-            ? a.backendId
-            : sort.column === "name"
-              ? a.bucketId
-              : a.region || "";
-        const vb =
-          sort.column === "backend"
-            ? b.backendId
-            : sort.column === "name"
-              ? b.bucketId
-              : b.region || "";
+        const va = sort.column === "backend" ? a.backendId : a.bucketId;
+        const vb = sort.column === "backend" ? b.backendId : b.bucketId;
         return va < vb ? -dir : va > vb ? dir : 0;
       });
     }
     return list;
   }, [buckets, filterBackend, search, sort]);
-
-  const detailHref = (b: Bucket) =>
-    `/tenants/${tenant.slug}/buckets/${encodeURIComponent(
-      b.backendId,
-    )}/${encodeURIComponent(b.bucketId)}`;
 
   return (
     <div className="space-y-4">
@@ -256,182 +248,93 @@ export default function TenantBucketsPage() {
         </Button>
       </div>
 
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead
-                className="@md:w-45"
-                label="Backend"
-                column="backend"
-                current={sort}
-                onSort={handleSort}
-              />
-              <SortableHead
-                label="Bucket name"
-                column="name"
-                current={sort}
-                onSort={handleSort}
-              />
-              <TableHead className="hidden @xs:table-cell">
-                Display name
-              </TableHead>
-              <SortableHead
-                className="hidden @md:table-cell"
-                label="Region"
-                column="region"
-                current={sort}
-                onSort={handleSort}
-              />
-              <TableHead className="@md:w-35">Status</TableHead>
-              <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && buckets.length === 0 ? (
-              [0, 1, 2].map((i) => (
-                <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={6} className="py-3">
-                    <Skeleton className="h-7 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : bucketsError ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center">
-                  <ListLoadError
-                    what="Buckets"
-                    reason={bucketsError}
-                    onRetry={() => void refetch()}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center">
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <ArchiveBoxIcon className="size-10 opacity-40" />
-                    <p className="text-sm">
-                      {search || filterBackend !== ALL_BACKENDS
-                        ? "No buckets match your filters."
-                        : dedicated
-                          ? "This tenant may bind to no bucket yet: it owns none and holds no grant."
-                          : "This tenant may bind to no bucket yet: it holds no grant. A bucket's owner grants it from the bucket's page."}
-                    </p>
-                    {!search &&
-                      filterBackend === ALL_BACKENDS &&
-                      (dedicated ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setCreateOpen(true)}
-                          disabled={Boolean(changesBlocked)}
-                          title={changesBlocked ?? undefined}
-                        >
-                          <PlusIcon className="size-4" />
-                          Create the first bucket
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={BUCKET_INDEX_HREF}>
-                            <ServerStackIcon className="size-4" />
-                            Find a bucket to grant
-                          </Link>
-                        </Button>
-                      ))}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((b) => (
-                <TableRow
-                  key={`${b.backendId}/${b.bucketId}`}
-                  className="group"
+      <BucketTable
+        buckets={filtered}
+        tenants={tenantNames}
+        perspective={tenant.tenantId}
+        loading={loading}
+        error={bucketsError}
+        onRetry={() => void refetch()}
+        sort={sort}
+        onSort={handleSort}
+        empty={
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <ArchiveBoxIcon className="size-10 opacity-40" />
+            <p className="text-sm">
+              {search || filterBackend !== ALL_BACKENDS
+                ? "No buckets match your filters."
+                : dedicated
+                  ? "This tenant may bind to no bucket yet: it owns none and holds no grant."
+                  : "This tenant may bind to no bucket yet: it holds no grant. A bucket's owner grants it from the bucket's page."}
+            </p>
+            {!search &&
+              filterBackend === ALL_BACKENDS &&
+              (dedicated ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCreateOpen(true)}
+                  disabled={Boolean(changesBlocked)}
+                  title={changesBlocked ?? undefined}
                 >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <ServerStackIcon className="size-4 text-chart-5" />
-                      <Badge variant="info" className={T.code}>
-                        {b.backendId}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
+                  <PlusIcon className="size-4" />
+                  Create the first bucket
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={BUCKET_INDEX_HREF}>
+                    <ServerStackIcon className="size-4" />
+                    Find a bucket to grant
+                  </Link>
+                </Button>
+              ))}
+          </div>
+        }
+        rowActions={(b) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 opacity-60 group-hover:opacity-100"
+                aria-label={`Actions for ${b.bucketId}`}
+              >
+                <EllipsisHorizontalIcon className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {ownedByTenant(b) ? (
+                <>
+                  <DropdownMenuItem asChild>
                     <Link
-                      href={
-                        ownedByTenant(b) ? detailHref(b) : backendBucketHref(b)
-                      }
-                      className="flex items-center gap-3 hover:text-primary"
+                      href={bucketHref(b.backendId, b.bucketId, LIFECYCLE_TAB)}
                     >
-                      <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                        <ArchiveBoxIcon className="size-4" />
-                      </div>
-                      <span className="font-mono text-xs">{b.bucketId}</span>
+                      <ClockIcon className="size-4" />
+                      Lifecycle rules
                     </Link>
-                  </TableCell>
-                  <TableCell className="hidden @xs:table-cell font-medium">
-                    {b.displayName || (
-                      <span className="text-muted-foreground italic">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden @md:table-cell text-muted-foreground text-xs font-mono">
-                    {b.region || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <BucketTenancyBadge owned={ownedByTenant(b)} />
-                    <ProvisionStateBadge state={b.provisionState} />
-                    {b.publicRead && <PublicReadBadge />}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 opacity-60 group-hover:opacity-100"
-                          aria-label={`Actions for ${b.bucketId}`}
-                        >
-                          <EllipsisHorizontalIcon className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {ownedByTenant(b) ? (
-                          <>
-                            <DropdownMenuItem asChild>
-                              <Link href={`${detailHref(b)}/lifecycle`}>
-                                <ClockIcon className="size-4" />
-                                Lifecycle rules
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => setDeleteTarget(b)}
-                            >
-                              <TrashIcon className="size-4" />
-                              Delete bucket
-                            </DropdownMenuItem>
-                          </>
-                        ) : (
-                          // Another tenant's: its rules, deletion and grants
-                          // are the owner's, and reach every tenant in it.
-                          <DropdownMenuItem asChild>
-                            <Link href={backendBucketHref(b)}>
-                              <ServerStackIcon className="size-4" />
-                              Open on the backend
-                            </Link>
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setDeleteTarget(b)}
+                  >
+                    <TrashIcon className="size-4" />
+                    Delete bucket
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                // Another tenant's: its rules, deletion and grants are the
+                // owner's, and reach every tenant in it.
+                <DropdownMenuItem asChild>
+                  <Link href={bucketHref(b.backendId, b.bucketId)}>
+                    <ServerStackIcon className="size-4" />
+                    Open the bucket
+                  </Link>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      />
 
       {dedicated && (
         <BucketCreateDialog

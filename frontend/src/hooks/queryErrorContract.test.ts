@@ -30,6 +30,12 @@ const HOOK_LISTS: Record<string, string[]> = {
  * call site fails the second test, so this list cannot outlive its callers.
  */
 const ALLOWED: Record<string, string> = {
+  // The tenants only name owners and grantees; an unread one shows its id,
+  // which is the truth, not a claim that there are none.
+  "app/storage-backends/[backendId]/page.tsx::useTenants":
+    "tenant names label bucket rows; a failed read falls back to the id",
+  "app/tenants/[id]/buckets/page.tsx::useTenants":
+    "tenant names label bucket rows; a failed read falls back to the id",
   "app/storage-backends/[backendId]/buckets/[bucketId]/page.tsx::useBackends":
     "label only: a miss drops the backend name from the header; the bucket itself comes from its own query, which surfaces errors",
 };
