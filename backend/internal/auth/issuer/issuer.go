@@ -84,6 +84,9 @@ type AccessClaims struct {
 	// Empty for every other token.
 	OAuthClientID string
 	OAuthScopes   []string
+	// Actor is the OAuth client that exchanged the token on the subject's
+	// behalf (RFC 8693), minted as `act`. Empty for a token not exchanged.
+	Actor string
 	// Optional explicit TTL override (must be ≤ scoped_token_max_ttl).
 	TTL time.Duration
 }
@@ -132,6 +135,9 @@ func (i *Issuer) MintAccess(c AccessClaims) (string, time.Time, error) {
 	if c.OAuthClientID != "" {
 		claims[auth.ClaimClientID] = c.OAuthClientID
 		claims[auth.ClaimScope] = strings.Join(c.OAuthScopes, auth.ScopeSeparator)
+	}
+	if c.Actor != "" {
+		claims[auth.ClaimActor] = map[string]string{auth.ClaimActorSubject: c.Actor}
 	}
 	tok, err := signHS256(i.cfg.SigningKey, claims)
 	if err != nil {

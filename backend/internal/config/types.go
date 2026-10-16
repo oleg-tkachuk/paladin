@@ -364,6 +364,20 @@ type OAuthAS struct {
 }
 
 // OAuthSeedClient is a pre-registered (usually public / PKCE) OAuth client.
+// TokenExchangeEnabled reports whether the RFC 8693 grant is served: the AS
+// is on and a seed client may call it (ADR-0036).
+func (o OAuthAS) TokenExchangeEnabled() bool {
+	if !o.Enabled {
+		return false
+	}
+	for _, sc := range o.SeedClients {
+		if sc.TokenExchange {
+			return true
+		}
+	}
+	return false
+}
+
 type OAuthSeedClient struct {
 	ClientID         string   `yaml:"client_id" json:"client_id"`
 	RedirectURIs     []string `yaml:"redirect_uris" json:"redirect_uris"`
@@ -376,6 +390,16 @@ type OAuthSeedClient struct {
 	// via dynamic registration — a self-registered client can never skip
 	// consent.
 	SkipConsent bool `yaml:"skip_consent" json:"skip_consent"`
+	// ClientSecret authenticates a confidential client (Public false) at
+	// /oauth/token; the AS stores only its hash. Inline for dev only;
+	// ClientSecretRef in real deployments.
+	ClientSecret string `yaml:"client_secret" json:"client_secret"`
+	// ClientSecretRef resolves ClientSecret from a Kubernetes Secret at boot.
+	ClientSecretRef *SecretRef `yaml:"client_secret_ref" json:"client_secret_ref"`
+	// TokenExchange lets this client call the RFC 8693 token-exchange grant:
+	// the MCP server, trading a caller's paladin-mcp token for one per plane
+	// (ADR-0036). Only a confidential client may hold it.
+	TokenExchange bool `yaml:"token_exchange" json:"token_exchange"`
 }
 
 type Security struct {

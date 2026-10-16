@@ -2,6 +2,8 @@ package apiutil
 
 import (
 	"context"
+	"errors"
+	"slices"
 
 	"connectrpc.com/connect/v2"
 
@@ -69,6 +71,33 @@ var AdminAudienceRoles = []string{
 	RoleIAMAdmin,
 	RoleTenantProvisioner,
 	RoleCapabilityIssuer,
+}
+
+// Why AudienceEligible refused an audience.
+var (
+	ErrUnsupportedAudience = errors.New("unsupported audience")
+	ErrAudienceRole        = errors.New("insufficient role for the audience")
+)
+
+// AudienceEligible reports whether a user holding roles may be issued an
+// access token for a plane's audience. The audience only opens the plane;
+// Cedar still decides each call. Every user may hold paladin-data and
+// paladin-iam; paladin-admin needs one of AdminAudienceRoles. paladin-mcp is
+// not a plane: only the OAuth Authorization Server issues it (ADR-0036).
+func AudienceEligible(roles []string, audience string) error {
+	switch audience {
+	case auth.AudienceData, auth.AudienceIAM:
+		return nil
+	case auth.AudienceAdmin:
+		for _, role := range roles {
+			if slices.Contains(AdminAudienceRoles, role) {
+				return nil
+			}
+		}
+		return ErrAudienceRole
+	default:
+		return ErrUnsupportedAudience
+	}
 }
 
 // RequireRole returns Unauthenticated when no principal is present and

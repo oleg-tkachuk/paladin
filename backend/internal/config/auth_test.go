@@ -101,3 +101,21 @@ func TestValidateBackendAuthModes(t *testing.T) {
 		})
 	}
 }
+
+func TestOAuthAS_TokenExchangeEnabled(t *testing.T) {
+	exchanger := OAuthSeedClient{ClientID: "mcp", TokenExchange: true}
+	agent := OAuthSeedClient{ClientID: "agent", Public: true}
+	for _, tc := range []struct {
+		name string
+		as   OAuthAS
+		want bool
+	}{
+		{"on, with an exchanger", OAuthAS{Enabled: true, SeedClients: []OAuthSeedClient{agent, exchanger}}, true},
+		{"on, no exchanger", OAuthAS{Enabled: true, SeedClients: []OAuthSeedClient{agent}}, false},
+		{"off, with an exchanger", OAuthAS{SeedClients: []OAuthSeedClient{exchanger}}, false},
+	} {
+		if got := tc.as.TokenExchangeEnabled(); got != tc.want {
+			t.Errorf("%s: TokenExchangeEnabled() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

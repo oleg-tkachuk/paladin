@@ -77,9 +77,10 @@ spec:
         {{- end }}
       {{- end }}
     # OAuth Authorization Server — the IAM listener, outside the procedure
-    # prefix. Without it /oauth/* fell through to the data plane and 404'd.
+    # prefix: its endpoints and its RFC 8414 metadata. Without it /oauth/*
+    # fell through to the data plane and 404'd.
     - kind: Rule
-      match: Host(`{{ $host }}`) && PathPrefix(`{{ $planes.iam.oauthPathPrefix }}`)
+      match: Host(`{{ $host }}`) && (PathPrefix(`{{ $planes.iam.oauthPathPrefix }}`) || Path(`{{ $planes.iam.oauthMetadataPath }}`))
       services:
         - kind: Service
           name: {{ $apiFullname }}

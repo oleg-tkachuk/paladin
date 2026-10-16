@@ -19,6 +19,9 @@ const (
 	AudienceData  = "paladin-data"
 	AudienceAdmin = "paladin-admin"
 	AudienceIAM   = "paladin-iam"
+	// AudienceMCP is the MCP server's own audience (ADR-0036). Every plane
+	// refuses it; the MCP server exchanges it for the plane a tool calls.
+	AudienceMCP = "paladin-mcp"
 )
 
 // TokenRefreshMargin is how long before its expiry a cached access token is

@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -60,6 +61,8 @@ type Handler struct {
 	authz       Authorizer
 	audit       AuditWriter
 	skipConsent map[string]bool
+	exchange    *tokenExchange
+	mcpResource string
 	log         *zap.Logger
 	now         func() time.Time
 }
@@ -69,6 +72,23 @@ type Handler struct {
 // Never applies to dynamically-registered clients.
 func (h *Handler) WithSkipConsent(clientIDs map[string]bool) *Handler {
 	h.skipConsent = clientIDs
+	return h
+}
+
+// WithMCPResource names the MCP server's resource URL (mcp.oauth.resource_url):
+// a client that asks for it as its RFC 8707 resource is issued paladin-mcp
+// (ADR-0036). Empty leaves only the audience names themselves.
+func (h *Handler) WithMCPResource(resourceURL string) *Handler {
+	h.mcpResource = resourceURL
+	return h
+}
+
+// WithTokenExchange serves the RFC 8693 token-exchange grant to clientIDs,
+// trading a paladin-mcp token that subjects verifies for one per plane
+// (ADR-0036). subjects must accept only paladin-mcp. Without it the grant
+// type is unsupported.
+func (h *Handler) WithTokenExchange(subjects auth.TokenVerifier, clientIDs map[string]bool) *Handler {
+	h.exchange = &tokenExchange{subjects: subjects, clients: clientIDs}
 	return h
 }
 
@@ -231,7 +251,16 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	audience := audienceFor(client, p.Resource)
+	audience := audienceFor(client, h.resolveResource(p.Resource))
+	// The same eligibility as a console login: paladin-admin only for a role
+	// with work on the admin plane. paladin-mcp is any user's, since every
+	// call through it is exchanged for a plane under this same rule.
+	if audience != auth.AudienceMCP {
+		if err := apiutil.AudienceEligible(u.Roles, audience); err != nil {
+			h.redirectError(w, r, registered, p.State, "invalid_target", "the user may not be issued "+audience)
+			return
+		}
+	}
 
 	code, err := GenerateCode()
 	if err != nil {
@@ -330,12 +359,18 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.PostForm.Get("grant_type") {
-	case "authorization_code":
+	case GrantTypeAuthorizationCode:
 		h.tokenAuthCode(w, r)
-	case "refresh_token":
+	case GrantTypeRefreshToken:
 		h.tokenRefresh(w, r)
+	case GrantTypeTokenExchange:
+		if h.exchange == nil {
+			h.unsupportedGrant(w)
+			return
+		}
+		h.tokenExchange(w, r)
 	default:
-		h.jsonError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
+		h.unsupportedGrant(w)
 	}
 }
 
@@ -525,6 +560,14 @@ func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, grant authstore.O
 
 // authenticateClient enforces client authentication: public clients pass
 // (PKCE is their proof), confidential clients must present a matching secret.
+func (h *Handler) unsupportedGrant(w http.ResponseWriter) {
+	supported := []string{GrantTypeAuthorizationCode, GrantTypeRefreshToken}
+	if h.exchange != nil {
+		supported = append(supported, GrantTypeTokenExchange)
+	}
+	h.jsonError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be one of "+strings.Join(supported, ", "))
+}
+
 func (h *Handler) authenticateClient(r *http.Request, client Client) error {
 	if client.Public || len(client.SecretHash) == 0 {
 		return nil
@@ -644,6 +687,15 @@ func registeredRedirect(client Client, redirectURI string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// resolveResource maps the MCP server's resource URL to its audience; any
+// other resource indicator is already an audience name, or matches none.
+func (h *Handler) resolveResource(resource string) string {
+	if h.mcpResource != "" && resource == h.mcpResource {
+		return auth.AudienceMCP
+	}
+	return resource
 }
 
 func audienceFor(client Client, resource string) string {

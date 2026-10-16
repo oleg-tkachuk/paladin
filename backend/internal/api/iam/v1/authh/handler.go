@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -760,16 +759,10 @@ func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error
 // fine-grained per-resource policy at handler-time; this is just a gate so
 // the user can't even get an admin-aud JWT minted.
 func (h *Handler) assertAudienceAllowed(u authstore.User, audience string) error {
-	switch audience {
-	case auth.AudienceData, auth.AudienceIAM:
+	switch err := apiutil.AudienceEligible(u.Roles, audience); {
+	case err == nil:
 		return nil
-	case auth.AudienceAdmin:
-		// The audience only opens the plane; Cedar still decides each call.
-		for _, role := range u.Roles {
-			if slices.Contains(apiutil.AdminAudienceRoles, role) {
-				return nil
-			}
-		}
+	case errors.Is(err, apiutil.ErrAudienceRole):
 		return connect.NewError(connect.CodePermissionDenied,
 			"insufficient role for paladin-admin audience")
 	default:

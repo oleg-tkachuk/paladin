@@ -121,7 +121,9 @@ func TestEventDeliveryPurger_CutoffIsTTLAgo(t *testing.T) {
 		t.Fatal("the purger never ran")
 	}
 	cancel()
-	<-done
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Errorf("Run() = %v, want context.Canceled", err)
+	}
 	if got.Before(before.Add(-ttl)) || got.After(time.Now().UTC().Add(-ttl)) {
 		t.Errorf("cutoff = %s, want now - %s", got, ttl)
 	}

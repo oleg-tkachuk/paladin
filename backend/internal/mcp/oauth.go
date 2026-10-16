@@ -36,10 +36,6 @@ import (
 // WWW-Authenticate challenge.
 const WellKnownProtectedResource = "/.well-known/oauth-protected-resource"
 
-// WellKnownAuthorizationServer is the RFC 8414 path served only when this
-// process is itself the Authorization Server (cfg.MCP.OAuth.AuthorizationServer.Issuer set).
-const WellKnownAuthorizationServer = "/.well-known/oauth-authorization-server"
-
 // BearerToken extracts the caller's access token from a request, preferring
 // the standard `Authorization: Bearer <token>` header (what OAuth-aware MCP
 // clients send) and falling back to the legacy `X-Paladin-Token` header so
@@ -72,43 +68,6 @@ func ProtectedResourceMetadataHandler(cfg config.MCPOAuth) http.Handler {
 		AuthorizationServers:   cfg.AuthorizationServers,
 		ScopesSupported:        cfg.ScopesSupported,
 		BearerMethodsSupported: []string{"header"},
-	}
-	body, _ := json.MarshalIndent(doc, "", "  ")
-	return jsonDocHandler(body)
-}
-
-// authorizationServerMetadata is the subset of RFC 8414 fields Paladin advertises
-// when it is itself the AS. Endpoint fields are omitted when unset so we never
-// publish a URL that 404s.
-type authorizationServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint,omitempty"`
-	TokenEndpoint                     string   `json:"token_endpoint,omitempty"`
-	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
-	JWKSURI                           string   `json:"jwks_uri,omitempty"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-}
-
-// AuthorizationServerMetadataHandler serves RFC 8414 metadata describing the
-// Paladin-as-AS endpoints. Only mounted when cfg.AuthorizationServer.Issuer is
-// set (the same-origin AS case); when delegating to an external IdP the
-// client fetches that IdP's own metadata instead. PKCE S256 is mandatory and
-// auth-code + refresh are the advertised grants — the contract
-// internal/auth/oauth implements.
-func AuthorizationServerMetadataHandler(as config.MCPOAuthAS) http.Handler {
-	doc := authorizationServerMetadata{
-		Issuer:                            as.Issuer,
-		AuthorizationEndpoint:             as.AuthorizationEndpoint,
-		TokenEndpoint:                     as.TokenEndpoint,
-		RegistrationEndpoint:              as.RegistrationEndpoint,
-		JWKSURI:                           as.JWKSURI,
-		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		CodeChallengeMethodsSupported:     []string{"S256"},
-		TokenEndpointAuthMethodsSupported: []string{"none", "client_secret_basic"},
 	}
 	body, _ := json.MarshalIndent(doc, "", "  ")
 	return jsonDocHandler(body)

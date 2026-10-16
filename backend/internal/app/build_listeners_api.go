@@ -465,25 +465,42 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	if cfg.Auth.OAuth.Enabled {
 		oauthStore := oauth.NewPgxStore(deps.Pool)
 		skipConsent := map[string]bool{}
+		exchangers := map[string]bool{}
 		for _, sc := range cfg.Auth.OAuth.SeedClients {
-			if serr := oauthStore.UpsertClient(ctx, oauth.Client{
-				ClientID:         sc.ClientID,
-				RedirectURIs:     sc.RedirectURIs,
-				AllowedScopes:    sc.AllowedScopes,
-				AllowedAudiences: sc.AllowedAudiences,
-				Public:           sc.Public,
-			}); serr != nil {
+			client, serr := oauth.SeedClient(sc)
+			if serr != nil {
+				return nil, nil, nil, serr
+			}
+			if serr := oauthStore.UpsertClient(ctx, client); serr != nil {
 				return nil, nil, nil, fmt.Errorf("oauth seed client %q: %w", sc.ClientID, serr)
 			}
 			if sc.SkipConsent {
 				skipConsent[sc.ClientID] = true
 			}
+			if sc.TokenExchange {
+				exchangers[sc.ClientID] = true
+			}
 		}
-		oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).
+		as := oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).
 			WithAuthorizer(polEngine).
 			WithAudit(repos.Audit).
 			WithSkipConsent(skipConsent).
-			Mount(iamMux)
+			WithMCPResource(cfg.MCP.OAuth.ResourceURL)
+		// RFC 8693 exchange for the MCP server (ADR-0036): only when a seed
+		// client may call it, with a verifier that accepts paladin-mcp alone.
+		if len(exchangers) > 0 {
+			verifierMCP, verr := BuildVerifier(ctx, cfg.Auth, auth.AudienceMCP, l)
+			if verr != nil {
+				return nil, nil, nil, fmt.Errorf("oauth token exchange verifier: %w", verr)
+			}
+			as = as.WithTokenExchange(verifierMCP, exchangers)
+		}
+		as.Mount(iamMux)
+		// The metadata at the AS's own origin, where RFC 8414 puts it; the MCP
+		// server serves the same document for a same-origin deployment.
+		if asMeta := cfg.MCP.OAuth.AuthorizationServer; asMeta.Issuer != "" {
+			iamMux.Handle(oauth.WellKnownAuthorizationServer, oauth.MetadataHandler(asMeta, cfg.Auth.OAuth.TokenExchangeEnabled()))
+		}
 		l.Info("oauth authorization server enabled", zap.Int("seed_clients", len(cfg.Auth.OAuth.SeedClients)))
 	}
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/mcp"
@@ -357,7 +358,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	if cfg.MCP.OAuth.Enabled {
 		mux.Handle(mcp.WellKnownProtectedResource, mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth))
 		if cfg.MCP.OAuth.AuthorizationServer.Issuer != "" {
-			mux.Handle(mcp.WellKnownAuthorizationServer, mcp.AuthorizationServerMetadataHandler(cfg.MCP.OAuth.AuthorizationServer))
+			mux.Handle(oauth.WellKnownAuthorizationServer, oauth.MetadataHandler(cfg.MCP.OAuth.AuthorizationServer, cfg.Auth.OAuth.TokenExchangeEnabled()))
 		}
 		metadataURL = oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL)
 	}

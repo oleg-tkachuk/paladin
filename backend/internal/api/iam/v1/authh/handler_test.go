@@ -491,6 +491,10 @@ func TestAssertAudienceAllowed(t *testing.T) {
 	if err := h.assertAudienceAllowed(user, "paladin-bogus"); code(err) != connect.CodeInvalidArgument {
 		t.Errorf("unknown audience: code = %v, want InvalidArgument", code(err))
 	}
+	// A console session never holds the MCP server's audience (ADR-0036).
+	if err := h.assertAudienceAllowed(admin, auth.AudienceMCP); code(err) != connect.CodeInvalidArgument {
+		t.Errorf("mcp audience: code = %v, want InvalidArgument", code(err))
+	}
 }
 
 // Each role's answer for the admin audience. The two platform roles do all
