@@ -33,7 +33,6 @@ import { searchFilter } from "@/lib/cel";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import {
   Table,
@@ -59,6 +58,7 @@ import { ListLoadError, failedRead } from "@/components/ui/ListLoadError";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
+import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 
 type SortColumn = "name" | "displayName" | "bucket";
 
@@ -359,22 +359,8 @@ export default function TenantCollectionsPage() {
                       <span className="text-muted-foreground italic">—</span>
                     )}
                   </TableCell>
-                  {/* The bucket is a full resource name: it breaks rather
-                      than widening the table. */}
-                  <TableCell className="hidden @md:table-cell whitespace-normal">
-                    {ok.bucket ? (
-                      <Badge
-                        variant="info"
-                        className={cn(
-                          T.code,
-                          "h-auto max-w-full whitespace-normal break-all",
-                        )}
-                      >
-                        {ok.bucket}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                  <TableCell className="hidden @md:table-cell">
+                    <BucketNameLink bucket={ok.bucket} />
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
