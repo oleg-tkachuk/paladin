@@ -25,6 +25,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ backendId: "primary" }),
+  usePathname: () => "/storage-backends/primary",
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
 vi.mock("./BackendActions", () => ({ BackendActions: () => null }));
@@ -117,5 +118,33 @@ describe("StorageBackendDetailPage bucket read", () => {
     h.buckets.fetchBuckets.mockClear();
     render(<StorageBackendDetailPage />);
     expect(h.buckets.fetchBuckets).toHaveBeenCalledWith("primary");
+  });
+});
+
+describe("StorageBackendDetailPage features", () => {
+  // The probe is read when a capability is in question, not on every visit:
+  // the overview shows its verdict and links to the tab that lists it.
+  it("summarises the probe and links to its tab, without listing it", () => {
+    h.backends.backends = [
+      {
+        ...PRIMARY,
+        compatibility: 2,
+        features: [
+          { feature: 1, support: 1, required: true },
+          { feature: 2, support: 2, required: false },
+        ],
+      },
+    ];
+    render(<StorageBackendDetailPage />);
+    const summary = screen.getByRole("link", { name: /1 of 2 supported/ });
+    expect(summary).toHaveAttribute(
+      "href",
+      "/storage-backends/primary/features",
+    );
+    expect(screen.queryByText("Required by Paladin")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "S3 features" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
   });
 });
