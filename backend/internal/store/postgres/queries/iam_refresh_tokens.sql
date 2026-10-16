@@ -97,3 +97,29 @@ WHERE ctid IN (
     ORDER BY rt.expires_at
     LIMIT 10000
 );
+
+-- name: ListOAuthGrantsForUser :many
+-- The OAuth grants a user holds: one row per live family of OAuth refresh
+-- tokens, carrying its newest live member and when the family began — the
+-- consent. A console login is no grant and is left out.
+SELECT DISTINCT ON (rt.family_id)
+       rt.family_id, rt.oauth_client_id, rt.oauth_audience, rt.oauth_scopes,
+       rt.issued_at, rt.expires_at,
+       (SELECT min(f.issued_at) FROM refresh_tokens AS f WHERE f.family_id = rt.family_id)::timestamptz AS granted_at
+FROM refresh_tokens AS rt
+WHERE rt.user_id = $1
+  AND rt.oauth_client_id IS NOT NULL
+  AND rt.revoked = FALSE
+  AND rt.expires_at > $2
+ORDER BY rt.family_id, rt.issued_at DESC;
+
+-- name: RevokeOAuthGrant :execrows
+-- End one OAuth grant: the family, as RevokeRefreshTokenFamily does, but
+-- named by its id and only when it is this user's and an OAuth one — the
+-- caller names a grant it was shown, never a console session.
+UPDATE refresh_tokens
+SET revoked = TRUE, superseded_at = NULL
+WHERE family_id = $1
+  AND user_id = $2
+  AND oauth_client_id IS NOT NULL
+  AND (revoked = FALSE OR superseded_at IS NOT NULL);

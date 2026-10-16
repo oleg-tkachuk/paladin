@@ -159,6 +159,28 @@ type OAuthGrant struct {
 	Scopes   []string
 }
 
+// UserOAuthGrant is one grant a user holds: a live family of OAuth refresh
+// tokens, named by its family id. GrantedAt is when the user consented,
+// RefreshedAt when the client last rotated, ExpiresAt when the newest token
+// lapses unless rotated again.
+type UserOAuthGrant struct {
+	ID          uuid.UUID
+	Grant       OAuthGrant
+	GrantedAt   time.Time
+	RefreshedAt time.Time
+	ExpiresAt   time.Time
+}
+
+// OAuthGrantStore lists and ends the OAuth grants a user holds. Ending one
+// revokes its refresh tokens; an access token already issued lives out its
+// short lifetime.
+type OAuthGrantStore interface {
+	ListOAuthGrants(ctx context.Context, userID uuid.UUID, now time.Time) ([]UserOAuthGrant, error)
+	// RevokeOAuthGrant ends the user's grant id, and reports whether there
+	// was one: a grant of another user, or no grant at all, is not touched.
+	RevokeOAuthGrant(ctx context.Context, userID, grantID uuid.UUID) (bool, error)
+}
+
 // ─── Common errors ──────────────────────────────────────────────────────────
 
 var (

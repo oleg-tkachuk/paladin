@@ -83,6 +83,7 @@ type Repos struct {
 	EventSub      admindomain.EventSubscriptionRepository
 	IAMUser       authstore.UserRepository
 	IAMRefresh    authstore.RefreshTokenRepository
+	IAMOAuthGrant authstore.OAuthGrantStore
 	ObjectVersion objecth.VersionRepository
 	// ObjectLock persists object_locks rows (ADR-0013). Optional: nil leaves
 	// the lock RPCs Unimplemented and skips applying bucket default retention
@@ -191,7 +192,7 @@ func ProvideAuthHandler(repos Repos, iss *issuer.Issuer, dec *auth.RefreshDecode
 }
 
 func ProvideUserHandler(repos Repos, pe *policy.Engine) *userh.Handler {
-	return userh.NewHandler(repos.IAMUser, pe)
+	return userh.NewHandler(repos.IAMUser, pe).WithOAuthGrants(repos.IAMOAuthGrant)
 }
 
 // tenantSlugLookup adapts the tenant.Repository to the Slug-resolver shape

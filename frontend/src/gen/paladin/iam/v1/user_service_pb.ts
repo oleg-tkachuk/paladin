@@ -13,8 +13,12 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { FieldMask } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
+import { file_google_api_field_behavior } from "../../../google/api/field_behavior_pb";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  file_google_protobuf_field_mask,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import type { Scope } from "../../common/v1/scope_pb";
@@ -29,9 +33,11 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_user_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFwYWxhZGluL2lhbS92MS91c2VyX3NlcnZpY2UucHJvdG8SDnBhbGFkaW4uaWFtLnYxIrIBChFDcmVhdGVVc2VyUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSGAoHc3ViamVjdBgCIAEoCUIHukgEcgIQARIUCgxkaXNwbGF5X25hbWUYAyABKAkSJAoQaW5pdGlhbF9wYXNzd29yZBgEIAEoCUIKgAEBukgEcgIQDBINCgVyb2xlcxgFIAMoCRIoCgZzY29wZXMYBiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZSInCg5HZXRVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIr0BChFVcGRhdGVVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFAoMZGlzcGxheV9uYW1lGAQgASgJEhAKCGRpc2FibGVkGAUgASgIEg0KBXJvbGVzGAYgAygJIk0KEURlbGV0ZVVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQASIUChJEZWxldGVVc2VyUmVzcG9uc2UiYAoQTGlzdFVzZXJzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSLAoEcGFnZRgCIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgDIAEoCSJnChFMaXN0VXNlcnNSZXNwb25zZRIjCgV1c2VycxgBIAMoCzIULnBhbGFkaW4uaWFtLnYxLlVzZXISLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChJHcmFudFNjb3Blc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIyCgZzY29wZXMYAiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAEiYAoTUmV2b2tlU2NvcGVzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEjIKBnNjb3BlcxgCIAMoCzIYLnBhbGFkaW4uY29tbW9uLnYxLlNjb3BlQgi6SAWSAQIIASJIChRSZXNldFBhc3N3b3JkUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhkKDG5ld19wYXNzd29yZBgCIAEoCUIDgAEBIjgKFVJlc2V0UGFzc3dvcmRSZXNwb25zZRIfChJnZW5lcmF0ZWRfcGFzc3dvcmQYASABKAlCA4ABATKYBQoLVXNlclNlcnZpY2USRQoKQ3JlYXRlVXNlchIhLnBhbGFkaW4uaWFtLnYxLkNyZWF0ZVVzZXJSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlchJECgdHZXRVc2VyEh4ucGFsYWRpbi5pYW0udjEuR2V0VXNlclJlcXVlc3QaFC5wYWxhZGluLmlhbS52MS5Vc2VyIgOQAgESSgoKVXBkYXRlVXNlchIhLnBhbGFkaW4uaWFtLnYxLlVwZGF0ZVVzZXJSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAICElgKCkRlbGV0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5EZWxldGVVc2VyUmVxdWVzdBoiLnBhbGFkaW4uaWFtLnYxLkRlbGV0ZVVzZXJSZXNwb25zZSIDkAICElUKCUxpc3RVc2VycxIgLnBhbGFkaW4uaWFtLnYxLkxpc3RVc2Vyc1JlcXVlc3QaIS5wYWxhZGluLmlhbS52MS5MaXN0VXNlcnNSZXNwb25zZSIDkAIBEkwKC0dyYW50U2NvcGVzEiIucGFsYWRpbi5pYW0udjEuR3JhbnRTY29wZXNSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAICEk4KDFJldm9rZVNjb3BlcxIjLnBhbGFkaW4uaWFtLnYxLlJldm9rZVNjb3Blc1JlcXVlc3QaFC5wYWxhZGluLmlhbS52MS5Vc2VyIgOQAgISYQoNUmVzZXRQYXNzd29yZBIkLnBhbGFkaW4uaWFtLnYxLlJlc2V0UGFzc3dvcmRSZXF1ZXN0GiUucGFsYWRpbi5pYW0udjEuUmVzZXRQYXNzd29yZFJlc3BvbnNlIgOQAgJCSFpGZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vaWFtL3YxO3BhbGFkaW5pYW12MWIGcHJvdG8z",
+    "CiFwYWxhZGluL2lhbS92MS91c2VyX3NlcnZpY2UucHJvdG8SDnBhbGFkaW4uaWFtLnYxIrIBChFDcmVhdGVVc2VyUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSGAoHc3ViamVjdBgCIAEoCUIHukgEcgIQARIUCgxkaXNwbGF5X25hbWUYAyABKAkSJAoQaW5pdGlhbF9wYXNzd29yZBgEIAEoCUIKgAEBukgEcgIQDBINCgVyb2xlcxgFIAMoCRIoCgZzY29wZXMYBiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZSInCg5HZXRVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIr0BChFVcGRhdGVVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFAoMZGlzcGxheV9uYW1lGAQgASgJEhAKCGRpc2FibGVkGAUgASgIEg0KBXJvbGVzGAYgAygJIk0KEURlbGV0ZVVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQASIUChJEZWxldGVVc2VyUmVzcG9uc2UiYAoQTGlzdFVzZXJzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSLAoEcGFnZRgCIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgDIAEoCSJnChFMaXN0VXNlcnNSZXNwb25zZRIjCgV1c2VycxgBIAMoCzIULnBhbGFkaW4uaWFtLnYxLlVzZXISLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChJHcmFudFNjb3Blc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIyCgZzY29wZXMYAiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAEiYAoTUmV2b2tlU2NvcGVzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEjIKBnNjb3BlcxgCIAMoCzIYLnBhbGFkaW4uY29tbW9uLnYxLlNjb3BlQgi6SAWSAQIIASJIChRSZXNldFBhc3N3b3JkUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhkKDG5ld19wYXNzd29yZBgCIAEoCUIDgAEBIjgKFVJlc2V0UGFzc3dvcmRSZXNwb25zZRIfChJnZW5lcmF0ZWRfcGFzc3dvcmQYASABKAlCA4ABASIvChZMaXN0T0F1dGhHcmFudHNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiRQoXTGlzdE9BdXRoR3JhbnRzUmVzcG9uc2USKgoGZ3JhbnRzGAEgAygLMhoucGFsYWRpbi5pYW0udjEuT0F1dGhHcmFudCKCAgoKT0F1dGhHcmFudBIPCgJpZBgBIAEoCUID4EEDEhYKCWNsaWVudF9pZBgCIAEoCUID4EEDEhUKCGF1ZGllbmNlGAMgASgJQgPgQQMSEwoGc2NvcGVzGAQgAygJQgPgQQMSMwoKZ3JhbnRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI1CgxyZWZyZXNoZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyJMChdSZXZva2VPQXV0aEdyYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhoKCGdyYW50X2lkGAIgASgJQgi6SAVyA7ABASIaChhSZXZva2VPQXV0aEdyYW50UmVzcG9uc2Uy7QYKC1VzZXJTZXJ2aWNlEkUKCkNyZWF0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5DcmVhdGVVc2VyUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXISRAoHR2V0VXNlchIeLnBhbGFkaW4uaWFtLnYxLkdldFVzZXJSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAIBEkoKClVwZGF0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5VcGRhdGVVc2VyUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXIiA5ACAhJYCgpEZWxldGVVc2VyEiEucGFsYWRpbi5pYW0udjEuRGVsZXRlVXNlclJlcXVlc3QaIi5wYWxhZGluLmlhbS52MS5EZWxldGVVc2VyUmVzcG9uc2UiA5ACAhJVCglMaXN0VXNlcnMSIC5wYWxhZGluLmlhbS52MS5MaXN0VXNlcnNSZXF1ZXN0GiEucGFsYWRpbi5pYW0udjEuTGlzdFVzZXJzUmVzcG9uc2UiA5ACARJMCgtHcmFudFNjb3BlcxIiLnBhbGFkaW4uaWFtLnYxLkdyYW50U2NvcGVzUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXIiA5ACAhJOCgxSZXZva2VTY29wZXMSIy5wYWxhZGluLmlhbS52MS5SZXZva2VTY29wZXNSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAICEmEKDVJlc2V0UGFzc3dvcmQSJC5wYWxhZGluLmlhbS52MS5SZXNldFBhc3N3b3JkUmVxdWVzdBolLnBhbGFkaW4uaWFtLnYxLlJlc2V0UGFzc3dvcmRSZXNwb25zZSIDkAICEmcKD0xpc3RPQXV0aEdyYW50cxImLnBhbGFkaW4uaWFtLnYxLkxpc3RPQXV0aEdyYW50c1JlcXVlc3QaJy5wYWxhZGluLmlhbS52MS5MaXN0T0F1dGhHcmFudHNSZXNwb25zZSIDkAIBEmoKEFJldm9rZU9BdXRoR3JhbnQSJy5wYWxhZGluLmlhbS52MS5SZXZva2VPQXV0aEdyYW50UmVxdWVzdBooLnBhbGFkaW4uaWFtLnYxLlJldm9rZU9BdXRoR3JhbnRSZXNwb25zZSIDkAICQkhaRmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2lhbS92MTtwYWxhZGluaWFtdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
+      file_google_api_field_behavior,
+      file_google_protobuf_timestamp,
       file_google_protobuf_field_mask,
       file_paladin_common_v1_pagination,
       file_paladin_common_v1_scope,
@@ -345,6 +351,147 @@ export const ResetPasswordResponseSchema: GenMessage<ResetPasswordResponse> =
   messageDesc(file_paladin_iam_v1_user_service, 10);
 
 /**
+ * @generated from message paladin.iam.v1.ListOAuthGrantsRequest
+ */
+export type ListOAuthGrantsRequest =
+  Message<"paladin.iam.v1.ListOAuthGrantsRequest"> & {
+    /**
+     * The user whose grants to list.
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.iam.v1.ListOAuthGrantsRequest.
+ * Use `create(ListOAuthGrantsRequestSchema)` to create a new message.
+ */
+export const ListOAuthGrantsRequestSchema: GenMessage<ListOAuthGrantsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 11);
+
+/**
+ * @generated from message paladin.iam.v1.ListOAuthGrantsResponse
+ */
+export type ListOAuthGrantsResponse =
+  Message<"paladin.iam.v1.ListOAuthGrantsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.iam.v1.OAuthGrant grants = 1;
+     */
+    grants: OAuthGrant[];
+  };
+
+/**
+ * Describes the message paladin.iam.v1.ListOAuthGrantsResponse.
+ * Use `create(ListOAuthGrantsResponseSchema)` to create a new message.
+ */
+export const ListOAuthGrantsResponseSchema: GenMessage<ListOAuthGrantsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 12);
+
+/**
+ * OAuthGrant is what a user consented to for one client, while the client
+ * keeps it alive by rotating its refresh token.
+ *
+ * @generated from message paladin.iam.v1.OAuthGrant
+ */
+export type OAuthGrant = Message<"paladin.iam.v1.OAuthGrant"> & {
+  /**
+   * id names the grant for RevokeOAuthGrant.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string client_id = 2;
+   */
+  clientId: string;
+
+  /**
+   * audience is the plane, or paladin-mcp, the grant's tokens are for.
+   *
+   * @generated from field: string audience = 3;
+   */
+  audience: string;
+
+  /**
+   * @generated from field: repeated string scopes = 4;
+   */
+  scopes: string[];
+
+  /**
+   * granted_at is when the user consented.
+   *
+   * @generated from field: google.protobuf.Timestamp granted_at = 5;
+   */
+  grantedAt?: Timestamp | undefined;
+
+  /**
+   * refreshed_at is when the client last rotated its refresh token.
+   *
+   * @generated from field: google.protobuf.Timestamp refreshed_at = 6;
+   */
+  refreshedAt?: Timestamp | undefined;
+
+  /**
+   * expires_at is when the grant lapses unless the client rotates again.
+   *
+   * @generated from field: google.protobuf.Timestamp expires_at = 7;
+   */
+  expiresAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message paladin.iam.v1.OAuthGrant.
+ * Use `create(OAuthGrantSchema)` to create a new message.
+ */
+export const OAuthGrantSchema: GenMessage<OAuthGrant> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 13);
+
+/**
+ * @generated from message paladin.iam.v1.RevokeOAuthGrantRequest
+ */
+export type RevokeOAuthGrantRequest =
+  Message<"paladin.iam.v1.RevokeOAuthGrantRequest"> & {
+    /**
+     * The user whose grant to end.
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * @generated from field: string grant_id = 2;
+     */
+    grantId: string;
+  };
+
+/**
+ * Describes the message paladin.iam.v1.RevokeOAuthGrantRequest.
+ * Use `create(RevokeOAuthGrantRequestSchema)` to create a new message.
+ */
+export const RevokeOAuthGrantRequestSchema: GenMessage<RevokeOAuthGrantRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 14);
+
+/**
+ * @generated from message paladin.iam.v1.RevokeOAuthGrantResponse
+ */
+export type RevokeOAuthGrantResponse =
+  Message<"paladin.iam.v1.RevokeOAuthGrantResponse"> & {};
+
+/**
+ * Describes the message paladin.iam.v1.RevokeOAuthGrantResponse.
+ * Use `create(RevokeOAuthGrantResponseSchema)` to create a new message.
+ */
+export const RevokeOAuthGrantResponseSchema: GenMessage<RevokeOAuthGrantResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 15);
+
+/**
  * UserService is the admin-only side of IAM. CRUD users, grant scopes/roles,
  * reset passwords. Requires role `iam.admin` or `platform.admin`.
  *
@@ -436,5 +583,28 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof ResetPasswordRequestSchema;
     output: typeof ResetPasswordResponseSchema;
+  };
+  /**
+   * ListOAuthGrants returns the live OAuth grants the user gave clients at
+   * /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+   * those of the tenant's users.
+   *
+   * @generated from rpc paladin.iam.v1.UserService.ListOAuthGrants
+   */
+  listOAuthGrants: {
+    methodKind: "unary";
+    input: typeof ListOAuthGrantsRequestSchema;
+    output: typeof ListOAuthGrantsResponseSchema;
+  };
+  /**
+   * RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+   * at once, and an access token it already holds within its short lifetime.
+   *
+   * @generated from rpc paladin.iam.v1.UserService.RevokeOAuthGrant
+   */
+  revokeOAuthGrant: {
+    methodKind: "unary";
+    input: typeof RevokeOAuthGrantRequestSchema;
+    output: typeof RevokeOAuthGrantResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_user_service, 0);

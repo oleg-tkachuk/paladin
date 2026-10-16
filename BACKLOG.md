@@ -78,18 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### The console shows the MCP server's newer contract
-
-- **Status:** In-Progress — the `/mcp` page shows each tool's destructive
-  and open-world hints and, under OAuth clients, how agents authorize.
-- **Reason:** nothing in the console lists or revokes the OAuth grants a
-  user has given; a grant lives on until its refresh token expires or the
-  user changes their password.
-- **Definition of Done:** a user can list and revoke their own OAuth grants
-  (refresh-token families per client), and an admin a tenant's users', with
-  unit tests and an e2e assertion.
-- **Blockers:** none.
-
 ### Admin RPCs the MCP bridge leaves off on purpose
 
 - **Status:** Won't-do (by design) unless the decision below is revisited.

@@ -44,6 +44,16 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a user can list and revoke their OAuth grants
+
+`UserService` gains `ListOAuthGrants` and `RevokeOAuthGrant`, and the console
+shows them as Connected applications on the profile and on a user's page. A
+grant is a live family of OAuth refresh tokens; revoking it stops the client
+refreshing at once, and an access token it holds expires within minutes. A user
+manages their own grants and a tenant admin those of the tenant's users,
+through built-in Cedar permits on the new `ReadOAuthGrants` and
+`RevokeOAuthGrant` actions. Additive: no action needed.
+
 ## Unreleased — the audit log names the MCP server that relayed a call
 
 Migration `083` adds `audit_log.relayed_by`, and `AuditLogEntry` gains

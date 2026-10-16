@@ -26,13 +26,23 @@ type Handler struct {
 	policy cedar.Authorizer
 	// cel compiles and caches List filters (program cache only).
 	cel *celpkg.Evaluator
+	// grants lists and ends the OAuth grants users gave clients. Nil
+	// answers both RPCs Unimplemented.
+	grants authstore.OAuthGrantStore
+	now    func() time.Time
+}
+
+// WithOAuthGrants lets the handler list and end users' OAuth grants.
+func (h *Handler) WithOAuthGrants(g authstore.OAuthGrantStore) *Handler {
+	h.grants = g
+	return h
 }
 
 func NewHandler(u authstore.UserRepository, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("userh: policy authorizer is required")
 	}
-	return &Handler{cel: celpkg.NewEvaluator(), users: u, policy: policy}
+	return &Handler{cel: celpkg.NewEvaluator(), users: u, policy: policy, now: time.Now}
 }
 
 // authorize gates a user-management RPC against Cedar. Pre-existing
@@ -428,6 +438,71 @@ func (h *Handler) ResetPassword(ctx context.Context, ref UserRef, newPassword st
 		return "", rpcerr.New(connect.CodeInternal, fmt.Errorf("reset password: %w", err))
 	}
 	return newPassword, nil
+}
+
+// ─── OAuth grants ───────────────────────────────────────────────────────────
+
+// errNoGrantStore answers the grant RPCs on a handler built without a store.
+var errNoGrantStore = errors.New("oauth grants are not served here")
+
+// ListOAuthGrants returns the live OAuth grants the user gave clients: the
+// user's own, or for a tenant admin a user of the tenant.
+func (h *Handler) ListOAuthGrants(ctx context.Context, ref UserRef) ([]authstore.UserOAuthGrant, error) {
+	u, err := h.grantTarget(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionReadOAuthGrants, u); err != nil {
+		return nil, err
+	}
+	grants, err := h.grants.ListOAuthGrants(auth.WithActingTenant(ctx, u.TenantID), u.UserID, h.now())
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("list oauth grants: %w", err))
+	}
+	return grants, nil
+}
+
+// RevokeOAuthGrant ends one of the user's grants: the client's refresh
+// tokens stop working at once, an access token it holds within its short
+// lifetime. A grant that is not the user's is not found.
+func (h *Handler) RevokeOAuthGrant(ctx context.Context, ref UserRef, grantID uuid.UUID) error {
+	u, err := h.grantTarget(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if err := h.authorize(ctx, cedar.ActionRevokeOAuthGrant, u); err != nil {
+		return err
+	}
+	found, err := h.grants.RevokeOAuthGrant(auth.WithActingTenant(ctx, u.TenantID), u.UserID, grantID)
+	if err != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("revoke oauth grant: %w", err))
+	}
+	if !found {
+		return connect.NewError(connect.CodeNotFound, "oauth grant not found")
+	}
+	return nil
+}
+
+// grantTarget loads the user whose grants are asked about. Another tenant's
+// user reads as not found to all but a platform admin, as GetUser does; the
+// caller then authorizes its action on the user.
+func (h *Handler) grantTarget(ctx context.Context, ref UserRef) (authstore.User, error) {
+	if h.grants == nil {
+		return authstore.User{}, connect.NewError(connect.CodeUnimplemented, errNoGrantStore.Error())
+	}
+	caller, _, err := apiutil.CallerContext(ctx)
+	if err != nil {
+		return authstore.User{}, err
+	}
+	u, err := h.load(ctx, ref)
+	if err != nil {
+		return authstore.User{}, notFound(err)
+	}
+	p, _ := auth.PrincipalFromContext(ctx)
+	if !hasPlatformAdmin(p) && u.TenantID != caller {
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound.Error())
+	}
+	return u, nil
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────

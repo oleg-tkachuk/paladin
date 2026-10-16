@@ -444,6 +444,10 @@ type Querier interface {
 	// account, not a display trim. Pass after_created_at='-infinity' for the
 	// first page.
 	ListMembershipsBySubject(ctx context.Context, subject string, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]User, error)
+	// The OAuth grants a user holds: one row per live family of OAuth refresh
+	// tokens, carrying its newest live member and when the family began — the
+	// consent. A console login is no grant and is left out.
+	ListOAuthGrantsForUser(ctx context.Context, userID pgtype.UUID, expiresAt pgtype.Timestamptz) ([]ListOAuthGrantsForUserRow, error)
 	// Every lock row on any version of one object, for the permanent-delete
 	// pre-check. Deleting the object removes all its versions, so a lock on an
 	// older version blocks the delete as surely as one on the current version;
@@ -757,6 +761,10 @@ type Querier interface {
 	// only when a collection is written. Zero rows: no such grant, or collections
 	// remain — BucketGrantInUse tells the two apart.
 	RevokeBucketGrant(ctx context.Context, backendName string, bucketName string, tenantID pgtype.UUID) (int64, error)
+	// End one OAuth grant: the family, as RevokeRefreshTokenFamily does, but
+	// named by its id and only when it is this user's and an OAuth one — the
+	// caller names a grant it was shown, never a console session.
+	RevokeOAuthGrant(ctx context.Context, familyID pgtype.UUID, userID pgtype.UUID) (int64, error)
 	// Revocation FOR CAUSE — logout. Leaves superseded_at NULL, so this token is
 	// never mistaken for one that was merely rotated.
 	RevokeRefreshToken(ctx context.Context, id pgtype.UUID) error

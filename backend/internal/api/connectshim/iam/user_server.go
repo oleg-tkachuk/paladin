@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -222,6 +223,49 @@ func (s *UserServer) ResetPassword(ctx context.Context, req *pb.ResetPasswordReq
 		out.GeneratedPassword = pw
 	}
 	return out, nil
+}
+
+func (s *UserServer) ListOAuthGrants(ctx context.Context, req *pb.ListOAuthGrantsRequest) (*pb.ListOAuthGrantsResponse, error) {
+	ref, err := s.userRef(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	grants, err := s.H.ListOAuthGrants(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListOAuthGrantsResponse{Grants: make([]*pb.OAuthGrant, 0, len(grants))}
+	for _, g := range grants {
+		out.Grants = append(out.Grants, oauthGrantToProto(g))
+	}
+	return out, nil
+}
+
+func (s *UserServer) RevokeOAuthGrant(ctx context.Context, req *pb.RevokeOAuthGrantRequest) (*pb.RevokeOAuthGrantResponse, error) {
+	ref, err := s.userRef(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	grantID, err := uuid.Parse(req.GetGrantId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "grant_id is not a UUID").WithCause(err)
+	}
+	if err := s.H.RevokeOAuthGrant(ctx, ref, grantID); err != nil {
+		return nil, err
+	}
+	return &pb.RevokeOAuthGrantResponse{}, nil
+}
+
+func oauthGrantToProto(g authstore.UserOAuthGrant) *pb.OAuthGrant {
+	return &pb.OAuthGrant{
+		Id:          g.ID.String(),
+		ClientId:    g.Grant.ClientID,
+		Audience:    g.Grant.Audience,
+		Scopes:      g.Grant.Scopes,
+		GrantedAt:   timestamppb.New(g.GrantedAt),
+		RefreshedAt: timestamppb.New(g.RefreshedAt),
+		ExpiresAt:   timestamppb.New(g.ExpiresAt),
+	}
 }
 
 var _ paladiniamv1connect.UserServiceHandler = (*UserServer)(nil)

@@ -594,7 +594,7 @@ what each field means, are documented in the `.proto` files under
 | --- | --- |
 | `AuthService` | `Login`, `RefreshToken`, `Revoke`, `WhoAmI`, `ChangePassword`, `ExchangeAudience`, `ListMyMemberships`, `SwitchTenant` |
 | `HealthService` | `GetVersion`, `GetHealth` |
-| `UserService` | `CreateUser`, `GetUser`, `UpdateUser`, `DeleteUser`, `ListUsers`, `GrantScopes`, `RevokeScopes`, `ResetPassword` |
+| `UserService` | `CreateUser`, `GetUser`, `UpdateUser`, `DeleteUser`, `ListUsers`, `GrantScopes`, `RevokeScopes`, `ResetPassword`, `ListOAuthGrants`, `RevokeOAuthGrant` |
 | `UserSettingsService` | `GetMine`, `UpdateMine`, `GetForUser`, `ListByTenant`, `DeleteForUser` |
 
 `paladin/readme_test.go` fails when a service or method in `gen/` is missing

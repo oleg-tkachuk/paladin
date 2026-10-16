@@ -5,6 +5,8 @@ package paladin.iam.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1";
 
 import "buf/validate/validate.proto";
+import "google/api/field_behavior.proto";
+import "google/protobuf/timestamp.proto";
 import "google/protobuf/field_mask.proto";
 import "paladin/common/v1/pagination.proto";
 import "paladin/common/v1/scope.proto";
@@ -49,6 +51,19 @@ service UserService {
 
   // ResetPassword forces a password change on next login. Local IdP only.
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListOAuthGrants returns the live OAuth grants the user gave clients at
+  // /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+  // those of the tenant's users.
+  rpc ListOAuthGrants(ListOAuthGrantsRequest) returns (ListOAuthGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+  // at once, and an access token it already holds within its short lifetime.
+  rpc RevokeOAuthGrant(RevokeOAuthGrantRequest) returns (RevokeOAuthGrantResponse) {
     option idempotency_level = IDEMPOTENT;
   }
 }
@@ -124,3 +139,37 @@ message ResetPasswordResponse {
   // Set only when caller didn't provide a password — return-once.
   string generated_password = 1 [debug_redact = true];
 }
+
+message ListOAuthGrantsRequest {
+  // The user whose grants to list.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListOAuthGrantsResponse {
+  repeated OAuthGrant grants = 1;
+}
+
+// OAuthGrant is what a user consented to for one client, while the client
+// keeps it alive by rotating its refresh token.
+message OAuthGrant {
+  // id names the grant for RevokeOAuthGrant.
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string client_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // audience is the plane, or paladin-mcp, the grant's tokens are for.
+  string audience = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated string scopes = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // granted_at is when the user consented.
+  google.protobuf.Timestamp granted_at = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // refreshed_at is when the client last rotated its refresh token.
+  google.protobuf.Timestamp refreshed_at = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // expires_at is when the grant lapses unless the client rotates again.
+  google.protobuf.Timestamp expires_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message RevokeOAuthGrantRequest {
+  // The user whose grant to end.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  string grant_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeOAuthGrantResponse {}

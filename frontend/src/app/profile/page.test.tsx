@@ -14,6 +14,9 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: vi.fn() }),
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
+vi.mock("@/components/features/OAuthGrantsCard", () => ({
+  OAuthGrantsCard: () => null,
+}));
 vi.mock("@/components/features/ChangePasswordCard", () => ({
   ChangePasswordCard: () => null,
 }));

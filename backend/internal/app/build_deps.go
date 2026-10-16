@@ -154,6 +154,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	if db.Reads != nil {
 		objectRepo.WithReads(db.Reads)
 	}
+	refreshRepo := adapters.NewRefreshTokenRepo(db.Queries)
 	repos := wire.Repos{
 		Object:       objectRepo,
 		Collection:   adapters.NewCollectionRepo(db.Queries, pool),
@@ -170,7 +171,8 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		Quota:         adapters.NewQuotaRepoV2(db.Queries, pool),
 		EventSub:      adapters.NewEventSubscriptionRepoV2(db.Queries),
 		IAMUser:       adapters.NewUserRepo(db.Queries),
-		IAMRefresh:    adapters.NewRefreshTokenRepo(db.Queries),
+		IAMRefresh:    refreshRepo,
+		IAMOAuthGrant: refreshRepo,
 		ObjectVersion: adapters.NewObjectVersionRepo(db.Queries),
 		ObjectLock:    adapters.NewObjectLockRepo(db.Queries),
 		ObjectTaint:   adapters.NewObjectTaintRepo(db.Queries),

@@ -41,6 +41,12 @@ const (
 	UserServiceRevokeScopesProcedure = "/paladin.iam.v1.UserService/RevokeScopes"
 	// UserServiceResetPasswordProcedure is the procedure name of the UserService's ResetPassword RPC.
 	UserServiceResetPasswordProcedure = "/paladin.iam.v1.UserService/ResetPassword"
+	// UserServiceListOAuthGrantsProcedure is the procedure name of the UserService's ListOAuthGrants
+	// RPC.
+	UserServiceListOAuthGrantsProcedure = "/paladin.iam.v1.UserService/ListOAuthGrants"
+	// UserServiceRevokeOAuthGrantProcedure is the procedure name of the UserService's RevokeOAuthGrant
+	// RPC.
+	UserServiceRevokeOAuthGrantProcedure = "/paladin.iam.v1.UserService/RevokeOAuthGrant"
 )
 
 var (
@@ -107,6 +113,22 @@ var (
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
+	userServiceListOAuthGrantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("ListOAuthGrants"),
+			Procedure:        UserServiceListOAuthGrantsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	userServiceRevokeOAuthGrantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("RevokeOAuthGrant"),
+			Procedure:        UserServiceRevokeOAuthGrantProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // UserServiceClient is a client for the paladin.iam.v1.UserService service.
@@ -133,6 +155,13 @@ type UserServiceClient interface {
 	RevokeScopes(context.Context, *v1.RevokeScopesRequest) (*v1.User, error)
 	// ResetPassword forces a password change on next login. Local IdP only.
 	ResetPassword(context.Context, *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error)
+	// ListOAuthGrants returns the live OAuth grants the user gave clients at
+	// /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+	// those of the tenant's users.
+	ListOAuthGrants(context.Context, *v1.ListOAuthGrantsRequest) (*v1.ListOAuthGrantsResponse, error)
+	// RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+	// at once, and an access token it already holds within its short lifetime.
+	RevokeOAuthGrant(context.Context, *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error)
 }
 
 // NewUserServiceClient constructs a client for the paladin.iam.v1.UserService service. Multiple
@@ -165,6 +194,13 @@ type UserServiceHandler interface {
 	RevokeScopes(context.Context, *v1.RevokeScopesRequest) (*v1.User, error)
 	// ResetPassword forces a password change on next login. Local IdP only.
 	ResetPassword(context.Context, *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error)
+	// ListOAuthGrants returns the live OAuth grants the user gave clients at
+	// /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+	// those of the tenant's users.
+	ListOAuthGrants(context.Context, *v1.ListOAuthGrantsRequest) (*v1.ListOAuthGrantsResponse, error)
+	// RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+	// at once, and an access token it already holds within its short lifetime.
+	RevokeOAuthGrant(context.Context, *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error)
 }
 
 // RegisterUserServiceHandler registers svc as the paladin.iam.v1.UserService implementation on
@@ -180,6 +216,8 @@ func RegisterUserServiceHandler(server *connect.Server, svc UserServiceHandler) 
 		connect.Method{Spec: userServiceGrantScopesSpec(), Handler: adapter.grantScopes},
 		connect.Method{Spec: userServiceRevokeScopesSpec(), Handler: adapter.revokeScopes},
 		connect.Method{Spec: userServiceResetPasswordSpec(), Handler: adapter.resetPassword},
+		connect.Method{Spec: userServiceListOAuthGrantsSpec(), Handler: adapter.listOAuthGrants},
+		connect.Method{Spec: userServiceRevokeOAuthGrantSpec(), Handler: adapter.revokeOAuthGrant},
 	)
 }
 
@@ -216,6 +254,14 @@ func (UnimplementedUserServiceHandler) RevokeScopes(context.Context, *v1.RevokeS
 
 func (UnimplementedUserServiceHandler) ResetPassword(context.Context, *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.ResetPassword is not implemented")
+}
+
+func (UnimplementedUserServiceHandler) ListOAuthGrants(context.Context, *v1.ListOAuthGrantsRequest) (*v1.ListOAuthGrantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.ListOAuthGrants is not implemented")
+}
+
+func (UnimplementedUserServiceHandler) RevokeOAuthGrant(context.Context, *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.RevokeOAuthGrant is not implemented")
 }
 
 type userServiceClient struct {
@@ -281,6 +327,22 @@ func (c *userServiceClient) RevokeScopes(ctx context.Context, req *v1.RevokeScop
 func (c *userServiceClient) ResetPassword(ctx context.Context, req *v1.ResetPasswordRequest) (*v1.ResetPasswordResponse, error) {
 	var res v1.ResetPasswordResponse
 	if err := c.client.CallUnary(ctx, userServiceResetPasswordSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) ListOAuthGrants(ctx context.Context, req *v1.ListOAuthGrantsRequest) (*v1.ListOAuthGrantsResponse, error) {
+	var res v1.ListOAuthGrantsResponse
+	if err := c.client.CallUnary(ctx, userServiceListOAuthGrantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) RevokeOAuthGrant(ctx context.Context, req *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error) {
+	var res v1.RevokeOAuthGrantResponse
+	if err := c.client.CallUnary(ctx, userServiceRevokeOAuthGrantSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -378,6 +440,30 @@ func (h userServiceHandler) resetPassword(ctx context.Context, _ connect.Spec, s
 		return err
 	}
 	res, err := h.svc.ResetPassword(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) listOAuthGrants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOAuthGrantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOAuthGrants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) revokeOAuthGrant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeOAuthGrantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeOAuthGrant(ctx, &req)
 	if err != nil {
 		return err
 	}
