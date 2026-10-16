@@ -33,25 +33,47 @@ contract of that same commit, so any other pairing is one nobody has tested.
 Separate versions would add a compatibility matrix, and a change seldom
 touches one side alone.
 
-Nothing is tagged by hand. `ci.yaml` dispatches
-[`release.yaml`](../.github/workflows/release.yaml) once every check on
-`main` has passed. semantic-release computes the next version from the commit
-types (see [`release.config.cjs`](../.github/release/release.config.cjs)), and the workflow
-publishes an image and a chart for each component at that tag. Only the
-commit whose checks dispatched the run is released: if `main` has moved on in
-the meantime, that run releases nothing, and the newer commit's own checks
-release both. The GitHub
+The product is released by hand, as a train
+([ADR-0034](adr/0034-the-product-releases-as-a-train.md)). Run
+[`release.yaml`](../.github/workflows/release.yaml) from the Actions tab, or
+`gh workflow run release.yaml`: it tags main's head once CI passed on that
+commit ([`release-ci-check.sh`](../.github/scripts/release-ci-check.sh)), and
+refuses an untested one. semantic-release computes the version from every
+commit since the last release (see
+[`release.config.cjs`](../.github/release/release.config.cjs)), so a train of
+several breaking changes is one major. The workflow then publishes an image and
+a chart for each component at that tag. The GitHub
 release is created last, and only when every image and chart was pushed; if a
 push fails, the tag stays without a release until the failed jobs are re-run.
+Between releases every green commit is published as a dev build (below), so
+nothing waits on a release to reach the dev cluster.
+
 `feat` is a minor release, `fix`, `perf`, `revert` and `security` a patch, a breaking
 change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
 `style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
 own.
 
+### What is a breaking change
+
+A `!` makes the train a major, so it marks only a change a deployment or a
+client **must act on**:
+
+- a field, RPC or enum value removed or renamed on the wire (`buf breaking`
+  reports it);
+- a request field that was optional and is now required;
+- a chart value or configuration key whose old spelling an existing
+  `values.yaml` or config file no longer works with;
+- a migration that needs an operator to do something, or drops data that
+  cannot be recovered.
+
+A change that only stops a wrong answer is a `fix`, with an `upgrading.md`
+note saying what a client will see differently. Console pages and URLs,
+additive fields and RPCs, and new behaviour behind a new field are not
+breaking.
+
 ### Dev builds
 
-Every commit that passed CI on `main` and cut no tag is published as well, as a
-dev build: an image and a chart at the version the task library derives for an
+Every commit that passed CI on `main` is published as a dev build: an image and a chart at the version the task library derives for an
 untagged commit, `<next patch>-dev.<committer time>.g<sha>`. Such a version
 sorts after the last release and before the next one, so a deployment that
 follows prereleases takes each dev build as it lands and the release that

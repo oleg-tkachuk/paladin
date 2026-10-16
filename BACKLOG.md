@@ -740,6 +740,19 @@ finding moving from "packages you import" to "your code is affected".
   names for the same subsystem is how this drift starts.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
 
+## Release
+
+### Dev builds accumulate in GHCR
+
+- **Status:** Deferred.
+- **Reason:** ADR-0034 publishes an image and a chart for every green merge to
+  `main`; nothing removes them yet, and Argo CD lists a chart's versions
+  through the registry on every refresh.
+- **Definition of Done:** a scheduled job deletes `-dev.` image and chart
+  versions older than a retention period from GHCR, never a release version
+  and never the newest dev build, with a test for its selection.
+- **Blockers:** none.
+
 ## UI / Admin Console
 
 ### Console lists that read one page
