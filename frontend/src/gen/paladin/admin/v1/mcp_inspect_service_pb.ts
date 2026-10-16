@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_mcp_inspect_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CipwYWxhZGluL2FkbWluL3YxL21jcF9pbnNwZWN0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEiGAoWR2V0QnJpZGdlU3RhdHVzUmVxdWVzdCLOAQoXR2V0QnJpZGdlU3RhdHVzUmVzcG9uc2USFgoJcmVhY2hhYmxlGAEgASgIQgPgQQMSEgoFZXJyb3IYAiABKAlCA+BBAxI7Cgl1cHN0cmVhbXMYAyADKAsyIy5wYWxhZGluLmFkbWluLnYxLk1DUFVwc3RyZWFtSGVhbHRoQgPgQQMSFQoIc2Vzc2lvbnMYBCABKAVCA+BBAxIzCgpjaGVja2VkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIn0KEU1DUFVwc3RyZWFtSGVhbHRoEhEKBG5hbWUYASABKAlCA+BBAxIQCgN1cmwYAiABKAlCA+BBAxIWCglyZWFjaGFibGUYAyABKAhCA+BBAxISCgVlcnJvchgEIAEoCUID4EEDEhcKCmxhdGVuY3lfbXMYBSABKANCA+BBAyITChFNQ1BJbnNwZWN0UmVxdWVzdCJDChNMaXN0U2Vzc2lvbnNSZXF1ZXN0EiwKBHBhZ2UYASABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdCJ1ChRMaXN0U2Vzc2lvbnNSZXNwb25zZRIuCghzZXNzaW9ucxgBIAMoCzIcLnBhbGFkaW4uYWRtaW4udjEuTUNQU2Vzc2lvbhItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlItwBCgpNQ1BTZXNzaW9uEg8KAmlkGAEgASgJQgPgQQMSGgoNYWdlbnRfc3ViamVjdBgCIAEoCUID4EEDEjMKCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMgoJbGFzdF9zZWVuGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhwKD3Rvb2xfY2FsbF9jb3VudBgFIAEoA0ID4EEDEhoKDXJlcXVlc3RfY291bnQYBiABKANCA+BBAyLyAQoSTUNQSW5zcGVjdFJlc3BvbnNlEi4KCHByb2ZpbGVzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5NQ1BQcm9maWxlEhMKC2Fsd2F5c19kZW55GAIgAygJEi8KDHRvb2xfY2F0YWxvZxgDIAMoCzIZLnBhbGFkaW4uYWRtaW4udjEuTUNQVG9vbBIxCgl1cHN0cmVhbXMYBCABKAsyHi5wYWxhZGluLmFkbWluLnYxLk1DUFVwc3RyZWFtcxIzCgp0cmFuc3BvcnRzGAUgASgLMh8ucGFsYWRpbi5hZG1pbi52MS5NQ1BUcmFuc3BvcnRzImIKCk1DUFByb2ZpbGUSEQoEbmFtZRgBIAEoCUID4EEIEg0KBXRvb2xzGAIgAygJEhQKDHJhd19wYXR0ZXJucxgDIAMoCRIMCgRkZW55GAQgAygJEg4KBnNvdXJjZRgFIAEoCSJrCgdNQ1BUb29sEhEKBG5hbWUYASABKAlCA+BBCBIQCghhdWRpZW5jZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIVCg1jYXBhYmlsaXR5X29wGAQgASgJEg8KB211dGF0ZXMYBSABKAgiRAoMTUNQVXBzdHJlYW1zEhEKCWFkbWluX3VybBgBIAEoCRIQCghkYXRhX3VybBgCIAEoCRIPCgdpYW1fdXJsGAMgASgJInUKDU1DUFRyYW5zcG9ydHMSMgoFc3RkaW8YASABKAsyIy5wYWxhZGluLmFkbWluLnYxLk1DUFRyYW5zcG9ydFN0ZGlvEjAKBGh0dHAYAiABKAsyIi5wYWxhZGluLmFkbWluLnYxLk1DUFRyYW5zcG9ydEhUVFAiNQoRTUNQVHJhbnNwb3J0U3RkaW8SDwoHZW5hYmxlZBgBIAEoCBIPCgdwcm9maWxlGAIgASgJImMKEE1DUFRyYW5zcG9ydEhUVFASDwoHZW5hYmxlZBgBIAEoCBIMCgRhZGRyGAIgASgJEg8KB3Byb2ZpbGUYAyABKAkSHwoXc2Vzc2lvbl90aW1lb3V0X3NlY29uZHMYBCABKAMyvwIKEU1DUEluc3BlY3RTZXJ2aWNlElkKB0luc3BlY3QSIy5wYWxhZGluLmFkbWluLnYxLk1DUEluc3BlY3RSZXF1ZXN0GiQucGFsYWRpbi5hZG1pbi52MS5NQ1BJbnNwZWN0UmVzcG9uc2UiA5ACARJiCgxMaXN0U2Vzc2lvbnMSJS5wYWxhZGluLmFkbWluLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlIgOQAgESawoPR2V0QnJpZGdlU3RhdHVzEigucGFsYWRpbi5hZG1pbi52MS5HZXRCcmlkZ2VTdGF0dXNSZXF1ZXN0GikucGFsYWRpbi5hZG1pbi52MS5HZXRCcmlkZ2VTdGF0dXNSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CipwYWxhZGluL2FkbWluL3YxL21jcF9pbnNwZWN0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEiGAoWR2V0QnJpZGdlU3RhdHVzUmVxdWVzdCLOAQoXR2V0QnJpZGdlU3RhdHVzUmVzcG9uc2USFgoJcmVhY2hhYmxlGAEgASgIQgPgQQMSEgoFZXJyb3IYAiABKAlCA+BBAxI7Cgl1cHN0cmVhbXMYAyADKAsyIy5wYWxhZGluLmFkbWluLnYxLk1DUFVwc3RyZWFtSGVhbHRoQgPgQQMSFQoIc2Vzc2lvbnMYBCABKAVCA+BBAxIzCgpjaGVja2VkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDIn0KEU1DUFVwc3RyZWFtSGVhbHRoEhEKBG5hbWUYASABKAlCA+BBAxIQCgN1cmwYAiABKAlCA+BBAxIWCglyZWFjaGFibGUYAyABKAhCA+BBAxISCgVlcnJvchgEIAEoCUID4EEDEhcKCmxhdGVuY3lfbXMYBSABKANCA+BBAyITChFNQ1BJbnNwZWN0UmVxdWVzdCJDChNMaXN0U2Vzc2lvbnNSZXF1ZXN0EiwKBHBhZ2UYASABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdCJ1ChRMaXN0U2Vzc2lvbnNSZXNwb25zZRIuCghzZXNzaW9ucxgBIAMoCzIcLnBhbGFkaW4uYWRtaW4udjEuTUNQU2Vzc2lvbhItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlItwBCgpNQ1BTZXNzaW9uEg8KAmlkGAEgASgJQgPgQQMSGgoNYWdlbnRfc3ViamVjdBgCIAEoCUID4EEDEjMKCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMgoJbGFzdF9zZWVuGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEhwKD3Rvb2xfY2FsbF9jb3VudBgFIAEoA0ID4EEDEhoKDXJlcXVlc3RfY291bnQYBiABKANCA+BBAyKiAgoSTUNQSW5zcGVjdFJlc3BvbnNlEi4KCHByb2ZpbGVzGAEgAygLMhwucGFsYWRpbi5hZG1pbi52MS5NQ1BQcm9maWxlEhMKC2Fsd2F5c19kZW55GAIgAygJEi8KDHRvb2xfY2F0YWxvZxgDIAMoCzIZLnBhbGFkaW4uYWRtaW4udjEuTUNQVG9vbBIxCgl1cHN0cmVhbXMYBCABKAsyHi5wYWxhZGluLmFkbWluLnYxLk1DUFVwc3RyZWFtcxIzCgp0cmFuc3BvcnRzGAUgASgLMh8ucGFsYWRpbi5hZG1pbi52MS5NQ1BUcmFuc3BvcnRzEi4KBW9hdXRoGAYgASgLMh8ucGFsYWRpbi5hZG1pbi52MS5NQ1BPQXV0aFN0YXRlItIBCg1NQ1BPQXV0aFN0YXRlEiQKHGF1dGhvcml6YXRpb25fc2VydmVyX2VuYWJsZWQYASABKAgSNgoMc2VlZF9jbGllbnRzGAIgAygLMiAucGFsYWRpbi5hZG1pbi52MS5NQ1BPQXV0aENsaWVudBIaChJlZGdlX29hdXRoX2VuYWJsZWQYAyABKAgSFAoMcmVzb3VyY2VfdXJsGAQgASgJEhUKDWVkZ2VfYXVkaWVuY2UYBSABKAkSGgoSZXhjaGFuZ2VfY2xpZW50X2lkGAYgASgJIpQBCg5NQ1BPQXV0aENsaWVudBIRCgljbGllbnRfaWQYASABKAkSDgoGcHVibGljGAIgASgIEhYKDmFsbG93ZWRfc2NvcGVzGAMgAygJEhkKEWFsbG93ZWRfYXVkaWVuY2VzGAQgAygJEhYKDnRva2VuX2V4Y2hhbmdlGAUgASgIEhQKDHNraXBfY29uc2VudBgGIAEoCCJiCgpNQ1BQcm9maWxlEhEKBG5hbWUYASABKAlCA+BBCBINCgV0b29scxgCIAMoCRIUCgxyYXdfcGF0dGVybnMYAyADKAkSDAoEZGVueRgEIAMoCRIOCgZzb3VyY2UYBSABKAkilAEKB01DUFRvb2wSEQoEbmFtZRgBIAEoCUID4EEIEhAKCGF1ZGllbmNlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDWNhcGFiaWxpdHlfb3AYBCABKAkSDwoHbXV0YXRlcxgFIAEoCBITCgtkZXN0cnVjdGl2ZRgGIAEoCBISCgpvcGVuX3dvcmxkGAcgASgIIkQKDE1DUFVwc3RyZWFtcxIRCglhZG1pbl91cmwYASABKAkSEAoIZGF0YV91cmwYAiABKAkSDwoHaWFtX3VybBgDIAEoCSJ1Cg1NQ1BUcmFuc3BvcnRzEjIKBXN0ZGlvGAEgASgLMiMucGFsYWRpbi5hZG1pbi52MS5NQ1BUcmFuc3BvcnRTdGRpbxIwCgRodHRwGAIgASgLMiIucGFsYWRpbi5hZG1pbi52MS5NQ1BUcmFuc3BvcnRIVFRQIjUKEU1DUFRyYW5zcG9ydFN0ZGlvEg8KB2VuYWJsZWQYASABKAgSDwoHcHJvZmlsZRgCIAEoCSJjChBNQ1BUcmFuc3BvcnRIVFRQEg8KB2VuYWJsZWQYASABKAgSDAoEYWRkchgCIAEoCRIPCgdwcm9maWxlGAMgASgJEh8KF3Nlc3Npb25fdGltZW91dF9zZWNvbmRzGAQgASgDMr8CChFNQ1BJbnNwZWN0U2VydmljZRJZCgdJbnNwZWN0EiMucGFsYWRpbi5hZG1pbi52MS5NQ1BJbnNwZWN0UmVxdWVzdBokLnBhbGFkaW4uYWRtaW4udjEuTUNQSW5zcGVjdFJlc3BvbnNlIgOQAgESYgoMTGlzdFNlc3Npb25zEiUucGFsYWRpbi5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZSIDkAIBEmsKD0dldEJyaWRnZVN0YXR1cxIoLnBhbGFkaW4uYWRtaW4udjEuR2V0QnJpZGdlU3RhdHVzUmVxdWVzdBopLnBhbGFkaW4uYWRtaW4udjEuR2V0QnJpZGdlU3RhdHVzUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_google_protobuf_timestamp,
       file_paladin_common_v1_pagination,
@@ -308,6 +308,14 @@ export type MCPInspectResponse =
      * @generated from field: paladin.admin.v1.MCPTransports transports = 5;
      */
     transports?: MCPTransports | undefined;
+
+    /**
+     * oauth is how agents authorize: the OAuth Authorization Server's clients
+     * and whether the MCP server is its own audience (ADR-0036).
+     *
+     * @generated from field: paladin.admin.v1.MCPOAuthState oauth = 6;
+     */
+    oauth?: MCPOAuthState | undefined;
   };
 
 /**
@@ -317,6 +325,123 @@ export type MCPInspectResponse =
 export const MCPInspectResponseSchema: GenMessage<MCPInspectResponse> =
   /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_mcp_inspect_service, 7);
+
+/**
+ * MCPOAuthState is the OAuth posture of the MCP server and the
+ * Authorization Server it relies on. Secrets are never included.
+ *
+ * @generated from message paladin.admin.v1.MCPOAuthState
+ */
+export type MCPOAuthState = Message<"paladin.admin.v1.MCPOAuthState"> & {
+  /**
+   * authorization_server_enabled reports auth.oauth.enabled: IAM serves
+   * /oauth/authorize and /oauth/token.
+   *
+   * @generated from field: bool authorization_server_enabled = 1;
+   */
+  authorizationServerEnabled: boolean;
+
+  /**
+   * seed_clients are the clients the configuration registers at boot.
+   * Clients added by dynamic registration live in the database and are not
+   * listed.
+   *
+   * @generated from field: repeated paladin.admin.v1.MCPOAuthClient seed_clients = 2;
+   */
+  seedClients: MCPOAuthClient[];
+
+  /**
+   * edge_oauth_enabled reports mcp.oauth.enabled: the MCP server challenges
+   * with 401 and serves its protected-resource metadata.
+   *
+   * @generated from field: bool edge_oauth_enabled = 3;
+   */
+  edgeOauthEnabled: boolean;
+
+  /**
+   * resource_url is the MCP server's resource identifier, what an agent
+   * authorizes for.
+   *
+   * @generated from field: string resource_url = 4;
+   */
+  resourceUrl: string;
+
+  /**
+   * edge_audience is the one audience the MCP server accepts — paladin-mcp
+   * when it exchanges tokens, empty when it forwards any plane's token.
+   *
+   * @generated from field: string edge_audience = 5;
+   */
+  edgeAudience: string;
+
+  /**
+   * exchange_client_id is the seed client the MCP server exchanges tokens
+   * as; empty when it does not.
+   *
+   * @generated from field: string exchange_client_id = 6;
+   */
+  exchangeClientId: string;
+};
+
+/**
+ * Describes the message paladin.admin.v1.MCPOAuthState.
+ * Use `create(MCPOAuthStateSchema)` to create a new message.
+ */
+export const MCPOAuthStateSchema: GenMessage<MCPOAuthState> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 8);
+
+/**
+ * MCPOAuthClient is one registered OAuth client.
+ *
+ * @generated from message paladin.admin.v1.MCPOAuthClient
+ */
+export type MCPOAuthClient = Message<"paladin.admin.v1.MCPOAuthClient"> & {
+  /**
+   * @generated from field: string client_id = 1;
+   */
+  clientId: string;
+
+  /**
+   * public is true for a PKCE-only client; false for one with a secret.
+   *
+   * @generated from field: bool public = 2;
+   */
+  public: boolean;
+
+  /**
+   * @generated from field: repeated string allowed_scopes = 3;
+   */
+  allowedScopes: string[];
+
+  /**
+   * @generated from field: repeated string allowed_audiences = 4;
+   */
+  allowedAudiences: string[];
+
+  /**
+   * token_exchange is true for the client that may call RFC 8693 exchange.
+   *
+   * @generated from field: bool token_exchange = 5;
+   */
+  tokenExchange: boolean;
+
+  /**
+   * skip_consent is true for a first-party client that skips the consent
+   * screen.
+   *
+   * @generated from field: bool skip_consent = 6;
+   */
+  skipConsent: boolean;
+};
+
+/**
+ * Describes the message paladin.admin.v1.MCPOAuthClient.
+ * Use `create(MCPOAuthClientSchema)` to create a new message.
+ */
+export const MCPOAuthClientSchema: GenMessage<MCPOAuthClient> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.MCPProfile
@@ -368,7 +493,7 @@ export type MCPProfile = Message<"paladin.admin.v1.MCPProfile"> & {
  */
 export const MCPProfileSchema: GenMessage<MCPProfile> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 8);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 10);
 
 /**
  * @generated from message paladin.admin.v1.MCPTool
@@ -408,6 +533,22 @@ export type MCPTool = Message<"paladin.admin.v1.MCPTool"> & {
    * @generated from field: bool mutates = 5;
    */
   mutates: boolean;
+
+  /**
+   * destructive is true when a call may delete or overwrite something
+   * (MCP's destructiveHint); false for an additive write and for a read.
+   *
+   * @generated from field: bool destructive = 6;
+   */
+  destructive: boolean;
+
+  /**
+   * open_world is true when the tool reaches past Paladin — an event sink,
+   * a webhook (MCP's openWorldHint).
+   *
+   * @generated from field: bool open_world = 7;
+   */
+  openWorld: boolean;
 };
 
 /**
@@ -416,7 +557,7 @@ export type MCPTool = Message<"paladin.admin.v1.MCPTool"> & {
  */
 export const MCPToolSchema: GenMessage<MCPTool> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 9);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 11);
 
 /**
  * @generated from message paladin.admin.v1.MCPUpstreams
@@ -444,7 +585,7 @@ export type MCPUpstreams = Message<"paladin.admin.v1.MCPUpstreams"> & {
  */
 export const MCPUpstreamsSchema: GenMessage<MCPUpstreams> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 10);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 12);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransports
@@ -467,7 +608,7 @@ export type MCPTransports = Message<"paladin.admin.v1.MCPTransports"> & {
  */
 export const MCPTransportsSchema: GenMessage<MCPTransports> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 11);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 13);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransportStdio
@@ -491,7 +632,7 @@ export type MCPTransportStdio =
  */
 export const MCPTransportStdioSchema: GenMessage<MCPTransportStdio> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 12);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 14);
 
 /**
  * @generated from message paladin.admin.v1.MCPTransportHTTP
@@ -526,7 +667,7 @@ export type MCPTransportHTTP = Message<"paladin.admin.v1.MCPTransportHTTP"> & {
  */
 export const MCPTransportHTTPSchema: GenMessage<MCPTransportHTTP> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 13);
+  messageDesc(file_paladin_admin_v1_mcp_inspect_service, 15);
 
 /**
  * MCPInspectService — read-only operator visibility into the MCP

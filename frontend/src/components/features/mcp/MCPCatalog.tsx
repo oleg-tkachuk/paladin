@@ -31,15 +31,34 @@ import { MCP_PLANES, planeTone } from "./mcp-status";
 
 const ALL = "__all__";
 
-function EffectBadge({ mutates }: { mutates: boolean }) {
-  return mutates ? (
-    <Badge variant="warning" className={T.labelTight}>
-      changes state
-    </Badge>
-  ) : (
-    <Badge variant="outline" className={T.labelTight}>
-      read
-    </Badge>
+/** What a call does: reads, changes state, or may destroy something — and
+ * whether it reaches past Paladin. The server sends the same as MCP hints. */
+export function EffectBadge({
+  tool,
+}: {
+  tool: Pick<MCPTool, "mutates" | "destructive" | "openWorld">;
+}) {
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {tool.destructive ? (
+        <Badge variant="destructive" className={T.labelTight}>
+          destructive
+        </Badge>
+      ) : tool.mutates ? (
+        <Badge variant="warning" className={T.labelTight}>
+          changes state
+        </Badge>
+      ) : (
+        <Badge variant="outline" className={T.labelTight}>
+          read
+        </Badge>
+      )}
+      {tool.openWorld ? (
+        <Badge variant="info" className={T.labelTight}>
+          open world
+        </Badge>
+      ) : null}
+    </span>
   );
 }
 
@@ -164,7 +183,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <EffectBadge mutates={t.mutates} />
+                    <EffectBadge tool={t} />
                   </TableCell>
                   <TableCell
                     className={`hidden @md:table-cell ${T.code} text-muted-foreground`}
