@@ -16,6 +16,7 @@ const (
 	AudienceData  = paladin.AudienceData
 	AudienceAdmin = paladin.AudienceAdmin
 	AudienceIAM   = paladin.AudienceIAM
+	AudienceMCP   = paladin.AudienceMCP
 )
 
 // The short plane labels a token's audience lists: an API token's, as

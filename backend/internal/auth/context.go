@@ -51,6 +51,10 @@ type Principal struct {
 	// console session, an API token and a capability.
 	OAuthClientID string
 	OAuthScopes   []string
+	// Actor is the OAuth client that exchanged this token on the subject's
+	// behalf — the MCP server (ADR-0036). Empty when the token was not
+	// exchanged.
+	Actor string
 }
 
 // PrincipalKind enumerates the originating credential type.
