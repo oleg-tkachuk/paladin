@@ -125,3 +125,62 @@ func TestRefreshTokenUnusedSuccessor(t *testing.T) {
 		t.Fatalf("a revoked family's successor %v was offered: err = %v", unused, err)
 	}
 }
+
+// TestRefreshTokenOAuthGrant covers ADR-0035 against real Postgres: a token
+// issued under an OAuth grant reads back with its client, audience and scopes,
+// including a consent to no scope at all; a console login reads back with no
+// grant; and the table refuses a grant recorded in part.
+func TestRefreshTokenOAuthGrant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewRefreshTokenRepo(sqlc.New(pool))
+
+	const clientID = "desktop-agent"
+	tenantID := uuid.New()
+	userID := uuid.New()
+	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, 'acme', 'acme')`, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO users (id, tenant_id, subject) VALUES ($1, $2, 'svc@acme')`, userID, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO oauth_clients (client_id) VALUES ($1)`, clientID)
+
+	insert := func(grant *authstore.OAuthGrant) uuid.UUID {
+		t.Helper()
+		jti := uuid.Must(uuid.NewV7())
+		if err := repo.Insert(ctx, authstore.RefreshToken{
+			JTI: jti, FamilyID: uuid.New(), UserID: userID, TenantID: tenantID,
+			IssuedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour), OAuth: grant,
+		}); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		return jti
+	}
+
+	for _, want := range []authstore.OAuthGrant{
+		{ClientID: clientID, Audience: "paladin-admin", Scopes: []string{"paladin.read", "paladin.write"}},
+		// No scope consented: the handler holds a nil slice, not an empty one.
+		{ClientID: clientID, Audience: "paladin-data", Scopes: nil},
+	} {
+		got, err := repo.Get(ctx, insert(&want))
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.OAuth == nil || got.OAuth.ClientID != want.ClientID || got.OAuth.Audience != want.Audience ||
+			len(got.OAuth.Scopes) != len(want.Scopes) {
+			t.Errorf("grant = %+v, want %+v", got.OAuth, want)
+		}
+	}
+
+	console, err := repo.Get(ctx, insert(nil))
+	if err != nil {
+		t.Fatalf("get console token: %v", err)
+	}
+	if console.OAuth != nil {
+		t.Errorf("a console login read back with a grant: %+v", console.OAuth)
+	}
+
+	// A client without the audience and scopes it was granted is not a grant.
+	if _, err := pool.Exec(ctx, `INSERT INTO refresh_tokens (id, user_id, tenant_id, expires_at, oauth_client_id)
+		VALUES ($1, $2, $3, now() + interval '1 hour', $4)`, uuid.New(), userID, tenantID, clientID); err == nil {
+		t.Error("a half-recorded grant was stored")
+	}
+}

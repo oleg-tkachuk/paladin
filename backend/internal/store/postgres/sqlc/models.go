@@ -653,6 +653,12 @@ type RefreshToken struct {
 	ParentID pgtype.UUID `json:"parent_id"`
 	// When this token was first presented. An unused successor is what a lost rotation response leaves behind.
 	FirstUsedAt pgtype.Timestamptz `json:"first_used_at"`
+	// The OAuth client this token was issued to; NULL for a console login. Deleting the client deletes its tokens.
+	OauthClientID *string `json:"oauth_client_id"`
+	// The audience the OAuth grant was issued for; a rotation re-issues the same one.
+	OauthAudience *string `json:"oauth_audience"`
+	// The scopes the user consented to; a rotation re-issues the same set.
+	OauthScopes []string `json:"oauth_scopes"`
 }
 
 type ReplicationState struct {

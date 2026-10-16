@@ -283,7 +283,8 @@ func TestToken_RefreshRechecksTheOwner(t *testing.T) {
 		t.Helper()
 		store := newMemStore()
 		store.clients[publicClient().ClientID] = publicClient()
-		return testHandler(t, store, &memRefresh{}, u)
+		grant := &authstore.OAuthGrant{ClientID: publicClient().ClientID, Audience: auth.AudienceData}
+		return testHandler(t, store, &memRefresh{grant: grant}, u)
 	}
 	exchange := func(h *Handler, rt string) int {
 		return postForm(h, "/oauth/token", url.Values{

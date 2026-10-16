@@ -13,7 +13,7 @@ import (
 
 const getRefreshToken = `-- name: GetRefreshToken :one
 SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
-       parent_id, first_used_at
+       parent_id, first_used_at, oauth_client_id, oauth_audience, oauth_scopes
 FROM refresh_tokens
 WHERE id = $1
 `
@@ -32,13 +32,16 @@ func (q *Queries) GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshT
 		&i.SupersededAt,
 		&i.ParentID,
 		&i.FirstUsedAt,
+		&i.OauthClientID,
+		&i.OauthAudience,
+		&i.OauthScopes,
 	)
 	return i, err
 }
 
 const getUnusedRefreshSuccessor = `-- name: GetUnusedRefreshSuccessor :one
 SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
-       parent_id, first_used_at
+       parent_id, first_used_at, oauth_client_id, oauth_audience, oauth_scopes
 FROM refresh_tokens
 WHERE parent_id = $1 AND first_used_at IS NULL AND revoked = FALSE
 ORDER BY issued_at DESC
@@ -62,17 +65,23 @@ func (q *Queries) GetUnusedRefreshSuccessor(ctx context.Context, parentID pgtype
 		&i.SupersededAt,
 		&i.ParentID,
 		&i.FirstUsedAt,
+		&i.OauthClientID,
+		&i.OauthAudience,
+		&i.OauthScopes,
 	)
 	return i, err
 }
 
 const insertRefreshToken = `-- name: InsertRefreshToken :exec
-INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at, parent_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at, parent_id,
+                            oauth_client_id, oauth_audience, oauth_scopes)
+VALUES ($1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10::text[])
 `
 
-// parent_id is the token this one was rotated from, NULL for a login.
-func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID) error {
+// parent_id is the token this one was rotated from, NULL for a login. The
+// oauth_* columns record the OAuth grant, NULL for a console login.
+func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID, oauthClientID *string, oauthAudience *string, oauthScopes []string) error {
 	_, err := q.db.Exec(ctx, insertRefreshToken,
 		iD,
 		userID,
@@ -81,6 +90,9 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID
 		issuedAt,
 		expiresAt,
 		parentID,
+		oauthClientID,
+		oauthAudience,
+		oauthScopes,
 	)
 	return err
 }

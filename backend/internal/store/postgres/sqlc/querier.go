@@ -336,8 +336,9 @@ type Querier interface {
 	// See ADR-0017 and migrations/001_initial_schema.sql: storage_path is
 	// denormalised here because the object row is gone before the purge runs.
 	InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, objectID pgtype.UUID, name string, name_2 string, collectionName string, path string) error
-	// parent_id is the token this one was rotated from, NULL for a login.
-	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID) error
+	// parent_id is the token this one was rotated from, NULL for a login. The
+	// oauth_* columns record the OAuth grant, NULL for a console login.
+	InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID pgtype.UUID, tenantID pgtype.UUID, familyID pgtype.UUID, issuedAt pgtype.Timestamptz, expiresAt pgtype.Timestamptz, parentID pgtype.UUID, oauthClientID *string, oauthAudience *string, oauthScopes []string) error
 	InsertStorageBackendFeature(ctx context.Context, feature string, support string, message string, checkedAt pgtype.Timestamptz, backendName string) error
 	// Streams a window of AVAILABLE-only objects under (tenant, collection)
 	// newest-first. Pagination cursor: id (UUIDv7 → time-ordered).

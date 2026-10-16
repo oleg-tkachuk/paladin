@@ -79,14 +79,31 @@ func (m memUsers) FindBySubjectGlobal(_ context.Context, subject string) ([]auth
 type memRefresh struct {
 	inserted, revoked, userRevoked, familyRevoked int
 	getErr                                        error // when set, Get returns it (e.g. ErrTokenRevoked)
+	rows                                          map[uuid.UUID]authstore.RefreshToken
+	// grant is what a jti Insert never stored reads as: nil is a console
+	// login, set is a token this handler issued before the test began.
+	grant *authstore.OAuthGrant
 }
 
-func (m *memRefresh) Insert(context.Context, authstore.RefreshToken) error { m.inserted++; return nil }
+func (m *memRefresh) Insert(_ context.Context, t authstore.RefreshToken) error {
+	m.inserted++
+	if m.rows == nil {
+		m.rows = map[uuid.UUID]authstore.RefreshToken{}
+	}
+	m.rows[t.JTI] = t
+	return nil
+}
+
+// Get returns the row Insert stored. A jti it never stored reads as a live
+// token carrying m.grant.
 func (m *memRefresh) Get(_ context.Context, jti uuid.UUID) (authstore.RefreshToken, error) {
 	if m.getErr != nil {
 		return authstore.RefreshToken{}, m.getErr
 	}
-	return authstore.RefreshToken{JTI: jti, ExpiresAt: time.Now().Add(time.Hour)}, nil
+	if t, ok := m.rows[jti]; ok {
+		return t, nil
+	}
+	return authstore.RefreshToken{JTI: jti, ExpiresAt: time.Now().Add(time.Hour), OAuth: m.grant}, nil
 }
 func (m *memRefresh) Revoke(context.Context, uuid.UUID) error { m.revoked++; return nil }
 func (m *memRefresh) Supersede(context.Context, uuid.UUID) error {
