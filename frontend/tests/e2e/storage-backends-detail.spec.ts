@@ -87,3 +87,26 @@ test.describe("Bucket contents", () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 });
+
+test.describe("Backend S3 features", () => {
+  // The probe is read when a capability is in question: the overview shows
+  // its verdict, and the feature list is a tab of its own.
+  test("are a tab of their own, reached from the overview", async ({
+    page,
+    makeBucket,
+  }) => {
+    await loginAsAdmin(page);
+    const bucket = await makeBucket();
+
+    await gotoSettled(page, `/storage-backends/${bucket.backendId}`);
+    await expect(page.getByText("Required by Paladin")).toHaveCount(0);
+
+    await page.getByRole("link", { name: /of \d+ supported/ }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/storage-backends/${bucket.backendId}/features$`),
+    );
+    await expect(page.getByText("Required by Paladin")).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+});
