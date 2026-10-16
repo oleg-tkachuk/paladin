@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 import { yamlConfig } from "./src/config";
+import {
+  OAUTH_CONSENT_PATH,
+  contentSecurityPolicy,
+} from "./src/lib/security/csp";
 
 // Bake the UI's own version + commit + build-time into the client
 // bundle. The dashboard renders these alongside the backend's
@@ -11,31 +15,12 @@ import { yamlConfig } from "./src/config";
 // the NEXT_PUBLIC_* vars below cover the UI half.
 const uiMeta = yamlConfig.runtimeConfig.public.uiMetadata;
 
-// Security headers applied to every response. CSP starts strict
-// (default-src 'self') and only opens what the app needs: Next.js
-// injects inline styles and (in dev) inline/eval scripts, and the BFF
-// talks to same-origin /api/rpc so connect-src 'self' suffices. The
-// 'unsafe-inline'/'unsafe-eval' script allowances are dev-only; the
-// production policy drops 'unsafe-eval'. Tighten further (nonces) once
-// any remaining inline scripts are audited.
+// Security headers applied to every response; the CSP is built in
+// src/lib/security/csp.ts.
 const isDev = process.env.NODE_ENV !== "production";
-const csp = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "connect-src 'self'",
-  "form-action 'self'",
-]
-  .join("; ")
-  .concat(isDev ? "" : "; upgrade-insecure-requests");
 
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
+  { key: "Content-Security-Policy", value: contentSecurityPolicy({ isDev }) },
   // HSTS only in production. On http://localhost dev a 2-year HSTS would
   // make the browser refuse plain-HTTP to localhost for everything on
   // that port — poisoning every developer's machine after one visit.
@@ -60,7 +45,20 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Later wins for the same header: the consent page's policy without
+      // form-action (see contentSecurityPolicy).
+      {
+        source: OAUTH_CONSENT_PATH,
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: contentSecurityPolicy({ isDev, consent: true }),
+          },
+        ],
+      },
+    ];
   },
   env: {
     // PALADIN_GRPC_URL used to be set here from the config file's
