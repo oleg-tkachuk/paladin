@@ -243,7 +243,10 @@ ingress() { yq ea -r '[select(.kind == "Ingress")] | .[0] | '"$2" "$scratch/$1.y
 check "ingress: Caddy class" "$(ingress ingress .spec.ingressClassName)" "caddy"
 check "ingress: iam path first" "$(ingress ingress '.spec.rules[0].http.paths[0].path')" "/paladin.iam.v1.*"
 check "ingress: iam to the iam port" "$(ingress ingress '.spec.rules[0].http.paths[0].backend.service.port.number')" "8085"
-check "ingress: the rest to the data port" "$(ingress ingress '.spec.rules[0].http.paths[1].backend.service.port.number')" "8080"
+# ingress_port <name> <path> — the port the Ingress sends that path to.
+ingress_port() { ingress "$1" '.spec.rules[0].http.paths[] | select(.path == "'"$2"'") | .backend.service.port.number'; }
+check "ingress: OAuth to the iam port" "$(ingress_port ingress /oauth)" "8085"
+check "ingress: the rest to the data port" "$(ingress_port ingress /)" "8080"
 check "ingress: plain backends need no protocol annotation" \
     "$(ingress ingress '.metadata.annotations["caddy.ingress.kubernetes.io/backend-protocol"] // "none"')" "none"
 
@@ -258,6 +261,23 @@ refuse ingress-no-host "ingress.hosts must name at least one host" \
 console console-ingress --set ingress.enabled=true --set 'ingress.hosts={console.example.com}'
 check "console ingress: to the console Service" \
     "$(yq ea -r '[select(.kind == "Ingress")] | .[0] | .spec.rules[0].http.paths[0].backend.service.port.number' "$scratch/console-console-ingress.yaml")" "3000"
+
+# ─── Traefik routes ──────────────────────────────────────────────────────────
+
+# The OAuth Authorization Server is served by the IAM listener outside the
+# procedure prefix. Without its own rule /oauth/* fell through to the data
+# plane, which does not serve it.
+render traefik --set traefik.enabled=true --set 'traefik.hosts={api.example.com}'
+# route_port <name> <match> — the port of the IngressRoute rule with that match.
+route_port() {
+    yq ea -r '[select(.kind == "IngressRoute")] | .[0] | .spec.routes[] | select(.match == "'"$2"'") | .services[0].port' \
+        "$scratch/$1.yaml"
+}
+check "traefik: OAuth to the iam port" \
+    "$(route_port traefik 'Host(`api.example.com`) && PathPrefix(`/oauth/`)')" "8085"
+check "traefik: iam RPCs to the iam port" \
+    "$(route_port traefik 'Host(`api.example.com`) && PathPrefix(`/paladin.iam.v1.`)')" "8085"
+check "traefik: the rest to the data port" "$(route_port traefik 'Host(`api.example.com`)')" "8080"
 
 # ─── rollout history ─────────────────────────────────────────────────────────
 

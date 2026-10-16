@@ -76,6 +76,27 @@ spec:
           {{- end }}
         {{- end }}
       {{- end }}
+    # OAuth Authorization Server — the IAM listener, outside the procedure
+    # prefix. Without it /oauth/* fell through to the data plane and 404'd.
+    - kind: Rule
+      match: Host(`{{ $host }}`) && PathPrefix(`{{ $planes.iam.oauthPathPrefix }}`)
+      services:
+        - kind: Service
+          name: {{ $apiFullname }}
+          port: {{ $planes.iam.port }}
+          {{- if $bt.enabled }}
+          scheme: https
+          serversTransport: {{ $stName }}
+          {{- end }}
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
     {{- end }}
     {{- if and $adminEnabled (not $adminHosts) }}
     # admin plane — shared host, procedure-prefix dispatch.
