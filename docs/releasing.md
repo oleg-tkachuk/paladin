@@ -81,6 +81,12 @@ follows it. A dev build gets no GitHub release and moves no floating tag;
 [`publish-version-check.sh`](../.github/scripts/publish-version-check.sh) refuses
 one that derived a release version.
 
+A commit is built from its own sha, so it is published even when `main` has
+moved past it by the time its CI passes. The one commit that gets no dev build
+is one whose CI run never finished: GitHub cancels a run still queued when a
+newer push to `main` queues behind it, and the newer commit's build carries
+its change.
+
 ### Signatures and SBOMs
 
 Every image and chart a release publishes is signed, and every image carries
