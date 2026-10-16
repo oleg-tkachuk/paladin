@@ -142,6 +142,47 @@ message MCPInspectResponse {
   // Transports describes which MCP transports are enabled and their
   // active profile.
   MCPTransports transports = 5;
+  // oauth is how agents authorize: the OAuth Authorization Server's clients
+  // and whether the MCP server is its own audience (ADR-0036).
+  MCPOAuthState oauth = 6;
+}
+
+// MCPOAuthState is the OAuth posture of the MCP server and the
+// Authorization Server it relies on. Secrets are never included.
+message MCPOAuthState {
+  // authorization_server_enabled reports auth.oauth.enabled: IAM serves
+  // /oauth/authorize and /oauth/token.
+  bool authorization_server_enabled = 1;
+  // seed_clients are the clients the configuration registers at boot.
+  // Clients added by dynamic registration live in the database and are not
+  // listed.
+  repeated MCPOAuthClient seed_clients = 2;
+  // edge_oauth_enabled reports mcp.oauth.enabled: the MCP server challenges
+  // with 401 and serves its protected-resource metadata.
+  bool edge_oauth_enabled = 3;
+  // resource_url is the MCP server's resource identifier, what an agent
+  // authorizes for.
+  string resource_url = 4;
+  // edge_audience is the one audience the MCP server accepts — paladin-mcp
+  // when it exchanges tokens, empty when it forwards any plane's token.
+  string edge_audience = 5;
+  // exchange_client_id is the seed client the MCP server exchanges tokens
+  // as; empty when it does not.
+  string exchange_client_id = 6;
+}
+
+// MCPOAuthClient is one registered OAuth client.
+message MCPOAuthClient {
+  string client_id = 1;
+  // public is true for a PKCE-only client; false for one with a secret.
+  bool public = 2;
+  repeated string allowed_scopes = 3;
+  repeated string allowed_audiences = 4;
+  // token_exchange is true for the client that may call RFC 8693 exchange.
+  bool token_exchange = 5;
+  // skip_consent is true for a first-party client that skips the consent
+  // screen.
+  bool skip_consent = 6;
 }
 
 message MCPProfile {
@@ -175,6 +216,12 @@ message MCPTool {
   // UI flags these for visual emphasis; deny-list candidates by
   // default.
   bool mutates = 5;
+  // destructive is true when a call may delete or overwrite something
+  // (MCP's destructiveHint); false for an additive write and for a read.
+  bool destructive = 6;
+  // open_world is true when the tool reaches past Paladin — an event sink,
+  // a webhook (MCP's openWorldHint).
+  bool open_world = 7;
 }
 
 message MCPUpstreams {

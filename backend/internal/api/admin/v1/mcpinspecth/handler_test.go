@@ -6,11 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -589,5 +591,78 @@ func TestListSessionsDeduplicatesByFreshestLastSeen(t *testing.T) {
 	}
 	if res.Sessions[0].RequestCount != 99 {
 		t.Errorf("kept the stale entry: %+v", res.Sessions[0])
+	}
+}
+
+// ─── Inspect: tool hints and OAuth ─────────────────────────────────────────
+
+// Each tool carries the catalog's destructive and open-world hints, so the
+// console can mark the calls an operator should look at twice.
+func TestInspectCarriesToolHints(t *testing.T) {
+	resp, err := NewHandler(config.MCP{}, allowAll()).Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]*adminv1.MCPTool{}
+	for _, tool := range resp.GetToolCatalog() {
+		byName[tool.GetName()] = tool
+	}
+	for _, meta := range mcppkg.DefaultCatalog {
+		got := byName[meta.Name]
+		if got.GetDestructive() != meta.Destructive || got.GetOpenWorld() != meta.OpenWorld {
+			t.Errorf("%s: destructive, open_world = %v, %v; catalog says %v, %v",
+				meta.Name, got.GetDestructive(), got.GetOpenWorld(), meta.Destructive, meta.OpenWorld)
+		}
+	}
+}
+
+func TestInspectReportsOAuth(t *testing.T) {
+	const (
+		agent     = "agent"
+		mcpServer = "paladin-mcp-server"
+		resource  = "https://mcp.example.test/mcp"
+		secret    = "never-shown"
+	)
+	as := config.OAuthAS{Enabled: true, SeedClients: []config.OAuthSeedClient{
+		{ClientID: agent, Public: true, AllowedScopes: []string{auth.OAuthScopeRead}, AllowedAudiences: []string{auth.AudienceMCP}},
+		{ClientID: mcpServer, ClientSecret: secret, TokenExchange: true},
+	}}
+
+	exchanging := config.MCP{OAuth: config.MCPOAuth{
+		Enabled: true, ResourceURL: resource,
+		Exchange: config.MCPOAuthExchange{ClientID: mcpServer, ClientSecret: secret},
+	}}
+	resp, err := NewHandler(exchanging, allowAll()).WithOAuth(as).Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := resp.GetOauth()
+	if !st.GetAuthorizationServerEnabled() || !st.GetEdgeOauthEnabled() || st.GetResourceUrl() != resource {
+		t.Errorf("state = %+v", st)
+	}
+	if st.GetEdgeAudience() != auth.AudienceMCP || st.GetExchangeClientId() != mcpServer {
+		t.Errorf("edge audience, exchange client = %q, %q", st.GetEdgeAudience(), st.GetExchangeClientId())
+	}
+	if n := len(st.GetSeedClients()); n != len(as.SeedClients) {
+		t.Fatalf("seed clients = %d, want %d", n, len(as.SeedClients))
+	}
+	if c := st.GetSeedClients()[0]; c.GetClientId() != agent || !c.GetPublic() || c.GetAllowedAudiences()[0] != auth.AudienceMCP {
+		t.Errorf("agent client = %+v", c)
+	}
+	if c := st.GetSeedClients()[1]; !c.GetTokenExchange() || c.GetPublic() {
+		t.Errorf("exchange client = %+v", c)
+	}
+	if strings.Contains(protojson.Format(resp), secret) {
+		t.Error("a client secret reached the response")
+	}
+
+	// Forwarding: no audience of its own, no exchange client.
+	forwarding := config.MCP{OAuth: config.MCPOAuth{Enabled: true}}
+	resp, err = NewHandler(forwarding, allowAll()).WithOAuth(as).Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := resp.GetOauth(); st.GetEdgeAudience() != "" || st.GetExchangeClientId() != "" {
+		t.Errorf("forwarding: edge audience, exchange client = %q, %q", st.GetEdgeAudience(), st.GetExchangeClientId())
 	}
 }

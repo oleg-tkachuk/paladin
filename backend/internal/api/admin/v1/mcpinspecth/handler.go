@@ -44,6 +44,7 @@ import (
 // the lifetime of the process.
 type Handler struct {
 	cfg         config.MCP
+	oauth       config.OAuthAS
 	policy      cedar.Authorizer
 	sessionsURL string
 	httpClient  *http.Client
@@ -288,6 +289,7 @@ func (h *Handler) Inspect(ctx context.Context, _ *adminv1.MCPInspectRequest) (*a
 				SessionTimeoutSeconds: int64(h.cfg.HTTP.SessionTimeout / time.Second),
 			},
 		},
+		Oauth: h.oauthState(),
 	}
 	return resp, nil
 }
@@ -361,6 +363,38 @@ func (h *Handler) alwaysDeny() []string {
 	return out
 }
 
+// WithOAuth gives Inspect the Authorization Server's configuration, so it
+// can report the clients agents authorize as (ADR-0036).
+func (h *Handler) WithOAuth(as config.OAuthAS) *Handler {
+	h.oauth = as
+	return h
+}
+
+// oauthState is how agents authorize, without a secret in it.
+func (h *Handler) oauthState() *adminv1.MCPOAuthState {
+	st := &adminv1.MCPOAuthState{
+		AuthorizationServerEnabled: h.oauth.Enabled,
+		EdgeOauthEnabled:           h.cfg.OAuth.Enabled,
+		ResourceUrl:                h.cfg.OAuth.ResourceURL,
+		SeedClients:                make([]*adminv1.MCPOAuthClient, 0, len(h.oauth.SeedClients)),
+	}
+	if h.cfg.OAuth.ExchangeEnabled() {
+		st.EdgeAudience = auth.AudienceMCP
+		st.ExchangeClientId = h.cfg.OAuth.Exchange.ClientID
+	}
+	for _, sc := range h.oauth.SeedClients {
+		st.SeedClients = append(st.SeedClients, &adminv1.MCPOAuthClient{
+			ClientId:         sc.ClientID,
+			Public:           sc.Public,
+			AllowedScopes:    sc.AllowedScopes,
+			AllowedAudiences: sc.AllowedAudiences,
+			TokenExchange:    sc.TokenExchange,
+			SkipConsent:      sc.SkipConsent,
+		})
+	}
+	return st
+}
+
 // toolCatalog projects mcp.DefaultCatalog into the proto shape.
 func (h *Handler) toolCatalog() []*adminv1.MCPTool {
 	out := make([]*adminv1.MCPTool, 0, len(mcppkg.DefaultCatalog))
@@ -371,6 +405,8 @@ func (h *Handler) toolCatalog() []*adminv1.MCPTool {
 			Description:  t.Description,
 			CapabilityOp: t.CapabilityOp,
 			Mutates:      t.Mutates,
+			Destructive:  t.Destructive,
+			OpenWorld:    t.OpenWorld,
 		})
 	}
 	return out

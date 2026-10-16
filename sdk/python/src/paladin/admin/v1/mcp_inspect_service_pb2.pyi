@@ -78,18 +78,52 @@ class MCPSession(_message.Message):
     def __init__(self, id: _Optional[str] = ..., agent_subject: _Optional[str] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_seen: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tool_call_count: _Optional[int] = ..., request_count: _Optional[int] = ...) -> None: ...
 
 class MCPInspectResponse(_message.Message):
-    __slots__ = ("profiles", "always_deny", "tool_catalog", "upstreams", "transports")
+    __slots__ = ("profiles", "always_deny", "tool_catalog", "upstreams", "transports", "oauth")
     PROFILES_FIELD_NUMBER: _ClassVar[int]
     ALWAYS_DENY_FIELD_NUMBER: _ClassVar[int]
     TOOL_CATALOG_FIELD_NUMBER: _ClassVar[int]
     UPSTREAMS_FIELD_NUMBER: _ClassVar[int]
     TRANSPORTS_FIELD_NUMBER: _ClassVar[int]
+    OAUTH_FIELD_NUMBER: _ClassVar[int]
     profiles: _containers.RepeatedCompositeFieldContainer[MCPProfile]
     always_deny: _containers.RepeatedScalarFieldContainer[str]
     tool_catalog: _containers.RepeatedCompositeFieldContainer[MCPTool]
     upstreams: MCPUpstreams
     transports: MCPTransports
-    def __init__(self, profiles: _Optional[_Iterable[_Union[MCPProfile, _Mapping]]] = ..., always_deny: _Optional[_Iterable[str]] = ..., tool_catalog: _Optional[_Iterable[_Union[MCPTool, _Mapping]]] = ..., upstreams: _Optional[_Union[MCPUpstreams, _Mapping]] = ..., transports: _Optional[_Union[MCPTransports, _Mapping]] = ...) -> None: ...
+    oauth: MCPOAuthState
+    def __init__(self, profiles: _Optional[_Iterable[_Union[MCPProfile, _Mapping]]] = ..., always_deny: _Optional[_Iterable[str]] = ..., tool_catalog: _Optional[_Iterable[_Union[MCPTool, _Mapping]]] = ..., upstreams: _Optional[_Union[MCPUpstreams, _Mapping]] = ..., transports: _Optional[_Union[MCPTransports, _Mapping]] = ..., oauth: _Optional[_Union[MCPOAuthState, _Mapping]] = ...) -> None: ...
+
+class MCPOAuthState(_message.Message):
+    __slots__ = ("authorization_server_enabled", "seed_clients", "edge_oauth_enabled", "resource_url", "edge_audience", "exchange_client_id")
+    AUTHORIZATION_SERVER_ENABLED_FIELD_NUMBER: _ClassVar[int]
+    SEED_CLIENTS_FIELD_NUMBER: _ClassVar[int]
+    EDGE_OAUTH_ENABLED_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_URL_FIELD_NUMBER: _ClassVar[int]
+    EDGE_AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    EXCHANGE_CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    authorization_server_enabled: bool
+    seed_clients: _containers.RepeatedCompositeFieldContainer[MCPOAuthClient]
+    edge_oauth_enabled: bool
+    resource_url: str
+    edge_audience: str
+    exchange_client_id: str
+    def __init__(self, authorization_server_enabled: _Optional[bool] = ..., seed_clients: _Optional[_Iterable[_Union[MCPOAuthClient, _Mapping]]] = ..., edge_oauth_enabled: _Optional[bool] = ..., resource_url: _Optional[str] = ..., edge_audience: _Optional[str] = ..., exchange_client_id: _Optional[str] = ...) -> None: ...
+
+class MCPOAuthClient(_message.Message):
+    __slots__ = ("client_id", "public", "allowed_scopes", "allowed_audiences", "token_exchange", "skip_consent")
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    PUBLIC_FIELD_NUMBER: _ClassVar[int]
+    ALLOWED_SCOPES_FIELD_NUMBER: _ClassVar[int]
+    ALLOWED_AUDIENCES_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_EXCHANGE_FIELD_NUMBER: _ClassVar[int]
+    SKIP_CONSENT_FIELD_NUMBER: _ClassVar[int]
+    client_id: str
+    public: bool
+    allowed_scopes: _containers.RepeatedScalarFieldContainer[str]
+    allowed_audiences: _containers.RepeatedScalarFieldContainer[str]
+    token_exchange: bool
+    skip_consent: bool
+    def __init__(self, client_id: _Optional[str] = ..., public: _Optional[bool] = ..., allowed_scopes: _Optional[_Iterable[str]] = ..., allowed_audiences: _Optional[_Iterable[str]] = ..., token_exchange: _Optional[bool] = ..., skip_consent: _Optional[bool] = ...) -> None: ...
 
 class MCPProfile(_message.Message):
     __slots__ = ("name", "tools", "raw_patterns", "deny", "source")
@@ -106,18 +140,22 @@ class MCPProfile(_message.Message):
     def __init__(self, name: _Optional[str] = ..., tools: _Optional[_Iterable[str]] = ..., raw_patterns: _Optional[_Iterable[str]] = ..., deny: _Optional[_Iterable[str]] = ..., source: _Optional[str] = ...) -> None: ...
 
 class MCPTool(_message.Message):
-    __slots__ = ("name", "audience", "description", "capability_op", "mutates")
+    __slots__ = ("name", "audience", "description", "capability_op", "mutates", "destructive", "open_world")
     NAME_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     CAPABILITY_OP_FIELD_NUMBER: _ClassVar[int]
     MUTATES_FIELD_NUMBER: _ClassVar[int]
+    DESTRUCTIVE_FIELD_NUMBER: _ClassVar[int]
+    OPEN_WORLD_FIELD_NUMBER: _ClassVar[int]
     name: str
     audience: str
     description: str
     capability_op: str
     mutates: bool
-    def __init__(self, name: _Optional[str] = ..., audience: _Optional[str] = ..., description: _Optional[str] = ..., capability_op: _Optional[str] = ..., mutates: _Optional[bool] = ...) -> None: ...
+    destructive: bool
+    open_world: bool
+    def __init__(self, name: _Optional[str] = ..., audience: _Optional[str] = ..., description: _Optional[str] = ..., capability_op: _Optional[str] = ..., mutates: _Optional[bool] = ..., destructive: _Optional[bool] = ..., open_world: _Optional[bool] = ...) -> None: ...
 
 class MCPUpstreams(_message.Message):
     __slots__ = ("admin_url", "data_url", "iam_url")
