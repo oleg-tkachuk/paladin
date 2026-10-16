@@ -161,3 +161,16 @@ describe("M2MTokensPage failed list", () => {
     expect(screen.queryByText(/No M2M tokens yet/)).toBeNull();
   });
 });
+
+describe("M2MTokensPage paging", () => {
+  // A token past the first hundred was not listed, so it could not be
+  // revoked from the page that lists tokens.
+  it("reads every page of tokens", async () => {
+    h.list
+      .mockResolvedValueOnce({ apiTokens: [], nextPageToken: "p2" })
+      .mockResolvedValueOnce({ apiTokens: [], nextPageToken: "" });
+    render(<M2MTokensPage />);
+    await waitFor(() => expect(h.list).toHaveBeenCalledTimes(2));
+    expect(h.list.mock.calls[1][0].pageToken).toBe("p2");
+  });
+});

@@ -1,5 +1,7 @@
 "use client";
 
+import { listAllPages } from "@/lib/listAllPages";
+import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -73,11 +75,21 @@ export default function EventsPage() {
     retry: false, // queryFn toasts; a retry would double-toast.
     queryFn: async ({ signal }) => {
       try {
-        const res = await eventSubscriptionClient.listSubscriptions(
-          { parent: `tenants/${tenantId}` },
-          { signal },
+        // Every page: the request named none, and so read the server's first.
+        return await listAllPages((pageToken) =>
+          eventSubscriptionClient
+            .listSubscriptions(
+              {
+                parent: `tenants/${tenantId}`,
+                page: { pageSize: API_PAGE_SIZE_MAX, pageToken },
+              },
+              { signal },
+            )
+            .then((r) => ({
+              items: r.subscriptions,
+              next: r.page?.nextPageToken ?? "",
+            })),
         );
-        return res.subscriptions;
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:
         // TanStack cancels in-flight reads on unmount and on supersede.

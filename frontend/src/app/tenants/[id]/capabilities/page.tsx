@@ -1,5 +1,7 @@
 "use client";
 
+import { listAllPages } from "@/lib/listAllPages";
+import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -172,16 +174,22 @@ export default function CapabilitiesPage() {
     retry: false, // queryFn toasts real failures.
     queryFn: async ({ signal }) => {
       try {
-        const res = await capabilityClient.list(
-          {
-            tenantId,
-            principalKind: Number(principalKind),
-            subject: subject.trim(),
-            includeExpired,
-            includeRevoked,
-            pageSize: 100,
-          },
-          { signal },
+        // Every page of the principal's capabilities, not the first hundred.
+        const capabilities = await listAllPages((pageToken) =>
+          capabilityClient
+            .list(
+              {
+                tenantId,
+                principalKind: Number(principalKind),
+                subject: subject.trim(),
+                includeExpired,
+                includeRevoked,
+                pageSize: API_PAGE_SIZE_MAX,
+                pageToken,
+              },
+              { signal },
+            )
+            .then((r) => ({ items: r.capabilities, next: r.nextPageToken })),
         );
         // Persist the successful browse so a return visit pre-fills it.
         try {
@@ -196,7 +204,7 @@ export default function CapabilitiesPage() {
         // 100 in flight is fine. NotFound ⇒ "never" sentinel. The shared
         // signal cancels them all if the browse is superseded.
         const entries = await Promise.all(
-          res.capabilities.map(async (c) => {
+          capabilities.map(async (c) => {
             try {
               const u = await capabilityClient.getUsage(
                 { id: c.id },
@@ -225,7 +233,7 @@ export default function CapabilitiesPage() {
             (e): e is readonly [string, UsageSnap | "never"] => e !== null,
           ),
         );
-        return { items: res.capabilities, usage };
+        return { items: capabilities, usage };
       } catch (err) {
         showNotification({
           type: "error",

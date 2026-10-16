@@ -268,3 +268,26 @@ describe("EventsPage failed list", () => {
     expect(screen.queryByText(/No event subscriptions/)).toBeNull();
   });
 });
+
+describe("EventsPage paging", () => {
+  // The list named no page, so it read the server's first and no more.
+  it("lists the subscriptions of every page", async () => {
+    h.list
+      .mockResolvedValueOnce({
+        subscriptions: [makeSub("sub-1", "https://hook.example.com/1")],
+        page: { nextPageToken: "p2" },
+      })
+      .mockResolvedValueOnce({
+        subscriptions: [makeSub("sub-2", "https://hook.example.com/2")],
+        page: { nextPageToken: "" },
+      });
+    render(<EventsPage />);
+    expect(
+      await screen.findByText("Actions for subscription sub-2"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Actions for subscription sub-1"),
+    ).toBeInTheDocument();
+    expect(h.list.mock.calls[1][0].page.pageToken).toBe("p2");
+  });
+});

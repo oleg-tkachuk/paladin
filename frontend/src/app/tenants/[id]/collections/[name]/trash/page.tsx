@@ -6,7 +6,7 @@
 // else (search, bulk restore, bulk purge, single purge) carries
 // over verbatim. Every restore and purge is confirmed first.
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ArrowUturnLeftIcon,
   ClockIcon,
@@ -16,6 +16,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useObjects } from "@/hooks/useObjects";
+import { buildObjectFilter } from "@/lib/objectFilter";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
 import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -47,25 +48,41 @@ import { useCollection } from "../collection-context";
 import { useTenantChangesBlocked } from "../../../tenant-context";
 import { formatDateTime } from "@/lib/format/locale";
 
+/** The state a trashed object is in. */
+const TRASHED_STATE = "DELETED";
+/** How long the search waits after a keystroke before asking the server. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function CollectionTrashPage() {
   const { collection: collectionResource } = useCollection();
   const changesBlocked = useTenantChangesBlocked();
   const collection = collectionResource.collection;
 
+  // The search is the server's, over every trashed object, and the list
+  // pages on: a search over the first fifty rows missed the rest, and the
+  // rest were not listed at all.
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const {
     objects,
     loading,
+    loadMore,
     restoreObject,
     purgeObject,
     bulkDeleteObjects,
     bulkRestoreObjects,
   } = useObjects({
     collection,
-    filter: "state == 'DELETED'",
-    limit: 50,
+    filter: buildObjectFilter({
+      status: TRASHED_STATE,
+      search: debouncedSearch,
+    }),
   });
-
-  const [search, setSearch] = useState("");
   const [useRelativeTime, setUseRelativeTime] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   // The action awaiting the operator's confirmation: restore and purge, of one
@@ -79,14 +96,7 @@ export default function CollectionTrashPage() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return objects;
-    return objects.filter(
-      (o) =>
-        o.key.toLowerCase().includes(q) || o.objectId.toLowerCase().includes(q),
-    );
-  }, [objects, search]);
+  const filtered = objects;
 
   const allSelected = selected.size > 0 && selected.size === filtered.length;
   const partiallySelected = selected.size > 0 && !allSelected;
@@ -174,14 +184,15 @@ export default function CollectionTrashPage() {
           <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search by key or object ID…"
+            placeholder="Search by key…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <Badge variant="secondary" className="font-mono tabular-nums">
-          {objects.length} deleted
+          {objects.length}
+          {loadMore ? "+" : ""} deleted
         </Badge>
       </div>
 
@@ -364,6 +375,19 @@ export default function CollectionTrashPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {loadMore && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadMore()}
+            disabled={loading}
+          >
+            Load more
+          </Button>
+        </div>
+      )}
 
       <SelectionBar
         count={selected.size}
