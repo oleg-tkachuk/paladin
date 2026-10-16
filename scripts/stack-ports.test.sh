@@ -2,7 +2,7 @@
 # stack-ports.test.sh — the port defaults in scripts/stack-ports.sh must equal
 # the ones the compose file interpolates.
 #
-# Two files have to agree about six numbers, which is the shape of every
+# Two files have to agree about seven numbers, which is the shape of every
 # divergence this repository has had to chase. The failure mode if they drift is
 # quiet and nasty: the preflight checks one set of ports, compose publishes
 # another, and a gate boots on top of whatever was already listening.
@@ -19,9 +19,9 @@ lib="$root/scripts/stack-ports.sh"
 # cleared, so an exported override in the caller's shell cannot mask a drift.
 declared=$(env -u PALADIN_E2E_PORT_DATA -u PALADIN_E2E_PORT_IAM \
     -u PALADIN_E2E_PORT_ADMIN -u PALADIN_E2E_PORT_S3 \
-    -u PALADIN_E2E_PORT_UI -u PALADIN_E2E_PORT_PG \
+    -u PALADIN_E2E_PORT_UI -u PALADIN_E2E_PORT_PG -u PALADIN_E2E_PORT_MCP \
     bash -c "source '$lib'; \
-        for v in DATA IAM ADMIN S3 UI PG; do \
+        for v in DATA IAM ADMIN S3 UI PG MCP; do \
             eval \"echo \\\$v=\\\$PALADIN_E2E_PORT_\$v\"; \
         done" | sort)
 

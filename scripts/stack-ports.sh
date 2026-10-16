@@ -23,14 +23,16 @@
 : "${PALADIN_E2E_PORT_S3:=9000}"
 : "${PALADIN_E2E_PORT_UI:=3000}"
 : "${PALADIN_E2E_PORT_PG:=5434}"
+: "${PALADIN_E2E_PORT_MCP:=8095}"
 export PALADIN_E2E_PORT_DATA PALADIN_E2E_PORT_IAM PALADIN_E2E_PORT_ADMIN
-export PALADIN_E2E_PORT_S3 PALADIN_E2E_PORT_UI PALADIN_E2E_PORT_PG
+export PALADIN_E2E_PORT_S3 PALADIN_E2E_PORT_UI PALADIN_E2E_PORT_PG PALADIN_E2E_PORT_MCP
 
 stack_data_url="http://localhost:${PALADIN_E2E_PORT_DATA}"
 stack_iam_url="http://localhost:${PALADIN_E2E_PORT_IAM}"
 stack_admin_url="http://localhost:${PALADIN_E2E_PORT_ADMIN}"
 stack_s3_url="http://localhost:${PALADIN_E2E_PORT_S3}"
 stack_ui_url="http://localhost:${PALADIN_E2E_PORT_UI}"
+stack_mcp_url="http://localhost:${PALADIN_E2E_PORT_MCP}/mcp"
 
 # stack_export_urls — publish the plane addresses under the one name every
 # suite reads.
@@ -50,6 +52,7 @@ stack_export_urls() {
     export PALADIN_E2E_DATA_URL="$stack_data_url"
     export PALADIN_E2E_IAM_URL="$stack_iam_url"
     export PALADIN_E2E_ADMIN_URL="$stack_admin_url"
+    export PALADIN_E2E_MCP_URL="$stack_mcp_url"
 }
 
 # require_free_ports <re-run command> [extra port ...]
@@ -63,7 +66,8 @@ require_free_ports() {
     local rerun=$1
     shift
     local ports=("$PALADIN_E2E_PORT_DATA" "$PALADIN_E2E_PORT_IAM"
-        "$PALADIN_E2E_PORT_ADMIN" "$PALADIN_E2E_PORT_S3" "$PALADIN_E2E_PORT_PG" "$@")
+        "$PALADIN_E2E_PORT_ADMIN" "$PALADIN_E2E_PORT_S3" "$PALADIN_E2E_PORT_PG"
+        "$PALADIN_E2E_PORT_MCP" "$@")
     local busy="" port holders owner
     for port in "${ports[@]}"; do
         if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -94,7 +98,7 @@ require_free_ports() {
         echo
         echo "      PALADIN_E2E_PORT_UI=13000 PALADIN_E2E_PORT_DATA=18080 \\"
         echo "        PALADIN_E2E_PORT_IAM=18085 PALADIN_E2E_PORT_ADMIN=18090 \\"
-        echo "        PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 \\"
+        echo "        PALADIN_E2E_PORT_S3=19000 PALADIN_E2E_PORT_PG=15434 PALADIN_E2E_PORT_MCP=18095 \\"
         echo "        $rerun"
     } >&2
     return 1

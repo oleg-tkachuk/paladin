@@ -63,11 +63,13 @@ export const ADMIN_URL =
   process.env.PALADIN_E2E_ADMIN_URL ?? "http://localhost:8090";
 const DATA_URL = process.env.PALADIN_E2E_DATA_URL ?? "http://localhost:8083";
 // The streamable-HTTP MCP endpoint, and the resource URL the MCP server is
-// configured as (mcp.oauth.resource_url): the same in compose, apart when a
-// port-forward reaches the cluster's.
-export const MCP_URL =
-  process.env.PALADIN_E2E_MCP_URL ?? "http://localhost:8095/mcp";
-export const MCP_RESOURCE = process.env.PALADIN_E2E_MCP_RESOURCE ?? MCP_URL;
+// configured as (mcp.oauth.resource_url). The resource is an identifier, not
+// an address: compose's stays the same when its port is overridden, and the
+// cluster's is reached through a port-forward.
+const COMPOSE_MCP_RESOURCE = "http://localhost:8095/mcp";
+export const MCP_URL = process.env.PALADIN_E2E_MCP_URL ?? COMPOSE_MCP_RESOURCE;
+export const MCP_RESOURCE =
+  process.env.PALADIN_E2E_MCP_RESOURCE ?? COMPOSE_MCP_RESOURCE;
 
 // ─── token cache: audience → access JWT + its expiry ───────
 //

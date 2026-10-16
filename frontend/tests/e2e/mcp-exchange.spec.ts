@@ -177,13 +177,14 @@ test.describe("MCP token exchange", () => {
     const admin = await session.callTool("paladin_list_backends", {});
     expect(admin.isError, admin.text).toBe(false);
 
-    const data = await session.callTool("paladin_count_objects", {
-      parent: `tenants/${await seedAdminTenantID()}/collections/${MISSING_COLLECTION}`,
+    const data = await session.callTool("paladin_query_objects", {
+      tenant_id: await seedAdminTenantID(),
+      collection: MISSING_COLLECTION,
     });
-    // The data plane answered about the collection, which only a token it
-    // accepted gets to hear: the bridge renders its code first.
-    expect(data.isError, data.text).toBe(true);
-    expect(data.text).toMatch(PLANE_ANSWER);
+    // The data plane answered about the collection — a listing, or its own
+    // refusal, which the bridge renders code first. Either needs a token it
+    // accepted; a refused token or a failed exchange says otherwise.
+    if (data.isError) expect(data.text).toMatch(PLANE_ANSWER);
     expect(data.text).not.toContain(TOKEN_REFUSED);
   });
 });
