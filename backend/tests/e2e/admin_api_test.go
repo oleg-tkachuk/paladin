@@ -91,6 +91,11 @@ type fixture struct {
 	jwtSecret string
 	jwtIssuer string
 
+	// platformTenantID owns the bucket the run creates: every bucket has an
+	// owner (ADR-0032), and the tenant the run creates binds to it through
+	// the grant CreateTenant gives it with the default binding.
+	platformTenantID string
+
 	tenants     paladinadminv1connect.TenantServiceClient
 	backends    paladinadminv1connect.BackendServiceClient
 	buckets     paladinadminv1connect.BucketServiceClient
@@ -137,9 +142,12 @@ func newFixture(t *testing.T) *fixture {
 		nonce:     nonce,
 		jwtSecret: secret,
 		jwtIssuer: issuer,
-		tenants:   paladinadminv1connect.NewTenantServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
-		backends:  paladinadminv1connect.NewBackendServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
-		buckets:   paladinadminv1connect.NewBucketServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
+
+		platformTenantID: platform,
+
+		tenants:  paladinadminv1connect.NewTenantServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
+		backends: paladinadminv1connect.NewBackendServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
+		buckets:  paladinadminv1connect.NewBucketServiceClient(connect.NewClient(connecthttp.NewTransport(httpClient, adminURL))),
 		collections: paladinadminv1connect.NewCollectionServiceClient(connect.NewClient(connecthttp.NewTransport(
 			httpClient, adminURL))),
 	}
@@ -425,9 +433,10 @@ func TestAdminAPI_E2E(t *testing.T) {
 				Parent:   "storageBackends/" + bucketBackendID,
 				BucketId: bucketID,
 				Bucket: &pb.Bucket{
-					BucketId:    bucketID,
-					DisplayName: "E2E Bucket " + f.nonce,
-					Region:      "e2e",
+					BucketId:      bucketID,
+					DisplayName:   "E2E Bucket " + f.nonce,
+					Region:        "e2e",
+					OwnerTenantId: f.platformTenantID,
 				},
 				// A new name: Paladin registers without provisioning only a
 				// bucket the backend already holds (ADR-0028).
