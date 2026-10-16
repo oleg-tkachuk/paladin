@@ -232,6 +232,11 @@ auth: {
       allowed_audiences: [...string] | *[]
       public:            bool | *true
       skip_consent:      bool | *false
+      // A confidential client's secret: inline for dev, a Secret otherwise.
+      client_secret?:     string
+      client_secret_ref?: #SecretRef
+      // RFC 8693 token exchange, for the MCP server (ADR-0036).
+      token_exchange: bool | *false
     }] | *[]
   }
 }

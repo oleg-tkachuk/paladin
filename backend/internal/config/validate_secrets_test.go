@@ -141,3 +141,33 @@ func TestValidate_IngestWebhook_DevToleratesNoSecret(t *testing.T) {
 		t.Errorf("Validate() in local env without secret: want nil, got %v", err)
 	}
 }
+
+func TestValidate_OAuthSeedClientAuthentication(t *testing.T) {
+	ref := &SecretRef{Name: "x", Key: "k"}
+	for _, tc := range []struct {
+		name   string
+		client OAuthSeedClient
+		want   string // "" accepts
+	}{
+		{"public, no secret", OAuthSeedClient{ClientID: "c", Public: true}, ""},
+		{"confidential, inline secret", OAuthSeedClient{ClientID: "c", ClientSecret: "s"}, ""},
+		{"confidential, secret ref", OAuthSeedClient{ClientID: "c", ClientSecretRef: ref}, ""},
+		{"confidential exchanger", OAuthSeedClient{ClientID: "c", ClientSecretRef: ref, TokenExchange: true}, ""},
+		{"both secrets", OAuthSeedClient{ClientID: "c", ClientSecret: "s", ClientSecretRef: ref}, "cannot specify both client_secret and client_secret_ref"},
+		{"public with a secret", OAuthSeedClient{ClientID: "c", Public: true, ClientSecret: "s"}, "a public client takes no client_secret"},
+		{"confidential without a secret", OAuthSeedClient{ClientID: "c"}, "a confidential client needs client_secret or client_secret_ref"},
+		{"public exchanger", OAuthSeedClient{ClientID: "c", Public: true, TokenExchange: true}, "token_exchange needs a confidential client"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := minimalValidConfig()
+			c.Auth.OAuth.SeedClients = []OAuthSeedClient{tc.client}
+			if tc.want == "" {
+				if err := c.Validate(); err != nil {
+					t.Fatalf("Validate() = %v, want nil", err)
+				}
+				return
+			}
+			mustReject(t, c, "auth.oauth.seed_clients[c]: "+tc.want)
+		})
+	}
+}

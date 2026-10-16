@@ -23,7 +23,8 @@ var notSecret = map[string]bool{
 const plantedPrefix = "planted-secret:"
 
 // walkStrings calls fn for every settable string field under v, with its
-// dotted yaml path. Maps of structs are walked through a copy written back.
+// dotted yaml path. Maps of structs are walked through a copy written back;
+// a slice of structs gets one element, walked as "[]".
 func walkStrings(v reflect.Value, path string, fn func(path string, f reflect.Value)) {
 	switch v.Kind() {
 	case reflect.Struct:
@@ -55,6 +56,14 @@ func walkStrings(v reflect.Value, path string, fn func(path string, f reflect.Va
 		}
 		walkStrings(elem, path+".*", fn)
 		v.SetMapIndex(key, elem)
+	case reflect.Slice:
+		if v.Type().Elem().Kind() != reflect.Struct {
+			return
+		}
+		if v.Len() == 0 {
+			v.Set(reflect.MakeSlice(v.Type(), 1, 1))
+		}
+		walkStrings(v.Index(0), path+"[]", fn)
 	}
 }
 

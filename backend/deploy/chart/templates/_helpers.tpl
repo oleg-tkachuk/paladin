@@ -207,7 +207,8 @@ it render exactly as before.
 
 {{/*
 chart.secretReaderNames — every Secret the in-process resolver GETs: the
-static rbac.secretReader.secretNames, plus each one this chart wires itself,
+static rbac.secretReader.secretNames, plus each one this chart wires itself
+and each OAuth seed client's client_secret_ref,
 so an operator who replaces the static list cannot drop a Secret the chart
 depends on. Returns a JSON list.
 */}}
@@ -222,6 +223,16 @@ depends on. Returns a JSON list.
 {{- end -}}
 {{- $auth := fromJson (include "chart.authSigningKey" .) -}}
 {{- if $auth.active -}}{{- $names = append $names $auth.name -}}{{- end -}}
+{{- $oauth := ((.Values.config.auth | default dict).oauth | default dict) -}}
+{{- range $client := $oauth.seed_clients | default (list) -}}
+{{- with $client.client_secret_ref -}}
+{{- if kindIs "string" . -}}
+{{- $names = append $names . -}}
+{{- else -}}
+{{- $names = append $names .name -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- $pg := fromJson (include "chart.postgres" .) -}}
 {{- if $pg.active -}}{{- $names = concat $names (list $pg.app.name $pg.migrate.name) -}}{{- end -}}
 {{- $names | uniq | toJson -}}

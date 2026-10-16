@@ -1519,8 +1519,9 @@ rbac:
     # cannot grant that.
     clusterWide: false
     # Secrets the chart does not wire itself. The ones it does — the Postgres
-    # passwords, the S3 credentials, the bootstrap admin and the generated
-    # signing key — are appended at render time (chart.secretReaderNames).
+    # passwords, the S3 credentials, the bootstrap admin, the generated
+    # signing key and each OAuth seed client's client_secret_ref — are
+    # appended at render time (chart.secretReaderNames).
     #
     # Add the names behind any other SecretRef: config.auth.signing_key_secret,
     # config.ingest.webhook.shared_secret_ref, the reaper password, and the

@@ -466,13 +466,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		oauthStore := oauth.NewPgxStore(deps.Pool)
 		skipConsent := map[string]bool{}
 		for _, sc := range cfg.Auth.OAuth.SeedClients {
-			if serr := oauthStore.UpsertClient(ctx, oauth.Client{
-				ClientID:         sc.ClientID,
-				RedirectURIs:     sc.RedirectURIs,
-				AllowedScopes:    sc.AllowedScopes,
-				AllowedAudiences: sc.AllowedAudiences,
-				Public:           sc.Public,
-			}); serr != nil {
+			client, serr := oauth.SeedClient(sc)
+			if serr != nil {
+				return nil, nil, nil, serr
+			}
+			if serr := oauthStore.UpsertClient(ctx, client); serr != nil {
 				return nil, nil, nil, fmt.Errorf("oauth seed client %q: %w", sc.ClientID, serr)
 			}
 			if sc.SkipConsent {

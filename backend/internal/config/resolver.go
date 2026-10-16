@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -279,6 +280,21 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Ingest.Webhook.SharedSecretRef = SecretRef{}
 	}
 
+	// OAuth seed clients' secrets — the MCP server's above all, which
+	// authenticates its token exchange (ADR-0036).
+	for i := range cfg.Auth.OAuth.SeedClients {
+		sc := &cfg.Auth.OAuth.SeedClients[i]
+		if sc.ClientSecretRef == nil {
+			continue
+		}
+		sec, err := r.resolveSecret(ctx, sc.ClientSecretRef)
+		if err != nil {
+			return fmt.Errorf("auth.oauth.seed_clients[%s].client_secret_ref: %w", sc.ClientID, err)
+		}
+		sc.ClientSecret = sec
+		sc.ClientSecretRef = nil
+	}
+
 	// Per-backend credential secrets.
 	for name, b := range cfg.Storage.Backends {
 		if b.Auth.AccessKeySecret != nil {
@@ -414,6 +430,17 @@ func (c *Config) Obfuscated() Config {
 
 	if cc.Auth.SigningKey != "" {
 		cc.Auth.SigningKey = Redacted
+	}
+
+	// OAuth seed client secrets. Copy the slice so the source keeps them.
+	if len(cc.Auth.OAuth.SeedClients) > 0 {
+		clients := slices.Clone(cc.Auth.OAuth.SeedClients)
+		for i := range clients {
+			if clients[i].ClientSecret != "" {
+				clients[i].ClientSecret = Redacted
+			}
+		}
+		cc.Auth.OAuth.SeedClients = clients
 	}
 
 	// Bootstrap admin password (resolved from bootstrap.admin.password_secret).

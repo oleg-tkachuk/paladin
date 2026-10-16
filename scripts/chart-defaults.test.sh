@@ -96,6 +96,26 @@ cases=$((cases + 1))
 rbac_names replaced-list | grep -x paladin-bootstrap-admin >/dev/null ||
     bad "a replaced rbac.secretReader.secretNames dropped the bootstrap admin Secret"
 
+# A confidential OAuth client's secret, in both #SecretRef spellings.
+cat >"$scratch/oauth-clients-values.yaml" <<'VALUES'
+config:
+  auth:
+    oauth:
+      seed_clients:
+        - client_id: mcp
+          public: false
+          client_secret_ref: {name: mcp-oauth-object, key: client-secret}
+        - client_id: other
+          public: false
+          client_secret_ref: mcp-oauth-string
+        - client_id: agent
+VALUES
+render oauth-clients -f "$scratch/oauth-clients-values.yaml"
+for name in mcp-oauth-object mcp-oauth-string; do
+    cases=$((cases + 1))
+    rbac_names oauth-clients | grep -x "$name" >/dev/null || bad "oauth seed client: RBAC cannot read $name"
+done
+
 # ─── PostgreSQL ───────────────────────────────────────────────────────────────
 
 check "postgres: dsn built from the block" "$(config defaults .datastores.postgres.dsn)" \

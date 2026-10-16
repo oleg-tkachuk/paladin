@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -222,6 +223,11 @@ func (c *Config) Validate() error {
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
 	}
+	for _, sc := range c.Auth.OAuth.SeedClients {
+		if err := validateSeedClient(sc); err != nil {
+			return fmt.Errorf("auth.oauth.seed_clients[%s]: %w", sc.ClientID, err)
+		}
+	}
 	if !limes.IsUnitCode(c.Capability.Currency) {
 		return fmt.Errorf("capability.currency: %q is not an ISO 4217 code in upper case", c.Capability.Currency)
 	}
@@ -356,6 +362,24 @@ func validateBackendAuth(name string, b StorageBackend) error {
 		return fmt.Errorf("storage.backends.%s.auth.mode is required (one of static_keys|default_chain|assume_role|web_identity)", name)
 	default:
 		return fmt.Errorf("storage.backends.%s.auth.mode=%q: unknown (want static_keys|default_chain|assume_role|web_identity)", name, a.Mode)
+	}
+	return nil
+}
+
+// validateSeedClient refuses a seed client whose authentication cannot be
+// what it says: a public client holds no secret, a confidential one holds
+// exactly one, and only a confidential client may exchange tokens.
+func validateSeedClient(sc OAuthSeedClient) error {
+	hasSecret := sc.ClientSecret != "" || sc.ClientSecretRef != nil
+	switch {
+	case sc.ClientSecret != "" && sc.ClientSecretRef != nil:
+		return errors.New("cannot specify both client_secret and client_secret_ref")
+	case sc.Public && hasSecret:
+		return errors.New("a public client takes no client_secret")
+	case !sc.Public && !hasSecret:
+		return errors.New("a confidential client needs client_secret or client_secret_ref")
+	case sc.TokenExchange && sc.Public:
+		return errors.New("token_exchange needs a confidential client")
 	}
 	return nil
 }

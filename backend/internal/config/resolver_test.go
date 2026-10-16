@@ -381,3 +381,51 @@ func TestDefaultSecretReadBackoff_Span(t *testing.T) {
 		t.Errorf("retries span %v, want between %v and %v", total, lower, upper)
 	}
 }
+
+// A confidential OAuth client's secret — the MCP server's, which
+// authenticates its token exchange — comes from a Secret, and only the
+// client that names one is touched.
+func TestResolveConfig_InCluster_OAuthSeedClientSecret(t *testing.T) {
+	t.Setenv(DefaultK8sServiceHostEnvKey, "10.0.0.1")
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token")
+	nsPath := filepath.Join(dir, "namespace")
+	if err := os.WriteFile(tokenPath, []byte("fake-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nsPath, []byte("paladin"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := newTestResolver(t, tokenPath, nsPath,
+		secret("paladin", "paladin-mcp-oauth", "client-secret", "resolved-client-secret"),
+	)
+
+	cfg := &Config{}
+	cfg.Auth.OAuth.SeedClients = []OAuthSeedClient{
+		{ClientID: "agent", Public: true},
+		{ClientID: "mcp", ClientSecretRef: &SecretRef{Name: "paladin-mcp-oauth", Key: "client-secret"}},
+	}
+
+	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+		t.Fatalf("ResolveConfig() error = %v, want nil", err)
+	}
+	if got := cfg.Auth.OAuth.SeedClients[1].ClientSecret; got != "resolved-client-secret" {
+		t.Errorf("mcp ClientSecret = %q, want resolved-client-secret", got)
+	}
+	if ref := cfg.Auth.OAuth.SeedClients[1].ClientSecretRef; ref != nil {
+		t.Errorf("mcp ClientSecretRef = %+v, want cleared", ref)
+	}
+	if got := cfg.Auth.OAuth.SeedClients[0].ClientSecret; got != "" {
+		t.Errorf("agent ClientSecret = %q, want none", got)
+	}
+
+	missing := &Config{}
+	missing.Auth.OAuth.SeedClients = []OAuthSeedClient{
+		{ClientID: "mcp", ClientSecretRef: &SecretRef{Name: "absent", Key: "client-secret"}},
+	}
+	if err := r.ResolveConfig(context.Background(), missing); err == nil {
+		t.Error("ResolveConfig() with a missing Secret = nil, want an error")
+	}
+}
