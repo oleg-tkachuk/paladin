@@ -8,11 +8,9 @@
 # semantic-release releases only from a branch, and the head can be newer than
 # the commit whose CI dispatched the run: a pull request merged while that CI
 # finished. Tagging it would release a commit whose own checks had not passed.
-# That happened with v4.12.0. When the head has moved, this run releases
-# nothing: the newer commit's CI dispatches its own run once it passes, and
-# semantic-release counts this commit's changes in that release. A
-# documentation-only head dispatches nothing, so the release then waits for the
-# next code change on main.
+# That happened with v4.12.0. When the head has moved, this run tags nothing:
+# semantic-release counts this commit's changes in a later tag. Its dev build
+# is published all the same, from the dispatched sha (publish-plan.sh).
 #
 # An empty sha is an error, not a pass. The workflow cannot tell which commit
 # CI vouched for, so it does not release.

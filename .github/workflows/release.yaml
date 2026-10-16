@@ -252,11 +252,13 @@ jobs:
         id: plan
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-          # A manual run that cut no tag publishes nothing: its head's dev
-          # build came with its own CI run.
-          TESTED: ${{ github.event_name == 'repository_dispatch' && steps.head.outputs.release || 'false' }}
+          # A CI dispatch publishes its commit even when main has moved past
+          # it: the dev build is of that sha, not of the head. A manual run
+          # that cut no tag publishes nothing; its head's dev build came with
+          # its own CI run.
+          EVENT: ${{ github.event_name }}
           SHA: ${{ github.event.client_payload.sha }}
-        run: ./.github/scripts/publish-plan.sh "$TAG" "$TESTED" "$SHA" >>"$GITHUB_OUTPUT"
+        run: ./.github/scripts/publish-plan.sh "$TAG" "$EVENT" "$SHA" >>"$GITHUB_OUTPUT"
 
       # main is protected, so the named sections go in as a pull request,
       # opened with AUTOMERGE_TOKEN: one GITHUB_TOKEN opens starts no CI and
