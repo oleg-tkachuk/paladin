@@ -1396,6 +1396,9 @@ traefik:
   planes:
     iam:
       pathPrefix: /paladin.iam.v1.
+      # The OAuth Authorization Server's raw-HTTP endpoints (ADR-0009) are
+      # served by the IAM listener too, outside the procedure prefix.
+      oauthPathPrefix: /oauth/
       port: 8085   # served by the api role
     admin:
       pathPrefix: /paladin.admin.v1.
@@ -1444,6 +1447,9 @@ ingress:
     # path segments.
     path: /paladin.iam.v1.*
     pathType: ImplementationSpecific
+    # The OAuth Authorization Server's endpoints (ADR-0009), on the same
+    # listener. Matched as a Prefix: /oauth is a whole path segment.
+    oauthPath: /oauth
     port: 8085
   data:
     port: 8080
