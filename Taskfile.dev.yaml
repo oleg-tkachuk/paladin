@@ -261,6 +261,7 @@ tasks:
       - task: verify:compose-images
       - task: verify:warm-go-proxy
       - task: verify:release-head
+      - task: verify:publish-plan
       - task: verify:release-rules
       - task: verify:go-module-paths
       - task: verify:image-uid
@@ -611,6 +612,14 @@ tasks:
     # v4.12.0 was tagged on a merge whose own CI was still running.
     cmds:
       - ./.github/scripts/release-head-check.test.sh
+
+  verify:publish-plan:
+    desc: "Fail when release.yaml would publish a dev build as a release, or a release off its tag"
+    # Every tested commit on main is published as a dev build for the dev
+    # cluster; a release only at the tag a release run cut.
+    cmds:
+      - ./.github/scripts/publish-plan.test.sh
+      - ./.github/scripts/publish-version-check.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"

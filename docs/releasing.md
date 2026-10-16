@@ -48,6 +48,17 @@ change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
 `style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
 own.
 
+### Dev builds
+
+Every commit that passed CI on `main` and cut no tag is published as well, as a
+dev build: an image and a chart at the version the task library derives for an
+untagged commit, `<next patch>-dev.<committer time>.g<sha>`. Such a version
+sorts after the last release and before the next one, so a deployment that
+follows prereleases takes each dev build as it lands and the release that
+follows it. A dev build gets no GitHub release and moves no floating tag;
+[`publish-version-check.sh`](../.github/scripts/publish-version-check.sh) refuses
+one that derived a release version.
+
 ### Signatures and SBOMs
 
 Every image and chart a release publishes is signed, and every image carries
