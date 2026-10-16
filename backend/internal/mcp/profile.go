@@ -44,6 +44,12 @@ type ToolMeta struct {
 	Description  string
 	CapabilityOp string
 	Mutates      bool
+	// Destructive marks a mutating tool that deletes or overwrites rather
+	// than only adds: what a client asks a person to confirm.
+	Destructive bool
+	// OpenWorld marks a tool whose effect leaves the platform: it sends to a
+	// sink an operator configured, outside Paladin's own state.
+	OpenWorld bool
 }
 
 // DefaultCatalog is the ground-truth list of tools registered by
@@ -62,7 +68,7 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_get_collection", Audience: "admin", Description: "Read collection metadata + per-key Cedar policy."},
 	{Name: "paladin_create_collection", Audience: "admin", Description: "Create a new logical collection.", Mutates: true},
 	{Name: "paladin_get_quota", Audience: "admin", Description: "Read tenant or bucket-scoped quota."},
-	{Name: "paladin_set_quota", Audience: "admin", Description: "Upsert tenant or bucket quota.", Mutates: true},
+	{Name: "paladin_set_quota", Audience: "admin", Description: "Upsert tenant or bucket quota.", Mutates: true, Destructive: true},
 	{Name: "paladin_validate_policy", Audience: "admin", Description: "Compile + validate a Cedar policy without applying."},
 	{Name: "paladin_get_effective_policy", Audience: "admin", Description: "Read the merged tenant + collection policy text."},
 	{Name: "paladin_simulate_authz", Audience: "admin", Description: "Run a Cedar authz check without performing the call."},
@@ -70,15 +76,15 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_audit_export", Audience: "admin", Description: "Materialise an audit-log dump for compliance."},
 	{Name: "paladin_list_subscriptions", Audience: "admin", Description: "List event subscriptions per tenant."},
 	{Name: "paladin_get_subscription", Audience: "admin", Description: "Read a single event subscription."},
-	{Name: "paladin_create_subscription", Audience: "admin", Description: "Create an event subscription with HTTP / Kafka / SQS sink.", Mutates: true},
-	{Name: "paladin_update_subscription", Audience: "admin", Description: "Replace filter / sink / disabled on an existing subscription.", Mutates: true},
-	{Name: "paladin_delete_subscription", Audience: "admin", Description: "Delete an event subscription.", Mutates: true},
-	{Name: "paladin_test_subscription", Audience: "admin", Description: "Deliver a synthetic event to a subscription's sink (non-mutating)."},
-	{Name: "paladin_set_lifecycle_rules", Audience: "admin", Description: "Update bucket lifecycle (CEL-based expiration).", Mutates: true},
+	{Name: "paladin_create_subscription", Audience: "admin", Description: "Create an event subscription with HTTP / Kafka / SQS sink.", Mutates: true, Destructive: true, OpenWorld: true},
+	{Name: "paladin_update_subscription", Audience: "admin", Description: "Replace filter / sink / disabled on an existing subscription.", Mutates: true, Destructive: true, OpenWorld: true},
+	{Name: "paladin_delete_subscription", Audience: "admin", Description: "Delete an event subscription.", Mutates: true, Destructive: true},
+	{Name: "paladin_test_subscription", Audience: "admin", Description: "Deliver a synthetic event to a subscription's sink.", Mutates: true, OpenWorld: true},
+	{Name: "paladin_set_lifecycle_rules", Audience: "admin", Description: "Update bucket lifecycle (CEL-based expiration).", Mutates: true, Destructive: true},
 	{Name: "paladin_validate_cel", Audience: "admin", Description: "Compile-check a CEL expression against a Paladin schema (Object | Collection | AuditLogEntry | EventEnvelope)."},
 	{Name: "paladin_get_audit_entry", Audience: "admin", Description: "Read a single audit-log entry by id."},
 	{Name: "paladin_system_config", Audience: "admin", Description: "Read the platform's effective runtime config (admin profile only)."},
-	{Name: "paladin_reset_usage", Audience: "admin", Description: "Reset accumulated usage counters on a quota (limits unchanged).", Mutates: true},
+	{Name: "paladin_reset_usage", Audience: "admin", Description: "Reset accumulated usage counters on a quota (limits unchanged).", Mutates: true, Destructive: true},
 	{Name: "paladin_get_tenant_budget", Audience: "admin", Description: "Read a tenant's capability budget and spend."},
 	{Name: "paladin_budget_summary", Audience: "admin", Description: "Summarise capability budgets across tenants (admin profile only)."},
 	{Name: "paladin_billing_summary", Audience: "admin", Description: "A tenant's charges over a period, by operation (admin profile only)."},
@@ -90,20 +96,20 @@ var DefaultCatalog = []ToolMeta{
 	// ── admin plane: backend / bucket / collection lifecycle ─────
 	// Only the reads match agent_safe's patterns; the writes are admin-only.
 	{Name: "paladin_get_backend", Audience: "admin", Description: "Read one storage backend's settings and health."},
-	{Name: "paladin_test_backend", Audience: "admin", Description: "Probe a storage backend's reachability and features (non-mutating)."},
-	{Name: "paladin_set_backend_enabled", Audience: "admin", Description: "Enable or disable a storage backend.", Mutates: true},
-	{Name: "paladin_set_backend_read_only", Audience: "admin", Description: "Put a storage backend in or out of read-only mode.", Mutates: true},
-	{Name: "paladin_set_backend_maintenance", Audience: "admin", Description: "Put a storage backend in or out of maintenance.", Mutates: true},
-	{Name: "paladin_delete_backend", Audience: "admin", Description: "Deregister a storage backend with no buckets.", Mutates: true},
+	{Name: "paladin_test_backend", Audience: "admin", Description: "Probe a storage backend's reachability and features, and record them.", Mutates: true},
+	{Name: "paladin_set_backend_enabled", Audience: "admin", Description: "Enable or disable a storage backend.", Mutates: true, Destructive: true},
+	{Name: "paladin_set_backend_read_only", Audience: "admin", Description: "Put a storage backend in or out of read-only mode.", Mutates: true, Destructive: true},
+	{Name: "paladin_set_backend_maintenance", Audience: "admin", Description: "Put a storage backend in or out of maintenance.", Mutates: true, Destructive: true},
+	{Name: "paladin_delete_backend", Audience: "admin", Description: "Deregister a storage backend with no buckets.", Mutates: true, Destructive: true},
 	{Name: "paladin_list_accessible_buckets", Audience: "admin", Description: "List the buckets a tenant owns or shares."},
 	{Name: "paladin_create_bucket", Audience: "admin", Description: "Register a bucket on a backend.", Mutates: true},
-	{Name: "paladin_update_bucket", Audience: "admin", Description: "Change a bucket's display name or labels.", Mutates: true},
-	{Name: "paladin_delete_bucket", Audience: "admin", Description: "Deregister a bucket.", Mutates: true},
-	{Name: "paladin_set_bucket_versioning", Audience: "admin", Description: "Turn object versioning on or off for a bucket.", Mutates: true},
-	{Name: "paladin_update_collection", Audience: "admin", Description: "Change a collection's display name.", Mutates: true},
+	{Name: "paladin_update_bucket", Audience: "admin", Description: "Change a bucket's display name or labels.", Mutates: true, Destructive: true},
+	{Name: "paladin_delete_bucket", Audience: "admin", Description: "Deregister a bucket.", Mutates: true, Destructive: true},
+	{Name: "paladin_set_bucket_versioning", Audience: "admin", Description: "Turn object versioning on or off for a bucket.", Mutates: true, Destructive: true},
+	{Name: "paladin_update_collection", Audience: "admin", Description: "Change a collection's display name.", Mutates: true, Destructive: true},
 	{Name: "paladin_bind_collection_to_bucket", Audience: "admin", Description: "Move a collection's binding to another bucket.", Mutates: true},
-	{Name: "paladin_delete_collection", Audience: "admin", Description: "Delete an empty collection.", Mutates: true},
-	{Name: "paladin_redrive_failed_deliveries", Audience: "admin", Description: "Re-queue a subscription's failed deliveries.", Mutates: true},
+	{Name: "paladin_delete_collection", Audience: "admin", Description: "Delete an empty collection.", Mutates: true, Destructive: true},
+	{Name: "paladin_redrive_failed_deliveries", Audience: "admin", Description: "Re-queue a subscription's failed deliveries.", Mutates: true, OpenWorld: true},
 
 	// ── data plane: object operations ────────────────────────────
 	{Name: "paladin_query_objects", Audience: "data", Description: "List objects under a collection with CEL filter.", CapabilityOp: "list"},
@@ -112,29 +118,29 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_count_objects", Audience: "data", Description: "Count objects under a collection, optionally CEL-filtered.", CapabilityOp: "list"},
 	{Name: "paladin_list_versions", Audience: "data", Description: "List versions of one object.", CapabilityOp: "list"},
 	{Name: "paladin_get_version", Audience: "data", Description: "Read one version's metadata.", CapabilityOp: "get"},
-	{Name: "paladin_restore_version", Audience: "data", Description: "Promote an older version as current.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_restore_version", Audience: "data", Description: "Promote an older version as current.", CapabilityOp: "put", Mutates: true, Destructive: true},
 	{Name: "paladin_get_object_tags", Audience: "data", Description: "Read object tags.", CapabilityOp: "tag"},
-	{Name: "paladin_set_object_tags", Audience: "data", Description: "Update object tags.", CapabilityOp: "tag", Mutates: true},
+	{Name: "paladin_set_object_tags", Audience: "data", Description: "Update object tags.", CapabilityOp: "tag", Mutates: true, Destructive: true},
 	{Name: "paladin_presign_download", Audience: "data", Description: "Mint a signed GET URL.", CapabilityOp: "presign"},
 	{Name: "paladin_upload_object", Audience: "data", Description: "Initiate object upload (presigned PUT).", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_complete_object", Audience: "data", Description: "Finalise upload + commit object metadata.", CapabilityOp: "put", Mutates: true},
-	{Name: "paladin_delete_object", Audience: "data", Description: "Delete an object (soft by default; permanent on request).", CapabilityOp: "delete", Mutates: true},
-	{Name: "paladin_copy_object", Audience: "data", Description: "Server-side copy of an object to a new collection + key.", CapabilityOp: "put", Mutates: true},
-	{Name: "paladin_batch_delete", Audience: "data", Description: "Async bulk delete by names or CEL filter; returns an Operation.", CapabilityOp: "delete", Mutates: true},
-	{Name: "paladin_batch_copy", Audience: "data", Description: "Async bulk server-side copy into a destination collection; returns an Operation.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_delete_object", Audience: "data", Description: "Delete an object (soft by default; permanent on request).", CapabilityOp: "delete", Mutates: true, Destructive: true},
+	{Name: "paladin_copy_object", Audience: "data", Description: "Server-side copy of an object to a new collection + key.", CapabilityOp: "put", Mutates: true, Destructive: true},
+	{Name: "paladin_batch_delete", Audience: "data", Description: "Async bulk delete by names or CEL filter; returns an Operation.", CapabilityOp: "delete", Mutates: true, Destructive: true},
+	{Name: "paladin_batch_copy", Audience: "data", Description: "Async bulk server-side copy into a destination collection; returns an Operation.", CapabilityOp: "put", Mutates: true, Destructive: true},
 	{Name: "paladin_batch_restore", Audience: "data", Description: "Async bulk restore of soft-deleted objects; returns an Operation.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_list_operations", Audience: "data", Description: "List async batch operations."},
 	{Name: "paladin_get_operation", Audience: "data", Description: "Read one operation's status + progress."},
-	{Name: "paladin_cancel_operation", Audience: "data", Description: "Request cancellation of a running operation.", Mutates: true},
-	{Name: "paladin_update_object", Audience: "data", Description: "Patch object metadata/tags/content-type via field mask (not the body).", CapabilityOp: "put", Mutates: true},
-	{Name: "paladin_delete_object_tags", Audience: "data", Description: "Remove specific tag keys from an object.", CapabilityOp: "tag", Mutates: true},
+	{Name: "paladin_cancel_operation", Audience: "data", Description: "Request cancellation of a running operation.", Mutates: true, Destructive: true},
+	{Name: "paladin_update_object", Audience: "data", Description: "Patch object metadata/tags/content-type via field mask (not the body).", CapabilityOp: "put", Mutates: true, Destructive: true},
+	{Name: "paladin_delete_object_tags", Audience: "data", Description: "Remove specific tag keys from an object.", CapabilityOp: "tag", Mutates: true, Destructive: true},
 	{Name: "paladin_list_distinct_tags", Audience: "data", Description: "List distinct tag keys/values in use under a collection.", CapabilityOp: "list"},
-	{Name: "paladin_batch_update_tags", Audience: "data", Description: "Async bulk tag merge/replace across a collection; returns an Operation.", CapabilityOp: "tag", Mutates: true},
+	{Name: "paladin_batch_update_tags", Audience: "data", Description: "Async bulk tag merge/replace across a collection; returns an Operation.", CapabilityOp: "tag", Mutates: true, Destructive: true},
 	{Name: "paladin_regenerate_upload_url", Audience: "data", Description: "Re-mint a presigned PUT URL for an in-progress (not completed) upload.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_initiate_multipart_upload", Audience: "data", Description: "Begin a multipart upload for a large object.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_presign_part", Audience: "data", Description: "Mint a presigned PUT URL for one part of a multipart upload.", CapabilityOp: "presign"},
 	{Name: "paladin_complete_multipart_upload", Audience: "data", Description: "Finalise a multipart upload from the ordered part list.", CapabilityOp: "put", Mutates: true},
-	{Name: "paladin_abort_multipart_upload", Audience: "data", Description: "Abort an in-progress multipart upload and discard its parts.", CapabilityOp: "put", Mutates: true},
+	{Name: "paladin_abort_multipart_upload", Audience: "data", Description: "Abort an in-progress multipart upload and discard its parts.", CapabilityOp: "put", Mutates: true, Destructive: true},
 	{Name: "paladin_list_parts", Audience: "data", Description: "List parts uploaded so far for a multipart upload.", CapabilityOp: "list"},
 
 	// ── iam plane: identity surface ──────────────────────────────

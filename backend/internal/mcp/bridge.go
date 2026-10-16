@@ -831,8 +831,6 @@ type auditExportArgs struct {
 // ─── Mutating tool registration ─────────────────────────────────────────────
 
 func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
-	destructive := mcpsdk.ToolAnnotations{DestructiveHint: ptrTrue()}
-
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_create_collection",
 		Description: "Create a collection (logical namespace) under a tenant + bucket binding.",
@@ -888,7 +886,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_set_lifecycle_rules",
 		Description: "Replace bucket lifecycle rules (expiration only in v2). Pass rules=[] to clear.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in setLifecycleRulesArgs) (*mcpsdk.CallToolResult, any, error) {
 		pbRules := make([]*adminv1.LifecycleRule, 0, len(in.Rules))
 		for _, r := range in.Rules {
@@ -922,7 +919,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_create_subscription",
 		Description: "Create an event subscription for a tenant. Sink is one of HTTP / Kafka / SQS. CEL filter is validated against EventEnvelope; empty = all events.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in createSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
 		sub, err := buildEventSubscription(in)
 		if err != nil {
@@ -937,7 +933,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_update_subscription",
 		Description: "Replace filter / sink / disabled on an existing subscription — all three, so pass the current values of any you are not changing: an omitted filter matches every event and an omitted disabled enables the subscription. Resource name and resource_version from paladin_get_subscription.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in updateSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
 		sub, err := buildEventSubscription(in.createSubscriptionArgs)
 		if err != nil {
@@ -954,7 +949,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_delete_subscription",
 		Description: "Delete an event subscription. Existing in-flight deliveries continue; no events sent after this point.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteSubscriptionArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.EventSub.DeleteSubscription(ctx, &adminv1.DeleteSubscriptionRequest{
 			Name:            in.Name,
@@ -964,7 +958,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_test_subscription",
-		Description: "Deliver a synthetic event to the configured sink. Returns {delivered, status_code, error_message}. Safe — does not mutate any state.",
+		Description: "Deliver a synthetic event to the configured sink. Returns {delivered, status_code, error_message}. Sends a real request to the sink: it changes nothing in Paladin, but the receiver acts on it.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.EventSub.TestSubscription(ctx, &adminv1.TestSubscriptionRequest{Name: in.Name}))
 	})
@@ -1077,7 +1071,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_delete_object",
 		Description: "Delete an object. Default is a soft delete (recoverable via paladin_restore_version); set `permanent` to purge it irrecoverably. Locked objects refuse deletion unless the caller holds GOVERNANCE bypass.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteObjectArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
 			Name:            in.Name,
@@ -1089,7 +1082,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_copy_object",
 		Description: "Server-side copy of an object to a destination collection + key. The source is left in place (use paladin_delete_object after for a move).",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in copyObjectArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Object.CopyObject(ctx, &datav1.CopyObjectRequest{
 			SourceName:            in.SourceName,
@@ -1101,7 +1093,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_delete",
 		Description: "Asynchronously delete many objects under one collection. Select either by explicit `names` (≤100) or a CEL `filter`. Returns a long-running Operation; poll it via paladin_get_operation.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchDeleteArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Batch.BatchDeleteObjects(ctx, &datav1.BatchDeleteObjectsRequest{
 			Parent: in.Parent,
@@ -1272,7 +1263,6 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_reset_usage",
 		Description: "Reset the accumulated usage counters on a tenant- or bucket-scoped quota (admin-profile only). Does not change the quota limits.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getNameArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Quota.ResetUsage(ctx, &adminv1.ResetUsageRequest{Name: in.Name}))
 	})
@@ -1548,8 +1538,6 @@ func registerPrompts(s *mcpsdk.Server, filter *ToolFilter) {
 		})
 	}
 }
-
-func ptrTrue() *bool { v := true; return &v }
 
 // stringScopesToProto decodes "type:value" strings into commonv1.Scope. The
 // LLM-friendly text form keeps the tool input flat — no nested object array.

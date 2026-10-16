@@ -116,8 +116,6 @@ func registerLifecycleTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 }
 
 func registerBackendTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
-	destructive := mcpsdk.ToolAnnotations{DestructiveHint: ptrTrue()}
-
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_get_backend",
 		Description: "Read one storage backend: endpoint, health, enabled / read-only / maintenance state and resource_version.",
@@ -127,7 +125,7 @@ func registerBackendTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_test_backend",
-		Description: "Probe a storage backend: reachability, latency and the features it supports. Changes nothing.",
+		Description: "Probe a storage backend: reachability, latency and the features it supports. Records the outcome as the backend's health and features.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in backendNameArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Backend.TestBackend(ctx, &adminv1.TestBackendRequest{Name: in.Name}))
 	})
@@ -162,7 +160,6 @@ func registerBackendTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_delete_backend",
 		Description: "Deregister a storage backend. The plane refuses while buckets still reference it.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteVersionedArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Backend.DeleteBackend(ctx, &adminv1.DeleteBackendRequest{
 			Name: in.Name, ResourceVersion: in.ResourceVersion,
@@ -171,8 +168,6 @@ func registerBackendTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 }
 
 func registerBucketTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
-	destructive := mcpsdk.ToolAnnotations{DestructiveHint: ptrTrue()}
-
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_list_accessible_buckets",
 		Description: "List the buckets a tenant can use: the ones it owns and the ones granted to it.",
@@ -232,7 +227,6 @@ func registerBucketTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_delete_bucket",
 		Description: "Deregister a bucket, optionally deleting it on the storage backend too.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteBucketArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Bucket.DeleteBucket(ctx, &adminv1.DeleteBucketRequest{
 			Name:            in.Name,
@@ -257,8 +251,6 @@ func registerBucketTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 }
 
 func registerCollectionTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
-	destructive := mcpsdk.ToolAnnotations{DestructiveHint: ptrTrue()}
-
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_update_collection",
 		Description: "Rename a collection's display label.",
@@ -285,7 +277,6 @@ func registerCollectionTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_delete_collection",
 		Description: "Delete a collection. The plane refuses while objects remain in it.",
-		Annotations: &destructive,
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in deleteVersionedArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.OKey.DeleteCollection(ctx, &adminv1.DeleteCollectionRequest{
 			Name:            in.Name,
