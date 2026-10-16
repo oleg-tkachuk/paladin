@@ -155,14 +155,15 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		objectRepo.WithReads(db.Reads)
 	}
 	repos := wire.Repos{
-		Object:     objectRepo,
-		Collection: adapters.NewCollectionRepo(db.Queries, pool),
-		Tenant:     adapters.NewTenantRepo(db.Queries, pool),
-		Presign:    adapters.NewPresignRepo(db.Queries, pool),
-		Multipart:  adapters.NewMultipartRepo(db.Queries, pool),
-		Operation:  adapters.NewOperationRepo(db.Queries, pool),
-		BackendV2:  adapters.NewBackendRepoV2(db.Queries, pool),
-		BucketV2:   adapters.NewBucketRepoV2(db.Queries, pool),
+		Object:       objectRepo,
+		Collection:   adapters.NewCollectionRepo(db.Queries, pool),
+		Tenant:       adapters.NewTenantRepo(db.Queries, pool),
+		Presign:      adapters.NewPresignRepo(db.Queries, pool),
+		Multipart:    adapters.NewMultipartRepo(db.Queries, pool),
+		Operation:    adapters.NewOperationRepo(db.Queries, pool),
+		BackendV2:    adapters.NewBackendRepoV2(db.Queries, pool),
+		BucketV2:     adapters.NewBucketRepoV2(db.Queries, pool),
+		BucketGrants: adapters.NewBucketGrantRepoV2(db.Queries),
 		// pool wired so the audit interceptor's InsertWithOutbox can open a
 		// tx that commits the audit row + its mirror event atomically.
 		Audit:         adapters.NewAuditRepoV2(db.Queries, pool),

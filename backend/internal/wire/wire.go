@@ -73,8 +73,11 @@ type Repos struct {
 	Operation  operationh.Repository
 
 	// v2 admin/iam stores.
-	BackendV2     admindomain.BackendRepository
-	BucketV2      admindomain.BucketRepository
+	BackendV2 admindomain.BackendRepository
+	BucketV2  admindomain.BucketRepository
+	// BucketGrants keeps the tenants other than its owner that may bind to a
+	// bucket (ADR-0032).
+	BucketGrants  bucketh.GrantRepository
 	Audit         admindomain.AuditRepository
 	Quota         admindomain.QuotaRepository
 	EventSub      admindomain.EventSubscriptionRepository
@@ -241,6 +244,7 @@ func ProvideBucketV2Handler(repos Repos, storage Storage, pe *policy.Engine, cfg
 	h.SetReservedBuckets(bucketh.ReservedBuckets{Prefix: s3adapter.ProbeBucketPrefix})
 	// A public bucket needs its backend's probed features (ADR-0027).
 	h.SetBackends(repos.BackendV2)
+	h.SetGrants(repos.BucketGrants)
 	return h
 }
 

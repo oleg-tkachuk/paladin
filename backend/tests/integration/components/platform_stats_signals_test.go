@@ -23,20 +23,22 @@ import (
 // on a shared bucket that no tenant owns, and hold that the tenants' counts
 // plus the unattributed ones equal the census count on the same data.
 
-// signalSeed is two tenants' worth of rows on both sides of every signal.
+// signalSeed is two tenants' worth of rows on both sides of every signal,
+// plus the tenant owning the buckets neither of them owns.
 type signalSeed struct {
-	busy, quiet uuid.UUID
+	busy, quiet, owner uuid.UUID
 }
 
 func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSeed {
 	t.Helper()
 	f := seedFixture(t, ctx, pool)
 	quiet, _ := mkTenant(t, ctx, pool, "shared")
-	s := signalSeed{busy: f.tenantID, quiet: quiet}
+	owner, _ := mkTenant(t, ctx, pool, "shared")
+	s := signalSeed{busy: f.tenantID, quiet: quiet, owner: owner}
 	hex := uuid.NewString()[:8]
 	backend := backendOf(t, ctx, pool, f)
 
-	bucket := func(name string, owner any) string {
+	bucket := func(name string, owner uuid.UUID) string {
 		t.Helper()
 		var id string
 		if err := pool.QueryRow(ctx,
@@ -71,9 +73,10 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 	bucketQuota(bucket("bkt-own-n-"+hex, s.busy), nearLimit)
 	// quiet: near limit on its own quota only.
 	tenantQuota(s.quiet, nearLimit)
-	// Nobody's: a shared bucket at its limit, and a healthy one.
-	bucketQuota(bucket("bkt-shr-a-"+hex, nil), atLimit)
-	bucketQuota(bucket("bkt-shr-h-"+hex, nil), healthy)
+	// Neither's: every bucket has an owner (ADR-0032), so the buckets that
+	// were nobody's — one at its limit, one healthy — are a third tenant's.
+	bucketQuota(bucket("bkt-shr-a-"+hex, s.owner), atLimit)
+	bucketQuota(bucket("bkt-shr-h-"+hex, s.owner), healthy)
 
 	now := time.Now()
 	capability := func(tenant uuid.UUID, expiresIn time.Duration, revoked bool) {
@@ -122,8 +125,11 @@ func TestCollectSignalTenants_AddsUpToTheCensus(t *testing.T) {
 		want             []platformstats.TenantCount
 		wantUnattributed int64
 	}{
+		// ADR-0032: decide whether Unattributed stays — with no ownerless
+		// bucket nothing produces it, so the third tenant now takes the
+		// shared bucket's at-limit quota that used to be unattributed.
 		{platformstats.SignalQuotaAtLimit, census.Quotas.AtLimit,
-			[]platformstats.TenantCount{{TenantID: s.busy.String(), Count: 2}}, 1},
+			[]platformstats.TenantCount{{TenantID: s.busy.String(), Count: 2}, {TenantID: s.owner.String(), Count: 1}}, 0},
 		{platformstats.SignalQuotaNearLimit, census.Quotas.NearLimit,
 			ranked(s.busy, s.quiet, 1, 1), 0},
 		{platformstats.SignalCapabilitiesExpiring, census.Capabilities.ExpiringSoon,
@@ -229,8 +235,11 @@ func TestSignalTenantsHandler_ServesTheDrillDown(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.Signal != platformstats.SignalQuotaAtLimit || got.Unattributed != 1 ||
-		len(got.Tenants) != 1 || got.Tenants[0].TenantID != s.busy.String() {
-		t.Errorf("served %+v, want busy plus one unattributed", got)
+	// ADR-0032: decide whether Unattributed stays; no bucket is ownerless,
+	// so the at-limit bucket that used to be unattributed is the owner's.
+	if got.Signal != platformstats.SignalQuotaAtLimit || got.Unattributed != 0 ||
+		len(got.Tenants) != 2 || got.Tenants[0].TenantID != s.busy.String() ||
+		got.Tenants[1].TenantID != s.owner.String() {
+		t.Errorf("served %+v, want busy then the bucket owner, nothing unattributed", got)
 	}
 }

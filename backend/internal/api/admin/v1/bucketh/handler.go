@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,7 +75,24 @@ type Handler struct {
 	configured map[string]bool
 	// reserved are the buckets Paladin uses itself; see SetReservedBuckets.
 	reserved ReservedBuckets
+	// grants keeps the tenants other than its owner that may bind to a bucket
+	// (ADR-0032); see SetGrants. nil refuses every tenant but the owner.
+	grants GrantRepository
 }
+
+// GrantRepository is the bucket grants the handler reads and writes, with the
+// transactional write an owner move needs.
+type GrantRepository interface {
+	admindomain.BucketGrantRepository
+	GrantTx(ctx context.Context, tx pgx.Tx, backendID, bucketName string, tenantID uuid.UUID, grantedBy string) (admindomain.BucketGrant, error)
+}
+
+// SetGrants attaches the bucket grant repository.
+func (h *Handler) SetGrants(g GrantRepository) { h.grants = g }
+
+// MaskOwnerTenantID is the UpdateBucket mask path that moves a bucket to
+// another owner.
+const MaskOwnerTenantID = "owner_tenant_id"
 
 func NewHandler(r Repository, p Provisioner, policyEngine cedar.Authorizer) *Handler {
 	if policyEngine == nil {
@@ -163,6 +181,17 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID,
 	return nil
 }
 
+// authorizeStored authorizes action on the bucket as it is stored: with its
+// owner, which a policy may decide on. Every bucket has one (ADR-0032), so
+// none of these asks Cedar about a bucket with no owner any more.
+func (h *Handler) authorizeStored(ctx context.Context, action cedar.Action, backendID, bucketName string) error {
+	b, err := h.repo.Get(ctx, backendID, bucketName)
+	if err != nil {
+		return apiutil.MapError(err)
+	}
+	return h.authorize(ctx, action, backendID, bucketName, b.OwnerTenantID)
+}
+
 // ─── Create ─────────────────────────────────────────────────────────────────
 
 type CreateBucketInput struct {
@@ -183,6 +212,11 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			"backend_id and bucket_name required")
+	}
+	// Every bucket has an owner (ADR-0032); a pool for many tenants is the
+	// platform tenant's, and they reach it through grants.
+	if in.Bucket.OwnerTenantID == uuid.Nil {
+		return nil, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
 	}
 	// The data plane enforces these on every upload; constraints no upload
 	// could satisfy are refused here rather than discovered there.
@@ -278,9 +312,12 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 // already authorized the caller.
 //
 // It reuses CreateBucket's exact repo + provision-state + outbox/event path,
-// so a shared bucket self-provisioned this way is indistinguishable from one
-// an admin created. Returns created=false when the bucket already existed (a
-// no-op), created=true when a new row was written.
+// so a bucket self-provisioned this way is indistinguishable from one an admin
+// created. in.Bucket.OwnerTenantID is the caller's tenant: a missing bucket is
+// created owned by it, and an existing one is taken only when that tenant owns
+// it or holds a grant on it — ErrBucketNotGranted otherwise (ADR-0032).
+// Returns created=false when the bucket already existed (a no-op),
+// created=true when a new row was written.
 func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admindomain.Bucket, bool, error) {
 	if _, err := auth.PrincipalFromContext(ctx); err != nil {
 		return nil, false, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
@@ -288,6 +325,9 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
 		return nil, false, connect.NewError(connect.CodeInvalidArgument,
 			"backend_id and bucket_name required")
+	}
+	if in.Bucket.OwnerTenantID == uuid.Nil {
+		return nil, false, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
 	}
 	if err := in.Bucket.Constraints.Validate(); err != nil {
 		return nil, false, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
@@ -297,10 +337,15 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if in.Bucket.PublicRead || in.Bucket.PublicBaseURL != "" {
 		return nil, false, apiutil.MapError(publicread.Rulef("a public bucket is created through CreateBucket only"))
 	}
-	// Fast idempotent path: an existing row is a success no-op. This also keeps
-	// the common "already provisioned" startup call off the write path.
+	// Fast idempotent path: an existing row the tenant may bind to is a success
+	// no-op. This also keeps the common "already provisioned" startup call off
+	// the write path. One it may not bind to is refused here, by name, rather
+	// than by the binding trigger on the collection that follows.
 	switch existing, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); {
 	case err == nil:
+		if err := h.mayBind(ctx, existing, in.Bucket.OwnerTenantID); err != nil {
+			return nil, false, err
+		}
 		return &existing, false, nil
 	case errors.Is(err, admindomain.ErrNotFound):
 		// fall through to create
@@ -364,12 +409,33 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 		// is hard to reach on purpose.
 		if errors.Is(err, admindomain.ErrAlreadyExists) {
 			if existing, gerr := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); gerr == nil {
+				if err := h.mayBind(ctx, existing, in.Bucket.OwnerTenantID); err != nil {
+					return nil, false, err
+				}
 				return &existing, false, nil
 			}
 		}
 		return nil, false, apiutil.MapError(err)
 	}
 	return &got, true, nil
+}
+
+// mayBind refuses a tenant that neither owns the bucket nor holds a grant.
+func (h *Handler) mayBind(ctx context.Context, b admindomain.Bucket, tenant uuid.UUID) error {
+	if b.OwnerTenantID == tenant {
+		return nil
+	}
+	if h.grants == nil {
+		return apiutil.MapError(admindomain.ErrBucketNotGranted)
+	}
+	ok, err := h.grants.MayBind(ctx, b.BackendID, b.BucketName, tenant)
+	if err != nil {
+		return apiutil.MapError(err)
+	}
+	if !ok {
+		return apiutil.MapError(admindomain.ErrBucketNotGranted)
+	}
+	return nil
 }
 
 // ─── Read ───────────────────────────────────────────────────────────────────
@@ -487,8 +553,27 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
+	// Authorized against the bucket as stored, and — when the owner moves —
+	// against the new owner too: a policy on either tenant has a say.
+	stored, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName)
+	if err != nil {
+		return nil, apiutil.MapError(err)
+	}
+	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, stored.OwnerTenantID); err != nil {
 		return nil, err
+	}
+	ownerMoves := slices.Contains(in.UpdateMask, MaskOwnerTenantID)
+	if ownerMoves {
+		if in.Bucket.OwnerTenantID == uuid.Nil {
+			return nil, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
+		}
+		if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
+			return nil, err
+		}
+		ownerMoves = in.Bucket.OwnerTenantID != stored.OwnerTenantID
+	}
+	if ownerMoves && h.grants == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, "bucket grants not wired")
 	}
 	// Update + paladin.bucket.updated in one tx (ADR-0003). GetTx reads the
 	// post-update row back on the same tx (resource_version, owner).
@@ -496,6 +581,14 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if e := h.repo.UpdateBasicTx(ctx, tx, in.Bucket, in.ExpectedVersion, in.UpdateMask); e != nil {
 			return e
+		}
+		// The previous owner keeps what it had: its collections stay bound,
+		// through a grant the new owner may revoke once they are gone.
+		if ownerMoves {
+			if _, e := h.grants.GrantTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName,
+				stored.OwnerTenantID, grantedBy(ctx)); e != nil {
+				return e
+			}
 		}
 		var e error
 		got, e = h.repo.GetTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName)
@@ -525,7 +618,7 @@ func (h *Handler) SetPolicy(ctx context.Context, backendID, bucketName, policy s
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionConfigureBucketPolicy, backendID, bucketName, uuid.Nil); err != nil {
+	if err := h.authorizeStored(ctx, cedar.ActionConfigureBucketPolicy, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetPolicy(ctx, backendID, bucketName, policy, expectedVersion); err != nil {
@@ -544,7 +637,7 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionConfigureLifecycle, backendID, bucketName, uuid.Nil); err != nil {
+	if err := h.authorizeStored(ctx, cedar.ActionConfigureLifecycle, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	// Validate every rule's CEL match upfront so a typo is rejected at
@@ -572,7 +665,7 @@ func (h *Handler) SetObjectLock(ctx context.Context, backendID, bucketName strin
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionConfigureLock, backendID, bucketName, uuid.Nil); err != nil {
+	if err := h.authorizeStored(ctx, cedar.ActionConfigureLock, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	// Object lock attaches retention to a VERSION, so a bucket without
@@ -600,7 +693,7 @@ func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName strin
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionConfigureVersioning, backendID, bucketName, uuid.Nil); err != nil {
+	if err := h.authorizeStored(ctx, cedar.ActionConfigureVersioning, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	// The other half of the same precondition. Turning versioning off under a
@@ -630,7 +723,7 @@ func (h *Handler) SetReplication(ctx context.Context, backendID, bucketName stri
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, cedar.ActionConfigureReplication, backendID, bucketName, uuid.Nil); err != nil {
+	if err := h.authorizeStored(ctx, cedar.ActionConfigureReplication, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetReplication(ctx, backendID, bucketName, r, expectedVersion); err != nil {
@@ -668,7 +761,7 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return err
 	}
-	if err := h.authorize(ctx, cedar.ActionManageBucket, in.BackendID, in.BucketName, uuid.Nil); err != nil {
+	if err := h.authorizeStored(ctx, cedar.ActionManageBucket, in.BackendID, in.BucketName); err != nil {
 		return err
 	}
 	// Refuse while anything still holds this bucket under ON DELETE RESTRICT.

@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({
   listAuditLog: vi.fn(async () => ({ entries: [] })),
+  listAccessibleBuckets: vi.fn(async () => ({
+    buckets: [{ bucketId: "own" }, { bucketId: "granted" }],
+  })),
 }));
 vi.mock("@/lib/connect/client", () => ({
-  bucketClient: { listBuckets: vi.fn(async () => ({ buckets: [] })) },
+  bucketClient: { listAccessibleBuckets: h.listAccessibleBuckets },
   collectionClient: {
     listCollections: vi.fn(async () => ({ collections: [] })),
   },
@@ -35,5 +38,21 @@ describe("TenantOverviewPage recent activity", () => {
     ];
     expect(req.tenantId).toBe("t-1");
     expect(req.filter ?? "").toBe("");
+  });
+});
+
+// ADR-0032: the Buckets tab lists owned and granted buckets, so the tile
+// counts the same set rather than only the ones the tenant owns.
+describe("TenantOverviewPage bucket count", () => {
+  it("counts the buckets the tenant may bind to", async () => {
+    render(<TenantOverviewPage />);
+    await waitFor(() =>
+      expect(h.listAccessibleBuckets).toHaveBeenCalledWith(
+        expect.objectContaining({ tenant: "tenants/t-1" }),
+      ),
+    );
+    expect(await screen.findByText("owned or granted")).toBeInTheDocument();
+    const tile = screen.getByText("owned or granted").closest("a")!;
+    await waitFor(() => expect(tile).toHaveTextContent("2"));
   });
 });

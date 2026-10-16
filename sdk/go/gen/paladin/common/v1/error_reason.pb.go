@@ -148,6 +148,13 @@ const (
 	// The capability came under a scheme its binding does not take: a
 	// key-bound one not under DPoP, or a bearer one under it.
 	ErrorReason_ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH ErrorReason = 57
+	// A bucket was named without the tenant that owns it (ADR-0032).
+	ErrorReason_ERROR_REASON_BUCKET_OWNER_REQUIRED ErrorReason = 58
+	// The tenant neither owns the bucket nor holds a grant on it, so it may not
+	// bind a collection to it (ADR-0032).
+	ErrorReason_ERROR_REASON_BUCKET_NOT_GRANTED ErrorReason = 59
+	// The grant is not revoked: the tenant still has collections in the bucket.
+	ErrorReason_ERROR_REASON_BUCKET_GRANT_IN_USE ErrorReason = 60
 )
 
 // Enum value maps for ErrorReason.
@@ -211,6 +218,9 @@ var (
 		55: "ERROR_REASON_CAPABILITY_NO_CREDENTIALS",
 		56: "ERROR_REASON_CAPABILITY_NONCE_REQUIRED",
 		57: "ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH",
+		58: "ERROR_REASON_BUCKET_OWNER_REQUIRED",
+		59: "ERROR_REASON_BUCKET_NOT_GRANTED",
+		60: "ERROR_REASON_BUCKET_GRANT_IN_USE",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                         0,
@@ -271,6 +281,9 @@ var (
 		"ERROR_REASON_CAPABILITY_NO_CREDENTIALS":           55,
 		"ERROR_REASON_CAPABILITY_NONCE_REQUIRED":           56,
 		"ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH":     57,
+		"ERROR_REASON_BUCKET_OWNER_REQUIRED":               58,
+		"ERROR_REASON_BUCKET_NOT_GRANTED":                  59,
+		"ERROR_REASON_BUCKET_GRANT_IN_USE":                 60,
 	}
 )
 
@@ -305,7 +318,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xe7\x12\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xda\x13\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -365,7 +378,10 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"-ERROR_REASON_CAPABILITY_SOURCE_IP_NOT_ALLOWED\x106\x12*\n" +
 	"&ERROR_REASON_CAPABILITY_NO_CREDENTIALS\x107\x12*\n" +
 	"&ERROR_REASON_CAPABILITY_NONCE_REQUIRED\x108\x120\n" +
-	",ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH\x109BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	",ERROR_REASON_CAPABILITY_AUTH_SCHEME_MISMATCH\x109\x12&\n" +
+	"\"ERROR_REASON_BUCKET_OWNER_REQUIRED\x10:\x12#\n" +
+	"\x1fERROR_REASON_BUCKET_NOT_GRANTED\x10;\x12$\n" +
+	" ERROR_REASON_BUCKET_GRANT_IN_USE\x10<BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once

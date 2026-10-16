@@ -30,6 +30,10 @@ import {
   type StorageBackend,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { supports } from "@/lib/storageFeatures";
+import {
+  TenantSelect,
+  type TenantOption,
+} from "@/components/features/tenants/TenantSelect";
 
 interface BucketCreateDialogProps {
   open: boolean;
@@ -46,6 +50,18 @@ interface BucketCreateDialogProps {
   backendsFailed?: FailedRead | null;
   /** Who the bucket is for; a caller creating an owned bucket says so. */
   description?: string;
+  /**
+   * The tenants the operator may pick the owner from (ADR-0032: every bucket
+   * has one). Ignored when `fixedOwnerTenantId` is set.
+   */
+  tenants?: TenantOption[];
+  /** Set when the tenant list failed to load: `tenants` is then unknown. */
+  tenantsFailed?: FailedRead | null;
+  /**
+   * The owner, when the caller already knows it — a tenant's own bucket
+   * page. The picker is then not shown.
+   */
+  fixedOwnerTenantId?: string;
   createBucket: (
     backendId: string,
     bucketId: string,
@@ -53,6 +69,7 @@ interface BucketCreateDialogProps {
     region: string,
     provisionOnBackend: boolean,
     publicRead: PublicReadSettings | null,
+    ownerTenantId: string,
   ) => Promise<unknown>;
 }
 
@@ -77,11 +94,18 @@ const REASON_HINTS: Partial<Record<ErrorReason, string>> = {
     " To manage it, turn on Register an existing bucket.",
   [ErrorReason.BUCKET_NOT_ON_BACKEND]:
     " Turn off Register an existing bucket to create it.",
+  [ErrorReason.BUCKET_OWNER_REQUIRED]: " Pick the tenant that owns it.",
 };
 
-/** The default description: the bucket is created with no owner tenant. */
-export const SHARED_BUCKET_DESCRIPTION =
-  "Created on the backend and shared: any tenant can bind to it.";
+/**
+ * The default description: the bucket belongs to the tenant picked as its
+ * owner, and other tenants bind to it only once granted (ADR-0032).
+ */
+export const OWNED_BUCKET_DESCRIPTION =
+  "Created on the backend and owned by the tenant you pick. Other tenants bind to it only once granted on the bucket's page.";
+
+/** Why Create is held while no owner is picked. */
+export const PICK_OWNER_REASON = "Pick the tenant that owns the bucket.";
 
 /** The backend page, where its features are probed and shown. */
 const backendHref = (backendId: string) =>
@@ -89,8 +113,10 @@ const backendHref = (backendId: string) =>
 
 /**
  * New S3 bucket — one dialog for the cross-tenant list and a tenant's own,
- * which each carried a copy. Whether the bucket is shared or owned is the
- * caller's `createBucket`; `description` tells the operator which.
+ * which each carried a copy. Every bucket has an owner tenant (ADR-0032): the
+ * cross-tenant list lets the operator pick it — the platform tenant for a pool
+ * it runs for many tenants — and a tenant's own list fixes it to that tenant.
+ * Sharing is a grant, made afterwards on the bucket's page.
  *
  * It may be created public (ADR-0027): anyone reads its objects by URL. That
  * is offered only on a backend whose probe found anonymous reads enforced,
@@ -101,11 +127,16 @@ export function BucketCreateDialog({
   onOpenChange,
   backends,
   backendsFailed = null,
-  description = SHARED_BUCKET_DESCRIPTION,
+  description = OWNED_BUCKET_DESCRIPTION,
+  tenants = [],
+  tenantsFailed = null,
+  fixedOwnerTenantId,
   createBucket,
 }: BucketCreateDialogProps) {
   const { showNotification } = useNotification();
   const [backendId, setBackendId] = useState("");
+  const [pickedOwner, setPickedOwner] = useState("");
+  const ownerTenantId = fixedOwnerTenantId ?? pickedOwner;
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [region, setRegion] = useState("");
@@ -132,6 +163,7 @@ export function BucketCreateDialog({
   // longer describes what Create would send.
   const draft = JSON.stringify([
     backendId,
+    ownerTenantId,
     name,
     displayName,
     region,
@@ -163,13 +195,17 @@ export function BucketCreateDialog({
       ? "Register a storage backend first."
       : backendBlock
         ? `Backend ${backendId} is ${backendBlock}; pick another.`
-        : !name
-          ? "Enter a bucket name to continue."
-          : nameError
-            ? "Fix the bucket name to continue."
-            : publicRead && allowedTypes.length === 0
-              ? "List the content types a public bucket serves."
-              : null;
+        : !ownerTenantId
+          ? tenantsFailed
+            ? "Tenants could not be loaded."
+            : PICK_OWNER_REASON
+          : !name
+            ? "Enter a bucket name to continue."
+            : nameError
+              ? "Fix the bucket name to continue."
+              : publicRead && allowedTypes.length === 0
+                ? "List the content types a public bucket serves."
+                : null;
 
   const handleCreate = async () => {
     setSubmitError(null);
@@ -182,6 +218,7 @@ export function BucketCreateDialog({
         region,
         !adopt,
         publicRead ? { allowedContentTypes: allowedTypes, baseUrl } : null,
+        ownerTenantId,
       );
       showNotification({
         type: "success",
@@ -189,6 +226,7 @@ export function BucketCreateDialog({
         message: `${name} (backend ${backendId})`,
       });
       setName("");
+      setPickedOwner("");
       setDisplayName("");
       setRegion("");
       setPublicRead(false);
@@ -281,6 +319,34 @@ export function BucketCreateDialog({
             )}
           </FormField>
         </FormRow>
+        {fixedOwnerTenantId === undefined && (
+          <FormField
+            label="Owner tenant"
+            required
+            hint="Answerable for the bucket and receives its events. The platform tenant owns a pool run for many tenants; grant the others on the bucket's page."
+          >
+            {(control) =>
+              tenantsFailed ? (
+                <ListLoadError
+                  variant="inline"
+                  what="Tenants"
+                  reason={tenantsFailed.reason}
+                  onRetry={tenantsFailed.retry}
+                />
+              ) : (
+                <TenantSelect
+                  value={pickedOwner}
+                  onValueChange={setPickedOwner}
+                  tenants={tenants}
+                  placeholder={
+                    tenants.length === 0 ? "No tenants loaded" : "Pick owner"
+                  }
+                  label={control}
+                />
+              )
+            }
+          </FormField>
+        )}
         <FormRow>
           <FormField label="Display name" hint="Shown in the console.">
             {(control) => (

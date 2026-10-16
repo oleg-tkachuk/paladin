@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -174,7 +175,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 		return nil
 	}
 	return &pb.Bucket{
-		Name:             fmt.Sprintf("storageBackends/%s/buckets/%s", b.BackendID, b.BucketName),
+		Name:             bucketResourceName(b.BackendID, b.BucketName),
 		BackendId:        b.BackendID,
 		BucketId:         b.BucketName,
 		DisplayName:      b.DisplayName,
@@ -514,4 +515,19 @@ func subscriptionFromName(name string) (apiutil.TenantRef, string, error) {
 		return apiutil.TenantRef{}, "", fmt.Errorf("invalid subscription name %q: %w", name, err)
 	}
 	return ref, parts[3], nil
+}
+
+// bucketResourceName is a bucket's resource name:
+// "storageBackends/{backend_id}/buckets/{bucket_id}".
+func bucketResourceName(backendID, bucketName string) string {
+	return fmt.Sprintf("storageBackends/%s/buckets/%s", backendID, bucketName)
+}
+
+func bucketGrantToProto(backendID, bucketName string, g admindomain.BucketGrant) *pb.BucketGrant {
+	return &pb.BucketGrant{
+		Bucket:    bucketResourceName(backendID, bucketName),
+		TenantId:  g.TenantID.String(),
+		GrantedBy: g.GrantedBy,
+		GrantedAt: timestamppb.New(g.GrantedAt),
+	}
 }

@@ -69,6 +69,9 @@ type bucketHandler interface {
 	SetReplication(ctx context.Context, backendID, bucketName string, r admindomain.BucketReplication, expectedVersion int64) (*admindomain.Bucket, error)
 	SetVersioning(ctx context.Context, backendID, bucketName string, v admindomain.BucketVersioning, expectedVersion int64) (*admindomain.Bucket, error)
 	UpdateBucket(ctx context.Context, in bucketh.UpdateBucketInput) (*admindomain.Bucket, error)
+	GrantBucket(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) (admindomain.BucketGrant, error)
+	RevokeBucketGrant(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error
+	ListBucketGrants(ctx context.Context, backendID, bucketName string) ([]admindomain.BucketGrant, error)
 }
 
 var _ bucketHandler = (*bucketh.Handler)(nil)

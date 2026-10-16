@@ -44,6 +44,37 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — every bucket has a tenant owner, and sharing is granted
+
+[ADR-0032](adr/0032-every-bucket-has-a-tenant-owner.md).
+
+- **Breaking, API.** `CreateBucket` requires `owner_tenant_id`: without one it
+  is `INVALID_ARGUMENT` with reason `BUCKET_OWNER_REQUIRED`. A pool for many
+  tenants belongs to the platform tenant.
+- **Breaking, behaviour.** A collection binds only to a bucket its tenant owns
+  or holds a grant on; anything else is `PERMISSION_DENIED` with reason
+  `BUCKET_NOT_GRANTED` (it used to be accepted for a bucket with no owner, and
+  `INTERNAL` for another tenant's bucket). `EnsureTenantStorage` creates its
+  bucket owned by the calling tenant and refuses an existing one the tenant
+  may not bind to. `SetTenantDefaultBinding` refuses such a bucket too; a
+  tenant created with a shared default binding is granted that bucket.
+- **New RPCs.** `BucketService.GrantBucket`, `RevokeBucketGrant` (refused with
+  `BUCKET_GRANT_IN_USE` while the tenant still has collections in the bucket)
+  and `ListBucketGrants`. Moving a bucket to another owner leaves the previous
+  owner a grant.
+- **Consumers that create a bucket for several of their tenants** through
+  `CreateBucket` name its owner and call `GrantBucket` for each tenant they
+  provision. One that provisions through `EnsureTenantStorage` needs nothing.
+- **Migration 080** gives every ownerless bucket an owner: the one tenant using
+  it, or the platform tenant with a grant for each tenant that uses it. The
+  platform tenant is found by the bootstrap's default slug, `platform`; a
+  deployment that set another `bootstrap.admin.tenant_slug` and still has
+  ownerless buckets used by several tenants, or by none, stops the migration
+  with a message naming what to do — set their owners first, or rename the
+  tenant. `buckets.owner_tenant_id` becomes `NOT NULL`.
+- **Stats.** `BucketStats.shared` counts the buckets granted to another
+  tenant, and `tenant_owned` the rest.
+
 ## Unreleased — a failed object is deleted; FAILED leaves the contract
 
 - **Breaking, API.** `ObjectState.OBJECT_STATE_FAILED` (3) is removed and

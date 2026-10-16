@@ -206,12 +206,14 @@ ensure "tenant" paladin.admin.v1.TenantService/CreateTenant \
           tenant: {slug: "ui-dev", display_name: "UI dev tenant"}}')" \
     "dev-bootstrap-tenant-$TENANT_ID"
 
+# Every bucket has an owner (ADR-0032): the dev tenant, created above. The key
+# names the owner, so a replay of the older, ownerless request is not reused.
 ensure "bucket" paladin.admin.v1.BucketService/CreateBucket \
-    "$(jq -nc --arg be "$BACKEND_ID" --arg b "$BUCKET_ID" \
+    "$(jq -nc --arg be "$BACKEND_ID" --arg b "$BUCKET_ID" --arg tid "$TENANT_ID" \
         '{parent: ("storageBackends/" + $be),
           bucket_id: $b,
-          bucket: {display_name: "primary"}}')" \
-    "dev-bootstrap-bucket-$BACKEND_ID-$BUCKET_ID"
+          bucket: {display_name: "primary", owner_tenant_id: $tid}}')" \
+    "dev-bootstrap-bucket-$BACKEND_ID-$BUCKET_ID-owned-by-$TENANT_ID"
 
 ensure "collection" paladin.admin.v1.CollectionService/CreateCollection \
     "$(jq -nc --arg tid "$TENANT_ID" --arg c "$COLLECTION" \

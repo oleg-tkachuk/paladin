@@ -34,14 +34,9 @@ func TestStorageMigrationTransitionsApplyOnlyFromTheStateRead(t *testing.T) {
 	q := sqlc.New(h.PoolMigrate)
 	repo := adapters.NewStorageMigrationRepo(q, h.PoolMigrate)
 	seedBackend(t, h.PoolMigrate, migrationTestBackend)
-	for _, b := range []string{"mig-shared", "mig-dedicated"} {
-		if _, err := h.PoolMigrate.Exec(ctx, `
-			INSERT INTO buckets (backend_id, name)
-			SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, migrationTestBackend, b); err != nil {
-			t.Fatalf("seed bucket %s: %v", b, err)
-		}
-	}
 	tenant := mustCreateTenant(t, h.PoolMigrate, "migration-state")
+	mustSeedSharedBucket(t, h.PoolMigrate, migrationTestBackend, "mig-shared", tenant)
+	mustCreateBucket(t, h.PoolMigrate, tenant, migrationTestBackend, "mig-dedicated")
 	if _, err := q.CreateStorageMigration(ctx, pgtype.UUID{Bytes: tenant, Valid: true},
 		migrationTestBackend, "mig-shared", migrationTestBackend, "mig-dedicated", cleanupRetentionSeconds); err != nil {
 		t.Fatalf("create migration: %v", err)
@@ -113,14 +108,9 @@ func TestStorageMigrationTransitionsApplyOnlyToTheAttemptRead(t *testing.T) {
 	repo := adapters.NewStorageMigrationRepo(q, h.PoolMigrate)
 	const backend = "be-migration-attempt"
 	seedBackend(t, h.PoolMigrate, backend)
-	for _, b := range []string{"att-shared", "att-dedicated"} {
-		if _, err := h.PoolMigrate.Exec(ctx, `
-			INSERT INTO buckets (backend_id, name)
-			SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backend, b); err != nil {
-			t.Fatalf("seed bucket %s: %v", b, err)
-		}
-	}
 	tenant := mustCreateTenant(t, h.PoolMigrate, "migration-attempt")
+	mustSeedSharedBucket(t, h.PoolMigrate, backend, "att-shared", tenant)
+	mustCreateBucket(t, h.PoolMigrate, tenant, backend, "att-dedicated")
 	if _, err := q.CreateStorageMigration(ctx, pgtype.UUID{Bytes: tenant, Valid: true},
 		backend, "att-shared", backend, "att-dedicated", cleanupRetentionSeconds); err != nil {
 		t.Fatalf("create migration: %v", err)
@@ -212,12 +202,21 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 			t.Fatalf("%s: %v", sql, err)
 		}
 	}
-	for b, public := range map[string]bool{"rb-shared": false, "rb-dedicated": false, "rb-public": true} {
-		exec(`INSERT INTO buckets (backend_id, name, public_read)
-			SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, backend, b, public)
-	}
 	tenant := mustCreateTenant(t, pool, "migration-rollback")
-	exec(`UPDATE buckets SET owner_tenant_id = $1 WHERE name = 'rb-dedicated'`, tenant)
+	// The tenant owns its dedicated bucket and is granted the two it shares
+	// with others (ADR-0032), which the rebind back has to be allowed into.
+	platform := mustCreateTenant(t, pool, "migration-rollback-owner")
+	for _, b := range []struct {
+		name   string
+		owner  uuid.UUID
+		public bool
+	}{{"rb-shared", platform, false}, {"rb-dedicated", tenant, false}, {"rb-public", platform, true}} {
+		exec(`INSERT INTO buckets (backend_id, name, public_read, owner_tenant_id)
+			SELECT sb.id, $2, $3, $4 FROM storage_backends sb WHERE sb.name = $1`, backend, b.name, b.public, b.owner)
+		if b.owner != tenant {
+			mustGrantBucket(t, pool, tenant, backend, b.name)
+		}
+	}
 	// Rebound: private collection on the dedicated bucket, layout dedicated,
 	// default binding there; the public collection never moved.
 	exec(`INSERT INTO collections (tenant_id, name, bucket_id) SELECT $1, 'docs', id FROM buckets WHERE name = 'rb-dedicated'`, tenant)
@@ -334,13 +333,9 @@ func TestStorageMigrationRebindRecordsReboundAt(t *testing.T) {
 	repo := adapters.NewStorageMigrationRepo(q, pool)
 	const backend = "be-migration-rebound"
 	seedBackend(t, pool, backend)
-	for _, b := range []string{"rba-shared", "rba-dedicated"} {
-		if _, err := pool.Exec(ctx, `INSERT INTO buckets (backend_id, name)
-			SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backend, b); err != nil {
-			t.Fatalf("seed bucket %s: %v", b, err)
-		}
-	}
 	tenant := mustCreateTenant(t, pool, "migration-rebound")
+	mustSeedSharedBucket(t, pool, backend, "rba-shared", tenant)
+	mustCreateBucket(t, pool, tenant, backend, "rba-dedicated")
 	if _, err := pool.Exec(ctx, `INSERT INTO collections (tenant_id, name, bucket_id)
 		SELECT $1, 'docs', id FROM buckets WHERE name = 'rba-shared'`, tenant); err != nil {
 		t.Fatalf("seed collection: %v", err)

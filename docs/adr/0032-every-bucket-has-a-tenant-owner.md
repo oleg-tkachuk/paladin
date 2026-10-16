@@ -1,6 +1,8 @@
 # ADR-0032: Every bucket has a tenant owner, and sharing is granted
 
-- **Status:** Proposed — 2026-10-15.
+- **Status:** Accepted — implemented 2026-10-16 (`080_bucket_owner_and_grants.sql`,
+  `bucketh/grants.go`, `BucketService.GrantBucket` / `RevokeBucketGrant` /
+  `ListBucketGrants`).
 - **Related:** [ADR-0015](0015-per-tenant-bucket-layout.md) (shared and
   dedicated layouts; this replaces its rule that a bucket with no owner is
   open to every tenant), [ADR-0025](0025-bucket-quotas-are-platform-configuration.md)
@@ -55,7 +57,10 @@
      The binding trigger admits a collection whose tenant owns the bucket or
      holds a grant on it, and nothing else; "NULL admits anyone" goes.
   3. **Grants are admin-plane.** `BucketService.GrantBucket` and
-     `RevokeBucketGrant`, under the owner's `ManageBucket`. A grant is not
+     `RevokeBucketGrant`, under the owner's `ManageBucket`.
+     `platform.tenant-provisioner` may grant, since placing a tenant it
+     provisions on a pool is the decision it already makes with a default
+     binding; revoking stays with the bucket-admin roles. A grant is not
      revoked while the tenant still has collections in the bucket
      (`FAILED_PRECONDITION`), as a collection with objects is not deleted. The
      console's bucket page names the owner and lists the grants.

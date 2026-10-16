@@ -45,15 +45,15 @@ func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture 
 	bucketName := "bkt-" + hex // satisfies buckets.bucket_name_format
 
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
-	// Shared bucket (owner_tenant_id NULL) so the collections tenancy trigger
-	// permits binding from the test tenant. collections FKs (backend_id,
-	// bucket_name) → buckets.
-	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backendID, bucketName)
 	// slug + display_name are NOT NULL with format/unique CHECKs (migrations
 	// 009 / 033). Mirror 009's `t-<hex>` backfill shape for the slug.
 	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		f.tenantID, "t-"+hex, "tn-"+hex)
+	// Every bucket has an owner, and only the owner (or a grantee) may bind a
+	// collection to it (ADR-0032), so the tenant is created first and owns the
+	// bucket its collection binds to.
+	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, backendID, bucketName, f.tenantID)
 	if err := pool.QueryRow(ctx, `INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, b.id FROM buckets b
 		   JOIN storage_backends sb ON sb.id = b.backend_id
@@ -77,6 +77,22 @@ func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f 
 		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection, "key-"+uuid.NewString()[:8])
 	return id
+}
+
+// bucketGrantor is what the fixtures record as having granted a tenant use
+// of a bucket it does not own (bucket_grants.granted_by).
+const bucketGrantor = "test"
+
+// grantBucket grants tenantID use of a bucket it does not own: only the owner
+// or a tenant holding a grant may bind a collection to a bucket (ADR-0032).
+// Fixtures that put several tenants' collections into one bucket rely on it.
+func grantBucket(tb testing.TB, ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName string) {
+	tb.Helper()
+	mustExec(tb, ctx, pool, `INSERT INTO bucket_grants (bucket_id, tenant_id, granted_by)
+		 SELECT b.id, $3, $4 FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $1 AND b.name = $2
+		 ON CONFLICT DO NOTHING`, backendID, bucketName, tenantID, bucketGrantor)
 }
 
 func mustExec(tb testing.TB, ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) {

@@ -362,14 +362,15 @@ func TestCreateBucket_ConflictMapped(t *testing.T) {
 // the old one would still compile — so this pins the branch that is, by
 // design, almost impossible to reach on purpose.
 func TestEnsureBucket_LostRaceReturnsTheExistingBucket(t *testing.T) {
+	in := validBucket()
 	repo := &fakeRepo{
 		backendEnabled:   true,
 		getNotFoundFirst: true,
 		createTxErr:      fmt.Errorf("wrapped: %w", admindomain.ErrAlreadyExists),
-		getBucket:        admindomain.Bucket{BackendID: "primary", BucketName: "acme"},
+		getBucket:        admindomain.Bucket{BackendID: "primary", BucketName: "acme", OwnerTenantID: in.OwnerTenantID},
 	}
 	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
-	got, created, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: validBucket()})
+	got, created, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: in})
 	if err != nil {
 		t.Fatalf("a lost race must be success, got %v", err)
 	}

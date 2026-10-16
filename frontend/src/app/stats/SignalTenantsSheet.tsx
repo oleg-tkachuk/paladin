@@ -32,6 +32,13 @@ import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
 // PageRequest.page_size 0: the server's own page size.
 const SERVER_PAGE_SIZE = 0;
 
+/**
+ * What follows the count of rows behind a signal that belong to no tenant.
+ * Every bucket has an owner since ADR-0032, so a bucket quota is always
+ * attributed; the field stays for scopes a future signal may add.
+ */
+export const UNATTRIBUTED_SUFFIX = "attributed to no tenant.";
+
 // The tenant-page tab each signal's rows live on.
 export type TenantTab = "quotas" | "capabilities" | "m2m-tokens";
 
@@ -170,8 +177,7 @@ function SignalTenantsList({
       </ul>
       {unattributed > 0n && (
         <p className={T.hint}>
-          {formatCount(Number(unattributed))} on shared buckets, owned by no
-          tenant.
+          {formatCount(Number(unattributed))} {UNATTRIBUTED_SUFFIX}
         </p>
       )}
       {hasNextPage && (

@@ -17,6 +17,7 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useBackends } from "@/hooks/useBackends";
+import { useTenants } from "@/hooks/useTenants";
 import { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,12 @@ export default function BucketsPage() {
     error: backendsError,
     fetchBackends,
   } = useBackends();
+
+  // The create dialog's owner picker (ADR-0032: every bucket has one).
+  const { tenants, error: tenantsError, fetchTenants } = useTenants();
+  useEffect(() => {
+    void fetchTenants();
+  }, [fetchTenants]);
 
   const backends = useMemo(
     () => backendRows.map((b) => b.backendId),
@@ -306,8 +313,8 @@ export default function BucketsPage() {
                 // (/tenants/.../buckets/.../collections) is for the
                 // operator who already knows which tenant they care about;
                 // /storage-backends/.../buckets/... is the "show me
-                // what's physically here" view that scales naturally to
-                // shared buckets with multiple tenant prefixes.
+                // what's physically here" view that scales naturally to a
+                // bucket its owner granted to other tenants.
                 const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
                 return (
                   <TableRow
@@ -368,20 +375,16 @@ export default function BucketsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {/* Detail subtree lives under the owner tenant
-                            (Phase 2 of the URL refactor). Shared
-                            buckets — no owner_tenant_id — don't have
-                            one, so we hide the link rather than
-                            invent a placeholder route that 404s. */}
-                          {b.ownerTenantId && (
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketId)}/lifecycle`}
-                              >
-                                <ClockIcon className="size-4" />
-                                Lifecycle rules
-                              </Link>
-                            </DropdownMenuItem>
-                          )}
+                            (Phase 2 of the URL refactor); every bucket
+                            has one (ADR-0032). */}
+                          <DropdownMenuItem asChild>
+                            <Link
+                              href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketId)}/lifecycle`}
+                            >
+                              <ClockIcon className="size-4" />
+                              Lifecycle rules
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
                             onSelect={() => setDeleteTarget(b)}
@@ -405,6 +408,8 @@ export default function BucketsPage() {
         onOpenChange={setCreateOpen}
         backends={backendRows}
         backendsFailed={failedRead(backendsError, fetchBackends)}
+        tenants={tenants}
+        tenantsFailed={failedRead(tenantsError, fetchTenants)}
         createBucket={createBucket}
       />
 

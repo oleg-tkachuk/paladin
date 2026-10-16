@@ -1,22 +1,22 @@
 import { Badge } from "@/components/ui/badge";
 import { T } from "@/lib/ui/typography";
 
-/** The label for a bucket the viewed tenant owns outright. */
+/** The label for a bucket the viewed tenant owns. */
 export const OWNED_BUCKET_LABEL = "owned";
-/** The label for a bucket the viewed tenant stores in alongside others. */
-export const SHARED_BUCKET_LABEL = "shared";
+/** The label for a bucket another tenant owns and granted the viewed one. */
+export const GRANTED_BUCKET_LABEL = "granted";
 
 /**
- * Whether a bucket on a tenant's list is the tenant's own (dedicated layout,
- * ADR-0015) or a shared one it stores in through its default binding or a
- * collection. A shared bucket is managed from the cross-tenant /buckets page.
+ * Whether a bucket on a tenant's list is the tenant's own or one its owner
+ * granted it (ADR-0032). Every bucket has an owner; a granted bucket's
+ * settings and grants are managed from the bucket's page, under its owner.
  */
 export function BucketTenancyBadge({ owned }: { owned: boolean }) {
   return owned ? (
     <Badge
       variant="info"
       className={T.code}
-      title="Owned by this tenant alone."
+      title="Owned by this tenant; other tenants bind to it only if it grants them."
     >
       {OWNED_BUCKET_LABEL}
     </Badge>
@@ -24,9 +24,9 @@ export function BucketTenancyBadge({ owned }: { owned: boolean }) {
     <Badge
       variant="secondary"
       className={T.code}
-      title="Shared with other tenants; this tenant stores in it through its default binding or a collection."
+      title="Owned by another tenant, which granted this one the right to bind collections to it."
     >
-      {SHARED_BUCKET_LABEL}
+      {GRANTED_BUCKET_LABEL}
     </Badge>
   );
 }

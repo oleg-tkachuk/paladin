@@ -66,10 +66,8 @@ WHERE id = (SELECT b.id FROM buckets b
   AND provision_state IN ('pending', 'failed');
 
 -- name: ListBucketsV2 :many
--- owner_tenant_id is an optional filter (nullable arg → skipped).
--- Index on buckets(owner_tenant_id) WHERE owner_tenant_id IS NOT NULL
--- (the schema baseline (001_initial_schema.sql)) makes the per-tenant filter cheap; the WHERE clause
--- below is plain equality so the planner uses the partial index.
+-- owner_tenant_id is an optional filter (nullable arg → skipped). The index on
+-- buckets(owner_tenant_id) (001_initial_schema.sql) makes it cheap.
 SELECT sb.name AS backend_name,
        b.name, b.display_name, b.region, b.labels,
        b.owner_tenant_id, b.cedar_policy, b.cedar_policy_hash, b.constraints,
@@ -83,11 +81,14 @@ FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_name')::text)
   AND (sqlc.narg('owner_tenant_id')::uuid IS NULL OR b.owner_tenant_id = sqlc.narg('owner_tenant_id')::uuid)
-  -- used_by_tenant_id: the buckets a tenant stores in — the ones it owns, the
-  -- one it is bound to by default, and every one a collection of it sits in.
-  -- A shared-layout tenant owns no bucket, so ownership alone lists nothing.
+  -- used_by_tenant_id: the buckets a tenant stores in or may — the ones it
+  -- owns, the ones it holds a grant on, the one it is bound to by default,
+  -- and every one a collection of it sits in.
   AND (sqlc.narg('used_by_tenant_id')::uuid IS NULL
        OR b.owner_tenant_id = sqlc.narg('used_by_tenant_id')::uuid
+       OR EXISTS (SELECT 1 FROM bucket_grants g
+                   WHERE g.bucket_id = b.id
+                     AND g.tenant_id = sqlc.narg('used_by_tenant_id')::uuid)
        OR EXISTS (SELECT 1 FROM tenant_default_bindings d
                    WHERE d.bucket_id = b.id
                      AND d.tenant_id = sqlc.narg('used_by_tenant_id')::uuid)
@@ -126,7 +127,8 @@ ORDER BY sb.name, b.name
 LIMIT sqlc.arg('page_size');
 
 -- name: ListAccessibleBuckets :many
--- Returns shared buckets (owner IS NULL) plus buckets owned by the tenant.
+-- The buckets a tenant may bind a collection to: the ones it owns and the
+-- ones it holds a grant on (ADR-0032).
 SELECT sb.name AS backend_name,
        b.name, b.display_name, b.region, b.labels,
        b.owner_tenant_id, b.cedar_policy, b.cedar_policy_hash, b.constraints,
@@ -138,7 +140,8 @@ SELECT sb.name AS backend_name,
        b.resource_version, b.created_at, b.updated_at
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE (b.owner_tenant_id IS NULL OR b.owner_tenant_id = $1)
+WHERE (b.owner_tenant_id = $1
+       OR EXISTS (SELECT 1 FROM bucket_grants g WHERE g.bucket_id = b.id AND g.tenant_id = $1))
   AND (sb.name, b.name) > ($2::text, $3::text)
 ORDER BY sb.name, b.name
 LIMIT $4;

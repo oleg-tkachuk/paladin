@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const h = vi.hoisted(() => ({ showNotification: vi.fn() }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -11,7 +12,8 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   BucketCreateDialog,
-  SHARED_BUCKET_DESCRIPTION,
+  OWNED_BUCKET_DESCRIPTION,
+  PICK_OWNER_REASON,
 } from "./BucketCreateDialog";
 import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
 import {
@@ -39,6 +41,17 @@ function backend(
   } as never;
 }
 
+/** The tenant every test bucket is owned by, unless a test says otherwise. */
+const OWNER = "t-owner";
+const TENANTS = [
+  { tenantId: "t-platform", slug: "platform", displayName: "Platform" },
+  { tenantId: OWNER, slug: "acme", displayName: "Acme" },
+];
+
+/**
+ * Opens the dialog with the owner fixed, the way the tenant page opens it, so
+ * the tests about the rest of the form need not drive a Radix select.
+ */
 function open(
   createBucket = vi.fn().mockResolvedValue({}),
   backends = [backend("primary")],
@@ -49,6 +62,7 @@ function open(
       open
       onOpenChange={onOpenChange}
       backends={backends}
+      fixedOwnerTenantId={OWNER}
       createBucket={createBucket}
     />,
   );
@@ -63,14 +77,18 @@ describe("BucketCreateDialog", () => {
     h.showNotification.mockReset();
   });
 
-  it("says the bucket is shared unless told otherwise", () => {
+  // ADR-0032: no bucket is open to every tenant any more, so the dialog no
+  // longer says so.
+  it("says the bucket is owned unless told otherwise", () => {
     open();
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      SHARED_BUCKET_DESCRIPTION,
+      OWNED_BUCKET_DESCRIPTION,
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      /any tenant can bind/,
     );
   });
 
-  // A tenant's own bucket is not one any tenant can bind to.
   it("shows the caller's description for an owned bucket", () => {
     const owned = "Owned by Acme.";
     render(
@@ -79,13 +97,86 @@ describe("BucketCreateDialog", () => {
         onOpenChange={vi.fn()}
         backends={[backend("primary")]}
         description={owned}
+        fixedOwnerTenantId={OWNER}
         createBucket={vi.fn()}
       />,
     );
     expect(screen.getByRole("dialog")).toHaveTextContent(owned);
     expect(screen.getByRole("dialog")).not.toHaveTextContent(
-      SHARED_BUCKET_DESCRIPTION,
+      OWNED_BUCKET_DESCRIPTION,
     );
+  });
+
+  describe("owner tenant", () => {
+    const openWithPicker = (
+      createBucket = vi.fn().mockResolvedValue({}),
+      tenantsFailed: { reason: string; retry: () => void } | null = null,
+    ) => {
+      render(
+        <BucketCreateDialog
+          open
+          onOpenChange={vi.fn()}
+          backends={[backend("primary")]}
+          tenants={tenantsFailed ? [] : TENANTS}
+          tenantsFailed={tenantsFailed}
+          createBucket={createBucket}
+        />,
+      );
+      return { createBucket };
+    };
+
+    // The server refuses a bucket without an owner (BUCKET_OWNER_REQUIRED).
+    it("holds Create until an owner is picked", () => {
+      openWithPicker();
+      fireEvent.change(name(), { target: { value: "pool" } });
+      expect(
+        screen.getByRole("combobox", { name: /Owner tenant/ }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(PICK_OWNER_REASON)).toBeInTheDocument();
+      expect(submit()).toBeDisabled();
+    });
+
+    it("creates the bucket owned by the picked tenant", async () => {
+      const { createBucket } = openWithPicker();
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      await user.click(screen.getByRole("combobox", { name: /Owner tenant/ }));
+      await user.click(
+        await screen.findByRole("option", { name: "Platform (platform)" }),
+      );
+      fireEvent.change(name(), { target: { value: "pool" } });
+      fireEvent.submit(submit().closest("form")!);
+      await waitFor(() =>
+        expect(createBucket).toHaveBeenCalledWith(
+          "primary",
+          "pool",
+          "",
+          "",
+          true,
+          null,
+          "t-platform",
+        ),
+      );
+    });
+
+    it("says the tenant list failed rather than offering no owner", () => {
+      const retry = vi.fn();
+      openWithPicker(undefined, { reason: "unavailable: upstream", retry });
+      fireEvent.change(name(), { target: { value: "pool" } });
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /Tenants could not be loaded/,
+      );
+      expect(submit()).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(retry).toHaveBeenCalledOnce();
+    });
+
+    // A fixed owner is the tenant page's: no picker, and that tenant is sent.
+    it("shows no picker when the owner is fixed", () => {
+      open();
+      expect(
+        screen.queryByRole("combobox", { name: /Owner tenant/ }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   // The API refuses a name S3 refuses; the form says so before submit.
@@ -117,6 +208,7 @@ describe("BucketCreateDialog", () => {
         "eu-central-1",
         true,
         null,
+        OWNER,
       ),
     );
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -149,6 +241,7 @@ describe("BucketCreateDialog", () => {
         onOpenChange={vi.fn()}
         backends={[]}
         backendsFailed={{ reason: "unavailable: upstream", retry }}
+        fixedOwnerTenantId={OWNER}
         createBucket={vi.fn()}
       />,
     );
@@ -202,6 +295,7 @@ describe("BucketCreateDialog", () => {
           allowedContentTypes: ["image/webp"],
           baseUrl: "https://cdn.example.com",
         },
+        OWNER,
       ),
     );
   });
@@ -244,6 +338,7 @@ describe("BucketCreateDialog", () => {
         "",
         true,
         null,
+        OWNER,
       ),
     );
   });
@@ -290,6 +385,7 @@ describe("BucketCreateDialog", () => {
         "",
         false,
         null,
+        OWNER,
       ),
     );
   });

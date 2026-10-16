@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -53,7 +54,7 @@ func TestCreateBucketTakesOnlyWhatItMeansTo(t *testing.T) {
 			commonv1.ErrorReason_ERROR_REASON_BUCKET_RESERVED},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			b := admindomain.Bucket{BackendID: "primary", BucketName: tc.bucket}
+			b := admindomain.Bucket{BackendID: "primary", BucketName: tc.bucket, OwnerTenantID: uuid.New()}
 			repo := &fakeRepo{backendEnabled: true, getTxBucket: b}
 			h := ownershipHandler(repo, okProvisioner{onBackend: tc.onBackend})
 			_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin),
@@ -112,7 +113,7 @@ func TestEnsureBucketCreatesButDoesNotAdopt(t *testing.T) {
 	t.Run("a probe's scratch bucket", func(t *testing.T) {
 		repo := &fakeRepo{backendEnabled: true, getErr: admindomain.ErrNotFound}
 		h := ownershipHandler(repo, okProvisioner{})
-		b := admindomain.Bucket{BackendID: "primary", BucketName: probePrefix + "x"}
+		b := admindomain.Bucket{BackendID: "primary", BucketName: probePrefix + "x", OwnerTenantID: uuid.New()}
 		_, _, err := h.EnsureBucket(ctxAs(apiutil.RoleBucketAdmin),
 			CreateBucketInput{Bucket: b, ProvisionOnBackend: true})
 		if reasonOf(t, err) != commonv1.ErrorReason_ERROR_REASON_BUCKET_RESERVED {

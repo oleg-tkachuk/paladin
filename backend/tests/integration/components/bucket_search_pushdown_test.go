@@ -37,6 +37,8 @@ func subtestBucketSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.
 		mustExec(t, ctx, pool,
 			`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 		repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
+		// Every bucket has an owner (ADR-0032); which one is beside the point.
+		owner, _ := mkTenant(t, ctx, pool, "shared")
 
 		// Chosen to break the definition rather than to exercise it.
 		rows := []struct{ name, display string }{
@@ -51,7 +53,7 @@ func subtestBucketSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.
 		}
 		for _, r := range rows {
 			if err := repo.Create(ctx, admindomain.Bucket{
-				BackendID: backendID, BucketName: r.name, DisplayName: r.display,
+				BackendID: backendID, BucketName: r.name, DisplayName: r.display, OwnerTenantID: owner,
 			}); err != nil {
 				t.Fatalf("create %s: %v", r.name, err)
 			}
@@ -196,17 +198,18 @@ func subtestBucketPastThePage(ctx context.Context, pool *pgxpool.Pool) func(*tes
 		mustExec(t, ctx, pool,
 			`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 		repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
+		owner, _ := mkTenant(t, ctx, pool, "shared")
 
 		// 60 rows, page size 10. The needle sorts last on purpose.
 		for i := 0; i < 59; i++ {
 			if err := repo.Create(ctx, admindomain.Bucket{
-				BackendID: backendID, BucketName: fmt.Sprintf("aaa-%03d", i),
+				BackendID: backendID, BucketName: fmt.Sprintf("aaa-%03d", i), OwnerTenantID: owner,
 			}); err != nil {
 				t.Fatalf("create filler %d: %v", i, err)
 			}
 		}
 		if err := repo.Create(ctx, admindomain.Bucket{
-			BackendID: backendID, BucketName: "zzz-needle", DisplayName: "The Needle",
+			BackendID: backendID, BucketName: "zzz-needle", DisplayName: "The Needle", OwnerTenantID: owner,
 		}); err != nil {
 			t.Fatalf("create needle: %v", err)
 		}

@@ -39,11 +39,14 @@ func newBucketFixture(t *testing.T) (context.Context, *pgxpool.Pool, *adapters.B
 		`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
 	repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
+	// Every bucket has an owner (ADR-0032); which one is beside the point.
+	owner, _ := mkTenant(t, ctx, pool, "shared")
 	b := admindomain.Bucket{
-		BackendID:   backendID,
-		BucketName:  "cfg-bucket",
-		DisplayName: "config round-trip",
-		Region:      "eu-central-1",
+		BackendID:     backendID,
+		BucketName:    "cfg-bucket",
+		OwnerTenantID: owner,
+		DisplayName:   "config round-trip",
+		Region:        "eu-central-1",
 	}
 	if err := repo.Create(ctx, b); err != nil {
 		t.Fatalf("create bucket: %v", err)

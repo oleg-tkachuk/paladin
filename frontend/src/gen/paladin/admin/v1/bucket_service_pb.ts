@@ -13,8 +13,11 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { FieldMask } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_field_mask } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  file_google_protobuf_field_mask,
+  file_google_protobuf_timestamp,
+} from "@bufbuild/protobuf/wkt";
 import type {
   Bucket,
   BucketReplication,
@@ -34,10 +37,11 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_bucket_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL2J1Y2tldF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIrsBChNDcmVhdGVCdWNrZXRSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARI7CglidWNrZXRfaWQYAiABKAlCKLpIJXIjEAMYPzIdXlthLXowLTldW2EtejAtOS4tXSpbYS16MC05XSQSMAoGYnVja2V0GAMgASgLMhgucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRCBrpIA8gBARIcChRwcm92aXNpb25fb25fYmFja2VuZBgEIAEoCCIpChBHZXRCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEisgEKE1VwZGF0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEigKBmJ1Y2tldBgEIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0In0KE0RlbGV0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhkKEWRlbGV0ZV9vbl9iYWNrZW5kGAMgASgIEhoKEnNraXBfdmVyc2lvbl9jaGVjaxgEIAEoCCIWChREZWxldGVCdWNrZXRSZXNwb25zZSKWAQoSTGlzdEJ1Y2tldHNSZXF1ZXN0Eg4KBnBhcmVudBgBIAEoCRIsCgRwYWdlGAIgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhcKD293bmVyX3RlbmFudF9pZBgEIAEoCRIZChF1c2VkX2J5X3RlbmFudF9pZBgFIAEoCSJvChNMaXN0QnVja2V0c1Jlc3BvbnNlEikKB2J1Y2tldHMYASADKAsyGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldBItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlImgKFlNldEJ1Y2tldFBvbGljeVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEhQKDGNlZGFyX3BvbGljeRgDIAEoCSKEAQoYU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIuCgVydWxlcxgDIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuTGlmZWN5Y2xlUnVsZSKMAQoUU2V0T2JqZWN0TG9ja1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEjoKBmNvbmZpZxgDIAEoCzIiLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZ0IGukgDyAEBIpABChRTZXRWZXJzaW9uaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESPgoKdmVyc2lvbmluZxgDIAEoCzIiLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0VmVyc2lvbmluZ0IGukgDyAEBIpMBChVTZXRSZXBsaWNhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEkAKC3JlcGxpY2F0aW9uGAMgASgLMiMucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRSZXBsaWNhdGlvbkIGukgDyAEBImUKHExpc3RBY2Nlc3NpYmxlQnVja2V0c1JlcXVlc3QSFwoGdGVuYW50GAEgASgJQge6SARyAhABEiwKBHBhZ2UYAiABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdDKGCAoNQnVja2V0U2VydmljZRJPCgxDcmVhdGVCdWNrZXQSJS5wYWxhZGluLmFkbWluLnYxLkNyZWF0ZUJ1Y2tldFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldBJOCglHZXRCdWNrZXQSIi5wYWxhZGluLmFkbWluLnYxLkdldEJ1Y2tldFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldCIDkAIBElQKDFVwZGF0ZUJ1Y2tldBIlLnBhbGFkaW4uYWRtaW4udjEuVXBkYXRlQnVja2V0UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0IgOQAgISYgoMRGVsZXRlQnVja2V0EiUucGFsYWRpbi5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXNwb25zZSIDkAICEl8KC0xpc3RCdWNrZXRzEiQucGFsYWRpbi5hZG1pbi52MS5MaXN0QnVja2V0c1JlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVzcG9uc2UiA5ACARJaCg9TZXRCdWNrZXRQb2xpY3kSKC5wYWxhZGluLmFkbWluLnYxLlNldEJ1Y2tldFBvbGljeVJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldCIDkAICEl4KEVNldExpZmVjeWNsZVJ1bGVzEioucGFsYWRpbi5hZG1pbi52MS5TZXRMaWZlY3ljbGVSdWxlc1JlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldCIDkAICElYKDVNldE9iamVjdExvY2sSJi5wYWxhZGluLmFkbWluLnYxLlNldE9iamVjdExvY2tSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5CdWNrZXQiA5ACAhJWCg1TZXRWZXJzaW9uaW5nEiYucGFsYWRpbi5hZG1pbi52MS5TZXRWZXJzaW9uaW5nUmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0IgOQAgISWAoOU2V0UmVwbGljYXRpb24SJy5wYWxhZGluLmFkbWluLnYxLlNldFJlcGxpY2F0aW9uUmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0IgOQAgIScwoVTGlzdEFjY2Vzc2libGVCdWNrZXRzEi4ucGFsYWRpbi5hZG1pbi52MS5MaXN0QWNjZXNzaWJsZUJ1Y2tldHNSZXF1ZXN0GiUucGFsYWRpbi5hZG1pbi52MS5MaXN0QnVja2V0c1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CiVwYWxhZGluL2FkbWluL3YxL2J1Y2tldF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIrsBChNDcmVhdGVCdWNrZXRSZXF1ZXN0EhcKBnBhcmVudBgBIAEoCUIHukgEcgIQARI7CglidWNrZXRfaWQYAiABKAlCKLpIJXIjEAMYPzIdXlthLXowLTldW2EtejAtOS4tXSpbYS16MC05XSQSMAoGYnVja2V0GAMgASgLMhgucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRCBrpIA8gBARIcChRwcm92aXNpb25fb25fYmFja2VuZBgEIAEoCCIpChBHZXRCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEisgEKE1VwZGF0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEjcKC3VwZGF0ZV9tYXNrGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEigKBmJ1Y2tldBgEIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0In0KE0RlbGV0ZUJ1Y2tldFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIYChByZXNvdXJjZV92ZXJzaW9uGAIgASgJEhkKEWRlbGV0ZV9vbl9iYWNrZW5kGAMgASgIEhoKEnNraXBfdmVyc2lvbl9jaGVjaxgEIAEoCCIWChREZWxldGVCdWNrZXRSZXNwb25zZSKWAQoSTGlzdEJ1Y2tldHNSZXF1ZXN0Eg4KBnBhcmVudBgBIAEoCRIsCgRwYWdlGAIgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAMgASgJEhcKD293bmVyX3RlbmFudF9pZBgEIAEoCRIZChF1c2VkX2J5X3RlbmFudF9pZBgFIAEoCSJvChNMaXN0QnVja2V0c1Jlc3BvbnNlEikKB2J1Y2tldHMYASADKAsyGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldBItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlImgKFlNldEJ1Y2tldFBvbGljeVJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEhQKDGNlZGFyX3BvbGljeRgDIAEoCSKEAQoYU2V0TGlmZWN5Y2xlUnVsZXNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIuCgVydWxlcxgDIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuTGlmZWN5Y2xlUnVsZSKMAQoUU2V0T2JqZWN0TG9ja1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEjoKBmNvbmZpZxgDIAEoCzIiLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0TG9ja0NvbmZpZ0IGukgDyAEBIpABChRTZXRWZXJzaW9uaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESPgoKdmVyc2lvbmluZxgDIAEoCzIiLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0VmVyc2lvbmluZ0IGukgDyAEBIpMBChVTZXRSZXBsaWNhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEkAKC3JlcGxpY2F0aW9uGAMgASgLMiMucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRSZXBsaWNhdGlvbkIGukgDyAEBImUKHExpc3RBY2Nlc3NpYmxlQnVja2V0c1JlcXVlc3QSFwoGdGVuYW50GAEgASgJQge6SARyAhABEiwKBHBhZ2UYAiABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdCJ0CgtCdWNrZXRHcmFudBIOCgZidWNrZXQYASABKAkSEQoJdGVuYW50X2lkGAIgASgJEhIKCmdyYW50ZWRfYnkYAyABKAkSLgoKZ3JhbnRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiSAoSR3JhbnRCdWNrZXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGwoJdGVuYW50X2lkGAIgASgJQgi6SAVyA7ABASJOChhSZXZva2VCdWNrZXRHcmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIbCgl0ZW5hbnRfaWQYAiABKAlCCLpIBXIDsAEBIhsKGVJldm9rZUJ1Y2tldEdyYW50UmVzcG9uc2UiMAoXTGlzdEJ1Y2tldEdyYW50c1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASJJChhMaXN0QnVja2V0R3JhbnRzUmVzcG9uc2USLQoGZ3JhbnRzGAEgAygLMh0ucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRHcmFudDLCCgoNQnVja2V0U2VydmljZRJPCgxDcmVhdGVCdWNrZXQSJS5wYWxhZGluLmFkbWluLnYxLkNyZWF0ZUJ1Y2tldFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldBJOCglHZXRCdWNrZXQSIi5wYWxhZGluLmFkbWluLnYxLkdldEJ1Y2tldFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldCIDkAIBElQKDFVwZGF0ZUJ1Y2tldBIlLnBhbGFkaW4uYWRtaW4udjEuVXBkYXRlQnVja2V0UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0IgOQAgISYgoMRGVsZXRlQnVja2V0EiUucGFsYWRpbi5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5EZWxldGVCdWNrZXRSZXNwb25zZSIDkAICEl8KC0xpc3RCdWNrZXRzEiQucGFsYWRpbi5hZG1pbi52MS5MaXN0QnVja2V0c1JlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLkxpc3RCdWNrZXRzUmVzcG9uc2UiA5ACARJaCg9TZXRCdWNrZXRQb2xpY3kSKC5wYWxhZGluLmFkbWluLnYxLlNldEJ1Y2tldFBvbGljeVJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldCIDkAICEl4KEVNldExpZmVjeWNsZVJ1bGVzEioucGFsYWRpbi5hZG1pbi52MS5TZXRMaWZlY3ljbGVSdWxlc1JlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldCIDkAICElYKDVNldE9iamVjdExvY2sSJi5wYWxhZGluLmFkbWluLnYxLlNldE9iamVjdExvY2tSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5CdWNrZXQiA5ACAhJWCg1TZXRWZXJzaW9uaW5nEiYucGFsYWRpbi5hZG1pbi52MS5TZXRWZXJzaW9uaW5nUmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0IgOQAgISWAoOU2V0UmVwbGljYXRpb24SJy5wYWxhZGluLmFkbWluLnYxLlNldFJlcGxpY2F0aW9uUmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0IgOQAgISVwoLR3JhbnRCdWNrZXQSJC5wYWxhZGluLmFkbWluLnYxLkdyYW50QnVja2V0UmVxdWVzdBodLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0R3JhbnQiA5ACAhJxChFSZXZva2VCdWNrZXRHcmFudBIqLnBhbGFkaW4uYWRtaW4udjEuUmV2b2tlQnVja2V0R3JhbnRSZXF1ZXN0GisucGFsYWRpbi5hZG1pbi52MS5SZXZva2VCdWNrZXRHcmFudFJlc3BvbnNlIgOQAgISbgoQTGlzdEJ1Y2tldEdyYW50cxIpLnBhbGFkaW4uYWRtaW4udjEuTGlzdEJ1Y2tldEdyYW50c1JlcXVlc3QaKi5wYWxhZGluLmFkbWluLnYxLkxpc3RCdWNrZXRHcmFudHNSZXNwb25zZSIDkAIBEnMKFUxpc3RBY2Nlc3NpYmxlQnVja2V0cxIuLnBhbGFkaW4uYWRtaW4udjEuTGlzdEFjY2Vzc2libGVCdWNrZXRzUmVxdWVzdBolLnBhbGFkaW4uYWRtaW4udjEuTGlzdEJ1Y2tldHNSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
+      file_google_protobuf_timestamp,
       file_paladin_admin_v1_types,
       file_paladin_common_v1_pagination,
     ],
@@ -482,6 +486,157 @@ export const ListAccessibleBucketsRequestSchema: GenMessage<ListAccessibleBucket
   messageDesc(file_paladin_admin_v1_bucket_service, 12);
 
 /**
+ * A tenant other than its owner that may bind Collections to a bucket.
+ *
+ * @generated from message paladin.admin.v1.BucketGrant
+ */
+export type BucketGrant = Message<"paladin.admin.v1.BucketGrant"> & {
+  /**
+   * The bucket's resource name: "storageBackends/{backend_id}/buckets/{bucket_id}".
+   *
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * The tenant granted, by UUID.
+   *
+   * @generated from field: string tenant_id = 2;
+   */
+  tenantId: string;
+
+  /**
+   * Who granted it: the subject of the call, or the migration that did.
+   *
+   * @generated from field: string granted_by = 3;
+   */
+  grantedBy: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp granted_at = 4;
+   */
+  grantedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message paladin.admin.v1.BucketGrant.
+ * Use `create(BucketGrantSchema)` to create a new message.
+ */
+export const BucketGrantSchema: GenMessage<BucketGrant> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_bucket_service, 13);
+
+/**
+ * @generated from message paladin.admin.v1.GrantBucketRequest
+ */
+export type GrantBucketRequest =
+  Message<"paladin.admin.v1.GrantBucketRequest"> & {
+    /**
+     * The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * The tenant to grant, by UUID.
+     *
+     * @generated from field: string tenant_id = 2;
+     */
+    tenantId: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.GrantBucketRequest.
+ * Use `create(GrantBucketRequestSchema)` to create a new message.
+ */
+export const GrantBucketRequestSchema: GenMessage<GrantBucketRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_bucket_service, 14);
+
+/**
+ * @generated from message paladin.admin.v1.RevokeBucketGrantRequest
+ */
+export type RevokeBucketGrantRequest =
+  Message<"paladin.admin.v1.RevokeBucketGrantRequest"> & {
+    /**
+     * The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * The tenant whose grant is revoked, by UUID.
+     *
+     * @generated from field: string tenant_id = 2;
+     */
+    tenantId: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.RevokeBucketGrantRequest.
+ * Use `create(RevokeBucketGrantRequestSchema)` to create a new message.
+ */
+export const RevokeBucketGrantRequestSchema: GenMessage<RevokeBucketGrantRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_bucket_service, 15);
+
+/**
+ * @generated from message paladin.admin.v1.RevokeBucketGrantResponse
+ */
+export type RevokeBucketGrantResponse =
+  Message<"paladin.admin.v1.RevokeBucketGrantResponse"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.RevokeBucketGrantResponse.
+ * Use `create(RevokeBucketGrantResponseSchema)` to create a new message.
+ */
+export const RevokeBucketGrantResponseSchema: GenMessage<RevokeBucketGrantResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_bucket_service, 16);
+
+/**
+ * @generated from message paladin.admin.v1.ListBucketGrantsRequest
+ */
+export type ListBucketGrantsRequest =
+  Message<"paladin.admin.v1.ListBucketGrantsRequest"> & {
+    /**
+     * The bucket: "storageBackends/{backend_id}/buckets/{bucket_id}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListBucketGrantsRequest.
+ * Use `create(ListBucketGrantsRequestSchema)` to create a new message.
+ */
+export const ListBucketGrantsRequestSchema: GenMessage<ListBucketGrantsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_bucket_service, 17);
+
+/**
+ * @generated from message paladin.admin.v1.ListBucketGrantsResponse
+ */
+export type ListBucketGrantsResponse =
+  Message<"paladin.admin.v1.ListBucketGrantsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.BucketGrant grants = 1;
+     */
+    grants: BucketGrant[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListBucketGrantsResponse.
+ * Use `create(ListBucketGrantsResponseSchema)` to create a new message.
+ */
+export const ListBucketGrantsResponseSchema: GenMessage<ListBucketGrantsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_bucket_service, 18);
+
+/**
  * BucketService manages physical S3 buckets. Bucket admins create buckets
  * and bind them to backends; tenant admins consume them via Collection.
  *
@@ -603,8 +758,42 @@ export const BucketService: GenService<{
     output: typeof BucketSchema;
   };
   /**
-   * ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-   * the caller's principal/scopes are allowed to bind Collections to.
+   * GrantBucket lets a tenant other than the owner bind Collections to the
+   * bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+   * its first granter and time.
+   *
+   * @generated from rpc paladin.admin.v1.BucketService.GrantBucket
+   */
+  grantBucket: {
+    methodKind: "unary";
+    input: typeof GrantBucketRequestSchema;
+    output: typeof BucketGrantSchema;
+  };
+  /**
+   * RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+   * while the tenant still has Collections in the bucket.
+   *
+   * @generated from rpc paladin.admin.v1.BucketService.RevokeBucketGrant
+   */
+  revokeBucketGrant: {
+    methodKind: "unary";
+    input: typeof RevokeBucketGrantRequestSchema;
+    output: typeof RevokeBucketGrantResponseSchema;
+  };
+  /**
+   * ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+   *
+   * @generated from rpc paladin.admin.v1.BucketService.ListBucketGrants
+   */
+  listBucketGrants: {
+    methodKind: "unary";
+    input: typeof ListBucketGrantsRequestSchema;
+    output: typeof ListBucketGrantsResponseSchema;
+  };
+  /**
+   * ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+   * a tenant may bind Collections to: the ones it owns and the ones granted
+   * to it.
    *
    * @generated from rpc paladin.admin.v1.BucketService.ListAccessibleBuckets
    */

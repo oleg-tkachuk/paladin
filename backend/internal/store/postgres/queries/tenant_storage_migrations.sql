@@ -196,13 +196,15 @@ ON CONFLICT (backend_id, name) DO NOTHING;
 -- name: StorageMigrationTargetBucket :one
 -- What a start must know before it uses the target bucket: its owner, whether
 -- it is public, its provisioning state, and whether any OTHER tenant reaches
--- it through a collection or a default binding. Run with the cross-tenant
+-- it through a collection, a default binding or a grant. Run with the cross-tenant
 -- read on, or RLS would hide exactly the rows being looked for.
 SELECT b.id, b.owner_tenant_id, b.public_read, b.provision_state,
        (EXISTS (SELECT 1 FROM collections c
                  WHERE c.bucket_id = b.id AND c.tenant_id <> sqlc.arg('tenant_id'))
         OR EXISTS (SELECT 1 FROM tenant_default_bindings d
-                    WHERE d.bucket_id = b.id AND d.tenant_id <> sqlc.arg('tenant_id')))::bool
+                    WHERE d.bucket_id = b.id AND d.tenant_id <> sqlc.arg('tenant_id'))
+        OR EXISTS (SELECT 1 FROM bucket_grants g
+                    WHERE g.bucket_id = b.id AND g.tenant_id <> sqlc.arg('tenant_id')))::bool
        AS used_by_other_tenant
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id

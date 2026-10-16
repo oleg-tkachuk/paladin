@@ -8,6 +8,8 @@ import {
   deleteBuckets,
   deleteCollections,
   deleteTenants,
+  grantBucket,
+  revokeBucketGrants,
   seedBucket,
   seedCollection,
   seedDisabledBackend,
@@ -17,6 +19,7 @@ import {
   type SeededBackend,
   type SeededBucket,
   type SeededCollection,
+  type SeededGrant,
   type SeededMembership,
   type SeededTenant,
 } from "./seed";
@@ -42,7 +45,8 @@ const CLEANUP_TIMEOUT_MS = 120_000;
  * something else in about 45 runs.
  *
  * Teardown order is the documented one (docs/deletion-semantics.md): objects,
- * then collections, then buckets, then backends, then tenants. It lives in a
+ * then collections, then bucket grants (ADR-0032: refused while the tenant
+ * has collections in the bucket), then buckets, then backends, then tenants. It lives in a
  * single fixture rather than one per resource because Playwright tears
  * fixtures down in reverse setup order, which depends on which the test
  * happened to touch first — and the FKs here are RESTRICT, so a wrong order
@@ -61,6 +65,10 @@ export type MakeBucket = (opts?: {
   displayNamePrefix?: string;
   ownerTenantId?: string;
 }) => Promise<SeededBucket>;
+export type MakeGrant = (
+  bucket: SeededBucket,
+  tenantId: string,
+) => Promise<SeededGrant>;
 export type MakeCollection = (opts: {
   tenantId: string;
   bucket: SeededBucket;
@@ -72,6 +80,8 @@ interface Registry {
   backends: string[];
   buckets: SeededBucket[];
   collections: SeededCollection[];
+  /** Bucket grants, revoked once the collections that used them are gone. */
+  grants: SeededGrant[];
   /** Subjects of users a UI test created through the console's own dialog. */
   users: string[];
 }
@@ -83,6 +93,11 @@ export const test = base.extend<{
   makeDisabledBackend: MakeBackend;
   makeEnabledBackend: () => Promise<SeededBackend>;
   makeBucket: MakeBucket;
+  /**
+   * Grant a tenant a bucket it does not own (ADR-0032), so it may bind a
+   * collection there; revoked on teardown.
+   */
+  makeGrant: MakeGrant;
   makeCollection: MakeCollection;
   /**
    * Register something the test created through the UI rather than through a
@@ -95,6 +110,7 @@ export const test = base.extend<{
    */
   trackUser: (subject: string) => void;
   trackCollection: (item: SeededCollection) => void;
+  trackGrant: (item: SeededGrant) => void;
 }>({
   cleanup: [
     async ({}, use) => {
@@ -103,6 +119,7 @@ export const test = base.extend<{
         backends: [],
         buckets: [],
         collections: [],
+        grants: [],
         users: [],
       };
       await use(reg);
@@ -110,6 +127,12 @@ export const test = base.extend<{
       // passed. Each step reports what it could not remove.
       if (reg.collections.length) {
         await deleteCollections(reg.collections).catch(() => {});
+      }
+      // After the collections — a grant still in use is refused — and before
+      // the buckets and tenants, so none outlives its run on the shared
+      // physical bucket, which teardown never deletes.
+      if (reg.grants.length) {
+        await revokeBucketGrants(reg.grants).catch(() => {});
       }
       if (reg.buckets.length) await deleteBuckets(reg.buckets).catch(() => {});
       if (reg.backends.length)
@@ -165,6 +188,14 @@ export const test = base.extend<{
     });
   },
 
+  makeGrant: async ({ cleanup }, use) => {
+    await use(async (bucket, tenantId) => {
+      const g = await grantBucket(bucket, tenantId);
+      cleanup.grants.push(g);
+      return g;
+    });
+  },
+
   makeCollection: async ({ cleanup }, use) => {
     await use(async (opts) => {
       const c = await seedCollection(opts);
@@ -182,6 +213,12 @@ export const test = base.extend<{
   trackCollection: async ({ cleanup }, use) => {
     await use((item) => {
       cleanup.collections.push(item);
+    });
+  },
+
+  trackGrant: async ({ cleanup }, use) => {
+    await use((item) => {
+      cleanup.grants.push(item);
     });
   },
 });

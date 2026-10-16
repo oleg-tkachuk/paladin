@@ -144,7 +144,7 @@ when { principal.roles.contains("storage.operator") };
 |--------|------------|
 | `Tenant` | `tenant_id`, `slug`, `display_name`, `labels`, `scope_keys`? |
 | `StorageBackend` | `backend_id`, `scope_keys` |
-| `Bucket` | `bucket_name`, `backend_id`, `owner_tenant_id` (empty for a shared bucket), `labels`, `scope_keys` |
+| `Bucket` | `bucket_name`, `backend_id`, `owner_tenant_id` (always set: every bucket has an owner, ADR-0032), `labels`, `scope_keys` |
 | `Collection` | `collection`, `tenant_id`, `bucket_name`, `backend_id`, `scope_keys` |
 | `Object` | `key`, `state`, `size_bytes`, `content_type`, `tenant_id`, `collection`, `bucket_name`, `backend_id`, `tags`, `tag_values`, `scope_keys` |
 | `User` | `tenant_id`, `subject`, `tenant_slug`, `kind`, `roles`, `scopes`, `user_id`, `scope_keys`? |

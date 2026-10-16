@@ -30,7 +30,9 @@
      bucket its collection is bound to — the same object → collection →
      bucket path the reconciler sums over.
   5. A bucket quota's `paladin.quota.set` goes to the tenant owning the
-     bucket; a shared bucket has no owner and notifies nobody.
+     bucket; a shared bucket has no owner and notifies nobody. (Since
+     [ADR-0032](0032-every-bucket-has-a-tenant-owner.md) every bucket has an
+     owner, the platform tenant for a shared pool, which is notified.)
 
 - **Consequences:**
   - Anyone allowed to read quotas can read a shared bucket's aggregate usage

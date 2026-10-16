@@ -33,10 +33,13 @@ func TestTenantCreate_RecordsBindingActor(t *testing.T) {
 	const backendID = "be-actor"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
+	// The tenants created below bind by default to a bucket another tenant
+	// owns: every bucket has an owner (ADR-0032).
 	const bucketName = "bucket-actor"
+	owner, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name) SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`,
-		backendID, bucketName)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id) SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`,
+		backendID, bucketName, owner)
 
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 

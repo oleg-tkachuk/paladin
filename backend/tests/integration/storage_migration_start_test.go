@@ -32,8 +32,7 @@ func TestStorageMigrationStartUnderRLS(t *testing.T) {
 		t.Helper()
 		tenant := mustCreateTenant(t, h.PoolMigrate, slug)
 		shared := "shared-" + slug
-		exec(t, h, `INSERT INTO buckets (backend_id, name)
-			SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backend, shared)
+		mustSeedSharedBucket(t, h.PoolMigrate, backend, shared, tenant)
 		exec(t, h, `INSERT INTO collections (tenant_id, name, bucket_id)
 			SELECT $1, 'docs', b.id FROM buckets b WHERE b.name = $2`, tenant, shared)
 		return tenant, tenanth.StartStorageMigrationArgs{
@@ -67,18 +66,17 @@ func TestStorageMigrationStartUnderRLS(t *testing.T) {
 		}
 	})
 
-	// The bucket was shared, another tenant bound a collection to it, then it
-	// was handed to this tenant. A tenant-scoped read sees no such
-	// collection; the start must look past that.
+	// The bucket is this tenant's, but another tenant was granted use of it
+	// and bound a collection there (ADR-0032). A tenant-scoped read sees no
+	// such collection; the start must look past that.
 	t.Run("bucket another tenant uses, hidden by RLS", func(t *testing.T) {
 		t.Parallel()
 		tenant, args := seed(t, "mig-start-taken")
 		other := mustCreateTenant(t, h.PoolMigrate, "mig-start-other")
-		exec(t, h, `INSERT INTO buckets (backend_id, name)
-			SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`, backend, args.TargetBucketName)
+		mustCreateBucket(t, h.PoolMigrate, tenant, backend, args.TargetBucketName)
+		mustGrantBucket(t, h.PoolMigrate, other, backend, args.TargetBucketName)
 		exec(t, h, `INSERT INTO collections (tenant_id, name, bucket_id)
 			SELECT $1, 'theirs', b.id FROM buckets b WHERE b.name = $2`, other, args.TargetBucketName)
-		exec(t, h, `UPDATE buckets SET owner_tenant_id = $2 WHERE name = $1`, args.TargetBucketName, tenant)
 
 		if _, err := repo.StartStorageMigration(as(tenant), args); !errors.Is(err, tenanth.ErrTargetBucketUnusable) {
 			t.Fatalf("start = %v, want ErrTargetBucketUnusable", err)

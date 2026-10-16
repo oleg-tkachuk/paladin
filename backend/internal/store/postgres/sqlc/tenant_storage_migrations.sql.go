@@ -842,7 +842,9 @@ SELECT b.id, b.owner_tenant_id, b.public_read, b.provision_state,
        (EXISTS (SELECT 1 FROM collections c
                  WHERE c.bucket_id = b.id AND c.tenant_id <> $1)
         OR EXISTS (SELECT 1 FROM tenant_default_bindings d
-                    WHERE d.bucket_id = b.id AND d.tenant_id <> $1))::bool
+                    WHERE d.bucket_id = b.id AND d.tenant_id <> $1)
+        OR EXISTS (SELECT 1 FROM bucket_grants g
+                    WHERE g.bucket_id = b.id AND g.tenant_id <> $1))::bool
        AS used_by_other_tenant
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
@@ -859,7 +861,7 @@ type StorageMigrationTargetBucketRow struct {
 
 // What a start must know before it uses the target bucket: its owner, whether
 // it is public, its provisioning state, and whether any OTHER tenant reaches
-// it through a collection or a default binding. Run with the cross-tenant
+// it through a collection, a default binding or a grant. Run with the cross-tenant
 // read on, or RLS would hide exactly the rows being looked for.
 func (q *Queries) StorageMigrationTargetBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (StorageMigrationTargetBucketRow, error) {
 	row := q.db.QueryRow(ctx, storageMigrationTargetBucket, tenantID, backendName, bucketName)

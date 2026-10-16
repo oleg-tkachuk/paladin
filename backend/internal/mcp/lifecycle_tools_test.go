@@ -119,14 +119,17 @@ func TestUpdateBucketRefusesAnEmptyChange(t *testing.T) {
 	}
 }
 
-// The plane drops an owner it cannot parse and creates a shared bucket.
+// Every bucket has an owner, named by UUID (ADR-0032): a slug or no owner at
+// all is refused before the plane is asked.
 func TestCreateBucketRefusesAnOwnerThatIsNotAUUID(t *testing.T) {
-	plane := &lifecyclePlane{}
-	res := callLifecycleTool(t, plane, "paladin_create_bucket", map[string]any{
-		"backend_id": "primary", "bucket_id": "assets", "owner_tenant_id": "acme",
-	})
-	if !res.IsError || plane.got != nil {
-		t.Fatalf("a bucket for owner %q reached the plane", "acme")
+	for _, owner := range []string{"acme", ""} {
+		plane := &lifecyclePlane{}
+		res := callLifecycleTool(t, plane, "paladin_create_bucket", map[string]any{
+			"backend_id": "primary", "bucket_id": "assets", "owner_tenant_id": owner,
+		})
+		if !res.IsError || plane.got != nil {
+			t.Fatalf("a bucket for owner %q reached the plane", owner)
+		}
 	}
 }
 

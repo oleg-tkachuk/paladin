@@ -23,6 +23,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 import StatsPage from "./page";
+import { UNATTRIBUTED_SUFFIX } from "./SignalTenantsSheet";
+import { OWNER_ONLY_BUCKETS_LABEL, SHARED_BUCKETS_LABEL } from "./bucketLabels";
 import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
 
 const state = (s: string, count: bigint, bytes: bigint) => ({
@@ -153,6 +155,22 @@ describe("StatsPage", () => {
 
     // Rollup row totals the fleet.
     expect(screen.getByText("All tenants")).toBeInTheDocument();
+  });
+
+  // ADR-0032: every bucket has an owner, so "tenant-owned" no longer tells
+  // buckets apart; what does is whether the owner granted it to others.
+  it("labels buckets by whether their owner shared them", async () => {
+    h.getPlatformStats.mockResolvedValue(response());
+    render(<StatsPage />);
+    const shared = await screen.findByText(SHARED_BUCKETS_LABEL);
+    expect(shared.parentElement).toHaveTextContent("3");
+    expect(
+      screen.getByText(OWNER_ONLY_BUCKETS_LABEL).parentElement,
+    ).toHaveTextContent("2");
+    expect(
+      screen.getByText(`3 ${SHARED_BUCKETS_LABEL.toLowerCase()}`),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/tenant-owned/i)).not.toBeInTheDocument();
   });
 
   it("says the census is unavailable instead of rendering zeros", async () => {
@@ -362,9 +380,7 @@ describe("StatsPage", () => {
           signal: PlatformStatsSignal.QUOTA_AT_LIMIT,
         }),
       );
-      expect(
-        screen.getByText(/2 on shared buckets, owned by no tenant/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(`2 ${UNATTRIBUTED_SUFFIX}`)).toBeInTheDocument();
     });
 
     it("sends each signal to its own tenant tab", async () => {

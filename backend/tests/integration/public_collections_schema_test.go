@@ -31,18 +31,20 @@ func seedVisibilityFixture(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
 	seedBackend(t, pool, visibilityBackend)
-	for name, public := range map[string]bool{publicBucketName: true, otherPublicBucket: true, privateBucketName: false} {
-		if _, err := pool.Exec(ctx, `
-            INSERT INTO buckets (backend_id, name, public_read)
-            SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`,
-			visibilityBackend, name, public); err != nil {
-			t.Fatalf("seed bucket %s: %v", name, err)
-		}
-	}
 	tenant := uuid.New()
 	if _, err := pool.Exec(ctx, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		tenant, "vis-"+tenant.String()[:8], "visibility "+tenant.String()[:8]); err != nil {
 		t.Fatalf("seed tenant: %v", err)
+	}
+	// The tenant owns the buckets so its collections may bind to them
+	// (ADR-0032).
+	for name, public := range map[string]bool{publicBucketName: true, otherPublicBucket: true, privateBucketName: false} {
+		if _, err := pool.Exec(ctx, `
+            INSERT INTO buckets (backend_id, name, public_read, owner_tenant_id)
+            SELECT sb.id, $2, $3, $4 FROM storage_backends sb WHERE sb.name = $1`,
+			visibilityBackend, name, public, tenant); err != nil {
+			t.Fatalf("seed bucket %s: %v", name, err)
+		}
 	}
 	return tenant
 }

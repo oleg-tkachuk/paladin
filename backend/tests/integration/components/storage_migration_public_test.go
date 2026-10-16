@@ -104,10 +104,14 @@ func seedPublicMigrationFixture(t *testing.T, ctx context.Context) publicMigrati
 	mustExec(t, ctx, f.pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, f.backend)
 	mustExec(t, ctx, f.pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		f.tenant, "t-"+hex, "tn-"+hex)
+	// The buckets the tenant starts in are shared: another tenant owns them
+	// and grants this one their use (ADR-0032).
+	owner, _ := mkTenant(t, ctx, f.pool, "shared")
 	for name, public := range map[string]bool{f.private: false, f.public: true} {
-		mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, public_read)
-			SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`,
-			f.backend, name, public)
+		mustExec(t, ctx, f.pool, `INSERT INTO buckets (backend_id, name, public_read, owner_tenant_id)
+			SELECT sb.id, $2, $3, $4 FROM storage_backends sb WHERE sb.name = $1`,
+			f.backend, name, public, owner)
+		grantBucket(t, ctx, f.pool, f.tenant, f.backend, name)
 	}
 	return f
 }

@@ -55,6 +55,7 @@ import { formatCount, formatTime } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
 import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
 import { SignalTenantsSheet } from "./SignalTenantsSheet";
+import { OWNER_ONLY_BUCKETS_LABEL, SHARED_BUCKETS_LABEL } from "./bucketLabels";
 
 // Poll cadence. Slower than /health's 15s: this is inventory, which moves
 // on operator actions and bulk uploads rather than second-to-second, and
@@ -480,7 +481,7 @@ export default function StatsPage() {
               <Metric
                 label="Buckets"
                 value={num(data.buckets?.total)}
-                sub={`${num(data.buckets?.tenantOwned)} tenant-owned`}
+                sub={`${num(data.buckets?.shared)} ${SHARED_BUCKETS_LABEL.toLowerCase()}`}
                 icon={ArchiveBoxIcon}
               />
               <Metric
@@ -585,10 +586,13 @@ export default function StatsPage() {
 
             <BreakdownCard title="Buckets" icon={ArchiveBoxIcon}>
               <Row
-                label="Tenant-owned"
+                label={OWNER_ONLY_BUCKETS_LABEL}
                 value={num(data.buckets?.tenantOwned)}
               />
-              <Row label="Shared" value={num(data.buckets?.shared)} />
+              <Row
+                label={SHARED_BUCKETS_LABEL}
+                value={num(data.buckets?.shared)}
+              />
               <Separator className="my-2" />
               <Row
                 label="Versioning on"

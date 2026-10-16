@@ -50,6 +50,14 @@ const (
 	// BucketServiceSetReplicationProcedure is the procedure name of the BucketService's SetReplication
 	// RPC.
 	BucketServiceSetReplicationProcedure = "/paladin.admin.v1.BucketService/SetReplication"
+	// BucketServiceGrantBucketProcedure is the procedure name of the BucketService's GrantBucket RPC.
+	BucketServiceGrantBucketProcedure = "/paladin.admin.v1.BucketService/GrantBucket"
+	// BucketServiceRevokeBucketGrantProcedure is the procedure name of the BucketService's
+	// RevokeBucketGrant RPC.
+	BucketServiceRevokeBucketGrantProcedure = "/paladin.admin.v1.BucketService/RevokeBucketGrant"
+	// BucketServiceListBucketGrantsProcedure is the procedure name of the BucketService's
+	// ListBucketGrants RPC.
+	BucketServiceListBucketGrantsProcedure = "/paladin.admin.v1.BucketService/ListBucketGrants"
 	// BucketServiceListAccessibleBucketsProcedure is the procedure name of the BucketService's
 	// ListAccessibleBuckets RPC.
 	BucketServiceListAccessibleBucketsProcedure = "/paladin.admin.v1.BucketService/ListAccessibleBuckets"
@@ -135,6 +143,30 @@ var (
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
+	bucketServiceGrantBucketSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("GrantBucket"),
+			Procedure:        BucketServiceGrantBucketProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceRevokeBucketGrantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("RevokeBucketGrant"),
+			Procedure:        BucketServiceRevokeBucketGrantProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	bucketServiceListBucketGrantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_bucket_service_proto.Services().ByName("BucketService").Methods().ByName("ListBucketGrants"),
+			Procedure:        BucketServiceListBucketGrantsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 	bucketServiceListAccessibleBucketsSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -181,8 +213,18 @@ type BucketServiceClient interface {
 	// objects are not backfilled; replication applies from the moment it is
 	// enabled.
 	SetReplication(context.Context, *v1.SetReplicationRequest) (*v1.Bucket, error)
-	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-	// the caller's principal/scopes are allowed to bind Collections to.
+	// GrantBucket lets a tenant other than the owner bind Collections to the
+	// bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+	// its first granter and time.
+	GrantBucket(context.Context, *v1.GrantBucketRequest) (*v1.BucketGrant, error)
+	// RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+	// while the tenant still has Collections in the bucket.
+	RevokeBucketGrant(context.Context, *v1.RevokeBucketGrantRequest) (*v1.RevokeBucketGrantResponse, error)
+	// ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+	ListBucketGrants(context.Context, *v1.ListBucketGrantsRequest) (*v1.ListBucketGrantsResponse, error)
+	// ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+	// a tenant may bind Collections to: the ones it owns and the ones granted
+	// to it.
 	ListAccessibleBuckets(context.Context, *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error)
 }
 
@@ -228,8 +270,18 @@ type BucketServiceHandler interface {
 	// objects are not backfilled; replication applies from the moment it is
 	// enabled.
 	SetReplication(context.Context, *v1.SetReplicationRequest) (*v1.Bucket, error)
-	// ListAccessibleBuckets is callable by tenant admins. Returns only buckets
-	// the caller's principal/scopes are allowed to bind Collections to.
+	// GrantBucket lets a tenant other than the owner bind Collections to the
+	// bucket (ADR-0032). Idempotent: a tenant that holds a grant keeps it, with
+	// its first granter and time.
+	GrantBucket(context.Context, *v1.GrantBucketRequest) (*v1.BucketGrant, error)
+	// RevokeBucketGrant takes a grant back. Refused with BUCKET_GRANT_IN_USE
+	// while the tenant still has Collections in the bucket.
+	RevokeBucketGrant(context.Context, *v1.RevokeBucketGrantRequest) (*v1.RevokeBucketGrantResponse, error)
+	// ListBucketGrants returns the tenants a bucket is granted to, oldest first.
+	ListBucketGrants(context.Context, *v1.ListBucketGrantsRequest) (*v1.ListBucketGrantsResponse, error)
+	// ListAccessibleBuckets is callable by tenant admins. Returns the buckets
+	// a tenant may bind Collections to: the ones it owns and the ones granted
+	// to it.
 	ListAccessibleBuckets(context.Context, *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error)
 }
 
@@ -248,6 +300,9 @@ func RegisterBucketServiceHandler(server *connect.Server, svc BucketServiceHandl
 		connect.Method{Spec: bucketServiceSetObjectLockSpec(), Handler: adapter.setObjectLock},
 		connect.Method{Spec: bucketServiceSetVersioningSpec(), Handler: adapter.setVersioning},
 		connect.Method{Spec: bucketServiceSetReplicationSpec(), Handler: adapter.setReplication},
+		connect.Method{Spec: bucketServiceGrantBucketSpec(), Handler: adapter.grantBucket},
+		connect.Method{Spec: bucketServiceRevokeBucketGrantSpec(), Handler: adapter.revokeBucketGrant},
+		connect.Method{Spec: bucketServiceListBucketGrantsSpec(), Handler: adapter.listBucketGrants},
 		connect.Method{Spec: bucketServiceListAccessibleBucketsSpec(), Handler: adapter.listAccessibleBuckets},
 	)
 }
@@ -293,6 +348,18 @@ func (UnimplementedBucketServiceHandler) SetVersioning(context.Context, *v1.SetV
 
 func (UnimplementedBucketServiceHandler) SetReplication(context.Context, *v1.SetReplicationRequest) (*v1.Bucket, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.SetReplication is not implemented")
+}
+
+func (UnimplementedBucketServiceHandler) GrantBucket(context.Context, *v1.GrantBucketRequest) (*v1.BucketGrant, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.GrantBucket is not implemented")
+}
+
+func (UnimplementedBucketServiceHandler) RevokeBucketGrant(context.Context, *v1.RevokeBucketGrantRequest) (*v1.RevokeBucketGrantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.RevokeBucketGrant is not implemented")
+}
+
+func (UnimplementedBucketServiceHandler) ListBucketGrants(context.Context, *v1.ListBucketGrantsRequest) (*v1.ListBucketGrantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BucketService.ListBucketGrants is not implemented")
 }
 
 func (UnimplementedBucketServiceHandler) ListAccessibleBuckets(context.Context, *v1.ListAccessibleBucketsRequest) (*v1.ListBucketsResponse, error) {
@@ -378,6 +445,30 @@ func (c *bucketServiceClient) SetVersioning(ctx context.Context, req *v1.SetVers
 func (c *bucketServiceClient) SetReplication(ctx context.Context, req *v1.SetReplicationRequest) (*v1.Bucket, error) {
 	var res v1.Bucket
 	if err := c.client.CallUnary(ctx, bucketServiceSetReplicationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) GrantBucket(ctx context.Context, req *v1.GrantBucketRequest) (*v1.BucketGrant, error) {
+	var res v1.BucketGrant
+	if err := c.client.CallUnary(ctx, bucketServiceGrantBucketSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) RevokeBucketGrant(ctx context.Context, req *v1.RevokeBucketGrantRequest) (*v1.RevokeBucketGrantResponse, error) {
+	var res v1.RevokeBucketGrantResponse
+	if err := c.client.CallUnary(ctx, bucketServiceRevokeBucketGrantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bucketServiceClient) ListBucketGrants(ctx context.Context, req *v1.ListBucketGrantsRequest) (*v1.ListBucketGrantsResponse, error) {
+	var res v1.ListBucketGrantsResponse
+	if err := c.client.CallUnary(ctx, bucketServiceListBucketGrantsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -507,6 +598,42 @@ func (h bucketServiceHandler) setReplication(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.SetReplication(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) grantBucket(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GrantBucketRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GrantBucket(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) revokeBucketGrant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeBucketGrantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeBucketGrant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bucketServiceHandler) listBucketGrants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBucketGrantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBucketGrants(ctx, &req)
 	if err != nil {
 		return err
 	}

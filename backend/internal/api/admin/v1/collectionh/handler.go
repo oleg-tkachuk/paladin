@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect/v2"
@@ -323,6 +325,11 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 		if _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); gerr == nil {
 			return false, nil
 		}
+		// A refusal the repository named — a bucket the tenant may not bind
+		// to — keeps its code; anything else is Internal.
+		if errors.Is(err, admindomain.ErrBucketNotGranted) {
+			return false, apiutil.MapError(err)
+		}
 		return false, rpcerr.New(connect.CodeInternal, fmt.Errorf("ensure collection: %w", err))
 	}
 	return true, nil
@@ -589,7 +596,7 @@ func (h *Handler) BindCollectionToBucket(
 		if errors.Is(err, ErrVersionMismatch) {
 			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 		}
-		if errors.Is(err, publicread.ErrRule) {
+		if errors.Is(err, publicread.ErrRule) || errors.Is(err, admindomain.ErrBucketNotGranted) {
 			return nil, apiutil.MapError(err)
 		}
 		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("rebind: %w", err))

@@ -135,13 +135,7 @@ func mustCreateCollection(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, 
     `, backendID); err != nil {
 		t.Fatalf("seed backend: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), `
-        INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1
-        ON CONFLICT DO NOTHING
-    `, backendID, bucketName); err != nil {
-		t.Fatalf("seed bucket: %v", err)
-	}
+	mustEnsureBindableBucket(t, pool, tenantID, backendID, bucketName)
 	if _, err := pool.Exec(context.Background(), `
         INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, b.id FROM buckets b
@@ -149,6 +143,79 @@ func mustCreateCollection(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, 
 		  WHERE sb.name = $3 AND b.name = $4
     `, tenantID, name, backendID, bucketName); err != nil {
 		t.Fatalf("create collection: %v", err)
+	}
+}
+
+// bucketGrantor is what the fixtures record as having granted a tenant use
+// of a bucket it does not own (bucket_grants.granted_by).
+const bucketGrantor = "test"
+
+// sharedBucketOwnerSlugPrefix names the tenant mustSeedSharedBucket creates to
+// own a bucket that other tenants bind into; the bucket name completes it.
+const sharedBucketOwnerSlugPrefix = "own-"
+
+// mustCreateBucket registers a bucket owned by owner: every bucket has an
+// owner (ADR-0032).
+func mustCreateBucket(t *testing.T, pool *pgxpool.Pool, owner uuid.UUID, backendID, bucketName string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+        INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1
+    `, backendID, bucketName, owner); err != nil {
+		t.Fatalf("seed bucket %s: %v", bucketName, err)
+	}
+}
+
+// mustGrantBucket grants tenantID use of a bucket it does not own, which is
+// what lets it bind a collection there (ADR-0032).
+func mustGrantBucket(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `
+        INSERT INTO bucket_grants (bucket_id, tenant_id, granted_by)
+		 SELECT b.id, $3, $4 FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $1 AND b.name = $2
+        ON CONFLICT DO NOTHING
+    `, backendID, bucketName, tenantID, bucketGrantor); err != nil {
+		t.Fatalf("grant bucket %s: %v", bucketName, err)
+	}
+}
+
+// mustSeedSharedBucket registers a bucket several tenants bind into. What was
+// an ownerless "shared" bucket is now one a tenant of its own owns and grants
+// to each of tenants (ADR-0032); the owner binds nothing itself.
+func mustSeedSharedBucket(t *testing.T, pool *pgxpool.Pool, backendID, bucketName string, tenants ...uuid.UUID) {
+	t.Helper()
+	owner := mustCreateTenant(t, pool, sharedBucketOwnerSlugPrefix+bucketName)
+	mustCreateBucket(t, pool, owner, backendID, bucketName)
+	for _, tenant := range tenants {
+		mustGrantBucket(t, pool, tenant, backendID, bucketName)
+	}
+}
+
+// mustEnsureBindableBucket leaves tenantID able to bind collections to the
+// bucket. Only the owner or a tenant holding a grant may bind to a bucket
+// (ADR-0032): the first tenant to ask creates the bucket and owns it, and
+// every later one is granted use of it. Fixtures that put several tenants'
+// collections into one bucket rely on the grant.
+func mustEnsureBindableBucket(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, backendID, bucketName string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `
+        INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1
+        ON CONFLICT DO NOTHING
+    `, backendID, bucketName, tenantID); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+        INSERT INTO bucket_grants (bucket_id, tenant_id, granted_by)
+		 SELECT b.id, $3, $4 FROM buckets b
+		   JOIN storage_backends sb ON sb.id = b.backend_id
+		  WHERE sb.name = $1 AND b.name = $2 AND b.owner_tenant_id <> $3
+        ON CONFLICT DO NOTHING
+    `, backendID, bucketName, tenantID, bucketGrantor); err != nil {
+		t.Fatalf("grant bucket: %v", err)
 	}
 }
 

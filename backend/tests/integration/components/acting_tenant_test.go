@@ -147,19 +147,31 @@ func rlsPool(t *testing.T, ctx context.Context, admin *pgxpool.Pool) *pgxpool.Po
 	return p
 }
 
+// The backend and bucket every tenant of these tests binds into.
+const (
+	actingBackendName = "acting-be"
+	actingBucketName  = "acting-bucket"
+)
+
+// seedBucketRow registers the bucket the tests' tenants share. Every bucket
+// has an owner (ADR-0032); a tenant of its own owns this one, so none of the
+// tenants under test owns what the others use, and seedCollectionFor grants
+// each one its use.
 func seedBucketRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
 	mustExec(t, ctx, pool,
-		`INSERT INTO storage_backends (name, kind) VALUES ('acting-be', 's3-compatible')
-		 ON CONFLICT (name) DO NOTHING`)
+		`INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')
+		 ON CONFLICT (name) DO NOTHING`, actingBackendName)
+	owner, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, 'acting-bucket' FROM storage_backends sb WHERE sb.name = 'acting-be'
-		 ON CONFLICT DO NOTHING`)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1
+		 ON CONFLICT DO NOTHING`, actingBackendName, actingBucketName, owner)
 }
 
 func seedCollectionFor(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant uuid.UUID, name string) {
 	t.Helper()
+	grantBucket(t, ctx, pool, tenant, actingBackendName, actingBucketName)
 	mustExec(t, ctx, pool,
 		`INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, b.id FROM buckets b LIMIT 1`, tenant, name)

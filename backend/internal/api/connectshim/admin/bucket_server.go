@@ -148,7 +148,7 @@ func ownerTenantID(s string) (uuid.UUID, error) {
 }
 
 // updateBucketPaths are the Bucket fields UpdateBucket applies.
-var updateBucketPaths = []string{"display_name", "labels", "owner_tenant_id"}
+var updateBucketPaths = []string{"display_name", "labels", bucketh.MaskOwnerTenantID}
 
 func (s *BucketServer) UpdateBucket(ctx context.Context, req *pb.UpdateBucketRequest) (*pb.Bucket, error) {
 	if err := requireCompilablePolicy(req.GetBucket().GetCedarPolicy()); err != nil {
@@ -311,4 +311,54 @@ func splitBucketCursor(tok string) (string, string) {
 		}
 	}
 	return tok, ""
+}
+
+// GrantBucket lets a tenant other than the owner bind to the bucket (ADR-0032).
+func (s *BucketServer) GrantBucket(ctx context.Context, req *pb.GrantBucketRequest) (*pb.BucketGrant, error) {
+	backend, name, err := bucketNameParts(req.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	tenant, err := uuid.Parse(req.GetTenantId())
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id must be a tenant UUID: %w", err))
+	}
+	g, err := s.H.GrantBucket(ctx, backend, name, tenant)
+	if err != nil {
+		return nil, err
+	}
+	return bucketGrantToProto(backend, name, g), nil
+}
+
+// RevokeBucketGrant takes a tenant's grant on the bucket back.
+func (s *BucketServer) RevokeBucketGrant(ctx context.Context, req *pb.RevokeBucketGrantRequest) (*pb.RevokeBucketGrantResponse, error) {
+	backend, name, err := bucketNameParts(req.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	tenant, err := uuid.Parse(req.GetTenantId())
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id must be a tenant UUID: %w", err))
+	}
+	if err := s.H.RevokeBucketGrant(ctx, backend, name, tenant); err != nil {
+		return nil, err
+	}
+	return &pb.RevokeBucketGrantResponse{}, nil
+}
+
+// ListBucketGrants returns the tenants the bucket is granted to.
+func (s *BucketServer) ListBucketGrants(ctx context.Context, req *pb.ListBucketGrantsRequest) (*pb.ListBucketGrantsResponse, error) {
+	backend, name, err := bucketNameParts(req.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	grants, err := s.H.ListBucketGrants(ctx, backend, name)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListBucketGrantsResponse{Grants: make([]*pb.BucketGrant, 0, len(grants))}
+	for _, g := range grants {
+		out.Grants = append(out.Grants, bucketGrantToProto(backend, name, g))
+	}
+	return out, nil
 }

@@ -36,7 +36,7 @@ test.describe("Phone-width layout", () => {
     const tenant = await makeTenant();
     // The objects page names the collection's bucket; a long one is what
     // pushed that strip past the edge.
-    const bucket = await makeBucket();
+    const bucket = await makeBucket({ ownerTenantId: tenant.tenantId });
     const collection = await makeCollection({
       tenantId: tenant.tenantId,
       bucket,

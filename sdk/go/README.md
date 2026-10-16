@@ -359,6 +359,9 @@ the `paladin://` resource space the MCP bridge serves.
 To create a bucket and bind collections to it at every boot, call
 `p.Data.StorageBootstrap.EnsureTenantStorage`: it is idempotent on the
 server, and reports which collections it created and which already existed.
+The bucket is the calling tenant's: a missing one is created owned by it, and
+an existing one is used only when the tenant owns it or was granted it
+(`BucketService.GrantBucket`); otherwise the call is `PermissionDenied`.
 
 ### Verifying webhook deliveries
 
@@ -560,7 +563,7 @@ what each field means, are documented in the `.proto` files under
 | `AuditLogService` | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `GetBillingSettings` |
-| `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `ListAccessibleBuckets` |
+| `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
 | `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |
 | `CELService` | `Validate` |
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |

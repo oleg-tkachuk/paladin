@@ -108,6 +108,10 @@ var procedureKinds = map[string]Kind{
 	admin.BucketServiceSetVersioningProcedure:         Changes,
 	admin.BucketServiceSetReplicationProcedure:        Changes,
 	admin.BucketServiceListAccessibleBucketsProcedure: Reads,
+	// A grant to a tenant in the trash is refused; taking one back is not.
+	admin.BucketServiceGrantBucketProcedure:       Changes,
+	admin.BucketServiceRevokeBucketGrantProcedure: Withdraws,
+	admin.BucketServiceListBucketGrantsProcedure:  Reads,
 
 	admin.CapabilityServiceIssueProcedure:           Changes,
 	admin.CapabilityServiceDelegateProcedure:        Changes,

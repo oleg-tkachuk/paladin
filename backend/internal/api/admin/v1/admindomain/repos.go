@@ -28,6 +28,16 @@ var (
 	// tell "it exists" from "something else is wrong", and the code is the
 	// only part of the answer they can branch on.
 	ErrAlreadyExists = errors.New("admin: already exists")
+
+	// ErrBucketOwnerRequired — a bucket named without the tenant that owns it
+	// (ADR-0032).
+	ErrBucketOwnerRequired = errors.New("admin: a bucket needs the tenant that owns it")
+	// ErrBucketNotGranted — a tenant binding a collection to a bucket it
+	// neither owns nor holds a grant on.
+	ErrBucketNotGranted = errors.New("admin: the tenant neither owns the bucket nor holds a grant on it")
+	// ErrBucketGrantInUse — a grant revoked while the tenant still has
+	// collections in the bucket.
+	ErrBucketGrantInUse = errors.New("admin: the tenant still has collections in the bucket")
 )
 
 // Register the admin domain sentinels with the central error→Connect-code
@@ -38,6 +48,9 @@ func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrConflict, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_CONFLICT)
 	apiutil.RegisterError(ErrAlreadyExists, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_ALREADY_EXISTS)
+	apiutil.RegisterError(ErrBucketOwnerRequired, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_BUCKET_OWNER_REQUIRED)
+	apiutil.RegisterError(ErrBucketNotGranted, connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_BUCKET_NOT_GRANTED)
+	apiutil.RegisterError(ErrBucketGrantInUse, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BUCKET_GRANT_IN_USE)
 }
 
 // ─── Storage backend repository ─────────────────────────────────────────────
@@ -85,6 +98,27 @@ type BackendRepository interface {
 type BucketReference struct {
 	Relation string
 	Count    int64
+}
+
+// BucketGrant is a tenant other than its owner that may bind collections to a
+// bucket (ADR-0032).
+type BucketGrant struct {
+	TenantID  uuid.UUID
+	GrantedBy string
+	GrantedAt time.Time
+}
+
+// BucketGrantRepository keeps a bucket's grants. A bucket that does not exist
+// is ErrNotFound.
+type BucketGrantRepository interface {
+	// Grant is idempotent: a tenant holding a grant keeps it as it was.
+	Grant(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID, grantedBy string) (BucketGrant, error)
+	// RevokeGrant refuses with ErrBucketGrantInUse while the tenant has
+	// collections in the bucket; a grant that is not there is ErrNotFound.
+	RevokeGrant(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error
+	ListGrants(ctx context.Context, backendID, bucketName string) ([]BucketGrant, error)
+	// MayBind reports whether the tenant owns the bucket or holds a grant.
+	MayBind(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) (bool, error)
 }
 
 type BucketRepository interface {

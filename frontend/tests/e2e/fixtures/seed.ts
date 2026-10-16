@@ -362,6 +362,16 @@ export interface SeededBucket {
   bucketId: string;
   /** Human-facing display name. UUID-suffixed. */
   displayName: string;
+  /**
+   * The tenant that owns it (ADR-0032: every bucket has one). Only the owner
+   * and the tenants it grants may bind collections to it.
+   */
+  ownerTenantId: string;
+}
+
+/** A bucket's resource name, as BucketService addresses it. */
+export function bucketResourceName(b: SeededBucket): string {
+  return `storageBackends/${b.backendId}/buckets/${b.bucketId}`;
 }
 
 /**
@@ -379,10 +389,11 @@ export async function seedBucket(opts?: {
   backendId?: string;
   bucketIdPrefix?: string;
   displayNamePrefix?: string;
-  // Bind the bucket to one tenant. Unset (the default, and what every caller
-  // before the default-route spec wanted) leaves it shared. The default-route
-  // picker lists tenant-owned buckets only, so a shared bucket is invisible
-  // there — a test that used one would be asserting against an empty select.
+  // The tenant that owns the bucket (ADR-0032). Unset, the platform tenant
+  // the seeded admin belongs to owns it, as it owns the operator's pools —
+  // which is what every spec binding the admin's own collections needs. A
+  // spec binding another tenant's collections names that tenant here, or
+  // grants it the bucket (makeGrant).
   ownerTenantId?: string;
 }): Promise<SeededBucket> {
   const backendId = opts?.backendId ?? "primary";
@@ -390,6 +401,7 @@ export async function seedBucket(opts?: {
   const displayName = uniqueDisplayName(
     opts?.displayNamePrefix ?? "E2E Bucket",
   );
+  const ownerTenantId = opts?.ownerTenantId ?? (await seedAdminTenantID());
   const client = bucketAdminClient();
   await client.createBucket({
     parent: `storageBackends/${backendId}`,
@@ -401,12 +413,15 @@ export async function seedBucket(opts?: {
       region: "",
       labels: {},
       cedarPolicy: "",
-      ownerTenantId: opts?.ownerTenantId ?? "",
+      ownerTenantId,
     },
     provisionOnBackend: true,
   });
-  return { backendId, bucketId, displayName };
+  return { backendId, bucketId, displayName, ownerTenantId };
 }
+
+/** The display name the shared physical bucket is registered under. */
+const PHYSICAL_BUCKET_DISPLAY_NAME = "E2E physical bucket";
 
 /**
  * The bucket that physically exists in the test stack's SeaweedFS, registered in
@@ -418,15 +433,26 @@ export async function seedBucket(opts?: {
  * container creates is the one real place bytes can land.
  *
  * Idempotent — every object test shares it.
+ *
+ * Owned by the platform tenant the seeded admin belongs to (ADR-0032), so the
+ * admin's own collections bind to it as they are. A spec that binds another
+ * tenant's collection here grants that tenant first (makeGrant), and the
+ * grant is revoked on teardown.
  */
 export async function seedPhysicalBucket(): Promise<SeededBucket> {
   const backendId = "primary";
   const bucketId = process.env.PALADIN_E2E_S3_BUCKET ?? "paladin-e2e";
+  const ownerTenantId = await seedAdminTenantID();
   try {
     await bucketAdminClient().createBucket({
       parent: `storageBackends/${backendId}`,
       bucketId,
-      bucket: { backendId, bucketId, displayName: "E2E physical bucket" },
+      bucket: {
+        backendId,
+        bucketId,
+        displayName: PHYSICAL_BUCKET_DISPLAY_NAME,
+        ownerTenantId,
+      },
       provisionOnBackend: false,
     });
   } catch (e) {
@@ -438,13 +464,85 @@ export async function seedPhysicalBucket(): Promise<SeededBucket> {
       e instanceof ConnectError &&
       (e.code === Code.AlreadyExists || e.code === Code.FailedPrecondition);
     if (!conflict) throw e;
-    await bucketAdminClient()
+    const existing = await bucketAdminClient()
       .getBucket({ name: `storageBackends/${backendId}/buckets/${bucketId}` })
       .catch(() => {
         throw e;
       });
+    // Registered before this run, by someone else or by the ADR-0032
+    // migration. Every spec binding the admin's collections here relies on
+    // the platform tenant owning it; say so rather than fail later with
+    // BUCKET_NOT_GRANTED on a collection.
+    if (existing.ownerTenantId !== ownerTenantId) {
+      throw new Error(
+        `seedPhysicalBucket: ${bucketId} is owned by tenant ` +
+          `${existing.ownerTenantId}, not the platform tenant ${ownerTenantId}`,
+      );
+    }
   }
-  return { backendId, bucketId, displayName: "E2E physical bucket" };
+  return {
+    backendId,
+    bucketId,
+    displayName: PHYSICAL_BUCKET_DISPLAY_NAME,
+    ownerTenantId,
+  };
+}
+
+// ─── bucket grants ─────────────────────────────────────────
+
+/** A tenant granted a bucket it does not own (ADR-0032). */
+export interface SeededGrant {
+  bucket: SeededBucket;
+  tenantId: string;
+}
+
+/**
+ * Grant a tenant a bucket another tenant owns, so it may bind collections to
+ * it.
+ */
+export async function grantBucket(
+  bucket: SeededBucket,
+  tenantId: string,
+): Promise<SeededGrant> {
+  await bucketAdminClient().grantBucket({
+    name: bucketResourceName(bucket),
+    tenantId,
+  });
+  return { bucket, tenantId };
+}
+
+/** The tenants a bucket is granted to, by UUID. */
+export async function bucketGrantees(bucket: SeededBucket): Promise<string[]> {
+  const res = await bucketAdminClient().listBucketGrants({
+    name: bucketResourceName(bucket),
+  });
+  return res.grants.map((g) => g.tenantId);
+}
+
+/**
+ * Revoke grants. Runs after deleteCollections — a grant is refused revocation
+ * (BUCKET_GRANT_IN_USE) while the tenant still has collections in the bucket
+ * — and before deleteTenants, so a grant on the shared physical bucket, which
+ * teardown never deletes, does not outlive its run.
+ */
+export async function revokeBucketGrants(items: SeededGrant[]): Promise<void> {
+  const client = bucketAdminClient();
+  const results = await Promise.allSettled(
+    items.map((g) =>
+      client.revokeBucketGrant({
+        name: bucketResourceName(g.bucket),
+        tenantId: g.tenantId,
+      }),
+    ),
+  );
+  for (const [i, r] of results.entries()) {
+    if (r.status === "rejected" && !alreadyGone(r.reason)) {
+      console.warn(
+        `[teardown] grant of ${items[i].bucket.bucketId} to ` +
+          `${items[i].tenantId} not revoked: ${String(r.reason).slice(0, 200)}`,
+      );
+    }
+  }
 }
 
 // ─── collection seeding ────────────────────────────────────
@@ -658,6 +756,9 @@ export async function seedTenantMembership(): Promise<SeededMembership> {
 
 // ─── objects (data plane) ──────────────────────────────────
 
+/** The slug of the platform tenant the seeded admin belongs to. */
+const ADMIN_TENANT_SLUG = "platform";
+let adminTenantID: Promise<string> | undefined;
 /**
  * The tenant the seeded admin belongs to. Objects must be seeded into a
  * collection this tenant owns: the data plane scopes every request to the
@@ -666,9 +767,16 @@ export async function seedTenantMembership(): Promise<SeededMembership> {
  * around.
  */
 export async function seedAdminTenantID(): Promise<string> {
-  const client = createClient(TenantService, adminTransport());
-  const res = await client.getTenant({ name: "tenants/platform" });
-  return res.tenantId;
+  // Asked once per worker: every bucket a spec seeds is owned by it by
+  // default, so this runs far more often than the tenant could change.
+  adminTenantID ??= createClient(TenantService, adminTransport())
+    .getTenant({ name: `tenants/${ADMIN_TENANT_SLUG}` })
+    .then((res) => res.tenantId)
+    .catch((err: unknown) => {
+      adminTenantID = undefined;
+      throw err;
+    });
+  return adminTenantID;
 }
 
 export interface SeededObject {

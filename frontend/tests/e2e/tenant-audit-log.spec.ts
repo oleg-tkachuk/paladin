@@ -67,7 +67,7 @@ test.describe("Tenant audit log", () => {
     // nests the tenant under its bucket, so this also checks that the trail
     // does not hang on a `tenants/<id>/` prefix.
     const tenant = await makeTenant();
-    const bucket = await makeBucket();
+    const bucket = await makeBucket({ ownerTenantId: tenant.tenantId });
     await makeCollection({ tenantId: tenant.tenantId, bucket });
 
     await gotoSettled(page, auditURL(tenant.tenantId));

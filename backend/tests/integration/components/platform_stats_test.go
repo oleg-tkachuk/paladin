@@ -41,8 +41,8 @@ func seedRevocation(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uu
 // split, the layout split (active rows only), backend enable/drain flags,
 // and the bucket provision-state / ownership breakdowns.
 //
-// The fixture seeds one tenant + one backend + one shared bucket + one
-// object key; this test adds a second, deliberately-degenerate set on top
+// The fixture seeds one tenant + one backend + one bucket that tenant owns +
+// one object key; this test adds a second, deliberately-degenerate set on top
 // and asserts on deltas so it stays correct if seedFixture grows.
 func TestCollectControlPlane(t *testing.T) {
 	t.Parallel()
@@ -70,6 +70,8 @@ func TestCollectControlPlane(t *testing.T) {
 		`INSERT INTO buckets (backend_id, name, owner_tenant_id, provision_state, versioning_enabled)
 		 SELECT sb.id, $2, $3, 'failed', true FROM storage_backends sb WHERE sb.name = $1`,
 		"be-off-"+hex, "bkt-own-"+hex, f.tenantID)
+	// That bucket granted to the trashed tenant: a shared bucket (ADR-0032).
+	grantBucket(t, ctx, pool, trashed, "be-off-"+hex, "bkt-own-"+hex)
 
 	got, err := platformstats.CollectControlPlane(ctx, pool)
 	if err != nil {
@@ -94,6 +96,8 @@ func TestCollectControlPlane(t *testing.T) {
 	assertDelta(t, "backends.aws-s3", base.Backends.ByKind["aws-s3"], got.Backends.ByKind["aws-s3"], 1)
 
 	assertDelta(t, "buckets.total", base.Buckets.Total, got.Buckets.Total, 2)
+	// Every bucket has an owner (ADR-0032); a shared one is one it granted:
+	// the fixture's is its tenant's alone, this test's is granted.
 	assertDelta(t, "buckets.tenant_owned", base.Buckets.TenantOwned, got.Buckets.TenantOwned, 1)
 	assertDelta(t, "buckets.shared", base.Buckets.Shared, got.Buckets.Shared, 1)
 	assertDelta(t, "buckets.versioning", base.Buckets.VersioningEnabled, got.Buckets.VersioningEnabled, 1)
@@ -254,9 +258,9 @@ func TestCollectRLSSiblings(t *testing.T) {
 	// Bucket-scoped row at 95% of its byte cap → near_limit, not at_limit.
 	// Its usage must NOT land in the tenant-scoped usage sums.
 	mustExec(t, ctx, pool,
-		`INSERT INTO buckets (backend_id, name)
-		 SELECT sb.id, $2 FROM storage_backends sb WHERE sb.name = $1`,
-		backendOf(t, ctx, pool, f), "bkt-q-"+hex)
+		`INSERT INTO buckets (backend_id, name, owner_tenant_id)
+		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`,
+		backendOf(t, ctx, pool, f), "bkt-q-"+hex, f.tenantID)
 	mustExec(t, ctx, pool,
 		`INSERT INTO bucket_quotas (id, bucket_id, max_total_bytes, usage_total_bytes)
 		 VALUES ($1, (SELECT b.id FROM buckets b

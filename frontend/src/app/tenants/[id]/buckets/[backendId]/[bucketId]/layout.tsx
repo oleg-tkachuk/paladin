@@ -79,17 +79,19 @@ export default function BucketDetailLayout({
       return resolved ?? undefined;
     });
 
-  // Cross-ownership guard: an operator who pasted a bucket URL
-  // belonging to a different tenant lands here with the bucket
-  // load succeeding but `ownerTenantId` not matching the URL's
-  // tenant. Bounce to the bucket's owning tenant so the address
-  // bar tells the truth.
+  // Cross-ownership guard: every bucket has an owner (ADR-0032), and
+  // this subtree is the owner's — its lifecycle rules, policy and
+  // deletion reach every tenant granted the bucket. An operator who
+  // reached a bucket under another tenant (pasted URL, or a tenant
+  // the owner granted it) is bounced to the owner's path so the
+  // address bar tells the truth. A granted tenant's own list links
+  // to the storage-first bucket page instead.
   // Placed BEFORE the notFound() short-circuit so the hook count
   // is stable across the render where notFoundFlag flips.
   useEffect(() => {
     if (!bucket) return;
     const owner = bucket.ownerTenantId;
-    if (owner && owner !== tenant.tenantId) {
+    if (owner !== tenant.tenantId) {
       router.replace(
         `/tenants/${owner}/buckets/${encodeURIComponent(
           backendId,

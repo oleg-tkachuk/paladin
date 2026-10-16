@@ -31,8 +31,10 @@ test.describe("Bucket collections tab", () => {
     // nothing here needs the shared platform tenant — and staying out of it
     // keeps this spec from moving state other specs are counting on.
     const { tenantId } = await makeTenant();
-    const mine = await makeBucket();
-    const other = await makeBucket();
+    // ADR-0032: a collection binds only to a bucket its tenant owns or was
+    // granted; the tenant owning it keeps the bucket's pages under its own URL.
+    const mine = await makeBucket({ ownerTenantId: tenantId });
+    const other = await makeBucket({ ownerTenantId: tenantId });
     const bound = await makeCollection({ tenantId, bucket: mine });
     const elsewhere = await makeCollection({ tenantId, bucket: other });
 
@@ -65,7 +67,9 @@ test.describe("Bucket collections tab", () => {
     // nothing here needs the shared platform tenant — and staying out of it
     // keeps this spec from moving state other specs are counting on.
     const { tenantId } = await makeTenant();
-    const bucket = await makeBucket();
+    // Owned by the tenant whose URL addresses it: the bucket pages redirect a
+    // bucket to its owner's (ADR-0032).
+    const bucket = await makeBucket({ ownerTenantId: tenantId });
 
     await gotoSettled(
       page,

@@ -138,9 +138,9 @@ func TestEnsureTenantStorage_TenantFromContextNotRequest(t *testing.T) {
 	if len(keys.seenTenants) != 1 || keys.seenTenants[0] != caller {
 		t.Errorf("object-key create tenants = %v, want [%s]", keys.seenTenants, caller)
 	}
-	// Shared bucket: OwnerTenantID must stay empty (uuid.Nil).
-	if buckets.gotIn.Bucket.OwnerTenantID != uuid.Nil {
-		t.Errorf("bucket OwnerTenantID = %s, want uuid.Nil (shared)", buckets.gotIn.Bucket.OwnerTenantID)
+	// The bucket is the caller's own (ADR-0032), never an ownerless one.
+	if buckets.gotIn.Bucket.OwnerTenantID != caller {
+		t.Errorf("bucket OwnerTenantID = %s, want the caller's tenant %s", buckets.gotIn.Bucket.OwnerTenantID, caller)
 	}
 	if !buckets.gotIn.ProvisionOnBackend {
 		t.Error("EnsureBucket must request provision_on_backend=true")
