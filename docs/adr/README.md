@@ -45,6 +45,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0033](0033-console-separates-platform-from-tenant-workspace.md) | The console separates the platform from a tenant's workspace | Accepted |
 | [0034](0034-the-product-releases-as-a-train.md) | The product releases as a train; the dev cluster follows dev builds | Accepted |
 | [0035](0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md) | An OAuth grant is bound to its client, and its scopes are enforced | Accepted |
+| [0036](0036-the-mcp-server-is-its-own-audience.md) | The MCP server is its own audience and exchanges the caller's token | Proposed |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
