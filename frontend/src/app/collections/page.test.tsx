@@ -228,3 +228,32 @@ describe("CollectionsPage catalogue", () => {
     ]);
   });
 });
+
+describe("CollectionsPage bucket column", () => {
+  // The bucket by name, linking to its page; the resource name in full had
+  // widened the table past the page.
+  it("names each row's bucket and links to its page", () => {
+    h.collections = [
+      {
+        tenantId: "t-a",
+        collection: "docs",
+        displayName: "",
+        bucket: "storageBackends/primary/buckets/pool",
+        resourceVersion: "1",
+      },
+    ];
+    render(<CollectionsPage />);
+    expect(
+      screen.getByRole("columnheader", { name: /Bucket/ }),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "pool" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/storage-backends/primary/buckets/pool",
+    );
+    expect(link).toHaveAttribute(
+      "title",
+      "storageBackends/primary/buckets/pool",
+    );
+  });
+});

@@ -24,12 +24,12 @@ import {
   tenantLabelMap,
 } from "@/components/features/buckets/BucketTable";
 import { collectionHref, tenantHref } from "@/lib/navigation/hrefs";
+import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 import { useBackends } from "@/hooks/useBackends";
 import { useNotification } from "@/components/ui/Notification";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import {
   Table,
@@ -49,12 +49,11 @@ import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
-import { T } from "@/lib/ui/typography";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
 
-type SortColumn = "name" | "displayName" | "backendId";
+type SortColumn = "name" | "displayName" | "bucket";
 
 /** Collection, tenant, display name, bucket, actions. */
 const COLUMNS = 5;
@@ -234,8 +233,8 @@ export default function CollectionsPage() {
               />
               <SortableHead
                 className="hidden @md:table-cell"
-                label="Backend"
-                column="backendId"
+                label="Bucket"
+                column="bucket"
                 current={sort}
                 onSort={handleSort}
               />
@@ -326,14 +325,7 @@ export default function CollectionsPage() {
                     )}
                   </TableCell>
                   <TableCell className="hidden @md:table-cell">
-                    {/* backendId removed from Collection schema — show bucket binding instead */}
-                    {ok.bucket ? (
-                      <Badge variant="info" className={T.code}>
-                        {ok.bucket}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
+                    <BucketNameLink bucket={ok.bucket} />
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
