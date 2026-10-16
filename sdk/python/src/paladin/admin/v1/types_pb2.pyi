@@ -437,7 +437,7 @@ class QuotaUsage(_message.Message):
     def __init__(self, total_bytes: _Optional[int] = ..., object_count: _Optional[int] = ..., bytes_today: _Optional[int] = ..., objects_today: _Optional[int] = ..., last_reset_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class AuditLogEntry(_message.Message):
-    __slots__ = ("entry_id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name", "request_id", "source_ip", "before_json", "after_json", "error_message", "capability_id")
+    __slots__ = ("entry_id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name", "request_id", "source_ip", "before_json", "after_json", "error_message", "capability_id", "relayed_by")
     ENTRY_ID_FIELD_NUMBER: _ClassVar[int]
     AT_FIELD_NUMBER: _ClassVar[int]
     ACTOR_SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -451,6 +451,7 @@ class AuditLogEntry(_message.Message):
     AFTER_JSON_FIELD_NUMBER: _ClassVar[int]
     ERROR_MESSAGE_FIELD_NUMBER: _ClassVar[int]
     CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    RELAYED_BY_FIELD_NUMBER: _ClassVar[int]
     entry_id: str
     at: _timestamp_pb2.Timestamp
     actor_subject: str
@@ -464,7 +465,8 @@ class AuditLogEntry(_message.Message):
     after_json: bytes
     error_message: str
     capability_id: str
-    def __init__(self, entry_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., actor_subject: _Optional[str] = ..., actor_tenant_id: _Optional[str] = ..., actor_audience: _Optional[str] = ..., action: _Optional[str] = ..., resource_name: _Optional[str] = ..., request_id: _Optional[str] = ..., source_ip: _Optional[str] = ..., before_json: _Optional[bytes] = ..., after_json: _Optional[bytes] = ..., error_message: _Optional[str] = ..., capability_id: _Optional[str] = ...) -> None: ...
+    relayed_by: str
+    def __init__(self, entry_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., actor_subject: _Optional[str] = ..., actor_tenant_id: _Optional[str] = ..., actor_audience: _Optional[str] = ..., action: _Optional[str] = ..., resource_name: _Optional[str] = ..., request_id: _Optional[str] = ..., source_ip: _Optional[str] = ..., before_json: _Optional[bytes] = ..., after_json: _Optional[bytes] = ..., error_message: _Optional[str] = ..., capability_id: _Optional[str] = ..., relayed_by: _Optional[str] = ...) -> None: ...
 
 class EventSubscription(_message.Message):
     __slots__ = ("name", "tenant_id", "filter", "sink", "disabled", "resource_version", "created_at", "updated_at")

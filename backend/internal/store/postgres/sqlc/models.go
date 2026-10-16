@@ -312,6 +312,7 @@ type AuditLog struct {
 	AfterJson        []byte             `json:"after_json"`
 	Detail           []byte             `json:"detail"`
 	ResourceTenantID pgtype.UUID        `json:"resource_tenant_id"`
+	RelayedBy        *string            `json:"relayed_by"`
 }
 
 type AuditLogDefault struct {

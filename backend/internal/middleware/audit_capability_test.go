@@ -37,3 +37,23 @@ func TestCapabilityID_Present(t *testing.T) {
 		t.Errorf("got %s, want %s", got, want)
 	}
 }
+
+// relayedBy names the client an exchanged token says relayed the call
+// (ADR-0036), and nothing for a direct call or no principal at all.
+func TestRelayedBy(t *testing.T) {
+	t.Parallel()
+	const mcpServer = "paladin-mcp-server"
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+		want string
+	}{
+		{"no principal", context.Background(), ""},
+		{"a direct call", auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u"}), ""},
+		{"relayed by the MCP server", auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u", Actor: mcpServer}), mcpServer},
+	} {
+		if got := relayedBy(tc.ctx); got != tc.want {
+			t.Errorf("%s: relayedBy = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

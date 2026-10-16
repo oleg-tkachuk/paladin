@@ -9,13 +9,19 @@
  * MCP is spoken by hand over streamable HTTP, one JSON-RPC message a POST.
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
+import { createHash } from "node:crypto";
+import { createClient } from "@connectrpc/connect";
+
+import { AuditLogService } from "@/gen/paladin/admin/v1/audit_service_pb";
 
 import {
   AUDIENCE_ADMIN,
   AUDIENCE_MCP,
   CLIENT_ID,
   HTTP_UNAUTHORIZED,
+  MCP_SERVER_CLIENT_ID,
   SCOPE_READ,
+  SCOPE_WRITE,
   claims,
   grant,
 } from "./fixtures/oauth";
@@ -23,6 +29,7 @@ import {
   ADMIN_URL,
   MCP_RESOURCE,
   MCP_URL,
+  adminTransport,
   seedAdminTenantID,
 } from "./fixtures/seed";
 
@@ -40,6 +47,15 @@ const MISSING_COLLECTION = "e2e-mcp-exchange-missing";
 // How the bridge renders a plane's answer about the request itself:
 // "<connect code>: <message>" (backend/internal/mcp/errors.go).
 const PLANE_ANSWER = /^(not_found|permission_denied): /;
+// The audited RPC behind paladin_upload_object, and a one-byte body for it.
+const UPLOAD_ACTION = "/paladin.data.v1.ObjectService/UploadObject";
+const UPLOAD_BYTES = "x";
+const UPLOAD_SHA256 = createHash("sha256")
+  .update(UPLOAD_BYTES)
+  .digest("base64");
+// How much of a UUID names the run's collection.
+const UNIQUE_SUFFIX = 8;
+const AUDIT_PAGE_SIZE = 50;
 
 interface RPCResponse {
   result?: {
@@ -186,5 +202,34 @@ test.describe("MCP token exchange", () => {
     // accepted; a refused token or a failed exchange says otherwise.
     if (data.isError) expect(data.text).toMatch(PLANE_ANSWER);
     expect(data.text).not.toContain(TOKEN_REFUSED);
+  });
+
+  test("a call through the MCP server is audited as relayed by it", async ({
+    request,
+  }) => {
+    const tok = await grant(request, [SCOPE_READ, SCOPE_WRITE], MCP_RESOURCE);
+    const session = new MCPSession(request, tok.access_token);
+    await session.initialize();
+
+    // A write the data plane audits, failed or not: an upload into a
+    // collection no fixture creates, named for this run so its audit row is
+    // the only one that carries the name. Nothing is reserved.
+    const marker = `e2e-relay-${crypto.randomUUID().slice(0, UNIQUE_SUFFIX)}`;
+    const write = await session.callTool("paladin_upload_object", {
+      parent: `tenants/${await seedAdminTenantID()}/collections/${marker}`,
+      content_type: "text/plain",
+      size_bytes: UPLOAD_BYTES.length,
+      checksum_value: UPLOAD_SHA256,
+    });
+    expect(write.text).not.toContain(TOKEN_REFUSED);
+
+    const audit = createClient(AuditLogService, adminTransport());
+    const { entries } = await audit.listAuditLog({
+      filter: `relayed_by == "${MCP_SERVER_CLIENT_ID}" && action == "${UPLOAD_ACTION}" && search.contains("${marker}")`,
+      page: { pageSize: AUDIT_PAGE_SIZE },
+    });
+    expect(entries.length, "the relayed write is in the audit log").toBe(1);
+    expect(entries[0].relayedBy).toBe(MCP_SERVER_CLIENT_ID);
+    expect(entries[0].actorAudience).toBe("paladin-data");
   });
 });

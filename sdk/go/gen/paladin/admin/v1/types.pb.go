@@ -2293,7 +2293,11 @@ type AuditLogEntry struct {
 	// authorised this action, when one was presented. Empty when the
 	// call was JWT- or API-token-authenticated. UI clients render
 	// this as a link to the capability detail surface.
-	CapabilityId  string `protobuf:"bytes,13,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	CapabilityId string `protobuf:"bytes,13,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	// relayed_by is the OAuth client that relayed the call on the actor's
+	// behalf: the MCP server, which exchanges each agent's token for the plane
+	// it calls (ADR-0036). Empty for a call made directly.
+	RelayedBy     string `protobuf:"bytes,14,opt,name=relayed_by,json=relayedBy,proto3" json:"relayed_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2415,6 +2419,13 @@ func (x *AuditLogEntry) GetErrorMessage() string {
 func (x *AuditLogEntry) GetCapabilityId() string {
 	if x != nil {
 		return x.CapabilityId
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetRelayedBy() string {
+	if x != nil {
+		return x.RelayedBy
 	}
 	return ""
 }
@@ -3320,7 +3331,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vbytes_today\x18\x03 \x01(\x03R\n" +
 	"bytesToday\x12#\n" +
 	"\robjects_today\x18\x04 \x01(\x03R\fobjectsToday\x12C\n" +
-	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\xd2\x03\n" +
+	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\xf1\x03\n" +
 	"\rAuditLogEntry\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12/\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x02at\x12#\n" +
@@ -3338,7 +3349,9 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"after_json\x18\v \x01(\fR\tafterJson\x12#\n" +
 	"\rerror_message\x18\f \x01(\tR\ferrorMessage\x12#\n" +
-	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\"\xde\x02\n" +
+	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\x12\x1d\n" +
+	"\n" +
+	"relayed_by\x18\x0e \x01(\tR\trelayedBy\"\xde\x02\n" +
 	"\x11EventSubscription\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x16\n" +

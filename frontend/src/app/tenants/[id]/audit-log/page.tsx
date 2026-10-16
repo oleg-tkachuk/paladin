@@ -38,6 +38,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { RelayedBy } from "@/components/features/audit/RelayedBy";
 import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { Timestamp } from "@/components/Timestamp";
 
@@ -207,6 +208,7 @@ export default function TenantAuditLogPage() {
                             aud {e.actorAudience}
                           </div>
                         )}
+                        <RelayedBy client={e.relayedBy} />
                       </div>
                     </TableCell>
                     <TableCell

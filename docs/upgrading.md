@@ -44,6 +44,14 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the audit log names the MCP server that relayed a call
+
+Migration `083` adds `audit_log.relayed_by`, and `AuditLogEntry` gains
+`relayed_by`: the OAuth client named in the `act` claim of an exchanged token
+(ADR-0036), so a call an agent made through the MCP server reads as the user's,
+via the MCP server. Empty for a direct call. The audit mirror event carries it
+too. Additive: no action needed.
+
 ## Unreleased — the MCP server exchanges the caller's token
 
 [ADR-0036](adr/0036-the-mcp-server-is-its-own-audience.md), behind

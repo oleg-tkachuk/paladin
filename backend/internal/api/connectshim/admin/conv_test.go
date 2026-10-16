@@ -503,3 +503,15 @@ func TestBucketToProtoCarriesGrantees(t *testing.T) {
 		t.Errorf("an ungranted bucket: grantees %#v, want an empty list", got.GrantedTenantIds)
 	}
 }
+
+// The relay reaches the wire as the client's name, and a direct call as
+// nothing for the console to show.
+func TestAuditEntryToProto_RelayedBy(t *testing.T) {
+	const mcpServer = "paladin-mcp-server"
+	if got := auditEntryToProto(&admindomain.AuditEntry{RelayedBy: mcpServer}).GetRelayedBy(); got != mcpServer {
+		t.Errorf("relayed call: relayed_by = %q, want %q", got, mcpServer)
+	}
+	if got := auditEntryToProto(&admindomain.AuditEntry{}).GetRelayedBy(); got != "" {
+		t.Errorf("direct call: relayed_by = %q, want empty", got)
+	}
+}

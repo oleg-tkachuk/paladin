@@ -455,6 +455,10 @@ message AuditLogEntry {
   // call was JWT- or API-token-authenticated. UI clients render
   // this as a link to the capability detail surface.
   string capability_id = 13;
+  // relayed_by is the OAuth client that relayed the call on the actor's
+  // behalf: the MCP server, which exchanges each agent's token for the plane
+  // it calls (ADR-0036). Empty for a call made directly.
+  string relayed_by = 14;
 }
 
 // ─── Event subscription ─────────────────────────────────────────────────────

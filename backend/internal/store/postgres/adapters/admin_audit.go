@@ -66,6 +66,7 @@ func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindo
 		// index on the column stays small.
 		pgUUIDOptional(e.CapabilityID),
 		pgUUIDOptional(e.ResourceTenant()),
+		strPtr(e.RelayedBy),
 	)
 }
 
@@ -216,6 +217,7 @@ func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 		AfterJSON:     row.AfterJson,
 		ErrorMessage:  derefStr(row.ErrorMessage),
 		CapabilityID:  uuidFrom(row.CapabilityID),
+		RelayedBy:     derefStr(row.RelayedBy),
 
 		ResourceTenantID: uuidFrom(row.ResourceTenantID),
 	}

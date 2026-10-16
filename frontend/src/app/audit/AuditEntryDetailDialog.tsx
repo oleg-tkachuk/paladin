@@ -102,6 +102,7 @@ export function AuditEntryDetailDialog({
             {data.capabilityId && (
               <Field k="capability" v={data.capabilityId} mono />
             )}
+            {data.relayedBy && <Field k="relayed by" v={data.relayedBy} mono />}
             {data.errorMessage && (
               <Field k="error">
                 <span className="text-destructive">{data.errorMessage}</span>

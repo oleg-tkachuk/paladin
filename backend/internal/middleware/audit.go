@@ -220,6 +220,7 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 		RequestID:     unary.Info(ctx).RequestHeader().Get(HeaderRequestID),
 		SourceIP:      sourceIP(ctx),
 		CapabilityID:  capabilityID(ctx),
+		RelayedBy:     relayedBy(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
@@ -265,6 +266,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 		Action:        procedure,
 		RequestID:     requestID,
 		CapabilityID:  capabilityID(ctx),
+		RelayedBy:     relayedBy(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
@@ -285,6 +287,16 @@ func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {
 // value the CapabilityInterceptor stamps on success — no extra lookup,
 // no fallback. JWT-only flows return uuid.Nil and the audit row has
 // NULL capability_id.
+// relayedBy is the client that relayed the call: the `act` of an exchanged
+// token (ADR-0036), or empty.
+func relayedBy(ctx context.Context) string {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil || p == nil {
+		return ""
+	}
+	return p.Actor
+}
+
 func capabilityID(ctx context.Context) uuid.UUID {
 	c, ok := auth.CapabilityFromContext(ctx)
 	if !ok || c == nil {

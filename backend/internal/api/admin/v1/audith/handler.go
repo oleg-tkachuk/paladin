@@ -189,10 +189,11 @@ func auditEntryRow(e admindomain.AuditEntry) map[string]any {
 		"resource_name":   e.ResourceName,
 		"request_id":      e.RequestID,
 		"source_ip":       e.SourceIP,
+		"relayed_by":      e.RelayedBy,
 		"at":              e.At,
 		"is_error":        e.ErrorMessage != "",
 		"search": celpkg.SearchText(e.Action, e.ActorSubject, e.ActorAudience,
-			e.ResourceName, e.RequestID, e.SourceIP, e.ErrorMessage),
+			e.ResourceName, e.RequestID, e.SourceIP, e.ErrorMessage, e.RelayedBy),
 	}
 }
 
@@ -239,6 +240,7 @@ type ExportAuditLogEntry struct {
 	ResourceName  string          `json:"resource_name"`
 	RequestID     string          `json:"request_id,omitempty"`
 	SourceIP      string          `json:"source_ip,omitempty"`
+	RelayedBy     string          `json:"relayed_by,omitempty"`
 	Before        json.RawMessage `json:"before,omitempty"`
 	After         json.RawMessage `json:"after,omitempty"`
 	ErrorMessage  string          `json:"error_message,omitempty"`
@@ -321,6 +323,7 @@ func projectExportEntry(e admindomain.AuditEntry) ExportAuditLogEntry {
 		ResourceName:  e.ResourceName,
 		RequestID:     e.RequestID,
 		SourceIP:      e.SourceIP,
+		RelayedBy:     e.RelayedBy,
 		Before:        json.RawMessage(e.BeforeJSON),
 		After:         json.RawMessage(e.AfterJSON),
 		ErrorMessage:  e.ErrorMessage,
