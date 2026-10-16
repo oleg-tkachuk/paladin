@@ -16,7 +16,6 @@ import {
   PlusIcon,
 } from "@heroicons/react/24/outline";
 
-import { PageHeader } from "@/components/layout/PageHeader";
 import { useBackends } from "@/hooks/useBackends";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useTenants } from "@/hooks/useTenants";
@@ -25,22 +24,15 @@ import {
   tenantLabelMap,
 } from "@/components/features/buckets/BucketTable";
 import { ListLoadError } from "@/components/ui/ListLoadError";
-import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BackendActions } from "./BackendActions";
-import { BackendFeatures } from "./BackendFeatures";
+import { BackendHeader, kindLabel } from "./BackendHeader";
+import { FeaturesSummary } from "./FeaturesSummary";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-
-const KIND_LABELS: Record<number, string> = {
-  [StorageKind.AWS_S3]: "AWS S3",
-  [StorageKind.S3_COMPATIBLE]: "S3-compatible",
-  [StorageKind.GCS]: "GCS",
-  [StorageKind.UNSPECIFIED]: "—",
-};
 
 export default function StorageBackendDetailPage() {
   const params = useParams<{ backendId: string }>();
@@ -80,15 +72,7 @@ export default function StorageBackendDetailPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={backend?.displayName || backendId}
-        description={
-          backend
-            ? `Storage backend · ${KIND_LABELS[backend.kind] || "—"}${backend.region ? ` · ${backend.region}` : ""}`
-            : "Storage backend"
-        }
-        showDefaultActions={false}
-      />
+      <BackendHeader backendId={backendId} backend={backend} />
 
       {/* Identity card */}
       {loadingBackends && !backend ? (
@@ -111,12 +95,18 @@ export default function StorageBackendDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 pt-0 text-xs">
             <Row k="id" v={backend.backendId} mono />
-            <Row k="kind" v={KIND_LABELS[backend.kind] || "—"} />
+            <Row k="kind" v={kindLabel(backend)} />
             {backend.region && <Row k="region" v={backend.region} mono />}
             <Row k="endpoint" v={backend.endpoint} mono truncate />
             {backend.publicEndpoint && (
               <Row k="public" v={backend.publicEndpoint} mono truncate />
             )}
+            <div className="flex items-center gap-2">
+              <span className="w-20 uppercase tracking-wider text-muted-foreground">
+                features
+              </span>
+              <FeaturesSummary backend={backend} />
+            </div>
             {backend.credentialsSecretRef && (
               <Row k="secret" v={backend.credentialsSecretRef} mono truncate />
             )}
@@ -147,8 +137,6 @@ export default function StorageBackendDetailPage() {
           </CardContent>
         </Card>
       )}
-
-      {backend && <BackendFeatures backend={backend} />}
 
       {/* Buckets on this backend */}
       <div className="flex items-center justify-between">
