@@ -30,6 +30,8 @@ const HOOK_LISTS: Record<string, string[]> = {
  * call site fails the second test, so this list cannot outlive its callers.
  */
 const ALLOWED: Record<string, string> = {
+  "app/collections/page.tsx::useTenants":
+    "tenant names label the rows; a failed read falls back to the id",
   // The tenants only name owners and grantees; an unread one shows its id,
   // which is the truth, not a claim that there are none.
   "app/storage-backends/[backendId]/page.tsx::useTenants":

@@ -41,9 +41,22 @@ const collectionResourceName = (tenantId: string, collection: string) =>
 const bucketResourceName = (backendId: string, bucketId: string) =>
   `storageBackends/${backendId}/buckets/${bucketId}`;
 
-export function useCollections() {
+/** How a page reads Collections. */
+export interface UseCollectionsOptions {
+  /**
+   * Every tenant's: the platform's catalogue. The server answers an empty
+   * parent so for a platform admin only; anyone else gets their own tenant's.
+   * Without it, the tenant the page acts on.
+   */
+  catalogue?: boolean;
+}
+
+export function useCollections({
+  catalogue = false,
+}: UseCollectionsOptions = {}) {
   const actingTenantId = useActingTenantId();
-  const tenantParent = actingTenantId ? `tenants/${actingTenantId}` : "";
+  const tenantParent =
+    !catalogue && actingTenantId ? `tenants/${actingTenantId}` : "";
   // `bumpRefresh` is deliberately absent from the mutation dep arrays below,
   // and each one carries a disable comment saying so. The two hook rules want
   // opposite things here: exhaustive-deps warns that it is missing, and adding
@@ -102,31 +115,35 @@ export function useCollections() {
    * the operator came to make. That is the defect this closes, the same one
    * the bucket picker had.
    */
-  const fetchAllCollections = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      let token = "";
-      let pages = 0;
-      const acc: Collection[] = [];
-      do {
-        const res = await collectionClient.listCollections({
-          parent: tenantParent,
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-        });
-        acc.push(...res.collections);
-        token = res.page?.nextPageToken ?? "";
-        pages += 1;
-      } while (token && pages < MAX_LIST_PAGES);
-      setCollections(acc);
-      return { collections: acc, nextPageToken: token };
-    } catch (err) {
-      setError(errorMessage(err, "Failed to fetch collections"));
-      return { collections: [], nextPageToken: "" };
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantParent]);
+  const fetchAllCollections = useCallback(
+    async (filter: string = "") => {
+      setLoading(true);
+      setError(null);
+      try {
+        let token = "";
+        let pages = 0;
+        const acc: Collection[] = [];
+        do {
+          const res = await collectionClient.listCollections({
+            parent: tenantParent,
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+            filter,
+          });
+          acc.push(...res.collections);
+          token = res.page?.nextPageToken ?? "";
+          pages += 1;
+        } while (token && pages < MAX_LIST_PAGES);
+        setCollections(acc);
+        return { collections: acc, nextPageToken: token };
+      } catch (err) {
+        setError(errorMessage(err, "Failed to fetch collections"));
+        return { collections: [], nextPageToken: "" };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tenantParent],
+  );
 
   const createCollection = useCallback(
     async (
@@ -183,17 +200,22 @@ export function useCollections() {
       // that still holds objects whatever this says — that is a foreign key,
       // not a policy.
       skipVersionCheck: boolean = false,
+      // The Collection's tenant, where a list spans tenants; the tenant the
+      // page acts on otherwise.
+      tenant: string = actingTenantId,
     ): Promise<void> => {
       try {
         setError(null);
-        const tenantId = actingTenantId;
+        const tenantId = tenant;
         await collectionClient.deleteCollection({
           name: collectionResourceName(tenantId, collection),
           resourceVersion,
           skipVersionCheck,
         });
         setCollections((prev) =>
-          prev.filter((b) => b.collection !== collection),
+          prev.filter(
+            (b) => !(b.collection === collection && b.tenantId === tenantId),
+          ),
         );
         // Deleting a Collection may have removed (or trashed) every object
         // beneath it — fan out to "objects" so any open list refetches.

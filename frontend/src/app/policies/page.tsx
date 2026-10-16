@@ -40,6 +40,10 @@ import {
 import { useTenants } from "@/hooks/useTenants";
 import { useBuckets } from "@/hooks/useBuckets";
 import { useCollections } from "@/hooks/useCollections";
+import {
+  tenantLabel,
+  tenantLabelMap,
+} from "@/components/features/buckets/BucketTable";
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
@@ -111,7 +115,8 @@ export default function PoliciesPage() {
     fetchAllCollections,
     loading: collectionsLoading,
     error: collectionsError,
-  } = useCollections();
+    // The system-wide editor targets any tenant's Collection.
+  } = useCollections({ catalogue: true });
 
   useEffect(() => {
     void fetchTenants();
@@ -143,9 +148,10 @@ export default function PoliciesPage() {
         label: `${b.backendId}/${b.bucketId}`,
       }));
     }
+    const names = tenantLabelMap(tenants);
     return collections.map((k) => ({
       value: collectionResourceName(k.tenantId, k.collection),
-      label: `${k.tenantId.slice(0, 8)}…/${k.collection}`,
+      label: `${tenantLabel(names, k.tenantId)} / ${k.collection}`,
     }));
   }, [scope, tenants, buckets, collections]);
 
