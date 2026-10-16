@@ -22,7 +22,9 @@ function formReq() {
 }
 
 describe("POST /oauth/authorize", () => {
-  beforeEach(() => h.fetch.mockReset());
+  beforeEach(() => {
+    h.fetch.mockReset();
+  });
 
   it("relays the form to the IAM plane without following its redirect", async () => {
     h.fetch.mockResolvedValue(
