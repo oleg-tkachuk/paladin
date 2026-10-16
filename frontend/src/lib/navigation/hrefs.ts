@@ -25,3 +25,11 @@ export function bucketHref(
 export function tenantHref(tenant: string): string {
   return `/tenants/${enc(tenant)}`;
 }
+
+/** The parts of a bucket resource name, "storageBackends/{b}/buckets/{id}". */
+export function parseBucketName(
+  name: string,
+): { backendId: string; bucketId: string } | null {
+  const m = /^storageBackends\/([^/]+)\/buckets\/([^/]+)$/.exec(name);
+  return m ? { backendId: m[1], bucketId: m[2] } : null;
+}

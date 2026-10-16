@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backendHref, bucketHref, tenantHref } from "./hrefs";
+import { backendHref, bucketHref, parseBucketName, tenantHref } from "./hrefs";
 
 describe("hrefs", () => {
   it("builds each entity's one URL", () => {
@@ -18,5 +18,23 @@ describe("hrefs", () => {
     expect(bucketHref("a b", "c/d")).toBe(
       "/storage-backends/a%20b/buckets/c%2Fd",
     );
+  });
+});
+
+describe("parseBucketName", () => {
+  it("splits a bucket resource name", () => {
+    expect(parseBucketName("storageBackends/primary/buckets/b1")).toEqual({
+      backendId: "primary",
+      bucketId: "b1",
+    });
+  });
+
+  it.each([
+    "",
+    "storageBackends/primary",
+    "buckets/b1",
+    "storageBackends/a/buckets/b/c",
+  ])("refuses %o", (name) => {
+    expect(parseBucketName(name)).toBeNull();
   });
 });

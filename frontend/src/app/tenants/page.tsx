@@ -15,6 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { bucketHref, parseBucketName } from "@/lib/navigation/hrefs";
 import { useTenants } from "@/hooks/useTenants";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { TenantCreateDialog } from "./TenantCreateDialog";
@@ -52,12 +53,6 @@ type SortColumn = "slug" | "displayName";
 // the tenant is bound to: "storageBackends/{backend}/buckets/{bucket}". Empty
 // when unset. Split into its parts so the Storage column can render a compact
 // "{backend}/{bucket}".
-function parseDefaultBucket(
-  name: string,
-): { backend: string; bucket: string } | null {
-  const m = /^storageBackends\/([^/]+)\/buckets\/(.+)$/.exec(name);
-  return m ? { backend: m[1], bucket: m[2] } : null;
-}
 
 export default function TenantsPage() {
   const {
@@ -171,8 +166,8 @@ export default function TenantsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden @4xl:table-cell">
-                Storage (backend/bucket)
+              <TableHead className="hidden @2xl:table-cell">
+                Default bucket
               </TableHead>
               <TableHead className="hidden @md:table-cell">Labels</TableHead>
               <TableHead className="hidden @5xl:table-cell w-70">
@@ -228,7 +223,7 @@ export default function TenantsPage() {
             ) : (
               filtered.map((tenant) => {
                 const labelEntries = Object.entries(tenant.labels);
-                const db = parseDefaultBucket(tenant.defaultBucket);
+                const db = parseBucketName(tenant.defaultBucket);
                 // Slug is the canonical handle in URLs; UUID is the
                 // safety net when slug is empty (legacy rows). Phase 0
                 // makes slug NOT NULL UNIQUE, so the fallback only
@@ -245,7 +240,10 @@ export default function TenantsPage() {
                         <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
                           <BuildingOfficeIcon className="size-4" />
                         </div>
-                        <span className="font-medium break-all whitespace-normal group-hover:underline">
+                        <span
+                          title={tenant.slug}
+                          className="max-w-48 truncate whitespace-nowrap font-medium group-hover:underline"
+                        >
                           {tenant.slug || (
                             <span className="text-muted-foreground italic">
                               (no slug)
@@ -267,11 +265,15 @@ export default function TenantsPage() {
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className="hidden @4xl:table-cell">
+                    <TableCell className="hidden @2xl:table-cell">
                       {db ? (
-                        <span className="font-mono text-xs">
-                          {db.backend}/{db.bucket}
-                        </span>
+                        <Link
+                          href={bucketHref(db.backendId, db.bucketId)}
+                          title={tenant.defaultBucket}
+                          className={cn(T.codeSmall, "hover:text-primary")}
+                        >
+                          {db.bucketId}
+                        </Link>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -282,10 +284,11 @@ export default function TenantsPage() {
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {labelEntries.slice(0, 3).map(([k, v]) => (
+                            // Labels are case-sensitive data: shown as stored.
                             <Badge
                               key={k}
                               variant="outline"
-                              className={cn(T.labelTight, "font-mono")}
+                              className={T.codeSmall}
                             >
                               {k}={String(v)}
                             </Badge>

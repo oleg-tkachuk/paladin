@@ -93,6 +93,41 @@ describe("TenantsPage", () => {
     expect(screen.queryByText("No tenants yet.")).not.toBeInTheDocument();
   });
 
+  // The default bucket is read as the tenant, so the list now has one for
+  // every tenant; it links to the bucket's one page (ADR-0033).
+  it("links a tenant's default bucket to the bucket's page", () => {
+    h.state.tenants = [
+      {
+        tenantId: "t-1",
+        slug: "acme",
+        displayName: "Acme Corp",
+        labels: {},
+        defaultBucket: "storageBackends/primary/buckets/pool",
+      },
+    ];
+    render(<TenantsPage />);
+    expect(screen.getByRole("link", { name: "pool" })).toHaveAttribute(
+      "href",
+      "/storage-backends/primary/buckets/pool",
+    );
+  });
+
+  // Labels are case-sensitive: an upper-cased chip names another label.
+  it("shows labels as they are stored", () => {
+    h.state.tenants = [
+      {
+        tenantId: "t-1",
+        slug: "acme",
+        displayName: "",
+        labels: { app: "billing" },
+        defaultBucket: "",
+      },
+    ];
+    render(<TenantsPage />);
+    const chip = screen.getByText("app=billing");
+    expect(chip.className).not.toMatch(/\buppercase\b/);
+  });
+
   it("opens the create dialog from the New tenant button", async () => {
     render(<TenantsPage />);
     await userEvent.click(screen.getByRole("button", { name: /New tenant/i }));
