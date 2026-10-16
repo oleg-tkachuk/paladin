@@ -742,6 +742,28 @@ finding moving from "packages you import" to "your code is affected".
 
 ## UI / Admin Console
 
+### Console lists that read one page
+
+- **Status:** Deferred.
+- **Reason:** these lists show only their own entity's rows — the scope is
+  right — but stop at the first page and say nothing about the rest; fixing
+  each is its own paging or server-search change, separate from the scope
+  fixes that shipped with ADR-0033.
+- **Definition of Done:** every list below either follows
+  `next_page_token` to the end, or pages with controls and says how many
+  rows it shows, and a search on it is a server filter rather than a pass
+  over the loaded rows:
+  - `/users` (`app/users/page.tsx`) — one page, search in the browser;
+  - `/audit` (`app/audit/page.tsx`) — text search over the loaded rows only;
+  - `/trash` (`app/trash/page.tsx`) — one page; its past-retention count
+    counts that page;
+  - a collection's trash (`collections/[name]/trash/page.tsx`) — 50 rows, no
+    "load more", search over those;
+  - a tenant's M2M tokens, capabilities (`pageSize: 100`) and event
+    subscriptions — `next_page_token` ignored, nothing on screen says the
+    list is cut.
+- **Blockers:** none.
+
 ### Option: Inter and IBM Plex Mono as the console's typefaces
 
 - **Status:** Deferred (an option, decided against for now — Geist stays).

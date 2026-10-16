@@ -109,3 +109,13 @@ describe("StorageBackendDetailPage bucket rows", () => {
     expect(screen.queryByRole("columnheader", { name: "Region" })).toBeNull();
   });
 });
+
+describe("StorageBackendDetailPage bucket read", () => {
+  // The backend's buckets, asked of the server by backend — not every
+  // bucket on every backend, filtered here.
+  it("asks the server for this backend's buckets only", () => {
+    h.buckets.fetchBuckets.mockClear();
+    render(<StorageBackendDetailPage />);
+    expect(h.buckets.fetchBuckets).toHaveBeenCalledWith("primary");
+  });
+});

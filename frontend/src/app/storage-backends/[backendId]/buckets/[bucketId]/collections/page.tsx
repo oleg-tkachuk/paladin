@@ -18,9 +18,8 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useTenants } from "@/hooks/useTenants";
-import { collectionClient } from "@/lib/connect/client";
+import { listAllCollections } from "@/lib/listAllCollections";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
-import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,17 +66,7 @@ export default function BucketCollectionsPage() {
   const collectionsQuery = useQuery({
     queryKey: ["bucketCollections", bucket.name],
     queryFn: ({ signal }) =>
-      collectionClient
-        .listCollections(
-          {
-            parent: "",
-            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: "" },
-            filter: "",
-            bucket: bucket.name,
-          },
-          { signal },
-        )
-        .then((res) => res.collections),
+      listAllCollections({ parent: "", bucket: bucket.name }, signal),
   });
   const collections = useMemo(
     () => collectionsQuery.data ?? [],

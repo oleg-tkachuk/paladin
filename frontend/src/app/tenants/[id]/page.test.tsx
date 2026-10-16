@@ -56,3 +56,29 @@ describe("TenantOverviewPage bucket count", () => {
     await waitFor(() => expect(tile).toHaveTextContent("2"));
   });
 });
+
+// A count that could not be read is unknown, not zero: "0 buckets" for a
+// failed read tells an operator the tenant has none.
+describe("TenantOverviewPage failed count", () => {
+  it("shows no number for a list that failed", async () => {
+    h.listAccessibleBuckets.mockRejectedValueOnce(new Error("unavailable"));
+    render(<TenantOverviewPage />);
+    const tile = (await screen.findByText("owned or granted")).closest("a")!;
+    await waitFor(() => expect(tile).toHaveTextContent("—"));
+    expect(tile).not.toHaveTextContent(/^0|\b0\b/);
+  });
+
+  it("counts every page of the list", async () => {
+    h.listAccessibleBuckets
+      .mockResolvedValueOnce({
+        buckets: [{ bucketId: "a" }],
+        page: { nextPageToken: "p2" },
+      } as never)
+      .mockResolvedValueOnce({
+        buckets: [{ bucketId: "b" }, { bucketId: "c" }],
+      });
+    render(<TenantOverviewPage />);
+    const tile = (await screen.findByText("owned or granted")).closest("a")!;
+    await waitFor(() => expect(tile).toHaveTextContent("3"));
+  });
+});

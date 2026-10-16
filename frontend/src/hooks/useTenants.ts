@@ -11,6 +11,7 @@ import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_servi
 import { useBumpRefresh } from "@/context/RefreshContext";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { MAX_LIST_PAGES } from "@/hooks/useBuckets";
 import { fieldMask } from "@/lib/connect/fieldMask";
 
 /**
@@ -45,17 +46,25 @@ export function useTenants() {
       setLoading(true);
       setError(null);
       try {
-        const res = await tenantClient.listTenants({
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken },
-          filter,
-          includeTrashed: !!opts.includeTrashed,
-          onlyTrashed: !!opts.onlyTrashed,
-        });
-        setTenants(res.tenants);
-        return {
-          tenants: res.tenants,
-          nextPageToken: res.page?.nextPageToken ?? "",
-        };
+        // Every page, from pageToken on: the callers name owners and
+        // grantees and pick a tenant from this set, and a set cut at one page
+        // hid every tenant past it — a grant could not be given to one.
+        let token = pageToken;
+        let pages = 0;
+        const acc: Tenant[] = [];
+        do {
+          const res = await tenantClient.listTenants({
+            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
+            filter,
+            includeTrashed: !!opts.includeTrashed,
+            onlyTrashed: !!opts.onlyTrashed,
+          });
+          acc.push(...res.tenants);
+          token = res.page?.nextPageToken ?? "";
+          pages += 1;
+        } while (token && pages < MAX_LIST_PAGES);
+        setTenants(acc);
+        return { tenants: acc, nextPageToken: token };
       } catch (err) {
         // Query contract (state-only): surface via `error`, never throw.
         // Callers read `error`; awaiting callers get an empty page.
