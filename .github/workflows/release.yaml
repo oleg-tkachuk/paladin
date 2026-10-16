@@ -4,7 +4,10 @@ name: Release
 #
 # A product release is a tag, both components published to GHCR at that tag
 # (a multi-arch image and a Helm chart each), and the GitHub release that
-# announces them. The SDK releases too, as a tag of its own (sdk/go/v*), when
+# announces them. A commit that passed CI and cut no tag is published too, as a
+# dev build at the version the library derives for it, <next patch>-dev.<…>:
+# the dev cluster follows those, so it runs every change as it lands. A dev
+# build is not announced and moves no floating tag. The SDK releases too, as a tag of its own (sdk/go/v*), when
 # a commit touched it. The announcement comes last and only when every component
 # published: a release whose charts are missing is not announced. Nothing is
 # published when no tag was due.
@@ -69,8 +72,12 @@ jobs:
     permissions:
       contents: write # semantic-release pushes the tag
     outputs:
-      # Empty when no release was due; publish and announce key off it.
+      # Empty when no release was due; announce keys off it.
       tag: ${{ steps.tag.outputs.tag }}
+      # What publish builds: the release at its tag, or a dev build of the
+      # commit CI passed (publish-plan.sh). Empty when it builds nothing.
+      publish_kind: ${{ steps.plan.outputs.kind }}
+      publish_ref: ${{ steps.plan.outputs.ref }}
     steps:
       # No persist-credentials: false — semantic-release pushes the tag it
       # creates, so this is the one checkout here that needs its credentials.
@@ -216,6 +223,16 @@ jobs:
           fi
           printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
 
+      # Every commit that passed CI is published: as the release when this run
+      # cut its tag, and otherwise as a dev build the dev cluster follows.
+      - name: Decide what to publish
+        id: plan
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          TESTED: ${{ steps.head.outputs.release }}
+          SHA: ${{ github.event.client_payload.sha }}
+        run: ./.github/scripts/publish-plan.sh "$TAG" "$TESTED" "$SHA" >>"$GITHUB_OUTPUT"
+
       # main is protected, so the named sections go in as a pull request,
       # opened with AUTOMERGE_TOKEN: one GITHUB_TOKEN opens starts no CI and
       # would never merge. See .github/scripts/propose-upgrade-sections.sh.
@@ -236,7 +253,7 @@ jobs:
     # interpolated one is shown raw whenever the job is skipped.
     name: Publish
     needs: [release]
-    if: needs.release.outputs.tag != ''
+    if: needs.release.outputs.publish_ref != ''
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
@@ -253,14 +270,16 @@ jobs:
     env:
       COMPONENT: ${{ matrix.component }}
       TAG: ${{ needs.release.outputs.tag }}
+      KIND: ${{ needs.release.outputs.publish_kind }}
     steps:
-      # The tag, not the branch head: main may have moved on since the release
-      # job ran. fetch-depth: 0 because the library derives the version with
-      # `git describe`, which needs the tags.
-      - name: Check out the tag
+      # The tag, or the tested commit for a dev build — not the branch head:
+      # main may have moved on since the release job ran. fetch-depth: 0
+      # because the library derives the version with `git describe`, which
+      # needs the tags.
+      - name: Check out what is published
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release.outputs.tag }}
+          ref: ${{ needs.release.outputs.publish_ref }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -292,10 +311,8 @@ jobs:
 
           # --yes accepts the first-fetch trust prompt for the task library.
           version="$(task --yes "${COMPONENT}:release:version")"
-          if [ "$version" != "${TAG#v}" ]; then
-            printf 'the library derives %s, the tag is %s — refusing to publish\n' "$version" "$TAG" >&2
-            exit 1
-          fi
+          # A release publishes its tag's version, a dev build only a dev one.
+          ./.github/scripts/publish-version-check.sh "$KIND" "$version" "$TAG"
 
           taskfile="${COMPONENT}/Taskfile.yaml"
           name="$(yq -r '.vars.PROJECT_NAME' "$taskfile")"
