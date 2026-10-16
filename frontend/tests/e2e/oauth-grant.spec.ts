@@ -11,9 +11,12 @@
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
+import { loginAsAdmin } from "./fixtures/auth";
+
 import { SEEDED_ADMIN } from "./fixtures/credentials";
 import {
   AUDIENCE_ADMIN,
+  AUDIENCE_DATA,
   CLIENT_ID,
   HTTP_BAD_REQUEST,
   HTTP_OK,
@@ -117,5 +120,47 @@ test.describe("OAuth grant", () => {
     expect(((await res.json()) as { error: string }).error).toBe(
       "invalid_grant",
     );
+  });
+
+  // The grant shows on the user's profile, and revoking it there ends it:
+  // the client's refresh token is refused from then on. Granted for
+  // paladin-data, which no other spec asks for, so the rows this test acts on
+  // are its own whatever runs beside it.
+  test("a grant revoked on the profile page can no longer refresh", async ({
+    page,
+    request,
+  }) => {
+    const tok = await grant(request, [SCOPE_READ], AUDIENCE_DATA);
+
+    await loginAsAdmin(page);
+    await page.goto("/profile");
+    const card = page
+      .locator("[data-slot=card]")
+      .filter({ hasText: "Connected applications" });
+    const ours = card
+      .locator("li")
+      .filter({ hasText: CLIENT_ID })
+      .filter({ hasText: AUDIENCE_DATA });
+    await expect(ours.first()).toBeVisible({ timeout: 15_000 });
+
+    // A retry may find an earlier attempt's grant too; end every one.
+    while ((await ours.count()) > 0) {
+      const remaining = await ours.count();
+      await ours.first().getByRole("button", { name: "Revoke" }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "Revoke" })
+        .click();
+      await expect(ours).toHaveCount(remaining - 1);
+    }
+
+    const res = await request.post(`${IAM_URL}/oauth/token`, {
+      form: {
+        grant_type: "refresh_token",
+        client_id: CLIENT_ID,
+        refresh_token: tok.refresh_token,
+      },
+    });
+    expect(res.status()).toBe(HTTP_BAD_REQUEST);
   });
 });

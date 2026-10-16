@@ -14,6 +14,7 @@ export const REDIRECT_URI = "https://e2e-agent.invalid/callback";
 export const SCOPE_READ = "paladin.read";
 export const SCOPE_WRITE = "paladin.write";
 export const AUDIENCE_ADMIN = "paladin-admin";
+export const AUDIENCE_DATA = "paladin-data";
 export const AUDIENCE_MCP = "paladin-mcp";
 // The MCP server's own OAuth client (compose and the dev cluster seed it), the
 // `act` of every token it exchanges and so the audit log's relayed_by.
