@@ -78,8 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-- **Blockers:** none.
-
 ### Admin RPCs the MCP bridge leaves off on purpose
 
 - **Status:** Won't-do (by design) unless the decision below is revisited.
