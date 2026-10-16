@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { RelayedBy } from "@/components/features/audit/RelayedBy";
 import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { Timestamp } from "@/components/Timestamp";
 
@@ -259,6 +260,7 @@ export default function AuditPage() {
                             aud {e.actorAudience}
                           </div>
                         )}
+                        <RelayedBy client={e.relayedBy} />
                       </div>
                     </TableCell>
                     <TableCell

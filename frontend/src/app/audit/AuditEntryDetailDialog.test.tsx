@@ -98,4 +98,26 @@ describe("AuditEntryDetailDialog", () => {
       await screen.findByText(/no state snapshot recorded/i),
     ).toBeInTheDocument();
   });
+  it("names the client that relayed the call", async () => {
+    h.get.mockResolvedValue({
+      entryId: "e4",
+      at: { seconds: 1_700_000_000n },
+      action: "/paladin.admin.v1.BackendService/ListBackends",
+      actorSubject: "user:ops",
+      actorTenantId: "",
+      resourceName: "",
+      requestId: "",
+      sourceIp: "",
+      capabilityId: "",
+      relayedBy: "paladin-mcp-server",
+      errorMessage: "",
+      beforeJson: new Uint8Array(),
+      afterJson: new Uint8Array(),
+    });
+
+    render(<AuditEntryDetailDialog entryId="e4" onOpenChange={() => {}} />);
+
+    expect(await screen.findByText("relayed by")).toBeInTheDocument();
+    expect(screen.getByText("paladin-mcp-server")).toBeInTheDocument();
+  });
 });
