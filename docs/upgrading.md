@@ -44,6 +44,24 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the OAuth server issues paladin-mcp and exchanges it
+
+[ADR-0036](adr/0036-the-mcp-server-is-its-own-audience.md), the
+Authorization Server's half. The MCP server does not use it yet.
+
+- **Breaking, behaviour.** `/oauth/authorize` applies the eligibility a console
+  login does: a user without a role in the admin plane's list is refused
+  `paladin-admin` with `invalid_target`, where it used to get the token and
+  meet Cedar on every call.
+- A client asking for `mcp.oauth.resource_url` as its `resource` is issued
+  `paladin-mcp`, when its `allowed_audiences` list it.
+- A seed client takes `client_secret` or `client_secret_ref`, stored hashed,
+  and `token_exchange: true` lets it call the RFC 8693 grant. A confidential
+  seed client without a secret, or a public one with one, now fails to load.
+  The chart lets the resolver read each `client_secret_ref`.
+- IAM serves `/.well-known/oauth-authorization-server` when
+  `mcp.oauth.authorization_server.issuer` is set, and the chart routes it.
+
 ## Unreleased — an OAuth client writes only with `paladin.write`
 
 [ADR-0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
