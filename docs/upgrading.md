@@ -44,6 +44,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an OAuth refresh token is bound to its grant
+
+[ADR-0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
+
+- **Behaviour.** `/oauth/token` redeems a refresh token only for the
+  client it was issued to, and re-issues the grant's own audience and scopes
+  instead of `paladin-data` with none. A refresh token issued before migration
+  082 records no grant and is refused with `invalid_grant`: each OAuth client
+  authorizes once more.
+- **Behaviour.** `AuthService.RefreshToken` and `ExchangeAudience`
+  refuse a refresh token the OAuth Authorization Server issued, and
+  `/oauth/token` refuses a console login's.
+
 ## Unreleased — an object list shows live objects unless asked for others
 
 - **Breaking, behaviour.** `ListObjects` and `CountObjects` whose filter names

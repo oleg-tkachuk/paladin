@@ -21,6 +21,14 @@ func NewRefreshTokenRepo(q *sqlc.Queries) *RefreshTokenRepo { return &RefreshTok
 var _ authstore.RefreshTokenRepository = (*RefreshTokenRepo)(nil)
 
 func (r *RefreshTokenRepo) Insert(ctx context.Context, t authstore.RefreshToken) error {
+	var clientID, audience *string
+	var scopes []string
+	if g := t.OAuth; g != nil {
+		clientID, audience = &g.ClientID, &g.Audience
+		// Non-nil even when empty: a nil slice is written as NULL, which the
+		// table reads as "no grant" and its CHECK refuses beside a client.
+		scopes = append([]string{}, g.Scopes...)
+	}
 	return r.q.InsertRefreshToken(ctx,
 		pgUUID(t.JTI),
 		pgUUID(t.UserID),
@@ -29,6 +37,7 @@ func (r *RefreshTokenRepo) Insert(ctx context.Context, t authstore.RefreshToken)
 		pgTS(t.IssuedAt),
 		pgTS(t.ExpiresAt),
 		pgUUIDOptional(t.ParentID),
+		clientID, audience, scopes,
 	)
 }
 
@@ -66,6 +75,12 @@ func refreshTokenFromSQLC(row sqlc.RefreshToken) authstore.RefreshToken {
 	if row.FirstUsedAt.Valid {
 		at := timeFrom(row.FirstUsedAt)
 		out.FirstUsedAt = &at
+	}
+	if row.OauthClientID != nil {
+		out.OAuth = &authstore.OAuthGrant{ClientID: *row.OauthClientID, Scopes: row.OauthScopes}
+		if row.OauthAudience != nil {
+			out.OAuth.Audience = *row.OauthAudience
+		}
 	}
 	return out
 }

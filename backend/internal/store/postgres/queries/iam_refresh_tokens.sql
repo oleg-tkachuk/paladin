@@ -1,11 +1,14 @@
 -- name: InsertRefreshToken :exec
--- parent_id is the token this one was rotated from, NULL for a login.
-INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at, parent_id)
-VALUES ($1, $2, $3, $4, $5, $6, sqlc.narg(parent_id));
+-- parent_id is the token this one was rotated from, NULL for a login. The
+-- oauth_* columns record the OAuth grant, NULL for a console login.
+INSERT INTO refresh_tokens (id, user_id, tenant_id, family_id, issued_at, expires_at, parent_id,
+                            oauth_client_id, oauth_audience, oauth_scopes)
+VALUES ($1, $2, $3, $4, $5, $6, sqlc.narg(parent_id),
+        sqlc.narg(oauth_client_id), sqlc.narg(oauth_audience), sqlc.narg(oauth_scopes)::text[]);
 
 -- name: GetRefreshToken :one
 SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
-       parent_id, first_used_at
+       parent_id, first_used_at, oauth_client_id, oauth_audience, oauth_scopes
 FROM refresh_tokens
 WHERE id = $1;
 
@@ -21,7 +24,7 @@ WHERE id = $1 AND first_used_at IS NULL;
 -- client that lost the rotation response never received. A revoked successor
 -- (its family killed) is not offered.
 SELECT id, user_id, tenant_id, family_id, issued_at, expires_at, revoked, superseded_at,
-       parent_id, first_used_at
+       parent_id, first_used_at, oauth_client_id, oauth_audience, oauth_scopes
 FROM refresh_tokens
 WHERE parent_id = $1 AND first_used_at IS NULL AND revoked = FALSE
 ORDER BY issued_at DESC

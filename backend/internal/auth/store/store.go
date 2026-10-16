@@ -145,6 +145,18 @@ type RefreshToken struct {
 	// rotated token still unused is what a lost rotation response leaves
 	// behind, and the only kind its parent's holder may recover.
 	FirstUsedAt *time.Time
+	// OAuth is the grant the OAuth Authorization Server issued this token
+	// under; nil for a console login. Each flow redeems only its own tokens
+	// (ADR-0035).
+	OAuth *OAuthGrant
+}
+
+// OAuthGrant is what a user consented to at /oauth/authorize: the client,
+// the audience and the scopes. A rotation re-issues the same grant.
+type OAuthGrant struct {
+	ClientID string
+	Audience string
+	Scopes   []string
 }
 
 // ─── Common errors ──────────────────────────────────────────────────────────

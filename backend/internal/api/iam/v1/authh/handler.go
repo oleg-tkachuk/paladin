@@ -245,6 +245,14 @@ type RefreshOutput struct {
 	Audience string
 }
 
+// errNotAConsoleToken refuses a refresh token the OAuth Authorization Server
+// issued. Its grant names one client, one audience and the scopes a user
+// consented to; redeemed here it would mint any audience the user may hold
+// (ADR-0035).
+var errNotAConsoleToken = connect.NewError(connect.CodeUnauthenticated, "refresh token was issued to an OAuth client")
+
+func issuedToOAuthClient(t authstore.RefreshToken) bool { return t.OAuth != nil }
+
 func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOutput, error) {
 	if in.RefreshToken == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "refresh_token required")
@@ -262,6 +270,9 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 		// rotated first — see errRotatedBySibling.
 		if errors.Is(err, authstore.ErrTokenRevoked) {
 			any, gerr := h.refresh.GetAny(ctx, jti)
+			if gerr == nil && issuedToOAuthClient(any) {
+				return nil, errNotAConsoleToken
+			}
 			if gerr == nil && h.withinSupersessionGrace(any) {
 				h.onRefreshRaceLost(ctx, jti, userID)
 				return nil, errRotatedBySibling
@@ -282,6 +293,9 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	if issuedToOAuthClient(stored) {
+		return nil, errNotAConsoleToken
 	}
 	if h.now().After(stored.ExpiresAt) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
@@ -403,6 +417,9 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	if issuedToOAuthClient(stored) {
+		return nil, errNotAConsoleToken
 	}
 	if h.now().After(stored.ExpiresAt) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token expired")

@@ -375,7 +375,9 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
 		return
 	}
-	h.issueTokens(r.Context(), w, u, ac.Audience, scopesJoin(ac.Scopes), uuid.Nil)
+	h.issueTokens(r.Context(), w, u, authstore.OAuthGrant{
+		ClientID: ac.ClientID, Audience: ac.Audience, Scopes: ac.Scopes,
+	}, uuid.Nil)
 }
 
 func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
@@ -412,6 +414,13 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token rejected")
 		return
 	}
+	// Only a token this endpoint issued, and only to the client presenting it
+	// (RFC 6749 §6). A console login's token carries no grant to re-issue.
+	grant := stored.OAuth
+	if grant == nil || grant.ClientID != client.ClientID {
+		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token was not issued to this client")
+		return
+	}
 	u, err := h.users.GetByID(r.Context(), userID)
 	if err != nil || u.Disabled || u.TenantID != tenantID {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
@@ -423,7 +432,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "rotation failed")
 		return
 	}
-	h.issueTokens(r.Context(), w, u, auth.AudienceData, "", stored.FamilyID)
+	h.issueTokens(r.Context(), w, u, *grant, stored.FamilyID)
 }
 
 // onRefreshReuse handles a detected refresh-token replay: revoke the token's
@@ -463,16 +472,17 @@ type tokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
-// issueTokens mints an access token (aud-bound) + a rotating refresh token,
-// stores the refresh row, and writes the §5.1 JSON.
-func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, audience, scope string, familyID uuid.UUID) {
+// issueTokens mints an access token for the grant's audience + a rotating
+// refresh token that records the grant, stores the refresh row, and writes
+// the §5.1 JSON.
+func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, grant authstore.OAuthGrant, familyID uuid.UUID) {
 	if familyID == uuid.Nil {
 		familyID = uuid.Must(uuid.NewV7())
 	}
 	access, accessExp, err := h.iss.MintAccess(issuer.AccessClaims{
 		Subject:  u.UserID.String(),
 		TenantID: u.TenantID,
-		Audience: audience,
+		Audience: grant.Audience,
 		Roles:    u.Roles,
 		Scopes:   u.Scopes,
 		Kind:     auth.PrincipalKindUser,
@@ -489,7 +499,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint refresh failed")
 		return
 	}
-	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), r2RefreshToken(tokenID, familyID, u, h.now(), refreshExp)); err != nil {
+	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), r2RefreshToken(tokenID, familyID, u, grant, h.now(), refreshExp)); err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "persist refresh failed")
 		return
 	}
@@ -498,12 +508,15 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		TokenType:    "Bearer",
 		ExpiresIn:    int(time.Until(accessExp).Seconds()),
 		RefreshToken: refresh,
-		Scope:        scope,
+		Scope:        scopesJoin(grant.Scopes),
 	})
 }
 
-func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, iat, exp time.Time) authstore.RefreshToken {
-	return authstore.RefreshToken{JTI: jti, FamilyID: familyID, UserID: u.UserID, TenantID: u.TenantID, IssuedAt: iat, ExpiresAt: exp}
+func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, grant authstore.OAuthGrant, iat, exp time.Time) authstore.RefreshToken {
+	return authstore.RefreshToken{
+		JTI: jti, FamilyID: familyID, UserID: u.UserID, TenantID: u.TenantID, IssuedAt: iat, ExpiresAt: exp,
+		OAuth: &grant,
+	}
 }
 
 // authenticateClient enforces client authentication: public clients pass
