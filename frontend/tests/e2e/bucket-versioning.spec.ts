@@ -9,15 +9,12 @@
  */
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
-import {
-  seedAdminTenantID,
-  bucketState,
-  setBucketVersioning,
-} from "./fixtures/seed";
+import { bucketState, setBucketVersioning } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 
-function versioningURL(tenantId: string, backendId: string, bucketId: string) {
-  return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/versioning`;
+// A bucket's one page, under its backend (ADR-0033).
+function versioningURL(backendId: string, bucketId: string): string {
+  return `/storage-backends/${backendId}/buckets/${bucketId}/versioning`;
 }
 
 test.describe("Bucket versioning", () => {
@@ -26,15 +23,11 @@ test.describe("Bucket versioning", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
     const before = await bucketState(bucket.backendId, bucket.bucketId);
     expect(before.versioningEnabled).toBe(false);
 
-    await gotoSettled(
-      page,
-      versioningURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, versioningURL(bucket.backendId, bucket.bucketId));
 
     // Save starts disabled — nothing is dirty yet. That it becomes enabled
     // only after a change is itself the guard against submitting a form whose
@@ -64,13 +57,9 @@ test.describe("Bucket versioning", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      versioningURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, versioningURL(bucket.backendId, bucket.bucketId));
 
     // Retaining delete markers is meaningless without versioning, and the
     // server would store a combination it never honours. The UI refuses to
@@ -89,13 +78,9 @@ test.describe("Bucket versioning", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      versioningURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, versioningURL(bucket.backendId, bucket.bucketId));
     const save = page.getByRole("button", { name: /^Save$/ });
     await expect(save).toBeDisabled({ timeout: 15_000 });
 

@@ -1,5 +1,6 @@
 /**
- * A bucket's Collections tab — which Collections route into this bucket.
+ * A bucket's Collections tab — which Collections route into this bucket, by
+ * tenant, on the bucket's one page (ADR-0033).
  *
  * The last of the seven pages nothing had opened. It answers a question the
  * bucket settings pages raise and do not resolve: before changing a bucket's
@@ -11,12 +12,9 @@ import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 
-function collectionsTabURL(
-  tenantId: string,
-  backendId: string,
-  bucketId: string,
-): string {
-  return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/collections`;
+// A bucket's one page, under its backend (ADR-0033).
+function collectionsTabURL(backendId: string, bucketId: string): string {
+  return `/storage-backends/${backendId}/buckets/${bucketId}/collections`;
 }
 
 test.describe("Bucket collections tab", () => {
@@ -27,24 +25,20 @@ test.describe("Bucket collections tab", () => {
     makeCollection,
   }) => {
     await loginAsAdmin(page);
-    // A tenant of its own. These pages are addressed by tenant in the URL, so
-    // nothing here needs the shared platform tenant — and staying out of it
-    // keeps this spec from moving state other specs are counting on.
+    // A tenant of its own: staying out of the shared platform tenant keeps
+    // this spec from moving state other specs are counting on.
     const { tenantId } = await makeTenant();
     // ADR-0032: a collection binds only to a bucket its tenant owns or was
-    // granted; the tenant owning it keeps the bucket's pages under its own URL.
+    // granted.
     const mine = await makeBucket({ ownerTenantId: tenantId });
     const other = await makeBucket({ ownerTenantId: tenantId });
     const bound = await makeCollection({ tenantId, bucket: mine });
     const elsewhere = await makeCollection({ tenantId, bucket: other });
 
-    await gotoSettled(
-      page,
-      collectionsTabURL(tenantId, mine.backendId, mine.bucketId),
-    );
+    await gotoSettled(page, collectionsTabURL(mine.backendId, mine.bucketId));
 
     await expect(
-      page.getByRole("heading", { name: /^Collections$/ }),
+      page.getByRole("tab", { name: "Collections", selected: true }),
     ).toBeVisible({
       timeout: 15_000,
     });
@@ -63,21 +57,18 @@ test.describe("Bucket collections tab", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    // A tenant of its own. These pages are addressed by tenant in the URL, so
-    // nothing here needs the shared platform tenant — and staying out of it
-    // keeps this spec from moving state other specs are counting on.
+    // A tenant of its own: staying out of the shared platform tenant keeps
+    // this spec from moving state other specs are counting on.
     const { tenantId } = await makeTenant();
-    // Owned by the tenant whose URL addresses it: the bucket pages redirect a
-    // bucket to its owner's (ADR-0032).
     const bucket = await makeBucket({ ownerTenantId: tenantId });
 
     await gotoSettled(
       page,
-      collectionsTabURL(tenantId, bucket.backendId, bucket.bucketId),
+      collectionsTabURL(bucket.backendId, bucket.bucketId),
     );
 
     await expect(
-      page.getByText(/No Collections bound to this bucket yet/i),
+      page.getByText(/No collection is bound to this bucket yet/i),
     ).toBeVisible({ timeout: 15_000 });
   });
 });
