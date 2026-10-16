@@ -171,3 +171,36 @@ func TestValidate_OAuthSeedClientAuthentication(t *testing.T) {
 		})
 	}
 }
+
+func TestValidate_MCPExchange(t *testing.T) {
+	ref := &SecretRef{Name: "x", Key: "k"}
+	on := func(ex MCPOAuthExchange) MCPOAuth { return MCPOAuth{Enabled: true, Exchange: ex} }
+	for _, tc := range []struct {
+		name  string
+		oauth MCPOAuth
+		want  string // "" accepts
+	}{
+		{"off", MCPOAuth{}, ""},
+		{"inline secret", on(MCPOAuthExchange{ClientID: "mcp", ClientSecret: "s"}), ""},
+		{"secret ref", on(MCPOAuthExchange{ClientID: "mcp", ClientSecretRef: ref}), ""},
+		{"both secrets", on(MCPOAuthExchange{ClientID: "mcp", ClientSecret: "s", ClientSecretRef: ref}), "cannot specify both client_secret and client_secret_ref"},
+		{"no secret", on(MCPOAuthExchange{ClientID: "mcp"}), "client_id needs client_secret or client_secret_ref"},
+		{"a secret with no client", on(MCPOAuthExchange{ClientSecret: "s"}), "a client secret needs a client_id"},
+		{"oauth off at the edge", MCPOAuth{Exchange: MCPOAuthExchange{ClientID: "mcp", ClientSecret: "s"}}, "needs mcp.oauth.enabled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := minimalValidConfig()
+			c.MCP.OAuth = tc.oauth
+			if tc.want == "" {
+				if err := c.Validate(); err != nil {
+					t.Fatalf("Validate() = %v, want nil", err)
+				}
+				if got, want := c.MCP.OAuth.ExchangeEnabled(), tc.oauth.Exchange.ClientID != ""; got != want {
+					t.Errorf("ExchangeEnabled() = %v, want %v", got, want)
+				}
+				return
+			}
+			mustReject(t, c, "mcp.oauth.exchange: "+tc.want)
+		})
+	}
+}

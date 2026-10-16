@@ -280,6 +280,16 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Ingest.Webhook.SharedSecretRef = SecretRef{}
 	}
 
+	// The MCP server's own client secret, for its token exchange.
+	if cfg.MCP.OAuth.Exchange.ClientSecretRef != nil {
+		sec, err := r.resolveSecret(ctx, cfg.MCP.OAuth.Exchange.ClientSecretRef)
+		if err != nil {
+			return fmt.Errorf("mcp.oauth.exchange.client_secret_ref: %w", err)
+		}
+		cfg.MCP.OAuth.Exchange.ClientSecret = sec
+		cfg.MCP.OAuth.Exchange.ClientSecretRef = nil
+	}
+
 	// OAuth seed clients' secrets — the MCP server's above all, which
 	// authenticates its token exchange (ADR-0036).
 	for i := range cfg.Auth.OAuth.SeedClients {
@@ -430,6 +440,10 @@ func (c *Config) Obfuscated() Config {
 
 	if cc.Auth.SigningKey != "" {
 		cc.Auth.SigningKey = Redacted
+	}
+
+	if cc.MCP.OAuth.Exchange.ClientSecret != "" {
+		cc.MCP.OAuth.Exchange.ClientSecret = Redacted
 	}
 
 	// OAuth seed client secrets. Copy the slice so the source keeps them.

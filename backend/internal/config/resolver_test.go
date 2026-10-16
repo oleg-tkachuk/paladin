@@ -407,6 +407,8 @@ func TestResolveConfig_InCluster_OAuthSeedClientSecret(t *testing.T) {
 		{ClientID: "agent", Public: true},
 		{ClientID: "mcp", ClientSecretRef: &SecretRef{Name: "paladin-mcp-oauth", Key: "client-secret"}},
 	}
+	// The MCP server reads the same Secret for its side of the exchange.
+	cfg.MCP.OAuth.Exchange = MCPOAuthExchange{ClientID: "mcp", ClientSecretRef: &SecretRef{Name: "paladin-mcp-oauth", Key: "client-secret"}}
 
 	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
@@ -419,6 +421,12 @@ func TestResolveConfig_InCluster_OAuthSeedClientSecret(t *testing.T) {
 	}
 	if got := cfg.Auth.OAuth.SeedClients[0].ClientSecret; got != "" {
 		t.Errorf("agent ClientSecret = %q, want none", got)
+	}
+	if got := cfg.MCP.OAuth.Exchange.ClientSecret; got != "resolved-client-secret" {
+		t.Errorf("mcp.oauth.exchange ClientSecret = %q, want resolved-client-secret", got)
+	}
+	if ref := cfg.MCP.OAuth.Exchange.ClientSecretRef; ref != nil {
+		t.Errorf("mcp.oauth.exchange ClientSecretRef = %+v, want cleared", ref)
 	}
 
 	missing := &Config{}

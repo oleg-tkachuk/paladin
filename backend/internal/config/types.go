@@ -1069,6 +1069,29 @@ type MCPOAuth struct {
 	// that serves its own metadata. The endpoint paths it advertises are
 	// the contract internal/auth/oauth serves (ADR-0009).
 	AuthorizationServer MCPOAuthAS `yaml:"authorization_server" json:"authorization_server"`
+	// Exchange makes the MCP server a confidential client of the AS that
+	// exchanges each caller's paladin-mcp token for the plane a tool calls
+	// (ADR-0036). With it set, the edge accepts paladin-mcp tokens only.
+	Exchange MCPOAuthExchange `yaml:"exchange" json:"exchange"`
+}
+
+// MCPOAuthExchange is the MCP server's client registration for RFC 8693 token
+// exchange: a seed client of the AS with token_exchange set and this secret.
+type MCPOAuthExchange struct {
+	// ClientID names the seed client. Empty leaves the exchange off.
+	ClientID string `yaml:"client_id" json:"client_id"`
+	// ClientSecret authenticates it. Inline for dev only; ClientSecretRef in
+	// real deployments.
+	ClientSecret string `yaml:"client_secret" json:"client_secret"`
+	// ClientSecretRef resolves ClientSecret from a Kubernetes Secret at boot.
+	ClientSecretRef *SecretRef `yaml:"client_secret_ref" json:"client_secret_ref"`
+	// TokenURL is the AS's token endpoint. Empty: the IAM upstream's.
+	TokenURL string `yaml:"token_url" json:"token_url"`
+}
+
+// ExchangeEnabled reports whether the MCP server exchanges tokens.
+func (o MCPOAuth) ExchangeEnabled() bool {
+	return o.Enabled && o.Exchange.ClientID != ""
 }
 
 // MCPOAuthAS is the RFC 8414 Authorization-Server metadata this process

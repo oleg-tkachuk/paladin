@@ -319,6 +319,14 @@ mcp.oauth.authorization_server.registration_endpoint
 mcp.oauth.authorization_server.token_endpoint
 mcp.oauth.authorization_servers
 mcp.oauth.enabled
+mcp.oauth.exchange
+mcp.oauth.exchange.client_id
+mcp.oauth.exchange.client_secret
+mcp.oauth.exchange.client_secret_ref
+mcp.oauth.exchange.client_secret_ref.key
+mcp.oauth.exchange.client_secret_ref.name
+mcp.oauth.exchange.client_secret_ref.namespace
+mcp.oauth.exchange.token_url
 mcp.oauth.resource_url
 mcp.oauth.scopes_supported
 mcp.profiles
