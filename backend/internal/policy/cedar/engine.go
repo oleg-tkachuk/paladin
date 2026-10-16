@@ -261,6 +261,11 @@ type Principal struct {
 	// `principal.scopes` so policies can match scope prefixes for
 	// fine-grained delegation. Empty when the principal carries roles only.
 	Scopes []string
+	// OAuthClientID and OAuthScopes are the OAuth grant the principal acts
+	// under (ADR-0035). IsAuthorized exposes them as context.oauth_client_id
+	// and context.oauth_scopes when the caller's RequestContext names none.
+	OAuthClientID string
+	OAuthScopes   []string
 }
 
 // Resource is the entity under authorization. Different fields are
@@ -306,10 +311,11 @@ type RequestContext struct {
 	Now         time.Time
 	IP          string
 
-	// OAuth consent context (ADR-0009): the client being authorized and the
-	// scopes it requested. Exposed to policies as context.oauth_client_id +
-	// context.oauth_scopes so a tenant can forbid specific clients/scopes.
-	// Zero values for non-OAuth checks.
+	// OAuth context (ADR-0009, ADR-0035): at consent, the client being
+	// authorized and the scopes it requested; on any other check, the grant
+	// the principal acts under. Exposed to policies as context.oauth_client_id
+	// + context.oauth_scopes so a tenant can forbid specific clients/scopes.
+	// Zero values when no OAuth client is involved.
 	OAuthClientID string
 	OAuthScopes   []string
 }
@@ -483,6 +489,11 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action Action, 
 		return DecisionDeny, err
 	}
 
+	// context.oauth_*: the grant the principal acts under, on every request
+	// and not only at consent, unless the caller set one (ADR-0035).
+	if rc.OAuthClientID == "" && p != nil {
+		rc.OAuthClientID, rc.OAuthScopes = p.OAuthClientID, p.OAuthScopes
+	}
 	// context.ip: the client address the listener resolved from its trusted
 	// proxies (clientip.Middleware), unless the caller set one.
 	if rc.IP == "" {

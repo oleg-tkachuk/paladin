@@ -62,5 +62,8 @@ func CedarPrincipalFor(p *auth.Principal, tenantOverride uuid.UUID) *cedar.Princ
 		Kind:   p.Kind.String(),
 		Roles:  p.Roles,
 		Scopes: ScopeStrings(p.Scopes),
+		// The OAuth grant, for context.oauth_* (ADR-0035).
+		OAuthClientID: p.OAuthClientID,
+		OAuthScopes:   p.OAuthScopes,
 	}
 }

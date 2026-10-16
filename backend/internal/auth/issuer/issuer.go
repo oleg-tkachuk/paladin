@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,6 +79,11 @@ type AccessClaims struct {
 	Scopes     []auth.Scope
 	Kind       auth.PrincipalKind
 	Labels     map[string]string
+	// OAuthClientID and OAuthScopes are the grant an OAuth client holds
+	// (ADR-0035), minted as the RFC 9068 `client_id` and `scope` claims.
+	// Empty for every other token.
+	OAuthClientID string
+	OAuthScopes   []string
 	// Optional explicit TTL override (must be ≤ scoped_token_max_ttl).
 	TTL time.Duration
 }
@@ -122,6 +128,10 @@ func (i *Issuer) MintAccess(c AccessClaims) (string, time.Time, error) {
 	}
 	if len(c.Labels) > 0 {
 		claims["labels"] = c.Labels
+	}
+	if c.OAuthClientID != "" {
+		claims[auth.ClaimClientID] = c.OAuthClientID
+		claims[auth.ClaimScope] = strings.Join(c.OAuthScopes, auth.ScopeSeparator)
 	}
 	tok, err := signHS256(i.cfg.SigningKey, claims)
 	if err != nil {

@@ -52,6 +52,10 @@ type jwtClaims struct {
 	Scopes     []string          `json:"scopes"`
 	Kind       string            `json:"kind"`
 	Labels     map[string]string `json:"labels"`
+	// ClientID and Scope are the RFC 9068 claims of a token an OAuth client
+	// holds (ADR-0035).
+	ClientID string `json:"client_id"`
+	Scope    string `json:"scope"`
 }
 
 // tenantClaim returns the effective tenant identifier from the claim
@@ -134,6 +138,10 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		Kind:       parseKind(c.Kind),
 		Labels:     c.Labels,
 		TenantSlug: c.TenantSlug,
+	}
+	if c.ClientID != "" {
+		p.OAuthClientID = c.ClientID
+		p.OAuthScopes = strings.Fields(c.Scope)
 	}
 	if c.Exp > 0 {
 		p.ExpiresAt = time.Unix(c.Exp, 0)

@@ -44,6 +44,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an OAuth client writes only with `paladin.write`
+
+[ADR-0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
+
+- **Breaking, behaviour.** An access token from `/oauth/token` carries the
+  `client_id` and `scope` claims, and every plane refuses an OAuth client
+  whose grant lacks `paladin.write` any RPC not marked `NO_SIDE_EFFECTS`, with
+  `PERMISSION_DENIED`. An agent that writes asks for `paladin.write` and is
+  authorized again. Console sessions, API tokens and capabilities are
+  unaffected.
+- Tenant policies see the grant as `context.oauth_client_id` and
+  `context.oauth_scopes` on every call, not only on `AuthorizeOAuth`.
+
 ## Unreleased — an OAuth refresh token is bound to its grant
 
 [ADR-0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
