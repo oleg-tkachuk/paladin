@@ -1,6 +1,6 @@
 "use client";
 
-// Default Route — ADR-0014 Phase 3. Manages the tenant's default
+// Default bucket — ADR-0014 Phase 3. Manages the tenant's default
 // (backend, bucket) binding: where a bare collection name (created without
 // naming a bucket) lands. Backed by TenantService.{Get,Set,Clear}
 // TenantDefaultBinding.
@@ -147,11 +147,11 @@ export default function DefaultBindingPage() {
     <div className="space-y-4">
       <Card className="space-y-4 p-5">
         <div>
-          <h2 className="text-base font-semibold">Default route</h2>
+          <h2 className="text-base font-semibold">Default bucket</h2>
           <p className="text-sm text-muted-foreground">
             Where a bare collection name (created without naming a bucket) lands
             for this tenant. Creating a collection with no bucket and no default
-            route is rejected.
+            bucket is rejected.
           </p>
         </div>
 
@@ -168,7 +168,7 @@ export default function DefaultBindingPage() {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No default route set — bare-name creation will be rejected.
+            No default bucket set — bare-name creation will be rejected.
           </p>
         )}
 
@@ -222,9 +222,9 @@ export default function DefaultBindingPage() {
         onClose={() => setConfirmClear(false)}
         onConfirm={handleClear}
         type="danger"
-        title="Clear the default route?"
-        message="Creating a Collection or object without naming a bucket will be refused in this tenant until a route is set again."
-        confirmText="Clear route"
+        title="Clear the default bucket?"
+        message="Creating a Collection or object without naming a bucket will be refused in this tenant until a default bucket is set again."
+        confirmText="Clear default bucket"
         loading={busy}
       />
     </div>

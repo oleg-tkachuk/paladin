@@ -1,5 +1,5 @@
 /**
- * Tenant default route — the page that decides where a bare-name creation
+ * Tenant default bucket — the page that decides where a bare-name creation
  * lands.
  *
  * A Collection created without naming a bucket is routed by this binding, and
@@ -23,7 +23,7 @@ function bindingURL(tenantId: string): string {
   return `/tenants/${tenantId}/default-binding`;
 }
 
-test.describe("Tenant default route", () => {
+test.describe("Tenant default bucket", () => {
   test("a tenant with no binding says so, and says what it costs", async ({
     page,
     makeTenant,
@@ -114,7 +114,7 @@ test.describe("Tenant default route", () => {
     // Clear asks first.
     await page
       .getByRole("alertdialog")
-      .getByRole("button", { name: "Clear route" })
+      .getByRole("button", { name: "Clear default bucket" })
       .click();
 
     await expect(page.getByText(/Default binding cleared/i)).toBeVisible({

@@ -13,13 +13,8 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notFound, useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Code, ConnectError } from "@connectrpc/connect";
-import {
-  ArrowPathIcon,
-  ChevronLeftIcon,
-  KeyIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowPathIcon, KeyIcon } from "@heroicons/react/24/outline";
 
 import { CollectionTabs } from "@/components/layout/CollectionTabs";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -72,7 +67,7 @@ export default function CollectionDetailLayout({
     collectionQuery.error.code === Code.NotFound;
   const error =
     collectionQuery.error && !notFoundFlag
-      ? errorMessage(collectionQuery.error, "Failed to load object key.")
+      ? errorMessage(collectionQuery.error, "Failed to load collection.")
       : null;
   const refetch = async () => {
     await collectionQuery.refetch();
@@ -111,13 +106,6 @@ export default function CollectionDetailLayout({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1 min-w-0">
-          <Link
-            href={`/tenants/${tenant.slug}/collections`}
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ChevronLeftIcon className="size-4" />
-            All Object Keys
-          </Link>
           <h2 className="flex items-center gap-2 truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             <KeyIcon className="size-5 text-primary" />
             <span className="truncate font-mono">{collectionName}</span>
