@@ -209,9 +209,25 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
           "rounded-md border border-warning/30 bg-warning/5 px-3 py-2",
         )}
       >
-        Each tool calls one plane, and the plane checks the token&apos;s
-        audience. A token from signing in is issued for a single plane, so it
-        reaches only that plane&apos;s tools; an API token can cover several.
+        {inspect.oauth?.edgeAudience ? (
+          <>
+            Agents authorize for{" "}
+            <span className={T.code}>
+              {inspect.oauth.resourceUrl || "the MCP server"}
+            </span>{" "}
+            and hold a{" "}
+            <span className={T.code}>{inspect.oauth.edgeAudience}</span> token,
+            which no plane accepts. The server exchanges it for each plane a
+            tool calls, so one session reaches all of them.
+          </>
+        ) : (
+          <>
+            Each tool calls one plane, and the plane checks the token&apos;s
+            audience. A token from signing in is issued for a single plane, so
+            it reaches only that plane&apos;s tools; an API token can cover
+            several.
+          </>
+        )}
       </p>
     </Card>
   );

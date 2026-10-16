@@ -93,22 +93,15 @@ the same commit. Treat this file like a runtime invariant.
 
 ### The console shows the MCP server's newer contract
 
-- **Status:** Deferred.
-- **Reason:** the `/mcp` page reads `MCPInspectService.Inspect`, whose
-  `MCPTool` carries only `mutates`. The tool hints the server now sends
-  (`destructiveHint`, `openWorldHint`), the OAuth grant model of ADR-0035
-  (registered clients, their scopes and audiences, whether the
-  Authorization Server is on) and the audience and token exchange of
-  ADR-0036 are invisible to an operator, and nothing in the console lists
-  or revokes the OAuth grants a user has given.
-- **Definition of Done:** `MCPTool` gains `destructive` and `open_world`
-  from the catalog and the Tools tab badges them; Inspect reports the
-  Authorization Server's state and its clients (no secrets), shown on the
-  page; a user can list and revoke their own OAuth grants (refresh-token
-  families per client), and an admin a tenant's; once ADR-0036 lands, the
-  page shows the MCP audience and whether the exchange client is
-  configured. Each with unit tests and an e2e assertion on the cluster.
-- **Blockers:** the ADR-0036 parts wait for that entry; the rest does not.
+- **Status:** In-Progress — the `/mcp` page shows each tool's destructive
+  and open-world hints and, under OAuth clients, how agents authorize.
+- **Reason:** nothing in the console lists or revokes the OAuth grants a
+  user has given; a grant lives on until its refresh token expires or the
+  user changes their password.
+- **Definition of Done:** a user can list and revoke their own OAuth grants
+  (refresh-token families per client), and an admin a tenant's users', with
+  unit tests and an e2e assertion.
+- **Blockers:** none.
 
 ### Admin RPCs the MCP bridge leaves off on purpose
 
