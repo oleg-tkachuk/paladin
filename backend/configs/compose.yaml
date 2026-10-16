@@ -112,6 +112,18 @@ auth:
   # surface these UI tests exercise, so raise both caps out of the way here.
   login_rate_limit_per_subject_per_minute: 100000
   login_rate_limit_per_ip_per_minute: 100000
+  # The OAuth Authorization Server (ADR-0009, ADR-0035), on so the stack can
+  # run the grant end to end: tests/e2e/oauth-grant.spec.ts authorizes the
+  # client below, exchanges the code and calls the planes with the token.
+  # The redirect is never followed; the code is read off the 302.
+  oauth:
+    enabled: true
+    seed_clients:
+      - client_id: "paladin-e2e-agent"
+        redirect_uris: ["https://e2e-agent.invalid/callback"]
+        allowed_scopes: ["paladin.read", "paladin.write"]
+        allowed_audiences: ["paladin-admin", "paladin-data"]
+        public: true
 
 # Bootstrap on first boot. Running `paladin bootstrap` once with this
 # config provisions a `platform/admin` user + the primary storage
