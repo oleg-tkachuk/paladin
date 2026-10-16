@@ -23,15 +23,22 @@ TypeScript, Python and workflow code.
 
 A change that touches only documentation (Markdown, `docs/`, images, the
 licence files) runs no verify group and no CodeQL analysis, and does not
-dispatch a release. Its commits count towards the next release a code change
-triggers.
+dispatch a release run. Its commits count towards the next release.
 
 Any other green push to `main` dispatches
-[`release.yaml`](../.github/workflows/release.yaml). semantic-release computes
-the next tag from the commits since the last one; both images and both charts
-are pushed to GHCR at that version, and the GitHub release with generated
-notes is created once all of them are. The same run cuts `sdk/go/v*` when a
-commit touched the SDK; the `api/v*` baseline is cut by hand. See [releasing.md](releasing.md).
+[`release.yaml`](../.github/workflows/release.yaml), which publishes a **dev
+build** of that commit — both images and both charts at
+`<next patch>-dev.<time>.g<sha>` — and cuts `sdk/go/v*` when a commit touched
+the SDK. The dev cluster follows the dev builds, so it runs every change as it
+lands.
+
+The product is **released by hand**, as a train ([ADR-0034](adr/0034-the-product-releases-as-a-train.md)):
+running `release.yaml` from the Actions tab, or `gh workflow run release.yaml`,
+tags main's head once CI passed on it. semantic-release computes the tag from
+every commit since the last release, so however many breaking changes the train
+carries make one major; the images and charts are pushed at that version, and
+the GitHub release with generated notes is created once all of them are. The
+`api/v*` baseline is cut by hand. See [releasing.md](releasing.md).
 
 ```mermaid
 flowchart LR
@@ -44,7 +51,11 @@ flowchart LR
     wf["<b>Workflow</b><br/>syntax · audit"]
     ok{{"<b>All checks passed</b><br/>required by main"}}
     head{"head is the<br/>commit CI passed?"}
-    tag["semantic-release<br/>two streams"]
+    dev["<b>dev build</b> backend · frontend<br/>x.y.z-dev.… → dev cluster"]
+    sdk["semantic-release<br/>SDK stream"]
+    hand(["release.yaml run by hand"])
+    passed{"CI passed<br/>on main's head?"}
+    tag["semantic-release<br/>product stream"]
     pub["<b>publish</b> backend · frontend<br/>image → sign → SBOM per platform<br/>chart → sign · verify all"]
     ann["<b>GitHub release</b> vX.Y.Z<br/>notes + SBOMs · latest"]
     mods["<b>sdk/go/v*</b><br/>GitHub release, not latest<br/>Go proxy told of the tag"]
@@ -54,22 +65,24 @@ flowchart LR
     img --> e2e
     v & py & e2e & deep & wf --> ok
     ok -- "push to main" --> head
-    head -- yes --> tag
-    tag -- "product" --> pub --> ann
-    tag -- "a module's commits" --> mods
-    head -- "no: the newer commit's CI releases it" --> skip(["nothing"])
+    head -- yes --> dev & sdk
+    sdk -- "a module's commits" --> mods
+    head -- "no: the newer commit's CI publishes it" --> skip(["nothing"])
+    hand --> passed
+    passed -- yes --> tag --> pub --> ann
     pin(["push to main changing<br/>go.mod · package.json · compose"]) -. "badges.yaml" .-> badges
 
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class chg,v,py,img,e2e,deep,wf,tag,pub role
-    class skip,badges,pin optional
+    class chg,v,py,img,e2e,deep,wf,tag,pub,dev,sdk role
+    class skip,badges,pin,hand optional
     class ok,ann,mods external
 ```
 
 `ci.yaml` pushes no image and deploys nothing. Images and charts are published
-only by `release.yaml`, for a release tag. Its End-to-end images job builds
+only by `release.yaml`: a dev build for every commit CI passed on `main`, and a
+release for a tag. Its End-to-end images job builds
 both images once, and its two End-to-end jobs run `verify-e2e:run` —
 Playwright against a stack booted from those images — each on half the suite
 (`PALADIN_E2E_SHARD`), when the change reaches the console or the backend, and its two Deep jobs run the halves of

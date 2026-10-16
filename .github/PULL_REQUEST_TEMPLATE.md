@@ -26,6 +26,8 @@ verification step.
 ## Checklist
 
 - [ ] Commit subjects follow Conventional Commits, one scope each
+- [ ] A `!` marks only a change a deployment or a client must act on — see
+      [docs/releasing.md](../docs/releasing.md#what-is-a-breaking-change)
 - [ ] New behaviour has a test
 - [ ] Anything deliberately left undone is recorded in `BACKLOG.md`, with
       Status / Reason / Definition of Done / Blockers

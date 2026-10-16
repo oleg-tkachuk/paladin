@@ -23,11 +23,22 @@ name: Release
 # run, so CI dispatches this with its own GITHUB_TOKEN — no extra credential,
 # no dangerous trigger.
 #
-# Deliberately no workflow_dispatch: it would let a release be cut from an
-# untested main with one click, which is what the gate in ci.yaml prevents.
+# Two triggers, two jobs to do (ADR-0034):
+#
+#   repository_dispatch  CI, after every green push to main: the SDK's tag when
+#                        one is due, and a dev build of the product for the
+#                        dev cluster. No product tag.
+#   workflow_dispatch    an operator, when the product is to be released: the
+#                        product's tag from every change since the last one, so
+#                        however many breaking changes it carries make one major.
+#
+# A manual run releases main's head only once CI passed on it
+# (release-ci-check.sh): a click cannot release an untested commit, which is
+# what dispatching from CI guarantees the other trigger.
 on:
   repository_dispatch:
     types: [release]
+  workflow_dispatch:
 
 permissions: {}
 
@@ -101,14 +112,24 @@ jobs:
           CI_RUN: ${{ github.event.client_payload.ci_run_id }}
         run: printf 'dispatched by CI run %s for commit %s\n' "${CI_RUN:-unknown}" "${SHA:-unknown}"
 
-      # The checkout above is main's head, which can be newer than the commit
-      # whose CI dispatched this run. Only that commit is released; a newer
-      # head is released by its own CI run. See .github/scripts/release-head-check.sh.
-      - name: Release only the commit CI passed
+      # The checkout above is main's head. Dispatched by CI, that can be newer
+      # than the commit whose CI dispatched this run: only that commit is
+      # released, and a newer head by its own CI run (release-head-check.sh).
+      # Run by hand, it is the head itself, released only once CI passed on
+      # it (release-ci-check.sh).
+      - name: Release only a commit CI passed
         id: head
         env:
+          EVENT: ${{ github.event_name }}
           SHA: ${{ github.event.client_payload.sha }}
-        run: ./.github/scripts/release-head-check.sh "$SHA" >>"$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ]; then
+            ./.github/scripts/release-ci-check.sh "$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+          else
+            ./.github/scripts/release-head-check.sh "$SHA" >>"$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node
         if: steps.head.outputs.release == 'true'
@@ -134,8 +155,10 @@ jobs:
         if: steps.head.outputs.release == 'true'
         run: git tag --points-at HEAD >"$RUNNER_TEMP/tags-before"
 
+      # The product releases by hand only: a train of every change since the
+      # last release, rather than a release per merge.
       - name: Compute and push the tag
-        if: steps.head.outputs.release == 'true'
+        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch'
         working-directory: .github/release
         run: npx semantic-release --no-ci
         env:
@@ -147,7 +170,7 @@ jobs:
       # proxy and pip read the tag, so nothing is published here, and the
       # product's publish below keys on its own tag alone.
       - name: Compute and push the SDK tag
-        if: steps.head.outputs.release == 'true'
+        if: steps.head.outputs.release == 'true' && github.event_name == 'repository_dispatch'
         working-directory: .github/release
         run: npx semantic-release --no-ci
         env:
@@ -229,7 +252,9 @@ jobs:
         id: plan
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-          TESTED: ${{ steps.head.outputs.release }}
+          # A manual run that cut no tag publishes nothing: its head's dev
+          # build came with its own CI run.
+          TESTED: ${{ github.event_name == 'repository_dispatch' && steps.head.outputs.release || 'false' }}
           SHA: ${{ github.event.client_payload.sha }}
         run: ./.github/scripts/publish-plan.sh "$TAG" "$TESTED" "$SHA" >>"$GITHUB_OUTPUT"
 

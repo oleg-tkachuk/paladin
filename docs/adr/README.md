@@ -43,6 +43,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0031](0031-capability-verify-then-handler.md) | A capability is verified in the interceptor and checked in the handler | Accepted |
 | [0032](0032-every-bucket-has-a-tenant-owner.md) | Every bucket has a tenant owner, and sharing is granted | Accepted |
 | [0033](0033-console-separates-platform-from-tenant-workspace.md) | The console separates the platform from a tenant's workspace | Accepted |
+| [0034](0034-the-product-releases-as-a-train.md) | The product releases as a train; the dev cluster follows dev builds | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
