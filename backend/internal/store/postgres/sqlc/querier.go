@@ -396,7 +396,11 @@ type Querier interface {
 	// not a per-event query on the ingest hot path. collections is small per tenant
 	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
 	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
+	// tenant_id is optional: NULL lists every tenant's collections, which the
+	// handler allows only a platform admin reading across tenants. Rows and the
+	// cursor run in (tenant_id, name) order, so a page boundary between two
+	// tenants loses nothing; within one tenant that is the name order.
+	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, afterTenant pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.

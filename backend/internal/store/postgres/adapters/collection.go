@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 
@@ -212,9 +215,10 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	// raw pool with a parameterised UPDATE-safe statement.
 	if args.BackendID == "" && args.BucketName == "" {
 		var after *string
+		var afterTenant pgtype.UUID
 		if args.PageToken != "" {
-			tok := args.PageToken
-			after = &tok
+			tenant, name := decodeCollectionCursor(args.PageToken, args.TenantID)
+			after, afterTenant = &name, pgUUID(tenant)
 		}
 		// Pushdown: see admin_bucket.go — the handler's CEL pass over the
 		// page stays authoritative, these only narrow the scan.
@@ -226,7 +230,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		createdGTE, createdLTE := createdBounds(pd)
 		// Only the `like` half — see admin_bucket.go.
 		_, searchLike := pd.StringHint("search")
-		rows, err := r.q.ListCollections(ctx, pgUUID(args.TenantID), after,
+		rows, err := r.q.ListCollections(ctx, pgUUIDOptional(args.TenantID), after, afterTenant,
 			nameIn, nameLike, displayIn, displayLike, searchLike, backendIn,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
@@ -236,11 +240,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		for _, row := range rows {
 			out = append(out, collectionFromSQLC(row.Collection, row.BackendName, row.BucketName))
 		}
-		var next string
-		if len(out) == int(pageSize) && len(out) > 0 {
-			next = out[len(out)-1].Collection
-		}
-		return out, next, nil
+		return out, nextCollectionCursor(out, pageSize), nil
 	}
 
 	// Filtered path: (backend, bucket) narrow. Tenant filter is
@@ -259,7 +259,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		 WHERE sb.name = $1
 		   AND b.name  = $2
 		   AND ($3::uuid IS NULL OR c.tenant_id = $3)
-		   AND ($4::text IS NULL OR c.name > $4)
+		   AND ($4::text IS NULL OR (c.tenant_id, c.name) > ($7::uuid, $4))
 		   -- The derived search field, spelled to match cel.SearchText.
 		   -- (no backticks in this comment: the Go literal around it is one.)
 		   -- This path narrowed on nothing from the filter before, so the same
@@ -276,16 +276,17 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	if args.TenantID != uuid.Nil {
 		tenantFilter = pgUUID(args.TenantID)
 	}
-	var afterTok any
+	var afterTok, afterTenantTok any
 	if args.PageToken != "" {
-		afterTok = args.PageToken
+		tenant, name := decodeCollectionCursor(args.PageToken, args.TenantID)
+		afterTok, afterTenantTok = name, pgUUID(tenant)
 	}
 	var searchTok any
 	if _, like := hints(cel.CollectionSchema, args.Filter).StringHint("search"); like != nil {
 		searchTok = *like
 	}
 	rows, err := r.pool.Query(ctx, filteredQ,
-		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize, searchTok)
+		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize, searchTok, afterTenantTok)
 	if err != nil {
 		return nil, "", fmt.Errorf("list collections (filtered): %w", err)
 	}
@@ -308,11 +309,35 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("list collections: rows err: %w", err)
 	}
-	var next string
-	if len(out) == int(pageSize) && len(out) > 0 {
-		next = out[len(out)-1].Collection
+	return out, nextCollectionCursor(out, pageSize), nil
+}
+
+// A collection list's page token is "<tenant id>:<collection>": the rows run
+// in (tenant_id, name) order, and a name alone cannot say where a page that
+// ends in one tenant resumes in the next. A token without the tenant — the
+// shape issued before — resumes within the listed tenant.
+const collectionCursorSep = ":"
+
+// nextCollectionCursor is the token for the page after out, or "" when out
+// is the last one.
+func nextCollectionCursor(out []objectkey.Collection, pageSize int32) string {
+	if len(out) == 0 || len(out) < int(pageSize) {
+		return ""
 	}
-	return out, next, nil
+	last := out[len(out)-1]
+	return last.TenantID.String() + collectionCursorSep + last.Collection
+}
+
+// decodeCollectionCursor splits a page token into the tenant and collection
+// the next page starts after; a bare name belongs to fallback.
+func decodeCollectionCursor(tok string, fallback uuid.UUID) (uuid.UUID, string) {
+	head, name, ok := strings.Cut(tok, collectionCursorSep)
+	if ok {
+		if tenant, err := uuid.Parse(head); err == nil {
+			return tenant, name
+		}
+	}
+	return fallback, tok
 }
 
 // Stats runs a single grouped aggregation. Returning (AVAILABLE, PENDING,
