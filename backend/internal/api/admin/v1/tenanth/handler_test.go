@@ -1327,3 +1327,80 @@ func TestListTenants_PurgeEligibleFilter(t *testing.T) {
 			fr.lastListArgs.TrashRetention, fr.lastListArgs.AsOf, retention, asOf)
 	}
 }
+
+// ─── default binding under RLS ──────────────────────────────────────────────
+
+// A tenant's default binding is a row under RLS, joined into every tenant
+// read. Read in the caller's scope it was dropped for every tenant but the
+// caller's own, so a platform admin saw no default bucket on the others.
+func TestTenantReadsScopeToTheTenantRead(t *testing.T) {
+	tid := uuid.New()
+	foreign := uuid.New()
+
+	t.Run("GetTenant acts as the tenant read", func(t *testing.T) {
+		var scope uuid.UUID
+		fr := &fakeRepo{getFn: func(ctx context.Context, id uuid.UUID) (Tenant, error) {
+			scope, _ = auth.ActingTenant(ctx)
+			return Tenant{TenantID: id}, nil
+		}}
+		if _, err := NewHandler(fr, allow()).GetTenant(adminCtx(tid), foreign); err != nil {
+			t.Fatalf("GetTenant: %v", err)
+		}
+		if scope != foreign {
+			t.Fatalf("read in scope %v, want the tenant %v", scope, foreign)
+		}
+	})
+
+	t.Run("GetTenantBySlug rereads a foreign tenant as itself", func(t *testing.T) {
+		var scope uuid.UUID
+		fr := &fakeRepo{
+			getBySlugFn: func(context.Context, string) (Tenant, error) {
+				return Tenant{TenantID: foreign, Slug: "acme"}, nil
+			},
+			getFn: func(ctx context.Context, id uuid.UUID) (Tenant, error) {
+				scope, _ = auth.ActingTenant(ctx)
+				return Tenant{TenantID: id, Slug: "acme", DefaultBucket: "storageBackends/b/buckets/x"}, nil
+			},
+		}
+		got, err := NewHandler(fr, allow()).GetTenantBySlug(adminCtx(tid), "acme")
+		if err != nil {
+			t.Fatalf("GetTenantBySlug: %v", err)
+		}
+		if scope != foreign || got.DefaultBucket == "" {
+			t.Fatalf("scope %v, default bucket %q; want the tenant's own read", scope, got.DefaultBucket)
+		}
+	})
+
+	t.Run("GetTenantBySlug of the caller's own tenant reads once", func(t *testing.T) {
+		gets := 0
+		fr := &fakeRepo{
+			getBySlugFn: func(context.Context, string) (Tenant, error) {
+				return Tenant{TenantID: tid, Slug: "acme"}, nil
+			},
+			getFn: func(context.Context, uuid.UUID) (Tenant, error) {
+				gets++
+				return Tenant{TenantID: tid}, nil
+			},
+		}
+		if _, err := NewHandler(fr, allow()).GetTenantBySlug(adminCtx(tid), "acme"); err != nil {
+			t.Fatalf("GetTenantBySlug: %v", err)
+		}
+		if gets != 0 {
+			t.Fatalf("own tenant reread %d times, want 0", gets)
+		}
+	})
+
+	t.Run("ListTenants reads across tenants", func(t *testing.T) {
+		crossed := false
+		fr := &fakeRepo{listFn: func(ctx context.Context, _ ListTenantsArgs) ([]Tenant, string, error) {
+			crossed = auth.CrossTenantRead(ctx)
+			return nil, "", nil
+		}}
+		if _, _, err := NewHandler(fr, allow()).ListTenants(adminCtx(tid), ListTenantsArgs{}, ""); err != nil {
+			t.Fatalf("ListTenants: %v", err)
+		}
+		if !crossed {
+			t.Fatal("ListTenants read in the caller's scope; other tenants' default bindings are dropped")
+		}
+	})
+}
