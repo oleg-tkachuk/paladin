@@ -100,3 +100,18 @@ describe("sessionTenantGroupTitle", () => {
     expect(sessionTenantGroupTitle(null)).toBe(SESSION_TENANT_GROUP);
   });
 });
+
+describe("the session tenant's group", () => {
+  // Its rows open the session tenant's workspace; a platform page there reads
+  // as that tenant's. Billing spans every tenant, so it is a System row.
+  it("holds only shortcuts into the workspace", () => {
+    const group = visibleNavigationGroups(null).find(
+      (g) => g.title === SESSION_TENANT_GROUP,
+    );
+    expect(group?.items.every((i) => i.tenantTab)).toBe(true);
+    const system = visibleNavigationGroups(null).find(
+      (g) => g.title === "System",
+    );
+    expect(system?.items.map((i) => i.name)).toContain("Billing");
+  });
+});

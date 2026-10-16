@@ -167,16 +167,11 @@ const navigationGroups: Array<{
     ],
   },
   {
-    // Agents — Capabilities, M2M Tokens, Tenant Budgets, Events
-    // Subscriptions are tenant-scoped pages now (Phase 5+); they
-    // appear here as `tenantTab` shortcuts that resolve to
-    // /tenants/<signed-in-tenant>/<tab> at render time. Operators
-    // who routinely manage their own tenant don't need to bounce
-    // through Resources → tenant → tab on every visit. Billing
-    // stays an absolute path — it's a cross-tenant aggregate
-    // dashboard scoped by the JWT, not a per-tenant view.
-    // Shown under the session tenant's name (sessionTenantGroupTitle): each
-    // row opens a page of that tenant's workspace, not a platform page.
+    // Shortcuts into the session tenant's workspace: Capabilities, M2M
+    // tokens, Budget and Events resolve to /tenants/<signed-in>/<tab>, so an
+    // operator managing their own tenant need not go through Tenants first.
+    // Shown under that tenant's name (sessionTenantGroupTitle); every row is
+    // a page of its workspace, and nothing platform-wide belongs here.
     title: SESSION_TENANT_GROUP,
     items: [
       {
@@ -191,7 +186,6 @@ const navigationGroups: Array<{
         tenantTab: "event-subscriptions",
         icon: BoltIcon,
       },
-      { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
     ],
   },
   {
@@ -202,6 +196,8 @@ const navigationGroups: Array<{
       // Health because "what do we hold" is the question operators open
       // the System group for; Health answers "is it up".
       { name: "Platform Stats", path: "/stats", icon: ChartBarSquareIcon },
+      // Billing spans every tenant: a platform page, not the session tenant's.
+      { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
       { name: "MCP server", path: "/mcp", icon: CommandLineIcon },
       {
