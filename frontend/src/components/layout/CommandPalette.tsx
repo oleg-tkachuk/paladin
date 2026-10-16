@@ -23,6 +23,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useActions } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
+import { useActingTenant } from "@/hooks/useActingTenant";
 import {
   tenantClient,
   bucketClient,
@@ -67,7 +68,10 @@ export function CommandPalette() {
     (r: SearchResult) => adminPlane || !r.href || !routeNeedsAdminPlane(r.href),
     [adminPlane],
   );
-  const { tenant: scopedTenant, collection: scopedCollection } = useScope();
+  const { collection: scopedCollection } = useScope();
+  // The tenant on screen, not the session's: its jumps lead into the
+  // workspace the operator is looking at (ADR-0033).
+  const scopedTenant = useActingTenant();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Resolve the URL handle for the active scoped tenant. Prefer

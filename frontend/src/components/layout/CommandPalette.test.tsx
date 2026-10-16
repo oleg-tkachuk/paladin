@@ -38,12 +38,21 @@ const h = vi.hoisted(() => ({
   roles: ["platform.admin"] as string[],
   tenant: undefined as
     { slug: string; tenantId: string; displayName: string } | undefined,
+  // The tenant the route is on, when it is a tenant's page.
+  routed: null as null | {
+    slug: string;
+    tenantId: string;
+    displayName: string;
+  },
 }));
 export type { Rows };
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: h.push }) }));
 vi.mock("@/context/ActionsContext", () => ({
   useActions: () => ({ actions: [] }),
+}));
+vi.mock("@/app/tenants/[id]/tenant-context", () => ({
+  useTenantOptional: () => h.routed,
 }));
 vi.mock("@/context/ScopeContext", () => ({
   useScope: () => ({ tenant: h.tenant }),
@@ -260,6 +269,18 @@ describe("CommandPalette chord labels", () => {
     expect(chordOf("Collections (cross-tenant)")).toBe(chord("k"));
     expect(chordOf("Resources")).toBe(chord("t"));
     expect(chordOf("Upload Assets")).toBe("");
+  });
+
+  // On another tenant's page the jumps lead into the tenant on screen, not
+  // into the session's (ADR-0033).
+  it("leads into the tenant on screen rather than the session's", () => {
+    h.tenant = ACME;
+    h.routed = { slug: "globex", tenantId: "t-g", displayName: "Globex" };
+    render(<CommandPalette />);
+    open();
+    expect(chordOf("Buckets in Globex")).toBe(chord("b"));
+    expect(screen.queryByText("Buckets in Acme")).toBeNull();
+    h.routed = null;
   });
 
   it("moves the labels to the tenant's pages while one is in scope", () => {
