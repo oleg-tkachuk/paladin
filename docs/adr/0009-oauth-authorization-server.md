@@ -69,6 +69,9 @@ may grant which scopes to which clients.
 - Audience binding is explicit: the access token's `aud` is the resource the
   client requested, so it works on exactly the plane(s) the MCP profile
   targets — same single-audience reality as today, now spec-driven.
+  *Superseded by [ADR-0036](0036-the-mcp-server-is-its-own-audience.md): the
+  MCP resource URL is issued `paladin-mcp`, which the MCP server exchanges
+  for each plane, so one session is no longer one plane.*
 - The server-rendered login/consent is intentionally minimal (no i18n). A
   polished Next.js consent page (`frontend/src/app/oauth/consent`) is a
   follow-up; the backend contract it posts to is stable.

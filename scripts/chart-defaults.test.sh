@@ -109,9 +109,14 @@ config:
           public: false
           client_secret_ref: mcp-oauth-string
         - client_id: agent
+  mcp:
+    oauth:
+      exchange:
+        client_id: mcp
+        client_secret_ref: {name: mcp-exchange-secret, key: client-secret}
 VALUES
 render oauth-clients -f "$scratch/oauth-clients-values.yaml"
-for name in mcp-oauth-object mcp-oauth-string; do
+for name in mcp-oauth-object mcp-oauth-string mcp-exchange-secret; do
     cases=$((cases + 1))
     rbac_names oauth-clients | grep -x "$name" >/dev/null || bad "oauth seed client: RBAC cannot read $name"
 done

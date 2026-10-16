@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -158,8 +159,38 @@ func provideMCPBridgeRunner(cfg config.Config, l *zap.Logger) mcpRunner {
 			// hand-editing JSON-RPC frames.
 			return makeClients(os.Getenv("PALADIN_MCP_TOKEN"), os.Getenv("PALADIN_MCP_CAPABILITY"))
 		},
-		httpClients: func() (*mcp.Clients, error) { return makeClients("", "") },
+		httpClients: func() (*mcp.Clients, error) {
+			return mcp.NewClientsWithCapability(httpc,
+				cfg.MCP.Upstreams.AdminURL, cfg.MCP.Upstreams.DataURL, cfg.MCP.Upstreams.IAMURL,
+				"", "", append(keyOpts, exchangeOptions(cfg.MCP, httpc, cfg.MCP.Upstreams.IAMURL)...)...)
+		},
 	}
+}
+
+// exchangeTokenURL is the configured token URL, or the IAM upstream's.
+func exchangeTokenURL(ex config.MCPOAuthExchange, iamURL string) string {
+	if ex.TokenURL != "" {
+		return ex.TokenURL
+	}
+	return strings.TrimSuffix(iamURL, "/") + oauth.TokenPath
+}
+
+// inlineExchange drops a configured token URL, which only the network
+// transport could reach.
+func inlineExchange(cfg config.MCP) config.MCP {
+	cfg.OAuth.Exchange.TokenURL = ""
+	return cfg
+}
+
+// exchangeOptions has the streamable-HTTP clients exchange each caller's
+// token per plane when mcp.oauth.exchange names a client (ADR-0036), at the
+// configured token URL or else the IAM upstream's. stdio is never exchanged.
+func exchangeOptions(cfg config.MCP, httpc *http.Client, iamURL string) []mcp.ClientOption {
+	if !cfg.OAuth.ExchangeEnabled() {
+		return nil
+	}
+	ex := mcp.NewExchanger(httpc, exchangeTokenURL(cfg.OAuth.Exchange, iamURL), cfg.OAuth.Exchange.ClientID, cfg.OAuth.Exchange.ClientSecret)
+	return []mcp.ClientOption{mcp.WithExchanger(ex)}
 }
 
 // provideMCPEmbeddedRunner co-hosts api/admin/iam handlers in this process and
@@ -198,7 +229,13 @@ func provideMCPEmbeddedRunner(
 		stdioClients: func() (*mcp.Clients, error) {
 			return makeInlineClients(os.Getenv("PALADIN_MCP_TOKEN"), os.Getenv("PALADIN_MCP_CAPABILITY"))
 		},
-		httpClients: func() (*mcp.Clients, error) { return makeInlineClients("", "") },
+		httpClients: func() (*mcp.Clients, error) {
+			// In process the AS is the inline IAM handler; a configured token
+			// URL names a network the inline transport does not dial.
+			inline := &http.Client{Transport: mcp.NewInlineTransport(inlineHandlers)}
+			return mcp.NewInlineClientsWithCapability(inlineHandlers, "", "",
+				append(keyOpts, exchangeOptions(inlineExchange(cfg.MCP), inline, mcp.InlineIAMURL)...)...)
+		},
 		onStop: func(context.Context) {
 			// Bounded (5s) fresh-context OTel flush — see the same note in the
 			// other roles: the fx OnStop context carries the 90s StopTimeout, so
@@ -363,7 +400,15 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 		metadataURL = oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL)
 	}
 	var mcpHandler http.Handler
-	if v := buildAgentVerifier(ctx, cfg.Auth, l); v != nil {
+	if cfg.MCP.OAuth.ExchangeEnabled() {
+		// The MCP server is its own audience (ADR-0036): it accepts
+		// paladin-mcp alone and exchanges it for each plane it calls.
+		v, verr := app.BuildVerifier(ctx, cfg.Auth, auth.AudienceMCP, l)
+		if verr != nil {
+			return fmt.Errorf("mcp: a token exchange needs a verifier for %s: %w", auth.AudienceMCP, verr)
+		}
+		mcpHandler = mcp.RequireBearer(tracked, v, metadataURL, mcp.OnlyMCPAudience())
+	} else if v := buildAgentVerifier(ctx, cfg.Auth, l); v != nil {
 		mcpHandler = mcp.RequireBearer(tracked, v, metadataURL)
 	} else {
 		// A thin bridge with no signing key or JWKS cannot verify; the planes

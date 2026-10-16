@@ -94,7 +94,15 @@ func jsonDocHandler(body []byte) http.Handler {
 // audience downstream. A Paladin API token (paladin_pat_…) is not a JWT and
 // is verified by the planes against their store, which this edge does not
 // hold; it passes here, identified by its hash.
-func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetadataURL string) http.Handler {
+//
+// With OnlyMCPAudience the edge is the one ADR-0036 describes: verifier
+// accepts paladin-mcp alone, and an API token — a plane credential — is
+// refused rather than forwarded.
+func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetadataURL string, opts ...EdgeOption) http.Handler {
+	var o edgeOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	bound := bindSession(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok := BearerToken(r)
@@ -103,7 +111,12 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 			return
 		}
 		info := &mcpauth.TokenInfo{UserID: credentialIdentity(tok)}
-		if !strings.HasPrefix(tok, apitoken.TokenPrefix) {
+		isAPIToken := strings.HasPrefix(tok, apitoken.TokenPrefix)
+		if isAPIToken && o.onlyMCPAudience {
+			writeChallenge(w, resourceMetadataURL, "invalid_token", "an API token is a plane's credential; authorize for "+auth.AudienceMCP)
+			return
+		}
+		if !isAPIToken {
 			p, err := verifier.Verify(r.Context(), tok)
 			if err != nil {
 				writeChallenge(w, resourceMetadataURL, "invalid_token", "the access token is missing, expired, or invalid")
@@ -117,6 +130,19 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 		}
 		bound.ServeHTTP(w, withTokenInfo(r, tok, info))
 	})
+}
+
+// EdgeOption tunes RequireBearer.
+type EdgeOption func(*edgeOptions)
+
+type edgeOptions struct {
+	onlyMCPAudience bool
+}
+
+// OnlyMCPAudience refuses every credential but a paladin-mcp token; the
+// verifier given RequireBearer must check that audience (ADR-0036).
+func OnlyMCPAudience() EdgeOption {
+	return func(o *edgeOptions) { o.onlyMCPAudience = true }
 }
 
 // RequireToken is the edge for a deployment with no way to verify a token —

@@ -223,6 +223,9 @@ func (c *Config) Validate() error {
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
 	}
+	if err := validateMCPExchange(c.MCP.OAuth); err != nil {
+		return fmt.Errorf("mcp.oauth.exchange: %w", err)
+	}
 	for _, sc := range c.Auth.OAuth.SeedClients {
 		if err := validateSeedClient(sc); err != nil {
 			return fmt.Errorf("auth.oauth.seed_clients[%s]: %w", sc.ClientID, err)
@@ -380,6 +383,27 @@ func validateSeedClient(sc OAuthSeedClient) error {
 		return errors.New("a confidential client needs client_secret or client_secret_ref")
 	case sc.TokenExchange && sc.Public:
 		return errors.New("token_exchange needs a confidential client")
+	}
+	return nil
+}
+
+// validateMCPExchange refuses an exchange the MCP server could not perform:
+// one with no secret, two of them, or one with OAuth off at the edge.
+func validateMCPExchange(o MCPOAuth) error {
+	ex := o.Exchange
+	if ex.ClientID == "" {
+		if ex.ClientSecret != "" || ex.ClientSecretRef != nil {
+			return errors.New("a client secret needs a client_id")
+		}
+		return nil
+	}
+	switch {
+	case ex.ClientSecret != "" && ex.ClientSecretRef != nil:
+		return errors.New("cannot specify both client_secret and client_secret_ref")
+	case ex.ClientSecret == "" && ex.ClientSecretRef == nil:
+		return errors.New("client_id needs client_secret or client_secret_ref")
+	case !o.Enabled:
+		return errors.New("needs mcp.oauth.enabled")
 	}
 	return nil
 }

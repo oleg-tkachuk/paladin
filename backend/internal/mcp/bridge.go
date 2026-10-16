@@ -78,6 +78,14 @@ type ClientOption func(*clientOptions)
 
 type clientOptions struct {
 	bridgeKey *BridgeKey
+	exchanger *Exchanger
+}
+
+// WithExchanger has every call made for an MCP request carry that request's
+// token exchanged for the plane called (ADR-0036). A call with no request —
+// stdio — still sends the Clients' default bearer, unexchanged.
+func WithExchanger(ex *Exchanger) ClientOption {
+	return func(o *clientOptions) { o.exchanger = ex }
 }
 
 // WithBridgeKey has the bridge prove possession of key on every call that
@@ -123,9 +131,13 @@ func NewClientsWithCapability(
 		opt(&o)
 	}
 	defaults := Credentials{Bearer: bearer, Capability: capabilityToken}
+	var tokens paladin.TokenSource = requestTokens{defaults: defaults}
+	if o.exchanger != nil {
+		tokens = exchangedTokens{defaults: defaults, ex: o.exchanger}
+	}
 	sdkOpts := []paladin.Option{
 		paladin.WithHTTPClient(httpc),
-		paladin.WithTokens(requestTokens{defaults: defaults}),
+		paladin.WithTokens(tokens),
 		paladin.WithCapabilitySource(func(ctx context.Context) string {
 			return credentialsFrom(ctx, defaults).Capability
 		}),
@@ -170,6 +182,29 @@ type requestTokens struct {
 func (s requestTokens) Token(ctx context.Context, _ string) (string, error) {
 	return credentialsFrom(ctx, s.defaults).Bearer, nil
 }
+
+// exchangedTokens is the TokenSource of a bridge that exchanges: the MCP
+// request's paladin-mcp token traded for the plane's audience. A call with no
+// MCP request behind it sends the default bearer as requestTokens does.
+type exchangedTokens struct {
+	defaults Credentials
+	ex       *Exchanger
+}
+
+func (s exchangedTokens) Token(ctx context.Context, audience string) (string, error) {
+	c, ok := ctx.Value(credentialsKey{}).(Credentials)
+	if !ok {
+		return s.defaults.Bearer, nil
+	}
+	if c.Bearer == "" {
+		return "", nil
+	}
+	return s.ex.Token(ctx, c.Bearer, audience)
+}
+
+// Invalidate drops the exchanged tokens for a plane that refused one, so the
+// SDK's retry exchanges afresh.
+func (s exchangedTokens) Invalidate(audience string) { s.ex.Invalidate(audience) }
 
 // NewServer constructs an MCP server with the Paladin tool / resource / prompt
 // catalog wired up. The ToolFilter selects which tools are registered;

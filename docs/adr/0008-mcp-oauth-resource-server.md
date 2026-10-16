@@ -49,6 +49,10 @@ unchanged when off):
   via a shared `buildAgentVerifier`, which also feeds the session-subject
   enrichment — one verifier, one policy.
 
+  *Superseded by [ADR-0036](0036-the-mcp-server-is-its-own-audience.md)
+  when `mcp.oauth.exchange` is set: the edge then requires `paladin-mcp` and
+  exchanges the token for each plane instead of forwarding it.*
+
 The capability model is untouched: OAuth authenticates the *principal*; the
 fine-grained `X-Paladin-Capability` caveat authority is still operator-provisioned
 and never self-minted (an agent issuing its own capability stays in

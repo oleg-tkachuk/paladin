@@ -1,8 +1,9 @@
 # ADR-0036: The MCP server is its own audience and exchanges the caller's token
 
-- **Status:** Proposed. Implementation is deferred work (BACKLOG, "The MCP
+- **Status:** Accepted. Implemented 2026-10-16, behind `mcp.oauth.exchange`;
+  recording the actor in the audit log is deferred work (BACKLOG, "The MCP
   server is its own audience").
-- **Related:** supersedes, once implemented, the "not audience" bullet of
+- **Related:** supersedes the "not audience" bullet of
   [ADR-0008](0008-mcp-oauth-resource-server.md) and the single-audience
   consequence of [ADR-0009](0009-oauth-authorization-server.md); builds on
   [ADR-0035](0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
@@ -24,7 +25,7 @@
   What Paladin already gets right stays: each plane authorizes the user, not
   a service account, so there is no confused deputy. The fix must keep that.
 
-- **Decision (proposed).**
+- **Decision.**
   1. **A new audience, `paladin-mcp`.** The Authorization Server issues it for
      the MCP server's resource URL (`mcp.oauth.resource_url`), as the RFC
      8707 resource indicator a compliant client sends. Today `audienceFor`

@@ -287,6 +287,11 @@ services:
     init: true
     restart: on-failure
     command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
+    # The MCP server's upstreams in backend/configs/compose.yaml name the
+    # dev-loop stack's hosts.
+    networks:
+      default:
+        aliases: [paladin-api]
     ports:
       - "${PALADIN_E2E_PORT_DATA:-8083}:8080" # data
       - "${PALADIN_E2E_PORT_IAM:-8085}:8085" # iam
@@ -308,12 +313,31 @@ services:
     init: true
     restart: on-failure
     command: ["serve", "admin", "--config", "/app/configs/compose.yaml"]
+    networks:
+      default:
+        aliases: [paladin-admin]
     ports:
       - "${PALADIN_E2E_PORT_ADMIN:-8090}:8090"
     depends_on:
       bootstrap:
         condition: service_completed_successfully
     # Distroless image — no in-container HTTP probe possible (see api).
+
+  # The streamable-HTTP MCP server, its own audience (ADR-0036): it exchanges
+  # each agent's paladin-mcp token at the api's IAM listener
+  # (tests/e2e/mcp-exchange.spec.ts).
+  mcp:
+    <<: *paladin-base
+    init: true
+    restart: on-failure
+    command: ["serve", "mcp", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "${PALADIN_E2E_PORT_MCP:-8095}:8095"
+    depends_on:
+      api:
+        condition: service_started
+      admin:
+        condition: service_started
 
   ui:
     # Reuse the locally-built UI image; the dev-loop pipeline

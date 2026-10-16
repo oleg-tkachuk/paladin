@@ -626,6 +626,13 @@ mcp: {
       registration_endpoint:  string | *""
       jwks_uri:               string | *""
     }
+    // RFC 8693 exchange per plane (ADR-0036). Empty client_id: off.
+    exchange: {
+      client_id:          string | *""
+      client_secret:      string | *""
+      client_secret_ref?: #SecretRef
+      token_url:          string | *""
+    }
   }
   // The bridge's DPoP key (PEM PKCS#8, Ed25519 or P-256), for capabilities
   // delegated to it. Inline for dev, dpop_key_secret otherwise.

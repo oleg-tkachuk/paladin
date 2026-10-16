@@ -208,7 +208,7 @@ it render exactly as before.
 {{/*
 chart.secretReaderNames — every Secret the in-process resolver GETs: the
 static rbac.secretReader.secretNames, plus each one this chart wires itself
-and each OAuth seed client's client_secret_ref,
+and each OAuth seed client's client_secret_ref and the MCP server's,
 so an operator who replaces the static list cannot drop a Secret the chart
 depends on. Returns a JSON list.
 */}}
@@ -231,6 +231,14 @@ depends on. Returns a JSON list.
 {{- else -}}
 {{- $names = append $names .name -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $mcpOAuth := ((.Values.config.mcp | default dict).oauth | default dict) -}}
+{{- with ($mcpOAuth.exchange | default dict).client_secret_ref -}}
+{{- if kindIs "string" . -}}
+{{- $names = append $names . -}}
+{{- else -}}
+{{- $names = append $names .name -}}
 {{- end -}}
 {{- end -}}
 {{- $pg := fromJson (include "chart.postgres" .) -}}

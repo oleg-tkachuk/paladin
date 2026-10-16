@@ -122,8 +122,15 @@ auth:
       - client_id: "paladin-e2e-agent"
         redirect_uris: ["https://e2e-agent.invalid/callback"]
         allowed_scopes: ["paladin.read", "paladin.write"]
-        allowed_audiences: ["paladin-admin", "paladin-data"]
+        allowed_audiences: ["paladin-admin", "paladin-data", "paladin-mcp"]
         public: true
+      # The MCP server, exchanging the agent's paladin-mcp token for each
+      # plane (ADR-0036, tests/e2e/mcp-exchange.spec.ts). The secret is this
+      # throwaway stack's and nothing else's.
+      - client_id: "paladin-mcp-server"
+        public: false
+        client_secret: "compose-mcp-exchange-secret"
+        token_exchange: true
 
 # Bootstrap on first boot. Running `paladin bootstrap` once with this
 # config provisions a `platform/admin` user + the primary storage
@@ -230,6 +237,15 @@ mcp:
     addr: "0.0.0.0:8095"
     profile: agent_safe
     session_timeout: 10m
+  # The MCP server is its own audience (ADR-0036): it accepts paladin-mcp
+  # tokens only and exchanges each as the seed client above. resource_url is
+  # the URL the e2e suite reaches it at.
+  oauth:
+    enabled: true
+    resource_url: "http://localhost:8095/mcp"
+    exchange:
+      client_id: "paladin-mcp-server"
+      client_secret: "compose-mcp-exchange-secret"
 
 # Subsystems disabled by default in the smoke stack — they're config-
 # driven and orthogonal to the "stack composes" claim. Enable per

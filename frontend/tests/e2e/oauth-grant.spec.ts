@@ -12,17 +12,18 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
 import { SEEDED_ADMIN } from "./fixtures/credentials";
-import { ADMIN_URL, IAM_URL, seedAdminTenantID } from "./fixtures/seed";
-
-// The client backend/configs/compose.yaml seeds (and the dev cluster's values).
-const CLIENT_ID = "paladin-e2e-agent";
-const REDIRECT_URI = "https://e2e-agent.invalid/callback";
-const SCOPE_READ = "paladin.read";
-const SCOPE_WRITE = "paladin.write";
-const AUDIENCE_ADMIN = "paladin-admin";
-
-// RFC 7636 allows 43–128 characters; the verifier only has to match itself.
-const PKCE_VERIFIER = "e2e-verifier-".padEnd(64, "x");
+import {
+  AUDIENCE_ADMIN,
+  CLIENT_ID,
+  HTTP_BAD_REQUEST,
+  HTTP_OK,
+  SCOPE_READ,
+  SCOPE_WRITE,
+  claims,
+  grant,
+  type TokenResponse,
+} from "./fixtures/oauth";
+import { ADMIN_URL, IAM_URL } from "./fixtures/seed";
 
 // A read the admin plane serves to a platform admin, and a write whose empty
 // request is refused by validation — after the scope check, so the two codes
@@ -30,70 +31,6 @@ const PKCE_VERIFIER = "e2e-verifier-".padEnd(64, "x");
 const READ_RPC = "/paladin.admin.v1.BackendService/ListBackends";
 const WRITE_RPC = "/paladin.admin.v1.CollectionService/CreateCollection";
 const LOGIN_RPC = "/paladin.iam.v1.AuthService/Login";
-
-const HTTP_FOUND = 302;
-const HTTP_OK = 200;
-const HTTP_BAD_REQUEST = 400;
-
-interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  scope?: string;
-}
-
-async function pkceChallenge(verifier: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(verifier),
-  );
-  return Buffer.from(digest).toString("base64url");
-}
-
-function claims(token: string): Record<string, unknown> {
-  return JSON.parse(
-    Buffer.from(token.split(".")[1], "base64url").toString("utf8"),
-  );
-}
-
-/** Consent as the seeded admin and exchange the code. */
-async function grant(
-  request: APIRequestContext,
-  scopes: string[],
-): Promise<TokenResponse> {
-  const authorize = await request.post(`${IAM_URL}/oauth/authorize`, {
-    form: {
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      scope: scopes.join(" "),
-      resource: AUDIENCE_ADMIN,
-      code_challenge: await pkceChallenge(PKCE_VERIFIER),
-      code_challenge_method: "S256",
-      state: "e2e",
-      action: "allow",
-      username: SEEDED_ADMIN.subject,
-      password: SEEDED_ADMIN.password,
-      tenant: await seedAdminTenantID(),
-    },
-    maxRedirects: 0,
-  });
-  expect(authorize.status(), await authorize.text()).toBe(HTTP_FOUND);
-  const code = new URL(authorize.headers()["location"]).searchParams.get(
-    "code",
-  );
-  expect(code, "the redirect carries a code").toBeTruthy();
-
-  const token = await request.post(`${IAM_URL}/oauth/token`, {
-    form: {
-      grant_type: "authorization_code",
-      code: code as string,
-      client_id: CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
-      code_verifier: PKCE_VERIFIER,
-    },
-  });
-  expect(token.status(), await token.text()).toBe(HTTP_OK);
-  return (await token.json()) as TokenResponse;
-}
 
 /** The Connect error code of a unary JSON call, or "ok". */
 async function call(

@@ -12,6 +12,12 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 )
 
+// The endpoints Mount serves.
+const (
+	AuthorizePath = "/oauth/authorize"
+	TokenPath     = "/oauth/token" // #nosec G101 -- an endpoint path, not a credential
+)
+
 // The grant types /oauth/token serves, and the RFC 8693 token type it
 // exchanges.
 const (

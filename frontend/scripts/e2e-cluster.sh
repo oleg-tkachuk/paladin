@@ -34,6 +34,11 @@ ADMIN_SUBJECT="${ADMIN_SUBJECT:-admin}"
 # The admin Service's port, and the local one it is forwarded to.
 readonly ADMIN_SERVICE_PORT=8090
 readonly ADMIN_LOCAL_PORT="${ADMIN_LOCAL_PORT:-28190}"
+# The MCP Service's port and the local one it is forwarded to: like the admin
+# plane, the MCP server has no route through the ingress here.
+readonly MCP_SERVICE_PORT=8095
+readonly MCP_LOCAL_PORT="${MCP_LOCAL_PORT:-28195}"
+readonly MCP_PATH=/mcp
 # How long the forward gets to start answering.
 readonly FORWARD_WAIT_SECONDS=15
 readonly REACH_TIMEOUT_SECONDS=8
@@ -85,11 +90,24 @@ if [[ -z "$admin_url" ]]; then
     fi
 fi
 
+# The MCP server, reached through a forward of its own. The resource URL it
+# is configured as is what an agent authorizes for, whatever host reaches it.
+mcp_url="${MCP_URL:-}"
+if [[ -z "$mcp_url" ]]; then
+    "${kube[@]}" port-forward svc/paladin-core-mcp "${MCP_LOCAL_PORT}:${MCP_SERVICE_PORT}" >/dev/null 2>&1 &
+    mcp_forward_pid=$!
+    trap 'kill "${forward_pid:-}" "$mcp_forward_pid" 2>/dev/null || true' EXIT
+    mcp_url="http://localhost:${MCP_LOCAL_PORT}${MCP_PATH}"
+fi
+mcp_resource="${MCP_RESOURCE:-$("${kube[@]}" get configmap paladin-core-config -o jsonpath='{.data.config\.yaml}' |
+    yq -r '.mcp.oauth.resource_url // ""')}"
+
 echo "── e2e against cluster ──"
 echo "   ui:    https://${BASE_HOST}"
 echo "   iam:   https://${API_HOST}"
 echo "   data:  https://${API_HOST}"
 echo "   admin: ${admin_url}"
+echo "   mcp:   ${mcp_url} (resource ${mcp_resource:-unset})"
 echo "   as:    ${ADMIN_SUBJECT}"
 
 # The cluster serves an internal-CA certificate. Node's own trust store does
@@ -100,6 +118,8 @@ export PALADIN_E2E_BASE_URL="https://${BASE_HOST}"
 export PALADIN_E2E_IAM_URL="https://${API_HOST}"
 export PALADIN_E2E_DATA_URL="https://${API_HOST}"
 export PALADIN_E2E_ADMIN_URL="$admin_url"
+export PALADIN_E2E_MCP_URL="$mcp_url"
+[[ -n "$mcp_resource" ]] && export PALADIN_E2E_MCP_RESOURCE="$mcp_resource"
 export PALADIN_E2E_ADMIN_SUBJECT="$ADMIN_SUBJECT"
 export PALADIN_E2E_ADMIN_PASSWORD="$password"
 # The cluster runs the worker, so teardown can remove a bucket from its

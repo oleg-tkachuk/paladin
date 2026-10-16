@@ -8,6 +8,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	apitoken "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
@@ -133,4 +138,50 @@ func TestRequireBearer(t *testing.T) {
 			t.Fatalf("status = %d, want 200 (X-Paladin-Token back-compat)", rec.Code)
 		}
 	})
+}
+
+// The ADR-0036 edge: a paladin-mcp token opens a session; a plane token and
+// an API token, which work against the planes directly, do not.
+func TestRequireBearer_OnlyMCPAudience(t *testing.T) {
+	const key = "edge-test-signing-key-32-bytes-long!!"
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(key), AccessTokenTTL: time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mint := func(audience string) string {
+		tok, _, err := iss.MintAccess(issuer.AccessClaims{Subject: "u", TenantID: uuid.New(), Audience: audience, OAuthClientID: "agent"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+	verifier := &auth.JWTVerifier{Key: []byte(key), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceMCP}
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	strict := RequireBearer(next, verifier, "", OnlyMCPAudience())
+	lenient := RequireBearer(next, verifier, "")
+
+	status := func(h http.Handler, tok string) int {
+		rec := httptest.NewRecorder()
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+	apiToken := apitoken.TokenPrefix + "abc"
+	for _, tc := range []struct {
+		name string
+		h    http.Handler
+		tok  string
+		want int
+	}{
+		{"paladin-mcp", strict, mint(auth.AudienceMCP), http.StatusOK},
+		{"a plane token", strict, mint(auth.AudienceData), http.StatusUnauthorized},
+		{"an admin token", strict, mint(auth.AudienceAdmin), http.StatusUnauthorized},
+		{"an API token", strict, apiToken, http.StatusUnauthorized},
+		{"an API token, legacy edge", lenient, apiToken, http.StatusOK},
+	} {
+		if got := status(tc.h, tc.tok); got != tc.want {
+			t.Errorf("%s: status = %d, want %d", tc.name, got, tc.want)
+		}
+	}
 }

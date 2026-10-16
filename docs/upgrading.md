@@ -44,6 +44,20 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the MCP server exchanges the caller's token
+
+[ADR-0036](adr/0036-the-mcp-server-is-its-own-audience.md), behind
+`mcp.oauth.exchange`.
+
+- **Breaking, behaviour, once enabled.** Set `mcp.oauth.exchange.client_id`
+  and its secret, matching a seed client with `token_exchange: true`, and the
+  streamable-HTTP MCP server accepts `paladin-mcp` tokens only: a plane token,
+  an API token and `X-Paladin-Token` with either are refused with 401. An
+  agent authorizes for `mcp.oauth.resource_url`, and its client's
+  `allowed_audiences` must list `paladin-mcp`.
+- One session then reaches every plane; stdio is unchanged.
+- Without `mcp.oauth.exchange` the MCP server behaves as before.
+
 ## Unreleased — the OAuth server issues paladin-mcp and exchanges it
 
 [ADR-0036](adr/0036-the-mcp-server-is-its-own-audience.md), the
