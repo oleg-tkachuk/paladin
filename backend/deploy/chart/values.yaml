@@ -1399,6 +1399,8 @@ traefik:
       # The OAuth Authorization Server's raw-HTTP endpoints (ADR-0009) are
       # served by the IAM listener too, outside the procedure prefix.
       oauthPathPrefix: /oauth/
+      # Its RFC 8414 metadata, at the origin the issuer names.
+      oauthMetadataPath: /.well-known/oauth-authorization-server
       port: 8085   # served by the api role
     admin:
       pathPrefix: /paladin.admin.v1.
@@ -1450,6 +1452,8 @@ ingress:
     # The OAuth Authorization Server's endpoints (ADR-0009), on the same
     # listener. Matched as a Prefix: /oauth is a whole path segment.
     oauthPath: /oauth
+    # Its RFC 8414 metadata, matched Exact.
+    oauthMetadataPath: /.well-known/oauth-authorization-server
     port: 8085
   data:
     port: 8080

@@ -496,6 +496,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			as = as.WithTokenExchange(verifierMCP, exchangers)
 		}
 		as.Mount(iamMux)
+		// The metadata at the AS's own origin, where RFC 8414 puts it; the MCP
+		// server serves the same document for a same-origin deployment.
+		if asMeta := cfg.MCP.OAuth.AuthorizationServer; asMeta.Issuer != "" {
+			iamMux.Handle(oauth.WellKnownAuthorizationServer, oauth.MetadataHandler(asMeta, cfg.Auth.OAuth.TokenExchangeEnabled()))
+		}
 		l.Info("oauth authorization server enabled", zap.Int("seed_clients", len(cfg.Auth.OAuth.SeedClients)))
 	}
 

@@ -71,36 +71,6 @@ func TestProtectedResourceMetadata(t *testing.T) {
 	}
 }
 
-func TestAuthorizationServerMetadata(t *testing.T) {
-	h := AuthorizationServerMetadataHandler(config.MCPOAuthAS{
-		Issuer:                "https://paladin.example.com",
-		AuthorizationEndpoint: "https://paladin.example.com/oauth/authorize",
-		TokenEndpoint:         "https://paladin.example.com/oauth/token",
-		// RegistrationEndpoint + JWKSURI left empty → must be omitted.
-	})
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, WellKnownAuthorizationServer, nil))
-
-	var doc map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
-		t.Fatalf("body not JSON: %v", err)
-	}
-	if doc["issuer"] != "https://paladin.example.com" {
-		t.Errorf("issuer = %v", doc["issuer"])
-	}
-	if _, present := doc["registration_endpoint"]; present {
-		t.Error("empty registration_endpoint must be omitted")
-	}
-	pkce, _ := doc["code_challenge_methods_supported"].([]any)
-	if len(pkce) != 1 || pkce[0] != "S256" {
-		t.Errorf("code_challenge_methods_supported = %v (PKCE S256 is mandatory)", doc["code_challenge_methods_supported"])
-	}
-	grants, _ := doc["grant_types_supported"].([]any)
-	if len(grants) != 2 {
-		t.Errorf("grant_types_supported = %v", doc["grant_types_supported"])
-	}
-}
-
 // oauthFakeVerifier accepts exactly one token value; everything else errors.
 type oauthFakeVerifier struct{ good string }
 

@@ -266,6 +266,7 @@ check "ingress: iam to the iam port" "$(ingress ingress '.spec.rules[0].http.pat
 # ingress_port <name> <path> — the port the Ingress sends that path to.
 ingress_port() { ingress "$1" '.spec.rules[0].http.paths[] | select(.path == "'"$2"'") | .backend.service.port.number'; }
 check "ingress: OAuth to the iam port" "$(ingress_port ingress /oauth)" "8085"
+check "ingress: OAuth metadata to the iam port" "$(ingress_port ingress /.well-known/oauth-authorization-server)" "8085"
 check "ingress: the rest to the data port" "$(ingress_port ingress /)" "8080"
 check "ingress: plain backends need no protocol annotation" \
     "$(ingress ingress '.metadata.annotations["caddy.ingress.kubernetes.io/backend-protocol"] // "none"')" "none"
@@ -294,7 +295,7 @@ route_port() {
         "$scratch/$1.yaml"
 }
 check "traefik: OAuth to the iam port" \
-    "$(route_port traefik 'Host(`api.example.com`) && PathPrefix(`/oauth/`)')" "8085"
+    "$(route_port traefik 'Host(`api.example.com`) && (PathPrefix(`/oauth/`) || Path(`/.well-known/oauth-authorization-server`))')" "8085"
 check "traefik: iam RPCs to the iam port" \
     "$(route_port traefik 'Host(`api.example.com`) && PathPrefix(`/paladin.iam.v1.`)')" "8085"
 check "traefik: the rest to the data port" "$(route_port traefik 'Host(`api.example.com`)')" "8080"

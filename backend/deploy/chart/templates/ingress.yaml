@@ -1,6 +1,7 @@
 {{- /*
 A standard Ingress for the api role: the IAM plane under ingress.iam.path and
-its OAuth endpoints under ingress.iam.oauthPath, the data plane for everything else. The admin plane gets no public route, as with
+its OAuth endpoints under ingress.iam.oauthPath and their metadata at
+ingress.iam.oauthMetadataPath, the data plane for everything else. The admin plane gets no public route, as with
 the Traefik IngressRoute; expose it separately behind whatever guards it.
 
 The defaults target the Caddy ingress controller: its path matcher takes
@@ -49,6 +50,13 @@ spec:
                   number: {{ $ing.iam.port }}
           - path: {{ $ing.iam.oauthPath }}
             pathType: Prefix
+            backend:
+              service:
+                name: {{ $apiFullname }}
+                port:
+                  number: {{ $ing.iam.port }}
+          - path: {{ $ing.iam.oauthMetadataPath }}
+            pathType: Exact
             backend:
               service:
                 name: {{ $apiFullname }}

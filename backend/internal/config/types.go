@@ -364,6 +364,20 @@ type OAuthAS struct {
 }
 
 // OAuthSeedClient is a pre-registered (usually public / PKCE) OAuth client.
+// TokenExchangeEnabled reports whether the RFC 8693 grant is served: the AS
+// is on and a seed client may call it (ADR-0036).
+func (o OAuthAS) TokenExchangeEnabled() bool {
+	if !o.Enabled {
+		return false
+	}
+	for _, sc := range o.SeedClients {
+		if sc.TokenExchange {
+			return true
+		}
+	}
+	return false
+}
+
 type OAuthSeedClient struct {
 	ClientID         string   `yaml:"client_id" json:"client_id"`
 	RedirectURIs     []string `yaml:"redirect_uris" json:"redirect_uris"`
