@@ -44,7 +44,21 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — every bucket has a tenant owner, and sharing is granted
+## Unreleased — an object list shows live objects unless asked for others
+
+- **Breaking, behaviour.** `ListObjects` and `CountObjects` whose filter names
+  no `state` leave trashed (`DELETED`) objects out; a collection's objects no
+  longer list beside them what its trash lists. Ask for them by naming the
+  state: `state == "DELETED"` for the trash, `state in ["AVAILABLE",
+  "DELETED"]` for both. Migration 081 replaces `search_object_ids` with a
+  signature that takes the choice.
+- **`ListCollections` with an empty `parent`** lists every tenant's
+  collections for a platform admin; anyone else still gets their own
+  tenant's. Its page token now carries the tenant as well as the name, so a
+  list across tenants pages without losing rows; a token issued before still
+  resumes within its tenant.
+
+## v36.0.0 — every bucket has a tenant owner, and sharing is granted
 
 [ADR-0032](adr/0032-every-bucket-has-a-tenant-owner.md).
 

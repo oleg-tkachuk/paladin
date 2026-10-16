@@ -31,7 +31,7 @@ import (
 func searchIDs(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant uuid.UUID, collection, tags string) ([]uuid.UUID, error) {
 	t.Helper()
 	rows, err := pool.Query(ctx,
-		`SELECT search_object_ids($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, 1000)`,
+		`SELECT search_object_ids($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, 1000, false)`,
 		tenant, collection, nil, nil, nil, nil, nil, tags, nil, nil)
 	if err != nil {
 		return nil, err
@@ -371,4 +371,64 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// An object list whose filter names no state lists the live objects; the
+// trash is asked for by naming DELETED. Before 081 a collection's objects
+// showed its trashed ones beside the live, as its trash tab does.
+func TestListObjects_LiveUnlessStateIsNamed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+	seedBucketRow(t, ctx, admin)
+	seedCollectionFor(t, ctx, admin, tenant, "docs")
+	const live, trashed = 3, 2
+	mustExec(t, ctx, admin, `
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
+		SELECT $1, c.id, 'live-' || g, 'AVAILABLE', 'text/plain'
+		  FROM generate_series(1, $2::int) g
+		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant, live)
+	mustExec(t, ctx, admin, `
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
+		SELECT $1, c.id, 'gone-' || g, 'DELETED', 'text/plain'
+		  FROM generate_series(1, $2::int) g
+		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant, trashed)
+	pool := rlsPool(t, ctx, admin)
+	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
+	asTenant := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant})
+
+	for _, tc := range []struct {
+		filter string
+		want   int
+	}{
+		{``, live},
+		{`key.startsWith("")`, live},
+		{`state == "DELETED"`, trashed},
+		{`state in ["AVAILABLE", "DELETED"]`, live + trashed},
+		{`state != "PENDING"`, live + trashed},
+	} {
+		var program cel.Program
+		if tc.filter != "" {
+			program = must(cel.NewEvaluator().Compile(cel.ObjectSchema, tc.filter))
+		}
+		objs, _, err := repo.ListObjects(asTenant, objecth.ListObjectsArgs{
+			TenantID: tenant, Collection: "docs", PageSize: 10, CompiledCEL: program, Filter: tc.filter,
+		})
+		if err != nil {
+			t.Fatalf("ListObjects(%q): %v", tc.filter, err)
+		}
+		if len(objs) != tc.want {
+			t.Errorf("ListObjects(%q): %d objects, want %d", tc.filter, len(objs), tc.want)
+		}
+		n, _, err := repo.CountObjects(asTenant, objecth.CountObjectsArgs{
+			TenantID: tenant, Collection: "docs", CompiledCEL: program, Filter: tc.filter,
+		})
+		if err != nil {
+			t.Fatalf("CountObjects(%q): %v", tc.filter, err)
+		}
+		if n != int64(tc.want) {
+			t.Errorf("CountObjects(%q) = %d, want %d — the count must match the list", tc.filter, n, tc.want)
+		}
+	}
 }

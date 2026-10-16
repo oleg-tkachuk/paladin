@@ -242,7 +242,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 	}
 
 	rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection,
-		objectBranchHints(args.Filter), afterID, pageSize)
+		objectBranchHints(args.Filter), liveObjectsOnly(args.Filter), afterID, pageSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("list objects: %w", err)
 	}
@@ -279,7 +279,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		var n int64
 		err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
 			var err error
-			n, err = q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, nil)
+			n, err = q.CountObjects(ctx, pgUUID(args.TenantID), args.Collection, nil, true)
 			return err
 		})
 		if err != nil {
@@ -299,7 +299,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		afterID uuid.UUID
 	)
 	for {
-		rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection, branches, afterID, pageSize)
+		rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection, branches, liveObjectsOnly(args.Filter), afterID, pageSize)
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects scan: %w", err)
 		}
@@ -320,6 +320,18 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 	}
 }
 
+// objectStateField is the ObjectSchema field holding an object's state.
+const objectStateField = "state"
+
+// liveObjectsOnly reports whether a list under filter leaves trashed objects
+// out: it does unless the filter names state, which is how the trash, or a
+// caller who wants both, asks for them. A filter that does not parse names
+// nothing here; the compiled program rejects it before any row is read.
+func liveObjectsOnly(filter string) bool {
+	mentions, err := cel.ObjectFilterMentions(filter, objectStateField)
+	return err == nil && !mentions
+}
+
 // candidates returns one keyset page of objects that may match: those
 // after afterID, in id order, admitted by at least one branch.
 //
@@ -329,7 +341,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 // more reports that rows may follow next; next is the cursor for them.
 func (r *ObjectRepo) candidates(
 	ctx context.Context, tenantID uuid.UUID, collection string,
-	branches []objectHints, afterID uuid.UUID, pageSize int32,
+	branches []objectHints, liveOnly bool, afterID uuid.UUID, pageSize int32,
 ) (rows []sqlc.ListObjectsRow, next uuid.UUID, more bool, err error) {
 	err = r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
 		rows, next, more = nil, uuid.UUID{}, false
@@ -339,7 +351,7 @@ func (r *ObjectRepo) candidates(
 				h.state, h.prefix, h.substr,
 				h.contentType, h.contentTypePrefix,
 				h.tags, h.metadata,
-				pgUUID(afterID), pageSize)
+				pgUUID(afterID), pageSize, liveOnly)
 			if err != nil {
 				return err
 			}
