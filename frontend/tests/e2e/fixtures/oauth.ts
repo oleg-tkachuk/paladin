@@ -15,6 +15,9 @@ export const SCOPE_READ = "paladin.read";
 export const SCOPE_WRITE = "paladin.write";
 export const AUDIENCE_ADMIN = "paladin-admin";
 export const AUDIENCE_MCP = "paladin-mcp";
+// The MCP server's own OAuth client (compose and the dev cluster seed it), the
+// `act` of every token it exchanges and so the audit log's relayed_by.
+export const MCP_SERVER_CLIENT_ID = "paladin-mcp-server";
 
 // RFC 7636 allows 43–128 characters; the verifier only has to match itself.
 const PKCE_VERIFIER = "e2e-verifier-".padEnd(64, "x");

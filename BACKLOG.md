@@ -84,16 +84,11 @@ the same commit. Treat this file like a runtime invariant.
   [ADR-0036](docs/adr/0036-the-mcp-server-is-its-own-audience.md) is
   implemented behind `mcp.oauth.exchange` and runs in the compose stack and
   on the dev cluster.
-- **Reason:** two pieces are left. The audit log records who called but not
-  that the MCP server relayed it: the exchanged token's `act` claim reaches
-  the principal (`Principal.Actor`) and stops there, since storing it means
-  a column on the audit log and a field on its API. And the console consent
-  page posts to `/oauth/authorize` on the console's own origin, which routes
-  nowhere when `auth.oauth.consent_url` points at it.
-- **Definition of Done:** an audit entry made through the MCP server names
-  the relaying client, shown in the console's audit view; the consent page
-  reaches the IAM origin's `/oauth/authorize`, with an e2e test through the
-  page.
+- **Reason:** one piece is left: the console consent page posts to
+  `/oauth/authorize` on the console's own origin, which routes nowhere when
+  `auth.oauth.consent_url` points at it.
+- **Definition of Done:** the consent page reaches the IAM origin's
+  `/oauth/authorize`, with an e2e test through the page.
 - **Blockers:** none.
 
 ### The console shows the MCP server's newer contract
