@@ -187,6 +187,30 @@ func TestListAuditLogSearchesTextFields(t *testing.T) {
 	}
 }
 
+// relayed_by selects the calls an agent made through the MCP server, and the
+// console's search finds them by the client's name too (ADR-0036).
+func TestListAuditLogFiltersByRelay(t *testing.T) {
+	const mcpServer = "paladin-mcp-server"
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	direct := mkEntry(t0)
+	relayed := mkEntry(t0.Add(time.Second))
+	relayed.RelayedBy = mcpServer
+	for _, filter := range []string{
+		`relayed_by == "` + mcpServer + `"`,
+		`search.contains("` + mcpServer + `")`,
+	} {
+		repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{direct, relayed}}}
+		h := NewHandler(repo, allowAuthorizer{})
+		got, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t), admindomain.ListAuditArgs{PageSize: 50}, filter)
+		if err != nil {
+			t.Fatalf("%s: %v", filter, err)
+		}
+		if len(got) != 1 || got[0].EntryID != relayed.EntryID {
+			t.Errorf("%s: got %d entries, want only the relayed one", filter, len(got))
+		}
+	}
+}
+
 func TestListAuditLogRejectsBadFilter(t *testing.T) {
 	repo := &fakeAuditRepo{}
 	h := NewHandler(repo, allowAuthorizer{})

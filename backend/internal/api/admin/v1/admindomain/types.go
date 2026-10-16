@@ -229,6 +229,11 @@ type AuditEntry struct {
 	// by request_id.
 	CapabilityID uuid.UUID
 
+	// RelayedBy is the OAuth client that relayed the call on the actor's
+	// behalf — the MCP server, from the `act` claim of the token it exchanged
+	// (ADR-0036). Empty for a call made directly.
+	RelayedBy string
+
 	// ResourceTenantID is the tenant the action was done to, as read back
 	// from the log. Writers leave it unset; it is derived from ResourceName
 	// on insert (ResourceTenant). uuid.Nil when the name carries none.

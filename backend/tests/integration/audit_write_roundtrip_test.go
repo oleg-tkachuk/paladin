@@ -43,6 +43,7 @@ func auditFixture(tenantID uuid.UUID) admindomain.AuditEntry {
 		BeforeJSON:    []byte(`{"side":"before"}`),
 		AfterJSON:     []byte(`{"side":"after"}`),
 		CapabilityID:  uuid.Must(uuid.NewV7()),
+		RelayedBy:     "relayed-by",
 	}
 }
 
@@ -63,6 +64,7 @@ func assertAuditEntry(t *testing.T, got, want admindomain.AuditEntry, via string
 		{"SourceIP", got.SourceIP, want.SourceIP},
 		{"ErrorMessage", got.ErrorMessage, want.ErrorMessage},
 		{"CapabilityID", got.CapabilityID, want.CapabilityID},
+		{"RelayedBy", got.RelayedBy, want.RelayedBy},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
