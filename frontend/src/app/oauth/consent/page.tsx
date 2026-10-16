@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/Card";
+import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 
 /**
  * OAuth 2.1 consent page (ADR-0009). The backend /oauth/authorize GET
@@ -58,14 +59,26 @@ function ConsentForm() {
           </p>
         </div>
 
-        {!skipConsent && scopes.length > 0 ? (
+        {!skipConsent ? (
           <div className="space-y-1.5">
-            <p className="text-sm font-medium">This will allow it to:</p>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              {scopes.map((s) => (
-                <li key={s}>{s}</li>
-              ))}
-            </ul>
+            {scopes.length > 0 ? (
+              <>
+                <p className="text-sm font-medium">This will allow it to:</p>
+                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                  {scopes.map((s) => (
+                    <li key={s}>
+                      {describeOAuthScope(s)}{" "}
+                      <code className="text-xs">{s}</code>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            {grantsWrite(scopes) ? null : (
+              <p className="text-sm text-muted-foreground">
+                It will not be able to change anything.
+              </p>
+            )}
           </div>
         ) : null}
 
