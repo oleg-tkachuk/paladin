@@ -114,3 +114,27 @@ describe("spansBackends", () => {
     expect(spansBackends([bucket(), bucket({ backendId: "x" })])).toBe(true);
   });
 });
+
+describe("BucketTable long names", () => {
+  // A display name is free text; a long one widened the table until the
+  // state and the actions left the screen.
+  it("keeps owner and grantee names to one cut line, the full text on hover", () => {
+    const long = "x".repeat(200);
+    const named = new Map([[OWNER, { slug: "o", displayName: long }]]);
+    render(
+      <BucketTable
+        buckets={[bucket({ grantedTenantIds: [OWNER] })]}
+        tenants={named}
+        loading={false}
+        error={null}
+        onRetry={vi.fn()}
+        empty=""
+      />,
+    );
+    const owner = screen.getByRole("link", { name: long });
+    expect(owner.className).toMatch(/\btruncate\b/);
+    const shared = screen.getAllByText(long).find((el) => el !== owner)!;
+    expect(shared.className).toMatch(/\btruncate\b/);
+    expect(shared).toHaveAttribute("title", long);
+  });
+});

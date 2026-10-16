@@ -35,6 +35,12 @@ export const GRANTEES_NAMED = 2;
 export const NOT_SHARED_LABEL = "owner only";
 /** How many skeleton rows stand in while the first page loads. */
 const SKELETON_ROWS = 3;
+/**
+ * A cell of tenant names: one line, cut with an ellipsis, the full text on
+ * hover. A tenant's display name is free text, and a long one widened the
+ * table until its state and actions left the screen.
+ */
+const NAME_CELL_CLASS = "block max-w-56 truncate";
 /** The columns every row has: bucket, owner, shared with, state. */
 const FIXED_COLUMNS = 4;
 
@@ -256,7 +262,7 @@ function BucketRow({
           <Link
             href={tenantHref(b.ownerTenantId)}
             title={b.ownerTenantId}
-            className="truncate text-sm hover:text-primary"
+            className={cn(NAME_CELL_CLASS, "text-sm hover:text-primary")}
           >
             {tenantLabel(tenants, b.ownerTenantId)}
           </Link>
@@ -267,6 +273,7 @@ function BucketRow({
           <span className="text-muted-foreground">{NOT_SHARED_LABEL}</span>
         ) : (
           <span
+            className={NAME_CELL_CLASS}
             title={grantees.map((id) => tenantLabel(tenants, id)).join(", ")}
           >
             {named.map((id) => tenantLabel(tenants, id)).join(", ")}
