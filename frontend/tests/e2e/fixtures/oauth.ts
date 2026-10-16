@@ -10,7 +10,7 @@ import { IAM_URL, seedAdminTenantID } from "./seed";
 
 // The client backend/configs/compose.yaml seeds (and the dev cluster's values).
 export const CLIENT_ID = "paladin-e2e-agent";
-const REDIRECT_URI = "https://e2e-agent.invalid/callback";
+export const REDIRECT_URI = "https://e2e-agent.invalid/callback";
 export const SCOPE_READ = "paladin.read";
 export const SCOPE_WRITE = "paladin.write";
 export const AUDIENCE_ADMIN = "paladin-admin";
@@ -20,7 +20,7 @@ export const AUDIENCE_MCP = "paladin-mcp";
 export const MCP_SERVER_CLIENT_ID = "paladin-mcp-server";
 
 // RFC 7636 allows 43–128 characters; the verifier only has to match itself.
-const PKCE_VERIFIER = "e2e-verifier-".padEnd(64, "x");
+export const PKCE_VERIFIER = "e2e-verifier-".padEnd(64, "x");
 
 export const HTTP_FOUND = 302;
 export const HTTP_OK = 200;
@@ -33,7 +33,7 @@ export interface TokenResponse {
   scope?: string;
 }
 
-async function pkceChallenge(verifier: string): Promise<string> {
+export async function pkceChallenge(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(verifier),
@@ -76,10 +76,18 @@ export async function grant(
   );
   expect(code, "the redirect carries a code").toBeTruthy();
 
+  return exchangeCode(request, code as string);
+}
+
+/** Exchange an authorization code issued for PKCE_VERIFIER. */
+export async function exchangeCode(
+  request: APIRequestContext,
+  code: string,
+): Promise<TokenResponse> {
   const token = await request.post(`${IAM_URL}/oauth/token`, {
     form: {
       grant_type: "authorization_code",
-      code: code as string,
+      code,
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       code_verifier: PKCE_VERIFIER,

@@ -26,6 +26,18 @@
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
+import { SEEDED_ADMIN } from "./fixtures/credentials";
+import {
+  AUDIENCE_ADMIN,
+  CLIENT_ID,
+  REDIRECT_URI,
+  SCOPE_READ,
+  PKCE_VERIFIER,
+  claims,
+  exchangeCode,
+  pkceChallenge,
+} from "./fixtures/oauth";
+import { seedAdminTenantID } from "./fixtures/seed";
 
 const PARAMS = {
   client_id: "e2e-third-party",
@@ -85,5 +97,47 @@ test.describe("OAuth consent", () => {
       timeout: 15_000,
     });
     await expect(page.getByRole("button", { name: /^Deny$/ })).toBeVisible();
+  });
+
+  // The whole flow through the page: its form reaches the Authorization
+  // Server through the console's own /oauth/authorize, whichever host serves
+  // IAM, and the browser lands on the client's redirect with a code.
+  test("an Allow through the page issues the client a code", async ({
+    page,
+    request,
+  }) => {
+    const state = "st-through-the-page";
+    await loginAsAdmin(page);
+    // The client's redirect is not a real host: the browser's request for it
+    // is the answer, whether or not it resolves.
+    const landed = page.waitForRequest((req) =>
+      req.url().startsWith(REDIRECT_URI),
+    );
+    await page.goto(
+      consentURL({
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        scope: SCOPE_READ,
+        state,
+        code_challenge: await pkceChallenge(PKCE_VERIFIER),
+        resource: AUDIENCE_ADMIN,
+      }),
+    );
+    await page.locator("form input#username").fill(SEEDED_ADMIN.subject);
+    await page.locator("form input#password").fill(SEEDED_ADMIN.password);
+    await page.locator("form input#tenant").fill(await seedAdminTenantID());
+    await page.getByRole("button", { name: /^Allow$/ }).click();
+
+    const callback = new URL((await landed).url());
+    expect(callback.searchParams.get("state")).toBe(state);
+    const code = callback.searchParams.get("code");
+    expect(code, `the redirect carries a code: ${callback}`).toBeTruthy();
+
+    const tok = await exchangeCode(request, code as string);
+    expect(claims(tok.access_token)).toMatchObject({
+      aud: AUDIENCE_ADMIN,
+      client_id: CLIENT_ID,
+      scope: SCOPE_READ,
+    });
   });
 });

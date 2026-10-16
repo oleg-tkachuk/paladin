@@ -78,19 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### The MCP server is its own audience
-
-- **Status:** In-Progress —
-  [ADR-0036](docs/adr/0036-the-mcp-server-is-its-own-audience.md) is
-  implemented behind `mcp.oauth.exchange` and runs in the compose stack and
-  on the dev cluster.
-- **Reason:** one piece is left: the console consent page posts to
-  `/oauth/authorize` on the console's own origin, which routes nowhere when
-  `auth.oauth.consent_url` points at it.
-- **Definition of Done:** the consent page reaches the IAM origin's
-  `/oauth/authorize`, with an e2e test through the page.
-- **Blockers:** none.
-
 ### The console shows the MCP server's newer contract
 
 - **Status:** Deferred.
