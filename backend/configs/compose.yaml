@@ -243,7 +243,6 @@ mcp:
   oauth:
     enabled: true
     resource_url: "http://localhost:8095/mcp"
-    authorization_servers: ["paladin-dev"]
     exchange:
       client_id: "paladin-mcp-server"
       client_secret: "compose-mcp-exchange-secret"

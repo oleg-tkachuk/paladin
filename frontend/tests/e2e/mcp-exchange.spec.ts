@@ -37,6 +37,9 @@ const TOKEN_REFUSED = "access token was refused";
 // A collection no fixture creates: the data plane answers for it without the
 // token being in question.
 const MISSING_COLLECTION = "e2e-mcp-exchange-missing";
+// How the bridge renders a plane's answer about the request itself:
+// "<connect code>: <message>" (backend/internal/mcp/errors.go).
+const PLANE_ANSWER = /^(not_found|permission_denied): /;
 
 interface RPCResponse {
   result?: {
@@ -177,7 +180,10 @@ test.describe("MCP token exchange", () => {
     const data = await session.callTool("paladin_count_objects", {
       parent: `tenants/${await seedAdminTenantID()}/collections/${MISSING_COLLECTION}`,
     });
-    // The data plane answered about the collection, not about the token.
+    // The data plane answered about the collection, which only a token it
+    // accepted gets to hear: the bridge renders its code first.
+    expect(data.isError, data.text).toBe(true);
+    expect(data.text).toMatch(PLANE_ANSWER);
     expect(data.text).not.toContain(TOKEN_REFUSED);
   });
 });

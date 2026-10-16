@@ -224,14 +224,21 @@ depends on. Returns a JSON list.
 {{- $auth := fromJson (include "chart.authSigningKey" .) -}}
 {{- if $auth.active -}}{{- $names = append $names $auth.name -}}{{- end -}}
 {{- $oauth := ((.Values.config.auth | default dict).oauth | default dict) -}}
-{{- $mcpExchange := (((.Values.config.mcp | default dict).oauth | default dict).exchange | default dict) -}}
-{{- range $client := append ($oauth.seed_clients | default (list)) $mcpExchange -}}
+{{- range $client := $oauth.seed_clients | default (list) -}}
 {{- with $client.client_secret_ref -}}
 {{- if kindIs "string" . -}}
 {{- $names = append $names . -}}
 {{- else -}}
 {{- $names = append $names .name -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $mcpOAuth := ((.Values.config.mcp | default dict).oauth | default dict) -}}
+{{- with ($mcpOAuth.exchange | default dict).client_secret_ref -}}
+{{- if kindIs "string" . -}}
+{{- $names = append $names . -}}
+{{- else -}}
+{{- $names = append $names .name -}}
 {{- end -}}
 {{- end -}}
 {{- $pg := fromJson (include "chart.postgres" .) -}}
