@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { backendHref, bucketHref, parseBucketName, tenantHref } from "./hrefs";
+import {
+  backendHref,
+  bucketHref,
+  collectionHref,
+  parseBucketName,
+  tenantHref,
+} from "./hrefs";
 
 describe("hrefs", () => {
   it("builds each entity's one URL", () => {
@@ -12,6 +18,9 @@ describe("hrefs", () => {
       "/storage-backends/primary/buckets/b1/lifecycle",
     );
     expect(tenantHref("acme")).toBe("/tenants/acme");
+    expect(collectionHref("acme", "docs")).toBe(
+      "/tenants/acme/collections/docs",
+    );
   });
 
   it("encodes what a path segment cannot hold", () => {

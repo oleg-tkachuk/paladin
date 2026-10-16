@@ -26,6 +26,11 @@ export function tenantHref(tenant: string): string {
   return `/tenants/${enc(tenant)}`;
 }
 
+/** A collection's page in its tenant's workspace. */
+export function collectionHref(tenant: string, collection: string): string {
+  return `${tenantHref(tenant)}/collections/${enc(collection)}`;
+}
+
 /** The parts of a bucket resource name, "storageBackends/{b}/buckets/{id}". */
 export function parseBucketName(
   name: string,

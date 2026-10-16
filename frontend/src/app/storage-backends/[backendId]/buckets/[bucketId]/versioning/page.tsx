@@ -5,7 +5,6 @@
 // the object data-plane honours it (soft-deletes preserve prior versions); this
 // page is the operator switch + retention option.
 
-import { useTenantChangesBlocked } from "../../../../tenant-context";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -20,8 +19,7 @@ import { useBucket } from "../bucket-context";
 import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketVersioningPage() {
-  const changesBlocked = useTenantChangesBlocked();
-  const { bucket, setBucket } = useBucket();
+  const { bucket, setBucket, changesBlocked } = useBucket();
   const { showNotification } = useNotification();
 
   const current = bucket.versioning;

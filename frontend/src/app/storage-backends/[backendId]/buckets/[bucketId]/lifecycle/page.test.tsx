@@ -24,13 +24,17 @@ vi.mock("@/components/ui/Notification", () => ({
 vi.mock("@/hooks/useCELValidation", () => ({
   useCELValidation: () => ({ status: "valid" }),
 }));
-vi.mock("../../../../tenant-context", () => ({
-  useTenantChangesBlocked: () => null,
-}));
 
 let bucket: Bucket;
+let changesBlocked: string | null = null;
 vi.mock("../bucket-context", () => ({
-  useBucket: () => ({ bucket, setBucket: h.setBucket, refetch: vi.fn() }),
+  useBucket: () => ({
+    bucket,
+    setBucket: h.setBucket,
+    refetch: vi.fn(),
+    owner: null,
+    changesBlocked,
+  }),
 }));
 
 import BucketLifecyclePage from "./page";
@@ -78,6 +82,19 @@ describe("BucketLifecyclePage", () => {
     h.setBucket.mockReset();
     h.notify.mockReset();
     h.setRules.mockResolvedValue(withRules([]));
+    changesBlocked = null;
+  });
+
+  // The bucket is frozen with its owner: an owner in the trash takes no
+  // change, so neither does its bucket, whichever tenant the page is read as.
+  it("holds the rule controls while the owner takes no changes", () => {
+    bucket = withRules([]);
+    changesBlocked = "frozen";
+    render(<BucketLifecyclePage />);
+    for (const button of screen.getAllByRole("button", { name: /add rule/i })) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("title", "frozen");
+    }
   });
 
   // The server refuses transitions, so the editor offers expiration only.

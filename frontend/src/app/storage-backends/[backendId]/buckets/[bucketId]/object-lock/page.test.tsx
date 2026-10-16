@@ -21,7 +21,13 @@ vi.mock("@/components/ui/Notification", () => ({
 // test can seed a different objectLock state.
 let bucket: Bucket;
 vi.mock("../bucket-context", () => ({
-  useBucket: () => ({ bucket, setBucket: h.setBucket, refetch: vi.fn() }),
+  useBucket: () => ({
+    bucket,
+    setBucket: h.setBucket,
+    refetch: vi.fn(),
+    owner: null,
+    changesBlocked: null,
+  }),
 }));
 
 import BucketObjectLockPage from "./page";

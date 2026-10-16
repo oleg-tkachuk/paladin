@@ -44,12 +44,13 @@ const grant = (tenantId: string) => ({
   grantedBy: "e2e-admin",
 });
 
-function renderCard() {
+function renderCard(onChanged?: () => void) {
   render(
     <BucketGrantsCard
       bucketName={BUCKET}
       ownerTenantId={OWNER}
       tenants={TENANTS}
+      onChanged={onChanged}
     />,
   );
 }
@@ -132,6 +133,29 @@ describe("BucketGrantsCard", () => {
     expect(
       await screen.findByRole("link", { name: /Globex/ }),
     ).toBeInTheDocument();
+  });
+
+  // The bucket's page counts its grantees elsewhere too; a grant tells it,
+  // and a refused one does not.
+  it.each([
+    ["a grant that landed", true],
+    ["a refused grant", false],
+  ])("reports %s accordingly", async (_case, lands) => {
+    h.listBucketGrants.mockResolvedValue({ grants: [] });
+    if (lands) h.grantBucket.mockResolvedValue(grant("t-globex"));
+    else h.grantBucket.mockRejectedValue(new Error("refused"));
+    const onChanged = vi.fn();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderCard(onChanged);
+    await user.click(
+      screen.getByRole("combobox", { name: GRANT_PICKER_LABEL }),
+    );
+    await user.click(
+      await screen.findByRole("option", { name: "Globex (globex)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Grant" }));
+    await waitFor(() => expect(h.grantBucket).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(lands ? 1 : 0));
   });
 
   it("revokes a grant only once confirmed, with a warning", async () => {

@@ -22,6 +22,8 @@ const ERROR_FIELDS = new Set(["error", "isError"]);
 
 // "<file under src>#<variable>" → what a failure renders, and why it is honest.
 const ALLOWED: Record<string, string> = {
+  "app/storage-backends/[backendId]/buckets/[bucketId]/layout.tsx#ownerQuery":
+    "names the bucket's owner, shown by its id until read; a change the frozen owner refuses is refused by the server too",
   "app/users/[tenant]/[user]/page.tsx#tenantQuery":
     "names the tenant in the trail; a failed lookup shows its id, which the page already has",
   "app/trash/page.tsx#trashQuery":

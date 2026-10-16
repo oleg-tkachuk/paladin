@@ -36,8 +36,8 @@ const ALLOWED: Record<string, string> = {
     "tenant names label bucket rows; a failed read falls back to the id",
   "app/tenants/[id]/buckets/page.tsx::useTenants":
     "tenant names label bucket rows; a failed read falls back to the id",
-  "app/storage-backends/[backendId]/buckets/[bucketId]/page.tsx::useBackends":
-    "label only: a miss drops the backend name from the header; the bucket itself comes from its own query, which surfaces errors",
+  "app/storage-backends/[backendId]/buckets/[bucketId]/collections/page.tsx::useTenants":
+    "tenant names label the groups; a failed read falls back to the id",
 };
 
 const SRC = join(__dirname, "..");
