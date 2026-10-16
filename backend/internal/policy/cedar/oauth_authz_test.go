@@ -99,3 +99,45 @@ func TestBuiltin_ReadOwnTenant(t *testing.T) {
 		t.Errorf("foreign-tenant read = %v, want Deny", got)
 	}
 }
+
+// The grant a principal acts under reaches Cedar on every authorization, not
+// only at consent, so a tenant can forbid a client anywhere (ADR-0035). A
+// caller's own RequestContext still wins.
+func TestOAuthGrantReachesEveryAuthorization(t *testing.T) {
+	const policy = `permit(principal, action, resource);
+forbid(principal, action, resource) when { context.oauth_client_id == "blocked-client" };
+forbid(principal, action, resource) when { !context.oauth_scopes.contains("paladin.read") && context.oauth_client_id != "" };`
+
+	e := NewEngine(fakeStore{text: policy}, time.Minute)
+	tid := uuid.New()
+	decide := func(p *Principal, rc RequestContext) Decision {
+		t.Helper()
+		dec, err := e.IsAuthorized(context.Background(), p, ActionReadBucket, &Resource{TenantID: tid}, rc)
+		if err != nil {
+			t.Fatalf("IsAuthorized: %v", err)
+		}
+		return dec
+	}
+	principal := func(client string, scopes ...string) *Principal {
+		return &Principal{Subject: "u@acme", TenantID: tid, OAuthClientID: client, OAuthScopes: scopes}
+	}
+
+	for _, tc := range []struct {
+		name string
+		p    *Principal
+		rc   RequestContext
+		want Decision
+	}{
+		{"no client", principal(""), RequestContext{}, DecisionAllow},
+		{"blocked client", principal("blocked-client", "paladin.read"), RequestContext{}, DecisionDeny},
+		{"other client", principal("desktop-agent", "paladin.read"), RequestContext{}, DecisionAllow},
+		{"client lacking the scope", principal("desktop-agent"), RequestContext{}, DecisionDeny},
+		{"caller's context wins", principal("blocked-client"), RequestContext{OAuthClientID: "desktop-agent", OAuthScopes: []string{"paladin.read"}}, DecisionAllow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := decide(tc.p, tc.rc); got != tc.want {
+				t.Errorf("decision = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

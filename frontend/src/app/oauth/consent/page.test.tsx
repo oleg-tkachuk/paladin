@@ -47,6 +47,20 @@ describe("OAuth ConsentPage", () => {
     expect(actions).toContain("deny");
   });
 
+  it("says a grant without paladin.write changes nothing", () => {
+    render(<ConsentPage />);
+    expect(
+      screen.queryByText(/will not be able to change/),
+    ).not.toBeInTheDocument();
+
+    searchString = baseParams.replace(
+      "paladin.read paladin.write",
+      "paladin.read",
+    );
+    render(<ConsentPage />);
+    expect(screen.getByText(/will not be able to change/)).toBeInTheDocument();
+  });
+
   describe("skip_consent (pre-authorized client)", () => {
     beforeEach(() => {
       searchString = `${baseParams}&skip_consent=1`;

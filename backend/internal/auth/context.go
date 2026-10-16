@@ -46,6 +46,11 @@ type Principal struct {
 	// Labels are free-form claim attributes exposed to Cedar as principal
 	// attributes.
 	Labels map[string]string
+	// OAuthClientID is the OAuth client this principal acts for, and
+	// OAuthScopes the scopes its user consented to (ADR-0035). Empty for a
+	// console session, an API token and a capability.
+	OAuthClientID string
+	OAuthScopes   []string
 }
 
 // PrincipalKind enumerates the originating credential type.

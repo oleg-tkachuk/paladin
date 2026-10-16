@@ -221,6 +221,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// must land a principal first.
 		apiTokAdmin,
 		auth.RequireAudience(auth.AudienceAdmin),
+		// After the principal, which carries the OAuth grant (ADR-0035).
+		auth.RequireOAuthWriteScope(),
 		// After auth so the tenant is known, and ahead of the audit and
 		// idempotency writers so a throttled call costs no database work.
 		tenantRL.Intercept,

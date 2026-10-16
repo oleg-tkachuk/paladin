@@ -486,6 +486,10 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		Roles:    u.Roles,
 		Scopes:   u.Scopes,
 		Kind:     auth.PrincipalKindUser,
+		// The grant rides in the token so every plane enforces the consent,
+		// not only /authorize (ADR-0035).
+		OAuthClientID: grant.ClientID,
+		OAuthScopes:   grant.Scopes,
 	})
 	if err != nil {
 		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint access failed")

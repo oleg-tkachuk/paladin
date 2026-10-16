@@ -2,6 +2,7 @@ package issuer
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,5 +171,46 @@ func TestMintRefreshSignsAGivenExpiry(t *testing.T) {
 	}
 	if !exp.Equal(want) {
 		t.Errorf("expiry = %v, want %v", exp, want)
+	}
+}
+
+// An OAuth client's grant survives the round trip as the RFC 9068 claims, and
+// a token with no client carries none (ADR-0035).
+func TestMintAccessCarriesTheOAuthGrant(t *testing.T) {
+	iss := newTestIssuer(t)
+	v := &auth.JWTVerifier{
+		Key:              []byte("test-signing-key-32-bytes-min--padding"),
+		ExpectedIssuer:   "paladin-test",
+		ExpectedAudience: auth.AudienceData,
+	}
+	for _, tc := range []struct {
+		name       string
+		clientID   string
+		scopes     []string
+		wantScopes []string
+	}{
+		{"client with two scopes", "desktop-agent", []string{auth.OAuthScopeRead, auth.OAuthScopeWrite}, []string{auth.OAuthScopeRead, auth.OAuthScopeWrite}},
+		{"client with no scope", "desktop-agent", nil, nil},
+		{"no client", "", []string{auth.OAuthScopeWrite}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tok, _, err := iss.MintAccess(AccessClaims{
+				Subject: "u", TenantID: uuid.New(), Audience: auth.AudienceData,
+				OAuthClientID: tc.clientID, OAuthScopes: tc.scopes,
+			})
+			if err != nil {
+				t.Fatalf("MintAccess: %v", err)
+			}
+			p, err := v.Verify(context.Background(), tok)
+			if err != nil {
+				t.Fatalf("Verify: %v", err)
+			}
+			if p.OAuthClientID != tc.clientID {
+				t.Errorf("OAuthClientID = %q, want %q", p.OAuthClientID, tc.clientID)
+			}
+			if strings.Join(p.OAuthScopes, ",") != strings.Join(tc.wantScopes, ",") {
+				t.Errorf("OAuthScopes = %v, want %v", p.OAuthScopes, tc.wantScopes)
+			}
+		})
 	}
 }

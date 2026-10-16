@@ -1,7 +1,7 @@
 # ADR-0035: An OAuth grant is bound to its client, and its scopes are enforced
 
-- **Status:** Accepted. Decision 1 implemented 2026-10-16 (migration 082,
-  `authstore.OAuthGrant`); decision 2 follows.
+- **Status:** Accepted — implemented 2026-10-16 (migration 082,
+  `authstore.OAuthGrant`, `auth.RequireOAuthWriteScope`).
 - **Related:** [ADR-0009](0009-oauth-authorization-server.md), which this
   amends; [ADR-0008](0008-mcp-oauth-resource-server.md).
 
@@ -39,19 +39,22 @@
      - Neither flow can redeem the other's tokens. This holds without a
        reserved value: the absence of a grant is the console's mark.
   2. **Consented scopes travel with the token and are enforced on every
-     request.**
+     call.**
      - An access token from `/oauth/token` carries the RFC 9068 claims
-       `client_id` and `scope` (space-delimited).
-     - The verifier carries them onto the principal, and Cedar sees them as
-       `context.oauth_client_id` and `context.oauth_scopes` on every
-       authorization, not only at consent.
-     - A built-in policy gives the two scopes their meaning. A principal
-       acting for an OAuth client performs an action that changes state only
-       when its grant holds `paladin.write`. `paladin.read` is enough for the
-       actions that only read.
-     - Which actions read is a list in Go, beside the actions themselves. A
-       test holds every declared action to be classified, so a new action
-       cannot ship unclassified.
+       `client_id` and `scope` (space-delimited). The verifier carries them
+       onto the principal.
+     - `paladin.read` admits the RPCs the contract marks
+       `idempotency_level = NO_SIDE_EFFECTS`. `paladin.write` admits the rest.
+       An interceptor on each plane, after the principal is established,
+       refuses an OAuth client without `paladin.write` every other RPC.
+     - The contract is the classification, not a list beside it. Cedar
+       actions could not serve: `GetCollection` and `ListCollections`
+       authorize as `ManageCollection`, so a rule over actions would have
+       refused reads or admitted writes. A test holds every RPC named as a
+       read (`Get…`, `List…`, `Count…` and the like) to carry the mark.
+     - Cedar sees the grant as `context.oauth_client_id` and
+       `context.oauth_scopes` on every authorization, not only at consent,
+       so a tenant policy can forbid a client anywhere.
      - Console sessions, API tokens and capabilities carry no client and are
        unaffected.
      - Capabilities stay the primitive for narrowing an agent to resources
@@ -63,8 +66,11 @@
   - A grant keeps its audience across rotations. The token still has one
     audience, so an MCP session still reaches one plane. Removing that limit
     is a separate decision.
-  - After decision 2, an agent whose grant lacks `paladin.write` is refused
-    every write, including on a platform admin's account. The refusal is a
-    `forbid`, and a `forbid` beats the built-in `platform.admin` permit.
-    Clients that write must ask for `paladin.write`, and the consent screen
-    names it.
+  - An agent whose grant lacks `paladin.write` is refused every write with
+    `PERMISSION_DENIED`, on a platform admin's account too: the interceptor
+    runs before Cedar. Clients that write must ask for `paladin.write`. The
+    consent screen says what each scope allows and when a grant can change
+    nothing.
+  - An RPC that changes state must not be marked `NO_SIDE_EFFECTS`, or a
+    read-only grant reaches it. The mark already decides whether Connect
+    serves the RPC over GET, so it was not free to misuse before either.

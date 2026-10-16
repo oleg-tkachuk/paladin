@@ -300,6 +300,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// one has to run first.
 		capData,
 		auth.RequireAudience(auth.AudienceData),
+		// After the principal, which carries the OAuth grant (ADR-0035).
+		auth.RequireOAuthWriteScope(),
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.
@@ -355,6 +357,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			"ExchangeAudience",
 		).Intercept,
 		apiTokIAM,
+		// After the principal, which carries the OAuth grant (ADR-0035). A
+		// permissive RPC with no principal passes it.
+		auth.RequireOAuthWriteScope(),
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.

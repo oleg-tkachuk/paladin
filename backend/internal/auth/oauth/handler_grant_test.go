@@ -76,8 +76,14 @@ func refreshAs(h *Handler, clientID, refreshToken string) (int, tokenResponse) {
 	return rec.Code, tok
 }
 
-// accessAudience reads the `aud` claim of an access token this handler minted.
-func accessAudience(t *testing.T, token string) string {
+// accessClaims reads the claims of an access token this handler minted.
+type grantClaims struct {
+	Aud      string `json:"aud"`
+	ClientID string `json:"client_id"`
+	Scope    string `json:"scope"`
+}
+
+func accessClaims(t *testing.T, token string) grantClaims {
 	t.Helper()
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -87,13 +93,16 @@ func accessAudience(t *testing.T, token string) string {
 	if err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
-	var claims struct {
-		Aud string `json:"aud"`
-	}
+	var claims grantClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		t.Fatalf("claims: %v", err)
 	}
-	return claims.Aud
+	return claims
+}
+
+func accessAudience(t *testing.T, token string) string {
+	t.Helper()
+	return accessClaims(t, token).Aud
 }
 
 func TestToken_RefreshReissuesTheGrant(t *testing.T) {
@@ -162,5 +171,24 @@ func TestToken_RefreshRefusesAConsoleToken(t *testing.T) {
 	}
 	if refresh.inserted != 0 {
 		t.Error("a refused refresh must mint nothing")
+	}
+}
+
+// The access token names the client and the consented scopes, so every
+// plane enforces the consent, not only /authorize (ADR-0035). A rotation
+// re-issues them.
+func TestToken_AccessTokenCarriesTheGrant(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	u := sampleUser()
+	h := testHandler(t, store, &memRefresh{}, u)
+
+	first := authorizeAndExchange(t, h, u, publicClient(), "")
+	_, rotated := refreshAs(h, publicClient().ClientID, first.RefreshToken)
+	for name, tok := range map[string]string{"code exchange": first.AccessToken, "rotation": rotated.AccessToken} {
+		c := accessClaims(t, tok)
+		if c.ClientID != publicClient().ClientID || c.Scope != grantScope {
+			t.Errorf("%s: client_id=%q scope=%q, want %q %q", name, c.ClientID, c.Scope, publicClient().ClientID, grantScope)
+		}
 	}
 }
