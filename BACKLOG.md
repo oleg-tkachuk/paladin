@@ -78,6 +78,26 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
+### The MCP server is its own audience
+
+- **Status:** Aspirational — design in
+  [ADR-0036](docs/adr/0036-the-mcp-server-is-its-own-audience.md) (Proposed).
+- **Reason:** the streamable-HTTP MCP server accepts any plane token and
+  forwards it unchanged, which the MCP authorization specification forbids:
+  the agent's token works against the planes directly, a console token opens
+  an MCP session, and one session reaches only the plane its token names.
+  The fix is a new audience, a token-exchange grant at the Authorization
+  Server and a client credential for the MCP server, which is larger than the
+  fixes that shipped with ADR-0035.
+- **Definition of Done:** the AS issues `paladin-mcp` for the MCP resource
+  URL and serves RFC 8693 token exchange to the MCP server only; the edge
+  requires `paladin-mcp`; the bridge exchanges per plane, carrying the user's
+  subject, roles and OAuth grant plus an `act` claim, cached to expiry; a
+  test shows a `paladin-mcp` token refused by every plane, a plane token
+  refused by the edge, and one session calling a tool on each plane; ADR-0036
+  accepted and ADR-0008/0009 marked superseded where they say otherwise.
+- **Blockers:** none; ADR-0036 needs accepting first.
+
 ### Admin RPCs the MCP bridge leaves off on purpose
 
 - **Status:** Won't-do (by design) unless the decision below is revisited.
