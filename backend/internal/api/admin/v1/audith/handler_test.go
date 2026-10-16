@@ -151,6 +151,42 @@ func TestListAuditLogAppliesCELFilter(t *testing.T) {
 	}
 }
 
+func TestListAuditLogSearchesTextFields(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	update := mkEntry(t0)
+	failed := mkEntry(t0.Add(time.Second))
+	failed.Action = "/paladin.admin.v1.TenantService/DeleteTenant"
+	failed.ResourceName = "tenants/t1"
+	failed.ErrorMessage = "Tenant Still Has Collections"
+	cases := []struct {
+		name  string
+		query string
+		want  uuid.UUID
+	}{
+		// The console sends the query folded; the field is folded the
+		// same way, so case in the entry does not hide it.
+		{"action, folded", "bucketservice", update.EntryID},
+		{"resource name", "tenants/t1", failed.EntryID},
+		// The error text is searchable, though no filter field names it.
+		{"error message", "still has collections", failed.EntryID},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{update, failed}}}
+			h := NewHandler(repo, allowAuthorizer{})
+			got, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t),
+				admindomain.ListAuditArgs{PageSize: 50},
+				`search.contains("`+tc.query+`")`)
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if len(got) != 1 || got[0].EntryID != tc.want {
+				t.Errorf("got %d entries, want only %s", len(got), tc.want)
+			}
+		})
+	}
+}
+
 func TestListAuditLogRejectsBadFilter(t *testing.T) {
 	repo := &fakeAuditRepo{}
 	h := NewHandler(repo, allowAuthorizer{})
