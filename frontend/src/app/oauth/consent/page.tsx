@@ -8,12 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/Card";
 import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
+import { OAUTH_AUTHORIZE_PATH } from "@/lib/auth/oauthAuthorize";
 
 /**
  * OAuth 2.1 consent page (ADR-0009). The backend /oauth/authorize GET
  * validates the request and redirects here with the OAuth params on the query
  * string; this page collects the user's credentials + Allow/Deny decision and
- * POSTs them straight back to /oauth/authorize.
+ * POSTs them to /oauth/authorize, which the console relays to the IAM plane.
  *
  * The form is a NATIVE <form method="post"> (not fetch/BFF): on approval the
  * backend responds 302 to the client's redirect_uri — often a custom scheme
@@ -21,10 +22,8 @@ import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
  * A fetch-based submit would trap that redirect.
  */
 
-// Where the consent form POSTs. Same-origin default works when the ingress
-// routes /oauth/* to the IAM plane; override for a split-origin deployment.
-const AUTHORIZE_URL =
-  process.env.NEXT_PUBLIC_OAUTH_AUTHORIZE_URL || "/oauth/authorize";
+// Where the consent form POSTs: the console's own relay to the IAM plane
+// (src/app/oauth/authorize), so the form works whichever host serves IAM.
 
 function ConsentForm() {
   const search = useSearchParams();
@@ -82,7 +81,7 @@ function ConsentForm() {
           </div>
         ) : null}
 
-        <form className="space-y-4" method="post" action={AUTHORIZE_URL}>
+        <form className="space-y-4" method="post" action={OAUTH_AUTHORIZE_PATH}>
           {/* OAuth request params round-tripped back to the backend. */}
           <input type="hidden" name="client_id" value={clientID} />
           <input type="hidden" name="redirect_uri" value={redirectURI} />
