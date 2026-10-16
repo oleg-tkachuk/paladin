@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -109,6 +110,7 @@ func TestToken_RefreshReissuesTheGrant(t *testing.T) {
 	store := newMemStore()
 	store.clients[adminClient().ClientID] = adminClient()
 	u := sampleUser()
+	u.Roles = []string{apiutil.RoleTenantAdmin}
 	h := testHandler(t, store, &memRefresh{}, u)
 
 	first := authorizeAndExchange(t, h, u, adminClient(), auth.AudienceAdmin)
