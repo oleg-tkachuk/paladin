@@ -303,9 +303,11 @@ func (*DeleteCollectionResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListCollectionsRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Parent string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"` // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
-	Page   *v1.PageRequest        `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "tenants/{tenant_id_or_slug}", or empty: every tenant's Collections for a
+	// platform admin, the caller's own tenant's for anyone else.
+	Parent string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Page   *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 	// CEL filter, evaluated against the Collection schema (see internal/filter/cel).
 	// Applied to each fetched page; the page cursor is unaffected, so a page
 	// whose rows all fail the predicate still returns next_page_token.

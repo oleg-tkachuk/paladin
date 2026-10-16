@@ -87,7 +87,9 @@ message DeleteCollectionRequest {
 message DeleteCollectionResponse {}
 
 message ListCollectionsRequest {
-  string parent = 1; // "tenants/{tenant_id_or_slug}" or empty for cross-tenant
+  // "tenants/{tenant_id_or_slug}", or empty: every tenant's Collections for a
+  // platform admin, the caller's own tenant's for anyone else.
+  string parent = 1;
   paladin.common.v1.PageRequest page = 2;
   // CEL filter, evaluated against the Collection schema (see internal/filter/cel).
   // Applied to each fetched page; the page cursor is unaffected, so a page
