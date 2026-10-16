@@ -21,6 +21,12 @@ import { gotoSettled } from "./fixtures/navigate";
 const rpc = (proc: string) => (r: { url(): string }) =>
   r.url().includes("/api/rpc/") && r.url().includes(proc);
 
+// The palette's own search, not the page's list: /tenants reads ListTenants
+// with no filter too, and the first such read is otherwise the one caught.
+const filteredRpc =
+  (proc: string) => (r: { url(): string; postData(): string | null }) =>
+    rpc(proc)(r) && Boolean(JSON.parse(r.postData() ?? "{}").filter);
+
 async function openPalette(page: import("@playwright/test").Page) {
   await page.keyboard.press("ControlOrMeta+k");
   const input = page.getByPlaceholder(/type to search objects/i);
@@ -38,7 +44,7 @@ test.describe("Command palette", () => {
     await gotoSettled(page, "/tenants");
 
     const input = await openPalette(page);
-    const request = page.waitForRequest(rpc("ListTenants"), {
+    const request = page.waitForRequest(filteredRpc("ListTenants"), {
       timeout: 15_000,
     });
     await input.fill(tenant.slug);
