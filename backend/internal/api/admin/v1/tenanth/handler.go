@@ -647,7 +647,9 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 	if err := h.authorize(ctx, cedar.ActionReadTenant, tenantID); err != nil {
 		return nil, err
 	}
-	t, err := h.repo.Get(ctx, tenantID)
+	// Acting as the tenant read: its default binding sits under RLS, and the
+	// join would drop it for any caller but the tenant itself.
+	t, err := h.repo.Get(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
@@ -705,6 +707,15 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 	}
 	if lookupErr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, lookupErr.Error()).WithCause(lookupErr)
+	}
+	if callerTenant != t.TenantID {
+		// The lookup ran in the caller's scope, which hides another tenant's
+		// default binding; read the row again as the tenant, now authorized.
+		scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		}
+		t = scoped
 	}
 	return &t, nil
 }
@@ -1160,7 +1171,9 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 		args.AfterID = id
 	}
 	args.TrashRetention, args.AsOf = h.trashRetention, h.clock()
-	page, next, err := h.repo.List(ctx, args)
+	// Across tenants: the list spans them, and each row's default binding sits
+	// under RLS — in the caller's own scope every other tenant's came back empty.
+	page, next, err := h.repo.List(auth.WithCrossTenantRead(ctx), args)
 	if err != nil {
 		return nil, "", err
 	}

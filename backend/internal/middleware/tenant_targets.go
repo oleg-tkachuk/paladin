@@ -29,6 +29,9 @@ var tenantIDFields = map[protoreflect.Name]bool{
 // principal's tenant is an input to a what-if, not a target.
 var ignoredTenantFields = map[protoreflect.Name]bool{
 	"principal_tenant_id": true,
+	// Bucket.granted_tenant_ids is output only: a request's value is dropped,
+	// and grants change through GrantBucket, whose tenant_id the walk reads.
+	"granted_tenant_ids": true,
 }
 
 // tenantRefs are the tenants a request names: by id, and by slug where a

@@ -69,7 +69,11 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
        provision_state, public_read, public_base_url, created_on_backend,
-       resource_version, created_at, updated_at
+       resource_version, created_at, updated_at,
+       -- The tenants granted the bucket, oldest grant first (ADR-0032).
+       ARRAY(SELECT g.tenant_id FROM bucket_grants g
+              WHERE g.bucket_id = buckets.id
+              ORDER BY g.granted_at, g.tenant_id)::uuid[] AS granted_tenant_ids
 FROM buckets
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
@@ -102,6 +106,7 @@ type GetBucketV2Row struct {
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+	GrantedTenantIds                  []pgtype.UUID      `json:"granted_tenant_ids"`
 }
 
 // v2 bucket queries — full surface for admin/v1.BucketService.
@@ -134,6 +139,7 @@ func (q *Queries) GetBucketV2(ctx context.Context, name string, name_2 string) (
 		&i.ResourceVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.GrantedTenantIds,
 	)
 	return i, err
 }
@@ -147,7 +153,10 @@ SELECT sb.name AS backend_name,
        b.versioning_enabled, b.versioning_keep_deletes_forever,
        b.replication_enabled, b.replication_destination, b.replication_filter,
        b.provision_state, b.public_read, b.public_base_url, b.created_on_backend,
-       b.resource_version, b.created_at, b.updated_at
+       b.resource_version, b.created_at, b.updated_at,
+       ARRAY(SELECT g.tenant_id FROM bucket_grants g
+              WHERE g.bucket_id = b.id
+              ORDER BY g.granted_at, g.tenant_id)::uuid[] AS granted_tenant_ids
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (b.owner_tenant_id = $1
@@ -183,6 +192,7 @@ type ListAccessibleBucketsRow struct {
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+	GrantedTenantIds                  []pgtype.UUID      `json:"granted_tenant_ids"`
 }
 
 // The buckets a tenant may bind a collection to: the ones it owns and the
@@ -227,6 +237,7 @@ func (q *Queries) ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtyp
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GrantedTenantIds,
 		); err != nil {
 			return nil, err
 		}
@@ -247,7 +258,10 @@ SELECT sb.name AS backend_name,
        b.versioning_enabled, b.versioning_keep_deletes_forever,
        b.replication_enabled, b.replication_destination, b.replication_filter,
        b.provision_state, b.public_read, b.public_base_url, b.created_on_backend,
-       b.resource_version, b.created_at, b.updated_at
+       b.resource_version, b.created_at, b.updated_at,
+       ARRAY(SELECT g.tenant_id FROM bucket_grants g
+              WHERE g.bucket_id = b.id
+              ORDER BY g.granted_at, g.tenant_id)::uuid[] AS granted_tenant_ids
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE ($1::text IS NULL OR sb.name = $1::text)
@@ -324,6 +338,7 @@ type ListBucketsV2Row struct {
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+	GrantedTenantIds                  []pgtype.UUID      `json:"granted_tenant_ids"`
 }
 
 // owner_tenant_id is an optional filter (nullable arg → skipped). The index on
@@ -380,6 +395,7 @@ func (q *Queries) ListBucketsV2(ctx context.Context, backendName *string, ownerT
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.GrantedTenantIds,
 		); err != nil {
 			return nil, err
 		}

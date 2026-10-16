@@ -9,7 +9,11 @@ SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id
        versioning_enabled, versioning_keep_deletes_forever,
        replication_enabled, replication_destination, replication_filter,
        provision_state, public_read, public_base_url, created_on_backend,
-       resource_version, created_at, updated_at
+       resource_version, created_at, updated_at,
+       -- The tenants granted the bucket, oldest grant first (ADR-0032).
+       ARRAY(SELECT g.tenant_id FROM bucket_grants g
+              WHERE g.bucket_id = buckets.id
+              ORDER BY g.granted_at, g.tenant_id)::uuid[] AS granted_tenant_ids
 FROM buckets
 WHERE id = (SELECT b.id FROM buckets b
               JOIN storage_backends sb ON sb.id = b.backend_id
@@ -76,7 +80,10 @@ SELECT sb.name AS backend_name,
        b.versioning_enabled, b.versioning_keep_deletes_forever,
        b.replication_enabled, b.replication_destination, b.replication_filter,
        b.provision_state, b.public_read, b.public_base_url, b.created_on_backend,
-       b.resource_version, b.created_at, b.updated_at
+       b.resource_version, b.created_at, b.updated_at,
+       ARRAY(SELECT g.tenant_id FROM bucket_grants g
+              WHERE g.bucket_id = b.id
+              ORDER BY g.granted_at, g.tenant_id)::uuid[] AS granted_tenant_ids
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (sqlc.narg('backend_name')::text IS NULL OR sb.name = sqlc.narg('backend_name')::text)
@@ -137,7 +144,10 @@ SELECT sb.name AS backend_name,
        b.versioning_enabled, b.versioning_keep_deletes_forever,
        b.replication_enabled, b.replication_destination, b.replication_filter,
        b.provision_state, b.public_read, b.public_base_url, b.created_on_backend,
-       b.resource_version, b.created_at, b.updated_at
+       b.resource_version, b.created_at, b.updated_at,
+       ARRAY(SELECT g.tenant_id FROM bucket_grants g
+              WHERE g.bucket_id = b.id
+              ORDER BY g.granted_at, g.tenant_id)::uuid[] AS granted_tenant_ids
 FROM buckets b
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE (b.owner_tenant_id = $1

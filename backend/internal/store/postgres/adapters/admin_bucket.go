@@ -518,7 +518,7 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 // ─── Row → domain helpers ──────────────────────────────────────────────────
 
 func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
-	return decodeBucketRow(
+	return withGrantees(row.GrantedTenantIds, decodeBucketRow(
 		row.BackendName, row.Name, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
 		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
@@ -526,11 +526,11 @@ func bucketFromV2Row(row sqlc.GetBucketV2Row) admindomain.Bucket {
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 		row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
-	)
+	))
 }
 
 func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
-	return decodeBucketRow(
+	return withGrantees(row.GrantedTenantIds, decodeBucketRow(
 		row.BackendName, row.Name, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
 		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
@@ -538,11 +538,11 @@ func bucketFromV2RowList(row sqlc.ListBucketsV2Row) admindomain.Bucket {
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 		row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
-	)
+	))
 }
 
 func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bucket {
-	return decodeBucketRow(
+	return withGrantees(row.GrantedTenantIds, decodeBucketRow(
 		row.BackendName, row.Name, row.DisplayName, row.Region, row.Labels,
 		row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
 		row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
@@ -550,7 +550,16 @@ func bucketFromV2RowAccessible(row sqlc.ListAccessibleBucketsRow) admindomain.Bu
 		row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
 		row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
 		row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
-	)
+	))
+}
+
+// withGrantees sets the tenants a bucket is granted to on b.
+func withGrantees(ids []pgtype.UUID, b admindomain.Bucket) admindomain.Bucket {
+	b.GrantedTenantIDs = make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		b.GrantedTenantIDs = append(b.GrantedTenantIDs, uuidFrom(id))
+	}
+	return b
 }
 
 func decodeBucketRow(

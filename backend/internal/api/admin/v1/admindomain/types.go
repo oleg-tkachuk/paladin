@@ -101,13 +101,16 @@ type Bucket struct {
 	Labels      map[string]string
 	// OwnerTenantID is the tenant that owns the bucket; every bucket has one
 	// (ADR-0032). Other tenants bind to it through a grant.
-	OwnerTenantID  uuid.UUID
-	CedarPolicy    string
-	Constraints    BucketConstraints
-	LifecycleRules []LifecycleRule
-	ObjectLock     ObjectLockConfig
-	Versioning     BucketVersioning
-	Replication    BucketReplication
+	OwnerTenantID uuid.UUID
+	// GrantedTenantIDs are the tenants the owner granted the bucket to, oldest
+	// grant first. Read-only here; GrantBucket and RevokeBucketGrant change it.
+	GrantedTenantIDs []uuid.UUID
+	CedarPolicy      string
+	Constraints      BucketConstraints
+	LifecycleRules   []LifecycleRule
+	ObjectLock       ObjectLockConfig
+	Versioning       BucketVersioning
+	Replication      BucketReplication
 	// ProvisionState is the outbox status of the underlying physical
 	// bucket: empty/"ready" means the row is committed AND the backend
 	// confirms the bucket exists; "pending" means the reconciler still

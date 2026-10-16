@@ -1092,6 +1092,9 @@ type Bucket struct {
 	// there: an adopted one holds data Paladin never wrote. Set when the bucket
 	// is registered, never changed.
 	CreatedOnBackend bool `protobuf:"varint,20,opt,name=created_on_backend,json=createdOnBackend,proto3" json:"created_on_backend,omitempty"`
+	// The tenants the owner granted the bucket to, by tenant UUID, oldest grant
+	// first (ADR-0032). Change it with GrantBucket and RevokeBucketGrant.
+	GrantedTenantIds []string `protobuf:"bytes,21,rep,name=granted_tenant_ids,json=grantedTenantIds,proto3" json:"granted_tenant_ids,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1264,6 +1267,13 @@ func (x *Bucket) GetCreatedOnBackend() bool {
 		return x.CreatedOnBackend
 	}
 	return false
+}
+
+func (x *Bucket) GetGrantedTenantIds() []string {
+	if x != nil {
+		return x.GrantedTenantIds
+	}
+	return nil
 }
 
 type BucketConstraints struct {
@@ -3177,7 +3187,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x125\n" +
 	"\x06target\x18\x02 \x01(\x0e2\x1d.paladin.admin.v1.EventTargetR\x06target\x12\x1b\n" +
 	"\tqueue_url\x18\x03 \x01(\tR\bqueueUrl\x12>\n" +
-	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xa6\b\n" +
+	"\rpoll_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fpollInterval\"\xd9\b\n" +
 	"\x06Bucket\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\"\n" +
 	"\n" +
@@ -3206,7 +3216,8 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vpublic_read\x18\x12 \x01(\bB\x03\xe0A\x05R\n" +
 	"publicRead\x12+\n" +
 	"\x0fpublic_base_url\x18\x13 \x01(\tB\x03\xe0A\x05R\rpublicBaseUrl\x121\n" +
-	"\x12created_on_backend\x18\x14 \x01(\bB\x03\xe0A\x03R\x10createdOnBackend\x1a9\n" +
+	"\x12created_on_backend\x18\x14 \x01(\bB\x03\xe0A\x03R\x10createdOnBackend\x121\n" +
+	"\x12granted_tenant_ids\x18\x15 \x03(\tB\x03\xe0A\x03R\x10grantedTenantIds\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xef\x03\n" +
