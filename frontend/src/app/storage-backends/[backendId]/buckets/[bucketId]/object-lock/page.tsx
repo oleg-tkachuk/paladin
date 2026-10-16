@@ -7,7 +7,6 @@
 // backend persists ObjectLockConfig on the bucket row and the data plane
 // enforces it on delete/overwrite; this page is the operator switch.
 
-import { useTenantChangesBlocked } from "../../../../tenant-context";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -43,8 +42,7 @@ function strToMode(s: string): ObjectLockMode {
 }
 
 export default function BucketObjectLockPage() {
-  const changesBlocked = useTenantChangesBlocked();
-  const { bucket, setBucket } = useBucket();
+  const { bucket, setBucket, changesBlocked } = useBucket();
   const { showNotification } = useNotification();
 
   const current = bucket.objectLock;

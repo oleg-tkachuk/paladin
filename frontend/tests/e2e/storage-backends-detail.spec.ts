@@ -61,12 +61,9 @@ test.describe("Bucket contents", () => {
 
     await gotoSettled(
       page,
-      `/storage-backends/${bucket.backendId}/buckets/${bucket.bucketId}`,
+      `/storage-backends/${bucket.backendId}/buckets/${bucket.bucketId}/collections`,
     );
 
-    await expect(
-      page.getByRole("heading", { name: /What's stored here/i }),
-    ).toBeVisible({ timeout: 15_000 });
     // The collection that owns the object appears — this page's whole claim is
     // that it can answer "who is using this bucket".
     await expect(page.getByText(collection.collection).first()).toBeVisible({
@@ -80,13 +77,13 @@ test.describe("Bucket contents", () => {
 
     await gotoSettled(
       page,
-      `/storage-backends/${bucket.backendId}/buckets/${bucket.bucketId}`,
+      `/storage-backends/${bucket.backendId}/buckets/${bucket.bucketId}/collections`,
     );
 
     // The difference between "nothing here" and "nothing loaded" is the whole
     // value of an empty state on an operator page.
     await expect(
-      page.getByText(/No data stored in this bucket yet/i),
+      page.getByText(/No collection is bound to this bucket yet/i),
     ).toBeVisible({ timeout: 15_000 });
   });
 });

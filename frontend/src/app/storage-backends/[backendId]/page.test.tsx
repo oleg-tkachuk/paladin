@@ -17,6 +17,10 @@ const h = vi.hoisted(() => ({
     error: null as string | null,
     fetchBuckets: vi.fn(),
   },
+  tenants: {
+    tenants: [] as Array<Record<string, unknown>>,
+    fetchTenants: vi.fn(),
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -26,6 +30,7 @@ vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
 vi.mock("./BackendActions", () => ({ BackendActions: () => null }));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
 vi.mock("@/hooks/useBuckets", () => ({ useBuckets: () => h.buckets }));
+vi.mock("@/hooks/useTenants", () => ({ useTenants: () => h.tenants }));
 
 import StorageBackendDetailPage from "./page";
 
@@ -77,5 +82,30 @@ describe("StorageBackendDetailPage", () => {
       screen.getByText("No buckets on this backend yet."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("StorageBackendDetailPage bucket rows", () => {
+  // The backend's list is the same list as the platform's: owner by name and
+  // who the bucket is shared with (ADR-0033), not an empty region column.
+  it("names each bucket's owner and grantees", () => {
+    h.tenants.tenants = [
+      { tenantId: "t-owner", slug: "owner", displayName: "Owner Co" },
+      { tenantId: "t-a", slug: "tenant-a", displayName: "" },
+    ];
+    h.buckets.buckets = [
+      {
+        backendId: "primary",
+        bucketId: "pool",
+        displayName: "",
+        ownerTenantId: "t-owner",
+        grantedTenantIds: ["t-a"],
+        provisionState: "ready",
+      },
+    ];
+    render(<StorageBackendDetailPage />);
+    expect(screen.getByRole("link", { name: "Owner Co" })).toBeInTheDocument();
+    expect(screen.getByText("tenant-a")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Region" })).toBeNull();
   });
 });

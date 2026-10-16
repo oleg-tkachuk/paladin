@@ -12,15 +12,12 @@
  */
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
-import {
-  seedAdminTenantID,
-  bucketLifecycle,
-  bumpBucketVersion,
-} from "./fixtures/seed";
+import { bucketLifecycle, bumpBucketVersion } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
 
-function lifecycleURL(tenantId: string, backendId: string, bucketId: string) {
-  return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/lifecycle`;
+// A bucket's one page, under its backend (ADR-0033).
+function lifecycleURL(backendId: string, bucketId: string): string {
+  return `/storage-backends/${backendId}/buckets/${bucketId}/lifecycle`;
 }
 
 /**
@@ -42,13 +39,9 @@ async function openRuleEditor(page: import("@playwright/test").Page) {
 test.describe("Bucket lifecycle rules", () => {
   test("a bucket with no rules says so", async ({ page, makeBucket }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lifecycleURL(bucket.backendId, bucket.bucketId));
 
     await expect(page.getByText(/No lifecycle rules/i)).toBeVisible({
       timeout: 15_000,
@@ -60,15 +53,11 @@ test.describe("Bucket lifecycle rules", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
     const before = await bucketLifecycle(bucket.backendId, bucket.bucketId);
     expect(before.ruleCount).toBe(0);
 
-    await gotoSettled(
-      page,
-      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lifecycleURL(bucket.backendId, bucket.bucketId));
     await openRuleEditor(page);
 
     await page.getByLabel("Rule ID").fill("e2e-expire-tmp");
@@ -94,13 +83,9 @@ test.describe("Bucket lifecycle rules", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lifecycleURL(bucket.backendId, bucket.bucketId));
     await openRuleEditor(page);
 
     await page.getByLabel("Rule ID").fill("e2e-bad-match");
@@ -139,13 +124,9 @@ test.describe("Bucket lifecycle rules", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lifecycleURL(bucket.backendId, bucket.bucketId));
     await openRuleEditor(page);
     await page.getByLabel("Rule ID").fill("e2e-stale-write");
     await page.getByLabel("Match (CEL)").fill("size_bytes > 1000");
@@ -174,13 +155,9 @@ test.describe("Bucket lifecycle rules", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      lifecycleURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lifecycleURL(bucket.backendId, bucket.bucketId));
     await openRuleEditor(page);
 
     // A placeholder in a CEL field is a worked example — an operator copies

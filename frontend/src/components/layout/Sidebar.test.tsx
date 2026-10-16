@@ -5,7 +5,11 @@ import { cn } from "@/lib/utils";
 import {
   BRAND_NAME_CLASS,
   GROUP_LABEL_CLASS,
+  SESSION_TENANT_GROUP,
+  activeNavHref,
+  sessionTenantGroupTitle,
   visibleNavigationGroups,
+  type NavTarget,
 } from "./Sidebar";
 
 const names = (roles: string[] | null) =>
@@ -27,7 +31,7 @@ describe("visibleNavigationGroups", () => {
       (g) => g.title,
     );
     expect(titles).not.toContain("Management");
-    expect(titles).not.toContain("Agents");
+    expect(titles).not.toContain(SESSION_TENANT_GROUP);
   });
 
   it("gives an admin-tier role everything", () => {
@@ -63,5 +67,36 @@ describe("group label", () => {
 describe("brand name", () => {
   it("is set a size above the release line", () => {
     expect(cn(BRAND_NAME_CLASS).split(" ")).toContain("text-base");
+  });
+});
+
+describe("activeNavHref", () => {
+  const targets: NavTarget[] = [
+    { href: "/storage-backends", tenantTab: false },
+    { href: "/buckets", tenantTab: false },
+    { href: "/tenants", tenantTab: false },
+    { href: "/tenants/acme/capabilities", tenantTab: true },
+  ];
+
+  it.each([
+    ["/storage-backends/primary", "/storage-backends"],
+    // A bucket highlights Buckets, not the backend its URL sits under.
+    ["/storage-backends/primary/buckets/b1/policy", "/buckets"],
+    ["/tenants/other/collections", "/tenants"],
+    // The session tenant's shortcut, alone — not Tenants with it.
+    ["/tenants/acme/capabilities", "/tenants/acme/capabilities"],
+    ["/tenants/acme/capabilities/c1", "/tenants/acme/capabilities"],
+    ["/somewhere-else", null],
+  ])("%s lights %s", (path, want) => {
+    expect(activeNavHref(path, targets)).toBe(want);
+  });
+});
+
+describe("sessionTenantGroupTitle", () => {
+  it("names the session tenant once it is known", () => {
+    expect(sessionTenantGroupTitle("acme")).toBe(
+      `${SESSION_TENANT_GROUP} · acme`,
+    );
+    expect(sessionTenantGroupTitle(null)).toBe(SESSION_TENANT_GROUP);
   });
 });

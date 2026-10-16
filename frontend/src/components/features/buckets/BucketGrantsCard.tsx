@@ -57,6 +57,7 @@ export function BucketGrantsCard({
   ownerTenantId,
   tenants,
   tenantsFailed = null,
+  onChanged,
 }: {
   /** `storageBackends/{backend_id}/buckets/{bucket_id}`. */
   bucketName: string;
@@ -66,6 +67,8 @@ export function BucketGrantsCard({
   tenants: TenantOption[];
   /** Set when the tenant list failed to load: names fall back to UUIDs. */
   tenantsFailed?: FailedRead | null;
+  /** Called after a grant or a revoke lands, for what else shows the grants. */
+  onChanged?: () => void;
 }) {
   const { showNotification } = useNotification();
   const {
@@ -113,6 +116,7 @@ export function BucketGrantsCard({
     setGranting(true);
     try {
       await grantBucket(picked);
+      onChanged?.();
       const t = tenantByID.get(picked);
       showNotification({
         type: "success",
@@ -132,6 +136,7 @@ export function BucketGrantsCard({
     setActionError(null);
     try {
       await revokeBucketGrant(revokeTarget.tenantId);
+      onChanged?.();
       showNotification({
         type: "success",
         title: "Grant revoked",

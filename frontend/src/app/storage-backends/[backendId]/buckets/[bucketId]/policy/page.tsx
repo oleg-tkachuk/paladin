@@ -6,7 +6,6 @@
 // verbatim; the only differences are which client + RPC and which
 // resource the editor maps to.
 
-import { useTenantChangesBlocked } from "../../../../tenant-context";
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
@@ -29,8 +28,7 @@ import { useBucket } from "../bucket-context";
 import { errorMessage } from "@/hooks/errorContract";
 
 export default function BucketPolicyPage() {
-  const changesBlocked = useTenantChangesBlocked();
-  const { bucket, setBucket } = useBucket();
+  const { bucket, setBucket, changesBlocked } = useBucket();
   const { showNotification } = useNotification();
 
   const [policyText, setPolicyText] = useState(bucket.cedarPolicy);

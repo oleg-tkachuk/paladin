@@ -27,6 +27,9 @@ vi.mock("@/hooks/useBuckets", () => ({
     deleteBucket: h.deleteBucket,
   }),
 }));
+vi.mock("@/hooks/useTenants", () => ({
+  useTenants: () => ({ tenants: [], fetchTenants: vi.fn() }),
+}));
 vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({
     backends: [
@@ -69,6 +72,7 @@ const makeBucket = (name: string, ownerTenantId: string = TENANT_ID) => ({
   backendId: "be-1",
   ownerTenantId,
   bucketId: name,
+  grantedTenantIds: [] as string[],
   displayName: "",
   region: "us-east-1",
   provisionState: "PROVISION_STATE_READY",
@@ -215,14 +219,13 @@ describe("TenantBucketsPage", () => {
     expect(common).not.toHaveTextContent(OWNED_BUCKET_LABEL);
   });
 
-  // A granted bucket's subtree lives under its owner, and the bucket layout
-  // redirects there; the row goes straight to the storage-first page.
-  it("links a granted bucket to its bucket page, an owned one to its subtree", () => {
+  // ADR-0033: a bucket has one page, under its backend, owned or granted.
+  it("links every bucket to its one page", () => {
     h.buckets = [makeBucket("mine"), makeBucket("common", OTHER_OWNER)];
     render(<TenantBucketsPage />);
     expect(screen.getByRole("link", { name: /mine/ })).toHaveAttribute(
       "href",
-      "/tenants/acme/buckets/be-1/mine",
+      "/storage-backends/be-1/buckets/mine",
     );
     expect(screen.getByRole("link", { name: /common/ })).toHaveAttribute(
       "href",
@@ -240,7 +243,7 @@ describe("TenantBucketsPage", () => {
       await screen.findByRole("button", { name: "Actions for common" }),
     );
     expect(
-      await screen.findByRole("menuitem", { name: /Open on the backend/i }),
+      await screen.findByRole("menuitem", { name: /Open the bucket/i }),
     ).toHaveAttribute("href", "/storage-backends/be-1/buckets/common");
     expect(
       screen.queryByRole("menuitem", { name: /Lifecycle rules/i }),
@@ -259,7 +262,7 @@ describe("TenantBucketsPage", () => {
     );
     expect(
       await screen.findByRole("menuitem", { name: /Lifecycle rules/i }),
-    ).toHaveAttribute("href", "/tenants/acme/buckets/be-1/mine/lifecycle");
+    ).toHaveAttribute("href", "/storage-backends/be-1/buckets/mine/lifecycle");
   });
 
   // A shared tenant owns no bucket; it binds to the ones granted to it, and a

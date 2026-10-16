@@ -48,14 +48,10 @@ test.describe("US3 — Bucket list & Collection navigation", () => {
     const bucketLink = page.getByText(bucket.bucketId).first();
     await bucketLink.click();
 
-    // We're now on the bucket detail page. The "What's stored
-    // here" section heading + the tenant card + the Collection
-    // row should all render. We assert on the Collection
-    // identifier — the strongest signal that the bucket→OK
-    // join made it through the UI.
-    await expect(page.getByText(/What.s stored here/)).toBeVisible({
-      timeout: 5_000,
-    });
+    // We're now on the bucket's page; what each tenant stores is its
+    // Collections tab. We assert on the Collection identifier — the
+    // strongest signal that the bucket→Collection join made it through.
+    await page.getByRole("tab", { name: "Collections" }).click();
     await expect(page.getByText(ok.collection)).toBeVisible({
       timeout: 5_000,
     });

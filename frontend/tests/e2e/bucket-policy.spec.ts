@@ -11,17 +11,14 @@
 import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
-import { seedAdminTenantID, bucketPolicy } from "./fixtures/seed";
+import { bucketPolicy } from "./fixtures/seed";
 
 const EDITOR = /permit \( principal, action, resource \)/;
 const VALID_POLICY = `permit(principal, action, resource);`;
 
-function policyURL(
-  tenantId: string,
-  backendId: string,
-  bucketId: string,
-): string {
-  return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/policy`;
+// A bucket's one page, under its backend (ADR-0033).
+function policyURL(backendId: string, bucketId: string): string {
+  return `/storage-backends/${backendId}/buckets/${bucketId}/policy`;
 }
 
 test.describe("Bucket policy editor", () => {
@@ -30,16 +27,12 @@ test.describe("Bucket policy editor", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
     const before = await bucketPolicy(bucket.backendId, bucket.bucketId);
     expect(before.cedarPolicy).toBe("");
 
-    await gotoSettled(
-      page,
-      policyURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, policyURL(bucket.backendId, bucket.bucketId));
     const editor = page.getByPlaceholder(EDITOR);
     await expect(editor).toBeVisible({ timeout: 15_000 });
 
@@ -65,13 +58,9 @@ test.describe("Bucket policy editor", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      policyURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, policyURL(bucket.backendId, bucket.bucketId));
     const editor = page.getByPlaceholder(EDITOR);
     await expect(editor).toBeVisible({ timeout: 15_000 });
 
@@ -93,13 +82,9 @@ test.describe("Bucket policy editor", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      policyURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, policyURL(bucket.backendId, bucket.bucketId));
     const editor = page.getByPlaceholder(EDITOR);
     await expect(editor).toBeVisible({ timeout: 15_000 });
 

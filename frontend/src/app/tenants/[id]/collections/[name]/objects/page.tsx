@@ -598,7 +598,7 @@ function CollectionObjectsContent() {
           gets long. */}
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card/40 p-3">
         <div className="min-w-0 space-y-0.5">
-          <Label className={T.label}>Object Key</Label>
+          <Label className={T.label}>Collection</Label>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="info" className={T.code}>
               {collection}

@@ -10,7 +10,6 @@ import {
   EllipsisHorizontalIcon,
   MagnifyingGlassIcon,
   PlusIcon,
-  ServerStackIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
@@ -22,16 +21,6 @@ import { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/Card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,21 +34,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { failedRead } from "@/components/ui/ListLoadError";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
-import { T } from "@/lib/ui/typography";
 import { useTableSort } from "@/hooks/useTableSort";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
-import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
-import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
-import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
+import {
+  BucketTable,
+  SHARING,
+  bySharing,
+  tenantLabelMap,
+  type BucketSortColumn,
+  type Sharing,
+} from "@/components/features/buckets/BucketTable";
+import { bucketHref } from "@/lib/navigation/hrefs";
 
-type SortColumn = "backend" | "name" | "region";
+/** The bucket tab the row menu opens. */
+const LIFECYCLE_TAB = "lifecycle";
 
 const ALL_BACKENDS = "__all__";
 
@@ -102,7 +96,7 @@ export default function BucketsPage() {
   // same shape the objects page uses.
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
-  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
+  const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -141,38 +135,34 @@ export default function BucketsPage() {
   // Sort only. The two filters that used to live here are server-side now;
   // re-applying them in the browser would be dead code that quietly disagreed
   // with the API the day the two definitions of "matches" drifted apart.
+  const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
+  const [sharing, setSharing] = useState<Sharing>(SHARING.all);
+
   const filtered = useMemo(() => {
-    let list = buckets;
+    let list = bySharing(buckets, sharing);
     if (sort.column && sort.direction) {
       const dir = sort.direction === "asc" ? 1 : -1;
       list = [...list].sort((a, b) => {
-        const va =
-          sort.column === "backend"
-            ? a.backendId
-            : sort.column === "name"
-              ? a.bucketId
-              : a.region || "";
-        const vb =
-          sort.column === "backend"
-            ? b.backendId
-            : sort.column === "name"
-              ? b.bucketId
-              : b.region || "";
+        const va = sort.column === "backend" ? a.backendId : a.bucketId;
+        const vb = sort.column === "backend" ? b.backendId : b.bucketId;
         return va < vb ? -dir : va > vb ? dir : 0;
       });
     }
     return list;
-  }, [buckets, sort]);
+  }, [buckets, sort, sharing]);
 
-  const hasFilters = search.trim() !== "" || filterBackend !== ALL_BACKENDS;
+  const hasFilters =
+    search.trim() !== "" ||
+    filterBackend !== ALL_BACKENDS ||
+    sharing !== SHARING.all;
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="S3 Buckets"
-        description="Physical storage backends bound by Collections."
+        title="Buckets"
+        description="Every bucket on every backend: who owns it, and which tenants it is shared with."
         showDefaultActions={false}
         actions={
           <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -207,6 +197,19 @@ export default function BucketsPage() {
             ))}
           </SelectContent>
         </SelectRoot>
+        <SelectRoot
+          value={sharing}
+          onValueChange={(v) => setSharing(v as Sharing)}
+        >
+          <SelectTrigger aria-label="Filter by sharing" className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SHARING.all}>Shared or not</SelectItem>
+            <SelectItem value={SHARING.shared}>Shared</SelectItem>
+            <SelectItem value={SHARING.ownerOnly}>Owner only</SelectItem>
+          </SelectContent>
+        </SelectRoot>
         <Button
           variant="outline"
           size="icon"
@@ -217,191 +220,73 @@ export default function BucketsPage() {
         </Button>
       </div>
 
-      {/* Table */}
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead
-                className="hidden @md:table-cell w-45"
-                label="Backend"
-                column="backend"
-                current={sort}
-                onSort={handleSort}
-              />
-              <SortableHead
-                label="Bucket name"
-                column="name"
-                current={sort}
-                onSort={handleSort}
-              />
-              <TableHead className="hidden @lg:table-cell">
-                Display name
-              </TableHead>
-              <SortableHead
-                className="hidden @md:table-cell"
-                label="Region"
-                column="region"
-                current={sort}
-                onSort={handleSort}
-              />
-              <TableHead className="@md:w-35">Status</TableHead>
-              <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && buckets.length === 0 ? (
-              [0, 1, 2].map((i) => (
-                <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={6} className="py-3">
-                    <Skeleton className="h-7 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : listError ? (
-              // "No buckets yet" for a failed list is a lie with consequences:
-              // it invites the operator to create a bucket that already
-              // exists.
-              <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center">
-                  <ListLoadError
-                    what="Buckets"
-                    reason={listError}
-                    onRetry={() => void refetch()}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center">
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <ArchiveBoxIcon className="size-10 opacity-40" />
-                    <p className="text-sm">
-                      {/*
-                        Three states, not two. With the filter server-side an
-                        empty table means one of: the debounce has not fired
-                        yet, the request is in flight, or the server really
-                        found nothing. Collapsing the first two into "No
-                        buckets match" tells an operator their bucket is gone
-                        while they are still typing its name.
-                      */}
-                      {searchPending
-                        ? "Searching…"
-                        : hasFilters
-                          ? "No buckets match your filters."
-                          : "No buckets yet."}
-                    </p>
-                    {!searchPending && !hasFilters && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateOpen(true)}
-                      >
-                        <PlusIcon className="size-4" />
-                        Create the first bucket
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((b) => {
-                // Drill into the storage-first browser: backend → bucket →
-                // tenants → folders → files. The tenant-scoped path
-                // (/tenants/.../buckets/.../collections) is for the
-                // operator who already knows which tenant they care about;
-                // /storage-backends/.../buckets/... is the "show me
-                // what's physically here" view that scales naturally to a
-                // bucket its owner granted to other tenants.
-                const detailHref = `/storage-backends/${encodeURIComponent(b.backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
-                return (
-                  <TableRow
-                    key={`${b.backendId}/${b.bucketId}`}
-                    className="group"
-                  >
-                    <TableCell className="hidden @md:table-cell">
-                      <Link
-                        href={`/storage-backends/${encodeURIComponent(b.backendId)}`}
-                        className="flex items-center gap-2 hover:text-primary"
-                      >
-                        <ServerStackIcon className="size-4 text-chart-5" />
-                        <Badge variant="info" className={T.code}>
-                          {b.backendId}
-                        </Badge>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={detailHref}
-                        className="flex items-center gap-3 hover:text-primary"
-                      >
-                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                          <ArchiveBoxIcon className="size-4" />
-                        </div>
-                        <span className="font-mono text-xs group-hover:underline">
-                          {b.bucketId}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden @lg:table-cell font-medium">
-                      <Link href={detailHref} className="hover:text-primary">
-                        {b.displayName || (
-                          <span className="text-muted-foreground italic">
-                            —
-                          </span>
-                        )}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell text-muted-foreground text-xs font-mono">
-                      {b.region || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <ProvisionStateBadge state={b.provisionState} />
-                      {b.publicRead && <PublicReadBadge />}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 opacity-60 group-hover:opacity-100"
-                            aria-label={`Actions for ${b.bucketId}`}
-                          >
-                            <EllipsisHorizontalIcon className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {/* Detail subtree lives under the owner tenant
-                            (Phase 2 of the URL refactor); every bucket
-                            has one (ADR-0032). */}
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={`/tenants/${encodeURIComponent(b.ownerTenantId)}/buckets/${encodeURIComponent(b.backendId)}/${encodeURIComponent(b.bucketId)}/lifecycle`}
-                            >
-                              <ClockIcon className="size-4" />
-                              Lifecycle rules
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteTarget(b)}
-                          >
-                            <TrashIcon className="size-4" />
-                            Delete bucket
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+      <BucketTable
+        buckets={filtered}
+        tenants={tenantNames}
+        loading={loading}
+        error={listError}
+        onRetry={() => void refetch()}
+        sort={sort}
+        onSort={handleSort}
+        empty={
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <ArchiveBoxIcon className="size-10 opacity-40" />
+            <p className="text-sm">
+              {/*
+                Three states, not two. With the filter server-side an empty
+                table means one of: the debounce has not fired yet, the request
+                is in flight, or the server really found nothing. Collapsing
+                the first two into "No buckets match" tells an operator their
+                bucket is gone while they are still typing its name.
+              */}
+              {searchPending
+                ? "Searching…"
+                : hasFilters
+                  ? "No buckets match your filters."
+                  : "No buckets yet."}
+            </p>
+            {!searchPending && !hasFilters && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCreateOpen(true)}
+              >
+                <PlusIcon className="size-4" />
+                Create the first bucket
+              </Button>
             )}
-          </TableBody>
-        </Table>
-      </Card>
+          </div>
+        }
+        rowActions={(b) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 opacity-60 group-hover:opacity-100"
+                aria-label={`Actions for ${b.bucketId}`}
+              >
+                <EllipsisHorizontalIcon className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href={bucketHref(b.backendId, b.bucketId, LIFECYCLE_TAB)}>
+                  <ClockIcon className="size-4" />
+                  Lifecycle rules
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setDeleteTarget(b)}
+              >
+                <TrashIcon className="size-4" />
+                Delete bucket
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      />
 
       <BucketCreateDialog
         open={createOpen}

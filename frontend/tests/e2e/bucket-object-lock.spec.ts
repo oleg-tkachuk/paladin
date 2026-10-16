@@ -9,7 +9,6 @@
 import { test, expect, type MakeBucket } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
-  seedAdminTenantID,
   bucketLockState,
   bumpBucketVersion,
   setBucketVersioning,
@@ -29,8 +28,9 @@ async function seedVersionedBucket(makeBucket: MakeBucket) {
   return bucket;
 }
 
-function lockURL(tenantId: string, backendId: string, bucketId: string) {
-  return `/tenants/${tenantId}/buckets/${backendId}/${bucketId}/object-lock`;
+// A bucket's one page, under its backend (ADR-0033).
+function lockURL(backendId: string, bucketId: string): string {
+  return `/storage-backends/${backendId}/buckets/${bucketId}/object-lock`;
 }
 
 test.describe("Bucket object lock", () => {
@@ -39,15 +39,11 @@ test.describe("Bucket object lock", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await seedVersionedBucket(makeBucket);
     const before = await bucketLockState(bucket.backendId, bucket.bucketId);
     expect(before.enabled).toBe(false);
 
-    await gotoSettled(
-      page,
-      lockURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lockURL(bucket.backendId, bucket.bucketId));
 
     const save = page.getByRole("button", { name: /^Save$/ });
     await expect(save).toBeDisabled({ timeout: 15_000 });
@@ -77,13 +73,9 @@ test.describe("Bucket object lock", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket();
 
-    await gotoSettled(
-      page,
-      lockURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lockURL(bucket.backendId, bucket.bucketId));
 
     // Neither control means anything with the lock off, and offering them
     // would let an operator believe they had configured something.
@@ -103,13 +95,9 @@ test.describe("Bucket object lock", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await seedVersionedBucket(makeBucket);
 
-    await gotoSettled(
-      page,
-      lockURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lockURL(bucket.backendId, bucket.bucketId));
     const save = page.getByRole("button", { name: /^Save$/ });
     await expect(save).toBeDisabled({ timeout: 15_000 });
 
@@ -138,13 +126,9 @@ test.describe("Bucket object lock", () => {
     makeBucket,
   }) => {
     await loginAsAdmin(page);
-    const tenantId = await seedAdminTenantID();
     const bucket = await makeBucket(); // versioning deliberately off
 
-    await gotoSettled(
-      page,
-      lockURL(tenantId, bucket.backendId, bucket.bucketId),
-    );
+    await gotoSettled(page, lockURL(bucket.backendId, bucket.bucketId));
     await page.getByRole("switch", { name: /Enable object lock/i }).click();
     await page.getByRole("button", { name: /^Save$/ }).click();
 

@@ -56,11 +56,12 @@ describe("BucketsPage", () => {
     expect(screen.queryByText("No buckets yet.")).not.toBeInTheDocument();
   });
 
-  it("renders a row per bucket with its name and backend", () => {
+  it("renders a row per bucket with its name and display name", () => {
     h.buckets.buckets = [
       {
         backendId: "primary",
         bucketId: "acme-logs",
+        grantedTenantIds: [] as string[],
         displayName: "Acme Logs",
         region: "us-east-1",
         provisionState: "active",
@@ -69,18 +70,18 @@ describe("BucketsPage", () => {
     ];
     render(<BucketsPage />);
     expect(screen.getByText("acme-logs")).toBeInTheDocument();
-    expect(screen.getByText("primary")).toBeInTheDocument();
+    expect(screen.getByText("Acme Logs")).toBeInTheDocument();
     expect(screen.queryByText("No buckets yet.")).not.toBeInTheDocument();
   });
 
-  // ADR-0032: every bucket has an owner, so the lifecycle link under the
-  // owner's subtree is always offered; it used to be hidden for an ownerless
-  // bucket.
-  it("links each bucket's lifecycle rules under its owner tenant", async () => {
+  // ADR-0033: a bucket's settings are tabs of its one page, under its
+  // backend, not of a copy under its owner's workspace.
+  it("links each bucket's lifecycle rules on the bucket's page", async () => {
     h.buckets.buckets = [
       {
         backendId: "primary",
         bucketId: "pool",
+        grantedTenantIds: [] as string[],
         displayName: "",
         region: "",
         ownerTenantId: "t-platform",
@@ -95,7 +96,7 @@ describe("BucketsPage", () => {
       await screen.findByRole("menuitem", { name: /Lifecycle rules/ }),
     ).toHaveAttribute(
       "href",
-      "/tenants/t-platform/buckets/primary/pool/lifecycle",
+      "/storage-backends/primary/buckets/pool/lifecycle",
     );
   });
 });
@@ -199,6 +200,7 @@ describe("BucketsPage search", () => {
       {
         backendId: "primary",
         bucketId: "acme-logs",
+        grantedTenantIds: [] as string[],
         displayName: "Acme Logs",
         region: "us-east-1",
         provisionState: "active",
@@ -246,6 +248,7 @@ describe("BucketsPage provisioning", () => {
         {
           backendId: "primary",
           bucketId: "fresh",
+          grantedTenantIds: [] as string[],
           displayName: "",
           region: "",
           provisionState: PROVISION_STATE.pending,
@@ -271,6 +274,7 @@ describe("BucketsPage public read", () => {
       {
         backendId: "primary",
         bucketId: "photos",
+        grantedTenantIds: [] as string[],
         displayName: "",
         region: "",
         provisionState: "",
@@ -279,6 +283,7 @@ describe("BucketsPage public read", () => {
       {
         backendId: "primary",
         bucketId: "docs",
+        grantedTenantIds: [] as string[],
         displayName: "",
         region: "",
         provisionState: "",
@@ -290,5 +295,46 @@ describe("BucketsPage public read", () => {
     expect(screen.getByText("public").closest("tr")).toHaveTextContent(
       "photos",
     );
+  });
+});
+
+describe("BucketsPage sharing", () => {
+  const shared = {
+    backendId: "primary",
+    bucketId: "pool",
+    grantedTenantIds: ["t-a"],
+    displayName: "",
+    region: "",
+    ownerTenantId: "t-platform",
+    provisionState: "ready",
+    resourceVersion: "1",
+  };
+  const alone = { ...shared, bucketId: "solo", grantedTenantIds: [] };
+
+  beforeEach(() => {
+    h.buckets.buckets = [shared, alone];
+  });
+
+  // ADR-0032 made who a bucket is shared with the fact its settings reach;
+  // the list can be narrowed by it.
+  it("narrows the list to the shared buckets, and to the owner-only ones", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<BucketsPage />);
+    expect(screen.getByText("pool")).toBeInTheDocument();
+    expect(screen.getByText("solo")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter by sharing" }),
+    );
+    await user.click(await screen.findByRole("option", { name: "Shared" }));
+    expect(screen.getByText("pool")).toBeInTheDocument();
+    expect(screen.queryByText("solo")).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Filter by sharing" }),
+    );
+    await user.click(await screen.findByRole("option", { name: "Owner only" }));
+    expect(screen.queryByText("pool")).not.toBeInTheDocument();
+    expect(screen.getByText("solo")).toBeInTheDocument();
   });
 });

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 //
 // When this was measured, 4 of 19 asked nothing: Reset password (the user's
 // current password stopped working at once), Cancel on a running operation,
-// Clear on a tenant's default route (every bare-name create then fails), and
+// Clear on a tenant's default bucket (every bare-name create then fails), and
 // Reset daily counters. Delete sat beside Reset password and had always asked.
 //
 // A text rule cannot tell whether a confirmation guards a call: it is often a

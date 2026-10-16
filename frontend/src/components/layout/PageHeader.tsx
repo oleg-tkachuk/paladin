@@ -10,6 +10,7 @@ import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { Breadcrumbs } from "./Breadcrumbs";
+import { ScopeBadge } from "./ScopeBadge";
 
 interface PageHeaderProps {
   title: React.ReactNode;
@@ -27,13 +28,13 @@ interface PageHeaderProps {
 /**
  * Standard page header.
  *
- *   Breadcrumbs (route location)
+ *   Breadcrumbs (route location)                 [scope]
  *   Title                                        [actions…]
  *   Description
  *
- * The signed-in tenant is deliberately NOT repeated here — it lives once,
- * in the top-bar TenantSwitcher. Echoing it beside every title was the main
- * source of chrome noise; the breadcrumb already answers "where am I".
+ * The scope badge names the space the page is in — the platform, or the
+ * tenant whose workspace it is (ADR-0033). That is not the session's tenant,
+ * which the top bar's switcher shows: a platform admin acts on other tenants.
  */
 export const PageHeader: React.FC<PageHeaderProps> = ({
   title,
@@ -44,7 +45,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 }) => {
   return (
     <div className="space-y-4">
-      {showBreadcrumbs && <Breadcrumbs />}
+      {showBreadcrumbs && (
+        <div className="flex items-center justify-between gap-3">
+          <Breadcrumbs />
+          <ScopeBadge />
+        </div>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1 space-y-2">
           {typeof title === "string" ? (

@@ -38,6 +38,9 @@ import {
 export const TENANT_SWITCHER_LABEL = "Tenant switcher";
 /** What the list says when the memberships could not be read. */
 export const MEMBERSHIPS_FAILED = "Tenant list could not be loaded.";
+/** What the trigger says before the tenant: whose session this is, not which
+ *  tenant the page shows (ADR-0033). */
+export const SIGNED_IN_TO = "Signed in to";
 /** The list's heading while the memberships load, and once they have. */
 const HEADING_LOADING = "Loading…";
 const HEADING_TENANTS = "Your tenants";
@@ -121,7 +124,7 @@ export const TenantSwitcher: React.FC = () => {
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`${TENANT_SWITCHER_LABEL} — signed in to ${tenantLabel}`}
+          aria-label={`${TENANT_SWITCHER_LABEL} — ${SIGNED_IN_TO.toLowerCase()} ${tenantLabel}`}
           className={cn(
             "group inline-flex h-9 max-w-64 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left transition-colors",
             "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -133,8 +136,13 @@ export const TenantSwitcher: React.FC = () => {
               {tenantMonogram(tenantLabel)}
             </AvatarFallback>
           </Avatar>
-          <span className={cn(T.body, "min-w-0 truncate font-medium")}>
-            {tenantLabel}
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className={cn(T.hint, "hidden sm:block")}>
+              {SIGNED_IN_TO}
+            </span>
+            <span className={cn(T.body, "min-w-0 truncate font-medium")}>
+              {tenantLabel}
+            </span>
           </span>
           <ChevronUpDownIcon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
         </button>

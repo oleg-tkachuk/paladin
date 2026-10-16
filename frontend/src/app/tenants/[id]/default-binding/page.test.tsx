@@ -129,7 +129,7 @@ describe("DefaultBindingPage", () => {
     // Clear asks first.
     expect(h.clear).not.toHaveBeenCalled();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Clear route" }),
+      await screen.findByRole("button", { name: "Clear default bucket" }),
     );
     await waitFor(() =>
       expect(h.clear).toHaveBeenCalledWith({ name: "tenants/acme" }),

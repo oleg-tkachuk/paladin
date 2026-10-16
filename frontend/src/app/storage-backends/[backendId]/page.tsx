@@ -11,10 +11,7 @@ import React, { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  ArchiveBoxIcon,
-  ArrowLeftIcon,
   ArrowPathIcon,
-  ChevronRightIcon,
   CloudIcon,
   PlusIcon,
 } from "@heroicons/react/24/outline";
@@ -22,6 +19,11 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useBackends } from "@/hooks/useBackends";
 import { useBuckets } from "@/hooks/useBuckets";
+import { useTenants } from "@/hooks/useTenants";
+import {
+  BucketTable,
+  tenantLabelMap,
+} from "@/components/features/buckets/BucketTable";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { StorageKind } from "@/gen/paladin/admin/v1/types_pb";
 import { BackendActions } from "./BackendActions";
@@ -29,15 +31,6 @@ import { BackendFeatures } from "./BackendFeatures";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -74,6 +67,12 @@ export default function StorageBackendDetailPage() {
     () => backends.find((b) => b.backendId === backendId),
     [backends, backendId],
   );
+  // The rows name owners and grantees; an unknown tenant shows its id.
+  const { tenants, fetchTenants } = useTenants();
+  useEffect(() => {
+    void fetchTenants();
+  }, [fetchTenants]);
+  const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
   const bucketsHere = useMemo(
     () => buckets.filter((b) => b.backendId === backendId),
     [buckets, backendId],
@@ -89,24 +88,7 @@ export default function StorageBackendDetailPage() {
             : "Storage backend"
         }
         showDefaultActions={false}
-        actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/storage-backends">
-              <ArrowLeftIcon className="size-4" />
-              All backends
-            </Link>
-          </Button>
-        }
       />
-
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link href="/storage-backends" className="hover:text-foreground">
-          Storage Backends
-        </Link>
-        <ChevronRightIcon className="size-3" />
-        <span className="text-foreground font-medium">{backendId}</span>
-      </nav>
 
       {/* Identity card */}
       {loadingBackends && !backend ? (
@@ -188,94 +170,25 @@ export default function StorageBackendDetailPage() {
         </Button>
       </div>
 
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="@md:w-65">Bucket</TableHead>
-              <TableHead>Display name</TableHead>
-              <TableHead className="hidden @md:table-cell">Region</TableHead>
-              <TableHead className="hidden @md:table-cell">State</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loadingBuckets && buckets.length === 0 ? (
-              [0, 1, 2].map((i) => (
-                <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={4} className="py-3">
-                    <Skeleton className="h-7 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : bucketsError ? (
-              <TableRow>
-                <TableCell colSpan={4} className="h-40 text-center">
-                  <ListLoadError
-                    what="Buckets"
-                    reason={bucketsError}
-                    onRetry={() => void fetchBuckets()}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : bucketsHere.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="h-40 text-center">
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <CloudIcon className="size-8 opacity-40" />
-                    <p className="text-sm">No buckets on this backend yet.</p>
-                    <Button size="sm" variant="outline" asChild>
-                      <Link
-                        href={`/buckets?backend=${encodeURIComponent(backendId)}`}
-                      >
-                        <PlusIcon className="size-4" />
-                        Create bucket on this backend
-                      </Link>
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              bucketsHere.map((b) => {
-                const href = `/storage-backends/${encodeURIComponent(backendId)}/buckets/${encodeURIComponent(b.bucketId)}`;
-                return (
-                  <TableRow key={b.bucketId} className="group">
-                    <TableCell>
-                      <Link
-                        href={href}
-                        className="flex items-center gap-3 hover:text-primary"
-                      >
-                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-4/15 text-chart-4 ring-1 ring-chart-4/30">
-                          <ArchiveBoxIcon className="size-4" />
-                        </div>
-                        <span className="font-medium group-hover:underline">
-                          {b.bucketId}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {b.displayName || (
-                        <span className="text-muted-foreground italic">
-                          (unnamed)
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {b.region || "—"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <Badge variant="outline" className={T.labelTight}>
-                        {b.provisionState || "ready"}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      <BucketTable
+        buckets={bucketsHere}
+        tenants={tenantNames}
+        loading={loadingBuckets}
+        error={bucketsError}
+        onRetry={() => void fetchBuckets()}
+        empty={
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <CloudIcon className="size-8 opacity-40" />
+            <p className="text-sm">No buckets on this backend yet.</p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/buckets?backend=${encodeURIComponent(backendId)}`}>
+                <PlusIcon className="size-4" />
+                Create bucket on this backend
+              </Link>
+            </Button>
+          </div>
+        }
+      />
     </div>
   );
 }

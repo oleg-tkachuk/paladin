@@ -95,7 +95,7 @@ export default function TenantLayout({
       <div className="space-y-4">
         <PageHeader
           title={tenant.displayName}
-          description={`Tenant scope — slug: ${tenant.slug}`}
+          description={`Tenant workspace · ${tenant.slug}`}
           showDefaultActions={false}
         />
         {tenant.trashed && (

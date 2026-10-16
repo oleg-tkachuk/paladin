@@ -14,7 +14,6 @@
 //   - Optimistic concurrency via resourceVersion — on Aborted we
 //     refetch (via context.refetch) and ask the operator to retry.
 
-import { useTenantChangesBlocked } from "../../../../tenant-context";
 import React, { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema } from "@bufbuild/protobuf/wkt";
@@ -215,8 +214,7 @@ function formToRule(form: RuleFormState): LifecycleRule {
 // ─── page ────────────────────────────────────────────────────────────────────
 
 export default function BucketLifecyclePage() {
-  const changesBlocked = useTenantChangesBlocked();
-  const { bucket, setBucket, refetch } = useBucket();
+  const { bucket, setBucket, refetch, changesBlocked } = useBucket();
   const { showNotification } = useNotification();
 
   const [saving, setSaving] = useState(false);

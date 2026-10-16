@@ -1,22 +1,16 @@
 "use client";
 
-// BucketTabs — second-level sub-nav rendered inside the bucket
-// detail layout (`/tenants/<id>/buckets/<backend>/<name>/...`).
-//
-// Tabs reflect the surfaces the backend exposes per-bucket today
-// plus near-term placeholders so the URL shape doesn't churn when
-// they ship:
-//   1. Overview      — metadata, provision state, summary counts.
-//   2. Lifecycle     — transition / expiration rules (already wired).
-//   3. Policy        — bucket-level Cedar overlay.
-//   4. Replication   — cross-region / cross-backend mirror config.
-//   5. Versioning    — object-versioning toggle + retention.
-//   6. Object Lock   — WORM default-retention (governance/compliance).
-//   7. Collections   — Collections routed to this bucket.
+// BucketTabs — the tabs of a bucket's one page,
+// /storage-backends/<backend>/buckets/<bucket>/… (ADR-0033):
+//   Overview    — identity, owner, who it is shared with.
+//   Collections — what each tenant stores in it.
+//   the settings — lifecycle, policy, versioning, object lock, replication;
+//                  each reaches every tenant the bucket is shared with.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { bucketHref } from "@/lib/navigation/hrefs";
 import { cn } from "@/lib/utils";
 
 type TabSpec = {
@@ -25,29 +19,40 @@ type TabSpec = {
   exact?: boolean;
 };
 
+/** The tabs that change the bucket for every tenant in it. */
+export const BUCKET_SETTINGS_TABS = [
+  "lifecycle",
+  "policy",
+  "versioning",
+  "object-lock",
+  "replication",
+] as const;
+
 const TABS: TabSpec[] = [
   { slug: "", label: "Overview", exact: true },
+  { slug: "collections", label: "Collections" },
   { slug: "lifecycle", label: "Lifecycle" },
   { slug: "policy", label: "Policy" },
-  { slug: "replication", label: "Replication" },
   { slug: "versioning", label: "Versioning" },
-  { slug: "object-lock", label: "Object Lock" },
-  { slug: "collections", label: "Collections" },
+  { slug: "object-lock", label: "Object lock" },
+  { slug: "replication", label: "Replication" },
 ];
 
+/** Whether pathname is one of a bucket's settings tabs. */
+export function isBucketSettingsTab(pathname: string): boolean {
+  const last = pathname.split("/").filter(Boolean).pop() ?? "";
+  return (BUCKET_SETTINGS_TABS as readonly string[]).includes(last);
+}
+
 export function BucketTabs({
-  tenantId,
   backendId,
   bucketId,
 }: {
-  tenantId: string;
   backendId: string;
   bucketId: string;
 }) {
   const pathname = usePathname();
-  const base = `/tenants/${tenantId}/buckets/${encodeURIComponent(
-    backendId,
-  )}/${encodeURIComponent(bucketId)}`;
+  const base = bucketHref(backendId, bucketId);
 
   return (
     <div
