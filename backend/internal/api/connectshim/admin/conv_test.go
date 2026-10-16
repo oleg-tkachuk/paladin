@@ -1,8 +1,11 @@
 package admin
 
 import (
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -485,5 +488,18 @@ func TestLifecycleOmitsAbsentArms(t *testing.T) {
 func TestBackendToProtoCarriesDeclared(t *testing.T) {
 	if !backendToProto(&admindomain.StorageBackend{BackendID: "primary", Declared: true}).GetDeclared() {
 		t.Error("Declared dropped")
+	}
+}
+
+// A bucket's grantees reach the wire in the order the store gave them, and an
+// ungranted bucket carries none rather than a nil it would have to tell apart.
+func TestBucketToProtoCarriesGrantees(t *testing.T) {
+	first, second := uuid.New(), uuid.New()
+	got := bucketToProto(&admindomain.Bucket{GrantedTenantIDs: []uuid.UUID{first, second}})
+	if want := []string{first.String(), second.String()}; !slices.Equal(got.GetGrantedTenantIds(), want) {
+		t.Errorf("grantees %v, want %v", got.GetGrantedTenantIds(), want)
+	}
+	if got := bucketToProto(&admindomain.Bucket{}); got.GrantedTenantIds == nil || len(got.GrantedTenantIds) != 0 {
+		t.Errorf("an ungranted bucket: grantees %#v, want an empty list", got.GrantedTenantIds)
 	}
 }

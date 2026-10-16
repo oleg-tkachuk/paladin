@@ -181,6 +181,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 		DisplayName:      b.DisplayName,
 		Region:           b.Region,
 		OwnerTenantId:    uuidStrEmpty(b.OwnerTenantID.String()),
+		GrantedTenantIds: uuidStrings(b.GrantedTenantIDs),
 		CedarPolicy:      b.CedarPolicy,
 		Constraints:      constraintsToProto(b.Constraints),
 		LifecycleRules:   lifecycleToProto(b.LifecycleRules),
@@ -203,6 +204,15 @@ func uuidStrEmpty(s string) string {
 		return ""
 	}
 	return s
+}
+
+// uuidStrings renders ids as their string forms, in order.
+func uuidStrings(ids []uuid.UUID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return out
 }
 
 func constraintsToProto(c admindomain.BucketConstraints) *pb.BucketConstraints {

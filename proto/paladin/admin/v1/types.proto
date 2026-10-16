@@ -250,6 +250,9 @@ message Bucket {
   // there: an adopted one holds data Paladin never wrote. Set when the bucket
   // is registered, never changed.
   bool created_on_backend = 20 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // The tenants the owner granted the bucket to, by tenant UUID, oldest grant
+  // first (ADR-0032). Change it with GrantBucket and RevokeBucketGrant.
+  repeated string granted_tenant_ids = 21 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message BucketConstraints {
