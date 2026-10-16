@@ -42,7 +42,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0030](0030-agpl-with-apache-client-surface.md) | AGPL for the service, Apache-2.0 for what clients embed | Accepted |
 | [0031](0031-capability-verify-then-handler.md) | A capability is verified in the interceptor and checked in the handler | Accepted |
 | [0032](0032-every-bucket-has-a-tenant-owner.md) | Every bucket has a tenant owner, and sharing is granted | Accepted |
-| [0033](0033-console-separates-platform-from-tenant-workspace.md) | The console separates the platform from a tenant's workspace | Proposed |
+| [0033](0033-console-separates-platform-from-tenant-workspace.md) | The console separates the platform from a tenant's workspace | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

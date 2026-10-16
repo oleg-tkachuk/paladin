@@ -1,6 +1,8 @@
 # ADR-0033: The console separates the platform from a tenant's workspace
 
-- **Status:** Proposed
+- **Status:** Accepted — implemented 2026-10-16 (`lib/navigation/`,
+  `BucketTable`, the bucket layout under `storage-backends/[backendId]/buckets/`,
+  `TenantTabs`, `vocabulary.test.ts`).
 - **Related:** [ADR-0014](0014-canonical-resource-names.md) (canonical
   resource names — this gives each one a single console URL),
   [ADR-0015](0015-per-tenant-bucket-layout.md) (shared and dedicated
