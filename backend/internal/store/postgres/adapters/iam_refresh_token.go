@@ -18,7 +18,10 @@ type RefreshTokenRepo struct {
 
 func NewRefreshTokenRepo(q *sqlc.Queries) *RefreshTokenRepo { return &RefreshTokenRepo{q: q} }
 
-var _ authstore.RefreshTokenRepository = (*RefreshTokenRepo)(nil)
+var (
+	_ authstore.RefreshTokenRepository = (*RefreshTokenRepo)(nil)
+	_ authstore.OAuthGrantStore        = (*RefreshTokenRepo)(nil)
+)
 
 func (r *RefreshTokenRepo) Insert(ctx context.Context, t authstore.RefreshToken) error {
 	var clientID, audience *string
@@ -142,4 +145,31 @@ func (r *RefreshTokenRepo) RevokeFamilyOf(ctx context.Context, jti uuid.UUID) (i
 
 func (r *RefreshTokenRepo) PurgeExpired(ctx context.Context, olderThan time.Time) (int64, error) {
 	return r.q.PurgeExpiredRefreshTokens(ctx, pgTS(olderThan))
+}
+
+func (r *RefreshTokenRepo) ListOAuthGrants(ctx context.Context, userID uuid.UUID, now time.Time) ([]authstore.UserOAuthGrant, error) {
+	rows, err := r.q.ListOAuthGrantsForUser(ctx, pgUUID(userID), pgTS(now))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]authstore.UserOAuthGrant, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, authstore.UserOAuthGrant{
+			ID: uuidFrom(row.FamilyID),
+			Grant: authstore.OAuthGrant{
+				ClientID: derefStr(row.OauthClientID),
+				Audience: derefStr(row.OauthAudience),
+				Scopes:   row.OauthScopes,
+			},
+			GrantedAt:   timeFrom(row.GrantedAt),
+			RefreshedAt: timeFrom(row.IssuedAt),
+			ExpiresAt:   timeFrom(row.ExpiresAt),
+		})
+	}
+	return out, nil
+}
+
+func (r *RefreshTokenRepo) RevokeOAuthGrant(ctx context.Context, userID, grantID uuid.UUID) (bool, error) {
+	n, err := r.q.RevokeOAuthGrant(ctx, pgUUID(grantID), pgUUID(userID))
+	return n > 0, err
 }

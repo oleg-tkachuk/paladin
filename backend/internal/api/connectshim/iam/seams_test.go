@@ -83,6 +83,12 @@ func (failingUser) RevokeScopes(context.Context, userh.UserRef, []auth.Scope) (*
 func (failingUser) UpdateUser(context.Context, userh.UpdateUserInput) (*authstore.User, error) {
 	return nil, errBoom
 }
+func (failingUser) ListOAuthGrants(context.Context, userh.UserRef) ([]authstore.UserOAuthGrant, error) {
+	return nil, errBoom
+}
+func (failingUser) RevokeOAuthGrant(context.Context, userh.UserRef, uuid.UUID) error {
+	return errBoom
+}
 
 type failingUserSettings struct{}
 
@@ -206,6 +212,14 @@ func TestEveryIAMShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"User.ResetPassword", func() error {
 			_, err := userSrv.ResetPassword(ctx, &pb.ResetPasswordRequest{Name: userName})
+			return err
+		}},
+		{"User.ListOAuthGrants", func() error {
+			_, err := userSrv.ListOAuthGrants(ctx, &pb.ListOAuthGrantsRequest{Name: userName})
+			return err
+		}},
+		{"User.RevokeOAuthGrant", func() error {
+			_, err := userSrv.RevokeOAuthGrant(ctx, &pb.RevokeOAuthGrantRequest{Name: userName, GrantId: uuid.NewString()})
 			return err
 		}},
 

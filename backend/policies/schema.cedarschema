@@ -315,6 +315,20 @@ action "ReadUserSettings" appliesTo {
   context: RequestContext
 };
 
+// IAM — the OAuth grants a user gave clients. Resource is the user holding
+// them.
+action "ReadOAuthGrants" appliesTo {
+  principal: [User],
+  resource: [User],
+  context: RequestContext
+};
+
+action "RevokeOAuthGrant" appliesTo {
+  principal: [User],
+  resource: [User],
+  context: RequestContext
+};
+
 action "ManageUserSettings" appliesTo {
   principal: [User],
   resource: [User],

@@ -1,4 +1,8 @@
+import datetime
+
 from buf.validate import validate_pb2 as _validate_pb2
+from google.api import field_behavior_pb2 as _field_behavior_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf import field_mask_pb2 as _field_mask_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from paladin.common.v1 import scope_pb2 as _scope_pb2
@@ -108,3 +112,45 @@ class ResetPasswordResponse(_message.Message):
     GENERATED_PASSWORD_FIELD_NUMBER: _ClassVar[int]
     generated_password: str
     def __init__(self, generated_password: _Optional[str] = ...) -> None: ...
+
+class ListOAuthGrantsRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class ListOAuthGrantsResponse(_message.Message):
+    __slots__ = ("grants",)
+    GRANTS_FIELD_NUMBER: _ClassVar[int]
+    grants: _containers.RepeatedCompositeFieldContainer[OAuthGrant]
+    def __init__(self, grants: _Optional[_Iterable[_Union[OAuthGrant, _Mapping]]] = ...) -> None: ...
+
+class OAuthGrant(_message.Message):
+    __slots__ = ("id", "client_id", "audience", "scopes", "granted_at", "refreshed_at", "expires_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    GRANTED_AT_FIELD_NUMBER: _ClassVar[int]
+    REFRESHED_AT_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    client_id: str
+    audience: str
+    scopes: _containers.RepeatedScalarFieldContainer[str]
+    granted_at: _timestamp_pb2.Timestamp
+    refreshed_at: _timestamp_pb2.Timestamp
+    expires_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., client_id: _Optional[str] = ..., audience: _Optional[str] = ..., scopes: _Optional[_Iterable[str]] = ..., granted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., refreshed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class RevokeOAuthGrantRequest(_message.Message):
+    __slots__ = ("name", "grant_id")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    grant_id: str
+    def __init__(self, name: _Optional[str] = ..., grant_id: _Optional[str] = ...) -> None: ...
+
+class RevokeOAuthGrantResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...

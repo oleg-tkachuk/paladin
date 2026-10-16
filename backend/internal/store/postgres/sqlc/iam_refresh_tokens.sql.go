@@ -97,6 +97,60 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID
 	return err
 }
 
+const listOAuthGrantsForUser = `-- name: ListOAuthGrantsForUser :many
+SELECT DISTINCT ON (rt.family_id)
+       rt.family_id, rt.oauth_client_id, rt.oauth_audience, rt.oauth_scopes,
+       rt.issued_at, rt.expires_at,
+       (SELECT min(f.issued_at) FROM refresh_tokens AS f WHERE f.family_id = rt.family_id)::timestamptz AS granted_at
+FROM refresh_tokens AS rt
+WHERE rt.user_id = $1
+  AND rt.oauth_client_id IS NOT NULL
+  AND rt.revoked = FALSE
+  AND rt.expires_at > $2
+ORDER BY rt.family_id, rt.issued_at DESC
+`
+
+type ListOAuthGrantsForUserRow struct {
+	FamilyID      pgtype.UUID        `json:"family_id"`
+	OauthClientID *string            `json:"oauth_client_id"`
+	OauthAudience *string            `json:"oauth_audience"`
+	OauthScopes   []string           `json:"oauth_scopes"`
+	IssuedAt      pgtype.Timestamptz `json:"issued_at"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	GrantedAt     pgtype.Timestamptz `json:"granted_at"`
+}
+
+// The OAuth grants a user holds: one row per live family of OAuth refresh
+// tokens, carrying its newest live member and when the family began — the
+// consent. A console login is no grant and is left out.
+func (q *Queries) ListOAuthGrantsForUser(ctx context.Context, userID pgtype.UUID, expiresAt pgtype.Timestamptz) ([]ListOAuthGrantsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listOAuthGrantsForUser, userID, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOAuthGrantsForUserRow
+	for rows.Next() {
+		var i ListOAuthGrantsForUserRow
+		if err := rows.Scan(
+			&i.FamilyID,
+			&i.OauthClientID,
+			&i.OauthAudience,
+			&i.OauthScopes,
+			&i.IssuedAt,
+			&i.ExpiresAt,
+			&i.GrantedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :exec
 UPDATE refresh_tokens
 SET first_used_at = now()
@@ -123,6 +177,26 @@ WHERE ctid IN (
 // Bounded batch (10k). Worker loops until result is 0.
 func (q *Queries) PurgeExpiredRefreshTokens(ctx context.Context, expiresAt pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeExpiredRefreshTokens, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOAuthGrant = `-- name: RevokeOAuthGrant :execrows
+UPDATE refresh_tokens
+SET revoked = TRUE, superseded_at = NULL
+WHERE family_id = $1
+  AND user_id = $2
+  AND oauth_client_id IS NOT NULL
+  AND (revoked = FALSE OR superseded_at IS NOT NULL)
+`
+
+// End one OAuth grant: the family, as RevokeRefreshTokenFamily does, but
+// named by its id and only when it is this user's and an OAuth one — the
+// caller names a grant it was shown, never a console session.
+func (q *Queries) RevokeOAuthGrant(ctx context.Context, familyID pgtype.UUID, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOAuthGrant, familyID, userID)
 	if err != nil {
 		return 0, err
 	}

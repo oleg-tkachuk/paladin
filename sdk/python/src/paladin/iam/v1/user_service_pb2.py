@@ -23,13 +23,15 @@ _sym_db = _symbol_database.Default()
 
 
 from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
+from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.protobuf import field_mask_pb2 as google_dot_protobuf_dot_field__mask__pb2
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 from paladin.common.v1 import scope_pb2 as paladin_dot_common_dot_v1_dot_scope__pb2
 from paladin.iam.v1 import types_pb2 as paladin_dot_iam_dot_v1_dot_types__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!paladin/iam/v1/user_service.proto\x12\x0epaladin.iam.v1\x1a\x1b\x62uf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1dpaladin/common/v1/scope.proto\x1a\x1apaladin/iam/v1/types.proto\"\xb2\x01\n\x11\x43reateUserRequest\x12\x0e\n\x06parent\x18\x01 \x01(\t\x12\x18\n\x07subject\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12$\n\x10initial_password\x18\x04 \x01(\tB\n\x80\x01\x01\xbaH\x04r\x02\x10\x0c\x12\r\n\x05roles\x18\x05 \x03(\t\x12(\n\x06scopes\x18\x06 \x03(\x0b\x32\x18.paladin.common.v1.Scope\"\'\n\x0eGetUserRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\xbd\x01\n\x11UpdateUserRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x37\n\x0bupdate_mask\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01\x12\x14\n\x0c\x64isplay_name\x18\x04 \x01(\t\x12\x10\n\x08\x64isabled\x18\x05 \x01(\x08\x12\r\n\x05roles\x18\x06 \x03(\t\"M\n\x11\x44\x65leteUserRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x14\n\x12\x44\x65leteUserResponse\"`\n\x10ListUsersRequest\x12\x0e\n\x06parent\x18\x01 \x01(\t\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x03 \x01(\t\"g\n\x11ListUsersResponse\x12#\n\x05users\x18\x01 \x03(\x0b\x32\x14.paladin.iam.v1.User\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"_\n\x12GrantScopesRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x32\n\x06scopes\x18\x02 \x03(\x0b\x32\x18.paladin.common.v1.ScopeB\x08\xbaH\x05\x92\x01\x02\x08\x01\"`\n\x13RevokeScopesRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x32\n\x06scopes\x18\x02 \x03(\x0b\x32\x18.paladin.common.v1.ScopeB\x08\xbaH\x05\x92\x01\x02\x08\x01\"H\n\x14ResetPasswordRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x19\n\x0cnew_password\x18\x02 \x01(\tB\x03\x80\x01\x01\"8\n\x15ResetPasswordResponse\x12\x1f\n\x12generated_password\x18\x01 \x01(\tB\x03\x80\x01\x01\x32\x98\x05\n\x0bUserService\x12\x45\n\nCreateUser\x12!.paladin.iam.v1.CreateUserRequest\x1a\x14.paladin.iam.v1.User\x12\x44\n\x07GetUser\x12\x1e.paladin.iam.v1.GetUserRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x01\x12J\n\nUpdateUser\x12!.paladin.iam.v1.UpdateUserRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12X\n\nDeleteUser\x12!.paladin.iam.v1.DeleteUserRequest\x1a\".paladin.iam.v1.DeleteUserResponse\"\x03\x90\x02\x02\x12U\n\tListUsers\x12 .paladin.iam.v1.ListUsersRequest\x1a!.paladin.iam.v1.ListUsersResponse\"\x03\x90\x02\x01\x12L\n\x0bGrantScopes\x12\".paladin.iam.v1.GrantScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12N\n\x0cRevokeScopes\x12#.paladin.iam.v1.RevokeScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12\x61\n\rResetPassword\x12$.paladin.iam.v1.ResetPasswordRequest\x1a%.paladin.iam.v1.ResetPasswordResponse\"\x03\x90\x02\x02\x42HZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!paladin/iam/v1/user_service.proto\x12\x0epaladin.iam.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a google/protobuf/field_mask.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1dpaladin/common/v1/scope.proto\x1a\x1apaladin/iam/v1/types.proto\"\xb2\x01\n\x11\x43reateUserRequest\x12\x0e\n\x06parent\x18\x01 \x01(\t\x12\x18\n\x07subject\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x14\n\x0c\x64isplay_name\x18\x03 \x01(\t\x12$\n\x10initial_password\x18\x04 \x01(\tB\n\x80\x01\x01\xbaH\x04r\x02\x10\x0c\x12\r\n\x05roles\x18\x05 \x03(\t\x12(\n\x06scopes\x18\x06 \x03(\x0b\x32\x18.paladin.common.v1.Scope\"\'\n\x0eGetUserRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\xbd\x01\n\x11UpdateUserRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x37\n\x0bupdate_mask\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01\x12\x14\n\x0c\x64isplay_name\x18\x04 \x01(\t\x12\x10\n\x08\x64isabled\x18\x05 \x01(\x08\x12\r\n\x05roles\x18\x06 \x03(\t\"M\n\x11\x44\x65leteUserRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x10resource_version\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x14\n\x12\x44\x65leteUserResponse\"`\n\x10ListUsersRequest\x12\x0e\n\x06parent\x18\x01 \x01(\t\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x03 \x01(\t\"g\n\x11ListUsersResponse\x12#\n\x05users\x18\x01 \x03(\x0b\x32\x14.paladin.iam.v1.User\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"_\n\x12GrantScopesRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x32\n\x06scopes\x18\x02 \x03(\x0b\x32\x18.paladin.common.v1.ScopeB\x08\xbaH\x05\x92\x01\x02\x08\x01\"`\n\x13RevokeScopesRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x32\n\x06scopes\x18\x02 \x03(\x0b\x32\x18.paladin.common.v1.ScopeB\x08\xbaH\x05\x92\x01\x02\x08\x01\"H\n\x14ResetPasswordRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x19\n\x0cnew_password\x18\x02 \x01(\tB\x03\x80\x01\x01\"8\n\x15ResetPasswordResponse\x12\x1f\n\x12generated_password\x18\x01 \x01(\tB\x03\x80\x01\x01\"/\n\x16ListOAuthGrantsRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"E\n\x17ListOAuthGrantsResponse\x12*\n\x06grants\x18\x01 \x03(\x0b\x32\x1a.paladin.iam.v1.OAuthGrant\"\x82\x02\n\nOAuthGrant\x12\x0f\n\x02id\x18\x01 \x01(\tB\x03\xe0\x41\x03\x12\x16\n\tclient_id\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x15\n\x08\x61udience\x18\x03 \x01(\tB\x03\xe0\x41\x03\x12\x13\n\x06scopes\x18\x04 \x03(\tB\x03\xe0\x41\x03\x12\x33\n\ngranted_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x35\n\x0crefreshed_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nexpires_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\"L\n\x17RevokeOAuthGrantRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\x08grant_id\x18\x02 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\"\x1a\n\x18RevokeOAuthGrantResponse2\xed\x06\n\x0bUserService\x12\x45\n\nCreateUser\x12!.paladin.iam.v1.CreateUserRequest\x1a\x14.paladin.iam.v1.User\x12\x44\n\x07GetUser\x12\x1e.paladin.iam.v1.GetUserRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x01\x12J\n\nUpdateUser\x12!.paladin.iam.v1.UpdateUserRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12X\n\nDeleteUser\x12!.paladin.iam.v1.DeleteUserRequest\x1a\".paladin.iam.v1.DeleteUserResponse\"\x03\x90\x02\x02\x12U\n\tListUsers\x12 .paladin.iam.v1.ListUsersRequest\x1a!.paladin.iam.v1.ListUsersResponse\"\x03\x90\x02\x01\x12L\n\x0bGrantScopes\x12\".paladin.iam.v1.GrantScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12N\n\x0cRevokeScopes\x12#.paladin.iam.v1.RevokeScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12\x61\n\rResetPassword\x12$.paladin.iam.v1.ResetPasswordRequest\x1a%.paladin.iam.v1.ResetPasswordResponse\"\x03\x90\x02\x02\x12g\n\x0fListOAuthGrants\x12&.paladin.iam.v1.ListOAuthGrantsRequest\x1a\'.paladin.iam.v1.ListOAuthGrantsResponse\"\x03\x90\x02\x01\x12j\n\x10RevokeOAuthGrant\x12\'.paladin.iam.v1.RevokeOAuthGrantRequest\x1a(.paladin.iam.v1.RevokeOAuthGrantResponse\"\x03\x90\x02\x02\x42HZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -67,6 +69,26 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_RESETPASSWORDREQUEST'].fields_by_name['new_password']._serialized_options = b'\200\001\001'
   _globals['_RESETPASSWORDRESPONSE'].fields_by_name['generated_password']._loaded_options = None
   _globals['_RESETPASSWORDRESPONSE'].fields_by_name['generated_password']._serialized_options = b'\200\001\001'
+  _globals['_LISTOAUTHGRANTSREQUEST'].fields_by_name['name']._loaded_options = None
+  _globals['_LISTOAUTHGRANTSREQUEST'].fields_by_name['name']._serialized_options = b'\272H\004r\002\020\001'
+  _globals['_OAUTHGRANT'].fields_by_name['id']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['id']._serialized_options = b'\340A\003'
+  _globals['_OAUTHGRANT'].fields_by_name['client_id']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['client_id']._serialized_options = b'\340A\003'
+  _globals['_OAUTHGRANT'].fields_by_name['audience']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['audience']._serialized_options = b'\340A\003'
+  _globals['_OAUTHGRANT'].fields_by_name['scopes']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['scopes']._serialized_options = b'\340A\003'
+  _globals['_OAUTHGRANT'].fields_by_name['granted_at']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['granted_at']._serialized_options = b'\340A\003'
+  _globals['_OAUTHGRANT'].fields_by_name['refreshed_at']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['refreshed_at']._serialized_options = b'\340A\003'
+  _globals['_OAUTHGRANT'].fields_by_name['expires_at']._loaded_options = None
+  _globals['_OAUTHGRANT'].fields_by_name['expires_at']._serialized_options = b'\340A\003'
+  _globals['_REVOKEOAUTHGRANTREQUEST'].fields_by_name['name']._loaded_options = None
+  _globals['_REVOKEOAUTHGRANTREQUEST'].fields_by_name['name']._serialized_options = b'\272H\004r\002\020\001'
+  _globals['_REVOKEOAUTHGRANTREQUEST'].fields_by_name['grant_id']._loaded_options = None
+  _globals['_REVOKEOAUTHGRANTREQUEST'].fields_by_name['grant_id']._serialized_options = b'\272H\005r\003\260\001\001'
   _globals['_USERSERVICE'].methods_by_name['GetUser']._loaded_options = None
   _globals['_USERSERVICE'].methods_by_name['GetUser']._serialized_options = b'\220\002\001'
   _globals['_USERSERVICE'].methods_by_name['UpdateUser']._loaded_options = None
@@ -81,28 +103,42 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_USERSERVICE'].methods_by_name['RevokeScopes']._serialized_options = b'\220\002\002'
   _globals['_USERSERVICE'].methods_by_name['ResetPassword']._loaded_options = None
   _globals['_USERSERVICE'].methods_by_name['ResetPassword']._serialized_options = b'\220\002\002'
-  _globals['_CREATEUSERREQUEST']._serialized_start=212
-  _globals['_CREATEUSERREQUEST']._serialized_end=390
-  _globals['_GETUSERREQUEST']._serialized_start=392
-  _globals['_GETUSERREQUEST']._serialized_end=431
-  _globals['_UPDATEUSERREQUEST']._serialized_start=434
-  _globals['_UPDATEUSERREQUEST']._serialized_end=623
-  _globals['_DELETEUSERREQUEST']._serialized_start=625
-  _globals['_DELETEUSERREQUEST']._serialized_end=702
-  _globals['_DELETEUSERRESPONSE']._serialized_start=704
-  _globals['_DELETEUSERRESPONSE']._serialized_end=724
-  _globals['_LISTUSERSREQUEST']._serialized_start=726
-  _globals['_LISTUSERSREQUEST']._serialized_end=822
-  _globals['_LISTUSERSRESPONSE']._serialized_start=824
-  _globals['_LISTUSERSRESPONSE']._serialized_end=927
-  _globals['_GRANTSCOPESREQUEST']._serialized_start=929
-  _globals['_GRANTSCOPESREQUEST']._serialized_end=1024
-  _globals['_REVOKESCOPESREQUEST']._serialized_start=1026
-  _globals['_REVOKESCOPESREQUEST']._serialized_end=1122
-  _globals['_RESETPASSWORDREQUEST']._serialized_start=1124
-  _globals['_RESETPASSWORDREQUEST']._serialized_end=1196
-  _globals['_RESETPASSWORDRESPONSE']._serialized_start=1198
-  _globals['_RESETPASSWORDRESPONSE']._serialized_end=1254
-  _globals['_USERSERVICE']._serialized_start=1257
-  _globals['_USERSERVICE']._serialized_end=1921
+  _globals['_USERSERVICE'].methods_by_name['ListOAuthGrants']._loaded_options = None
+  _globals['_USERSERVICE'].methods_by_name['ListOAuthGrants']._serialized_options = b'\220\002\001'
+  _globals['_USERSERVICE'].methods_by_name['RevokeOAuthGrant']._loaded_options = None
+  _globals['_USERSERVICE'].methods_by_name['RevokeOAuthGrant']._serialized_options = b'\220\002\002'
+  _globals['_CREATEUSERREQUEST']._serialized_start=278
+  _globals['_CREATEUSERREQUEST']._serialized_end=456
+  _globals['_GETUSERREQUEST']._serialized_start=458
+  _globals['_GETUSERREQUEST']._serialized_end=497
+  _globals['_UPDATEUSERREQUEST']._serialized_start=500
+  _globals['_UPDATEUSERREQUEST']._serialized_end=689
+  _globals['_DELETEUSERREQUEST']._serialized_start=691
+  _globals['_DELETEUSERREQUEST']._serialized_end=768
+  _globals['_DELETEUSERRESPONSE']._serialized_start=770
+  _globals['_DELETEUSERRESPONSE']._serialized_end=790
+  _globals['_LISTUSERSREQUEST']._serialized_start=792
+  _globals['_LISTUSERSREQUEST']._serialized_end=888
+  _globals['_LISTUSERSRESPONSE']._serialized_start=890
+  _globals['_LISTUSERSRESPONSE']._serialized_end=993
+  _globals['_GRANTSCOPESREQUEST']._serialized_start=995
+  _globals['_GRANTSCOPESREQUEST']._serialized_end=1090
+  _globals['_REVOKESCOPESREQUEST']._serialized_start=1092
+  _globals['_REVOKESCOPESREQUEST']._serialized_end=1188
+  _globals['_RESETPASSWORDREQUEST']._serialized_start=1190
+  _globals['_RESETPASSWORDREQUEST']._serialized_end=1262
+  _globals['_RESETPASSWORDRESPONSE']._serialized_start=1264
+  _globals['_RESETPASSWORDRESPONSE']._serialized_end=1320
+  _globals['_LISTOAUTHGRANTSREQUEST']._serialized_start=1322
+  _globals['_LISTOAUTHGRANTSREQUEST']._serialized_end=1369
+  _globals['_LISTOAUTHGRANTSRESPONSE']._serialized_start=1371
+  _globals['_LISTOAUTHGRANTSRESPONSE']._serialized_end=1440
+  _globals['_OAUTHGRANT']._serialized_start=1443
+  _globals['_OAUTHGRANT']._serialized_end=1701
+  _globals['_REVOKEOAUTHGRANTREQUEST']._serialized_start=1703
+  _globals['_REVOKEOAUTHGRANTREQUEST']._serialized_end=1779
+  _globals['_REVOKEOAUTHGRANTRESPONSE']._serialized_start=1781
+  _globals['_REVOKEOAUTHGRANTRESPONSE']._serialized_end=1807
+  _globals['_USERSERVICE']._serialized_start=1810
+  _globals['_USERSERVICE']._serialized_end=2687
 # @@protoc_insertion_point(module_scope)

@@ -36,6 +36,8 @@ type userHandler interface {
 	ResetPassword(ctx context.Context, ref userh.UserRef, newPassword string) (string, error)
 	RevokeScopes(ctx context.Context, ref userh.UserRef, scopes []auth.Scope) (*authstore.User, error)
 	UpdateUser(ctx context.Context, in userh.UpdateUserInput) (*authstore.User, error)
+	ListOAuthGrants(ctx context.Context, ref userh.UserRef) ([]authstore.UserOAuthGrant, error)
+	RevokeOAuthGrant(ctx context.Context, ref userh.UserRef, grantID uuid.UUID) error
 }
 
 var _ userHandler = (*userh.Handler)(nil)

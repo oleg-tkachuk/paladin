@@ -19,7 +19,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.iam.v1.types_pb2 import User
 from pyqwest import Client, SyncClient
 
-from .user_service_pb2 import CreateUserRequest, DeleteUserRequest, DeleteUserResponse, GetUserRequest, GrantScopesRequest, ListUsersRequest, ListUsersResponse, ResetPasswordRequest, ResetPasswordResponse, RevokeScopesRequest, UpdateUserRequest
+from .user_service_pb2 import CreateUserRequest, DeleteUserRequest, DeleteUserResponse, GetUserRequest, GrantScopesRequest, ListOAuthGrantsRequest, ListOAuthGrantsResponse, ListUsersRequest, ListUsersResponse, ResetPasswordRequest, ResetPasswordResponse, RevokeOAuthGrantRequest, RevokeOAuthGrantResponse, RevokeScopesRequest, UpdateUserRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -91,6 +91,21 @@ class UserService(Protocol):
     async def reset_password(self, request: ResetPasswordRequest, ctx: RequestContext[ResetPasswordRequest, ResetPasswordResponse], /) -> ResetPasswordResponse:
         """
         ResetPassword forces a password change on next login. Local IdP only.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_o_auth_grants(self, request: ListOAuthGrantsRequest, ctx: RequestContext[ListOAuthGrantsRequest, ListOAuthGrantsResponse], /) -> ListOAuthGrantsResponse:
+        """
+        ListOAuthGrants returns the live OAuth grants the user gave clients at
+        /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+        those of the tenant's users.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def revoke_o_auth_grant(self, request: RevokeOAuthGrantRequest, ctx: RequestContext[RevokeOAuthGrantRequest, RevokeOAuthGrantResponse], /) -> RevokeOAuthGrantResponse:
+        """
+        RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+        at once, and an access token it already holds within its short lifetime.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -187,6 +202,26 @@ class UserServiceASGIApplication(ConnectASGIApplication[UserService]):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=svc.reset_password,
+                ),
+                "/paladin.iam.v1.UserService/ListOAuthGrants": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListOAuthGrants",
+                        service_name="paladin.iam.v1.UserService",
+                        input=ListOAuthGrantsRequest,
+                        output=ListOAuthGrantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_o_auth_grants,
+                ),
+                "/paladin.iam.v1.UserService/RevokeOAuthGrant": Endpoint.unary(
+                    method=MethodInfo(
+                        name="RevokeOAuthGrant",
+                        service_name="paladin.iam.v1.UserService",
+                        input=RevokeOAuthGrantRequest,
+                        output=RevokeOAuthGrantResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.revoke_o_auth_grant,
                 ),
             },
             interceptors=interceptors,
@@ -424,6 +459,57 @@ class UserServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def list_o_auth_grants(
+        self,
+        request: ListOAuthGrantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListOAuthGrantsResponse:
+        """
+        ListOAuthGrants returns the live OAuth grants the user gave clients at
+        /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+        those of the tenant's users.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListOAuthGrants",
+                service_name="paladin.iam.v1.UserService",
+                input=ListOAuthGrantsRequest,
+                output=ListOAuthGrantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
+    async def revoke_o_auth_grant(
+        self,
+        request: RevokeOAuthGrantRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> RevokeOAuthGrantResponse:
+        """
+        RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+        at once, and an access token it already holds within its short lifetime.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeOAuthGrant",
+                service_name="paladin.iam.v1.UserService",
+                input=RevokeOAuthGrantRequest,
+                output=RevokeOAuthGrantResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
 class UserServiceSync(Protocol):
     """
     UserService is the admin-only side of IAM. CRUD users, grant scopes/roles,
@@ -480,6 +566,21 @@ class UserServiceSync(Protocol):
     def reset_password(self, request: ResetPasswordRequest, ctx: RequestContext[ResetPasswordRequest, ResetPasswordResponse], /) -> ResetPasswordResponse:
         """
         ResetPassword forces a password change on next login. Local IdP only.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_o_auth_grants(self, request: ListOAuthGrantsRequest, ctx: RequestContext[ListOAuthGrantsRequest, ListOAuthGrantsResponse], /) -> ListOAuthGrantsResponse:
+        """
+        ListOAuthGrants returns the live OAuth grants the user gave clients at
+        /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+        those of the tenant's users.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def revoke_o_auth_grant(self, request: RevokeOAuthGrantRequest, ctx: RequestContext[RevokeOAuthGrantRequest, RevokeOAuthGrantResponse], /) -> RevokeOAuthGrantResponse:
+        """
+        RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+        at once, and an access token it already holds within its short lifetime.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -574,6 +675,26 @@ class UserServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=service.reset_password,
+                ),
+                "/paladin.iam.v1.UserService/ListOAuthGrants": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListOAuthGrants",
+                        service_name="paladin.iam.v1.UserService",
+                        input=ListOAuthGrantsRequest,
+                        output=ListOAuthGrantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_o_auth_grants,
+                ),
+                "/paladin.iam.v1.UserService/RevokeOAuthGrant": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="RevokeOAuthGrant",
+                        service_name="paladin.iam.v1.UserService",
+                        input=RevokeOAuthGrantRequest,
+                        output=RevokeOAuthGrantResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.revoke_o_auth_grant,
                 ),
             },
             interceptors=interceptors,
@@ -798,6 +919,55 @@ class UserServiceClientSync(ConnectClientSync):
                 service_name="paladin.iam.v1.UserService",
                 input=ResetPasswordRequest,
                 output=ResetPasswordResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def list_o_auth_grants(
+        self,
+        request: ListOAuthGrantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListOAuthGrantsResponse:
+        """
+        ListOAuthGrants returns the live OAuth grants the user gave clients at
+        /oauth/authorize (ADR-0035). Any user may list their own; a tenant admin
+        those of the tenant's users.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListOAuthGrants",
+                service_name="paladin.iam.v1.UserService",
+                input=ListOAuthGrantsRequest,
+                output=ListOAuthGrantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def revoke_o_auth_grant(
+        self,
+        request: RevokeOAuthGrantRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> RevokeOAuthGrantResponse:
+        """
+        RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
+        at once, and an access token it already holds within its short lifetime.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeOAuthGrant",
+                service_name="paladin.iam.v1.UserService",
+                input=RevokeOAuthGrantRequest,
+                output=RevokeOAuthGrantResponse,
                 idempotency_level=IdempotencyLevel.IDEMPOTENT,
             ),
             headers=headers,

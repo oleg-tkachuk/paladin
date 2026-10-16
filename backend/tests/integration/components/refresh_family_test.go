@@ -184,3 +184,93 @@ func TestRefreshTokenOAuthGrant(t *testing.T) {
 		t.Error("a half-recorded grant was stored")
 	}
 }
+
+// The grants a user holds are its live OAuth families, one row each, and
+// ending one ends that family alone — never a console session, never another
+// user's grant.
+func TestOAuthGrantsListAndRevoke(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewRefreshTokenRepo(sqlc.New(pool))
+
+	const clientID = "desktop-agent"
+	tenantID := uuid.New()
+	alice, bob := uuid.New(), uuid.New()
+	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, 'acme', 'acme')`, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO users (id, tenant_id, subject) VALUES ($1, $2, 'alice@acme')`, alice, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO users (id, tenant_id, subject) VALUES ($1, $2, 'bob@acme')`, bob, tenantID)
+	mustExec(t, ctx, pool, `INSERT INTO oauth_clients (client_id) VALUES ($1)`, clientID)
+
+	grant := &authstore.OAuthGrant{ClientID: clientID, Audience: "paladin-mcp", Scopes: []string{"paladin.read"}}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	insert := func(user, family uuid.UUID, g *authstore.OAuthGrant, issued time.Time, ttl time.Duration) uuid.UUID {
+		t.Helper()
+		jti := uuid.Must(uuid.NewV7())
+		if err := repo.Insert(ctx, authstore.RefreshToken{
+			JTI: jti, FamilyID: family, UserID: user, TenantID: tenantID,
+			IssuedAt: issued, ExpiresAt: issued.Add(ttl), OAuth: g,
+		}); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+		return jti
+	}
+
+	// Alice's grant, rotated once: the first token superseded, the second live.
+	rotated := uuid.New()
+	first := insert(alice, rotated, grant, now.Add(-2*time.Hour), 24*time.Hour)
+	if err := repo.Supersede(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	insert(alice, rotated, grant, now.Add(-time.Hour), 24*time.Hour)
+	// Another live grant, a console session, an expired grant, and Bob's.
+	other := uuid.New()
+	insert(alice, other, grant, now, 24*time.Hour)
+	console := uuid.New()
+	insert(alice, console, nil, now, 24*time.Hour)
+	insert(alice, uuid.New(), grant, now.Add(-48*time.Hour), time.Hour)
+	bobs := uuid.New()
+	insert(bob, bobs, grant, now, 24*time.Hour)
+
+	got, err := repo.ListOAuthGrants(ctx, alice, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("grants = %d, want 2 (the rotated one once, and the other)", len(got))
+	}
+	byID := map[uuid.UUID]authstore.UserOAuthGrant{}
+	for _, g := range got {
+		byID[g.ID] = g
+	}
+	r := byID[rotated]
+	if !r.GrantedAt.Equal(now.Add(-2*time.Hour)) || !r.RefreshedAt.Equal(now.Add(-time.Hour)) {
+		t.Errorf("rotated grant: granted %s, refreshed %s; want the first and the newest token's times", r.GrantedAt, r.RefreshedAt)
+	}
+	if r.Grant.ClientID != clientID || r.Grant.Audience != grant.Audience || len(r.Grant.Scopes) != 1 {
+		t.Errorf("rotated grant = %+v", r.Grant)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		user  uuid.UUID
+		grant uuid.UUID
+	}{
+		{"another user's grant", alice, bobs},
+		{"a console session", alice, console},
+		{"a grant asked for as another user", bob, rotated},
+	} {
+		if found, err := repo.RevokeOAuthGrant(ctx, tc.user, tc.grant); err != nil || found {
+			t.Errorf("%s: revoked = %v (%v), want untouched", tc.name, found, err)
+		}
+	}
+	if found, err := repo.RevokeOAuthGrant(ctx, alice, rotated); err != nil || !found {
+		t.Fatalf("revoke own grant: found = %v, err = %v", found, err)
+	}
+	if got, _ := repo.ListOAuthGrants(ctx, alice, now); len(got) != 1 || got[0].ID != other {
+		t.Errorf("after revoking, grants = %+v, want only %s", got, other)
+	}
+	if got, _ := repo.ListOAuthGrants(ctx, bob, now); len(got) != 1 {
+		t.Errorf("bob's grants = %d after alice revoked hers, want 1", len(got))
+	}
+}
