@@ -647,7 +647,7 @@ func TestInspectReportsOAuth(t *testing.T) {
 	if n := len(st.GetSeedClients()); n != len(as.SeedClients) {
 		t.Fatalf("seed clients = %d, want %d", n, len(as.SeedClients))
 	}
-	if c := st.GetSeedClients()[0]; c.GetClientId() != agent || !c.GetPublic() || c.GetAllowedAudiences()[0] != auth.AudienceMCP {
+	if c := st.GetSeedClients()[0]; c.GetClientId() != agent || !c.GetPublic() || c.GetAllowedAudiences()[0] != auth.AudienceMCP || !c.GetConfigured() {
 		t.Errorf("agent client = %+v", c)
 	}
 	if c := st.GetSeedClients()[1]; !c.GetTokenExchange() || c.GetPublic() {

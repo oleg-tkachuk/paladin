@@ -1,13 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@/test/utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
 
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { MCPAuthorization } from "./MCPAuthorization";
 import { MCPConnect } from "./MCPOverview";
 import { EffectBadge } from "./MCPCatalog";
 
+const h = vi.hoisted(() => ({ deleteOAuthClient: vi.fn() }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: vi.fn() }),
+}));
+vi.mock("@/lib/connect/client", () => ({
+  oauthClientClient: { deleteOAuthClient: h.deleteOAuthClient },
 }));
 
 const AGENT = {
@@ -17,6 +21,7 @@ const AGENT = {
   allowedAudiences: ["paladin-mcp"],
   tokenExchange: false,
   skipConsent: false,
+  configured: true,
 };
 const MCP_SERVER = {
   clientId: "paladin-mcp-server",
@@ -25,6 +30,18 @@ const MCP_SERVER = {
   allowedAudiences: [],
   tokenExchange: true,
   skipConsent: false,
+  configured: true,
+};
+// A client that registered itself, as the store lists it.
+const REGISTERED = {
+  clientId: "paladin-0199a1b2-dcr",
+  public: true,
+  allowedScopes: ["paladin.read"],
+  allowedAudiences: ["paladin-mcp"],
+  tokenExchange: false,
+  skipConsent: false,
+  dynamic: true,
+  configured: false,
 };
 
 function inspect(oauth: Partial<MCPInspectResponse["oauth"]>) {
@@ -122,6 +139,89 @@ describe("a client's record", () => {
     expect(dialog).toHaveTextContent("by the configuration");
     expect(dialog).toHaveTextContent("paladin.read");
     expect(dialog).toHaveTextContent("asked");
+  });
+});
+
+describe("deleting a client", () => {
+  beforeEach(() => {
+    h.deleteOAuthClient.mockReset().mockResolvedValue({});
+  });
+
+  const openRecord = async (clientId: string) => {
+    fireEvent.click(screen.getByRole("row", { name: new RegExp(clientId) }));
+    return screen.findByRole("dialog");
+  };
+
+  it("deletes a self-registered client only once confirmed", async () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          registeredClients: [MCP_SERVER, REGISTERED],
+        } as never)}
+      />,
+    );
+    const record = await openRecord(REGISTERED.clientId);
+    expect(record).toHaveTextContent("by the client itself");
+    fireEvent.click(
+      within(record).getByRole("button", { name: "Delete client" }),
+    );
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent("every tenant");
+    expect(h.deleteOAuthClient).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: "Delete client" }),
+    );
+    await waitFor(() =>
+      expect(h.deleteOAuthClient).toHaveBeenCalledWith({
+        clientId: REGISTERED.clientId,
+      }),
+    );
+  });
+
+  it("offers no delete for a client the configuration seeds", async () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          registeredClients: [MCP_SERVER, REGISTERED],
+        } as never)}
+      />,
+    );
+    const record = await openRecord(MCP_SERVER.clientId);
+    expect(
+      within(record).queryByRole("button", { name: "Delete client" }),
+    ).toBeNull();
+    expect(record).toHaveTextContent("auth.oauth.seed_clients");
+  });
+
+  // Listed from the configuration because the store could not be read: there
+  // is no row to delete.
+  it("offers no delete when the store's clients are unknown", async () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          seedClients: [{ ...REGISTERED, configured: false }],
+        } as never)}
+      />,
+    );
+    const record = await openRecord(REGISTERED.clientId);
+    expect(
+      within(record).queryByRole("button", { name: "Delete client" }),
+    ).toBeNull();
+  });
+
+  it("names a client the configuration dropped", async () => {
+    const dropped = { ...REGISTERED, clientId: "old-agent", dynamic: false };
+    render(
+      <MCPAuthorization
+        inspect={inspect({ registeredClients: [dropped] } as never)}
+      />,
+    );
+    const record = await openRecord(dropped.clientId);
+    expect(record).toHaveTextContent("no longer lists it");
+    expect(
+      within(record).getByRole("button", { name: "Delete client" }),
+    ).toBeInTheDocument();
   });
 });
 

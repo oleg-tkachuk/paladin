@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { useNotification } from "@/components/ui/Notification";
 import {
   RecordDialog,
   RecordField,
@@ -12,6 +16,9 @@ import { Timestamp } from "@/components/Timestamp";
 import { cn } from "@/lib/utils";
 
 import { Tile } from "./MCPOverview";
+import { MCP_INSPECT_KEY } from "./MCPPage";
+import { oauthClientClient } from "@/lib/connect/client";
+import { errorMessage } from "@/hooks/errorContract";
 import { Card } from "@/components/ui/Card";
 import {
   Table,
@@ -40,6 +47,13 @@ export function shownClients(
     : oauth.seedClients;
 }
 
+/** Where a client came from, in the words an operator needs. */
+function clientOrigin(c: MCPOAuthClient): string {
+  if (c.dynamic) return "by the client itself";
+  if (c.configured) return "by the configuration";
+  return "by a configuration that no longer lists it";
+}
+
 /** What a client is, in the words an operator needs. */
 function clientKind(c: MCPOAuthClient): string {
   if (c.tokenExchange) return "MCP server";
@@ -56,6 +70,36 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
   const exchanging = !!oauth?.edgeAudience;
   const clients = shownClients(oauth);
   const [opened, setOpened] = useState<MCPOAuthClient | null>(null);
+  const [deleting, setDeleting] = useState<MCPOAuthClient | null>(null);
+  const queryClient = useQueryClient();
+  const { showNotification } = useNotification();
+  // Only a client the store holds can be deleted, and not one the
+  // configuration seeds: the next boot would register it again.
+  const fromStore = (oauth?.registeredClients.length ?? 0) > 0;
+  const deletable = (c: MCPOAuthClient) => fromStore && !c.configured;
+
+  const remove = async () => {
+    if (!deleting) return;
+    try {
+      await oauthClientClient.deleteOAuthClient({
+        clientId: deleting.clientId,
+      });
+      showNotification({
+        type: "success",
+        title: "Client deleted",
+        message: `${deleting.clientId} and its grants are gone.`,
+      });
+    } catch (err) {
+      showNotification({
+        type: "error",
+        title: "Delete failed",
+        message: errorMessage(err, "The client was not deleted"),
+      });
+      throw err;
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: MCP_INSPECT_KEY });
+    }
+  };
   return (
     <div className="space-y-4">
       <section className="space-y-3">
@@ -177,7 +221,7 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
           <>
             <RecordField label="Kind">{clientKind(opened)}</RecordField>
             <RecordField label="Registered">
-              {opened.dynamic ? "by the client itself" : "by the configuration"}
+              {clientOrigin(opened)}
               {opened.createdAt ? (
                 <>
                   {" · "}
@@ -197,9 +241,37 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
             <RecordField label="Token exchange">
               {opened.tokenExchange ? "may exchange tokens" : "—"}
             </RecordField>
+            {deletable(opened) ? (
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    setDeleting(opened);
+                    setOpened(null);
+                  }}
+                >
+                  Delete client
+                </Button>
+              </div>
+            ) : opened.configured ? (
+              <p className={T.hint}>
+                Seeded by auth.oauth.seed_clients: remove it there to delete it.
+              </p>
+            ) : null}
           </>
         ) : null}
       </RecordDialog>
+      <ConfirmModal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={remove}
+        type="danger"
+        title="Delete this OAuth client?"
+        message={`${deleting?.clientId ?? "The client"} is removed with every grant issued to it, in every tenant.`}
+        warning="Agents using it must register and authorize again. An access token one already holds keeps working for a few minutes."
+        confirmText="Delete client"
+      />
     </div>
   );
 }

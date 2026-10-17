@@ -399,6 +399,7 @@ func (h *Handler) oauthState(ctx context.Context) *adminv1.MCPOAuthState {
 			AllowedAudiences: sc.AllowedAudiences,
 			TokenExchange:    sc.TokenExchange,
 			SkipConsent:      sc.SkipConsent,
+			Configured:       true,
 		})
 	}
 	h.listRegistered(ctx, st)
