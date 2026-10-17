@@ -36,6 +36,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"go.uber.org/zap"
+
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
@@ -276,16 +279,20 @@ func (i *idempotencyInterceptor) wrap(next unary.Func) unary.Func {
 		// so concurrent first-time writers race harmlessly.
 		body, merr := marshalResponse(resp)
 		if merr != nil {
-			// Marshal failure means we can't memoize this method.
-			// The original response still flows back to the caller;
-			// just log-and-skip (no logger plumbed here, so skip).
+			// Marshal failure means we can't memoize this method. The
+			// original response still flows back to the caller.
+			logger.FromContext(ctx).Warn(idempotencyNotKeptMessage,
+				zap.String("rpc", method), zap.Error(merr))
 			return resp, nil
 		}
-		// Put errors are non-fatal — losing the cache write means
-		// the next retry will re-run the handler. The caller still
-		// gets their fresh response.
-		_ = i.store.Put(ctx, tenantID, method, key,
-			IdempotencyRecord{Response: body, RequestHash: fingerprint}, time.Now().Add(i.cfg.TTL))
+		// Put errors are non-fatal — losing the cache write means the next
+		// retry will re-run the handler, which a non-idempotent write then
+		// does twice: worth a line.
+		if perr := i.store.Put(ctx, tenantID, method, key,
+			IdempotencyRecord{Response: body, RequestHash: fingerprint}, time.Now().Add(i.cfg.TTL)); perr != nil {
+			logger.FromContext(ctx).Warn(idempotencyNotKeptMessage,
+				zap.String("rpc", method), zap.Error(perr))
+		}
 		return resp, nil
 	}
 }
@@ -365,3 +372,7 @@ func isMutationMethod(procedure string) bool {
 	return strings.HasPrefix(method, "Create") ||
 		strings.HasPrefix(method, "Issue")
 }
+
+// idempotencyNotKeptMessage is the log line of a response the idempotency
+// store could not keep: a retry with its key will run the call again.
+const idempotencyNotKeptMessage = "idempotent response not kept"

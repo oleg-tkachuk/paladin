@@ -44,6 +44,12 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a logout that could not end the session says so
+
+- `AuthService.Revoke` answers `INTERNAL` when the session's refresh tokens
+  could not be revoked, where it answered OK and left the session live. A
+  client should treat it as not logged out and retry.
+
 ## Unreleased — idle self-registered OAuth clients are removed
 
 - **Behaviour.** The worker now removes a client that registered itself

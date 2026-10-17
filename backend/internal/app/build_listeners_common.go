@@ -81,6 +81,7 @@ func BuildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.L
 		v.ExpectedIssuer = a.Issuer
 		v.ExpectedAudience = audience
 		v.Leeway = a.Leeway
+		v.Logger = l
 		if err := v.Start(ctx); err != nil {
 			return nil, fmt.Errorf("jwks(%s): %w", audience, err)
 		}
