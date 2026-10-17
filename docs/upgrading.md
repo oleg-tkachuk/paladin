@@ -44,6 +44,20 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — dynamic registration follows RFC 7591 and RFC 8252
+
+- **Breaking, behaviour.** An `http` redirect URI is accepted only on a
+  loopback host (`localhost`, `127.0.0.1`, `[::1]`), a native client's
+  redirect, even with `http` in `auth.oauth.allowed_redirect_schemes`.
+- `/oauth/register` reads RFC 7591's space-separated `scope` beside the
+  older `scope_list`. A client naming no scope may ask for `paladin.read` and
+  `paladin.write`, the user choosing at consent; one naming no audience gets
+  `paladin-mcp` when the MCP server's resource URL is configured, else
+  `paladin-data`. `audiences` is limited to `paladin-data`, `paladin-admin`
+  and `paladin-mcp`.
+- The response carries `client_id_issued_at`, `scope`, `grant_types`,
+  `response_types` and `token_endpoint_auth_method`.
+
 ## Unreleased — the token exchange has its own rate limit
 
 `auth.oauth.token_exchange_rate_limit_per_minute` (default 6000) caps the RFC
