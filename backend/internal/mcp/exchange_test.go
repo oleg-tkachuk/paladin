@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
@@ -221,5 +224,50 @@ func TestExchangedTokens(t *testing.T) {
 	src.Invalidate(auth.AudienceAdmin)
 	if got, _ := src.Token(ctx, auth.AudienceAdmin); got == "alice@"+auth.AudienceAdmin+"#1" {
 		t.Error("Invalidate did not reach the exchanger")
+	}
+}
+
+// Each refusal keeps a code that says whose problem it is, so the SDK does not
+// read it as the plane being down.
+func TestExchangeRefusalCodes(t *testing.T) {
+	for _, tc := range []struct {
+		oauth string
+		want  connect.Code
+	}{
+		{oauthErrInvalidGrant, connect.CodeUnauthenticated},
+		{oauthErrInvalidTarget, connect.CodePermissionDenied},
+		{oauthErrSlowDown, connect.CodeResourceExhausted},
+		{"invalid_client", connect.CodeInternal},
+		{"", connect.CodeInternal},
+	} {
+		r := &ExchangeRefusal{Code: tc.oauth}
+		if got := r.connectCode(); got != tc.want {
+			t.Errorf("%q: code = %v, want %v", tc.oauth, got, tc.want)
+		}
+	}
+}
+
+// What an agent reads when its token could not be exchanged: why, from the
+// Authorization Server, through the SDK's own wrapping of a token failure —
+// not "the admin plane could not complete the call; try again later".
+func TestToolErrorExplainsARefusedExchange(t *testing.T) {
+	const why = "the user may not be issued paladin-admin"
+	refusal := &ExchangeRefusal{Audience: auth.AudienceAdmin, Code: oauthErrInvalidTarget, Description: why}
+	fromExchanger := connect.NewError(refusal.connectCode(), refusal.Error()).WithCause(refusal)
+	// paladin.tokenError: the Connect code kept, the error as the cause.
+	fromSDK := connect.NewError(connect.CodeOf(fromExchanger), fromExchanger.Error()).WithCause(fromExchanger)
+
+	got := toolError("paladin_list_backends", fromSDK).Error()
+	if !strings.Contains(got, why) || !strings.Contains(got, "admin plane") {
+		t.Errorf("toolError = %q, want the plane and the reason", got)
+	}
+	if strings.Contains(got, "try again later") {
+		t.Errorf("toolError = %q reads a refusal as an outage", got)
+	}
+
+	// Without a description the OAuth code stands in.
+	bare := &ExchangeRefusal{Code: oauthErrInvalidGrant}
+	if got := toolError("paladin_list_backends", bare).Error(); !strings.Contains(got, oauthErrInvalidGrant) {
+		t.Errorf("toolError = %q, want the OAuth code", got)
 	}
 }

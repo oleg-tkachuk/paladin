@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 const (
@@ -330,5 +331,36 @@ func TestTokenExchange_ExpiresWithTheSubject(t *testing.T) {
 	}
 	if resp.ExpiresIn > int(subjectTTL/time.Second) {
 		t.Errorf("expires_in = %d, want at most %d", resp.ExpiresIn, int(subjectTTL/time.Second))
+	}
+}
+
+// The exchange grant is capped on its own: the MCP server's sessions all count
+// against one client, so the cap that guards a secret from guessing would
+// refuse them. The other grants keep theirs.
+func TestTokenExchange_HasItsOwnRateLimit(t *testing.T) {
+	const (
+		tokenLimit    = 1
+		exchangeLimit = 3
+	)
+	u := sampleUser()
+	f := newExchangeFixture(t, u)
+	h := testHandlerCfg(t, f.store, &memRefresh{}, u, config.OAuthAS{
+		Enabled: true, AuthorizationCodeTTL: time.Minute, AllowedRedirectSchemes: []string{"https", "desktop-agent"},
+		TokenRateLimitPerMinute: tokenLimit, TokenExchangeRateLimitPerMinute: exchangeLimit,
+	}).WithMCPResource(mcpResourceURL).WithTokenExchange(mcpVerifier(), map[string]bool{exchangerID: true})
+
+	for i := range exchangeLimit {
+		if rec := postForm(h, "/oauth/token", exchangeForm(f.subject, auth.AudienceData)); rec.Code != http.StatusOK {
+			t.Fatalf("exchange %d: status %d, want 200 under its own cap (body %s)", i+1, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := postForm(h, "/oauth/token", exchangeForm(f.subject, auth.AudienceData)); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("exchange past its cap: status %d, want 429", rec.Code)
+	}
+
+	refresh := url.Values{"grant_type": {GrantTypeRefreshToken}, "client_id": {exchangerID}, "refresh_token": {"x"}}
+	postForm(h, "/oauth/token", refresh)
+	if rec := postForm(h, "/oauth/token", refresh); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("a second refresh under a cap of %d: status %d, want 429", tokenLimit, rec.Code)
 	}
 }

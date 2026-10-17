@@ -353,6 +353,12 @@ type OAuthAS struct {
 	// <= 0 falls back to a built-in default (60/min); set a high value to
 	// effectively disable.
 	TokenRateLimitPerMinute int `yaml:"token_rate_limit_per_minute" json:"token_rate_limit_per_minute"`
+	// TokenExchangeRateLimitPerMinute caps the RFC 8693 exchange grant per
+	// client_id, apart from the other grants. Every exchange the MCP server
+	// makes is one client's — each agent session costs one per plane — so the
+	// cap that guards a client secret from guessing would refuse them under
+	// ordinary load. The exchanging client authenticates on every call.
+	TokenExchangeRateLimitPerMinute int `yaml:"token_exchange_rate_limit_per_minute" json:"token_exchange_rate_limit_per_minute"`
 	// TokenEndpointAllowedOrigins enables CORS on /oauth/token for
 	// browser-based public clients: an Origin in this list (or "*") gets the
 	// Access-Control-Allow-Origin reply and OPTIONS preflight handling. Empty

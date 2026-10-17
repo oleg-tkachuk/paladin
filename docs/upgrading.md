@@ -44,6 +44,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the token exchange has its own rate limit
+
+`auth.oauth.token_exchange_rate_limit_per_minute` (default 6000) caps the RFC
+8693 exchange grant per client, apart from `token_rate_limit_per_minute`, which
+keeps guarding the other grants. Every exchange the MCP server makes counts
+against its one client, so the shared default of 60 refused new sessions past
+about twenty a minute. A deployment that raised `token_rate_limit_per_minute`
+for that reason can lower it again.
+
 ## Unreleased — a user can list and revoke their OAuth grants
 
 `UserService` gains `ListOAuthGrants` and `RevokeOAuthGrant`, and the console

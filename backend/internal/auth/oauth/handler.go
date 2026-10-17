@@ -50,21 +50,23 @@ type UserResolver interface {
 // minted by the same issuer.Issuer the Connect login path uses, so the bearer
 // validates on the target plane (and at the MCP Resource Server, ADR-0008).
 type Handler struct {
-	cfg         config.OAuthAS
-	store       Store
-	users       UserResolver
-	refresh     authstore.RefreshTokenRepository
-	iss         *issuer.Issuer
-	dec         *auth.RefreshDecoder
-	limiter     *tokenBucket
-	corsOrigins []string
-	authz       Authorizer
-	audit       AuditWriter
-	skipConsent map[string]bool
-	exchange    *tokenExchange
-	mcpResource string
-	log         *zap.Logger
-	now         func() time.Time
+	cfg     config.OAuthAS
+	store   Store
+	users   UserResolver
+	refresh authstore.RefreshTokenRepository
+	iss     *issuer.Issuer
+	dec     *auth.RefreshDecoder
+	limiter *tokenBucket
+	// exchangeLimiter caps the token-exchange grant on its own.
+	exchangeLimiter *tokenBucket
+	corsOrigins     []string
+	authz           Authorizer
+	audit           AuditWriter
+	skipConsent     map[string]bool
+	exchange        *tokenExchange
+	mcpResource     string
+	log             *zap.Logger
+	now             func() time.Time
 }
 
 // WithSkipConsent marks client_ids the operator pre-authorized (trusted
@@ -109,16 +111,17 @@ func (h *Handler) WithAudit(a AuditWriter) *Handler {
 // NewHandler builds the AS. now may be nil (defaults to time.Now).
 func NewHandler(cfg config.OAuthAS, store Store, users UserResolver, refresh authstore.RefreshTokenRepository, iss *issuer.Issuer, dec *auth.RefreshDecoder, l *zap.Logger) *Handler {
 	return &Handler{
-		cfg:         cfg,
-		store:       store,
-		users:       users,
-		refresh:     refresh,
-		iss:         iss,
-		dec:         dec,
-		limiter:     newTokenBucket(cfg.TokenRateLimitPerMinute),
-		corsOrigins: cfg.TokenEndpointAllowedOrigins,
-		log:         l,
-		now:         time.Now,
+		cfg:             cfg,
+		store:           store,
+		users:           users,
+		refresh:         refresh,
+		iss:             iss,
+		dec:             dec,
+		limiter:         newTokenBucket(cfg.TokenRateLimitPerMinute),
+		exchangeLimiter: newTokenBucket(cfg.TokenExchangeRateLimitPerMinute),
+		corsOrigins:     cfg.TokenEndpointAllowedOrigins,
+		log:             l,
+		now:             time.Now,
 	}
 }
 
@@ -349,7 +352,11 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	// Rate-limit per client_id before any DB work, to blunt code/secret
 	// brute-forcing (ADR-0009 hardening).
-	if ok, retry := h.limiter.allow(r.PostForm.Get("client_id")); !ok {
+	limiter := h.limiter
+	if r.PostForm.Get("grant_type") == GrantTypeTokenExchange {
+		limiter = h.exchangeLimiter
+	}
+	if ok, retry := limiter.allow(r.PostForm.Get("client_id")); !ok {
 		secs := int(retry.Seconds())
 		if secs < 1 {
 			secs = 1

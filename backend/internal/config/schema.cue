@@ -224,6 +224,9 @@ auth: {
     allowed_redirect_schemes: [...string] | *["https"]
     consent_url:              string | *""
     token_rate_limit_per_minute:    int | *60
+    // The exchange grant's own cap: the MCP server's sessions all count
+    // against one client (ADR-0036).
+    token_exchange_rate_limit_per_minute: int | *6000
     token_endpoint_allowed_origins: [...string] | *[]
     seed_clients: [...{
       client_id:         string
