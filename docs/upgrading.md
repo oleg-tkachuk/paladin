@@ -44,6 +44,17 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the OAuth endpoints answer an outage as a server error
+
+- `/oauth/authorize`, `/oauth/token` and the token exchange answer
+  `server_error` (HTTP 500, or the client's redirect with
+  `error=server_error` once its redirect URI is known) when a store or the
+  policy engine fails. Before, that read as `invalid_client`, wrong
+  credentials, `access_denied` or `invalid_grant`. A client should retry a
+  `server_error` rather than re-authorize.
+- A code redeemed for a user who moved to another tenant since is refused
+  with `invalid_grant`, as a refresh already was.
+
 ## Unreleased — a logout that could not end the session says so
 
 - `AuthService.Revoke` answers `INTERNAL` when the session's refresh tokens

@@ -58,9 +58,8 @@ func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	if u, _, ok := r.BasicAuth(); ok && clientID == "" {
 		clientID = u
 	}
-	client, err := h.store.GetClient(r.Context(), clientID)
-	if err != nil {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "unknown client")
+	client, ok := h.tokenClient(w, r, clientID)
+	if !ok {
 		return
 	}
 	// A public client could present any agent's token; the exchange is for
@@ -98,9 +97,8 @@ func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "subject token names no user")
 		return
 	}
-	u, err := h.users.GetByID(r.Context(), userID)
-	if err != nil || u.Disabled || u.TenantID != subject.TenantID {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
+	u, ok := h.eligibleUser(w, r, userID, subject.TenantID, clientID)
+	if !ok {
 		return
 	}
 

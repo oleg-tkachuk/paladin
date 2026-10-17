@@ -92,22 +92,6 @@ the same commit. Treat this file like a runtime invariant.
   audit page in an e2e assertion.
 - **Blockers:** none.
 
-### The OAuth endpoints answer an outage as a client error
-
-- **Status:** Deferred.
-- **Reason:** `/oauth/authorize`, `/oauth/token` and the token exchange
-  (`internal/auth/oauth/handler.go`, `exchange.go`) turn any store or policy
-  error into a 4xx: a database outage reads as `invalid_client`, a failing
-  Cedar engine as `access_denied`, a failed user lookup as "user no longer
-  eligible". An outage then looks like a wave of bad credentials, and none
-  of it is logged. Fixing it changes what a client sees, so it is its own
-  change.
-- **Definition of Done:** each lookup tells its not-found sentinel from any
-  other error; the sentinel keeps its 4xx, anything else answers
-  `server_error` through `serverError`, which logs it; unit tests per
-  endpoint and an `upgrading.md` note.
-- **Blockers:** none.
-
 ### OAuth grants and token exchanges write no audit rows
 
 - **Status:** Deferred.
