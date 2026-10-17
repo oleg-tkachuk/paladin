@@ -44,6 +44,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — idle self-registered OAuth clients are removed
+
+- **Behaviour.** The worker now removes a client that registered itself
+  (RFC 7591) once it is older than `worker.jobs.oauth_client_reap.max_age`
+  (default `168h`) and holds no live grant and no redeemable authorization
+  code. Seeded clients are never removed. Set
+  `worker.jobs.oauth_client_reap.interval: 0` to keep every client.
+- Migration 084 adds `oauth_clients.self_registered` and marks the clients
+  dynamic registration created before it, by their `paladin-<UUIDv7>` id.
+- `OAuthClientService.DeleteOAuthClient` removes a client with every grant
+  issued to it, from the console's MCP access page. Platform admins only; a
+  client in `auth.oauth.seed_clients` is refused.
+
 ## v38.0.0 — dynamic registration follows RFC 7591 and RFC 8252
 
 - **Breaking, behaviour.** An `http` redirect URI is accepted only on a
