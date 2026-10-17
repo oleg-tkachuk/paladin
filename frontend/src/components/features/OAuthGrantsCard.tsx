@@ -113,9 +113,7 @@ export function OAuthGrantsCard({
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={T.code}>{g.clientId}</span>
-                    <Badge variant="outline" className={T.labelTight}>
-                      {g.audience}
-                    </Badge>
+                    <Badge variant="outline">{g.audience}</Badge>
                   </div>
                   <div className={T.hint}>
                     {g.scopes.map(describeOAuthScope).join("; ") || "No scope"}

@@ -249,11 +249,7 @@ export default function ProfilePage() {
           {user?.roles && user.roles.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {user.roles.map((r) => (
-                <Badge
-                  key={r}
-                  variant="outline"
-                  className={cn(T.labelTight, "font-mono")}
-                >
+                <Badge key={r} variant="outline" className="font-mono">
                   {r}
                 </Badge>
               ))}

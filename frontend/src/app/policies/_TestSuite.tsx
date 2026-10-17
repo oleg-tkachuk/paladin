@@ -429,9 +429,7 @@ function CaseRow({
         <span className="flex-1 truncate text-sm font-medium">{tc.name}</span>
         <StatusPill status={status} isRunning={isRunning} />
         {tc.expected !== "any" && (
-          <Badge variant="outline" className="text-sm uppercase">
-            expects {tc.expected}
-          </Badge>
+          <Badge variant="outline">expects {tc.expected}</Badge>
         )}
       </button>
 
@@ -556,18 +554,10 @@ function StatusPill({
   isRunning: boolean;
 }): React.ReactElement {
   if (isRunning) {
-    return (
-      <Badge variant="outline" className="text-sm uppercase">
-        running
-      </Badge>
-    );
+    return <Badge variant="outline">running</Badge>;
   }
   if (status === "unrun") {
-    return (
-      <Badge variant="outline" className="text-sm uppercase">
-        not run
-      </Badge>
-    );
+    return <Badge variant="outline">not run</Badge>;
   }
   if (status === "pass") {
     return (

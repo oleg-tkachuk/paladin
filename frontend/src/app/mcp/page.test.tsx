@@ -29,6 +29,10 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/Notification", () => ({
+  useNotification: () => ({ showNotification: vi.fn() }),
+}));
+
 import MCPInspectPage from "./page";
 import MCPToolsPage from "./tools/page";
 import MCPAccessPage from "./access/page";
@@ -133,6 +137,27 @@ describe("MCP tools page", () => {
     expect(within(table).queryByText("paladin_query_objects")).toBeNull();
   });
 
+  it("opens a tool's record with the profiles that offer it", async () => {
+    render(<MCPToolsPage />);
+    fireEvent.click(
+      await screen.findByRole("row", { name: /paladin_query_objects/ }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("paladin_query_objects does a thing");
+    expect(within(dialog).getByText("read_only")).toBeInTheDocument();
+    expect(within(dialog).getByText("admin")).toBeInTheDocument();
+  });
+
+  it("opens a profile's record with every pattern and tool", async () => {
+    render(<MCPToolsPage />);
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Profiles" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Profiles" }));
+    fireEvent.click(await screen.findByRole("row", { name: /^read_only/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("paladin_query_*");
+    expect(dialog).toHaveTextContent("Tools (2 of 4)");
+  });
+
   // The always-deny list applies after every profile, so it is shown with them.
   it("shows the always-deny list beside the profiles", async () => {
     render(<MCPToolsPage />);
@@ -144,6 +169,10 @@ describe("MCP tools page", () => {
     expect(screen.getAllByText("paladin_create_user").length).toBeGreaterThan(
       0,
     );
+    // A long name wraps rather than pushing the plane chip off a phone.
+    for (const cell of screen.getAllByText("paladin_create_user")) {
+      if (cell.tagName === "TD") expect(cell).toHaveClass("break-all");
+    }
   });
 });
 
@@ -214,5 +243,23 @@ describe("MCP sessions", () => {
     render(<MCPInspectPage />);
     expect(await screen.findByText("agent-7")).toBeInTheDocument();
     expect(screen.getByText("ABCDEFGH…")).toBeInTheDocument();
+  });
+
+  it("opens a session's record from its row", async () => {
+    h.list.mockResolvedValue({
+      sessions: [
+        {
+          id: "ABCDEFGHIJKLMNOP",
+          agentSubject: "agent-7",
+          toolCallCount: 3n,
+          requestCount: 9n,
+        },
+      ],
+    });
+    render(<MCPInspectPage />);
+    fireEvent.click(await screen.findByRole("row", { name: /agent-7/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("ABCDEFGHIJKLMNOP");
+    expect(dialog).toHaveTextContent("Tool calls3");
   });
 });

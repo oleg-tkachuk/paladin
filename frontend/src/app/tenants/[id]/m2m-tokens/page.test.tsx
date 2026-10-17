@@ -47,6 +47,8 @@ const makeToken = (id: string, displayName: string) => ({
   displayName,
   scopes: [],
   audience: ["data"],
+  roles: ["uploader"],
+  createdBy: "user:ops",
   rateLimit: { case: "unlimitedRate", value: true },
   revokedAt: undefined,
   expiresAt: undefined,
@@ -151,6 +153,35 @@ describe("M2MTokensPage", () => {
 
 // A failed list fell through to "No M2M tokens yet. Create the first one";
 // the toast that said otherwise was gone in seconds.
+describe("M2MTokensPage token record", () => {
+  it("opens a token's record from its row, with the columns the table hides", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [makeToken("tok-1", "ci-uploader")],
+    });
+    render(<M2MTokensPage />);
+    fireEvent.click(await screen.findByRole("row", { name: /ci-uploader/ }));
+    const dialog = await screen.findByRole("dialog", { name: "ci-uploader" });
+    expect(dialog).toHaveAccessibleDescription("paladin_pat_abcd…");
+    expect(dialog).toHaveTextContent("tok-1");
+    expect(dialog).toHaveTextContent("Rolesuploader");
+    expect(dialog).toHaveTextContent("Rate limitunlimited");
+    expect(dialog).toHaveTextContent("by user:ops");
+  });
+
+  it("leaves the row's revoke action to itself", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [makeToken("tok-1", "ci-uploader")],
+    });
+    render(<M2MTokensPage />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Revoke ci-uploader/i }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "ci-uploader" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("M2MTokensPage failed list", () => {
   it("says the list could not be loaded, not that there are none", async () => {
     h.list.mockRejectedValue(new Error("unavailable"));

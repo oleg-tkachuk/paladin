@@ -217,3 +217,26 @@ describe("CollectionTrashPage paging and search", () => {
     expect(h.loadMore).toHaveBeenCalled();
   });
 });
+
+describe("CollectionTrashPage record", () => {
+  beforeEach(() => {
+    h.blocked = null;
+    h.restoreObject.mockReset();
+  });
+
+  it("opens a trashed object's record from its row", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("row", { name: /o1/ }));
+    const dialog = await screen.findByRole("dialog", { name: "old.pdf" });
+    expect(dialog).toHaveAccessibleDescription("o1");
+    expect(within(dialog).getByText("binary/octet-stream")).toBeInTheDocument();
+  });
+
+  it("leaves the row's checkbox and restore to themselves", () => {
+    renderPage();
+    const row = screen.getByRole("row", { name: /o1/ });
+    fireEvent.click(within(row).getByRole("checkbox"));
+    fireEvent.click(within(row).getByRole("button", { name: /^Restore$/ }));
+    expect(screen.queryByRole("dialog", { name: "old.pdf" })).toBeNull();
+  });
+});

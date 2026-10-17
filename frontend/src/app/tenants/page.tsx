@@ -294,7 +294,7 @@ export default function TenantsPage() {
                             </Badge>
                           ))}
                           {labelEntries.length > 3 && (
-                            <Badge variant="secondary" className={T.labelTight}>
+                            <Badge variant="secondary">
                               +{labelEntries.length - 3}
                             </Badge>
                           )}

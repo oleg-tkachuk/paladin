@@ -85,7 +85,7 @@ the same commit. Treat this file like a runtime invariant.
   register a client (RFC 7591), and nothing removes one: there is no RFC 7592
   management endpoint, no console or RPC to delete a client, and no expiry.
   An agent that re-registers on every install leaves a row each time; the
-  `/mcp` page lists them, marked as self-registered. Revoking the user's grant
+  `/mcp/access` page lists them, marked as self-registered. Revoking the user's grant
   ends the client's access, but the registration stays.
 - **Definition of Done:** an admin can delete a registered client from the
   console (its grants go with it, as `refresh_tokens.oauth_client_id` cascades),

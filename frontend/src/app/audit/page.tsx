@@ -30,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { openableRow } from "@/components/ui/RecordDialog";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
@@ -206,21 +207,15 @@ export default function AuditPage() {
             ) : (
               filtered.map((e) => {
                 const hasError = !!e.errorMessage;
+                const row = openableRow(() => setDetailId(e.entryId));
                 return (
                   <TableRow
                     key={e.entryId}
+                    {...row}
                     className={cn(
-                      "cursor-pointer hover:bg-muted/40",
+                      row.className,
                       hasError && "bg-destructive/5",
                     )}
-                    onClick={() => setDetailId(e.entryId)}
-                    tabIndex={0}
-                    onKeyDown={(ev) => {
-                      if (ev.key === "Enter" || ev.key === " ") {
-                        ev.preventDefault();
-                        setDetailId(e.entryId);
-                      }
-                    }}
                   >
                     <TableCell
                       className={cn(

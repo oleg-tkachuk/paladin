@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -70,18 +71,17 @@ interface ObjectTableRowProps {
   ) => Promise<{ url: string } | undefined>;
 }
 
-// Aligned with the global theme tokens (chart-N + destructive) so the
-// state pills match badges, switches, and the rest of the UI.
-const STATUS_STYLES: Partial<Record<ObjectState, string>> = {
-  [ObjectState.PENDING]: "bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30", // info / sky
-  [ObjectState.AVAILABLE]: "bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30", // success / emerald
-  [ObjectState.DELETED]: "bg-muted text-muted-foreground ring-1 ring-border", // neutral, lives in trash
-};
-
-const STATUS_LABELS: Partial<Record<ObjectState, string>> = {
-  [ObjectState.PENDING]: "PENDING",
-  [ObjectState.AVAILABLE]: "AVAILABLE",
-  [ObjectState.DELETED]: "DELETED",
+// A state's chip: the badge variant it reads as, and its words.
+const STATUS_BADGE: Partial<
+  Record<
+    ObjectState,
+    { variant: "info" | "success" | "outline"; label: string }
+  >
+> = {
+  [ObjectState.PENDING]: { variant: "info", label: "Pending" },
+  [ObjectState.AVAILABLE]: { variant: "success", label: "Available" },
+  // Neutral: it lives in the trash.
+  [ObjectState.DELETED]: { variant: "outline", label: "Deleted" },
 };
 
 export const ObjectTableRow = React.memo(function ObjectTableRow({
@@ -319,13 +319,9 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       {/* Status */}
       {visibleColumns.has("status") && (
         <td className="px-2 py-3 @lg:px-6 @lg:py-4 whitespace-nowrap">
-          <span
-            className={`text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-              STATUS_STYLES[obj.state] || "bg-muted/10 text-muted-foreground"
-            }`}
-          >
-            {STATUS_LABELS[obj.state] || "UNKNOWN"}
-          </span>
+          <Badge variant={STATUS_BADGE[obj.state]?.variant ?? "outline"}>
+            {STATUS_BADGE[obj.state]?.label ?? "Unknown"}
+          </Badge>
         </td>
       )}
 

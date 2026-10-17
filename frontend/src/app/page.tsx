@@ -167,7 +167,7 @@ export default function DashboardPage() {
             />
             <RollupIcon className="size-4" />
             <span>{rollupMeta.label}</span>
-            <Badge variant="outline" className={cn(T.labelTight, "font-mono")}>
+            <Badge variant="outline" className="font-mono">
               {components.length} comp
             </Badge>
           </div>

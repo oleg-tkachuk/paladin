@@ -499,15 +499,9 @@ function BudgetTile({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-medium">Budget</span>
-              {overCap && (
-                <Badge variant="destructive" className={T.labelTight}>
-                  over cap
-                </Badge>
-              )}
+              {overCap && <Badge variant="destructive">over cap</Badge>}
               {!overCap && !capped && budget && (
-                <Badge variant="outline" className={T.labelTight}>
-                  unlimited
-                </Badge>
+                <Badge variant="outline">unlimited</Badge>
               )}
             </div>
 
@@ -583,11 +577,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
               {prefix}
             </span>
           )}
-          {failed && (
-            <Badge variant="destructive" className={T.labelTight}>
-              failed
-            </Badge>
-          )}
+          {failed && <Badge variant="destructive">failed</Badge>}
         </div>
         <div
           className={cn(

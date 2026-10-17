@@ -172,7 +172,7 @@ export function ObjectTagsCard({
                 <Badge
                   key={key}
                   variant="outline"
-                  className="justify-start font-mono text-xs"
+                  className="justify-start font-mono"
                 >
                   {key}={value}
                 </Badge>

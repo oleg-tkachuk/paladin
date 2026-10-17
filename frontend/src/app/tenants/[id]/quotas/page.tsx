@@ -393,7 +393,7 @@ function UsageRow({
       <div className="flex items-baseline justify-between">
         <Label className="text-xs text-muted-foreground">{label}</Label>
         {overCap && (
-          <Badge variant="destructive" className={T.labelTight}>
+          <Badge variant="destructive">
             <ExclamationTriangleIcon className="mr-1 size-3" />
             cap reached
           </Badge>

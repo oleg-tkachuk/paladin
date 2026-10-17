@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@/test/utils";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@/test/utils";
 
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { MCPAuthorization } from "./MCPAuthorization";
 import { MCPConnect } from "./MCPOverview";
 import { EffectBadge } from "./MCPCatalog";
+
+vi.mock("@/components/ui/Notification", () => ({
+  useNotification: () => ({ showNotification: vi.fn() }),
+}));
 
 const AGENT = {
   clientId: "paladin-e2e-agent",
@@ -52,7 +56,7 @@ describe("MCPAuthorization", () => {
       />,
     );
     expect(
-      screen.getByText("Accepted audience").nextElementSibling,
+      screen.getByText("Accepted audience").closest("[data-slot=card]"),
     ).toHaveTextContent("paladin-mcp");
     expect(screen.getAllByText(MCP_SERVER.clientId)).toHaveLength(2);
     expect(screen.getByText("MCP server")).toBeInTheDocument();
@@ -62,8 +66,8 @@ describe("MCPAuthorization", () => {
   it("says a forwarding server takes any plane's token", () => {
     render(<MCPAuthorization inspect={inspect({})} />);
     expect(
-      screen.getByText("Accepted audience").nextElementSibling,
-    ).toHaveTextContent("any plane's token");
+      screen.getByText("Accepted audience").closest("[data-slot=card]"),
+    ).toHaveTextContent("any plane's");
     expect(screen.getByText("No client is registered.")).toBeInTheDocument();
   });
 });
@@ -104,6 +108,23 @@ describe("MCPAuthorization registered clients", () => {
   });
 });
 
+describe("a client's record", () => {
+  it("opens from its row, with what the table leaves out", async () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({ seedClients: [AGENT, MCP_SERVER] } as never)}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("row", { name: new RegExp(AGENT.clientId) }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("by the configuration");
+    expect(dialog).toHaveTextContent("paladin.read");
+    expect(dialog).toHaveTextContent("asked");
+  });
+});
+
 describe("MCPConnect", () => {
   it("explains the exchange when the server is its own audience", () => {
     render(
@@ -119,6 +140,25 @@ describe("MCPConnect", () => {
   it("explains single-plane tokens when it forwards them", () => {
     render(<MCPConnect inspect={inspect({})} />);
     expect(screen.getByText(/issued for a single plane/)).toBeInTheDocument();
+  });
+
+  it("gives each transport its endpoint and a way to copy it", () => {
+    render(
+      <MCPConnect
+        inspect={inspect({
+          edgeAudience: "paladin-mcp",
+          resourceUrl: "https://mcp.example/mcp",
+        } as never)}
+      />,
+    );
+    expect(
+      screen.getByText("POST https://mcp.example/mcp"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Authorization: Bearer <paladin-mcp token>"),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle("Copy Endpoint")).toBeInTheDocument();
+    expect(screen.getByTitle("Copy Command")).toBeInTheDocument();
   });
 });
 

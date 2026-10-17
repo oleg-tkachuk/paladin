@@ -346,7 +346,7 @@ export default function TenantBudgetPage() {
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{pct.toFixed(1)}% used</span>
                   {overCap && (
-                    <Badge variant="destructive" className={T.labelTight}>
+                    <Badge variant="destructive">
                       <ExclamationTriangleIcon className="mr-1 size-3" />
                       cap reached
                     </Badge>

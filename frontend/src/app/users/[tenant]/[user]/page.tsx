@@ -28,7 +28,6 @@ import { tenantClient, userClient } from "@/lib/connect/client";
 import { OAuthGrantsCard } from "@/components/features/OAuthGrantsCard";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
 import { normalizeError } from "@/lib/connect/error";
-import { T } from "@/lib/ui/typography";
 import { USERS_INDEX_HREF, userResourceName } from "@/lib/userPath";
 
 function Fact({
@@ -142,13 +141,9 @@ export default function UserDetailPage() {
               </Fact>
               <Fact label="State">
                 {user.disabled ? (
-                  <Badge variant="destructive" className={T.labelTight}>
-                    disabled
-                  </Badge>
+                  <Badge variant="destructive">disabled</Badge>
                 ) : (
-                  <Badge variant="outline" className={T.labelTight}>
-                    active
-                  </Badge>
+                  <Badge variant="outline">active</Badge>
                 )}
               </Fact>
               <Fact label="Last login">

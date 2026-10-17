@@ -33,9 +33,16 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
-import { isRevoked, isExpired } from "./_constants";
+import { isRevoked } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
+import {
+  TokenRecordDialog,
+  TokenStatus,
+  TokenUsage,
+  type UsageSnap,
+} from "./TokenRecordDialog";
+import { openableRow } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
@@ -45,20 +52,9 @@ const COL_PREFIX = "hidden @md:table-cell";
 const COL_AUDIENCE = "hidden @2xl:table-cell";
 const COL_EXPIRES = "hidden @3xl:table-cell";
 const COL_RATE = "hidden @4xl:table-cell";
-// The share of its cap past which a token's usage reads as a warning.
-const NEAR_CAP_RATIO = 0.9;
 const COL_LAST_USED = "hidden @5xl:table-cell";
 const COL_USAGE = "hidden @6xl:table-cell";
 
-// Per-token sliding-window usage snapshot keyed by token.id; "never" ⇒
-// the token was never verified (GetUsage NotFound).
-type UsageSnap = {
-  /** The cap in rpm; undefined when the token has none. */
-  limitRpm: number | undefined;
-  weighted: number;
-  currentBucket: bigint;
-  resetsAtMs: number;
-};
 type UsageMap = Map<string, UsageSnap | "never">;
 const EMPTY_USAGE: UsageMap = new Map();
 
@@ -172,6 +168,8 @@ export default function M2MTokensPage() {
     [tokensQuery.data],
   );
   const usage = tokensQuery.data?.usage ?? EMPTY_USAGE;
+  // When the usage was read: a window's reset counts down from then.
+  const readAtMs = tokensQuery.dataUpdatedAt;
   const loading = tokensQuery.isFetching;
   const fetchTokens = () => tokensQuery.refetch();
 
@@ -179,6 +177,7 @@ export default function M2MTokensPage() {
   // The dialogs own their own form + RPC; the page only tracks open state.
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<APIToken | null>(null);
+  const [opened, setOpened] = useState<APIToken | null>(null);
 
   const visibleTokens = useMemo(() => tokens, [tokens]);
 
@@ -299,9 +298,13 @@ export default function M2MTokensPage() {
             ) : (
               visibleTokens.map((t) => {
                 const revoked = isRevoked(t);
-                const expired = isExpired(t);
+                const row = openableRow(() => setOpened(t));
                 return (
-                  <TableRow key={t.id} className="group">
+                  <TableRow
+                    key={t.id}
+                    {...row}
+                    className={cn(row.className, "group")}
+                  >
                     <TableCell className={COL_PREFIX}>
                       <span className="font-mono text-xs">
                         paladin_pat_{t.prefix}…
@@ -319,7 +322,7 @@ export default function M2MTokensPage() {
                             <Badge
                               key={s}
                               variant="outline"
-                              className={cn(T.labelTight, "font-mono")}
+                              className="font-mono"
                             >
                               {s}
                             </Badge>
@@ -332,11 +335,7 @@ export default function M2MTokensPage() {
                     <TableCell className={COL_AUDIENCE}>
                       <div className="flex flex-wrap gap-1">
                         {t.audience.map((a) => (
-                          <Badge
-                            key={a}
-                            variant="secondary"
-                            className={T.labelTight}
-                          >
+                          <Badge key={a} variant="secondary">
                             {a}
                           </Badge>
                         ))}
@@ -350,54 +349,11 @@ export default function M2MTokensPage() {
                         : "∞"}
                     </TableCell>
                     <TableCell className={cn(COL_USAGE, T.code)}>
-                      {(() => {
-                        if (revoked) {
-                          return (
-                            <span className="text-muted-foreground">—</span>
-                          );
-                        }
-                        const u = usage.get(t.id);
-                        if (u === undefined) {
-                          return (
-                            <span className="text-muted-foreground">…</span>
-                          );
-                        }
-                        if (u === "never") {
-                          return (
-                            <span className="text-muted-foreground">
-                              never used
-                            </span>
-                          );
-                        }
-                        const resetsInS = Math.max(
-                          0,
-                          Math.round((u.resetsAtMs - Date.now()) / 1000),
-                        );
-                        const limit = u.limitRpm;
-                        const weighted = u.weighted.toFixed(1);
-                        // A cap of 0 is at its limit from the start.
-                        const overCap =
-                          limit !== undefined &&
-                          u.weighted >= limit * NEAR_CAP_RATIO;
-                        return (
-                          <div className="space-y-0.5">
-                            <div className={overCap ? "text-warning" : ""}>
-                              {weighted}
-                              {limit !== undefined ? (
-                                <span className="text-muted-foreground">
-                                  {" / "}
-                                  {limit}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  {" / ∞"}
-                                </span>
-                              )}
-                            </div>
-                            <div className={T.hint}>resets in {resetsInS}s</div>
-                          </div>
-                        );
-                      })()}
+                      <TokenUsage
+                        revoked={revoked}
+                        usage={usage.get(t.id)}
+                        readAtMs={readAtMs}
+                      />
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -418,19 +374,7 @@ export default function M2MTokensPage() {
                       {t.expiresAt ? <Timestamp ts={t.expiresAt} /> : "never"}
                     </TableCell>
                     <TableCell>
-                      {revoked ? (
-                        <Badge variant="destructive" className={T.code}>
-                          revoked
-                        </Badge>
-                      ) : expired ? (
-                        <Badge variant="outline" className={T.code}>
-                          expired
-                        </Badge>
-                      ) : (
-                        <Badge variant="success" className={T.code}>
-                          active
-                        </Badge>
-                      )}
+                      <TokenStatus token={t} />
                     </TableCell>
                     <TableCell className="text-right">
                       {!revoked && (
@@ -452,6 +396,13 @@ export default function M2MTokensPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <TokenRecordDialog
+        token={opened}
+        usage={opened ? usage.get(opened.id) : undefined}
+        readAtMs={readAtMs}
+        onClose={() => setOpened(null)}
+      />
 
       {/* ─── Create dialog ───────────────────────────────────────────── */}
       <CreateTokenDialog
