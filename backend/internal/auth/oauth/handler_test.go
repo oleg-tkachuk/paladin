@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/google/uuid"
@@ -543,9 +545,9 @@ func TestToken_RefreshReuseLogsAnUnwrittenAuditRow(t *testing.T) {
 	u := sampleUser()
 	h := testHandler(t, store, &memRefresh{getErr: authstore.ErrTokenRevoked}, u).WithAudit(failingAudit{})
 	core, logs := observer.New(zap.ErrorLevel)
-	h.log = zap.New(core)
+	ctx := logger.WithContext(t.Context(), zap.New(core))
 
-	h.onRefreshReuse(t.Context(), uuid.New(), u.UserID, u.TenantID)
+	h.onRefreshReuse(ctx, uuid.New(), u.UserID, u.TenantID)
 
 	got := logs.FilterMessage("audit entry not written").All()
 	if len(got) != 1 {

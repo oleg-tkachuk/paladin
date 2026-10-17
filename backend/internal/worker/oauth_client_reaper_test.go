@@ -14,9 +14,16 @@ type reapCall struct {
 
 // fakeClientReaper answers each call with the next count of counts, then 0.
 type fakeClientReaper struct {
-	calls  chan reapCall
-	counts []int64
-	err    error
+	calls    chan reapCall
+	counts   []int64
+	err      error
+	purged   []time.Time
+	purgeErr error
+}
+
+func (f *fakeClientReaper) PurgeExpiredCodes(_ context.Context, olderThan time.Time) (int64, error) {
+	f.purged = append(f.purged, olderThan)
+	return 0, f.purgeErr
 }
 
 func (f *fakeClientReaper) ReapIdleClients(_ context.Context, createdBefore, now time.Time, limit int) (int64, error) {
@@ -94,5 +101,29 @@ func TestOAuthClientReaper_DisabledByInterval(t *testing.T) {
 				t.Error("a disabled reaper reached its store")
 			}
 		})
+	}
+}
+
+// Each tick also deletes the codes expired past their retention, after the
+// clients.
+func TestOAuthClientReaper_PurgesExpiredCodes(t *testing.T) {
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	const retention = 24 * time.Hour
+	store := &fakeClientReaper{calls: make(chan reapCall, reaperCalls)}
+	r := &OAuthClientReaper{Store: store, MaxAge: time.Hour, ExpiredCodesFor: retention, Now: func() time.Time { return now }}
+	if err := r.reap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.purged) != 1 || !store.purged[0].Equal(now.Add(-retention)) {
+		t.Errorf("purged = %v, want once before %s", store.purged, now.Add(-retention))
+	}
+}
+
+func TestOAuthClientReaper_ReportsAFailedPurge(t *testing.T) {
+	boom := errors.New("pool closed")
+	store := &fakeClientReaper{calls: make(chan reapCall, reaperCalls), purgeErr: boom}
+	r := &OAuthClientReaper{Store: store, MaxAge: time.Hour}
+	if err := r.reap(context.Background()); !errors.Is(err, boom) {
+		t.Errorf("err = %v, want the purge's", err)
 	}
 }

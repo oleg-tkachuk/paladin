@@ -77,6 +77,9 @@ type ClientReaper interface {
 	// before createdBefore that hold neither a grant live at now nor an
 	// authorization code still redeemable at now, and returns how many.
 	ReapIdleClients(ctx context.Context, createdBefore, now time.Time, limit int) (int64, error)
+	// PurgeExpiredCodes deletes the authorization codes that expired before
+	// olderThan, and returns how many.
+	PurgeExpiredCodes(ctx context.Context, olderThan time.Time) (int64, error)
 }
 
 // Store is the OAuth AS persistence surface.

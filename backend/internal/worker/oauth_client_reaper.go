@@ -19,6 +19,10 @@ const OAuthClientReapBatch = 500
 // removes one, so an agent that registers on every install leaves a row each
 // time. Seeded clients are never reaped. Disabled when Interval <= 0.
 //
+// It also deletes the authorization codes that expired more than
+// ExpiredCodesFor ago: a code is single-use and lives a minute, and nothing
+// else removed one, so the table kept every code ever issued.
+//
 // Store must run on the reaper pool: refresh_tokens is tenant-scoped by
 // row-level security, and a connection scoped to one tenant would see no
 // grant of any other, so their clients would be reaped with those grants.
@@ -26,7 +30,9 @@ type OAuthClientReaper struct {
 	Store    oauth.ClientReaper
 	Interval time.Duration
 	MaxAge   time.Duration
-	Logger   *zap.Logger
+	// ExpiredCodesFor is how long an expired authorization code is kept.
+	ExpiredCodesFor time.Duration
+	Logger          *zap.Logger
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 }
@@ -55,6 +61,14 @@ func (r *OAuthClientReaper) reap(ctx context.Context) error {
 	}
 	if total > 0 {
 		r.log().Info("reaped idle self-registered oauth clients", zap.Int64("clients", total))
+	}
+	codes, err := r.Store.PurgeExpiredCodes(ctx, now.Add(-r.ExpiredCodesFor))
+	if err != nil {
+		r.log().Warn("failed to purge expired oauth authorization codes", zap.Error(err))
+		return err
+	}
+	if codes > 0 {
+		r.log().Info("purged expired oauth authorization codes", zap.Int64("codes", codes))
 	}
 	return nil
 }

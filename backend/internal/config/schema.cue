@@ -374,6 +374,9 @@ worker: {
   oauth_client_reap: {
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     max_age:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h" // 7 days
+    // How long an expired authorization code is kept before the same tick
+    // deletes it.
+    expired_codes_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
   }
   // Operations runner: dequeues PENDING rows from the operations
   // table and runs the registered Executor. Without it, BatchXxx

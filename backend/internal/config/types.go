@@ -725,12 +725,16 @@ type APITokenWorker struct {
 }
 
 // OAuthClientReap removes self-registered OAuth clients (RFC 7591) older than
-// max_age that hold neither a live grant nor a redeemable authorization code.
+// max_age that hold neither a live grant nor a redeemable authorization code,
+// and authorization codes expired for longer than expired_codes_for.
 // Seeded clients are never removed. Disable by setting interval to 0; a
 // positive interval needs a positive max_age (Config.Validate).
 type OAuthClientReap struct {
 	Interval time.Duration `yaml:"interval" json:"interval"`
 	MaxAge   time.Duration `yaml:"max_age" json:"max_age"`
+	// ExpiredCodesFor is how long an authorization code is kept past its
+	// expiry before the same tick deletes it.
+	ExpiredCodesFor time.Duration `yaml:"expired_codes_for" json:"expired_codes_for"`
 }
 
 // RefreshTokenReap drops expired refresh-token rows. Always on; tune

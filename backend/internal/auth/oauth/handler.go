@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -183,7 +184,11 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// redirect_uri is shown to the user, never followed (RFC 6749 §4.1.2.1).
 	client, err := h.store.GetClient(r.Context(), p.ClientID)
 	if err != nil {
-		h.jsonError(w, http.StatusBadRequest, "invalid_client", "unknown client_id")
+		if errors.Is(err, ErrClientNotFound) {
+			h.jsonError(w, http.StatusBadRequest, "invalid_client", "unknown client_id")
+			return
+		}
+		h.serverError(r.Context(), w, "client lookup failed", err, zap.String("client_id", p.ClientID))
 		return
 	}
 	registered, ok := registeredRedirect(client, p.RedirectURI)
@@ -217,6 +222,12 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// POST: the decision.
 	if r.PostForm.Get("action") != "allow" {
+		// Who refused is not known: the form is refused before it signs in.
+		h.record(r.Context(), admindomain.AuditEntry{
+			Action:       actionConsentDenied,
+			ResourceName: clientResource + client.ClientID,
+			ErrorMessage: "the user denied the request",
+		}, nil)
 		h.redirectError(w, r, registered, p.State, "access_denied", "the user denied the request")
 		return
 	}
@@ -224,6 +235,11 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	password := r.PostForm.Get("password")
 	tenantHint := r.PostForm.Get("tenant")
 	u, err := h.authenticate(r.Context(), subject, password, tenantHint)
+	if err != nil && !errors.Is(err, errBadCredentials) {
+		logServerError(r.Context(), "user lookup failed", err, zap.String("client_id", client.ClientID))
+		h.redirectError(w, r, registered, p.State, errServerError, "user lookup failed")
+		return
+	}
 	if err != nil {
 		// Bounce back to the consent UI with an error rather than leaking
 		// which factor failed.
@@ -251,7 +267,20 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 			&cedar.Resource{TenantID: u.TenantID},
 			cedar.RequestContext{Now: h.now(), OAuthClientID: client.ClientID, OAuthScopes: scopes},
 		)
-		if aerr != nil || dec != cedar.DecisionAllow {
+		if aerr != nil {
+			// A policy engine that could not decide has not denied.
+			logServerError(r.Context(), "policy evaluation failed", aerr, zap.String("client_id", client.ClientID))
+			h.redirectError(w, r, registered, p.State, errServerError, "policy evaluation failed")
+			return
+		}
+		if dec != cedar.DecisionAllow {
+			h.record(r.Context(), admindomain.AuditEntry{
+				ActorSubject:  u.UserID.String(),
+				ActorTenantID: u.TenantID,
+				Action:        actionConsentDenied,
+				ResourceName:  clientResource + client.ClientID,
+				ErrorMessage:  "authorization denied by policy",
+			}, grantDetail{Scopes: scopes})
 			h.redirectError(w, r, registered, p.State, "access_denied", "authorization denied by policy")
 			return
 		}
@@ -295,14 +324,25 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.record(r.Context(), admindomain.AuditEntry{
+		ActorSubject:  u.UserID.String(),
+		ActorTenantID: u.TenantID,
+		Action:        actionConsentGranted,
+		ResourceName:  clientResource + client.ClientID,
+	}, grantDetail{Audience: audience, Scopes: scopes})
 	redirectWithCode(w, r, registered, code, p.State)
 }
+
+// errBadCredentials is what authenticate returns for credentials that do not
+// name an eligible user. Any other error is the store failing, which the
+// caller must not answer as wrong credentials.
+var errBadCredentials = errors.New("oauth: bad credentials")
 
 // authenticate resolves the resource owner by subject (tenant-disambiguated)
 // and verifies the password — the same posture as AuthService.Login.
 func (h *Handler) authenticate(ctx context.Context, subject, password, tenantHint string) (authstore.User, error) {
 	if subject == "" || password == "" {
-		return authstore.User{}, errors.New("missing credentials")
+		return authstore.User{}, fmt.Errorf("%w: missing credentials", errBadCredentials)
 	}
 	var (
 		u   authstore.User
@@ -312,7 +352,7 @@ func (h *Handler) authenticate(ctx context.Context, subject, password, tenantHin
 		if tid, perr := uuid.Parse(tenantHint); perr == nil {
 			u, err = h.users.GetBySubject(ctx, tid, subject)
 		} else {
-			err = errors.New("invalid tenant hint")
+			err = fmt.Errorf("%w: invalid tenant hint", errBadCredentials)
 		}
 	} else {
 		var matches []authstore.User
@@ -321,19 +361,22 @@ func (h *Handler) authenticate(ctx context.Context, subject, password, tenantHin
 		case err == nil && len(matches) == 1:
 			u = matches[0]
 		case err == nil && len(matches) > 1:
-			return authstore.User{}, errors.New("ambiguous subject; tenant required")
+			return authstore.User{}, fmt.Errorf("%w: ambiguous subject; tenant required", errBadCredentials)
 		case err == nil:
-			return authstore.User{}, errors.New("no such user")
+			return authstore.User{}, fmt.Errorf("%w: no such user", errBadCredentials)
 		}
+	}
+	if errors.Is(err, authstore.ErrNotFound) {
+		return authstore.User{}, fmt.Errorf("%w: no such user", errBadCredentials)
 	}
 	if err != nil {
 		return authstore.User{}, err
 	}
 	if u.Disabled || len(u.PasswordHash) == 0 {
-		return authstore.User{}, errors.New("user not eligible")
+		return authstore.User{}, fmt.Errorf("%w: user not eligible", errBadCredentials)
 	}
 	if err := auth.CheckPassword(u.PasswordHash, password); err != nil {
-		return authstore.User{}, errors.New("invalid credentials")
+		return authstore.User{}, fmt.Errorf("%w: invalid credentials", errBadCredentials)
 	}
 	return u, nil
 }
@@ -392,9 +435,8 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 	redirectURI := r.PostForm.Get("redirect_uri")
 	verifier := r.PostForm.Get("code_verifier")
 
-	client, err := h.store.GetClient(r.Context(), clientID)
-	if err != nil {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "unknown client")
+	client, ok := h.tokenClient(w, r, clientID)
+	if !ok {
 		return
 	}
 	if err := h.authenticateClient(r, client); err != nil {
@@ -404,7 +446,11 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 
 	ac, err := h.store.ConsumeCode(r.Context(), code)
 	if err != nil {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid, expired, or already used")
+		if errors.Is(err, ErrCodeInvalid) {
+			h.jsonError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid, expired, or already used")
+			return
+		}
+		h.serverError(r.Context(), w, "code redemption failed", err, zap.String("client_id", clientID))
 		return
 	}
 	// Bind the code to the presenting client + the original redirect_uri.
@@ -417,23 +463,28 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.users.GetByID(r.Context(), ac.UserID)
-	if err != nil || u.Disabled {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
+	u, ok := h.eligibleUser(w, r, ac.UserID, ac.TenantID, clientID)
+	if !ok {
 		return
 	}
-	h.issueTokens(r.Context(), w, u, authstore.OAuthGrant{
+	if h.issueTokens(r.Context(), w, u, authstore.OAuthGrant{
 		ClientID: ac.ClientID, Audience: ac.Audience, Scopes: ac.Scopes,
-	}, uuid.Nil)
+	}, uuid.Nil) {
+		h.record(r.Context(), admindomain.AuditEntry{
+			ActorSubject:  u.UserID.String(),
+			ActorTenantID: u.TenantID,
+			Action:        actionGrantRedeemed,
+			ResourceName:  clientResource + ac.ClientID,
+		}, grantDetail{Audience: ac.Audience, Scopes: ac.Scopes})
+	}
 }
 
 func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 	clientID := r.PostForm.Get("client_id")
 	refreshTok := r.PostForm.Get("refresh_token")
 
-	client, err := h.store.GetClient(r.Context(), clientID)
-	if err != nil {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "unknown client")
+	client, ok := h.tokenClient(w, r, clientID)
+	if !ok {
 		return
 	}
 	if err := h.authenticateClient(r, client); err != nil {
@@ -447,6 +498,10 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stored, err := h.refresh.Get(r.Context(), jti)
+	if err != nil && !errors.Is(err, authstore.ErrTokenRevoked) && !errors.Is(err, authstore.ErrNotFound) {
+		h.serverError(r.Context(), w, "refresh token lookup failed", err, zap.String("client_id", clientID))
+		return
+	}
 	if err != nil {
 		// A revoked-but-present token means a rotated refresh was replayed —
 		// the RFC 6819 theft signal. Revoke the whole family (all the user's
@@ -468,9 +523,8 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token was not issued to this client")
 		return
 	}
-	u, err := h.users.GetByID(r.Context(), userID)
-	if err != nil || u.Disabled || u.TenantID != tenantID {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
+	u, ok := h.eligibleUser(w, r, userID, tenantID, clientID)
+	if !ok {
 		return
 	}
 	// Rotate: revoke the presented refresh before minting a fresh pair (RFC 6749
@@ -495,28 +549,14 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 			zap.Int64("revoked", revoked),
 			zap.Error(err))
 	}
-	if h.audit == nil {
-		return
-	}
-	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
-		At:            h.now().UTC(),
+	h.record(ctx, admindomain.AuditEntry{
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
-		ActorAudience: auth.AudienceIAM,
 		Action:        actionRefreshReuse,
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "rotated refresh token replayed; token family revoked",
-	}); err != nil && h.log != nil {
-		h.log.Error("audit entry not written",
-			zap.String("action", actionRefreshReuse),
-			zap.String("user_id", userID.String()),
-			zap.Error(err))
-	}
+	}, nil)
 }
-
-// actionRefreshReuse names the audit row of a replayed rotated refresh token.
-const actionRefreshReuse = "iam.RefreshTokenReuseDetected"
 
 // tokenResponse is the RFC 6749 §5.1 success body.
 type tokenResponse struct {
@@ -529,8 +569,8 @@ type tokenResponse struct {
 
 // issueTokens mints an access token for the grant's audience + a rotating
 // refresh token that records the grant, stores the refresh row, and writes
-// the §5.1 JSON.
-func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, grant authstore.OAuthGrant, familyID uuid.UUID) {
+// the §5.1 JSON. false is a failure it has already answered.
+func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, grant authstore.OAuthGrant, familyID uuid.UUID) bool {
 	if familyID == uuid.Nil {
 		familyID = uuid.Must(uuid.NewV7())
 	}
@@ -548,7 +588,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 	})
 	if err != nil {
 		h.serverError(ctx, w, "mint access failed", err, zap.String("client_id", grant.ClientID))
-		return
+		return false
 	}
 	tokenID := uuid.Must(uuid.NewV7())
 	refresh, refreshExp, err := h.iss.MintRefresh(issuer.RefreshClaims{
@@ -556,11 +596,11 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 	})
 	if err != nil {
 		h.serverError(ctx, w, "mint refresh failed", err, zap.String("client_id", grant.ClientID))
-		return
+		return false
 	}
 	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), r2RefreshToken(tokenID, familyID, u, grant, h.now(), refreshExp)); err != nil {
 		h.serverError(ctx, w, "persist refresh failed", err, zap.String("client_id", grant.ClientID))
-		return
+		return false
 	}
 	writeJSON(w, http.StatusOK, tokenResponse{
 		AccessToken:  access,
@@ -569,6 +609,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		RefreshToken: refresh,
 		Scope:        scopesJoin(grant.Scopes),
 	})
+	return true
 }
 
 func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, grant authstore.OAuthGrant, iat, exp time.Time) authstore.RefreshToken {
@@ -742,6 +783,14 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		h.serverError(r.Context(), w, "registration failed", err)
 		return
 	}
+	// Nobody is signed in: dynamic registration is open to any caller.
+	h.record(r.Context(), admindomain.AuditEntry{
+		Action:       actionClientRegistered,
+		ResourceName: clientResource + client.ClientID,
+	}, clientDetail{
+		ClientName: client.ClientName, Audiences: client.AllowedAudiences,
+		Scopes: client.AllowedScopes, Public: client.Public,
+	})
 	writeJSON(w, http.StatusCreated, resp)
 }
 
@@ -870,6 +919,39 @@ func (h *Handler) redirectError(w http.ResponseWriter, r *http.Request, register
 
 func (h *Handler) jsonError(w http.ResponseWriter, status int, errCode, desc string) {
 	writeJSON(w, status, map[string]string{"error": errCode, "error_description": desc})
+}
+
+// tokenClient is the client a token request names, or false once it has
+// answered: invalid_client for an unknown one, server_error for a store
+// that could not say.
+func (h *Handler) tokenClient(w http.ResponseWriter, r *http.Request, clientID string) (Client, bool) {
+	client, err := h.store.GetClient(r.Context(), clientID)
+	if err == nil {
+		return client, true
+	}
+	if errors.Is(err, ErrClientNotFound) {
+		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "unknown client")
+		return Client{}, false
+	}
+	h.serverError(r.Context(), w, "client lookup failed", err, zap.String("client_id", clientID))
+	return Client{}, false
+}
+
+// eligibleUser is the user a grant was issued to while it may still have
+// one, or false once it has answered: invalid_grant for a user gone,
+// disabled or moved to another tenant, server_error for a store that could
+// not say.
+func (h *Handler) eligibleUser(w http.ResponseWriter, r *http.Request, userID, tenantID uuid.UUID, clientID string) (authstore.User, bool) {
+	u, err := h.users.GetByID(r.Context(), userID)
+	if err != nil && !errors.Is(err, authstore.ErrNotFound) {
+		h.serverError(r.Context(), w, "user lookup failed", err, zap.String("client_id", clientID))
+		return authstore.User{}, false
+	}
+	if err != nil || u.Disabled || u.TenantID != tenantID {
+		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "user no longer eligible")
+		return authstore.User{}, false
+	}
+	return u, true
 }
 
 // serverError answers server_error and logs why. The endpoints are plain

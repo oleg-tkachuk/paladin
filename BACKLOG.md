@@ -78,49 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Dynamic client registration is not audited
-
-- **Status:** Deferred.
-- **Reason:** `/oauth/register` is plain HTTP on the IAM plane, outside the
-  Connect audit interceptor, so a client registering itself (RFC 7591)
-  leaves no audit row; deleting one through `OAuthClientService` does. With
-  `auth.oauth.dynamic_registration` on, any caller may register, and the
-  only trace is the client's row and its `created_at`.
-- **Definition of Done:** `handleRegister` writes an audit entry naming the
-  client id, its audiences and the caller's address, through the same
-  audit store the interceptor uses; a unit test, and the entry seen on the
-  audit page in an e2e assertion.
-- **Blockers:** none.
-
-### The OAuth endpoints answer an outage as a client error
-
-- **Status:** Deferred.
-- **Reason:** `/oauth/authorize`, `/oauth/token` and the token exchange
-  (`internal/auth/oauth/handler.go`, `exchange.go`) turn any store or policy
-  error into a 4xx: a database outage reads as `invalid_client`, a failing
-  Cedar engine as `access_denied`, a failed user lookup as "user no longer
-  eligible". An outage then looks like a wave of bad credentials, and none
-  of it is logged. Fixing it changes what a client sees, so it is its own
-  change.
-- **Definition of Done:** each lookup tells its not-found sentinel from any
-  other error; the sentinel keeps its 4xx, anything else answers
-  `server_error` through `serverError`, which logs it; unit tests per
-  endpoint and an `upgrading.md` note.
-- **Blockers:** none.
-
-### OAuth grants and token exchanges write no audit rows
-
-- **Status:** Deferred.
-- **Reason:** consent at `/oauth/authorize`, code redemption and refresh
-  rotation at `/oauth/token`, and the token exchange run outside the audit
-  interceptor and write no row themselves; only a replayed refresh token is
-  recorded. Who let which client in, and when, is in no trail but the
-  refresh tokens themselves.
-- **Definition of Done:** each writes a row through the audit repository
-  (which scopes it to the actor's tenant), denials included; unit tests and
-  the rows seen in an integration test.
-- **Blockers:** none.
-
 ### Worker ticks that hide their failures from the stalled-worker alert
 
 - **Status:** Deferred.
@@ -143,18 +100,6 @@ the same commit. Treat this file like a runtime invariant.
   transition through the data-plane RPC is audited.
 - **Definition of Done:** the ingest handlers write the row the RPC would,
   through the audit repository; an integration test.
-- **Blockers:** none.
-
-### Expired OAuth authorization codes are never purged
-
-- **Status:** Deferred.
-- **Reason:** `oauth.Store.PurgeExpiredCodes` exists and is tested, but no
-  worker job calls it, so `oauth_authorization_codes` keeps every code ever
-  issued. A code is single-use and short-lived, so the rows are harmless
-  but unbounded; they go only when their client is deleted or reaped.
-- **Definition of Done:** a worker job (or the OAuth client reaper's tick)
-  purges codes expired past a grace, on the reaper pool, with a config key,
-  its row in `backend/docs/ops-housekeeping.md`, and unit tests.
 - **Blockers:** none.
 
 ### Admin RPCs the MCP bridge leaves off on purpose
