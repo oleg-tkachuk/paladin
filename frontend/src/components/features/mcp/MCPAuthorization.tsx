@@ -16,7 +16,20 @@ import type {
 } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { T } from "@/lib/ui/typography";
 
-/** What a seed client is, in the words an operator needs. */
+/**
+ * The clients to show: every one the Authorization Server holds when it could
+ * list them, else the configuration's seed clients.
+ */
+export function shownClients(
+  oauth: MCPInspectResponse["oauth"],
+): MCPOAuthClient[] {
+  if (!oauth) return [];
+  return oauth.registeredClients.length > 0
+    ? oauth.registeredClients
+    : oauth.seedClients;
+}
+
+/** What a client is, in the words an operator needs. */
 function clientKind(c: MCPOAuthClient): string {
   if (c.tokenExchange) return "MCP server";
   return c.public ? "public (PKCE)" : "confidential";
@@ -30,6 +43,7 @@ function clientKind(c: MCPOAuthClient): string {
 export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
   const oauth = inspect.oauth;
   const exchanging = !!oauth?.edgeAudience;
+  const clients = shownClients(oauth);
   return (
     <div className="space-y-4">
       <Card className="space-y-3 p-4">
@@ -76,6 +90,12 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
         </dl>
       </Card>
 
+      {oauth?.registeredClientsError ? (
+        <p className={T.hint}>
+          Showing the configured clients only: the registered ones could not be
+          read ({oauth.registeredClientsError}).
+        </p>
+      ) : null}
       <Card className="p-0">
         <Table>
           <TableHeader>
@@ -87,20 +107,25 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(oauth?.seedClients ?? []).length === 0 ? (
+            {clients.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={4}
                   className="py-8 text-center text-xs text-muted-foreground"
                 >
-                  No client is registered at boot.
+                  No client is registered.
                 </TableCell>
               </TableRow>
             ) : (
-              oauth!.seedClients.map((c) => (
+              clients.map((c) => (
                 <TableRow key={c.clientId}>
                   <TableCell className={T.code}>
                     {c.clientId}
+                    {c.dynamic ? (
+                      <Badge variant="info" className={`ml-2 ${T.labelTight}`}>
+                        registered itself
+                      </Badge>
+                    ) : null}
                     {c.skipConsent ? (
                       <Badge
                         variant="outline"

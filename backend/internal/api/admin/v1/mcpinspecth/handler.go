@@ -31,6 +31,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	oauthpkg "github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -45,6 +46,7 @@ import (
 type Handler struct {
 	cfg         config.MCP
 	oauth       config.OAuthAS
+	clients     oauthpkg.ClientLister
 	policy      cedar.Authorizer
 	sessionsURL string
 	httpClient  *http.Client
@@ -289,7 +291,7 @@ func (h *Handler) Inspect(ctx context.Context, _ *adminv1.MCPInspectRequest) (*a
 				SessionTimeoutSeconds: int64(h.cfg.HTTP.SessionTimeout / time.Second),
 			},
 		},
-		Oauth: h.oauthState(),
+		Oauth: h.oauthState(ctx),
 	}
 	return resp, nil
 }
@@ -370,8 +372,15 @@ func (h *Handler) WithOAuth(as config.OAuthAS) *Handler {
 	return h
 }
 
+// WithOAuthClients lets Inspect list every registered client, the
+// self-registered ones included.
+func (h *Handler) WithOAuthClients(l oauthpkg.ClientLister) *Handler {
+	h.clients = l
+	return h
+}
+
 // oauthState is how agents authorize, without a secret in it.
-func (h *Handler) oauthState() *adminv1.MCPOAuthState {
+func (h *Handler) oauthState(ctx context.Context) *adminv1.MCPOAuthState {
 	st := &adminv1.MCPOAuthState{
 		AuthorizationServerEnabled: h.oauth.Enabled,
 		EdgeOauthEnabled:           h.cfg.OAuth.Enabled,
@@ -392,7 +401,39 @@ func (h *Handler) oauthState() *adminv1.MCPOAuthState {
 			SkipConsent:      sc.SkipConsent,
 		})
 	}
+	h.listRegistered(ctx, st)
 	return st
+}
+
+// listRegistered fills the clients the store holds. A store that cannot be
+// read leaves the rest of the answer standing and says why.
+func (h *Handler) listRegistered(ctx context.Context, st *adminv1.MCPOAuthState) {
+	if h.clients == nil {
+		return
+	}
+	clients, err := h.clients.ListClients(ctx)
+	if err != nil {
+		st.RegisteredClientsError = err.Error()
+		return
+	}
+	seeded := make(map[string]config.OAuthSeedClient, len(h.oauth.SeedClients))
+	for _, sc := range h.oauth.SeedClients {
+		seeded[sc.ClientID] = sc
+	}
+	st.RegisteredClients = make([]*adminv1.MCPOAuthClient, 0, len(clients))
+	for _, c := range clients {
+		sc, isSeed := seeded[c.ClientID]
+		st.RegisteredClients = append(st.RegisteredClients, &adminv1.MCPOAuthClient{
+			ClientId:         c.ClientID,
+			Public:           c.Public,
+			AllowedScopes:    c.AllowedScopes,
+			AllowedAudiences: c.AllowedAudiences,
+			TokenExchange:    isSeed && sc.TokenExchange,
+			SkipConsent:      isSeed && sc.SkipConsent,
+			Dynamic:          !isSeed,
+			CreatedAt:        timestamppb.New(c.CreatedAt),
+		})
+	}
 }
 
 // toolCatalog projects mcp.DefaultCatalog into the proto shape.

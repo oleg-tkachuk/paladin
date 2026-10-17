@@ -576,8 +576,14 @@ type MCPOAuthState struct {
 	// exchange_client_id is the seed client the MCP server exchanges tokens
 	// as; empty when it does not.
 	ExchangeClientId string `protobuf:"bytes,6,opt,name=exchange_client_id,json=exchangeClientId,proto3" json:"exchange_client_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// registered_clients is every client the Authorization Server holds,
+	// oldest first and capped: the seed clients and those that registered
+	// themselves (RFC 7591). Empty when the store could not be read, with
+	// registered_clients_error saying why.
+	RegisteredClients      []*MCPOAuthClient `protobuf:"bytes,7,rep,name=registered_clients,json=registeredClients,proto3" json:"registered_clients,omitempty"`
+	RegisteredClientsError string            `protobuf:"bytes,8,opt,name=registered_clients_error,json=registeredClientsError,proto3" json:"registered_clients_error,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *MCPOAuthState) Reset() {
@@ -652,6 +658,20 @@ func (x *MCPOAuthState) GetExchangeClientId() string {
 	return ""
 }
 
+func (x *MCPOAuthState) GetRegisteredClients() []*MCPOAuthClient {
+	if x != nil {
+		return x.RegisteredClients
+	}
+	return nil
+}
+
+func (x *MCPOAuthState) GetRegisteredClientsError() string {
+	if x != nil {
+		return x.RegisteredClientsError
+	}
+	return ""
+}
+
 // MCPOAuthClient is one registered OAuth client.
 type MCPOAuthClient struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -664,7 +684,13 @@ type MCPOAuthClient struct {
 	TokenExchange bool `protobuf:"varint,5,opt,name=token_exchange,json=tokenExchange,proto3" json:"token_exchange,omitempty"`
 	// skip_consent is true for a first-party client that skips the consent
 	// screen.
-	SkipConsent   bool `protobuf:"varint,6,opt,name=skip_consent,json=skipConsent,proto3" json:"skip_consent,omitempty"`
+	SkipConsent bool `protobuf:"varint,6,opt,name=skip_consent,json=skipConsent,proto3" json:"skip_consent,omitempty"`
+	// dynamic is true for a client that registered itself rather than being
+	// seeded by the configuration.
+	Dynamic bool `protobuf:"varint,7,opt,name=dynamic,proto3" json:"dynamic,omitempty"`
+	// created_at is when the client was registered; unset for a seed client
+	// read from the configuration.
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -739,6 +765,20 @@ func (x *MCPOAuthClient) GetSkipConsent() bool {
 		return x.SkipConsent
 	}
 	return false
+}
+
+func (x *MCPOAuthClient) GetDynamic() bool {
+	if x != nil {
+		return x.Dynamic
+	}
+	return false
+}
+
+func (x *MCPOAuthClient) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
 }
 
 type MCPProfile struct {
@@ -1207,21 +1247,26 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\n" +
 	"transports\x18\x05 \x01(\v2\x1f.paladin.admin.v1.MCPTransportsR\n" +
 	"transports\x125\n" +
-	"\x05oauth\x18\x06 \x01(\v2\x1f.paladin.admin.v1.MCPOAuthStateR\x05oauth\"\xba\x02\n" +
+	"\x05oauth\x18\x06 \x01(\v2\x1f.paladin.admin.v1.MCPOAuthStateR\x05oauth\"\xc5\x03\n" +
 	"\rMCPOAuthState\x12@\n" +
 	"\x1cauthorization_server_enabled\x18\x01 \x01(\bR\x1aauthorizationServerEnabled\x12C\n" +
 	"\fseed_clients\x18\x02 \x03(\v2 .paladin.admin.v1.MCPOAuthClientR\vseedClients\x12,\n" +
 	"\x12edge_oauth_enabled\x18\x03 \x01(\bR\x10edgeOauthEnabled\x12!\n" +
 	"\fresource_url\x18\x04 \x01(\tR\vresourceUrl\x12#\n" +
 	"\redge_audience\x18\x05 \x01(\tR\fedgeAudience\x12,\n" +
-	"\x12exchange_client_id\x18\x06 \x01(\tR\x10exchangeClientId\"\xe3\x01\n" +
+	"\x12exchange_client_id\x18\x06 \x01(\tR\x10exchangeClientId\x12O\n" +
+	"\x12registered_clients\x18\a \x03(\v2 .paladin.admin.v1.MCPOAuthClientR\x11registeredClients\x128\n" +
+	"\x18registered_clients_error\x18\b \x01(\tR\x16registeredClientsError\"\xb8\x02\n" +
 	"\x0eMCPOAuthClient\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x16\n" +
 	"\x06public\x18\x02 \x01(\bR\x06public\x12%\n" +
 	"\x0eallowed_scopes\x18\x03 \x03(\tR\rallowedScopes\x12+\n" +
 	"\x11allowed_audiences\x18\x04 \x03(\tR\x10allowedAudiences\x12%\n" +
 	"\x0etoken_exchange\x18\x05 \x01(\bR\rtokenExchange\x12!\n" +
-	"\fskip_consent\x18\x06 \x01(\bR\vskipConsent\"\x8a\x01\n" +
+	"\fskip_consent\x18\x06 \x01(\bR\vskipConsent\x12\x18\n" +
+	"\adynamic\x18\a \x01(\bR\adynamic\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x8a\x01\n" +
 	"\n" +
 	"MCPProfile\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x14\n" +
@@ -1306,19 +1351,21 @@ var file_paladin_admin_v1_mcp_inspect_service_proto_depIdxs = []int32{
 	13, // 10: paladin.admin.v1.MCPInspectResponse.transports:type_name -> paladin.admin.v1.MCPTransports
 	8,  // 11: paladin.admin.v1.MCPInspectResponse.oauth:type_name -> paladin.admin.v1.MCPOAuthState
 	9,  // 12: paladin.admin.v1.MCPOAuthState.seed_clients:type_name -> paladin.admin.v1.MCPOAuthClient
-	14, // 13: paladin.admin.v1.MCPTransports.stdio:type_name -> paladin.admin.v1.MCPTransportStdio
-	15, // 14: paladin.admin.v1.MCPTransports.http:type_name -> paladin.admin.v1.MCPTransportHTTP
-	3,  // 15: paladin.admin.v1.MCPInspectService.Inspect:input_type -> paladin.admin.v1.MCPInspectRequest
-	4,  // 16: paladin.admin.v1.MCPInspectService.ListSessions:input_type -> paladin.admin.v1.ListSessionsRequest
-	0,  // 17: paladin.admin.v1.MCPInspectService.GetBridgeStatus:input_type -> paladin.admin.v1.GetBridgeStatusRequest
-	7,  // 18: paladin.admin.v1.MCPInspectService.Inspect:output_type -> paladin.admin.v1.MCPInspectResponse
-	5,  // 19: paladin.admin.v1.MCPInspectService.ListSessions:output_type -> paladin.admin.v1.ListSessionsResponse
-	1,  // 20: paladin.admin.v1.MCPInspectService.GetBridgeStatus:output_type -> paladin.admin.v1.GetBridgeStatusResponse
-	18, // [18:21] is the sub-list for method output_type
-	15, // [15:18] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	9,  // 13: paladin.admin.v1.MCPOAuthState.registered_clients:type_name -> paladin.admin.v1.MCPOAuthClient
+	16, // 14: paladin.admin.v1.MCPOAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	14, // 15: paladin.admin.v1.MCPTransports.stdio:type_name -> paladin.admin.v1.MCPTransportStdio
+	15, // 16: paladin.admin.v1.MCPTransports.http:type_name -> paladin.admin.v1.MCPTransportHTTP
+	3,  // 17: paladin.admin.v1.MCPInspectService.Inspect:input_type -> paladin.admin.v1.MCPInspectRequest
+	4,  // 18: paladin.admin.v1.MCPInspectService.ListSessions:input_type -> paladin.admin.v1.ListSessionsRequest
+	0,  // 19: paladin.admin.v1.MCPInspectService.GetBridgeStatus:input_type -> paladin.admin.v1.GetBridgeStatusRequest
+	7,  // 20: paladin.admin.v1.MCPInspectService.Inspect:output_type -> paladin.admin.v1.MCPInspectResponse
+	5,  // 21: paladin.admin.v1.MCPInspectService.ListSessions:output_type -> paladin.admin.v1.ListSessionsResponse
+	1,  // 22: paladin.admin.v1.MCPInspectService.GetBridgeStatus:output_type -> paladin.admin.v1.GetBridgeStatusResponse
+	20, // [20:23] is the sub-list for method output_type
+	17, // [17:20] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_mcp_inspect_service_proto_init() }

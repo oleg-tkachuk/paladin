@@ -94,36 +94,44 @@ class MCPInspectResponse(_message.Message):
     def __init__(self, profiles: _Optional[_Iterable[_Union[MCPProfile, _Mapping]]] = ..., always_deny: _Optional[_Iterable[str]] = ..., tool_catalog: _Optional[_Iterable[_Union[MCPTool, _Mapping]]] = ..., upstreams: _Optional[_Union[MCPUpstreams, _Mapping]] = ..., transports: _Optional[_Union[MCPTransports, _Mapping]] = ..., oauth: _Optional[_Union[MCPOAuthState, _Mapping]] = ...) -> None: ...
 
 class MCPOAuthState(_message.Message):
-    __slots__ = ("authorization_server_enabled", "seed_clients", "edge_oauth_enabled", "resource_url", "edge_audience", "exchange_client_id")
+    __slots__ = ("authorization_server_enabled", "seed_clients", "edge_oauth_enabled", "resource_url", "edge_audience", "exchange_client_id", "registered_clients", "registered_clients_error")
     AUTHORIZATION_SERVER_ENABLED_FIELD_NUMBER: _ClassVar[int]
     SEED_CLIENTS_FIELD_NUMBER: _ClassVar[int]
     EDGE_OAUTH_ENABLED_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_URL_FIELD_NUMBER: _ClassVar[int]
     EDGE_AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     EXCHANGE_CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    REGISTERED_CLIENTS_FIELD_NUMBER: _ClassVar[int]
+    REGISTERED_CLIENTS_ERROR_FIELD_NUMBER: _ClassVar[int]
     authorization_server_enabled: bool
     seed_clients: _containers.RepeatedCompositeFieldContainer[MCPOAuthClient]
     edge_oauth_enabled: bool
     resource_url: str
     edge_audience: str
     exchange_client_id: str
-    def __init__(self, authorization_server_enabled: _Optional[bool] = ..., seed_clients: _Optional[_Iterable[_Union[MCPOAuthClient, _Mapping]]] = ..., edge_oauth_enabled: _Optional[bool] = ..., resource_url: _Optional[str] = ..., edge_audience: _Optional[str] = ..., exchange_client_id: _Optional[str] = ...) -> None: ...
+    registered_clients: _containers.RepeatedCompositeFieldContainer[MCPOAuthClient]
+    registered_clients_error: str
+    def __init__(self, authorization_server_enabled: _Optional[bool] = ..., seed_clients: _Optional[_Iterable[_Union[MCPOAuthClient, _Mapping]]] = ..., edge_oauth_enabled: _Optional[bool] = ..., resource_url: _Optional[str] = ..., edge_audience: _Optional[str] = ..., exchange_client_id: _Optional[str] = ..., registered_clients: _Optional[_Iterable[_Union[MCPOAuthClient, _Mapping]]] = ..., registered_clients_error: _Optional[str] = ...) -> None: ...
 
 class MCPOAuthClient(_message.Message):
-    __slots__ = ("client_id", "public", "allowed_scopes", "allowed_audiences", "token_exchange", "skip_consent")
+    __slots__ = ("client_id", "public", "allowed_scopes", "allowed_audiences", "token_exchange", "skip_consent", "dynamic", "created_at")
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_FIELD_NUMBER: _ClassVar[int]
     ALLOWED_SCOPES_FIELD_NUMBER: _ClassVar[int]
     ALLOWED_AUDIENCES_FIELD_NUMBER: _ClassVar[int]
     TOKEN_EXCHANGE_FIELD_NUMBER: _ClassVar[int]
     SKIP_CONSENT_FIELD_NUMBER: _ClassVar[int]
+    DYNAMIC_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     client_id: str
     public: bool
     allowed_scopes: _containers.RepeatedScalarFieldContainer[str]
     allowed_audiences: _containers.RepeatedScalarFieldContainer[str]
     token_exchange: bool
     skip_consent: bool
-    def __init__(self, client_id: _Optional[str] = ..., public: _Optional[bool] = ..., allowed_scopes: _Optional[_Iterable[str]] = ..., allowed_audiences: _Optional[_Iterable[str]] = ..., token_exchange: _Optional[bool] = ..., skip_consent: _Optional[bool] = ...) -> None: ...
+    dynamic: bool
+    created_at: _timestamp_pb2.Timestamp
+    def __init__(self, client_id: _Optional[str] = ..., public: _Optional[bool] = ..., allowed_scopes: _Optional[_Iterable[str]] = ..., allowed_audiences: _Optional[_Iterable[str]] = ..., token_exchange: _Optional[bool] = ..., skip_consent: _Optional[bool] = ..., dynamic: _Optional[bool] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class MCPProfile(_message.Message):
     __slots__ = ("name", "tools", "raw_patterns", "deny", "source")

@@ -51,6 +51,15 @@ type AuthCode struct {
 	ExpiresAt       time.Time
 }
 
+// MaxListedClients bounds ListClients: an operator's view of the registered
+// clients, not an export. Past it the oldest are shown.
+const MaxListedClients = 500
+
+// ClientLister lists the registered clients, oldest first.
+type ClientLister interface {
+	ListClients(ctx context.Context) ([]Client, error)
+}
+
 // Store is the OAuth AS persistence surface.
 type Store interface {
 	UpsertClient(ctx context.Context, c Client) error
@@ -88,7 +97,10 @@ type PgxStore struct {
 
 func NewPgxStore(pool *pgxpool.Pool) *PgxStore { return &PgxStore{pool: pool} }
 
-var _ Store = (*PgxStore)(nil)
+var (
+	_ Store        = (*PgxStore)(nil)
+	_ ClientLister = (*PgxStore)(nil)
+)
 
 func (s *PgxStore) UpsertClient(ctx context.Context, c Client) error {
 	const q = `
@@ -131,6 +143,29 @@ FROM oauth_clients WHERE client_id = $1`
 		return Client{}, err
 	}
 	return c, nil
+}
+
+// ListClients returns up to MaxListedClients registered clients, oldest
+// first, without their secret hashes.
+func (s *PgxStore) ListClients(ctx context.Context) ([]Client, error) {
+	const q = `
+SELECT client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, is_public, created_at
+FROM oauth_clients ORDER BY created_at, client_id LIMIT $1`
+	rows, err := s.pool.Query(ctx, q, MaxListedClients)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Client
+	for rows.Next() {
+		var c Client
+		if err := rows.Scan(&c.ClientID, &c.ClientName, &c.RedirectURIs, &c.AllowedScopes,
+			&c.AllowedAudiences, &c.Public, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (s *PgxStore) CreateCode(ctx context.Context, c AuthCode) error {
