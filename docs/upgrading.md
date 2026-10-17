@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — dynamic registration follows RFC 7591 and RFC 8252
+## v38.0.0 — dynamic registration follows RFC 7591 and RFC 8252
 
 - **Breaking, behaviour.** An `http` redirect URI is accepted only on a
   loopback host (`localhost`, `127.0.0.1`, `[::1]`), a native client's
@@ -58,7 +58,7 @@ tree with itself and passes without checking anything.
 - The response carries `client_id_issued_at`, `scope`, `grant_types`,
   `response_types` and `token_endpoint_auth_method`.
 
-## Unreleased — the token exchange has its own rate limit
+## v38.0.0 — the token exchange has its own rate limit
 
 `auth.oauth.token_exchange_rate_limit_per_minute` (default 6000) caps the RFC
 8693 exchange grant per client, apart from `token_rate_limit_per_minute`, which
@@ -67,7 +67,7 @@ against its one client, so the shared default of 60 refused new sessions past
 about twenty a minute. A deployment that raised `token_rate_limit_per_minute`
 for that reason can lower it again.
 
-## Unreleased — a user can list and revoke their OAuth grants
+## v38.0.0 — a user can list and revoke their OAuth grants
 
 `UserService` gains `ListOAuthGrants` and `RevokeOAuthGrant`, and the console
 shows them as Connected applications on the profile and on a user's page. A
@@ -77,7 +77,7 @@ manages their own grants and a tenant admin those of the tenant's users,
 through built-in Cedar permits on the new `ReadOAuthGrants` and
 `RevokeOAuthGrant` actions. Additive: no action needed.
 
-## Unreleased — the audit log names the MCP server that relayed a call
+## v38.0.0 — the audit log names the MCP server that relayed a call
 
 Migration `083` adds `audit_log.relayed_by`, and `AuditLogEntry` gains
 `relayed_by`: the OAuth client named in the `act` claim of an exchanged token
@@ -85,7 +85,7 @@ Migration `083` adds `audit_log.relayed_by`, and `AuditLogEntry` gains
 via the MCP server. Empty for a direct call. The audit mirror event carries it
 too. Additive: no action needed.
 
-## Unreleased — the MCP server exchanges the caller's token
+## v38.0.0 — the MCP server exchanges the caller's token
 
 [ADR-0036](adr/0036-the-mcp-server-is-its-own-audience.md), behind
 `mcp.oauth.exchange`.
@@ -99,7 +99,7 @@ too. Additive: no action needed.
 - One session then reaches every plane; stdio is unchanged.
 - Without `mcp.oauth.exchange` the MCP server behaves as before.
 
-## Unreleased — the OAuth server issues paladin-mcp and exchanges it
+## v38.0.0 — the OAuth server issues paladin-mcp and exchanges it
 
 [ADR-0036](adr/0036-the-mcp-server-is-its-own-audience.md), the
 Authorization Server's half. The MCP server does not use it yet.
@@ -117,7 +117,7 @@ Authorization Server's half. The MCP server does not use it yet.
 - IAM serves `/.well-known/oauth-authorization-server` when
   `mcp.oauth.authorization_server.issuer` is set, and the chart routes it.
 
-## Unreleased — an OAuth client writes only with `paladin.write`
+## v38.0.0 — an OAuth client writes only with `paladin.write`
 
 [ADR-0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
 
@@ -130,7 +130,7 @@ Authorization Server's half. The MCP server does not use it yet.
 - Tenant policies see the grant as `context.oauth_client_id` and
   `context.oauth_scopes` on every call, not only on `AuthorizeOAuth`.
 
-## Unreleased — an OAuth refresh token is bound to its grant
+## v38.0.0 — an OAuth refresh token is bound to its grant
 
 [ADR-0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md).
 
@@ -143,7 +143,7 @@ Authorization Server's half. The MCP server does not use it yet.
   refuse a refresh token the OAuth Authorization Server issued, and
   `/oauth/token` refuses a console login's.
 
-## Unreleased — an object list shows live objects unless asked for others
+## v37.0.0 — an object list shows live objects unless asked for others
 
 - **Breaking, behaviour.** `ListObjects` and `CountObjects` whose filter names
   no `state` leave trashed (`DELETED`) objects out; a collection's objects no
@@ -188,7 +188,7 @@ Authorization Server's half. The MCP server does not use it yet.
 - **Stats.** `BucketStats.shared` counts the buckets granted to another
   tenant, and `tenant_owned` the rest.
 
-## Unreleased — a failed object is deleted; FAILED leaves the contract
+## v35.0.0, sdk/go/v0.74.0 — a failed object is deleted; FAILED leaves the contract
 
 - **Breaking, API.** `ObjectState.OBJECT_STATE_FAILED` (3) is removed and
   reserved. An object that cannot become available — its upload URL expired
@@ -206,7 +206,7 @@ Authorization Server's half. The MCP server does not use it yet.
 - **SDKs.** The fake servers' `MarkFailed` / `mark_failed` are `FailUpload` /
   `fail_upload`, and delete the pending object.
 
-## Unreleased — every data-plane write is audited
+## v34.6.0 — every data-plane write is audited
 
 - **Behaviour, audit.** The data plane records every write in the trail of
   the tenant it acted on: a tenant's own agents and users, not only a platform
@@ -217,7 +217,7 @@ Authorization Server's half. The MCP server does not use it yet.
   (`backend/docs/ops-housekeeping.md`). Each write pays one more synchronous
   insert, about 1.7 ms on the dev cluster.
 
-## Unreleased — capabilities run on limes v0.64.0 and pgstore v0.9.0
+## v34.5.2 — capabilities run on limes v0.64.0 and pgstore v0.9.0
 
 - **Behaviour, stats.** The platform stats count capability records through
   pgstore's census instead of its tables. A record below a revoked ancestor
