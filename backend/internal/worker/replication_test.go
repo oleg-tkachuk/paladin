@@ -2,11 +2,15 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
@@ -14,10 +18,11 @@ import (
 type fakeReplSource struct {
 	buckets  []admindomain.Bucket
 	bindings map[string][]CollectionBinding
+	listErr  error
 }
 
 func (f *fakeReplSource) ListBucketsWithReplication(_ context.Context) ([]admindomain.Bucket, error) {
-	return f.buckets, nil
+	return f.buckets, f.listErr
 }
 func (f *fakeReplSource) ListCollectionBindings(_ context.Context, backend, bucket string) ([]CollectionBinding, error) {
 	return f.bindings[backend+"/"+bucket], nil
@@ -99,7 +104,9 @@ func TestReplicationWorkerCopiesAvailableNewerThanCutoff(t *testing.T) {
 		Now:            func() time.Time { return now },
 		watermarks:     map[string]time.Time{},
 	}
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 
 	rep.mu.Lock()
 	defer rep.mu.Unlock()
@@ -126,7 +133,9 @@ func TestReplicationWorkerSkipsDisabledBuckets(t *testing.T) {
 		Buckets: src, Replicator: rep, watermarks: map[string]time.Time{},
 		Now: time.Now,
 	}
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	if len(rep.copies) != 0 {
 		t.Errorf("expected no copies for disabled bucket, got %d", len(rep.copies))
 	}
@@ -158,7 +167,9 @@ func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
 		Now:            func() time.Time { return now },
 		watermarks:     map[string]time.Time{},
 	}
-	w.tick(context.Background()) // should not panic
+	if err := w.tick(context.Background()); err != nil { // should not panic
+		t.Fatalf("tick = %v, want nil", err)
+	}
 }
 
 // The skip guard is a disjunction: replication off OR no destination. The
@@ -208,7 +219,9 @@ func TestReplicationWorkerSkipsADisabledBucketThatWouldOtherwiseCopy(t *testing.
 		watermarks:     map[string]time.Time{},
 	}
 
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 
 	rep.mu.Lock()
 	defer rep.mu.Unlock()
@@ -216,4 +229,119 @@ func TestReplicationWorkerSkipsADisabledBucketThatWouldOtherwiseCopy(t *testing.
 		t.Errorf("%d objects were replicated out of a bucket whose replication "+
 			"is disabled", len(rep.copies))
 	}
+}
+
+// The lookback window, and the age of an object inside it.
+const (
+	replicationTestLookback = time.Hour
+	replicationTestAge      = time.Minute
+)
+
+// replicatingFixture is one enabled bucket with one binding holding two
+// objects inside the lookback window, so a tick copies both.
+func replicatingFixture(now time.Time) (*fakeReplSource, *fakeObjIter, CollectionBinding, admindomain.Bucket) {
+	bind := CollectionBinding{TenantID: uuid.Must(uuid.NewV7()), Collection: "k"}
+	bucket := admindomain.Bucket{
+		BackendID:  "primary",
+		BucketName: "paladin-archive",
+		Replication: admindomain.BucketReplication{
+			Enabled:           true,
+			DestinationBucket: "storageBackends/secondary/buckets/paladin-archive-dr",
+		},
+	}
+	src := &fakeReplSource{
+		buckets:  []admindomain.Bucket{bucket},
+		bindings: map[string][]CollectionBinding{bucket.BackendID + "/" + bucket.BucketName: {bind}},
+	}
+	committed := now.Add(-replicationTestAge)
+	objs := &fakeObjIter{rows: []LifecycleObjectRow{
+		{ObjectID: uuid.Must(uuid.NewV7()), Key: "a", State: "AVAILABLE", CommittedAt: &committed},
+		{ObjectID: uuid.Must(uuid.NewV7()), Key: "b", State: "AVAILABLE", CommittedAt: &committed},
+	}}
+	return src, objs, bind, bucket
+}
+
+// countingReplicator fails every copy and counts the attempts.
+type countingReplicator struct {
+	attempts int
+	err      error
+}
+
+func (c *countingReplicator) Replicate(context.Context, ReplicationTarget, ReplicationTarget) error {
+	c.attempts++
+	return c.err
+}
+
+// A copy that fails is a failed tick, and the other objects are still copied:
+// one unreachable object must not hold the bucket's replication back.
+func TestReplicationWorkerTickReturnsCopyFailure(t *testing.T) {
+	now := time.Now()
+	src, objs, _, _ := replicatingFixture(now)
+	rep := &countingReplicator{err: errSpecificCopyFailure}
+	w := &ReplicationWorker{
+		Buckets: src, Objects: objs, Replicator: rep,
+		LookbackWindow: replicationTestLookback, Now: func() time.Time { return now },
+		watermarks: map[string]time.Time{},
+	}
+	if err := w.tick(context.Background()); !errors.Is(err, errSpecificCopyFailure) {
+		t.Errorf("tick = %v, want %v", err, errSpecificCopyFailure)
+	}
+	if rep.attempts != len(objs.rows) {
+		t.Errorf("copy attempts = %d, want %d: a failure must not stop the rest", rep.attempts, len(objs.rows))
+	}
+}
+
+func TestReplicationWorkerTickReturnsListFailure(t *testing.T) {
+	src := &fakeReplSource{listErr: errors.New("bucket store unavailable")}
+	w := &ReplicationWorker{Buckets: src, Now: time.Now, watermarks: map[string]time.Time{}}
+	if err := w.tick(context.Background()); !errors.Is(err, src.listErr) {
+		t.Errorf("tick = %v, want %v", err, src.listErr)
+	}
+}
+
+// A watermark the store refuses is reported, although the copy landed.
+func TestReplicationWorkerTickReturnsWatermarkFailure(t *testing.T) {
+	now := time.Now()
+	src, objs, _, _ := replicatingFixture(now)
+	store := newFakeWatermarkStore()
+	storeDown := errors.New("watermark store unavailable")
+	store.advanceFn = func(time.Time) error { return storeDown }
+	w := &ReplicationWorker{
+		Buckets: src, Objects: objs, Replicator: &fakeReplicator{}, Watermarks: store,
+		LookbackWindow: replicationTestLookback, Now: func() time.Time { return now },
+		watermarks: map[string]time.Time{},
+	}
+	if err := w.tick(context.Background()); !errors.Is(err, storeDown) {
+		t.Errorf("tick = %v, want %v", err, storeDown)
+	}
+}
+
+// A per-object line names the object's tenant, collection and bucket, and
+// where it was being copied to: an object_id alone does not say which
+// replication pair is failing.
+func TestReplicationWorkerCopyFailureNamesTheObject(t *testing.T) {
+	now := time.Now()
+	src, objs, bind, bucket := replicatingFixture(now)
+	core, logs := observer.New(zapcore.WarnLevel)
+	w := &ReplicationWorker{
+		Buckets: src, Objects: objs, Replicator: &fakeReplicator{fail: true},
+		LookbackWindow: replicationTestLookback, Now: func() time.Time { return now },
+		Logger: zap.New(core), watermarks: map[string]time.Time{},
+	}
+	_ = w.tick(context.Background()) // fails by design; the log is what this test reads
+
+	lines := logs.FilterMessage("failed to copy object").All()
+	if len(lines) != len(objs.rows) {
+		t.Fatalf("copy failure lines = %d, want %d", len(lines), len(objs.rows))
+	}
+	assertLogFields(t, lines[0], map[string]string{
+		logKeyTenant:     bind.TenantID.String(),
+		logKeyCollection: bind.Collection,
+		logKeyBackend:    bucket.BackendID,
+		logKeyBucket:     bucket.BucketName,
+		logKeyDstBackend: "secondary",
+		logKeyDstBucket:  "paladin-archive-dr",
+		logKeyObjectID:   objs.rows[0].ObjectID.String(),
+		logKeyKey:        objs.rows[0].Key,
+	})
 }

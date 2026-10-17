@@ -159,25 +159,27 @@ func (m *PartitionMaintainer) Run(ctx context.Context) error {
 		m.Interval = 24 * time.Hour
 	}
 	// Run once on startup so a fresh deploy provisions ahead immediately
-	// rather than waiting a full Interval.
-	m.tick(ctx)
-	return RunTicker(ctx, "partition_maintainer", m.Interval, func(ctx context.Context) error {
-		m.tick(ctx)
-		return nil
-	})
+	// rather than waiting a full Interval. Its failures are logged; the
+	// metrics record ticks only.
+	_ = m.tick(ctx)
+	return RunTicker(ctx, "partition_maintainer", m.Interval, m.tick)
 }
 
 // RunOnce performs a single maintenance sweep (create-ahead + drop-old) and
-// returns. Run calls it on a schedule and once on startup; exposed for tests
-// and any on-demand trigger.
-func (m *PartitionMaintainer) RunOnce(ctx context.Context) { m.tick(ctx) }
+// returns its first failure. Run calls it on a schedule and once on startup;
+// exposed for tests and any on-demand trigger.
+func (m *PartitionMaintainer) RunOnce(ctx context.Context) error { return m.tick(ctx) }
 
-func (m *PartitionMaintainer) tick(ctx context.Context) {
+// tick maintains every spec, carrying on past a failure, and returns the first
+// one.
+func (m *PartitionMaintainer) tick(ctx context.Context) error {
 	now := time.Now().UTC()
+	var first error
 	for _, spec := range m.Specs {
-		m.ensureAhead(ctx, spec, now)
-		m.dropOld(ctx, spec, now)
+		keepFirst(&first, m.ensureAhead(ctx, spec, now))
+		keepFirst(&first, m.dropOld(ctx, spec, now))
 	}
+	return first
 }
 
 // ensureAhead creates the current + upcoming partitions. CREATE ... IF NOT
@@ -192,8 +194,10 @@ func (m *PartitionMaintainer) tick(ctx context.Context) {
 // for that bucket piles into DEFAULT (DELETE-reclaimed, not DROP-reclaimed).
 // recoverDefaultOverlap resolves it directly by relocating the blocking rows
 // into the partition. Any other error is logged, not fatal — DEFAULT catches
-// the write and the DELETE backstop sweeps it.
-func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpec, now time.Time) {
+// the write and the DELETE backstop sweeps it — and the first one is returned
+// so the tick reports it. A recovered overlap is not a failure.
+func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpec, now time.Time) error {
+	var first error
 	for _, d := range spec.desiredAhead(now) {
 		// Identifiers are derived from trusted Spec.Table + a digit suffix;
 		// quote them anyway. Bounds are passed as date literals.
@@ -212,6 +216,7 @@ func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpe
 					zap.String("table", spec.Table),
 					zap.String("partition", d.name),
 					zap.Error(rErr))
+				keepFirst(&first, rErr)
 			} else {
 				m.log().Info("ensure partition: recovered by relocating DEFAULT rows",
 					zap.String("table", spec.Table),
@@ -223,7 +228,9 @@ func (m *PartitionMaintainer) ensureAhead(ctx context.Context, spec PartitionSpe
 			zap.String("table", spec.Table),
 			zap.String("partition", d.name),
 			zap.Error(err))
+		keepFirst(&first, err)
 	}
+	return first
 }
 
 // isDefaultOverlap reports whether err is the check_violation Postgres raises
@@ -275,8 +282,9 @@ func (m *PartitionMaintainer) recoverDefaultOverlap(ctx context.Context, spec Pa
 }
 
 // dropOld lists the parent's child partitions and DROPs those fully past
-// retention.
-func (m *PartitionMaintainer) dropOld(ctx context.Context, spec PartitionSpec, now time.Time) {
+// retention. A failed drop does not stop the others; the first failure is
+// returned.
+func (m *PartitionMaintainer) dropOld(ctx context.Context, spec PartitionSpec, now time.Time) error {
 	rows, err := m.DB.Query(ctx, `
 		SELECT c.relname
 		FROM pg_inherits i
@@ -285,7 +293,7 @@ func (m *PartitionMaintainer) dropOld(ctx context.Context, spec PartitionSpec, n
 		WHERE p.relname = $1`, spec.Table)
 	if err != nil {
 		m.log().Warn("list partitions failed", zap.String("table", spec.Table), zap.Error(err))
-		return
+		return err
 	}
 	var names []string
 	for rows.Next() {
@@ -293,16 +301,17 @@ func (m *PartitionMaintainer) dropOld(ctx context.Context, spec PartitionSpec, n
 		if err := rows.Scan(&n); err != nil {
 			rows.Close()
 			m.log().Warn("scan partition failed", zap.String("table", spec.Table), zap.Error(err))
-			return
+			return err
 		}
 		names = append(names, n)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		m.log().Warn("iterate partitions failed", zap.String("table", spec.Table), zap.Error(err))
-		return
+		return err
 	}
 
+	var first error
 	for _, n := range names {
 		if !spec.shouldDrop(n, now) {
 			continue
@@ -310,11 +319,13 @@ func (m *PartitionMaintainer) dropOld(ctx context.Context, spec PartitionSpec, n
 		if _, err := m.DB.Exec(ctx, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, pgQuoteIdent(n))); err != nil {
 			m.log().Warn("drop partition failed",
 				zap.String("table", spec.Table), zap.String("partition", n), zap.Error(err))
+			keepFirst(&first, err)
 			continue
 		}
 		m.log().Info("dropped expired partition",
 			zap.String("table", spec.Table), zap.String("partition", n))
 	}
+	return first
 }
 
 func (m *PartitionMaintainer) log() *zap.Logger {

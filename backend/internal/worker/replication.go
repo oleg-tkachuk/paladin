@@ -97,48 +97,61 @@ func (r *ReplicationWorker) Run(ctx context.Context) error {
 	if r.watermarks == nil {
 		r.watermarks = map[string]time.Time{}
 	}
-	return RunTicker(ctx, "replication", r.Interval, func(ctx context.Context) error {
-		r.tick(ctx)
-		return nil
-	})
+	return RunTicker(ctx, "replication", r.Interval, r.tick)
 }
 
-func (r *ReplicationWorker) tick(ctx context.Context) {
+// tick replicates every enabled bucket, carrying on past one that fails, and
+// returns the first failure.
+func (r *ReplicationWorker) tick(ctx context.Context) error {
 	buckets, err := r.Buckets.ListBucketsWithReplication(ctx)
 	if err != nil {
 		r.log().Warn("failed to list buckets", zap.Error(err))
-		return
+		return err
 	}
+	var first error
 	for _, b := range buckets {
-		if err := ctx.Err(); err != nil {
-			return
+		if ctx.Err() != nil {
+			return first
 		}
-		r.processBucket(ctx, b)
+		keepFirst(&first, r.processBucket(ctx, b))
 	}
+	return first
 }
 
-func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Bucket) {
+// processBucket copies one bucket's new objects and returns the first failure
+// it logged. An object that fails to copy does not stop the others; a dry run
+// is not a failure.
+func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Bucket) error {
 	if !b.Replication.Enabled || b.Replication.DestinationBucket == "" {
-		return
+		return nil
 	}
 	dstBackend, dstBucket, err := splitBucketName(b.Replication.DestinationBucket)
 	if err != nil {
 		r.log().Warn("invalid destination", zap.String("dst", b.Replication.DestinationBucket), zap.Error(err))
-		return
+		return err
 	}
 	bindings, err := r.Buckets.ListCollectionBindings(ctx, b.BackendID, b.BucketName)
 	if err != nil {
 		r.log().Warn("failed to list collection bindings",
-			zap.String("backend", b.BackendID),
-			zap.String("bucket", b.BucketName),
+			zap.String(logKeyBackend, b.BackendID),
+			zap.String(logKeyBucket, b.BucketName),
 			zap.Error(err))
-		return
+		return err
 	}
 	cutoff := r.cutoff(ctx, b.BackendID, b.BucketName)
+	var first error
 	for _, bind := range bindings {
-		if err := ctx.Err(); err != nil {
-			return
+		if ctx.Err() != nil {
+			return first
 		}
+		log := r.log().With(
+			zap.String(logKeyTenant, bind.TenantID.String()),
+			zap.String(logKeyCollection, bind.Collection),
+			zap.String(logKeyBackend, b.BackendID),
+			zap.String(logKeyBucket, b.BucketName),
+			zap.String(logKeyDstBackend, dstBackend),
+			zap.String(logKeyDstBucket, dstBucket),
+		)
 		err := r.Objects.IterateObjects(ctx, bind.TenantID, bind.Collection, func(row LifecycleObjectRow) error {
 			if row.State != "AVAILABLE" {
 				return nil
@@ -163,23 +176,29 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 				Collection: bind.Collection,
 			}
 			if r.Replicator == nil {
-				r.log().Info("dry-run match",
-					zap.String("object_id", row.ObjectID.String()))
+				log.Info("dry-run match",
+					zap.String(logKeyObjectID, row.ObjectID.String()),
+					zap.String(logKeyKey, row.Key))
 				return nil
 			}
 			if err := r.Replicator.Replicate(ctx, src, dst); err != nil {
-				r.log().Warn("failed to copy object",
-					zap.String("object_id", row.ObjectID.String()),
+				log.Warn("failed to copy object",
+					zap.String(logKeyObjectID, row.ObjectID.String()),
+					zap.String(logKeyKey, row.Key),
 					zap.Error(err))
+				// Carry on with the next object; the tick reports this one.
+				keepFirst(&first, err)
 				return nil
 			}
-			r.advance(ctx, b.BackendID, b.BucketName, committed)
+			keepFirst(&first, r.advance(ctx, b.BackendID, b.BucketName, committed))
 			return nil
 		})
 		if err != nil {
-			r.log().Warn("failed to iterate objects", zap.Error(err))
+			log.Warn("failed to iterate objects", zap.Error(err))
+			keepFirst(&first, err)
 		}
 	}
+	return first
 }
 
 // cutoff resolves the start-of-window for a bucket. Layering:
@@ -192,9 +211,16 @@ func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName st
 		return t
 	}
 	if r.Watermarks != nil {
-		if t, err := r.Watermarks.Get(ctx, backendID, bucketName); err == nil && !t.IsZero() {
+		t, err := r.Watermarks.Get(ctx, backendID, bucketName)
+		if err == nil && !t.IsZero() {
 			r.watermarks[key] = t
 			return t
+		}
+		if err != nil {
+			// The window falls back to the lookback, which may copy again
+			// what the stored watermark had passed: say why.
+			r.log().Warn("failed to read the replication watermark; using the lookback window",
+				zap.String(logKeyBackend, backendID), zap.String(logKeyBucket, bucketName), zap.Error(err))
 		}
 	}
 	return r.Now().Add(-r.LookbackWindow)
@@ -203,21 +229,23 @@ func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName st
 // advance moves the watermark forward — first in memory, then to the
 // store. Monotonic: never moves backward. Persistence errors are
 // non-fatal (the next tick re-tries), so a transient DB blip can't stall
-// replication progress.
-func (r *ReplicationWorker) advance(ctx context.Context, backendID, bucketName string, t time.Time) {
+// replication progress; the failure is returned for the tick to report.
+func (r *ReplicationWorker) advance(ctx context.Context, backendID, bucketName string, t time.Time) error {
 	key := backendID + "/" + bucketName
 	if cur, ok := r.watermarks[key]; ok && !t.After(cur) {
-		return
+		return nil
 	}
 	r.watermarks[key] = t
 	if r.Watermarks != nil {
 		if err := r.Watermarks.Advance(ctx, backendID, bucketName, t); err != nil {
 			r.log().Warn("failed to advance watermark",
-				zap.String("backend", backendID),
-				zap.String("bucket", bucketName),
+				zap.String(logKeyBackend, backendID),
+				zap.String(logKeyBucket, bucketName),
 				zap.Error(err))
+			return err
 		}
 	}
+	return nil
 }
 
 func (r *ReplicationWorker) log() *zap.Logger {

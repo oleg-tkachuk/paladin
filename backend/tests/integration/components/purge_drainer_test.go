@@ -91,7 +91,9 @@ func TestPurgeDrainerKeepsDebtWhenStorageFails(t *testing.T) {
 		Pool: pool, Q: sqlc.New(pool), Storage: deleter,
 		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
 	}
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed storage delete, want the failure")
+	}
 
 	if got := purgeRowCount(t, ctx, pool, id); got != 1 {
 		t.Fatalf("debt rows = %d, want 1 — a failed reclaim must stay owed", got)
@@ -137,7 +139,9 @@ func TestPurgeDrainerSettlesAndAnnouncesOnSuccess(t *testing.T) {
 		},
 		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
 	}
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep = %v, want nil on a clean reclaim", err)
+	}
 
 	if got := purgeRowCount(t, ctx, pool, id); got != 0 {
 		t.Errorf("debt rows = %d, want 0 — a confirmed reclaim must settle", got)
@@ -167,14 +171,18 @@ func TestPurgeDrainerRetriesUntilSuccess(t *testing.T) {
 		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
 	}
 
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed storage delete, want the failure")
+	}
 	if got := purgeRowCount(t, ctx, pool, id); got != 1 {
 		t.Fatalf("after the failing sweep debt rows = %d, want 1", got)
 	}
 
 	// Fast-forward past the backoff.
 	mustExec(t, ctx, pool, `UPDATE pending_purges SET next_attempt_at = now() WHERE id = $1`, id)
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err != nil {
+		t.Errorf("Sweep = %v, want nil once the delete lands", err)
+	}
 
 	if got := purgeRowCount(t, ctx, pool, id); got != 0 {
 		t.Errorf("after the succeeding sweep debt rows = %d, want 0", got)
@@ -226,7 +234,9 @@ func TestPurgeDrainerKeepsDebtWhenTheAnnouncementFails(t *testing.T) {
 		Events:    &worker.Dispatcher{Store: failingSubscriptionStore{}, Logger: zap.NewNop()},
 		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
 	}
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed announcement, want the failure")
+	}
 
 	if got := purgeRowCount(t, ctx, pool, id); got != 1 {
 		t.Fatalf("debt rows = %d, want 1 — the announcement failed, so the tick "+

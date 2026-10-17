@@ -203,7 +203,9 @@ func runToTerminal(t *testing.T, w *StorageMigrationWorker, repo *fakeMigRepo) {
 		if repo.mig.State == MigStateCompleted || repo.mig.State == MigStateFailed {
 			return
 		}
-		w.tick(context.Background())
+		if err := w.tick(context.Background()); err != nil {
+			t.Fatalf("tick in %q = %v, want nil on the way to a terminal state", repo.mig.State, err)
+		}
 	}
 	t.Fatalf("migration did not reach a terminal state (stuck in %q)", repo.mig.State)
 }
@@ -257,7 +259,9 @@ func TestStorageMigration_WaitsForBucketReady(t *testing.T) {
 		bucketState: "pending", // reconciler hasn't created it yet
 	}
 	w := newWorker(repo, &fakeCopier{})
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	if repo.mig.State != MigStateProvisioning {
 		t.Fatalf("state = %q, want provisioning (should wait for the bucket)", repo.mig.State)
 	}
@@ -300,7 +304,9 @@ func TestStorageMigration_IncompleteCopyDoesNotRebind(t *testing.T) {
 		objects: nil, // list returns empty even though total=5
 	}
 	w := newWorker(repo, &fakeCopier{})
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	if repo.mig.State != MigStateFailed {
 		t.Fatalf("state = %q, want failed (must not rebind on incomplete copy)", repo.mig.State)
 	}
@@ -318,7 +324,9 @@ func TestStorageMigration_RefusedRebindFails(t *testing.T) {
 			errors.New("public collection photos may not move to another bucket")),
 	}
 	w := newWorker(repo, &fakeCopier{})
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	if repo.mig.State != MigStateFailed {
 		t.Fatalf("state = %q, want failed", repo.mig.State)
 	}
@@ -335,7 +343,10 @@ func TestStorageMigration_TransientRebindErrorRetries(t *testing.T) {
 		rebindErr: errors.New("connection reset"),
 	}
 	w := newWorker(repo, &fakeCopier{})
-	w.tick(context.Background())
+	// A transient step failure is a failed tick, which the alert reads.
+	if err := w.tick(context.Background()); !errors.Is(err, repo.rebindErr) {
+		t.Errorf("tick = %v, want the rebind failure %v", err, repo.rebindErr)
+	}
 	if repo.mig.State != MigStateRebinding {
 		t.Fatalf("state = %q, want %q (retried next tick)", repo.mig.State, MigStateRebinding)
 	}
@@ -419,7 +430,9 @@ func TestStorageMigration_VerifyFailureRollsBack(t *testing.T) {
 	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Deleter: del, Header: hdr, CopyBatch: 2,
 		Now: func() time.Time { return time.Now().Add(24 * time.Hour) }}
 
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	if repo.mig.State != MigStateRollingBack {
 		t.Fatalf("state = %q after the failed verify, want %q", repo.mig.State, MigStateRollingBack)
 	}
@@ -461,8 +474,13 @@ func TestStorageMigration_RollbackCopyFailureRetries(t *testing.T) {
 	repo, hdr := rollbackFixture(MigStateRollingBack)
 	cop := &fakeCopier{failOn: "w2"}
 	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Header: hdr, CopyBatch: 2, Now: time.Now}
+	var tickErr error
 	for range 5 {
-		w.tick(context.Background())
+		tickErr = w.tick(context.Background())
+	}
+	// The first batch copies what precedes w2; every tick after it is stuck.
+	if tickErr == nil {
+		t.Error("tick = nil while the reverse copy keeps failing, want the failure")
 	}
 	if repo.mig.State != MigStateRollingBack || repo.reboundBack {
 		t.Fatalf("state = %q, rebound back = %v; want still rolling back on the target", repo.mig.State, repo.reboundBack)
@@ -488,7 +506,9 @@ func TestStorageMigration_RollbackCatchesUpBeforeRebindingBack(t *testing.T) {
 	repo.written = repo.written[:1]
 	cop := &fakeCopier{}
 	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Header: hdr, CopyBatch: 2, Now: time.Now}
-	w.tick(context.Background()) // copies new.txt
+	if err := w.tick(context.Background()); err != nil { // copies new.txt
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	// Written now, after the batch: the RebindBack below must not go ahead.
 	repo.written = append(repo.written, WrittenObject{
 		ObjectRef: ObjectRef{Collection: "docs", Key: "w1", SizeBytes: 1},
@@ -556,7 +576,9 @@ func TestStorageMigration_CleanupAfterRetention(t *testing.T) {
 	}
 	del := &fakeDeleter{}
 	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 
 	if repo.mig.State != MigStateCleaned {
 		t.Fatalf("state = %q, want cleaned", repo.mig.State)
@@ -579,7 +601,9 @@ func TestStorageMigration_CleanupWaitsForRetention(t *testing.T) {
 	}
 	del := &fakeDeleter{}
 	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 
 	if repo.mig.State != MigStateCompleted {
 		t.Fatalf("state = %q, want completed (retention not elapsed)", repo.mig.State)
@@ -626,7 +650,9 @@ func TestStorageMigration_StaleStepDoesNotDragItBack(t *testing.T) {
 	}
 
 	// Its successor's next tick still completes it.
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 	if repo.mig.State != MigStateCompleted {
 		t.Errorf("state = %s after the successor's tick, want %s", repo.mig.State, MigStateCompleted)
 	}

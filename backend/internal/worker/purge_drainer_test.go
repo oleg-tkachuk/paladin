@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // PurgeDrainer normalises its own zero fields at the top of Run, before the
@@ -49,3 +51,18 @@ func TestPurgeDrainer_ZeroIntervalDisables(t *testing.T) {
 			"nothing ran, so nothing should have been written", w.BatchSize)
 	}
 }
+
+// The tick runs on a transaction, so an unreachable database fails it at Begin,
+// and the failure reaches RunTicker rather than only the log.
+func TestPurgeDrainerSweepReturnsBeginFailure(t *testing.T) {
+	pool := unreachablePool(t)
+	w := &PurgeDrainer{Pool: pool, Q: sqlc.New(pool), BatchSize: purgeDrainerTestBatch, MaxBackoff: time.Hour}
+	ctx, cancel := context.WithTimeout(context.Background(), sweepDeadline)
+	defer cancel()
+	if err := w.Sweep(ctx); err == nil {
+		t.Error("Sweep = nil against an unreachable database, want the error")
+	}
+}
+
+// purgeDrainerTestBatch is any positive claim size; the claim never runs.
+const purgeDrainerTestBatch = 10

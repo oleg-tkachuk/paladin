@@ -83,8 +83,7 @@ func (w *LifecycleHardDeleter) Run(ctx context.Context) error {
 		w.BatchSize = 100
 	}
 	return RunTicker(ctx, "lifecycle_hard_delete", w.Interval, func(ctx context.Context) error {
-		w.Sweep(ctx)
-		return nil
+		return w.Sweep(ctx)
 	})
 }
 
@@ -94,38 +93,44 @@ func (w *LifecycleHardDeleter) Run(ctx context.Context) error {
 //
 // Exported so integration tests can drive a single tick without
 // running the full Run loop with its time.Ticker.
-func (w *LifecycleHardDeleter) Sweep(ctx context.Context) {
+//
+// A row that fails is logged and the rest still run; the first failure is
+// returned. A row skipped because it is no longer DELETED, or deferred because
+// an upload holds its path, is not a failure.
+func (w *LifecycleHardDeleter) Sweep(ctx context.Context) error {
 	cutoff := pgtype.Timestamptz{Time: time.Now().Add(-w.TTL), Valid: true}
+	var first error
 	for {
 		if ctx.Err() != nil {
-			return
+			return first
 		}
 		rows, err := w.Q.ListHardDeletable(ctx, cutoff, w.BatchSize)
 		if err != nil {
 			w.log().Warn("list hard-deletable", zap.Error(err))
-			return
+			keepFirst(&first, err)
+			return first
 		}
 		if len(rows) == 0 {
-			return
+			return first
 		}
 		for _, r := range rows {
 			if ctx.Err() != nil {
-				return
+				return first
 			}
-			w.deleteOne(ctx, r)
+			keepFirst(&first, w.deleteOne(ctx, r))
 		}
 		// If we pulled fewer than the batch, the queue is drained;
 		// don't issue another no-op SELECT.
 		if len(rows) < int(w.BatchSize) {
-			return
+			return first
 		}
 	}
 }
 
 // Reclaim hard-deletes one listed row. Exported so integration tests can drive
 // a row they listed before changing it, which is the race Sweep cannot stage.
-func (w *LifecycleHardDeleter) Reclaim(ctx context.Context, r sqlc.ListHardDeletableRow) {
-	w.deleteOne(ctx, r)
+func (w *LifecycleHardDeleter) Reclaim(ctx context.Context, r sqlc.ListHardDeletableRow) error {
+	return w.deleteOne(ctx, r)
 }
 
 // deleteOne removes the row before the bytes, never the other way round:
@@ -140,7 +145,10 @@ func (w *LifecycleHardDeleter) Reclaim(ctx context.Context, r sqlc.ListHardDelet
 //
 // Deleting the bytes first, as this used to, stranded a Restore that landed
 // between the two steps: an AVAILABLE row whose bytes were gone.
-func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDeletableRow) {
+//
+// It returns the failure it logged, or nil when the row was deleted, skipped
+// or deferred.
+func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDeletableRow) error {
 	tenantID := uuid.UUID(r.TenantID.Bytes)
 	objectID := uuid.UUID(r.ID.Bytes)
 	logger := w.log().With(
@@ -153,35 +161,36 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 	purgeID, err := uuid.NewV7()
 	if err != nil {
 		logger.Warn("purge id", zap.Error(err))
-		return
+		return err
 	}
 	deleted, err := w.deleteRowRecordingDebt(ctx, r, tenantID, purgeID)
 	if err != nil {
 		logger.Warn("db hard-delete failed", zap.Error(err))
-		return
+		return err
 	}
 	if !deleted {
 		// Restored, or another worker got there first: the row is no
 		// longer DELETED at the version we listed, and the bytes are
 		// untouched.
 		logger.Debug("row no longer DELETED at our version; skipped")
-		return
+		return nil
 	}
 
 	verdict, err := w.deleteBytes(ctx, r, tenantID)
 	if err != nil {
 		logger.Warn("storage delete failed; the purge drainer retries it", zap.Error(err))
-		return
+		return err
 	}
 	if verdict == objectpath.Defer {
 		logger.Info("a new object is being written at this path; the purge drainer retries it")
-		return
+		return nil
 	}
 	if err := w.settleAndAnnounce(ctx, r, tenantID, purgeID); err != nil {
 		logger.Warn("settling the purge failed; the purge drainer retries it", zap.Error(err))
-		return
+		return err
 	}
 	logger.Info("hard-deleted")
+	return nil
 }
 
 // deleteRowRecordingDebt deletes the row and records its bytes in

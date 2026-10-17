@@ -46,7 +46,9 @@ func TestHardDelete_FullSweep(t *testing.T) {
 		TTL:       1 * time.Hour, // anything < 24h triggers the row
 		BatchSize: 100,
 	}
-	w.Sweep(context.Background())
+	if err := w.Sweep(context.Background()); err != nil {
+		t.Fatalf("Sweep = %v, want nil on a clean hard-delete", err)
+	}
 
 	storage.mu.Lock()
 	calls := append([]recordedDelete(nil), storage.calls...)
@@ -87,7 +89,9 @@ func TestHardDelete_RLSPoolFindsNothing(t *testing.T) {
 	sweptCount := func(pool *pgxpool.Pool) int {
 		st := &recordingStorage{}
 		w := &worker.LifecycleHardDeleter{Q: sqlc.New(pool), Pool: pool, Storage: st, TTL: time.Hour, BatchSize: 100}
-		w.Sweep(context.Background()) // bare ctx → no paladin.tenant_id GUC
+		if err := w.Sweep(context.Background()); err != nil { // bare ctx → no paladin.tenant_id GUC
+			t.Errorf("Sweep = %v, want nil", err)
+		}
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		return len(st.calls)
@@ -128,7 +132,10 @@ func TestHardDelete_RestoreWinsRace(t *testing.T) {
 
 	storage := &recordingStorage{}
 	w := &worker.LifecycleHardDeleter{Q: q, Pool: h.PoolMigrate, Storage: storage}
-	w.Reclaim(context.Background(), rows[0]) // the row as listed, before the restore
+	// The row as listed, before the restore. Losing the race is not a failure.
+	if err := w.Reclaim(context.Background(), rows[0]); err != nil {
+		t.Errorf("Reclaim = %v, want nil for a row restored since it was listed", err)
+	}
 
 	if !mustObjectExists(t, h.PoolMigrate, objectID) {
 		t.Error("the restored row was deleted")
@@ -157,7 +164,9 @@ func TestHardDelete_StorageFailureLeavesADebt(t *testing.T) {
 		Q: sqlc.New(h.PoolMigrate), Pool: h.PoolMigrate, Storage: storage,
 		TTL: time.Hour, BatchSize: 100,
 	}
-	w.Sweep(context.Background())
+	if err := w.Sweep(context.Background()); err == nil {
+		t.Error("Sweep = nil after a failed storage delete, want the failure")
+	}
 
 	if mustObjectExists(t, h.PoolMigrate, objectID) {
 		t.Error("row still present: the row goes first, the bytes after")

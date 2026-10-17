@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -130,3 +131,23 @@ func TestLifecycleHardDeleter_Disabled_NoOp(t *testing.T) {
 		t.Errorf("disabled Run = %v, want nil", err)
 	}
 }
+
+// A sweep whose listing fails is a failed tick, not a quiet one: the failure
+// reaches RunTicker, which feeds the failing-worker alert.
+func TestLifecycleHardDeleter_Sweep_ReturnsListFailure(t *testing.T) {
+	w := &LifecycleHardDeleter{Q: sqlc.New(stubDBTX{err: errDBDown}), TTL: time.Hour, BatchSize: hardDeleteTestBatch}
+	if err := w.Sweep(context.Background()); !errors.Is(err, errDBDown) {
+		t.Errorf("Sweep = %v, want %v", err, errDBDown)
+	}
+}
+
+// Nothing past the cooling-off window is a clean tick.
+func TestLifecycleHardDeleter_Sweep_NothingDueSucceeds(t *testing.T) {
+	w := &LifecycleHardDeleter{Q: sqlc.New(stubDBTX{}), TTL: time.Hour, BatchSize: hardDeleteTestBatch}
+	if err := w.Sweep(context.Background()); err != nil {
+		t.Errorf("Sweep = %v, want nil", err)
+	}
+}
+
+// hardDeleteTestBatch is any positive batch size.
+const hardDeleteTestBatch = 10

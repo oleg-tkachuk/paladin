@@ -61,8 +61,7 @@ func (w *MultipartAbortDrainer) Run(ctx context.Context) error {
 		w.MaxBackoff = DefaultMultipartAbortMaxBackoff
 	}
 	return RunTicker(ctx, "multipart_abort_drainer", w.Interval, func(ctx context.Context) error {
-		w.Sweep(ctx)
-		return nil
+		return w.Sweep(ctx)
 	})
 }
 
@@ -72,11 +71,14 @@ func (w *MultipartAbortDrainer) Run(ctx context.Context) error {
 // The claim holds FOR UPDATE SKIP LOCKED for the duration of the storage call,
 // as in PurgeDrainer: that is what stops a second replica from issuing a
 // duplicate abort while this one is in flight.
-func (w *MultipartAbortDrainer) Sweep(ctx context.Context) {
+//
+// A debt that fails is logged and kept; the rest of the batch still runs, and
+// the first failure is returned.
+func (w *MultipartAbortDrainer) Sweep(ctx context.Context) error {
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
 		w.log().Warn("multipart abort drainer: begin", zap.Error(err))
-		return
+		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -84,11 +86,12 @@ func (w *MultipartAbortDrainer) Sweep(ctx context.Context) {
 	rows, err := q.ClaimDueMultipartAborts(ctx, w.BatchSize)
 	if err != nil {
 		w.log().Warn("multipart abort drainer: claim", zap.Error(err))
-		return
+		return err
 	}
+	var first error
 	for _, r := range rows {
 		if ctx.Err() != nil {
-			return
+			return first
 		}
 		tenantID := uuid.UUID(r.TenantID.Bytes)
 		if err := w.Storage.AbortMultipart(ctx, r.BackendName, r.BucketName, tenantID,
@@ -98,10 +101,12 @@ func (w *MultipartAbortDrainer) Sweep(ctx context.Context) {
 				zap.String("tenant_id", tenantID.String()),
 				zap.Int32("attempts", r.Attempts),
 				zap.Error(err))
+			keepFirst(&first, err)
 			msg := err.Error()
 			if berr := q.BackoffMultipartAbortDebt(ctx, r.ID,
 				&msg, w.backoff(r.Attempts).Microseconds()); berr != nil {
 				w.log().Warn("multipart abort drainer: backoff", zap.Error(berr))
+				keepFirst(&first, berr)
 			}
 			continue
 		}
@@ -110,6 +115,7 @@ func (w *MultipartAbortDrainer) Sweep(ctx context.Context) {
 			// aborts an upload S3 no longer has, which it reports as success,
 			// and the row goes then.
 			w.log().Warn("multipart abort drainer: settle", zap.Error(err))
+			keepFirst(&first, err)
 			continue
 		}
 		w.log().Info("aborted an orphaned multipart upload",
@@ -118,7 +124,9 @@ func (w *MultipartAbortDrainer) Sweep(ctx context.Context) {
 	}
 	if err := tx.Commit(ctx); err != nil {
 		w.log().Warn("multipart abort drainer: commit", zap.Error(err))
+		keepFirst(&first, err)
 	}
+	return first
 }
 
 // backoff grows with the attempt count and is capped by MaxBackoff.

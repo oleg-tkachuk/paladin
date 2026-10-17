@@ -73,3 +73,28 @@ func TestRunTicker_FnErrorDoesNotStopLoop(t *testing.T) {
 		t.Fatalf("loop stopped early on fn error: got %d ticks", got)
 	}
 }
+
+// keepFirst keeps the earliest failure: a later one, or a later nil, must not
+// replace it, and a nil before any failure must not hide the failure after.
+func TestKeepFirst(t *testing.T) {
+	first, second := errors.New("first"), errors.New("second")
+	for name, tc := range map[string]struct {
+		in   []error
+		want error
+	}{
+		"nothing failed":         {in: []error{nil, nil}, want: nil},
+		"one failure":            {in: []error{nil, first, nil}, want: first},
+		"the earliest failure":   {in: []error{first, second}, want: first},
+		"nil does not overwrite": {in: []error{first, nil}, want: first},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var got error
+			for _, err := range tc.in {
+				keepFirst(&got, err)
+			}
+			if !errors.Is(got, tc.want) || (tc.want == nil && got != nil) {
+				t.Errorf("keepFirst over %v = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}

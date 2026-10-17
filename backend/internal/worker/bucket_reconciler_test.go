@@ -31,6 +31,9 @@ type fakeBucketRepo struct {
 	provisions []admindomain.BucketProvisionRow
 	deletions  []admindomain.BucketProvisionRow
 
+	listProvisionsErr error
+	listDeletionsErr  error
+
 	readyCalls    []string
 	provFailCalls []markFailure
 	delFailCalls  []markFailure
@@ -58,11 +61,11 @@ type markFailure struct {
 }
 
 func (f *fakeBucketRepo) ListPendingProvisions(context.Context, int32, int32) ([]admindomain.BucketProvisionRow, error) {
-	return f.provisions, nil
+	return f.provisions, f.listProvisionsErr
 }
 
 func (f *fakeBucketRepo) ListPendingDeletions(context.Context, int32, int32) ([]admindomain.BucketProvisionRow, error) {
-	return f.deletions, nil
+	return f.deletions, f.listDeletionsErr
 }
 
 func (f *fakeBucketRepo) MarkProvisionReady(_ context.Context, _, bucketName string) error {
@@ -171,7 +174,9 @@ func TestBucketReconciler_TaggingFailureStillMarksReady(t *testing.T) {
 	prov := &fakeProvisioner{tagErr: errBackend}
 	r := newReconciler(repo, prov)
 
-	r.reconcileOne(context.Background(), provisionRow(uuid.New()))
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.New())); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if prov.tagged != 1 {
 		t.Errorf("tagging attempted %d times, want 1", prov.tagged)
@@ -194,7 +199,9 @@ func TestBucketReconciler_SharedBucketIsNotTagged(t *testing.T) {
 	prov := &fakeProvisioner{}
 	r := newReconciler(repo, prov)
 
-	r.reconcileOne(context.Background(), provisionRow(uuid.Nil))
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if prov.tagged != 0 {
 		t.Errorf("a bucket with no owner was tagged %d times", prov.tagged)
@@ -211,7 +218,9 @@ func TestBucketReconciler_MarkReadyFailureRecordsNoFailure(t *testing.T) {
 	repo := &fakeBucketRepo{readyErr: errBackend}
 	r := newReconciler(repo, &fakeProvisioner{})
 
-	r.reconcileOne(context.Background(), provisionRow(uuid.Nil))
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, errBackend) {
+		t.Errorf("reconcile = %v, want %v", err, errBackend)
+	}
 
 	if len(repo.provFailCalls) != 0 {
 		t.Errorf("a failed mark-ready was recorded as a provisioning failure "+
@@ -240,7 +249,9 @@ func TestBucketReconciler_ClassifiesProvisionErrors(t *testing.T) {
 			repo := &fakeBucketRepo{}
 			r := newReconciler(repo, &fakeProvisioner{createErr: tc.err})
 
-			r.reconcileOne(context.Background(), provisionRow(uuid.Nil))
+			if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, tc.err) {
+				t.Errorf("reconcile = %v, want %v", err, tc.err)
+			}
 
 			if len(repo.provFailCalls) != 1 {
 				t.Fatalf("failure calls %v", repo.provFailCalls)
@@ -259,7 +270,9 @@ func TestBucketReconciler_NoProvisionerKeepsTheRowRetryable(t *testing.T) {
 	repo := &fakeBucketRepo{}
 	r := NewBucketReconciler(repo, nil, BucketReconcilerConfig{}, nil)
 
-	r.reconcileOne(context.Background(), provisionRow(uuid.Nil))
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if len(repo.provFailCalls) != 1 {
 		t.Fatalf("failure calls %v", repo.provFailCalls)
@@ -279,7 +292,9 @@ func TestBucketReconciler_BackendDeleteFailureKeepsTheRow(t *testing.T) {
 	r := newReconciler(repo, &fakeProvisioner{deleteErr: errors.New("BucketNotEmpty")})
 	r.SetEventProducer(events)
 
-	r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New()))
+	if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New())); err == nil {
+		t.Error("reconcile = nil, want the failure")
+	}
 
 	if repo.deleteTxN != 0 {
 		t.Error("the row was removed although the backend still has the bucket")
@@ -302,7 +317,9 @@ func TestBucketReconciler_AlreadyRemovedEmitsNothing(t *testing.T) {
 	r := newReconciler(repo, &fakeProvisioner{})
 	r.SetEventProducer(events)
 
-	r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New()))
+	if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New())); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if repo.deleteTxN != 0 {
 		t.Error("a row that was already gone was deleted again")
@@ -327,7 +344,9 @@ func TestBucketReconciler_DeleteAnnouncesTheTerminalEvent(t *testing.T) {
 	r := newReconciler(repo, &fakeProvisioner{})
 	r.SetEventProducer(events)
 
-	r.reconcileDeleteOne(context.Background(), provisionRow(owner))
+	if err := r.reconcileDeleteOne(context.Background(), provisionRow(owner)); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if repo.deleteTxN != 1 {
 		t.Fatalf("row deletions = %d, want 1", repo.deleteTxN)
@@ -363,7 +382,9 @@ func TestBucketReconciler_EventFailureReachesTheTxBoundary(t *testing.T) {
 	r := newReconciler(repo, &fakeProvisioner{})
 	r.SetEventProducer(events)
 
-	r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New()))
+	if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New())); !errors.Is(err, errBackend) {
+		t.Errorf("reconcile = %v, want %v", err, errBackend)
+	}
 
 	if !repo.ranClosure {
 		t.Fatal("the transaction body never ran")
@@ -416,9 +437,13 @@ func TestBucketReconciler_LogsTerminalAndTransientDifferently(t *testing.T) {
 			r := NewBucketReconciler(repo, prov, BucketReconcilerConfig{}, zap.New(core))
 
 			if tc.del {
-				r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil))
+				if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, tc.err) {
+					t.Errorf("reconcile = %v, want %v", err, tc.err)
+				}
 			} else {
-				r.reconcileOne(context.Background(), provisionRow(uuid.Nil))
+				if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, tc.err) {
+					t.Errorf("reconcile = %v, want %v", err, tc.err)
+				}
 			}
 
 			found := logs.FilterMessage(tc.msg).All()
@@ -464,9 +489,13 @@ func TestBucketReconciler_DiscardFailedWriteFailureStopsThere(t *testing.T) {
 			r := NewBucketReconciler(repo, prov, BucketReconcilerConfig{}, zap.New(core))
 
 			if tc.del {
-				r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil))
+				if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil)); err == nil {
+					t.Error("reconcile = nil, want the failure")
+				}
 			} else {
-				r.reconcileOne(context.Background(), provisionRow(uuid.Nil))
+				if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); err == nil {
+					t.Error("reconcile = nil, want the failure")
+				}
 			}
 
 			if n := len(logs.FilterMessage(tc.writeFailedMsg).All()); n != 1 {
@@ -501,7 +530,9 @@ func TestBucketReconciler_RecreatedBucketKeepsItsRow(t *testing.T) {
 	r := newReconciler(repo, &fakeProvisioner{})
 	r.SetEventProducer(events)
 
-	r.reconcileDeleteOne(context.Background(), provisionRow(owner))
+	if err := r.reconcileDeleteOne(context.Background(), provisionRow(owner)); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if repo.deleteTxN != 0 {
 		t.Error("the row of a bucket created again under the same name was deleted")
@@ -524,7 +555,9 @@ func TestBucketReconciler_RecreatedBucketKeepsItsBackendBucket(t *testing.T) {
 	prov := &fakeProvisioner{}
 	r := newReconciler(repo, prov)
 
-	r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New()))
+	if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.New())); err != nil {
+		t.Errorf("reconcile = %v, want nil", err)
+	}
 
 	if prov.removed != 0 {
 		t.Errorf("the backend bucket of a bucket created again was deleted (%d calls)", prov.removed)
@@ -553,7 +586,9 @@ func TestBucketReconciler_PublicBucketGetsItsPolicy(t *testing.T) {
 			prov := &fakeProvisioner{policyErr: tc.policyErr}
 			row := provisionRow(uuid.Nil)
 			row.PublicRead = tc.public
-			newReconciler(repo, prov).reconcileOne(context.Background(), row)
+			if err := newReconciler(repo, prov).reconcileOne(context.Background(), row); (err == nil) != tc.ready {
+				t.Errorf("reconcile = %v, want an error exactly when the bucket is not ready", err)
+			}
 			if prov.policies != tc.policies {
 				t.Errorf("policy set %d times, want %d", prov.policies, tc.policies)
 			}
@@ -564,5 +599,42 @@ func TestBucketReconciler_PublicBucketGetsItsPolicy(t *testing.T) {
 				t.Errorf("failures %v, want the policy failure recorded", repo.provFailCalls)
 			}
 		})
+	}
+}
+
+// A tick whose create-side listing fails still runs the delete side, and
+// reports the listing failure: RunTicker records it, which feeds the
+// failing-worker alert.
+func TestBucketReconciler_TickReturnsTheFirstFailure(t *testing.T) {
+	listFailure := errors.New("list pending provisions failed")
+	repo := &fakeBucketRepo{
+		listProvisionsErr: listFailure,
+		deletions:         []admindomain.BucketProvisionRow{provisionRow(uuid.Nil)},
+		getResult:         markedBucket(),
+	}
+	prov := &fakeProvisioner{deleteErr: errBackend}
+	r := newReconciler(repo, prov)
+
+	if err := r.tick(context.Background()); !errors.Is(err, listFailure) {
+		t.Errorf("tick = %v, want the first failure %v", err, listFailure)
+	}
+	if prov.removed != 1 {
+		t.Errorf("backend deletes = %d, want 1: a failed create-side listing must not skip the delete side", prov.removed)
+	}
+}
+
+// A row failure later in the tick is reported when the listings succeed.
+func TestBucketReconciler_TickReturnsARowFailure(t *testing.T) {
+	repo := &fakeBucketRepo{provisions: []admindomain.BucketProvisionRow{provisionRow(uuid.Nil)}}
+	r := newReconciler(repo, &fakeProvisioner{createErr: errBackend})
+	if err := r.tick(context.Background()); !errors.Is(err, errBackend) {
+		t.Errorf("tick = %v, want %v", err, errBackend)
+	}
+}
+
+func TestBucketReconciler_CleanTickSucceeds(t *testing.T) {
+	repo := &fakeBucketRepo{provisions: []admindomain.BucketProvisionRow{provisionRow(uuid.Nil)}}
+	if err := newReconciler(repo, &fakeProvisioner{}).tick(context.Background()); err != nil {
+		t.Errorf("tick = %v, want nil", err)
 	}
 }

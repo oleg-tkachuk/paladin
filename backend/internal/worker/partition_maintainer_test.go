@@ -1,8 +1,13 @@
 package worker
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func mustTime(t *testing.T, s string) time.Time {
@@ -117,5 +122,67 @@ func TestShouldDrop_ForeignPrefix(t *testing.T) {
 	now := mustTime(t, "2026-06-24T00:00:00Z")
 	if spec.shouldDrop("idempotency_keys_20240101", now) {
 		t.Error("dropped a partition belonging to a different table")
+	}
+}
+
+// fakePartitionDB answers the maintainer's statements: Exec with execErr,
+// Query with queryErr or an empty partition list. Begin backs only the
+// DEFAULT-overlap recovery, which these errors never reach.
+type fakePartitionDB struct {
+	execErr, queryErr error
+	execs             int
+}
+
+func (f *fakePartitionDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	f.execs++
+	return pgconn.CommandTag{}, f.execErr
+}
+
+func (f *fakePartitionDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	if f.queryErr != nil {
+		return nil, f.queryErr
+	}
+	return noRows{}, nil
+}
+
+func (*fakePartitionDB) Begin(context.Context) (pgx.Tx, error) {
+	return nil, errors.New("begin is not expected")
+}
+
+// partitionsAhead is how many buckets the test specs keep pre-created.
+const partitionsAhead = 2
+
+func testPartitionSpecs() []PartitionSpec {
+	return []PartitionSpec{
+		{Table: "audit_log", Period: PeriodMonthly, Ahead: partitionsAhead},
+		{Table: "idempotency_keys", Period: PeriodDaily, Ahead: partitionsAhead},
+	}
+}
+
+// A partition that cannot be created fails the tick, and every other one is
+// still attempted.
+func TestPartitionMaintainerRunOnceReturnsCreateFailure(t *testing.T) {
+	db := &fakePartitionDB{execErr: errDBDown}
+	specs := testPartitionSpecs()
+	m := &PartitionMaintainer{DB: db, Specs: specs}
+	if err := m.RunOnce(context.Background()); !errors.Is(err, errDBDown) {
+		t.Errorf("RunOnce = %v, want %v", err, errDBDown)
+	}
+	if want := len(specs) * partitionsAhead; db.execs != want {
+		t.Errorf("CREATE attempts = %d, want %d: a failure must not stop the rest", db.execs, want)
+	}
+}
+
+func TestPartitionMaintainerRunOnceReturnsListFailure(t *testing.T) {
+	m := &PartitionMaintainer{DB: &fakePartitionDB{queryErr: errDBDown}, Specs: testPartitionSpecs()}
+	if err := m.RunOnce(context.Background()); !errors.Is(err, errDBDown) {
+		t.Errorf("RunOnce = %v, want %v", err, errDBDown)
+	}
+}
+
+func TestPartitionMaintainerRunOnceCleanSucceeds(t *testing.T) {
+	m := &PartitionMaintainer{DB: &fakePartitionDB{}, Specs: testPartitionSpecs()}
+	if err := m.RunOnce(context.Background()); err != nil {
+		t.Errorf("RunOnce = %v, want nil", err)
 	}
 }

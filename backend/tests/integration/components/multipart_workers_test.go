@@ -132,7 +132,9 @@ func TestMultipartReaperAbortsStaleSessions(t *testing.T) {
 	fresh := seedMultipart(t, ctx, pool, freshAge)
 
 	aborter := &recordingAborter{}
-	newReaper(pool, aborter).Sweep(ctx)
+	if err := newReaper(pool, aborter).Sweep(ctx); err != nil {
+		t.Fatalf("Sweep = %v, want nil on a clean sweep", err)
+	}
 
 	if got := countWhere(t, ctx, pool, sessionsByID, stale.upload); got != 0 {
 		t.Errorf("stale session rows = %d, want 0", got)
@@ -156,7 +158,9 @@ func TestMultipartReaperKeepsASessionItCouldNotAbort(t *testing.T) {
 	pool := startPostgres(t)
 	stale := seedMultipart(t, ctx, pool, staleAge)
 
-	newReaper(pool, &recordingAborter{failures: 1}).Sweep(ctx)
+	if err := newReaper(pool, &recordingAborter{failures: 1}).Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed abort, want the failure")
+	}
 
 	if got := countWhere(t, ctx, pool, sessionsByID, stale.upload); got != 1 {
 		t.Errorf("session rows = %d, want 1 — the parts would be orphaned", got)
@@ -191,7 +195,9 @@ func TestMultipartAbortDrainerKeepsDebtWhenTheAbortFails(t *testing.T) {
 	pool := startPostgres(t)
 	s := seedAbortDebt(t, ctx, pool)
 
-	newAbortDrainer(pool, &recordingAborter{failures: 1}).Sweep(ctx)
+	if err := newAbortDrainer(pool, &recordingAborter{failures: 1}).Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed abort, want the failure")
+	}
 
 	var attempts int32
 	var lastErr string
@@ -215,9 +221,13 @@ func TestMultipartAbortDrainerSettlesOnceTheAbortLands(t *testing.T) {
 
 	aborter := &recordingAborter{failures: 1}
 	d := newAbortDrainer(pool, aborter)
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed abort, want the failure")
+	}
 	mustExec(t, ctx, pool, `UPDATE pending_multipart_aborts SET next_attempt_at = now() WHERE storage_upload_id = $1`, s.storageID)
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err != nil {
+		t.Errorf("Sweep = %v, want nil once the abort lands", err)
+	}
 
 	if got := countWhere(t, ctx, pool, debtByStorage, s.storageID); got != 0 {
 		t.Errorf("debt rows = %d, want 0", got)
@@ -251,12 +261,14 @@ func TestMultipartAbortDrainerLogsOnlyWhatFailed(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	d := newAbortDrainer(pool, &recordingAborter{failures: 1})
 	d.Logger = zap.New(core)
-	d.Sweep(ctx)
+	_ = d.Sweep(ctx) // fails by design; the log is what this test reads
 	if logs.FilterMessage(drainerAbortFail).Len() != 1 {
 		t.Errorf("the failed abort was not reported: %v", logs.All())
 	}
 	mustExec(t, ctx, pool, `UPDATE pending_multipart_aborts SET next_attempt_at = now() WHERE storage_upload_id = $1`, s.storageID)
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err != nil {
+		t.Errorf("Sweep = %v, want nil once the abort lands", err)
+	}
 	if logs.FilterMessage(drainerAborted).Len() != 1 {
 		t.Errorf("the settled abort was not reported: %v", logs.All())
 	}
@@ -285,7 +297,9 @@ func TestMultipartReaperReportsARowItCouldNotDelete(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	r := newReaper(pool, &recordingAborter{})
 	r.Sessions, r.Logger = failingSessions{}, zap.New(core)
-	r.Sweep(ctx)
+	if err := r.Sweep(ctx); err == nil {
+		t.Error("Sweep = nil after a failed row delete, want the failure")
+	}
 	if logs.FilterMessage(reaperDeleteFail).Len() != 1 || logs.FilterMessage(reaperReaped).Len() != 0 {
 		t.Errorf("log = %v", logs.All())
 	}
@@ -302,8 +316,8 @@ func TestMultipartWorkersRunWithoutALogger(t *testing.T) {
 
 	r := newReaper(pool, &recordingAborter{failures: 1})
 	r.Logger = nil
-	r.Sweep(ctx)
+	_ = r.Sweep(ctx) // fails by design; this test is about not panicking
 	d := newAbortDrainer(pool, &recordingAborter{failures: 1})
 	d.Logger = nil
-	d.Sweep(ctx)
+	_ = d.Sweep(ctx)
 }

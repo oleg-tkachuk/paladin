@@ -131,28 +131,30 @@ func NewBucketReconciler(
 
 // Run blocks until ctx is cancelled. Errors from individual rows are
 // logged and recorded on the row itself; the loop never aborts on a
-// per-row failure.
+// per-row failure, and the tick reports the first one.
 func (r *BucketReconciler) Run(ctx context.Context) error {
 	// Kick once on startup so a fresh restart doesn't leave a row
-	// languishing for a full Interval before the first attempt.
-	r.tick(ctx)
-	return RunTicker(ctx, "bucket_reconciler", r.cfg.Interval, func(ctx context.Context) error {
-		r.tick(ctx)
-		return nil
-	})
+	// languishing for a full Interval before the first attempt. Its failures
+	// are logged; the metrics record ticks only.
+	_ = r.tick(ctx)
+	return RunTicker(ctx, "bucket_reconciler", r.cfg.Interval, r.tick)
 }
 
-func (r *BucketReconciler) tick(ctx context.Context) {
+// tick runs the create side, then the delete side even when the create side
+// failed, and returns the first failure.
+func (r *BucketReconciler) tick(ctx context.Context) error {
+	var first error
 	// Create-side scan.
 	rows, err := r.repo.ListPendingProvisions(ctx, r.cfg.MaxAttempts, r.cfg.BatchSize)
 	if err != nil {
 		r.log.Warn("list pending bucket provisions failed", zap.Error(err))
+		keepFirst(&first, err)
 	} else {
 		for _, row := range rows {
-			if err := ctx.Err(); err != nil {
-				return
+			if ctx.Err() != nil {
+				return first
 			}
-			r.reconcileOne(ctx, row)
+			keepFirst(&first, r.reconcileOne(ctx, row))
 		}
 	}
 
@@ -162,17 +164,22 @@ func (r *BucketReconciler) tick(ctx context.Context) {
 	delRows, err := r.repo.ListPendingDeletions(ctx, r.cfg.MaxAttempts, r.cfg.BatchSize)
 	if err != nil {
 		r.log.Warn("list pending bucket deletions failed", zap.Error(err))
-		return
+		keepFirst(&first, err)
+		return first
 	}
 	for _, row := range delRows {
-		if err := ctx.Err(); err != nil {
-			return
+		if ctx.Err() != nil {
+			return first
 		}
-		r.reconcileDeleteOne(ctx, row)
+		keepFirst(&first, r.reconcileDeleteOne(ctx, row))
 	}
+	return first
 }
 
-func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.BucketProvisionRow) {
+// reconcileOne provisions one bucket and returns the failure it logged. With
+// no provisioner wired the row is left pending, which is not a failure; a
+// tagging failure is non-fatal and not one either.
+func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.BucketProvisionRow) error {
 	log := r.log.With(
 		zap.String("backend_id", row.BackendID),
 		zap.String("bucket_name", row.BucketName),
@@ -186,7 +193,7 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 		_ = r.repo.MarkProvisionFailed(ctx, row.BackendID, row.BucketName,
 			false, "no provisioner wired")
 		log.Debug("no provisioner wired, leaving row pending")
-		return
+		return nil
 	}
 
 	err := r.prov.CreateBucket(ctx, row.BackendID, row.BucketName, row.Region)
@@ -209,30 +216,34 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 			// CreateBucket call is idempotent (swallows already-owned),
 			// so we'll converge.
 			log.Warn("backend created but mark-ready failed", zap.Error(mErr))
-			return
+			return mErr
 		}
 		log.Info("bucket provisioned")
-		return
+		return nil
 	}
 
 	terminal := isTerminalProvisionError(err)
 	if mErr := r.repo.MarkProvisionFailed(ctx, row.BackendID, row.BucketName, terminal, err.Error()); mErr != nil {
 		log.Warn("mark-failed write failed",
 			zap.Bool("terminal", terminal), zap.Error(mErr), zap.NamedError("backend_err", err))
-		return
+		return err
 	}
 	if terminal {
 		log.Error("bucket provisioning failed permanently", zap.Error(err))
 	} else {
 		log.Warn("bucket provisioning failed (transient)", zap.Error(err))
 	}
+	return err
 }
 
 // reconcileDeleteOne is the delete-path twin of reconcileOne. On one tx,
 // with the row locked: re-check it is still marked for deletion, delete the
 // backend bucket, then the row. Both deletes are idempotent: the backend
 // swallows NoSuchBucket, and a row already gone is a replica that finished.
-func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindomain.BucketProvisionRow) {
+//
+// It returns the failure it logged. A row another replica finished, or one no
+// longer marked for deletion, is not a failure.
+func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindomain.BucketProvisionRow) error {
 	log := r.log.With(
 		zap.String("backend_id", row.BackendID),
 		zap.String("bucket_name", row.BucketName),
@@ -245,7 +256,7 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		_ = r.repo.MarkDeletionFailed(ctx, row.BackendID, row.BucketName,
 			false, "no provisioner wired")
 		log.Debug("no provisioner wired, leaving row deleting")
-		return
+		return nil
 	}
 
 	// The backend delete runs under the row lock, after re-reading the state:
@@ -287,26 +298,27 @@ func (r *BucketReconciler) reconcileDeleteOne(ctx context.Context, row admindoma
 		return r.emitBucketDeleted(ctx, tx, b)
 	}); err != nil {
 		log.Warn("bucket delete transaction failed", zap.Error(err))
-		return
+		return err
 	}
 	if backendErr != nil {
 		terminal := isTerminalDeletionError(backendErr)
 		if mErr := r.repo.MarkDeletionFailed(ctx, row.BackendID, row.BucketName, terminal, backendErr.Error()); mErr != nil {
 			log.Warn("mark-deletion-failed write failed",
 				zap.Bool("terminal", terminal), zap.Error(mErr), zap.NamedError("backend_err", backendErr))
-			return
+			return backendErr
 		}
 		if terminal {
 			log.Error("bucket deletion failed permanently", zap.Error(backendErr))
 		} else {
 			log.Warn("bucket deletion failed (transient)", zap.Error(backendErr))
 		}
-		return
+		return backendErr
 	}
 	if !deleted {
-		return
+		return nil
 	}
 	log.Info("bucket deleted")
+	return nil
 }
 
 // markedForDeletion reports whether a row is in the deletion outbox.

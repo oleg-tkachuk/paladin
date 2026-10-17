@@ -2,9 +2,13 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // fakeWatermarkStore is an in-memory WatermarkStore stub that records every
@@ -14,6 +18,7 @@ type fakeWatermarkStore struct {
 	stored    map[string]time.Time
 	advances  []time.Time
 	advanceFn func(time.Time) error
+	getErr    error
 }
 
 func newFakeWatermarkStore() *fakeWatermarkStore {
@@ -23,7 +28,7 @@ func newFakeWatermarkStore() *fakeWatermarkStore {
 func (f *fakeWatermarkStore) Get(_ context.Context, backendID, bucketName string) (time.Time, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.stored[backendID+"/"+bucketName], nil
+	return f.stored[backendID+"/"+bucketName], f.getErr
 }
 
 func (f *fakeWatermarkStore) Advance(_ context.Context, backendID, bucketName string, t time.Time) error {
@@ -85,9 +90,15 @@ func TestReplicationAdvanceMonotonic(t *testing.T) {
 	t2 := t1.Add(1 * time.Hour)
 	t3 := t1.Add(-30 * time.Minute) // older than t1, must not advance
 
-	w.advance(context.Background(), "primary", "paladin-archive", t1)
-	w.advance(context.Background(), "primary", "paladin-archive", t2)
-	w.advance(context.Background(), "primary", "paladin-archive", t3)
+	if err := w.advance(context.Background(), "primary", "paladin-archive", t1); err != nil {
+		t.Fatalf("advance(t1) = %v", err)
+	}
+	if err := w.advance(context.Background(), "primary", "paladin-archive", t2); err != nil {
+		t.Fatalf("advance(t2) = %v", err)
+	}
+	if err := w.advance(context.Background(), "primary", "paladin-archive", t3); err != nil {
+		t.Fatalf("advance(t3) = %v", err)
+	}
 
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -107,11 +118,36 @@ func TestReplicationAdvanceCachesInMemory(t *testing.T) {
 		Now:        time.Now,
 	}
 	t1 := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	w.advance(context.Background(), "primary", "paladin-archive", t1)
+	if err := w.advance(context.Background(), "primary", "paladin-archive", t1); err != nil {
+		t.Fatalf("advance(t1) = %v", err)
+	}
 
 	// Same Get call should hit the in-memory cache, not roundtrip to store.
 	// We assert this indirectly by verifying the cached value matches t1.
 	if got, ok := w.watermarks["primary/paladin-archive"]; !ok || !got.Equal(t1) {
 		t.Errorf("in-memory cache miss: got %v ok=%v want %v", got, ok, t1)
+	}
+}
+
+// A watermark that could not be read falls back to the lookback window, which
+// may copy again what it had passed, and says so.
+func TestReplicationCutoffLogsAnUnreadableWatermark(t *testing.T) {
+	now := time.Now()
+	store := newFakeWatermarkStore()
+	store.getErr = errors.New("pool closed")
+	core, logs := observer.New(zap.WarnLevel)
+	w := &ReplicationWorker{
+		Watermarks:     store,
+		LookbackWindow: time.Hour,
+		Now:            func() time.Time { return now },
+		Logger:         zap.New(core),
+		watermarks:     map[string]time.Time{},
+	}
+	if got := w.cutoff(context.Background(), "primary", "paladin-archive"); !got.Equal(now.Add(-time.Hour)) {
+		t.Errorf("cutoff = %v, want the lookback", got)
+	}
+	got := logs.All()
+	if len(got) != 1 || got[0].ContextMap()[logKeyBucket] != "paladin-archive" {
+		t.Errorf("logged %v, want one line naming the bucket", got)
 	}
 }

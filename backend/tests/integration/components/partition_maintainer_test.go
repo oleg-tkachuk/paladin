@@ -98,7 +98,9 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 			{Table: "idempotency_keys", Period: worker.PeriodDaily, Retention: 0, Ahead: 8},
 		},
 	}
-	m.RunOnce(ctx)
+	if err := m.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce = %v, want nil", err)
+	}
 
 	// Stale partitions dropped.
 	assertPartitionAbsent(ctx, t, pool, oldIdem)
@@ -113,7 +115,9 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 	assertPartitionPresent(ctx, t, pool, nextMonthPart)
 
 	// Idempotent: a second sweep is a no-op (no error, partitions unchanged).
-	m.RunOnce(ctx)
+	if err := m.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce = %v, want nil", err)
+	}
 	assertPartitionPresent(ctx, t, pool, tomorrow)
 }
 
@@ -176,7 +180,9 @@ func TestPartitionMaintainer_RecoversDefaultOverlap(t *testing.T) {
 			{Table: "pm_test", Period: worker.PeriodDaily, Retention: -1, Ahead: 2, PartitionKey: "k"},
 		},
 	}
-	m.RunOnce(ctx)
+	if err := m.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce = %v, want nil", err)
+	}
 
 	// Today's partition now exists (recovery created + attached it)...
 	todayPart := "pm_test_" + today.Format("20060102")
@@ -198,7 +204,9 @@ func TestPartitionMaintainer_RecoversDefaultOverlap(t *testing.T) {
 	}
 
 	// Idempotent: a second sweep with DEFAULT now clean is a plain no-op.
-	m.RunOnce(ctx)
+	if err := m.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce = %v, want nil", err)
+	}
 	assertPartitionPresent(ctx, t, pool, todayPart)
 }
 

@@ -16,6 +16,8 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	celpkg "cel.dev/cel-go/cel"
@@ -95,43 +97,54 @@ func (w *LifecycleWorker) Run(ctx context.Context) error {
 	if w.Now == nil {
 		w.Now = time.Now
 	}
-	return RunTicker(ctx, "lifecycle", w.Interval, func(ctx context.Context) error {
-		w.tick(ctx)
-		return nil
-	})
+	return RunTicker(ctx, "lifecycle", w.Interval, w.tick)
 }
 
-func (w *LifecycleWorker) tick(ctx context.Context) {
+// tick applies the rules of every bucket that has them, carrying on past one
+// that fails, and returns the first failure.
+func (w *LifecycleWorker) tick(ctx context.Context) error {
 	buckets, err := w.Buckets.ListBucketsWithLifecycle(ctx)
 	if err != nil {
 		w.log().Warn("failed to list buckets", zap.Error(err))
-		return
+		return err
 	}
+	var first error
 	for _, b := range buckets {
-		if err := ctx.Err(); err != nil {
-			return
+		if ctx.Err() != nil {
+			return first
 		}
-		w.processBucket(ctx, b)
+		keepFirst(&first, w.processBucket(ctx, b))
 	}
+	return first
 }
 
-func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucket) {
-	expirers := buildExpirers(b.LifecycleRules, w.Now(), w.CELEvaluator, w.log())
+// processBucket expires one bucket's objects and returns the first failure it
+// logged. An object whose match fails to evaluate, or that fails to delete,
+// does not stop the others.
+func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucket) error {
+	expirers, first := buildExpirers(b.LifecycleRules, w.Now(), w.CELEvaluator, w.log())
 	if len(expirers) == 0 {
-		return // no expiration rules → nothing to evaluate this tick
+		return first // no runnable expiration rule → nothing to evaluate this tick
 	}
 	bindings, err := w.Buckets.ListCollectionBindings(ctx, b.BackendID, b.BucketName)
 	if err != nil {
 		w.log().Warn("failed to list collection bindings",
-			zap.String("backend", b.BackendID),
-			zap.String("bucket", b.BucketName),
+			zap.String(logKeyBackend, b.BackendID),
+			zap.String(logKeyBucket, b.BucketName),
 			zap.Error(err))
-		return
+		keepFirst(&first, err)
+		return first
 	}
 	for _, bind := range bindings {
-		if err := ctx.Err(); err != nil {
-			return
+		if ctx.Err() != nil {
+			return first
 		}
+		log := w.log().With(
+			zap.String(logKeyTenant, bind.TenantID.String()),
+			zap.String(logKeyCollection, bind.Collection),
+			zap.String(logKeyBackend, b.BackendID),
+			zap.String(logKeyBucket, b.BucketName),
+		)
 		err := w.Objects.IterateObjects(ctx, bind.TenantID, bind.Collection, func(row LifecycleObjectRow) error {
 			if row.State != string(statemachine.StateAvailable) {
 				return nil
@@ -139,36 +152,55 @@ func (w *LifecycleWorker) processBucket(ctx context.Context, b admindomain.Bucke
 			for _, e := range expirers {
 				ok, err := e.matches(row)
 				if err != nil {
-					w.log().Warn("failed to evaluate match",
-						zap.String("rule", e.id),
-						zap.String("object_id", row.ObjectID.String()),
+					log.Warn("failed to evaluate match",
+						zap.String(logKeyRule, e.id),
+						zap.String(logKeyObjectID, row.ObjectID.String()),
+						zap.String(logKeyKey, row.Key),
 						zap.Error(err))
+					keepFirst(&first, err)
 					continue
 				}
 				if !ok {
 					continue
 				}
 				if err := w.SoftDeleter.SoftDelete(ctx, row.ObjectID, 0); err != nil {
-					w.log().Warn("failed to soft-delete object",
-						zap.String("object_id", row.ObjectID.String()),
+					log.Warn("failed to soft-delete object",
+						zap.String(logKeyObjectID, row.ObjectID.String()),
+						zap.String(logKeyKey, row.Key),
 						zap.Error(err))
+					// Carry on with the next object; the tick reports this one.
+					keepFirst(&first, err)
 					return nil
 				}
-				w.log().Info("expired object",
-					zap.String("rule", e.id),
-					zap.String("object_id", row.ObjectID.String()))
+				log.Info("expired object",
+					zap.String(logKeyRule, e.id),
+					zap.String(logKeyObjectID, row.ObjectID.String()),
+					zap.String(logKeyKey, row.Key))
 				return nil
 			}
 			return nil
 		})
 		if err != nil {
-			w.log().Warn("failed to iterate objects",
-				zap.String("tenant", bind.TenantID.String()),
-				zap.String("collection", bind.Collection),
-				zap.Error(err))
+			log.Warn("failed to iterate objects", zap.Error(err))
+			keepFirst(&first, err)
 		}
 	}
+	return first
 }
+
+// Log keys of the per-object lines the lifecycle and replication workers
+// write, so the two jobs (and their tests) spell them alike.
+const (
+	logKeyTenant     = "tenant"
+	logKeyCollection = "collection"
+	logKeyBackend    = "backend"
+	logKeyBucket     = "bucket"
+	logKeyDstBackend = "dst_backend"
+	logKeyDstBucket  = "dst_bucket"
+	logKeyObjectID   = "object_id"
+	logKeyKey        = "key"
+	logKeyRule       = "rule"
+)
 
 func (w *LifecycleWorker) log() *zap.Logger {
 	if w.Logger != nil {
@@ -220,8 +252,12 @@ func (e expirer) matches(row LifecycleObjectRow) (bool, error) {
 //
 // Rules without a match always evaluate the time window only — preserving
 // the slice-11 behaviour.
-func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.Evaluator, logger *zap.Logger) []expirer {
+//
+// The error is the first rule skipped, so the tick reports a bucket whose
+// expiry stopped: logged alone, nothing raised the failing-worker alert.
+func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.Evaluator, logger *zap.Logger) ([]expirer, error) {
 	out := make([]expirer, 0, len(rules))
+	var first error
 	for _, r := range rules {
 		if r.Expiration == nil || r.Expiration.After <= 0 {
 			continue
@@ -231,6 +267,7 @@ func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.E
 			if eval == nil {
 				logger.Error("rule has match but no CEL evaluator wired (configuration error)",
 					zap.String("rule", r.ID))
+				keepFirst(&first, fmt.Errorf("lifecycle rule %s: %w", r.ID, errNoEvaluator))
 				continue
 			}
 			compiled, err := eval.Compile(cel.ObjectSchema, r.Match)
@@ -239,6 +276,7 @@ func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.E
 					zap.String("rule", r.ID),
 					zap.String("match", r.Match),
 					zap.Error(err))
+				keepFirst(&first, fmt.Errorf("lifecycle rule %s: %w", r.ID, err))
 				continue
 			}
 			prog = compiled
@@ -250,8 +288,12 @@ func buildExpirers(rules []admindomain.LifecycleRule, now time.Time, eval *cel.E
 			match:   prog,
 		})
 	}
-	return out
+	return out, first
 }
+
+// errNoEvaluator is a rule with a match on a worker wired with no CEL
+// evaluator to run it.
+var errNoEvaluator = errors.New("match set but no CEL evaluator wired")
 
 // lifecycleRowToCELVars projects a LifecycleObjectRow through
 // cel.ObjectVars, the projection the data plane's ListObjects filter uses, so

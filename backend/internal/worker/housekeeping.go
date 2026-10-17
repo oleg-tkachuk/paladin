@@ -99,37 +99,39 @@ func (r *OperationsReaper) Run(ctx context.Context) error {
 		r.Interval = 6 * time.Hour
 	}
 	return RunTicker(ctx, "operations_purger", r.Interval, func(ctx context.Context) error {
-		r.sweep(ctx, time.Now().UTC().Add(-r.TTL))
-		return nil
+		return r.sweep(ctx, time.Now().UTC().Add(-r.TTL))
 	})
 }
 
 // sweep is one tick: terminal operations, then the tombstones, on one cutoff.
-func (r *OperationsReaper) sweep(ctx context.Context, cutoff time.Time) {
-	r.drain(ctx, cutoff)
+// The tombstones are drained even when the operations drain failed; the first
+// failure is returned.
+func (r *OperationsReaper) sweep(ctx context.Context, cutoff time.Time) error {
+	err := r.drain(ctx, cutoff)
 	if r.Erasures != nil {
-		r.drainErasures(ctx, cutoff)
+		keepFirst(&err, r.drainErasures(ctx, cutoff))
 	}
+	return err
 }
 
 // drain calls the bounded purge in a loop until it returns 0 rows. Each
 // iteration is capped at 10k rows by the SQL — drain backs off on error so
 // a transient DB hiccup doesn't pin the goroutine in a tight retry loop.
-func (r *OperationsReaper) drain(ctx context.Context, cutoff time.Time) {
+func (r *OperationsReaper) drain(ctx context.Context, cutoff time.Time) error {
 	for iter := 0; ; iter++ {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		default:
 		}
 		n, err := r.Repo.PurgeTerminalBefore(ctx, cutoff)
 		if err != nil {
 			r.log().Warn("failed to purge terminal operations",
 				zap.Int("iter", iter), zap.Error(err))
-			return
+			return err
 		}
 		if n == 0 {
-			return
+			return nil
 		}
 		r.log().Info("purged terminal operations",
 			zap.Int64("rows", n),
@@ -139,21 +141,21 @@ func (r *OperationsReaper) drain(ctx context.Context, cutoff time.Time) {
 
 // drainErasures is drain for the tombstones: the bounded purge until it
 // returns 0 rows, stopping on the first error.
-func (r *OperationsReaper) drainErasures(ctx context.Context, cutoff time.Time) {
+func (r *OperationsReaper) drainErasures(ctx context.Context, cutoff time.Time) error {
 	for iter := 0; ; iter++ {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		default:
 		}
 		n, err := r.Erasures.PurgeErasedBefore(ctx, cutoff)
 		if err != nil {
 			r.log().Warn("failed to purge erased-object tombstones",
 				zap.Int("iter", iter), zap.Error(err))
-			return
+			return err
 		}
 		if n == 0 {
-			return
+			return nil
 		}
 		r.log().Info("purged erased-object tombstones",
 			zap.Int64("rows", n),
