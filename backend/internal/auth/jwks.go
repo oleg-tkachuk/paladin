@@ -16,6 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
+	"go.uber.org/zap"
+
 	"golang.org/x/sync/singleflight"
 )
 
@@ -40,6 +43,11 @@ type JWKSVerifier struct {
 	// without this each miss triggers a synchronous outbound fetch,
 	// DoSing the verifier and the IdP. Defaults to 30s.
 	MinRefreshInterval time.Duration
+
+	// Logger receives a background refresh that failed: the cached keys stay
+	// in use, and a key the identity provider rotated in is refused until a
+	// refresh succeeds. nil keeps the failure silent.
+	Logger *zap.Logger
 
 	mu         sync.RWMutex
 	keys       map[string]any // kid → *rsa.PublicKey | *ecdsa.PublicKey
@@ -85,7 +93,10 @@ func (v *JWKSVerifier) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			_ = v.refresh(ctx)
+			if err := v.refresh(ctx); err != nil && v.Logger != nil {
+				v.Logger.Warn("jwks refresh failed; keeping the cached keys",
+					logfield.URL("url", v.URL), zap.Error(err))
+			}
 		}
 	}
 }

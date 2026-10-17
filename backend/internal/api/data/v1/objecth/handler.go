@@ -995,7 +995,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	// they're separate concerns from the event-atomicity guarantee and a
 	// version/quota hiccup must not roll back a delivered event.
 	if changed {
-		_ = h.versions.OnPromote(ctx, fresh)
+		LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
 		h.touchQuota(ctx, fresh)
 		if err := auth.ChargeRequest(ctx); err != nil {
 			return nil, err
@@ -1617,7 +1617,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		}
 		// Best-effort delete-marker write; post-commit, separate concern —
 		// a marker hiccup must not undo a delivered delete event.
-		_ = h.versions.OnSoftDelete(ctx, obj)
+		LogSideEffect(ctx, EffectDeleteMarker, obj.ObjectID, h.versions.OnSoftDelete(ctx, obj))
 		return nil
 	}
 	if err := h.assertBypassAllowed(principal, bypassGovernance); err != nil {
@@ -2085,7 +2085,7 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	// storage without spending anything, which is the one OpPut path where
 	// that was true.
 	if changed {
-		_ = h.versions.OnPromote(ctx, fresh)
+		LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
 		h.touchQuota(ctx, fresh)
 		if err := auth.ChargeRequest(ctx); err != nil {
 			return nil, err
@@ -2107,7 +2107,7 @@ func (h *Handler) touchQuota(ctx context.Context, obj Object) {
 	if h.quota == nil {
 		return
 	}
-	_ = h.quota.OnObjectPromoted(ctx, obj.TenantID, obj.ObjectID, obj.SizeBytes)
+	LogSideEffect(ctx, EffectQuota, obj.ObjectID, h.quota.OnObjectPromoted(ctx, obj.TenantID, obj.ObjectID, obj.SizeBytes))
 }
 
 func (h *Handler) authorize(
@@ -2194,4 +2194,28 @@ func init() {
 	apiutil.RegisterError(ErrBackendReadOnly, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_READ_ONLY)
 	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_OBJECT_VERSION_NOT_FOUND)
 	apiutil.RegisterError(ErrObjectBytesMissing, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_OBJECT_BYTES_MISSING)
+}
+
+// The side effects of an object's transition that are written after it
+// commits, as LogSideEffect names them.
+const (
+	EffectVersion        = "version history"
+	EffectDeleteMarker   = "delete marker"
+	EffectQuota          = "quota usage"
+	EffectStorageCleanup = "storage cleanup"
+)
+
+// LogSideEffect logs a side effect of an object's transition that failed
+// after the transition committed. The transition stands — undoing a
+// delivered event for a version row would be worse — but a version missing
+// from the history, or quota left drifting until the reconciler, was
+// otherwise invisible.
+func LogSideEffect(ctx context.Context, effect string, objectID uuid.UUID, err error) {
+	if err == nil {
+		return
+	}
+	logger.FromContext(ctx).Warn("object side effect not written",
+		zap.String("effect", effect),
+		zap.String("object_id", objectID.String()),
+		zap.Error(err))
 }

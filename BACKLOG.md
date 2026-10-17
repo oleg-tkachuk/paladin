@@ -92,6 +92,59 @@ the same commit. Treat this file like a runtime invariant.
   audit page in an e2e assertion.
 - **Blockers:** none.
 
+### The OAuth endpoints answer an outage as a client error
+
+- **Status:** Deferred.
+- **Reason:** `/oauth/authorize`, `/oauth/token` and the token exchange
+  (`internal/auth/oauth/handler.go`, `exchange.go`) turn any store or policy
+  error into a 4xx: a database outage reads as `invalid_client`, a failing
+  Cedar engine as `access_denied`, a failed user lookup as "user no longer
+  eligible". An outage then looks like a wave of bad credentials, and none
+  of it is logged. Fixing it changes what a client sees, so it is its own
+  change.
+- **Definition of Done:** each lookup tells its not-found sentinel from any
+  other error; the sentinel keeps its 4xx, anything else answers
+  `server_error` through `serverError`, which logs it; unit tests per
+  endpoint and an `upgrading.md` note.
+- **Blockers:** none.
+
+### OAuth grants and token exchanges write no audit rows
+
+- **Status:** Deferred.
+- **Reason:** consent at `/oauth/authorize`, code redemption and refresh
+  rotation at `/oauth/token`, and the token exchange run outside the audit
+  interceptor and write no row themselves; only a replayed refresh token is
+  recorded. Who let which client in, and when, is in no trail but the
+  refresh tokens themselves.
+- **Definition of Done:** each writes a row through the audit repository
+  (which scopes it to the actor's tenant), denials included; unit tests and
+  the rows seen in an integration test.
+- **Blockers:** none.
+
+### Worker ticks that hide their failures from the stalled-worker alert
+
+- **Status:** Deferred.
+- **Reason:** `RunTicker` records a tick's error as the job's error metric,
+  but eleven jobs log a failure inside their tick and return nil
+  (`reconciler`, `lifecycle_hard_delete`, `purge_drainer`,
+  `partition_maintainer`, `storage_migration`, `bucket_reconciler`,
+  `replication`, `operations_purger`, `lifecycle`, `multipart_reaper`,
+  `multipart_abort_drainer`), so the alert reads them as healthy. Per-object
+  lines of `replication` and `lifecycle` also lack the tenant and bucket.
+- **Definition of Done:** each tick returns its first error; the per-object
+  lines carry tenant, bucket and collection; unit tests per job.
+- **Blockers:** none.
+
+### Ingested object transitions write no audit row
+
+- **Status:** Deferred.
+- **Reason:** the event-ingest pipeline promotes and soft-deletes objects
+  (`internal/eventingest/handler.go`) without an audit row, while the same
+  transition through the data-plane RPC is audited.
+- **Definition of Done:** the ingest handlers write the row the RPC would,
+  through the audit repository; an integration test.
+- **Blockers:** none.
+
 ### Expired OAuth authorization codes are never purged
 
 - **Status:** Deferred.

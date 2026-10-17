@@ -469,7 +469,10 @@ func (h *Handler) Revoke(ctx context.Context, token string) error {
 		//
 		// This does NOT touch the user's other logins: each has its own family,
 		// which is the distinction RevokeFamilyOf was built to preserve.
-		_, _ = h.refresh.RevokeFamilyOf(auth.WithActingTenant(ctx, tokenTenant), jti)
+		if _, err := h.refresh.RevokeFamilyOf(auth.WithActingTenant(ctx, tokenTenant), jti); err != nil {
+			// The session did not end; saying it did would leave it live.
+			return connect.NewError(connect.CodeInternal, "the session could not be ended").WithCause(err)
+		}
 		return nil
 	}
 	// Access tokens are stateless — we can't revoke without a denylist.
@@ -758,8 +761,13 @@ func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error
 	if err := h.users.UpdatePasswordHash(ctx, id, hash); err != nil {
 		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	// Defensive: invalidate all refresh tokens on password change.
-	_, _ = h.refresh.RevokeForUser(ctx, id)
+	// Defensive: invalidate all refresh tokens on password change. The new
+	// password stands either way; a failure leaves the old sessions live,
+	// which an operator must hear about.
+	if _, err := h.refresh.RevokeForUser(ctx, id); err != nil {
+		logger.FromContext(ctx).Error("sessions not ended after a password change",
+			zap.String("user_id", id.String()), zap.Error(err))
+	}
 	return nil
 }
 

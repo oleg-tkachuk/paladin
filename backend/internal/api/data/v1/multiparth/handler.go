@@ -322,7 +322,8 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err != nil {
 		// Best-effort rollback: abort the orphan storage session. Log and
 		// proceed — a background sweeper eventually cleans stragglers.
-		_ = h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, storageUploadID, args.Collection, args.Key)
+		objecth.LogSideEffect(ctx, objecth.EffectStorageCleanup, objectID,
+			h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, storageUploadID, args.Collection, args.Key))
 		// The path is taken — by an object in any state, the trash included —
 		// as UploadObject reports it: a conflict the caller can act on, not a
 		// failure of the server.
@@ -392,7 +393,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		return objecth.Object{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if changed && h.versions != nil {
-		_ = h.versions.OnPromote(ctx, VersionedObject{
+		objecth.LogSideEffect(ctx, objecth.EffectVersion, sess.ObjectID, h.versions.OnPromote(ctx, VersionedObject{
 			ObjectID:              sess.ObjectID,
 			TenantID:              sess.TenantID,
 			Collection:            sess.Collection,
@@ -403,7 +404,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 			ChecksumAlgo:          sess.ChecksumAlgo,
 			Checksum:              composite,
 			ChecksumPartSizeBytes: sess.PartSizeBytes,
-		})
+		}))
 	}
 	// Quota accounting — symmetric with single-PUT path on object.Handler.
 	// Suppressed errors: drift gets corrected by the nightly accounting job;
