@@ -27,6 +27,14 @@ import { gotoSettled } from "./fixtures/navigate";
 const rpc = (proc: string) => (r: { url(): string }) =>
   r.url().includes("/api/rpc/") && r.url().includes(proc);
 
+// filteredRpc matches a call to proc that carries a filter. The page also
+// refetches its list unfiltered — on mount, on a focus change — and the first
+// such call can land after the box is typed into but before the search's own
+// request, which then read as no filter at all.
+const filteredRpc =
+  (proc: string) => (r: { url(): string; postData(): string | null }) =>
+    rpc(proc)(r) && !!JSON.parse(r.postData() ?? "{}").filter;
+
 test.describe("List search", () => {
   test("a bucket search matches the display name, ignoring case", async ({
     page,
@@ -47,7 +55,7 @@ test.describe("List search", () => {
     // UPPERCASE on purpose: the display name is mixed case, the console folds
     // ASCII before sending, and Postgres folds the column the same way. Any
     // of the three getting it wrong shows up as an empty table.
-    const request = page.waitForRequest(rpc("ListBuckets"), {
+    const request = page.waitForRequest(filteredRpc("ListBuckets"), {
       timeout: 15_000,
     });
     await page.getByPlaceholder(/search by name/i).fill("ZQX NEEDLE");
@@ -77,7 +85,7 @@ test.describe("List search", () => {
     await loginAsAdmin(page);
     await gotoSettled(page, "/collections");
 
-    const request = page.waitForRequest(rpc("ListCollections"), {
+    const request = page.waitForRequest(filteredRpc("ListCollections"), {
       timeout: 15_000,
     });
     await page.getByPlaceholder(/search by name/i).fill("zqxfind");
