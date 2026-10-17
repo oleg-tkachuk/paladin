@@ -78,20 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Worker ticks that hide their failures from the stalled-worker alert
-
-- **Status:** Deferred.
-- **Reason:** `RunTicker` records a tick's error as the job's error metric,
-  but eleven jobs log a failure inside their tick and return nil
-  (`reconciler`, `lifecycle_hard_delete`, `purge_drainer`,
-  `partition_maintainer`, `storage_migration`, `bucket_reconciler`,
-  `replication`, `operations_purger`, `lifecycle`, `multipart_reaper`,
-  `multipart_abort_drainer`), so the alert reads them as healthy. Per-object
-  lines of `replication` and `lifecycle` also lack the tenant and bucket.
-- **Definition of Done:** each tick returns its first error; the per-object
-  lines carry tenant, bucket and collection; unit tests per job.
-- **Blockers:** none.
-
 ### Ingested object transitions write no audit row
 
 - **Status:** Deferred.
@@ -482,6 +468,8 @@ finding moving from "packages you import" to "your code is affected".
   - Watermark advance + retry-with-exponential-backoff on transient
     errors.
   - Evaluate `replication.filter` (CEL) when selecting objects.
+  - Set `ReplicationTarget.Key` from the object row: the worker fills only
+    the collection today, which is harmless while dry-run.
   - Integration test across two backends — the suites bring up two
     SeaweedFS instances for exactly this.
 - **Blockers:** scope decision — same-cloud only vs. cross-cloud.

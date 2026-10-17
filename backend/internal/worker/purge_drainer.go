@@ -67,8 +67,7 @@ func (w *PurgeDrainer) Run(ctx context.Context) error {
 		w.MaxBackoff = time.Hour
 	}
 	return RunTicker(ctx, "purge_drainer", w.Interval, func(ctx context.Context) error {
-		w.Sweep(ctx)
-		return nil
+		return w.Sweep(ctx)
 	})
 }
 
@@ -82,18 +81,22 @@ func (w *PurgeDrainer) Run(ctx context.Context) error {
 // purpose: holding the row lock for the duration is what stops a second
 // replica from issuing a duplicate delete while this one is mid-flight. The
 // batch is small and the lock is per-row, so the contention cost is bounded.
-func (w *PurgeDrainer) Sweep(ctx context.Context) {
+//
+// It returns the first failure of the tick: one that rolled the tick back, or
+// a debt whose bytes could not be deleted and was rescheduled. A debt deferred
+// because an upload holds its path is not a failure.
+func (w *PurgeDrainer) Sweep(ctx context.Context) error {
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
 		w.log().Warn("purge drainer: begin", zap.Error(err))
-		return
+		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	rows, err := w.Q.WithTx(tx).ListDuePurges(ctx, w.BatchSize)
 	if err != nil {
 		w.log().Warn("purge drainer: list due", zap.Error(err))
-		return
+		return err
 	}
 	// A row whose settlement must not stand aborts the whole tick.
 	//
@@ -103,29 +106,28 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) {
 	// in this transaction. The debt settled, the event was never emitted, and
 	// the row was gone, so no later tick could retry it. The comment there
 	// said the tick rolls back; nothing did.
-	rollback := false
+	var failed error
 	for _, r := range rows {
 		if ctx.Err() != nil {
-			return
+			return failed
 		}
-		if err := w.drainOne(ctx, tx, r); err != nil {
-			rollback = true
-			break
+		if err := w.drainOne(ctx, tx, r, &failed); err != nil {
+			// The deferred Rollback does the work. Every settlement in this
+			// tick is discarded, including ones that succeeded — which is the
+			// trade the emit branch already chose: an unannounced purge is
+			// worse than a repeated one, and the repeat is free because the
+			// storage DELETE is idempotent.
+			keepFirst(&failed, err)
+			return failed
 		}
-	}
-	if rollback {
-		// The deferred Rollback does the work. Every settlement in this tick
-		// is discarded, including ones that succeeded — which is the trade the
-		// emit branch already chose: an unannounced purge is worse than a
-		// repeated one, and the repeat is free because the storage DELETE is
-		// idempotent.
-		return
 	}
 	if err := tx.Commit(ctx); err != nil {
 		// Nothing is lost: uncommitted settlements mean the debt rows stay,
 		// and the next tick re-issues storage deletes that are idempotent.
 		w.log().Warn("purge drainer: commit", zap.Error(err))
+		keepFirst(&failed, err)
 	}
+	return failed
 }
 
 // drainOne reclaims one object's bytes and settles its debt.
@@ -140,8 +142,9 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) {
 // already written to the transaction and standing it up without the
 // announcement is the failure the emit branch exists to prevent. A storage
 // failure is not one of those — it records attempts and last_error, which are
-// writes that MUST survive, so it returns nil.
-func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow) error {
+// writes that MUST survive, so it returns nil and keeps the failure in failed
+// instead, for the tick to report.
+func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow, failed *error) error {
 	purgeID := uuid.UUID(r.ID.Bytes)
 	tenantID := uuid.UUID(r.TenantID.Bytes)
 	logger := w.log().With(
@@ -160,11 +163,15 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		return err
 	}
 	if verdict == objectpath.Defer {
-		return w.reschedule(ctx, tx, r, logger, errPathInUse)
+		// Deferred, not failed: the upload owns the path for now.
+		keepFirst(failed, w.reschedule(ctx, tx, r, logger, errPathInUse))
+		return nil
 	}
 	if verdict == objectpath.Delete {
 		if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
-			return w.reschedule(ctx, tx, r, logger, err)
+			keepFirst(failed, err)
+			keepFirst(failed, w.reschedule(ctx, tx, r, logger, err))
+			return nil
 		}
 	}
 
@@ -192,14 +199,15 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 var errPathInUse = errors.New("a new object is being written at this path; retrying later")
 
 // reschedule records a failed or deferred attempt and pushes the debt out by
-// the backoff. It returns nil: the attempts/last_error write MUST survive, and
+// the backoff. It returns the write's own failure, for the tick to report; it
+// never aborts the tick: the attempts/last_error write MUST survive, and
 // nothing was settled for this row, so the tick may still commit.
 func (w *PurgeDrainer) reschedule(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePurgesRow, logger *zap.Logger, cause error) error {
 	backoff := w.backoffFor(r.Attempts)
 	if err := w.Q.WithTx(tx).ReschedulePendingPurge(ctx, r.ID, ptrTo(cause.Error()),
 		pgtype.Interval{Microseconds: backoff.Microseconds(), Valid: true}); err != nil {
 		logger.Warn("purge drainer: reschedule failed", zap.Error(err))
-		return nil
+		return err
 	}
 	logger.Warn("purge drainer: bytes not deleted; will retry",
 		zap.Duration("retry_in", backoff), zap.Error(cause))

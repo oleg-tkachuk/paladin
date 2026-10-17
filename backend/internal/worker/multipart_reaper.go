@@ -61,23 +61,26 @@ func (r *MultipartReaper) Run(ctx context.Context) error {
 		r.BatchSize = DefaultMultipartReaperBatchSize
 	}
 	return RunTicker(ctx, "multipart_reaper", r.Interval, func(ctx context.Context) error {
-		r.Sweep(ctx)
-		return nil
+		return r.Sweep(ctx)
 	})
 }
 
 // Sweep reaps one batch of sessions older than TTL. Exported so a test can
 // drive a single tick without the ticker.
-func (r *MultipartReaper) Sweep(ctx context.Context) {
+//
+// A session that fails is logged and left for the next sweep; the rest of the
+// batch still runs, and the first failure is returned.
+func (r *MultipartReaper) Sweep(ctx context.Context) error {
 	cutoff := pgtype.Timestamptz{Time: time.Now().UTC().Add(-r.TTL), Valid: true}
 	rows, err := r.Q.ListStaleMultipartUploads(ctx, cutoff, r.BatchSize)
 	if err != nil {
 		r.log().Warn("list stale multipart uploads failed", zap.Error(err))
-		return
+		return err
 	}
+	var first error
 	for _, row := range rows {
 		if ctx.Err() != nil {
-			return
+			return first
 		}
 		tenantID := uuid.UUID(row.TenantID.Bytes)
 		// Abort the S3 session first. If it fails we keep the DB row so
@@ -90,6 +93,7 @@ func (r *MultipartReaper) Sweep(ctx context.Context) {
 				zap.String("tenant_id", tenantID.String()),
 				zap.Error(err),
 			)
+			keepFirst(&first, err)
 			continue
 		}
 		// Through the repo, not the queries: the delete has to run in a
@@ -98,6 +102,7 @@ func (r *MultipartReaper) Sweep(ctx context.Context) {
 		if err := r.Sessions.DeleteSession(ctx, uuid.UUID(row.ID.Bytes).String()); err != nil {
 			r.log().Warn("delete multipart session row failed",
 				zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()), zap.Error(err))
+			keepFirst(&first, err)
 			continue
 		}
 		r.log().Info("reaped abandoned multipart upload",
@@ -105,6 +110,7 @@ func (r *MultipartReaper) Sweep(ctx context.Context) {
 			zap.String("tenant_id", tenantID.String()),
 		)
 	}
+	return first
 }
 
 func (r *MultipartReaper) log() *zap.Logger {

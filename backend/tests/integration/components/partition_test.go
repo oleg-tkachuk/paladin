@@ -109,7 +109,9 @@ func TestPartitionMaintainerRoutesOutOfDefault(t *testing.T) {
 		},
 		Logger: zap.NewNop(),
 	}
-	m.RunOnce(ctx)
+	if err := m.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce = %v, want nil", err)
+	}
 
 	// Every row moved into a real partition, none was lost, and the NULL
 	// tenant survived the move.

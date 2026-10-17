@@ -39,3 +39,12 @@ func RunTicker(ctx context.Context, name string, interval time.Duration, fn func
 		}
 	}
 }
+
+// keepFirst stores err in *first unless an earlier error is already there.
+// Ticks that log a failure and carry on through the rest of their batch use it
+// to return the first failure they met, which is what RunTicker records.
+func keepFirst(first *error, err error) {
+	if *first == nil {
+		*first = err
+	}
+}

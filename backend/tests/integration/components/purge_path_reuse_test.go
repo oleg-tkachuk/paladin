@@ -51,8 +51,10 @@ func TestPurgeDrainerSparesAReusedPath(t *testing.T) {
 	}
 
 	// Still uploading: whose bytes sit at the key is unknown, so neither
-	// delete nor settle.
-	d.Sweep(ctx)
+	// delete nor settle. Deferring is not a failure.
+	if err := d.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep = %v, want nil: a deferred debt is not a failed tick", err)
+	}
 	if deleter.calls != 0 {
 		t.Fatalf("the drainer deleted the bytes at a path a new upload holds (%d calls)", deleter.calls)
 	}
@@ -63,7 +65,9 @@ func TestPurgeDrainerSparesAReusedPath(t *testing.T) {
 	// Uploaded: its write replaced the old bytes, so the debt is paid.
 	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, newer.ObjectID)
 	mustExec(t, ctx, pool, `UPDATE pending_purges SET next_attempt_at = now() WHERE id = $1`, debt)
-	d.Sweep(ctx)
+	if err := d.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep = %v, want nil", err)
+	}
 	if deleter.calls != 0 {
 		t.Fatalf("the drainer deleted a live object's bytes (%d calls)", deleter.calls)
 	}

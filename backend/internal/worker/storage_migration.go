@@ -244,10 +244,7 @@ func (w *StorageMigrationWorker) Run(ctx context.Context) error {
 	if w.Now == nil {
 		w.Now = time.Now
 	}
-	return RunTicker(ctx, "storage-migration", w.Interval, func(ctx context.Context) error {
-		w.tick(ctx)
-		return nil
-	})
+	return RunTicker(ctx, "storage-migration", w.Interval, w.tick)
 }
 
 func (w *StorageMigrationWorker) now() time.Time {
@@ -257,15 +254,19 @@ func (w *StorageMigrationWorker) now() time.Time {
 	return time.Now()
 }
 
-func (w *StorageMigrationWorker) tick(ctx context.Context) {
+// tick advances every active migration one step, carrying on past one that
+// fails, and returns the first failure. A step dropped because the migration
+// moved on, or deferred behind writes made during a rollback, is not one.
+func (w *StorageMigrationWorker) tick(ctx context.Context) error {
 	migs, err := w.Repo.ListActive(ctx, 50)
 	if err != nil {
 		w.log().Warn("list active migrations failed", zap.Error(err))
-		return
+		return err
 	}
+	var first error
 	for _, m := range migs {
 		if ctx.Err() != nil {
-			return
+			return first
 		}
 		// A step error is transient — log and retry on the next tick. Terminal
 		// failures set state='failed' inside the step and return nil.
@@ -279,8 +280,10 @@ func (w *StorageMigrationWorker) tick(ctx context.Context) {
 			w.log().Warn("migration step failed; will retry",
 				zap.String("tenant_id", m.TenantID.String()),
 				zap.String("state", m.State), zap.Error(err))
+			keepFirst(&first, err)
 		}
 	}
+	return first
 }
 
 func (w *StorageMigrationWorker) advance(ctx context.Context, m StorageMigration) error {

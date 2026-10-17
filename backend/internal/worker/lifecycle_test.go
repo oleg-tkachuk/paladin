@@ -2,12 +2,16 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
@@ -17,10 +21,11 @@ import (
 type fakeBucketSource struct {
 	buckets  []admindomain.Bucket
 	bindings map[string][]CollectionBinding
+	listErr  error
 }
 
 func (f *fakeBucketSource) ListBucketsWithLifecycle(_ context.Context) ([]admindomain.Bucket, error) {
-	return f.buckets, nil
+	return f.buckets, f.listErr
 }
 func (f *fakeBucketSource) ListCollectionBindings(_ context.Context, backend, bucket string) ([]CollectionBinding, error) {
 	return f.bindings[backend+"/"+bucket], nil
@@ -40,13 +45,19 @@ func (f *fakeObjIter) IterateObjects(_ context.Context, _ uuid.UUID, _ string, c
 }
 
 type fakeSoftDeleter struct {
-	mu      sync.Mutex
-	deleted []uuid.UUID
+	mu       sync.Mutex
+	deleted  []uuid.UUID
+	attempts int
+	err      error // returned by every SoftDelete when set
 }
 
 func (f *fakeSoftDeleter) SoftDelete(_ context.Context, id uuid.UUID, _ int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.attempts++
+	if f.err != nil {
+		return f.err
+	}
 	f.deleted = append(f.deleted, id)
 	return nil
 }
@@ -57,7 +68,7 @@ func TestBuildExpirersDropsRulesWithoutExpiration(t *testing.T) {
 		{ID: "valid", Enabled: true, Expiration: &admindomain.LifecycleExpiration{After: 24 * time.Hour}},
 		{ID: "zero", Enabled: true, Expiration: &admindomain.LifecycleExpiration{After: 0}},
 	}
-	got := buildExpirers(rules, time.Now(), nil, zap.NewNop())
+	got, _ := buildExpirers(rules, time.Now(), nil, zap.NewNop())
 	if len(got) != 1 || got[0].id != "valid" {
 		t.Errorf("expected one expirer 'valid', got %+v", got)
 	}
@@ -94,7 +105,7 @@ func TestExpirerCELMatchGatesExpiration(t *testing.T) {
 		Match:      `tags["archive"] == "true"`,
 		Expiration: &admindomain.LifecycleExpiration{After: 1 * time.Hour},
 	}}
-	expirers := buildExpirers(rules, now, eval, zap.NewNop())
+	expirers, _ := buildExpirers(rules, now, eval, zap.NewNop())
 	if len(expirers) != 1 {
 		t.Fatalf("expected 1 expirer, got %d", len(expirers))
 	}
@@ -124,7 +135,7 @@ func TestExpirerMalformedCELMatchSkipsRule(t *testing.T) {
 		Match:      `not a valid expression !@#`,
 		Expiration: &admindomain.LifecycleExpiration{After: 1 * time.Hour},
 	}}
-	got := buildExpirers(rules, time.Now(), eval, zap.NewNop())
+	got, _ := buildExpirers(rules, time.Now(), eval, zap.NewNop())
 	if len(got) != 0 {
 		t.Errorf("malformed match should drop the rule, got %d expirers", len(got))
 	}
@@ -139,7 +150,7 @@ func TestExpirerMatchWithoutEvaluatorSkipped(t *testing.T) {
 	}}
 	// Pass nil evaluator — rule with non-empty Match must be skipped
 	// (fail-closed) rather than degrading to time-only.
-	got := buildExpirers(rules, time.Now(), nil, zap.NewNop())
+	got, _ := buildExpirers(rules, time.Now(), nil, zap.NewNop())
 	if len(got) != 0 {
 		t.Errorf("rule with match but no evaluator should be dropped, got %d", len(got))
 	}
@@ -179,7 +190,9 @@ func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
 		SoftDeleter: sd,
 		Now:         time.Now,
 	}
-	w.tick(context.Background())
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
 
 	if len(sd.deleted) != 1 || sd.deleted[0] != idOld {
 		t.Errorf("expected only idOld deleted, got %+v", sd.deleted)
@@ -198,7 +211,7 @@ func TestExpirerMatchesByKeyAndUpdatedAt(t *testing.T) {
 		Match:      `key.startsWith("logs/") && updated_at < timestamp("2100-01-01T00:00:00Z")`,
 		Expiration: &admindomain.LifecycleExpiration{After: 1 * time.Hour},
 	}}
-	expirers := buildExpirers(rules, now, eval, zap.NewNop())
+	expirers, _ := buildExpirers(rules, now, eval, zap.NewNop())
 	if len(expirers) != 1 {
 		t.Fatalf("expected 1 expirer, got %d", len(expirers))
 	}
@@ -208,5 +221,117 @@ func TestExpirerMatchesByKeyAndUpdatedAt(t *testing.T) {
 	}
 	if ok, err := expirers[0].matches(LifecycleObjectRow{Key: "data/a", CreatedAt: old, UpdatedAt: old}); err != nil || ok {
 		t.Errorf("data/ row should not match: ok=%v err=%v", ok, err)
+	}
+}
+
+// The rule's expiration window, and the age of objects well past it.
+const (
+	lifecycleTestWindow = 24 * time.Hour
+	lifecycleTestAge    = 2 * lifecycleTestWindow
+)
+
+// expiringFixture is one bucket with one binding holding two objects past
+// the rule's window, so a tick tries to expire both.
+func expiringFixture() (*fakeBucketSource, *fakeObjIter, CollectionBinding, admindomain.Bucket) {
+	bind := CollectionBinding{TenantID: uuid.Must(uuid.NewV7()), Collection: "logs"}
+	bucket := admindomain.Bucket{
+		BackendID:  "primary",
+		BucketName: "paladin-archive",
+		LifecycleRules: []admindomain.LifecycleRule{{
+			ID:         "expire-old",
+			Enabled:    true,
+			Expiration: &admindomain.LifecycleExpiration{After: lifecycleTestWindow},
+		}},
+	}
+	src := &fakeBucketSource{
+		buckets:  []admindomain.Bucket{bucket},
+		bindings: map[string][]CollectionBinding{bucket.BackendID + "/" + bucket.BucketName: {bind}},
+	}
+	old := time.Now().Add(-lifecycleTestAge)
+	objs := &fakeObjIter{rows: []LifecycleObjectRow{
+		{ObjectID: uuid.Must(uuid.NewV7()), Key: "logs/a", State: string(statemachine.StateAvailable), CreatedAt: old},
+		{ObjectID: uuid.Must(uuid.NewV7()), Key: "logs/b", State: string(statemachine.StateAvailable), CreatedAt: old},
+	}}
+	return src, objs, bind, bucket
+}
+
+// A soft-delete the state machine refuses fails the tick, and the other
+// objects are still tried: one stuck row must not stall expiry for the rest.
+func TestLifecycleWorkerTickReturnsSoftDeleteFailure(t *testing.T) {
+	src, objs, _, _ := expiringFixture()
+	sd := &fakeSoftDeleter{err: errors.New("state machine unavailable")}
+	w := &LifecycleWorker{Buckets: src, Objects: objs, SoftDeleter: sd, Now: time.Now}
+
+	if err := w.tick(context.Background()); !errors.Is(err, sd.err) {
+		t.Errorf("tick = %v, want %v", err, sd.err)
+	}
+	if sd.attempts != len(objs.rows) {
+		t.Errorf("soft-delete attempts = %d, want %d: a failure must not stop the rest", sd.attempts, len(objs.rows))
+	}
+}
+
+func TestLifecycleWorkerTickReturnsListFailure(t *testing.T) {
+	src := &fakeBucketSource{listErr: errors.New("bucket store unavailable")}
+	w := &LifecycleWorker{Buckets: src, Now: time.Now}
+	if err := w.tick(context.Background()); !errors.Is(err, src.listErr) {
+		t.Errorf("tick = %v, want %v", err, src.listErr)
+	}
+}
+
+// A per-object line names where the object lives: without tenant, bucket and
+// collection an operator cannot find the object an object_id refers to.
+func TestLifecycleWorkerSoftDeleteFailureNamesTheObject(t *testing.T) {
+	src, objs, bind, bucket := expiringFixture()
+	core, logs := observer.New(zapcore.WarnLevel)
+	w := &LifecycleWorker{
+		Buckets: src, Objects: objs, Now: time.Now, Logger: zap.New(core),
+		SoftDeleter: &fakeSoftDeleter{err: errors.New("state machine unavailable")},
+	}
+	_ = w.tick(context.Background()) // fails by design; the log is what this test reads
+
+	lines := logs.FilterMessage("failed to soft-delete object").All()
+	if len(lines) != len(objs.rows) {
+		t.Fatalf("soft-delete failure lines = %d, want %d", len(lines), len(objs.rows))
+	}
+	want := map[string]string{
+		logKeyTenant:     bind.TenantID.String(),
+		logKeyCollection: bind.Collection,
+		logKeyBackend:    bucket.BackendID,
+		logKeyBucket:     bucket.BucketName,
+		logKeyObjectID:   objs.rows[0].ObjectID.String(),
+		logKeyKey:        objs.rows[0].Key,
+	}
+	assertLogFields(t, lines[0], want)
+}
+
+// assertLogFields checks that entry carries every key in want with its value.
+func assertLogFields(t *testing.T, entry observer.LoggedEntry, want map[string]string) {
+	t.Helper()
+	got := entry.ContextMap()
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%q: field %q = %v, want %q", entry.Message, k, got[k], v)
+		}
+	}
+}
+
+// A rule that cannot run is skipped and reported: the tick returns it, so the
+// failing-worker alert sees a bucket whose expiry stopped.
+func TestBuildExpirersReportsARuleItSkips(t *testing.T) {
+	const keptRule, brokenRule = "kept", "broken"
+	week := 7 * 24 * time.Hour
+	rules := []admindomain.LifecycleRule{
+		{ID: keptRule, Enabled: true, Expiration: &admindomain.LifecycleExpiration{After: week}},
+		{ID: brokenRule, Enabled: true, Match: "size_bytes >", Expiration: &admindomain.LifecycleExpiration{After: week}},
+	}
+	got, err := buildExpirers(rules, time.Now(), nil, zap.NewNop())
+	if err == nil || !strings.Contains(err.Error(), brokenRule) {
+		t.Fatalf("err = %v, want it to name %s", err, brokenRule)
+	}
+	if len(got) != 1 || got[0].id != keptRule {
+		t.Errorf("expirers = %+v, want only %s", got, keptRule)
+	}
+	if _, err := buildExpirers(rules[:1], time.Now(), nil, zap.NewNop()); err != nil {
+		t.Errorf("a runnable rule reported %v", err)
 	}
 }
