@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -595,18 +596,70 @@ func (h *Handler) authenticateClient(r *http.Request, client Client) error {
 // ─── /register (RFC 7591 DCR) ────────────────────────────────────────────────
 
 type registerRequest struct {
-	ClientName              string   `json:"client_name"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	Scopes                  []string `json:"scope_list"`
+	ClientName   string   `json:"client_name"`
+	RedirectURIs []string `json:"redirect_uris"`
+	// Scope is RFC 7591's: space-separated. ScopeList is this server's older
+	// array form; the two are merged.
+	Scope                   string   `json:"scope"`
+	ScopeList               []string `json:"scope_list"`
 	Audiences               []string `json:"audiences"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 }
 
+// registerResponse is the RFC 7591 §3.2.1 client information response.
 type registerResponse struct {
-	ClientID     string   `json:"client_id"`
-	ClientSecret string   `json:"client_secret,omitempty"`
-	ClientName   string   `json:"client_name"`
-	RedirectURIs []string `json:"redirect_uris"`
+	ClientID                string   `json:"client_id"`
+	ClientSecret            string   `json:"client_secret,omitempty"`
+	ClientIDIssuedAt        int64    `json:"client_id_issued_at"`
+	ClientName              string   `json:"client_name"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	Scope                   string   `json:"scope"`
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+}
+
+// The token endpoint authentication methods a client registers with.
+const (
+	authMethodNone        = "none"
+	authMethodSecretBasic = "client_secret_basic"
+)
+
+// registrableAudiences are the audiences a client may register for. The
+// IAM plane is not one: a client acts on a user's data, not their account.
+var registrableAudiences = []string{auth.AudienceData, auth.AudienceAdmin, auth.AudienceMCP}
+
+// defaultRegisteredScopes is the ceiling a client gets when it names none:
+// both scopes, so the consent screen — where the user picks — decides.
+var defaultRegisteredScopes = []string{auth.OAuthScopeRead, auth.OAuthScopeWrite}
+
+// registeredAudiences is what a self-registering client may be issued: the
+// audiences it named, each a registrable one, or by default the MCP server's
+// when this server knows it — the client that registers itself is almost
+// always an agent finding the MCP server — and else the data plane's.
+func (h *Handler) registeredAudiences(requested []string) ([]string, bool) {
+	if len(requested) == 0 {
+		if h.mcpResource != "" {
+			return []string{auth.AudienceMCP}, true
+		}
+		return []string{auth.AudienceData}, true
+	}
+	for _, a := range requested {
+		if !slices.Contains(registrableAudiences, a) {
+			return nil, false
+		}
+	}
+	return requested, true
+}
+
+// registeredScopes merges the two spellings and falls back to the default.
+func registeredScopes(req registerRequest) []string {
+	scopes := append(splitScopes(req.Scope), req.ScopeList...)
+	if len(scopes) == 0 {
+		return slices.Clone(defaultRegisteredScopes)
+	}
+	slices.Sort(scopes)
+	return slices.Compact(scopes)
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -629,20 +682,34 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	public := req.TokenEndpointAuthMethod == "" || req.TokenEndpointAuthMethod == "none"
+	public := req.TokenEndpointAuthMethod == "" || req.TokenEndpointAuthMethod == authMethodNone
+	audiences, ok := h.registeredAudiences(req.Audiences)
+	if !ok {
+		h.jsonError(w, http.StatusBadRequest, "invalid_client_metadata", "audiences must be among "+strings.Join(registrableAudiences, ", "))
+		return
+	}
 
 	client := Client{
 		ClientID:         "paladin-" + uuid.Must(uuid.NewV7()).String(),
 		ClientName:       req.ClientName,
 		RedirectURIs:     req.RedirectURIs,
-		AllowedScopes:    req.Scopes,
-		AllowedAudiences: req.Audiences,
+		AllowedScopes:    registeredScopes(req),
+		AllowedAudiences: audiences,
 		Public:           public,
 	}
+	method := authMethodNone
+	if !public {
+		method = authMethodSecretBasic
+	}
 	resp := registerResponse{
-		ClientID:     client.ClientID,
-		ClientName:   client.ClientName,
-		RedirectURIs: client.RedirectURIs,
+		ClientID:                client.ClientID,
+		ClientIDIssuedAt:        h.now().Unix(),
+		ClientName:              client.ClientName,
+		RedirectURIs:            client.RedirectURIs,
+		Scope:                   scopesJoin(client.AllowedScopes),
+		GrantTypes:              []string{GrantTypeAuthorizationCode, GrantTypeRefreshToken},
+		ResponseTypes:           []string{responseTypeCode},
+		TokenEndpointAuthMethod: method,
 	}
 	if !public {
 		secret, _, err := auth.GenerateApiKeySecret()
@@ -667,6 +734,13 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+// schemeHTTP is allowed for a native client's loopback redirect only (RFC
+// 8252 §7.3): plain HTTP anywhere else would hand the code to the network.
+const schemeHTTP = "http"
+
+// loopbackHosts are the redirect hosts RFC 8252 counts as the device itself.
+var loopbackHosts = []string{"localhost", "127.0.0.1", "::1"}
+
 func (h *Handler) schemeAllowed(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme == "" {
@@ -677,9 +751,13 @@ func (h *Handler) schemeAllowed(rawURL string) bool {
 		allowed = []string{"https"}
 	}
 	for _, s := range allowed {
-		if strings.EqualFold(u.Scheme, s) {
-			return true
+		if !strings.EqualFold(u.Scheme, s) {
+			continue
 		}
+		if strings.EqualFold(u.Scheme, schemeHTTP) {
+			return slices.Contains(loopbackHosts, strings.ToLower(u.Hostname()))
+		}
+		return true
 	}
 	return false
 }

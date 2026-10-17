@@ -14,10 +14,13 @@ const WellKnownAuthorizationServer = "/.well-known/oauth-authorization-server"
 // metadataMaxAge is how long a client may cache the metadata document.
 const metadataMaxAge = "public, max-age=300"
 
+// responseTypeCode is the one response type: the authorization code flow.
+const responseTypeCode = "code"
+
 // The RFC 8414 values this server supports: the code flow only, PKCE S256
 // only, a public client or a confidential one over HTTP Basic or the form.
 var (
-	responseTypesSupported            = []string{"code"}
+	responseTypesSupported            = []string{responseTypeCode}
 	codeChallengeMethodsSupported     = []string{PKCEMethodS256}
 	tokenEndpointAuthMethodsSupported = []string{"none", "client_secret_basic", "client_secret_post"}
 )
