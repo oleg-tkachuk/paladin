@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect/v2"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -26,9 +28,48 @@ const exchangeCacheMaxEntries = 1024
 // exchangeErrorBodyLimit bounds how much of a refusal is read for its error.
 const exchangeErrorBodyLimit = 1 << 12
 
-// ErrExchangeRefused is returned when the Authorization Server refuses an
-// exchange; the error names the RFC 6749 code it gave.
+// ErrExchangeRefused is what every ExchangeRefusal is.
 var ErrExchangeRefused = errors.New("mcp: token exchange refused")
+
+// The RFC 6749 / RFC 8693 errors the Authorization Server answers an
+// exchange with, as far as they tell the agent something different.
+const (
+	oauthErrInvalidGrant  = "invalid_grant"
+	oauthErrInvalidTarget = "invalid_target"
+	oauthErrSlowDown      = "slow_down"
+)
+
+// ExchangeRefusal is the Authorization Server refusing to exchange a caller's
+// token for Audience. Code is the OAuth error, Description its words.
+type ExchangeRefusal struct {
+	Audience    string
+	Status      int
+	Code        string
+	Description string
+}
+
+func (e *ExchangeRefusal) Error() string {
+	return fmt.Sprintf("%s for %s: %d %s: %s", ErrExchangeRefused, e.Audience, e.Status, e.Code, e.Description)
+}
+
+func (e *ExchangeRefusal) Is(target error) bool { return target == ErrExchangeRefused }
+
+// connectCode is the Connect code a call fails with when its token could not
+// be exchanged. The caller's own token, or what it may hold, is the cause of
+// most refusals; an unauthenticated or unauthorized MCP client is the
+// operator's to fix and reads as an internal failure.
+func (e *ExchangeRefusal) connectCode() connect.Code {
+	switch e.Code {
+	case oauthErrInvalidGrant:
+		return connect.CodeUnauthenticated
+	case oauthErrInvalidTarget:
+		return connect.CodePermissionDenied
+	case oauthErrSlowDown:
+		return connect.CodeResourceExhausted
+	default:
+		return connect.CodeInternal
+	}
+}
 
 // Exchanger trades a caller's paladin-mcp token for one per plane at the
 // Authorization Server (RFC 8693, ADR-0036), as the confidential client the
@@ -142,7 +183,10 @@ func (e *Exchanger) exchange(ctx context.Context, subject, audience string) (exc
 			Description string `json:"error_description"`
 		}
 		_ = json.NewDecoder(io.LimitReader(resp.Body, exchangeErrorBodyLimit)).Decode(&refusal)
-		return exchanged{}, fmt.Errorf("%w for %s: %d %s: %s", ErrExchangeRefused, audience, resp.StatusCode, refusal.Error, refusal.Description)
+		r := &ExchangeRefusal{Audience: audience, Status: resp.StatusCode, Code: refusal.Error, Description: refusal.Description}
+		// A Connect error, so the SDK keeps its code rather than reading an
+		// unknown failure as the plane being unavailable.
+		return exchanged{}, connect.NewError(r.connectCode(), r.Error()).WithCause(r)
 	}
 	var body struct {
 		AccessToken     string `json:"access_token"`
