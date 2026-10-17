@@ -430,7 +430,7 @@ func (h *Handler) listRegistered(ctx context.Context, st *adminv1.MCPOAuthState)
 			AllowedAudiences: c.AllowedAudiences,
 			TokenExchange:    isSeed && sc.TokenExchange,
 			SkipConsent:      isSeed && sc.SkipConsent,
-			Dynamic:          !isSeed,
+			Dynamic:          c.SelfRegistered,
 			CreatedAt:        timestamppb.New(c.CreatedAt),
 		})
 	}

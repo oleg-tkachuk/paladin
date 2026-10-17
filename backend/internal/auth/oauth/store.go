@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,7 +33,10 @@ type Client struct {
 	AllowedAudiences []string
 	SecretHash       []byte
 	Public           bool
-	CreatedAt        time.Time
+	// SelfRegistered is a client that registered itself (RFC 7591), not one
+	// seeded from the configuration. Only these are reaped.
+	SelfRegistered bool
+	CreatedAt      time.Time
 }
 
 // AuthCode is a short-lived, single-use authorization code bound to a PKCE
@@ -58,6 +62,21 @@ const MaxListedClients = 500
 // ClientLister lists the registered clients, oldest first.
 type ClientLister interface {
 	ListClients(ctx context.Context) ([]Client, error)
+}
+
+// ClientDeleter removes a registered client. Its authorization codes and its
+// grants — the refresh tokens issued to it — go with it, by cascade.
+type ClientDeleter interface {
+	// DeleteClient returns ErrClientNotFound when no client has the id.
+	DeleteClient(ctx context.Context, clientID string) error
+}
+
+// ClientReaper removes self-registered clients nobody uses.
+type ClientReaper interface {
+	// ReapIdleClients deletes up to limit self-registered clients created
+	// before createdBefore that hold neither a grant live at now nor an
+	// authorization code still redeemable at now, and returns how many.
+	ReapIdleClients(ctx context.Context, createdBefore, now time.Time, limit int) (int64, error)
 }
 
 // Store is the OAuth AS persistence surface.
@@ -87,35 +106,51 @@ func GenerateCode() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
 
-// PgxStore implements Store over a pgxpool.Pool. uuid columns are passed as
+// DB is what PgxStore runs its statements on: a pool, or a transaction —
+// which is how a test runs them as a given role.
+type DB interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+var (
+	_ DB = (*pgxpool.Pool)(nil)
+	_ DB = (pgx.Tx)(nil)
+)
+
+// PgxStore implements Store over a DB. uuid columns are passed as
 // strings with ::uuid casts and scanned back as strings — pgx v5's default
 // type map doesn't register google/uuid, and this keeps the store free of
 // pgtype plumbing.
 type PgxStore struct {
-	pool *pgxpool.Pool
+	pool DB
 }
 
-func NewPgxStore(pool *pgxpool.Pool) *PgxStore { return &PgxStore{pool: pool} }
+func NewPgxStore(pool DB) *PgxStore { return &PgxStore{pool: pool} }
 
 var (
-	_ Store        = (*PgxStore)(nil)
-	_ ClientLister = (*PgxStore)(nil)
+	_ Store         = (*PgxStore)(nil)
+	_ ClientLister  = (*PgxStore)(nil)
+	_ ClientDeleter = (*PgxStore)(nil)
+	_ ClientReaper  = (*PgxStore)(nil)
 )
 
 func (s *PgxStore) UpsertClient(ctx context.Context, c Client) error {
 	const q = `
 INSERT INTO oauth_clients
-    (client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, secret_hash, is_public)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+    (client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, secret_hash, is_public, self_registered)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (client_id) DO UPDATE SET
     client_name       = EXCLUDED.client_name,
     redirect_uris     = EXCLUDED.redirect_uris,
     allowed_scopes    = EXCLUDED.allowed_scopes,
     allowed_audiences = EXCLUDED.allowed_audiences,
     secret_hash       = EXCLUDED.secret_hash,
-    is_public         = EXCLUDED.is_public`
+    is_public         = EXCLUDED.is_public,
+    self_registered   = EXCLUDED.self_registered`
 	_, err := s.pool.Exec(ctx, q,
-		c.ClientID, c.ClientName, nonNil(c.RedirectURIs), nonNil(c.AllowedScopes), nonNil(c.AllowedAudiences), c.SecretHash, c.Public)
+		c.ClientID, c.ClientName, nonNil(c.RedirectURIs), nonNil(c.AllowedScopes), nonNil(c.AllowedAudiences), c.SecretHash, c.Public, c.SelfRegistered)
 	return err
 }
 
@@ -130,12 +165,12 @@ func nonNil(s []string) []string {
 
 func (s *PgxStore) GetClient(ctx context.Context, clientID string) (Client, error) {
 	const q = `
-SELECT client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, secret_hash, is_public, created_at
+SELECT client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, secret_hash, is_public, self_registered, created_at
 FROM oauth_clients WHERE client_id = $1`
 	var c Client
 	err := s.pool.QueryRow(ctx, q, clientID).Scan(
 		&c.ClientID, &c.ClientName, &c.RedirectURIs, &c.AllowedScopes, &c.AllowedAudiences,
-		&c.SecretHash, &c.Public, &c.CreatedAt)
+		&c.SecretHash, &c.Public, &c.SelfRegistered, &c.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Client{}, ErrClientNotFound
@@ -149,7 +184,7 @@ FROM oauth_clients WHERE client_id = $1`
 // first, without their secret hashes.
 func (s *PgxStore) ListClients(ctx context.Context) ([]Client, error) {
 	const q = `
-SELECT client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, is_public, created_at
+SELECT client_id, client_name, redirect_uris, allowed_scopes, allowed_audiences, is_public, self_registered, created_at
 FROM oauth_clients ORDER BY created_at, client_id LIMIT $1`
 	rows, err := s.pool.Query(ctx, q, MaxListedClients)
 	if err != nil {
@@ -160,12 +195,47 @@ FROM oauth_clients ORDER BY created_at, client_id LIMIT $1`
 	for rows.Next() {
 		var c Client
 		if err := rows.Scan(&c.ClientID, &c.ClientName, &c.RedirectURIs, &c.AllowedScopes,
-			&c.AllowedAudiences, &c.Public, &c.CreatedAt); err != nil {
+			&c.AllowedAudiences, &c.Public, &c.SelfRegistered, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func (s *PgxStore) DeleteClient(ctx context.Context, clientID string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM oauth_clients WHERE client_id = $1`, clientID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrClientNotFound
+	}
+	return nil
+}
+
+// ReapIdleClients reads refresh_tokens, whose row-level security hides every
+// tenant but the connection's: run on a pool that bypasses it, or every
+// client looks as if it held no grant and is deleted with its users' grants.
+func (s *PgxStore) ReapIdleClients(ctx context.Context, createdBefore, now time.Time, limit int) (int64, error) {
+	const q = `
+DELETE FROM oauth_clients
+WHERE id IN (
+    SELECT c.id FROM oauth_clients c
+    WHERE c.self_registered AND c.created_at < $1
+      AND NOT EXISTS (
+          SELECT 1 FROM refresh_tokens rt
+          WHERE rt.oauth_client_id = c.client_id AND rt.revoked = FALSE AND rt.expires_at > $2)
+      AND NOT EXISTS (
+          SELECT 1 FROM oauth_authorization_codes ac
+          WHERE ac.oauth_client_id = c.id AND ac.consumed_at IS NULL AND ac.expires_at > $2)
+    ORDER BY c.created_at
+    LIMIT $3)`
+	tag, err := s.pool.Exec(ctx, q, createdBefore, now, limit)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (s *PgxStore) CreateCode(ctx context.Context, c AuthCode) error {

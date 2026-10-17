@@ -307,8 +307,13 @@ func TestRegister_DCR(t *testing.T) {
 	if !strings.HasPrefix(resp.ClientID, "paladin-") || resp.ClientSecret != "" {
 		t.Fatalf("bad DCR response (public client must have no secret): %+v", resp)
 	}
-	if _, ok := store.clients[resp.ClientID]; !ok {
-		t.Error("registered client not persisted")
+	got, ok := store.clients[resp.ClientID]
+	if !ok {
+		t.Fatal("registered client not persisted")
+	}
+	// The reaper removes only self-registered clients, so the mark is stored.
+	if !got.SelfRegistered {
+		t.Error("a client that registered itself is stored as not self-registered")
 	}
 }
 
