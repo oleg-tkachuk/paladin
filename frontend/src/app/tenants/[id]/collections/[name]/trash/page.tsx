@@ -16,6 +16,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useObjects } from "@/hooks/useObjects";
+import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { buildObjectFilter } from "@/lib/objectFilter";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
 import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
@@ -43,6 +44,11 @@ import {
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Skeleton } from "@/components/ui/Skeleton";
+import {
+  RecordDialog,
+  RecordField,
+  openableRow,
+} from "@/components/ui/RecordDialog";
 
 import { useCollection } from "../collection-context";
 import { useTenantChangesBlocked } from "../../../tenant-context";
@@ -85,6 +91,7 @@ export default function CollectionTrashPage() {
   });
   const [useRelativeTime, setUseRelativeTime] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [opened, setOpened] = useState<Object$ | null>(null);
   // The action awaiting the operator's confirmation: restore and purge, of one
   // row or of the selection, are all asked first.
   const [pending, setPending] = useState<{
@@ -261,116 +268,120 @@ export default function CollectionTrashPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((obj) => (
-                <TableRow
-                  key={obj.objectId}
-                  className="group"
-                  data-state={
-                    selected.has(obj.objectId) ? "selected" : undefined
-                  }
-                >
-                  <TableCell>
-                    <Checkbox
-                      checked={selected.has(obj.objectId)}
-                      onCheckedChange={() => toggleOne(obj.objectId)}
-                      aria-label={`Select ${obj.key}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-8 items-center justify-center rounded-md bg-destructive/15 text-destructive ring-1 ring-destructive/30">
-                        <DocumentIcon className="size-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">
-                          {obj.key.split("/").pop()}
+              filtered.map((obj) => {
+                const row = openableRow(() => setOpened(obj));
+                return (
+                  <TableRow
+                    key={obj.objectId}
+                    {...row}
+                    className={cn(row.className, "group")}
+                    data-state={
+                      selected.has(obj.objectId) ? "selected" : undefined
+                    }
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(obj.objectId)}
+                        onCheckedChange={() => toggleOne(obj.objectId)}
+                        aria-label={`Select ${obj.key}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="flex size-8 items-center justify-center rounded-md bg-destructive/15 text-destructive ring-1 ring-destructive/30">
+                          <DocumentIcon className="size-4" />
                         </div>
-                        <div
-                          className={cn(
-                            T.codeSmall,
-                            "truncate text-muted-foreground",
-                          )}
-                        >
-                          {obj.objectId}
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {obj.key.split("/").pop()}
+                          </div>
+                          <div
+                            className={cn(
+                              T.codeSmall,
+                              "truncate text-muted-foreground",
+                            )}
+                          >
+                            {obj.objectId}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden @md:table-cell">
-                    <ObjectTagBadge
-                      objectTag={obj.tags?.object_tag}
-                      linked={!!obj.tags?.object_tag}
-                    />
-                  </TableCell>
-                  <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground font-mono">
-                    {obj.contentType || "binary/octet-stream"}
-                  </TableCell>
-                  <TableCell className="hidden @md:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
-                    {formatBytes(Number(obj.sizeBytes))}
-                  </TableCell>
-                  <TableCell className="hidden @xs:table-cell text-xs text-muted-foreground whitespace-nowrap">
-                    {obj.terminatedAt
-                      ? useRelativeTime
-                        ? formatDate(timestampToDate(obj.terminatedAt))
-                        : formatDateTime(timestampToDate(obj.terminatedAt))
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="hidden @2xl:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
-                    {obj.resourceVersion || "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={Boolean(changesBlocked) || !!busyId}
-                            title={changesBlocked ?? undefined}
-                            onClick={() =>
-                              setPending({
-                                kind: "restore",
-                                ids: [obj.objectId],
-                                selection: false,
-                              })
-                            }
-                          >
-                            <ArrowUturnLeftIcon className="size-3.5" />
-                            Restore
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          Move back to the active list.
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                            disabled={Boolean(changesBlocked) || !!busyId}
-                            title={changesBlocked ?? undefined}
-                            onClick={() =>
-                              setPending({
-                                kind: "purge",
-                                ids: [obj.objectId],
-                                selection: false,
-                              })
-                            }
-                            aria-label={`Purge ${obj.key} from storage`}
-                          >
-                            <TrashIcon className="size-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          Permanently purge from storage.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell className="hidden @md:table-cell">
+                      <ObjectTagBadge
+                        objectTag={obj.tags?.object_tag}
+                        linked={!!obj.tags?.object_tag}
+                      />
+                    </TableCell>
+                    <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground font-mono">
+                      {obj.contentType || "binary/octet-stream"}
+                    </TableCell>
+                    <TableCell className="hidden @md:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
+                      {formatBytes(Number(obj.sizeBytes))}
+                    </TableCell>
+                    <TableCell className="hidden @xs:table-cell text-xs text-muted-foreground whitespace-nowrap">
+                      {obj.terminatedAt
+                        ? useRelativeTime
+                          ? formatDate(timestampToDate(obj.terminatedAt))
+                          : formatDateTime(timestampToDate(obj.terminatedAt))
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="hidden @2xl:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
+                      {obj.resourceVersion || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={Boolean(changesBlocked) || !!busyId}
+                              title={changesBlocked ?? undefined}
+                              onClick={() =>
+                                setPending({
+                                  kind: "restore",
+                                  ids: [obj.objectId],
+                                  selection: false,
+                                })
+                              }
+                            >
+                              <ArrowUturnLeftIcon className="size-3.5" />
+                              Restore
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Move back to the active list.
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              disabled={Boolean(changesBlocked) || !!busyId}
+                              title={changesBlocked ?? undefined}
+                              onClick={() =>
+                                setPending({
+                                  kind: "purge",
+                                  ids: [obj.objectId],
+                                  selection: false,
+                                })
+                              }
+                              aria-label={`Purge ${obj.key} from storage`}
+                            >
+                              <TrashIcon className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Permanently purge from storage.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -427,6 +438,41 @@ export default function CollectionTrashPage() {
           Purge
         </Button>
       </SelectionBar>
+
+      <RecordDialog
+        open={opened !== null}
+        onOpenChange={(o) => !o && setOpened(null)}
+        title={opened?.key.split("/").pop() || "Object"}
+        subtitle={opened?.objectId}
+      >
+        {opened ? (
+          <>
+            <RecordField label="Key" mono>
+              {opened.key}
+            </RecordField>
+            <RecordField label="Object tag">
+              <ObjectTagBadge
+                objectTag={opened.tags?.object_tag}
+                linked={!!opened.tags?.object_tag}
+              />
+            </RecordField>
+            <RecordField label="Content type" mono>
+              {opened.contentType || "binary/octet-stream"}
+            </RecordField>
+            <RecordField label="Size" mono>
+              {formatBytes(Number(opened.sizeBytes))}
+            </RecordField>
+            <RecordField label="Deleted">
+              {opened.terminatedAt
+                ? formatDateTime(timestampToDate(opened.terminatedAt))
+                : "—"}
+            </RecordField>
+            <RecordField label="Version" mono>
+              {opened.resourceVersion || "—"}
+            </RecordField>
+          </>
+        ) : null}
+      </RecordDialog>
 
       <ConfirmModal
         isOpen={pending?.kind === "restore"}
