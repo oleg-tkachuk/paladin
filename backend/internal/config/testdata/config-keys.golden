@@ -91,6 +91,7 @@ auth.oauth.dynamic_registration
 auth.oauth.enabled
 auth.oauth.seed_clients
 auth.oauth.token_endpoint_allowed_origins
+auth.oauth.token_exchange_rate_limit_per_minute
 auth.oauth.token_rate_limit_per_minute
 auth.refresh_token_ttl
 auth.scoped_token_max_ttl
