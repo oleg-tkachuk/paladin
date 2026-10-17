@@ -222,6 +222,12 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	// POST: the decision.
 	if r.PostForm.Get("action") != "allow" {
+		// Who refused is not known: the form is refused before it signs in.
+		h.record(r.Context(), admindomain.AuditEntry{
+			Action:       actionConsentDenied,
+			ResourceName: clientResource + client.ClientID,
+			ErrorMessage: "the user denied the request",
+		}, nil)
 		h.redirectError(w, r, registered, p.State, "access_denied", "the user denied the request")
 		return
 	}
@@ -268,6 +274,13 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if dec != cedar.DecisionAllow {
+			h.record(r.Context(), admindomain.AuditEntry{
+				ActorSubject:  u.UserID.String(),
+				ActorTenantID: u.TenantID,
+				Action:        actionConsentDenied,
+				ResourceName:  clientResource + client.ClientID,
+				ErrorMessage:  "authorization denied by policy",
+			}, grantDetail{Scopes: scopes})
 			h.redirectError(w, r, registered, p.State, "access_denied", "authorization denied by policy")
 			return
 		}
@@ -311,6 +324,12 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.record(r.Context(), admindomain.AuditEntry{
+		ActorSubject:  u.UserID.String(),
+		ActorTenantID: u.TenantID,
+		Action:        actionConsentGranted,
+		ResourceName:  clientResource + client.ClientID,
+	}, grantDetail{Audience: audience, Scopes: scopes})
 	redirectWithCode(w, r, registered, code, p.State)
 }
 
@@ -448,9 +467,16 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.issueTokens(r.Context(), w, u, authstore.OAuthGrant{
+	if h.issueTokens(r.Context(), w, u, authstore.OAuthGrant{
 		ClientID: ac.ClientID, Audience: ac.Audience, Scopes: ac.Scopes,
-	}, uuid.Nil)
+	}, uuid.Nil) {
+		h.record(r.Context(), admindomain.AuditEntry{
+			ActorSubject:  u.UserID.String(),
+			ActorTenantID: u.TenantID,
+			Action:        actionGrantRedeemed,
+			ResourceName:  clientResource + ac.ClientID,
+		}, grantDetail{Audience: ac.Audience, Scopes: ac.Scopes})
+	}
 }
 
 func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
@@ -523,28 +549,14 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 			zap.Int64("revoked", revoked),
 			zap.Error(err))
 	}
-	if h.audit == nil {
-		return
-	}
-	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
-		At:            h.now().UTC(),
+	h.record(ctx, admindomain.AuditEntry{
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
-		ActorAudience: auth.AudienceIAM,
 		Action:        actionRefreshReuse,
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "rotated refresh token replayed; token family revoked",
-	}); err != nil && h.log != nil {
-		h.log.Error("audit entry not written",
-			zap.String("action", actionRefreshReuse),
-			zap.String("user_id", userID.String()),
-			zap.Error(err))
-	}
+	}, nil)
 }
-
-// actionRefreshReuse names the audit row of a replayed rotated refresh token.
-const actionRefreshReuse = "iam.RefreshTokenReuseDetected"
 
 // tokenResponse is the RFC 6749 §5.1 success body.
 type tokenResponse struct {
@@ -557,8 +569,8 @@ type tokenResponse struct {
 
 // issueTokens mints an access token for the grant's audience + a rotating
 // refresh token that records the grant, stores the refresh row, and writes
-// the §5.1 JSON.
-func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, grant authstore.OAuthGrant, familyID uuid.UUID) {
+// the §5.1 JSON. false is a failure it has already answered.
+func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, grant authstore.OAuthGrant, familyID uuid.UUID) bool {
 	if familyID == uuid.Nil {
 		familyID = uuid.Must(uuid.NewV7())
 	}
@@ -576,7 +588,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 	})
 	if err != nil {
 		h.serverError(ctx, w, "mint access failed", err, zap.String("client_id", grant.ClientID))
-		return
+		return false
 	}
 	tokenID := uuid.Must(uuid.NewV7())
 	refresh, refreshExp, err := h.iss.MintRefresh(issuer.RefreshClaims{
@@ -584,11 +596,11 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 	})
 	if err != nil {
 		h.serverError(ctx, w, "mint refresh failed", err, zap.String("client_id", grant.ClientID))
-		return
+		return false
 	}
 	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), r2RefreshToken(tokenID, familyID, u, grant, h.now(), refreshExp)); err != nil {
 		h.serverError(ctx, w, "persist refresh failed", err, zap.String("client_id", grant.ClientID))
-		return
+		return false
 	}
 	writeJSON(w, http.StatusOK, tokenResponse{
 		AccessToken:  access,
@@ -597,6 +609,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		RefreshToken: refresh,
 		Scope:        scopesJoin(grant.Scopes),
 	})
+	return true
 }
 
 func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, grant authstore.OAuthGrant, iat, exp time.Time) authstore.RefreshToken {
@@ -770,6 +783,14 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		h.serverError(r.Context(), w, "registration failed", err)
 		return
 	}
+	// Nobody is signed in: dynamic registration is open to any caller.
+	h.record(r.Context(), admindomain.AuditEntry{
+		Action:       actionClientRegistered,
+		ResourceName: clientResource + client.ClientID,
+	}, clientDetail{
+		ClientName: client.ClientName, Audiences: client.AllowedAudiences,
+		Scopes: client.AllowedScopes, Public: client.Public,
+	})
 	writeJSON(w, http.StatusCreated, resp)
 }
 

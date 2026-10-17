@@ -78,33 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Dynamic client registration is not audited
-
-- **Status:** Deferred.
-- **Reason:** `/oauth/register` is plain HTTP on the IAM plane, outside the
-  Connect audit interceptor, so a client registering itself (RFC 7591)
-  leaves no audit row; deleting one through `OAuthClientService` does. With
-  `auth.oauth.dynamic_registration` on, any caller may register, and the
-  only trace is the client's row and its `created_at`.
-- **Definition of Done:** `handleRegister` writes an audit entry naming the
-  client id, its audiences and the caller's address, through the same
-  audit store the interceptor uses; a unit test, and the entry seen on the
-  audit page in an e2e assertion.
-- **Blockers:** none.
-
-### OAuth grants and token exchanges write no audit rows
-
-- **Status:** Deferred.
-- **Reason:** consent at `/oauth/authorize`, code redemption and refresh
-  rotation at `/oauth/token`, and the token exchange run outside the audit
-  interceptor and write no row themselves; only a replayed refresh token is
-  recorded. Who let which client in, and when, is in no trail but the
-  refresh tokens themselves.
-- **Definition of Done:** each writes a row through the audit repository
-  (which scopes it to the actor's tenant), denials included; unit tests and
-  the rows seen in an integration test.
-- **Blockers:** none.
-
 ### Worker ticks that hide their failures from the stalled-worker alert
 
 - **Status:** Deferred.

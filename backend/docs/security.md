@@ -45,6 +45,15 @@ mints a successor in the same family. Presenting a superseded token is:
 - otherwise: a replay; the whole family is revoked and an
   `iam.RefreshTokenReuseDetected` audit entry is written.
 
+The OAuth Authorization Server's endpoints are plain HTTP, outside the audit
+interceptor, and write their own rows for each change to who may reach the
+platform, each naming the client as `oauthClients/<client_id>`:
+`iam.OAuthClientRegistered` (dynamic registration; no actor), and
+`iam.OAuthConsentGranted`, `iam.OAuthConsentDenied` (by the user, before it
+signs in, or by policy) and `iam.OAuthGrantRedeemed` (the grant's first
+tokens). Refreshing a grant and exchanging its token write none, as a
+console session's refresh writes none.
+
 Logout and reuse detection clear `superseded_at`, so a deliberately ended
 session is never covered by either window (`internal/api/iam/v1/authh`).
 
