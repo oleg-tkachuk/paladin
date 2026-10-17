@@ -8,7 +8,9 @@
  *
  * MCP is spoken by hand over streamable HTTP, one JSON-RPC message a POST.
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext } from "@playwright/test";
+
+import { test, expect } from "./fixtures/resources";
 import { createHash } from "node:crypto";
 import { createClient } from "@connectrpc/connect";
 
@@ -31,6 +33,8 @@ import {
   MCP_URL,
   adminTransport,
   seedAdminTenantID,
+  seedObject,
+  seedPhysicalBucket,
 } from "./fixtures/seed";
 
 const READ_RPC = "/paladin.admin.v1.BackendService/ListBackends";
@@ -56,6 +60,8 @@ const UPLOAD_SHA256 = createHash("sha256")
 // How much of a UUID names the run's collection.
 const UNIQUE_SUFFIX = 8;
 const AUDIT_PAGE_SIZE = 50;
+// The tag the set_object_tags test writes, unique to the run.
+const TAG_KEY = "e2e-mcp";
 
 interface RPCResponse {
   result?: {
@@ -231,5 +237,50 @@ test.describe("MCP token exchange", () => {
     expect(entries.length, "the relayed write is in the audit log").toBe(1);
     expect(entries[0].relayedBy).toBe(MCP_SERVER_CLIENT_ID);
     expect(entries[0].actorAudience).toBe("paladin-data");
+  });
+
+  // A tag write through the MCP server reaches the object: the agent reads
+  // the version, as the tool asks, and the plane accepts the write under it.
+  // It used to send no version and be refused before the handler ran.
+  test("an agent sets an object's tags under the version it read", async ({
+    request,
+    makeCollection,
+  }) => {
+    const tenantId = await seedAdminTenantID();
+    const collection = await makeCollection({
+      tenantId,
+      bucket: await seedPhysicalBucket(),
+    });
+    const obj = await seedObject({
+      tenantId,
+      collection: collection.collection,
+    });
+
+    const tok = await grant(request, [SCOPE_READ, SCOPE_WRITE], MCP_RESOURCE);
+    const session = new MCPSession(request, tok.access_token);
+    await session.initialize();
+
+    const read = await session.callTool("paladin_get_object", {
+      name: obj.name,
+    });
+    expect(read.isError, read.text).toBe(false);
+    const version = (JSON.parse(read.text) as { resource_version: string })
+      .resource_version;
+    expect(version, read.text).toBeTruthy();
+
+    const marker = crypto.randomUUID();
+    const write = await session.callTool("paladin_set_object_tags", {
+      name: obj.name,
+      resource_version: version,
+      tags: { [TAG_KEY]: marker },
+    });
+    expect(write.isError, write.text).toBe(false);
+
+    const after = await session.callTool("paladin_get_object", {
+      name: obj.name,
+    });
+    const tags = (JSON.parse(after.text) as { tags?: Record<string, string> })
+      .tags;
+    expect(tags?.[TAG_KEY]).toBe(marker);
   });
 });
