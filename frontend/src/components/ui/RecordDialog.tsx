@@ -105,19 +105,36 @@ export function RecordBlock({
   );
 }
 
+// The controls a row may hold that act on their own: a click or a key on
+// one of them is its own, never the row's.
+const ROW_CONTROLS =
+  "a, button, input, select, textarea, [role=button], [role=menuitem], [role=checkbox]";
+
+function onControl(ev: React.SyntheticEvent): boolean {
+  const control = (ev.target as Element).closest(ROW_CONTROLS);
+  return (
+    control !== null &&
+    control !== ev.currentTarget &&
+    ev.currentTarget.contains(control)
+  );
+}
+
 /**
  * What makes a table row open its record: a click, or Enter or Space on the
  * focused row. Spread onto the TableRow. The row keeps its role, so it is
  * still found and read as a row of its table, named by its cells; it says it
- * opens a dialog. A key pressed on a control inside the row is that
- * control's, not the row's.
+ * opens a dialog. A link or button inside the row keeps its own click and
+ * keys.
  */
 export function openableRow(open: () => void) {
   return {
     tabIndex: 0,
     "aria-haspopup": "dialog" as const,
     className: "cursor-pointer hover:bg-muted/40",
-    onClick: open,
+    onClick: (ev: React.MouseEvent) => {
+      if (onControl(ev)) return;
+      open();
+    },
     onKeyDown: (ev: React.KeyboardEvent) => {
       if (ev.target !== ev.currentTarget) return;
       if (ev.key === "Enter" || ev.key === " ") {

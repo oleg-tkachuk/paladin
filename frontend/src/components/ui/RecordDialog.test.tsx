@@ -14,7 +14,10 @@ function Row({ open }: { open: () => void }) {
       <tbody>
         <tr {...openableRow(open)}>
           <td>
-            r-1 <button type="button">copy</button>
+            r-1 <button type="button">copy</button>{" "}
+            <a href="#r-1">
+              <span>link</span>
+            </a>
           </td>
         </tr>
       </tbody>
@@ -55,6 +58,22 @@ describe("openableRow", () => {
       key: "Enter",
     });
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe("openableRow clicks", () => {
+  it.each(["copy", "link"])("leaves a click on the row's %s to it", (name) => {
+    const open = vi.fn();
+    render(<Row open={open} />);
+    fireEvent.click(screen.getByText(name));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens on a click on the row's text", () => {
+    const open = vi.fn();
+    render(<Row open={open} />);
+    fireEvent.click(screen.getByRole("cell"));
+    expect(open).toHaveBeenCalledOnce();
   });
 });
 
