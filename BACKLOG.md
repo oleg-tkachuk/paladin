@@ -78,16 +78,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Ingested object transitions write no audit row
-
-- **Status:** Deferred.
-- **Reason:** the event-ingest pipeline promotes and soft-deletes objects
-  (`internal/eventingest/handler.go`) without an audit row, while the same
-  transition through the data-plane RPC is audited.
-- **Definition of Done:** the ingest handlers write the row the RPC would,
-  through the audit repository; an integration test.
-- **Blockers:** none.
-
 ### Admin RPCs the MCP bridge leaves off on purpose
 
 - **Status:** Won't-do (by design) unless the decision below is revisited.

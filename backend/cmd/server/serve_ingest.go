@@ -154,6 +154,9 @@ func runIngest(
 		// through the same BYPASSRLS queries.
 		Probe:   adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)),
 		Deleter: ingestSM,
+		// The transitions are recorded as the data-plane RPCs that make the
+		// same ones are; the repository writes in the object's tenant.
+		Audit: adapters.NewAuditRepoV2(ingestQueries, ingestPool),
 	}
 
 	// Build the configured driver.
