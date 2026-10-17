@@ -560,9 +560,8 @@ type MCPOAuthState struct {
 	// authorization_server_enabled reports auth.oauth.enabled: IAM serves
 	// /oauth/authorize and /oauth/token.
 	AuthorizationServerEnabled bool `protobuf:"varint,1,opt,name=authorization_server_enabled,json=authorizationServerEnabled,proto3" json:"authorization_server_enabled,omitempty"`
-	// seed_clients are the clients the configuration registers at boot.
-	// Clients added by dynamic registration live in the database and are not
-	// listed.
+	// seed_clients are the clients the configuration registers at boot, as
+	// configured; registered_clients lists what the store holds.
 	SeedClients []*MCPOAuthClient `protobuf:"bytes,2,rep,name=seed_clients,json=seedClients,proto3" json:"seed_clients,omitempty"`
 	// edge_oauth_enabled reports mcp.oauth.enabled: the MCP server challenges
 	// with 401 and serves its protected-resource metadata.
@@ -690,7 +689,10 @@ type MCPOAuthClient struct {
 	Dynamic bool `protobuf:"varint,7,opt,name=dynamic,proto3" json:"dynamic,omitempty"`
 	// created_at is when the client was registered; unset for a seed client
 	// read from the configuration.
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// configured is true for a client the configuration seeds now. It cannot
+	// be deleted: the next boot would register it again.
+	Configured    bool `protobuf:"varint,9,opt,name=configured,proto3" json:"configured,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -779,6 +781,13 @@ func (x *MCPOAuthClient) GetCreatedAt() *timestamppb.Timestamp {
 		return x.CreatedAt
 	}
 	return nil
+}
+
+func (x *MCPOAuthClient) GetConfigured() bool {
+	if x != nil {
+		return x.Configured
+	}
+	return false
 }
 
 type MCPProfile struct {
@@ -1256,7 +1265,7 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\redge_audience\x18\x05 \x01(\tR\fedgeAudience\x12,\n" +
 	"\x12exchange_client_id\x18\x06 \x01(\tR\x10exchangeClientId\x12O\n" +
 	"\x12registered_clients\x18\a \x03(\v2 .paladin.admin.v1.MCPOAuthClientR\x11registeredClients\x128\n" +
-	"\x18registered_clients_error\x18\b \x01(\tR\x16registeredClientsError\"\xb8\x02\n" +
+	"\x18registered_clients_error\x18\b \x01(\tR\x16registeredClientsError\"\xd8\x02\n" +
 	"\x0eMCPOAuthClient\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x16\n" +
 	"\x06public\x18\x02 \x01(\bR\x06public\x12%\n" +
@@ -1266,7 +1275,10 @@ const file_paladin_admin_v1_mcp_inspect_service_proto_rawDesc = "" +
 	"\fskip_consent\x18\x06 \x01(\bR\vskipConsent\x12\x18\n" +
 	"\adynamic\x18\a \x01(\bR\adynamic\x129\n" +
 	"\n" +
-	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x8a\x01\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1e\n" +
+	"\n" +
+	"configured\x18\t \x01(\bR\n" +
+	"configured\"\x8a\x01\n" +
 	"\n" +
 	"MCPProfile\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x14\n" +

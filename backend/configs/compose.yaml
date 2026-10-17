@@ -118,6 +118,9 @@ auth:
   # The redirect is never followed; the code is read off the 302.
   oauth:
     enabled: true
+    # Agents may register themselves (RFC 7591): tests/e2e/oauth-client-delete
+    # registers one and deletes it from the console.
+    dynamic_registration: true
     seed_clients:
       - client_id: "paladin-e2e-agent"
         redirect_uris: ["https://e2e-agent.invalid/callback"]

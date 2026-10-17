@@ -78,19 +78,30 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
-### Self-registered OAuth clients are never removed
+### Dynamic client registration is not audited
 
 - **Status:** Deferred.
-- **Reason:** with `auth.oauth.dynamic_registration` on, any caller may
-  register a client (RFC 7591), and nothing removes one: there is no RFC 7592
-  management endpoint, no console or RPC to delete a client, and no expiry.
-  An agent that re-registers on every install leaves a row each time; the
-  `/mcp/access` page lists them, marked as self-registered. Revoking the user's grant
-  ends the client's access, but the registration stays.
-- **Definition of Done:** an admin can delete a registered client from the
-  console (its grants go with it, as `refresh_tokens.oauth_client_id` cascades),
-  and self-registered clients with no live grant past a configured age are
-  reaped; unit tests and an e2e assertion.
+- **Reason:** `/oauth/register` is plain HTTP on the IAM plane, outside the
+  Connect audit interceptor, so a client registering itself (RFC 7591)
+  leaves no audit row; deleting one through `OAuthClientService` does. With
+  `auth.oauth.dynamic_registration` on, any caller may register, and the
+  only trace is the client's row and its `created_at`.
+- **Definition of Done:** `handleRegister` writes an audit entry naming the
+  client id, its audiences and the caller's address, through the same
+  audit store the interceptor uses; a unit test, and the entry seen on the
+  audit page in an e2e assertion.
+- **Blockers:** none.
+
+### Expired OAuth authorization codes are never purged
+
+- **Status:** Deferred.
+- **Reason:** `oauth.Store.PurgeExpiredCodes` exists and is tested, but no
+  worker job calls it, so `oauth_authorization_codes` keeps every code ever
+  issued. A code is single-use and short-lived, so the rows are harmless
+  but unbounded; they go only when their client is deleted or reaped.
+- **Definition of Done:** a worker job (or the OAuth client reaper's tick)
+  purges codes expired past a grace, on the reaper pool, with a config key,
+  its row in `backend/docs/ops-housekeeping.md`, and unit tests.
 - **Blockers:** none.
 
 ### Admin RPCs the MCP bridge leaves off on purpose
@@ -114,6 +125,8 @@ the same commit. Treat this file like a runtime invariant.
     `SetReplication` (no replicator applies it yet, see Replication below).
   - Tenant lifecycle and budget `Set`, as before; UserSettingsService, which
     holds console display preferences.
+  - `OAuthClientService.DeleteOAuthClient` — it ends every agent's grant
+    under that client, the bridge's own callers included.
 - **Definition of Done (only if revisited):** a tool per RPC in
   `internal/mcp/lifecycle_tools.go`, its `DefaultCatalog` row, and the name
   dropped from `DefaultAlwaysDeny` where it is listed there.

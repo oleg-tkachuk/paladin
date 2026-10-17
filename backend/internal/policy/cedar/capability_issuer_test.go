@@ -66,6 +66,7 @@ func TestCapabilityIssuer_CarriesNothingElse(t *testing.T) {
 		ActionRevokeAPIToken,
 		ActionReadAPIToken,
 		ActionInspectMCP,
+		ActionManageOAuthClient,
 		ActionManageTenant,
 		ActionManageBucket,
 		ActionManageCollection,
@@ -130,6 +131,7 @@ func TestPlatformAdmin_HoldsEveryCredentialAction(t *testing.T) {
 		ActionRevokeAPIToken,
 		ActionReadAPIToken,
 		ActionInspectMCP,
+		ActionManageOAuthClient,
 	} {
 		t.Run(action.String(), func(t *testing.T) {
 			if got := authzWithRoles(t, action, rolePlatformAdmin); got != DecisionAllow {

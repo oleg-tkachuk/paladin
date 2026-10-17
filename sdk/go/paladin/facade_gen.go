@@ -46,6 +46,7 @@ type AdminPlane struct {
 	Collection        paladinadminv1connect.CollectionServiceClient
 	EventSubscription paladinadminv1connect.EventSubscriptionServiceClient
 	MCPInspect        paladinadminv1connect.MCPInspectServiceClient
+	OAuthClient       paladinadminv1connect.OAuthClientServiceClient
 	PlatformOperation paladinadminv1connect.PlatformOperationServiceClient
 	Policy            paladinadminv1connect.PolicyServiceClient
 	Quota             paladinadminv1connect.QuotaServiceClient
@@ -66,6 +67,7 @@ func newAdminPlane(c *Client) *AdminPlane {
 		Collection:        paladinadminv1connect.NewCollectionServiceClient(c.rpc),
 		EventSubscription: paladinadminv1connect.NewEventSubscriptionServiceClient(c.rpc),
 		MCPInspect:        paladinadminv1connect.NewMCPInspectServiceClient(c.rpc),
+		OAuthClient:       paladinadminv1connect.NewOAuthClientServiceClient(c.rpc),
 		PlatformOperation: paladinadminv1connect.NewPlatformOperationServiceClient(c.rpc),
 		Policy:            paladinadminv1connect.NewPolicyServiceClient(c.rpc),
 		Quota:             paladinadminv1connect.NewQuotaServiceClient(c.rpc),

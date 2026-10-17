@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package paladin.admin.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1";
+
+import "buf/validate/validate.proto";
+
+// OAuthClientService manages the clients of the OAuth Authorization Server
+// (ADR-0036): the ones the configuration seeds, and the ones that registered
+// themselves (RFC 7591). MCPInspectService lists them. Platform-admin only.
+service OAuthClientService {
+  // DeleteOAuthClient removes a client with its authorization codes and every
+  // grant issued to it, in every tenant: the agents holding one must
+  // authorize again, under a new registration. A client the configuration
+  // seeds is refused with FAILED_PRECONDITION — the next boot would register
+  // it again, without its grants. NOT_FOUND when no client has the id.
+  rpc DeleteOAuthClient(DeleteOAuthClientRequest) returns (DeleteOAuthClientResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+}
+
+message DeleteOAuthClientRequest {
+  // client_id is the client's OAuth client_id, as MCPOAuthClient names it.
+  string client_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteOAuthClientResponse {}

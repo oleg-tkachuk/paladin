@@ -647,7 +647,7 @@ func TestInspectReportsOAuth(t *testing.T) {
 	if n := len(st.GetSeedClients()); n != len(as.SeedClients) {
 		t.Fatalf("seed clients = %d, want %d", n, len(as.SeedClients))
 	}
-	if c := st.GetSeedClients()[0]; c.GetClientId() != agent || !c.GetPublic() || c.GetAllowedAudiences()[0] != auth.AudienceMCP {
+	if c := st.GetSeedClients()[0]; c.GetClientId() != agent || !c.GetPublic() || c.GetAllowedAudiences()[0] != auth.AudienceMCP || !c.GetConfigured() {
 		t.Errorf("agent client = %+v", c)
 	}
 	if c := st.GetSeedClients()[1]; !c.GetTokenExchange() || c.GetPublic() {
@@ -676,14 +676,17 @@ type fakeClients struct {
 func (f fakeClients) ListClients(context.Context) ([]oauthpkg.Client, error) { return f.clients, f.err }
 
 // Every client the Authorization Server holds is listed, and the ones that
-// registered themselves are told apart from the configuration's.
+// registered themselves are told apart from the configuration's by what the
+// store recorded — a client dropped from the configuration did not register
+// itself.
 func TestInspectListsRegisteredClients(t *testing.T) {
-	const seeded, registered = "paladin-mcp-server", "paladin-0199-dcr"
+	const seeded, registered, dropped = "paladin-mcp-server", "paladin-0199-dcr", "paladin-old-agent"
 	created := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	as := config.OAuthAS{Enabled: true, SeedClients: []config.OAuthSeedClient{{ClientID: seeded, TokenExchange: true}}}
 	store := fakeClients{clients: []oauthpkg.Client{
 		{ClientID: seeded, CreatedAt: created},
-		{ClientID: registered, Public: true, AllowedAudiences: []string{auth.AudienceMCP}, CreatedAt: created},
+		{ClientID: registered, Public: true, AllowedAudiences: []string{auth.AudienceMCP}, SelfRegistered: true, CreatedAt: created},
+		{ClientID: dropped, CreatedAt: created},
 	}}
 	resp, err := NewHandler(config.MCP{}, allowAll()).WithOAuth(as).WithOAuthClients(store).
 		Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
@@ -691,14 +694,20 @@ func TestInspectListsRegisteredClients(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := resp.GetOauth().GetRegisteredClients()
-	if len(got) != 2 {
-		t.Fatalf("registered clients = %d, want 2", len(got))
+	if len(got) != 3 {
+		t.Fatalf("registered clients = %d, want 3", len(got))
 	}
-	if got[0].GetDynamic() || !got[0].GetTokenExchange() {
+	if got[0].GetDynamic() || !got[0].GetTokenExchange() || !got[0].GetConfigured() {
 		t.Errorf("seed client = %+v, want seeded and exchanging", got[0])
 	}
 	if !got[1].GetDynamic() || !got[1].GetCreatedAt().AsTime().Equal(created) {
 		t.Errorf("self-registered client = %+v", got[1])
+	}
+	if got[1].GetConfigured() {
+		t.Errorf("a self-registered client reads as configured: %+v", got[1])
+	}
+	if got[2].GetDynamic() || got[2].GetConfigured() {
+		t.Errorf("a client dropped from the configuration reads as self-registered: %+v", got[2])
 	}
 
 	// A store that cannot be read leaves the rest standing and says why.

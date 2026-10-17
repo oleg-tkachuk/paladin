@@ -19,6 +19,7 @@ import { CapabilityService } from "@/gen/paladin/admin/v1/capability_service_pb"
 import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { BillingService } from "@/gen/paladin/admin/v1/billing_service_pb";
 import { MCPInspectService } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
+import { OAuthClientService } from "@/gen/paladin/admin/v1/oauth_client_service_pb";
 
 // data plane
 import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
@@ -61,6 +62,10 @@ export const tenantBudgetClient = createClient(
 );
 export const billingClient = createClient(BillingService, adminTransport);
 export const mcpInspectClient = createClient(MCPInspectService, adminTransport);
+export const oauthClientClient = createClient(
+  OAuthClientService,
+  adminTransport,
+);
 
 // data
 export const objectClient = createClient(ObjectService, dataTransport);

@@ -569,6 +569,7 @@ what each field means, are documented in the `.proto` files under
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |
 | `MCPInspectService` | `Inspect`, `ListSessions`, `GetBridgeStatus` |
+| `OAuthClientService` | `DeleteOAuthClient` |
 | `PlatformOperationService` | `GetOperation`, `ListOperations`, `CancelOperation` |
 | `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
 | `QuotaService` | `GetQuota`, `SetQuota`, `ResetUsage` |

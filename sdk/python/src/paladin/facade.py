@@ -22,6 +22,7 @@ from paladin.admin.v1.capability_service_connect import CapabilityServiceClient,
 from paladin.admin.v1.collection_service_connect import CollectionServiceClient, CollectionServiceClientSync
 from paladin.admin.v1.event_subscription_service_connect import EventSubscriptionServiceClient, EventSubscriptionServiceClientSync
 from paladin.admin.v1.mcp_inspect_service_connect import MCPInspectServiceClient, MCPInspectServiceClientSync
+from paladin.admin.v1.oauth_client_service_connect import OAuthClientServiceClient, OAuthClientServiceClientSync
 from paladin.admin.v1.operation_service_connect import PlatformOperationServiceClient, PlatformOperationServiceClientSync
 from paladin.admin.v1.policy_service_connect import PolicyServiceClient, PolicyServiceClientSync
 from paladin.admin.v1.quota_service_connect import QuotaServiceClient, QuotaServiceClientSync
@@ -82,6 +83,7 @@ class AdminPlane:
         self.collection = CollectionServiceClientSync(address, interceptors=interceptors, **options)
         self.event_subscription = EventSubscriptionServiceClientSync(address, interceptors=interceptors, **options)
         self.mcp_inspect = MCPInspectServiceClientSync(address, interceptors=interceptors, **options)
+        self.oauth_client = OAuthClientServiceClientSync(address, interceptors=interceptors, **options)
         self.platform_operation = PlatformOperationServiceClientSync(address, interceptors=interceptors, **options)
         self.policy = PolicyServiceClientSync(address, interceptors=interceptors, **options)
         self.quota = QuotaServiceClientSync(address, interceptors=interceptors, **options)
@@ -104,6 +106,7 @@ class AsyncAdminPlane:
         self.collection = CollectionServiceClient(address, interceptors=interceptors, **options)
         self.event_subscription = EventSubscriptionServiceClient(address, interceptors=interceptors, **options)
         self.mcp_inspect = MCPInspectServiceClient(address, interceptors=interceptors, **options)
+        self.oauth_client = OAuthClientServiceClient(address, interceptors=interceptors, **options)
         self.platform_operation = PlatformOperationServiceClient(address, interceptors=interceptors, **options)
         self.policy = PolicyServiceClient(address, interceptors=interceptors, **options)
         self.quota = QuotaServiceClient(address, interceptors=interceptors, **options)
@@ -134,7 +137,7 @@ class AsyncIAMPlane:
 
 SERVICES = {
     "Data": ('BatchService', 'MultipartUploadService', 'ObjectService', 'ObjectTagService', 'OperationService', 'PresignService', 'StorageBootstrapService'),
-    "Admin": ('APITokenService', 'AuditLogService', 'BackendService', 'BillingService', 'BucketService', 'CELService', 'CapabilityService', 'CollectionService', 'EventSubscriptionService', 'MCPInspectService', 'PlatformOperationService', 'PolicyService', 'QuotaService', 'SystemService', 'TenantBudgetService', 'TenantService'),
+    "Admin": ('APITokenService', 'AuditLogService', 'BackendService', 'BillingService', 'BucketService', 'CELService', 'CapabilityService', 'CollectionService', 'EventSubscriptionService', 'MCPInspectService', 'OAuthClientService', 'PlatformOperationService', 'PolicyService', 'QuotaService', 'SystemService', 'TenantBudgetService', 'TenantService'),
     "IAM": ('AuthService', 'HealthService', 'UserService', 'UserSettingsService'),
 }
 """The services each plane holds, for tests."""

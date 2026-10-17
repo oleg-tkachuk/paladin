@@ -696,6 +696,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		AllowedScopes:    registeredScopes(req),
 		AllowedAudiences: audiences,
 		Public:           public,
+		SelfRegistered:   true,
 	}
 	method := authMethodNone
 	if !public {

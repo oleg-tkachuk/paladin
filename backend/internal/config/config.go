@@ -259,6 +259,9 @@ func (c *Config) Validate() error {
 	if err := c.validateCapabilityBounds(); err != nil {
 		return err
 	}
+	if err := c.validateOAuthClientReap(); err != nil {
+		return err
+	}
 
 	if err := c.Limits.Presign.Validate(); err != nil {
 		return err
@@ -327,6 +330,15 @@ func (c *Config) validateCapabilityBounds() error {
 	}
 	if r := c.Worker.Jobs.Capability.ExpiredFor; r != 0 && r < limes.MinPurgeRetention {
 		return fmt.Errorf("worker.jobs.capability: expired_for %s is shorter than %s", r, limes.MinPurgeRetention)
+	}
+	return nil
+}
+
+// validateOAuthClientReap refuses a running reaper with no age: every idle
+// self-registered client would be removed the moment it registered.
+func (c *Config) validateOAuthClientReap() error {
+	if r := c.Worker.Jobs.OAuthClientReap; r.Interval > 0 && r.MaxAge <= 0 {
+		return fmt.Errorf("worker.jobs.oauth_client_reap: max_age %s must be positive while interval is %s", r.MaxAge, r.Interval)
 	}
 	return nil
 }

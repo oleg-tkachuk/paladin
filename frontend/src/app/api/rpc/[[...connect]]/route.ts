@@ -35,6 +35,7 @@ import { CapabilityService } from "@/gen/paladin/admin/v1/capability_service_pb"
 import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { BillingService } from "@/gen/paladin/admin/v1/billing_service_pb";
 import { MCPInspectService } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
+import { OAuthClientService } from "@/gen/paladin/admin/v1/oauth_client_service_pb";
 
 // data plane services
 import { ObjectService } from "@/gen/paladin/data/v1/object_service_pb";
@@ -81,6 +82,7 @@ const planeServices: Record<Plane, DescService[]> = {
     TenantBudgetService,
     BillingService,
     MCPInspectService,
+    OAuthClientService,
   ],
   data: [
     ObjectService,

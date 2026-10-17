@@ -24,11 +24,17 @@ DESCRIPTOR_MODULE_SUFFIX = "_pb2"
 CONNECT_MODULE_SUFFIX = "_connect"
 OUTPUT = Path(__file__).resolve().parents[1] / "src" / "paladin" / "facade.py"
 _WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+# Words whose own capitals the split above would break apart ("OAuth" reads
+# as "O" and "Auth"); each is read as one word.
+WHOLE_WORDS = ("OAuth",)
 
 
 def attribute(service: str) -> str:
     """The plane's attribute for a service: ``APITokenService`` → ``api_token``."""
-    return _WORD_BOUNDARY.sub("_", service.removesuffix(SERVICE_SUFFIX)).lower()
+    name = service.removesuffix(SERVICE_SUFFIX)
+    for word in WHOLE_WORDS:
+        name = name.replace(word, word.capitalize())
+    return _WORD_BOUNDARY.sub("_", name).lower()
 
 
 def services(package: str) -> list[tuple[str, str]]:

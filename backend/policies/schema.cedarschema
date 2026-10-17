@@ -221,6 +221,15 @@ action "InspectMCP" appliesTo {
   context: RequestContext
 };
 
+// OAuth client management (admin plane): deleting a client of the OAuth
+// Authorization Server. Platform-admin only, checked against the caller's own
+// tenant.
+action "ManageOAuthClient" appliesTo {
+  principal: [User],
+  resource: [Tenant],
+  context: RequestContext
+};
+
 // EnsureTenantStorage (data plane). Self-service storage provisioning: a
 // tenant member ensures its own bucket and collections. The handler pins the
 // resource to the caller's tenant.

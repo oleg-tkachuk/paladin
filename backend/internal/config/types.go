@@ -555,6 +555,7 @@ type WorkerJobs struct {
 	Replication      Replication      `yaml:"replication" json:"replication"`
 	Capability       CapabilityWorker `yaml:"capability" json:"capability"`
 	APIToken         APITokenWorker   `yaml:"api_token" json:"api_token"`
+	OAuthClientReap  OAuthClientReap  `yaml:"oauth_client_reap" json:"oauth_client_reap"`
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
 	QuotaReconcile   QuotaReconcile   `yaml:"quota_reconcile" json:"quota_reconcile"`
 	PurgeDrain       PurgeDrain       `yaml:"purge_drain" json:"purge_drain"`
@@ -721,6 +722,15 @@ type DPoPNonce struct {
 type APITokenWorker struct {
 	Interval   time.Duration `yaml:"interval" json:"interval"`
 	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
+}
+
+// OAuthClientReap removes self-registered OAuth clients (RFC 7591) older than
+// max_age that hold neither a live grant nor a redeemable authorization code.
+// Seeded clients are never removed. Disable by setting interval to 0; a
+// positive interval needs a positive max_age (Config.Validate).
+type OAuthClientReap struct {
+	Interval time.Duration `yaml:"interval" json:"interval"`
+	MaxAge   time.Duration `yaml:"max_age" json:"max_age"`
 }
 
 // RefreshTokenReap drops expired refresh-token rows. Always on; tune

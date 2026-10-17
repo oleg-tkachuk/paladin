@@ -949,6 +949,11 @@ config:
         operations_ttl: 336h
       refresh_token_reap:
         interval: 1h
+      # Self-registered OAuth clients (RFC 7591) older than max_age with no
+      # live grant and no redeemable code; seeded clients are never removed.
+      oauth_client_reap:
+        interval: 1h
+        max_age: 168h
       lifecycle:
         enabled: true
         interval: 30m

@@ -30,13 +30,14 @@ import (
 var (
 	// The handler stashes the resource it acted on (apiutil.StashResource).
 	namesItsResource = map[string]bool{
-		"/paladin.admin.v1.BackendService/CreateBackend":    true,
-		"/paladin.admin.v1.TenantService/CreateTenant":      true,
-		"/paladin.admin.v1.TenantBudgetService/Set":         true,
-		"/paladin.admin.v1.CapabilityService/Issue":         true,
-		"/paladin.admin.v1.CapabilityService/Delegate":      true,
-		"/paladin.admin.v1.CapabilityService/Revoke":        true,
-		"/paladin.admin.v1.CapabilityService/RevokeBiscuit": true,
+		"/paladin.admin.v1.BackendService/CreateBackend":         true,
+		"/paladin.admin.v1.TenantService/CreateTenant":           true,
+		"/paladin.admin.v1.TenantBudgetService/Set":              true,
+		"/paladin.admin.v1.CapabilityService/Issue":              true,
+		"/paladin.admin.v1.CapabilityService/Delegate":           true,
+		"/paladin.admin.v1.CapabilityService/Revoke":             true,
+		"/paladin.admin.v1.CapabilityService/RevokeBiscuit":      true,
+		"/paladin.admin.v1.OAuthClientService/DeleteOAuthClient": true,
 	}
 	// The caller acts on itself — its session, password or settings — so the
 	// row belongs in its own tenant's trail, which the actor tenant gives it.

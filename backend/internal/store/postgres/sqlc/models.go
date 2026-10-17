@@ -523,6 +523,7 @@ type OauthClient struct {
 	SecretHash       []byte             `json:"secret_hash"`
 	IsPublic         bool               `json:"is_public"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	SelfRegistered   bool               `json:"self_registered"`
 }
 
 type Object struct {
