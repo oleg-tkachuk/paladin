@@ -169,6 +169,12 @@ message MCPOAuthState {
   // exchange_client_id is the seed client the MCP server exchanges tokens
   // as; empty when it does not.
   string exchange_client_id = 6;
+  // registered_clients is every client the Authorization Server holds,
+  // oldest first and capped: the seed clients and those that registered
+  // themselves (RFC 7591). Empty when the store could not be read, with
+  // registered_clients_error saying why.
+  repeated MCPOAuthClient registered_clients = 7;
+  string registered_clients_error = 8;
 }
 
 // MCPOAuthClient is one registered OAuth client.
@@ -183,6 +189,12 @@ message MCPOAuthClient {
   // skip_consent is true for a first-party client that skips the consent
   // screen.
   bool skip_consent = 6;
+  // dynamic is true for a client that registered itself rather than being
+  // seeded by the configuration.
+  bool dynamic = 7;
+  // created_at is when the client was registered; unset for a seed client
+  // read from the configuration.
+  google.protobuf.Timestamp created_at = 8;
 }
 
 message MCPProfile {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	oauthpkg "github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	mcppkg "github.com/oleg-tkachuk/paladin/backend/internal/mcp"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -664,5 +665,50 @@ func TestInspectReportsOAuth(t *testing.T) {
 	}
 	if st := resp.GetOauth(); st.GetEdgeAudience() != "" || st.GetExchangeClientId() != "" {
 		t.Errorf("forwarding: edge audience, exchange client = %q, %q", st.GetEdgeAudience(), st.GetExchangeClientId())
+	}
+}
+
+type fakeClients struct {
+	clients []oauthpkg.Client
+	err     error
+}
+
+func (f fakeClients) ListClients(context.Context) ([]oauthpkg.Client, error) { return f.clients, f.err }
+
+// Every client the Authorization Server holds is listed, and the ones that
+// registered themselves are told apart from the configuration's.
+func TestInspectListsRegisteredClients(t *testing.T) {
+	const seeded, registered = "paladin-mcp-server", "paladin-0199-dcr"
+	created := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	as := config.OAuthAS{Enabled: true, SeedClients: []config.OAuthSeedClient{{ClientID: seeded, TokenExchange: true}}}
+	store := fakeClients{clients: []oauthpkg.Client{
+		{ClientID: seeded, CreatedAt: created},
+		{ClientID: registered, Public: true, AllowedAudiences: []string{auth.AudienceMCP}, CreatedAt: created},
+	}}
+	resp, err := NewHandler(config.MCP{}, allowAll()).WithOAuth(as).WithOAuthClients(store).
+		Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp.GetOauth().GetRegisteredClients()
+	if len(got) != 2 {
+		t.Fatalf("registered clients = %d, want 2", len(got))
+	}
+	if got[0].GetDynamic() || !got[0].GetTokenExchange() {
+		t.Errorf("seed client = %+v, want seeded and exchanging", got[0])
+	}
+	if !got[1].GetDynamic() || !got[1].GetCreatedAt().AsTime().Equal(created) {
+		t.Errorf("self-registered client = %+v", got[1])
+	}
+
+	// A store that cannot be read leaves the rest standing and says why.
+	broken := fakeClients{err: errors.New("pool closed")}
+	resp, err = NewHandler(config.MCP{}, allowAll()).WithOAuth(as).WithOAuthClients(broken).
+		Inspect(ctxAs("admin"), &adminv1.MCPInspectRequest{})
+	if err != nil {
+		t.Fatalf("Inspect failed on an unreadable client store: %v", err)
+	}
+	if st := resp.GetOauth(); st.GetRegisteredClientsError() == "" || len(st.GetSeedClients()) != 1 {
+		t.Errorf("state = %+v, want the seed clients and the store's error", st)
 	}
 }

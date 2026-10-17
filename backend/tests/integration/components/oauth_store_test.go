@@ -130,3 +130,34 @@ func TestOAuthStore(t *testing.T) {
 		}
 	})
 }
+
+// ListClients returns every registered client, oldest first, and never the
+// secret hash an operator's view has no use for.
+func TestOAuthStoreListClients(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	store := oauth.NewPgxStore(pool)
+
+	for _, c := range []oauth.Client{
+		{ClientID: "first", Public: true, AllowedAudiences: []string{"paladin-mcp"}},
+		{ClientID: "second", SecretHash: []byte("hash")},
+	} {
+		if err := store.UpsertClient(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.ListClients(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ClientID != "first" || got[1].ClientID != "second" {
+		t.Fatalf("clients = %+v, want first then second", got)
+	}
+	if !got[0].Public || got[0].AllowedAudiences[0] != "paladin-mcp" || got[0].CreatedAt.IsZero() {
+		t.Errorf("first = %+v", got[0])
+	}
+	if got[1].SecretHash != nil {
+		t.Error("a secret hash was listed")
+	}
+}
