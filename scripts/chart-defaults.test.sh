@@ -305,6 +305,24 @@ check "traefik: iam RPCs to the iam port" \
     "$(route_port traefik 'Host(`api.example.com`) && PathPrefix(`/paladin.iam.v1.`)')" "8085"
 check "traefik: the rest to the data port" "$(route_port traefik 'Host(`api.example.com`)')" "8080"
 
+# The MCP server on a host of its own, plain HTTP to the pod; none by default.
+mcp_route() {
+    yq ea -r '[select(.kind == "IngressRoute" and .metadata.name == "'"$RELEASE"'-mcp")] | .[0] | '"$2" \
+        "$scratch/$1.yaml"
+}
+check "traefik: no MCP route by default" "$(mcp_route traefik '.metadata.name // "none"')" "none"
+render traefik-mcp --set traefik.enabled=true --set 'traefik.hosts={api.example.com}' \
+    --set 'traefik.mcp.hosts={mcp.example.com}'
+check "traefik: MCP host to the MCP port" \
+    "$(mcp_route traefik-mcp '.spec.routes[] | select(.match == "Host(`mcp.example.com`)") | .services[0].port')" "8095"
+check "traefik: MCP dialled over plain HTTP" \
+    "$(mcp_route traefik-mcp '.spec.routes[0].services[0].serversTransport // "none"')" "none"
+render mcp-cert --set traefik.enabled=true --set 'traefik.hosts={api.example.com}' \
+    --set 'traefik.mcp.hosts={mcp.example.com}' --set tls.certManager.enabled=true
+cases=$((cases + 1))
+yq -r 'select(.kind == "Certificate") | .spec.dnsNames[]' "$scratch/mcp-cert.yaml" | grep -x mcp.example.com >/dev/null ||
+    bad "certificate: the MCP host is not covered"
+
 # ─── rollout history ─────────────────────────────────────────────────────────
 
 # Kubernetes keeps ten old ReplicaSets per Deployment unless told otherwise.

@@ -6,7 +6,8 @@ host is configured.
 Env overlays set certManager.enabled=true and pick an issuer
 (letsencrypt-prod / letsencrypt-staging / internal CA). Local overlay
 flips certManager.enabled=false and reuses the cluster-wide `traefik-tls`
-Secret via tls.existingSecret.
+Secret via tls.existingSecret. The MCP server's hosts (traefik.mcp.hosts)
+are on the same certificate.
 */}}
 {{- if and .Values.tls.enabled .Values.tls.certManager.enabled (gt (len .Values.traefik.hosts) 0) -}}
 {{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
@@ -22,7 +23,7 @@ spec:
     name: {{ .Values.tls.certManager.issuerName }}
     kind: {{ .Values.tls.certManager.issuerKind }}
   dnsNames:
-    {{- toYaml .Values.traefik.hosts | nindent 4 }}
+    {{- toYaml (concat .Values.traefik.hosts (.Values.traefik.mcp.hosts | default list)) | nindent 4 }}
   # Renew 15d before expiry — matches the on-call rotation cadence;
   # cert-manager's default is 2/3 of duration which is ~30d for LE 90d.
   renewBefore: 360h

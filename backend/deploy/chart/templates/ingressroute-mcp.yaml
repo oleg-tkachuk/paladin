@@ -1,0 +1,53 @@
+{{/*
+IngressRoute for the streamable-HTTP MCP server, on traefik.mcp.hosts.
+Renders only when Traefik is on, a host is named and the mcp role is
+deployed. The whole host is the MCP server's: /mcp itself, and the RFC 9728
+protected-resource metadata an agent fetches from the same origin.
+
+Plain HTTP to the pod: the MCP listener does not terminate TLS, so the
+backend TLS transport the planes use would fail every request here.
+*/}}
+{{- $mcp := .Values.traefik.mcp | default dict -}}
+{{- if and .Values.traefik.enabled (gt (len ($mcp.hosts | default list)) 0) (index .Values.deployments "mcp").enabled -}}
+{{- $mcpFullname := include "chart.roleFullname" (dict "ctx" . "role" "mcp") -}}
+{{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $mcpFullname }}
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "mcp") | nindent 4 }}
+  {{- with .Values.traefik.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.traefik.entryPoints | nindent 4 }}
+  routes:
+    {{- range $host := $mcp.hosts }}
+    - kind: Rule
+      match: Host(`{{ $host }}`)
+      services:
+        - kind: Service
+          name: {{ $mcpFullname }}
+          port: {{ $mcp.port }}
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- if .Values.tls.enabled }}
+  tls:
+    {{- if .Values.tls.certManager.enabled }}
+    secretName: {{ $apiFullname }}-tls
+    {{- else if .Values.tls.existingSecret }}
+    secretName: {{ .Values.tls.existingSecret }}
+    {{- end }}
+  {{- end }}
+{{- end }}
