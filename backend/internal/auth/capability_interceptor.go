@@ -666,10 +666,10 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 	// on the same tx), so the event outbox rows are atomic with the spend —
 	// no dual-write window. nil ⇒ the store commits counters + ledger
 	// with no fan-out.
-	var onCharged func(ctx context.Context, tx pgx.Tx) error
+	var onCharged func(ctx context.Context, c limes.Charged[pgx.Tx]) error
 	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
-		onCharged = func(ctx context.Context, tx pgx.Tx) error {
-			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), string(op), actor, amount, subject.UnitCode())
+		onCharged = func(ctx context.Context, c limes.Charged[pgx.Tx]) error {
+			return emitter.EmitChargedTx(ctx, c.Tx, tenantID.String(), cap.ID.String(), string(op), actor, amount, subject.UnitCode())
 		}
 	}
 	receipt, err := store.Charge(ledgerContext(ctx, cap), limes.ChargeRequest{

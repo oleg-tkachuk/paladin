@@ -24,7 +24,7 @@ func (u *copiesUsage) Bump(ctx context.Context, req limes.BumpRequest) (limes.Bu
 	return u.usageStore.Bump(ctx, req)
 }
 
-func (u *copiesUsage) Charge(ctx context.Context, req limes.ChargeRequest, on func(context.Context, pgx.Tx) error) (limes.ChargeReceipt, error) {
+func (u *copiesUsage) Charge(ctx context.Context, req limes.ChargeRequest, on func(context.Context, limes.Charged[pgx.Tx]) error) (limes.ChargeReceipt, error) {
 	u.charged = req.Subject.Copies()
 	return u.usageStore.Charge(ctx, req, on)
 }

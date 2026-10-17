@@ -36,7 +36,7 @@ func (u *tenantRecordingUsage) Bump(ctx context.Context, req limes.BumpRequest) 
 	return u.usageStore.Bump(ctx, req)
 }
 
-func (u *tenantRecordingUsage) Charge(ctx context.Context, req limes.ChargeRequest, onCharged func(context.Context, pgx.Tx) error) (limes.ChargeReceipt, error) {
+func (u *tenantRecordingUsage) Charge(ctx context.Context, req limes.ChargeRequest, onCharged func(context.Context, limes.Charged[pgx.Tx]) error) (limes.ChargeReceipt, error) {
 	u.record(ctx, "Charge")
 	return u.usageStore.Charge(ctx, req, onCharged)
 }
