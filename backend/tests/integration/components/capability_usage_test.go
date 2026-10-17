@@ -132,7 +132,7 @@ func TestChargeFanOutFailureRollsBackEverything(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	boom := errors.New("outbox unavailable")
-	_, err := f.usage.Charge(ctx, limes.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("3"), Op: "op", Actor: "actor"}, func(context.Context, pgx.Tx) error { return boom })
+	_, err := f.usage.Charge(ctx, limes.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("3"), Op: "op", Actor: "actor"}, func(context.Context, limes.Charged[pgx.Tx]) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("want the fan-out error, got %v", err)
 	}
@@ -160,8 +160,8 @@ func TestChargeFanOutRunsOnTheChargeTransaction(t *testing.T) {
 
 	const countCounters = `SELECT count(*) FROM limes.usage WHERE capability_id = $1`
 	var onTx, elsewhere int
-	_, err := f.usage.Charge(ctx, limes.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("4"), Op: "op", Actor: "actor"}, func(c context.Context, tx pgx.Tx) error {
-		if err := tx.QueryRow(c, countCounters, f.capID).Scan(&onTx); err != nil {
+	_, err := f.usage.Charge(ctx, limes.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("4"), Op: "op", Actor: "actor"}, func(c context.Context, ch limes.Charged[pgx.Tx]) error {
+		if err := ch.Tx.QueryRow(c, countCounters, f.capID).Scan(&onTx); err != nil {
 			return err
 		}
 		return f.pool.QueryRow(c, countCounters, f.capID).Scan(&elsewhere)

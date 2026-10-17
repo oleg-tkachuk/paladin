@@ -36,6 +36,12 @@ import (
 // subID is a parameter rather than a fresh uuid because
 // event_deliveries.subscription_id is a real FK — the row it points at has to
 // have been seeded by the caller, on a pool the transaction can see.
+// onTx is fn as the usage store's onCharged hook, which runs it on the
+// charge's transaction.
+func onTx(fn func(context.Context, pgx.Tx) error) func(context.Context, limes.Charged[pgx.Tx]) error {
+	return func(ctx context.Context, c limes.Charged[pgx.Tx]) error { return fn(ctx, c.Tx) }
+}
+
 func insertOutboxOnTx(tenantID, subID uuid.UUID) func(context.Context, pgx.Tx) error {
 	return func(ctx context.Context, tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
@@ -175,7 +181,7 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	capID := uuid.New()
 	subject := seedCapRecord(t, h, capID, tenantID, outboxCapBudget)
 
-	spent, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID)))
+	spent, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, onTx(insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID))))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
@@ -215,7 +221,7 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	subject := seedCapRecord(t, h, capID, tenantID, outboxCapBudget)
 
 	boom := errors.New("fan-out down")
-	_, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, func(context.Context, pgx.Tx) error { return boom })
+	_, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, func(context.Context, limes.Charged[pgx.Tx]) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("charge err = %v, want it to wrap the fan-out error", err)
 	}
