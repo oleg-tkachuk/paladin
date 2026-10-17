@@ -1389,6 +1389,14 @@ traefik:
     enabled: true
     insecureSkipVerify: true
     serverName: ""
+  # The streamable-HTTP MCP server, on hostnames of its own. Empty (the
+  # default) publishes no route: agents inside the cluster reach the Service.
+  # Its listener is plain HTTP, so Traefik dials it without the backend TLS
+  # transport. Set config.mcp.oauth.resource_url to https://<host>/mcp to
+  # match, and cover the hosts with the serving certificate.
+  mcp:
+    hosts: []
+    port: 8095
   # Connect-RPC plane routing. iam + admin are dispatched by
   # procedure-prefix; everything else falls through to data. Each rule
   # is gated by its backing role (deployments.api / deployments.admin)

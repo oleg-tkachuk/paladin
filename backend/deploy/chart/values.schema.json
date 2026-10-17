@@ -2574,6 +2574,22 @@
             }
           },
           "type": "object"
+        },
+        "mcp": {
+          "additionalProperties": false,
+          "properties": {
+            "hosts": {
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": "array"
+            },
+            "port": {
+              "type": "integer"
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"
