@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
@@ -19,7 +20,8 @@ import { T } from "@/lib/ui/typography";
 import { planeTone, useMcpLive } from "./mcp-status";
 import { errorMessage } from "@/hooks/errorContract";
 
-function Tile({
+/** A tile of the MCP pages: a label, its value, and a line on what it means. */
+export function Tile({
   label,
   children,
   hint,
@@ -165,75 +167,121 @@ export function MCPOverview({
 export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
   const http = inspect.transports?.http;
   const stdio = inspect.transports?.stdio;
+  const endpoint =
+    inspect.oauth?.resourceUrl || `${http?.addr || DEFAULT_HTTP_ADDR}/mcp`;
   return (
-    <Card className="space-y-3 p-4">
-      <h3 className={T.cardTitleProse}>Transports</h3>
+    <div className="space-y-4">
+      <Card className="p-4">
+        <p className={T.helper}>
+          {inspect.oauth?.edgeAudience ? (
+            <>
+              Agents authorize for{" "}
+              <span className={T.code}>
+                {inspect.oauth.resourceUrl || "the MCP server"}
+              </span>{" "}
+              and hold a{" "}
+              <span className={T.code}>{inspect.oauth.edgeAudience}</span>{" "}
+              token, which no plane accepts. The server exchanges it for each
+              plane a tool calls, so one session reaches all of them.
+            </>
+          ) : (
+            <>
+              Each tool calls one plane, and the plane checks the token&apos;s
+              audience. A token from signing in is issued for a single plane, so
+              it reaches only that plane&apos;s tools; an API token can cover
+              several.
+            </>
+          )}
+        </p>
+      </Card>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="space-y-1.5 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">Streamable HTTP</span>
-            <Badge variant={http?.enabled ? "success" : "outline"}>
-              {http?.enabled ? "enabled" : "disabled"}
-            </Badge>
-          </div>
+        <TransportCard name="Streamable HTTP" enabled={!!http?.enabled}>
+          <ConnectField
+            label="Endpoint"
+            value={`POST ${endpoint}`}
+            copy={endpoint}
+          />
+          <ConnectField
+            label="Token"
+            value={
+              inspect.oauth?.edgeAudience
+                ? `Authorization: Bearer <${inspect.oauth.edgeAudience} token>`
+                : "Authorization: Bearer <token>"
+            }
+          />
+          <ConnectField label="Profile" value={http?.profile || "—"} />
           <p className={T.hint}>
-            <span className={T.code}>
-              POST{" "}
-              {inspect.oauth?.resourceUrl || `${http?.addr || ":8095"}/mcp`}
-            </span>{" "}
-            with <span className={T.code}>Authorization: Bearer …</span>.
             Sessions end after{" "}
             {http?.sessionTimeoutSeconds
               ? `${http.sessionTimeoutSeconds}s`
               : "no set time"}{" "}
             idle and belong to the principal that opened them.
           </p>
-        </div>
-        <div className="space-y-1.5 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">stdio</span>
-            <Badge variant={stdio?.enabled ? "success" : "outline"}>
-              {stdio?.enabled ? "enabled" : "disabled"}
-            </Badge>
-          </div>
+        </TransportCard>
+        <TransportCard name="stdio" enabled={!!stdio?.enabled}>
+          <ConnectField
+            label="Command"
+            value={STDIO_COMMAND}
+            copy={STDIO_COMMAND}
+          />
+          <ConnectField label="Token" value={`${STDIO_TOKEN_ENV}=<token>`} />
+          <ConnectField label="Profile" value={stdio?.profile || "—"} />
           <p className={T.hint}>
-            <span className={T.code}>paladin serve mcp --transport stdio</span>{" "}
-            with the token in <span className={T.code}>PALADIN_MCP_TOKEN</span>
-            {stdio?.profile ? (
-              <>
-                ; profile <span className={T.code}>{stdio.profile}</span>
-              </>
-            ) : null}
-            .
+            One process serves one operator; its token is used as it is, never
+            exchanged.
           </p>
-        </div>
+        </TransportCard>
       </div>
-      <p
-        className={cn(
-          T.hint,
-          "rounded-md border border-warning/30 bg-warning/5 px-3 py-2",
-        )}
-      >
-        {inspect.oauth?.edgeAudience ? (
-          <>
-            Agents authorize for{" "}
-            <span className={T.code}>
-              {inspect.oauth.resourceUrl || "the MCP server"}
-            </span>{" "}
-            and hold a{" "}
-            <span className={T.code}>{inspect.oauth.edgeAudience}</span> token,
-            which no plane accepts. The server exchanges it for each plane a
-            tool calls, so one session reaches all of them.
-          </>
-        ) : (
-          <>
-            Each tool calls one plane, and the plane checks the token&apos;s
-            audience. A token from signing in is issued for a single plane, so
-            it reaches only that plane&apos;s tools; an API token can cover
-            several.
-          </>
-        )}
-      </p>
+    </div>
+  );
+}
+
+// The HTTP listener's address when the configuration names none.
+const DEFAULT_HTTP_ADDR = ":8095";
+const STDIO_COMMAND = "paladin serve mcp --transport stdio";
+const STDIO_TOKEN_ENV = "PALADIN_MCP_TOKEN";
+
+function TransportCard({
+  name,
+  enabled,
+  children,
+}: {
+  name: string;
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex items-center gap-2">
+        <h3 className={T.cardTitleProse}>{name}</h3>
+        <Badge variant={enabled ? "success" : "outline"}>
+          {enabled ? "enabled" : "disabled"}
+        </Badge>
+      </div>
+      {children}
     </Card>
+  );
+}
+
+/** A connection setting: its label, the value in mono, and a copy button. */
+function ConnectField({
+  label,
+  value,
+  copy,
+}: {
+  label: string;
+  value: string;
+  copy?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className={T.label}>{label}</div>
+      <div className="flex items-start gap-2">
+        <code className={cn(T.code, "min-w-0 flex-1 break-all")}>{value}</code>
+        {copy ? (
+          <IdentifierCopy value={copy} label={label} iconOnly className="p-1" />
+        ) : null}
+      </div>
+    </div>
   );
 }

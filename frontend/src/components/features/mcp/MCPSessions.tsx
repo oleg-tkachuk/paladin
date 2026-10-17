@@ -1,5 +1,15 @@
 "use client";
 
+import { useState } from "react";
+
+import {
+  RecordDialog,
+  RecordField,
+  openableRow,
+} from "@/components/ui/RecordDialog";
+import { Timestamp } from "@/components/Timestamp";
+import type { MCPSession } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
+
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { RelativeTime } from "@/components/RelativeTime";
@@ -35,6 +45,7 @@ export function MCPSessions() {
       ? status.data.error || "the MCP server could not be reached"
       : null;
   const rows = sessions.data?.sessions ?? [];
+  const [opened, setOpened] = useState<MCPSession | null>(null);
 
   if (sessions.isPending || status.isPending) {
     return (
@@ -70,7 +81,10 @@ export function MCPSessions() {
         </TableHeader>
         <TableBody>
           {rows.map((s) => (
-            <TableRow key={s.id}>
+            <TableRow
+              key={s.id}
+              {...openableRow(() => setOpened(s), `Open session ${s.id}`)}
+            >
               <TableCell className={T.code} title={s.id}>
                 {s.id.slice(0, SESSION_ID_SHOWN)}…
               </TableCell>
@@ -95,6 +109,32 @@ export function MCPSessions() {
           ))}
         </TableBody>
       </Table>
+      <RecordDialog
+        open={opened !== null}
+        onOpenChange={(o) => !o && setOpened(null)}
+        title="Session"
+        subtitle={opened?.id}
+      >
+        {opened ? (
+          <>
+            <RecordField label="Agent" mono>
+              {opened.agentSubject || "unknown"}
+            </RecordField>
+            <RecordField label="Started">
+              <Timestamp ts={opened.startedAt} />
+            </RecordField>
+            <RecordField label="Last seen">
+              <Timestamp ts={opened.lastSeen} />
+            </RecordField>
+            <RecordField label="Tool calls">
+              {opened.toolCallCount.toString()}
+            </RecordField>
+            <RecordField label="Requests">
+              {opened.requestCount.toString()}
+            </RecordField>
+          </>
+        ) : null}
+      </RecordDialog>
     </Card>
   );
 }
