@@ -341,10 +341,11 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// clients holding them would be reaped with them.
 	if cfg.Worker.Jobs.OAuthClientReap.Interval > 0 && deps.ReaperPool != nil {
 		out = append(out, &worker.OAuthClientReaper{
-			Store:    oauth.NewPgxStore(deps.ReaperPool),
-			Interval: cfg.Worker.Jobs.OAuthClientReap.Interval,
-			MaxAge:   cfg.Worker.Jobs.OAuthClientReap.MaxAge,
-			Logger:   l.Named("oauth-client-reaper"),
+			Store:           oauth.NewPgxStore(deps.ReaperPool),
+			Interval:        cfg.Worker.Jobs.OAuthClientReap.Interval,
+			MaxAge:          cfg.Worker.Jobs.OAuthClientReap.MaxAge,
+			ExpiredCodesFor: cfg.Worker.Jobs.OAuthClientReap.ExpiredCodesFor,
+			Logger:          l.Named("oauth-client-reaper"),
 		})
 	}
 

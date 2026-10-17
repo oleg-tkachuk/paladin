@@ -449,6 +449,7 @@ worker.jobs.lifecycle
 worker.jobs.lifecycle.enabled
 worker.jobs.lifecycle.interval
 worker.jobs.oauth_client_reap
+worker.jobs.oauth_client_reap.expired_codes_for
 worker.jobs.oauth_client_reap.interval
 worker.jobs.oauth_client_reap.max_age
 worker.jobs.operations

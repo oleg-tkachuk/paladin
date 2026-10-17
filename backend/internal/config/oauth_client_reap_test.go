@@ -43,8 +43,9 @@ func TestValidateOAuthClientReapNeedsAnAge(t *testing.T) {
 // clients idle a week.
 func TestOAuthClientReapDefaults(t *testing.T) {
 	const (
-		wantInterval = time.Hour
-		wantMaxAge   = 7 * 24 * time.Hour
+		wantInterval  = time.Hour
+		wantMaxAge    = 7 * 24 * time.Hour
+		wantCodesKept = 24 * time.Hour
 	)
 	minPath := filepath.Join(t.TempDir(), "min.yaml")
 	if err := os.WriteFile(minPath, []byte(minimalConfigYAML), 0o600); err != nil {
@@ -54,7 +55,7 @@ func TestOAuthClientReapDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if r := cfg.Worker.Jobs.OAuthClientReap; r.Interval != wantInterval || r.MaxAge != wantMaxAge {
+	if r := cfg.Worker.Jobs.OAuthClientReap; r.Interval != wantInterval || r.MaxAge != wantMaxAge || r.ExpiredCodesFor != wantCodesKept {
 		t.Errorf("defaults = %+v, want interval %s, max_age %s", r, wantInterval, wantMaxAge)
 	}
 }

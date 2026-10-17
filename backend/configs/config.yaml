@@ -266,6 +266,7 @@ worker:
       # are never removed. interval 0 disables; max_age must then be positive.
       interval: 1h
       max_age: 168h
+      expired_codes_for: 24h             # expired authorization codes kept this long
     lifecycle:                          # CEL-based per-bucket expiration
       enabled: true
       interval: 30m

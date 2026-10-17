@@ -102,18 +102,6 @@ the same commit. Treat this file like a runtime invariant.
   through the audit repository; an integration test.
 - **Blockers:** none.
 
-### Expired OAuth authorization codes are never purged
-
-- **Status:** Deferred.
-- **Reason:** `oauth.Store.PurgeExpiredCodes` exists and is tested, but no
-  worker job calls it, so `oauth_authorization_codes` keeps every code ever
-  issued. A code is single-use and short-lived, so the rows are harmless
-  but unbounded; they go only when their client is deleted or reaped.
-- **Definition of Done:** a worker job (or the OAuth client reaper's tick)
-  purges codes expired past a grace, on the reaper pool, with a config key,
-  its row in `backend/docs/ops-housekeeping.md`, and unit tests.
-- **Blockers:** none.
-
 ### Admin RPCs the MCP bridge leaves off on purpose
 
 - **Status:** Won't-do (by design) unless the decision below is revisited.

@@ -954,6 +954,8 @@ config:
       oauth_client_reap:
         interval: 1h
         max_age: 168h
+        # Expired authorization codes are deleted by the same tick after this.
+        expired_codes_for: 24h
       lifecycle:
         enabled: true
         interval: 30m
