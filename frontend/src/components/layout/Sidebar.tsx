@@ -22,6 +22,9 @@ import {
   ArrowRightOnRectangleIcon,
   CubeTransparentIcon,
   CommandLineIcon,
+  WrenchScrewdriverIcon,
+  KeyIcon,
+  LinkIcon,
   CurrencyDollarIcon,
   BanknotesIcon,
   BoltIcon,
@@ -189,6 +192,21 @@ const navigationGroups: Array<{
     ],
   },
   {
+    // The MCP server: what agents connected to it are doing, what they may
+    // call, how they authorize and how to connect one. A group of its own
+    // rather than a row of System — four questions an operator asks at
+    // different times, which one page answered only below the fold. Named
+    // MCP, not Agents: an agent's capabilities and M2M tokens are a tenant's
+    // and stay in its workspace (ADR-0033).
+    title: "MCP",
+    items: [
+      { name: "Overview", path: SECTION.mcp, icon: CommandLineIcon },
+      { name: "Tools", path: SECTION.mcpTools, icon: WrenchScrewdriverIcon },
+      { name: "Access", path: SECTION.mcpAccess, icon: KeyIcon },
+      { name: "Connect", path: SECTION.mcpConnect, icon: LinkIcon },
+    ],
+  },
+  {
     title: "System",
     items: [
       // Platform Statistics — cross-tenant census (tenants / backends /
@@ -199,7 +217,6 @@ const navigationGroups: Array<{
       // Billing spans every tenant: a platform page, not the session tenant's.
       { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
-      { name: "MCP server", path: "/mcp", icon: CommandLineIcon },
       {
         name: "Health Status",
         path: "/health",

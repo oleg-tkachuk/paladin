@@ -16,6 +16,13 @@ describe("sectionFor", () => {
     ["/tenants", SECTION.tenants],
     ["/tenants/acme/collections/docs", SECTION.tenants],
     ["/audit", SECTION.audit],
+    // The MCP group's pages each own their row; anything deeper is the
+    // overview's.
+    ["/mcp", SECTION.mcp],
+    ["/mcp/tools", SECTION.mcpTools],
+    ["/mcp/access", SECTION.mcpAccess],
+    ["/mcp/connect", SECTION.mcpConnect],
+    ["/mcp/nowhere", SECTION.mcp],
   ])("%s is owned by %s", (path, want) => {
     expect(sectionFor(path)).toBe(want);
   });

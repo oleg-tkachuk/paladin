@@ -30,6 +30,9 @@ vi.mock("@/components/layout/PageHeader", () => ({
 }));
 
 import MCPInspectPage from "./page";
+import MCPToolsPage from "./tools/page";
+import MCPAccessPage from "./access/page";
+import MCPConnectPage from "./connect/page";
 
 const tool = (name: string, audience: string, mutates = false) => ({
   name,
@@ -105,10 +108,18 @@ describe("MCPInspectPage", () => {
     expect(await screen.findByText("of 4 tools")).toBeInTheDocument();
   });
 
-  it("filters the tools to the HTTP profile by default, and by plane", async () => {
+  it("lists the sessions on the overview, not the configuration", async () => {
     render(<MCPInspectPage />);
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: /Tools/ }));
-    fireEvent.click(screen.getByRole("tab", { name: /Tools/ }));
+    expect(
+      await screen.findByText(/No agent is connected/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).toBeNull();
+  });
+});
+
+describe("MCP tools page", () => {
+  it("filters the catalog to the HTTP profile by default, and by search", async () => {
+    render(<MCPToolsPage />);
     const table = await screen.findByRole("table");
     expect(
       within(table).getByText("paladin_query_objects"),
@@ -120,6 +131,38 @@ describe("MCPInspectPage", () => {
     });
     expect(within(table).getByText("paladin_list_tenants")).toBeInTheDocument();
     expect(within(table).queryByText("paladin_query_objects")).toBeNull();
+  });
+
+  // The always-deny list applies after every profile, so it is shown with them.
+  it("shows the always-deny list beside the profiles", async () => {
+    render(<MCPToolsPage />);
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Profiles" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Profiles" }));
+    expect(
+      await screen.findByRole("heading", { name: "Always denied" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("paladin_create_user").length).toBeGreaterThan(
+      0,
+    );
+  });
+});
+
+describe("MCP access and connect pages", () => {
+  it("shows how agents authorize", async () => {
+    render(<MCPAccessPage />);
+    expect(await screen.findByText("How agents authorize")).toBeInTheDocument();
+  });
+
+  it("shows the transports", async () => {
+    render(<MCPConnectPage />);
+    expect(await screen.findByText("Streamable HTTP")).toBeInTheDocument();
+    expect(screen.getByText("stdio")).toBeInTheDocument();
+  });
+
+  it("says the configuration did not load on every page", async () => {
+    h.inspect.mockRejectedValue(new ConnectError("fetch failed", Code.Unknown));
+    render(<MCPConnectPage />);
+    expect(await screen.findByText(/fetch failed/)).toBeInTheDocument();
   });
 });
 
