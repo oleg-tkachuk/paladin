@@ -146,6 +146,11 @@ func TestBuildBackgroundJobs_ConfigGates(t *testing.T) {
 			want: []string{"*worker.QuotaReconciler"},
 		},
 		{
+			name: "oauth client reap interval",
+			set:  func(c *config.Config) { c.Worker.Jobs.OAuthClientReap.Interval = time.Hour },
+			want: []string{"*worker.OAuthClientReaper"},
+		},
+		{
 			name: "operations interval brings the stale reclaimer with it",
 			set:  func(c *config.Config) { c.Worker.Jobs.Operations.Interval = time.Second },
 			want: []string{"*operations.Runner", "*worker.StaleOperationReclaimer"},
@@ -202,6 +207,20 @@ func TestBuildBackgroundJobs_SubsystemPurgersNeedTheirBundle(t *testing.T) {
 	for _, w := range []string{"*worker.CapabilityPurger", "*worker.APITokenPurger"} {
 		if !has(names, w) {
 			t.Errorf("%s missing with both a bundle and an interval; built %v", w, names)
+		}
+	}
+}
+
+// The OAuth client reaper reads every tenant's grants, which only the reaper
+// pool can: without one it is not built, rather than fall back to the
+// tenant-scoped pool the other jobs degrade to.
+func TestBuildBackgroundJobs_OAuthClientReaperNeedsTheReaperPool(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Worker.Jobs.OAuthClientReap.Interval = time.Hour
+	deps := &SharedDeps{Cfg: cfg, Logger: zap.NewNop(), Pool: &pgxpool.Pool{}}
+	for _, j := range BuildBackgroundJobs(deps) {
+		if _, ok := j.(*worker.OAuthClientReaper); ok {
+			t.Fatal("the OAuth client reaper was built without the reaper pool")
 		}
 	}
 }

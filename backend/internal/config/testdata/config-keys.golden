@@ -448,6 +448,9 @@ worker.jobs.housekeeping.operations_ttl
 worker.jobs.lifecycle
 worker.jobs.lifecycle.enabled
 worker.jobs.lifecycle.interval
+worker.jobs.oauth_client_reap
+worker.jobs.oauth_client_reap.interval
+worker.jobs.oauth_client_reap.max_age
 worker.jobs.operations
 worker.jobs.operations.interval
 worker.jobs.operations.stale_after

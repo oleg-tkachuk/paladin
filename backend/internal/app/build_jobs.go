@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
@@ -331,6 +332,19 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			Interval:   cfg.Worker.Jobs.APIToken.Interval,
 			ExpiredFor: cfg.Worker.Jobs.APIToken.ExpiredFor,
 			Logger:     l.Named("api-token-purger"),
+		})
+	}
+
+	// OAuth client reaper — removes idle self-registered clients. Only on the
+	// reaper pool, never the degraded fallback above: on a tenant-scoped
+	// connection refresh_tokens hides every other tenant's grants, and the
+	// clients holding them would be reaped with them.
+	if cfg.Worker.Jobs.OAuthClientReap.Interval > 0 && deps.ReaperPool != nil {
+		out = append(out, &worker.OAuthClientReaper{
+			Store:    oauth.NewPgxStore(deps.ReaperPool),
+			Interval: cfg.Worker.Jobs.OAuthClientReap.Interval,
+			MaxAge:   cfg.Worker.Jobs.OAuthClientReap.MaxAge,
+			Logger:   l.Named("oauth-client-reaper"),
 		})
 	}
 

@@ -368,6 +368,13 @@ worker: {
     interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"   // 7 days
   }
+  // OAuthClientReap: remove self-registered OAuth clients older than
+  // max_age that hold no live grant and no redeemable code. interval=0
+  // disables.
+  oauth_client_reap: {
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    max_age:  =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h" // 7 days
+  }
   // Operations runner: dequeues PENDING rows from the operations
   // table and runs the registered Executor. Without it, BatchXxx
   // RPCs enqueue work that nothing ever completes.

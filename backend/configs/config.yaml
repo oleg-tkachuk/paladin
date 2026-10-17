@@ -260,6 +260,12 @@ worker:
       hard_delete_batch_size: 100
     refresh_token_reap:                 # drops expired refresh tokens
       interval: 1h
+    oauth_client_reap:                  # removes idle self-registered OAuth clients
+      # A client that registered itself (RFC 7591) and is older than
+      # max_age, holding no live grant and no redeemable code. Seeded clients
+      # are never removed. interval 0 disables; max_age must then be positive.
+      interval: 1h
+      max_age: 168h
     lifecycle:                          # CEL-based per-bucket expiration
       enabled: true
       interval: 30m
