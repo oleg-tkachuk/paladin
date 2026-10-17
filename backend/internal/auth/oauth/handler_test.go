@@ -3,12 +3,15 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -522,6 +525,34 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 	e := audit.entries[0]
 	if !strings.Contains(e.Action, "Reuse") || e.ErrorMessage == "" {
 		t.Errorf("audit entry should name the reuse + carry an error message (is_error): %+v", e)
+	}
+}
+
+// failingAudit refuses every row, as audit_log's insert policy did.
+type failingAudit struct{}
+
+func (failingAudit) Insert(context.Context, admindomain.AuditEntry) error {
+	return errors.New("new row violates row-level security policy")
+}
+
+// A reuse whose audit row is refused says so in the log: the row is the
+// operator's only other trace of the replay.
+func TestToken_RefreshReuseLogsAnUnwrittenAuditRow(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	u := sampleUser()
+	h := testHandler(t, store, &memRefresh{getErr: authstore.ErrTokenRevoked}, u).WithAudit(failingAudit{})
+	core, logs := observer.New(zap.ErrorLevel)
+	h.log = zap.New(core)
+
+	h.onRefreshReuse(t.Context(), uuid.New(), u.UserID, u.TenantID)
+
+	got := logs.FilterMessage("audit entry not written").All()
+	if len(got) != 1 {
+		t.Fatalf("logged %d unwritten-audit lines, want 1", len(got))
+	}
+	if a := got[0].ContextMap()["action"]; a != actionRefreshReuse {
+		t.Errorf("action = %v, want %s", a, actionRefreshReuse)
 	}
 }
 

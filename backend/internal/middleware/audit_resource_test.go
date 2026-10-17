@@ -114,12 +114,10 @@ func idempotencyOf(m protoreflect.MethodDescriptor) connect.IdempotencyLevel {
 // recordingAuditWriter keeps the rows the interceptor writes.
 type recordingAuditWriter struct {
 	rows []admindomain.AuditEntry
-	ctxs []context.Context
 }
 
-func (w *recordingAuditWriter) Insert(ctx context.Context, e admindomain.AuditEntry) error {
+func (w *recordingAuditWriter) Insert(_ context.Context, e admindomain.AuditEntry) error {
 	w.rows = append(w.rows, e)
-	w.ctxs = append(w.ctxs, ctx)
 	return nil
 }
 
@@ -162,8 +160,8 @@ func TestAuditRowNamesTheResourceTheHandlerStashed(t *testing.T) {
 }
 
 // Every write is recorded, whoever makes it: a tenant's own principal in its
-// own tenant, and a platform admin in the tenant it named. The row is always
-// inserted under its actor's tenant, which audit_log's insert policy requires.
+// own tenant, and a platform admin in the tenant it named. The row names its
+// actor's tenant, under which the writer inserts it (AuditRepoV2.Insert).
 func TestAuditRecordsWritesWhereverTheyAct(t *testing.T) {
 	own, target := uuid.New(), uuid.New()
 	admin := auth.WithPrincipal(context.Background(), &auth.Principal{
@@ -191,11 +189,6 @@ func TestAuditRecordsWritesWhereverTheyAct(t *testing.T) {
 			}
 			if got := w.rows[0].ActorTenantID; got != own {
 				t.Errorf("row names actor tenant %s, want %s", got, own)
-			}
-			for _, ctx := range w.ctxs {
-				if scope, _ := auth.EffectiveTenant(ctx); scope != own {
-					t.Errorf("row inserted under %s, want the actor's tenant %s", scope, own)
-				}
 			}
 		})
 	}

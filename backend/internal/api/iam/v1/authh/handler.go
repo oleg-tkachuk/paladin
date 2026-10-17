@@ -702,21 +702,32 @@ func (h *Handler) callerUser(ctx context.Context) (authstore.User, error) {
 	return u, nil
 }
 
+// The actions of the audit rows this handler writes itself, outside the
+// audit interceptor.
+const (
+	actionTenantSwitched  = "iam.TenantSwitched"
+	actionRefreshReplayed = "iam.RefreshTokenReplayed"
+	actionRefreshReuse    = "iam.RefreshTokenReuseDetected"
+)
+
 // auditTenantSwitch records a best-effort audit row so operator scope changes
 // are observable. Never blocks or fails the switch.
 func (h *Handler) auditTenantSwitch(ctx context.Context, from, to authstore.User) {
 	if h.audit == nil {
 		return
 	}
-	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
 		EntryID:       uuid.Must(uuid.NewV7()),
 		At:            h.now().UTC(),
 		ActorSubject:  to.UserID.String(),
 		ActorTenantID: to.TenantID,
 		ActorAudience: auth.AudienceIAM,
-		Action:        "iam.TenantSwitched",
+		Action:        actionTenantSwitched,
 		ResourceName:  "tenants/" + to.TenantID.String(),
-	})
+	}); err != nil {
+		logger.FromContext(ctx).Error("audit entry not written",
+			zap.String("action", actionTenantSwitched), zap.Error(err))
+	}
 }
 
 // ─── ChangePassword ─────────────────────────────────────────────────────────
@@ -1059,16 +1070,19 @@ func (h *Handler) onRefreshReplayed(ctx context.Context, jti, userID, tenantID u
 	if h.audit == nil {
 		return
 	}
-	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
 		EntryID:       uuid.Must(uuid.NewV7()),
 		At:            h.now().UTC(),
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
 		ActorAudience: auth.AudienceIAM,
-		Action:        "iam.RefreshTokenReplayed",
+		Action:        actionRefreshReplayed,
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "spent refresh token presented to ExchangeAudience; rejected without revoking the family",
-	})
+	}); err != nil {
+		logger.FromContext(ctx).Error("audit entry not written",
+			zap.String("action", actionRefreshReplayed), zap.Error(err))
+	}
 }
 
 // supersessionGrace is how long after a rotation the superseded token is still
@@ -1164,16 +1178,19 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 	if h.audit == nil {
 		return
 	}
-	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
 		EntryID:       uuid.Must(uuid.NewV7()),
 		At:            h.now().UTC(),
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
 		ActorAudience: auth.AudienceIAM,
-		Action:        "iam.RefreshTokenReuseDetected",
+		Action:        actionRefreshReuse,
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "rotated refresh token replayed; token family revoked",
-	})
+	}); err != nil {
+		logger.FromContext(ctx).Error("audit entry not written",
+			zap.String("action", actionRefreshReuse), zap.Error(err))
+	}
 }
 
 func (h *Handler) parseRefresh(token string) (uuid.UUID, uuid.UUID, uuid.UUID, error) {
