@@ -11,6 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+
 	"go.uber.org/zap"
 )
 
@@ -80,7 +83,9 @@ func (d *WebhookDriver) Run(ctx context.Context, deliver func(context.Context, C
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           middleware.LogHTTPServerErrors(mux),
+		BaseContext:       logger.HTTPBaseContext(d.log()),
+		ErrorLog:          logger.HTTPServerErrorLog(d.log(), addr),
 		ReadHeaderTimeout: defaultDur(d.ReadHdrTimeout, 5*time.Second),
 		ReadTimeout:       defaultDur(d.ReadTimeout, 30*time.Second),
 		WriteTimeout:      defaultDur(d.WriteTimeout, 30*time.Second),

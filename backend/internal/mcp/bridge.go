@@ -14,9 +14,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"go.uber.org/zap"
+	"go.uber.org/zap/exp/zapslog"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -209,8 +214,12 @@ func (s exchangedTokens) Invalidate(audience string) { s.ex.Invalidate(audience)
 // NewServer constructs an MCP server with the Paladin tool / resource / prompt
 // catalog wired up. The ToolFilter selects which tools are registered;
 // see internal/mcp/profile.go for the YAML-driven gating model.
-func NewServer(name, version string, c *Clients, filter *ToolFilter) *mcpsdk.Server {
+//
+// log receives what the SDK reports of its own failures, which it discards
+// without a logger; nil keeps them discarded.
+func NewServer(name, version string, c *Clients, filter *ToolFilter, log *zap.Logger) *mcpsdk.Server {
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: name, Version: version}, &mcpsdk.ServerOptions{
+		Logger: SDKLogger(log),
 		// An empty (non-nil) ServerCapabilities suppresses the SDK's nil
 		// default of {"logging":{}}, which it advertises "for historical
 		// reasons". We implement no logging handler, and the feature is
@@ -278,10 +287,51 @@ func addTool[Args any](
 	mcpsdk.AddTool(srv, tool, func(ctx context.Context, req *mcpsdk.CallToolRequest, args Args) (*mcpsdk.CallToolResult, any, error) {
 		res, out, err := handler(withRequestCredentials(ctx, req.Extra), req, args)
 		if err != nil {
+			logToolFailure(ctx, tool.Name, err)
 			return res, out, toolError(tool.Name, err)
 		}
 		return res, out, nil
 	})
+}
+
+// SDKLogger is l as the MCP SDK takes a logger, or nil — the SDK's own
+// discarding default — when l is.
+func SDKLogger(l *zap.Logger) *slog.Logger {
+	if l == nil {
+		return nil
+	}
+	return slog.New(zapslog.NewHandler(l.Named("mcp-sdk").Core()))
+}
+
+// logToolFailure logs a tool call the server failed before toolError
+// rewrites it for the model: an unreachable plane, an internal error, a
+// refused exchange. The model is told to try again; the cause is only here,
+// since a call that never reached its plane is in no plane's log. A failure
+// that describes the request — a denial, a missing object — is the model's
+// answer, and is not logged.
+func logToolFailure(ctx context.Context, tool string, err error) {
+	var refusal *ExchangeRefusal
+	var ce *connect.Error
+	switch {
+	case errors.As(err, &refusal):
+	case errors.As(err, &ce) && !serverFailure[ce.Code()]:
+		return
+	}
+	logger.FromContext(ctx).Error(toolFailedMessage,
+		zap.String("tool", tool),
+		zap.String("plane", catalogAudience[tool]),
+		zap.String("code", connect.CodeOf(err).String()),
+		zap.Error(err))
+}
+
+// toolFailedMessage is the log line of a tool call the server failed.
+const toolFailedMessage = "mcp tool call failed"
+
+// serverFailure are the codes that report the platform failing a call rather
+// than refusing it.
+var serverFailure = map[connect.Code]bool{
+	connect.CodeUnavailable: true, connect.CodeInternal: true, connect.CodeUnknown: true,
+	connect.CodeDeadlineExceeded: true, connect.CodeDataLoss: true,
 }
 
 // jsonResult is the universal "Connect response → MCP tool result" adapter.

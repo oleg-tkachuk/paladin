@@ -47,6 +47,13 @@ func toolError(tool string, err error) error {
 	if !errors.As(err, &ce) {
 		return err
 	}
+	if serverFailure[ce.Code()] {
+		where := "the platform"
+		if plane != "" {
+			where = "the " + plane + " plane"
+		}
+		return fmt.Errorf("%s: %s could not complete the call; try again later", ce.Code(), where)
+	}
 	switch ce.Code() {
 	case connect.CodeUnauthenticated:
 		if strings.Contains(ce.Message(), audienceMismatch) && plane != "" {
@@ -55,13 +62,6 @@ func toolError(tool string, err error) error {
 				tool, plane, audiencePrefix, plane)
 		}
 		return errors.New("the access token was refused; it may have expired")
-	case connect.CodeUnavailable, connect.CodeInternal, connect.CodeUnknown,
-		connect.CodeDeadlineExceeded, connect.CodeDataLoss:
-		where := "the platform"
-		if plane != "" {
-			where = "the " + plane + " plane"
-		}
-		return fmt.Errorf("%s: %s could not complete the call; try again later", ce.Code(), where)
 	default:
 		return fmt.Errorf("%s: %s", ce.Code(), ce.Message())
 	}

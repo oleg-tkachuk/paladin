@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -268,6 +270,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 
 	code, err := GenerateCode()
 	if err != nil {
+		logServerError(r.Context(), "could not issue code", err, zap.String("client_id", p.ClientID))
 		h.redirectError(w, r, registered, p.State, "server_error", "could not issue code")
 		return
 	}
@@ -287,6 +290,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		Audience:        audience,
 		ExpiresAt:       h.now().Add(ttl),
 	}); err != nil {
+		logServerError(r.Context(), "could not persist code", err, zap.String("client_id", p.ClientID))
 		h.redirectError(w, r, registered, p.State, "server_error", "could not persist code")
 		return
 	}
@@ -472,7 +476,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 	// Rotate: revoke the presented refresh before minting a fresh pair (RFC 6749
 	// §6), keeping the same family so the chain stays linked for reuse-detection.
 	if err := h.refresh.Revoke(auth.WithActingTenant(r.Context(), stored.TenantID), jti); err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "rotation failed")
+		h.serverError(r.Context(), w, "rotation failed", err, zap.String("client_id", client.ClientID))
 		return
 	}
 	h.issueTokens(r.Context(), w, u, *grant, stored.FamilyID)
@@ -543,7 +547,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		OAuthScopes:   grant.Scopes,
 	})
 	if err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint access failed")
+		h.serverError(ctx, w, "mint access failed", err, zap.String("client_id", grant.ClientID))
 		return
 	}
 	tokenID := uuid.Must(uuid.NewV7())
@@ -551,11 +555,11 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: tokenID,
 	})
 	if err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint refresh failed")
+		h.serverError(ctx, w, "mint refresh failed", err, zap.String("client_id", grant.ClientID))
 		return
 	}
 	if err := h.refresh.Insert(auth.WithActingTenant(ctx, u.TenantID), r2RefreshToken(tokenID, familyID, u, grant, h.now(), refreshExp)); err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "persist refresh failed")
+		h.serverError(ctx, w, "persist refresh failed", err, zap.String("client_id", grant.ClientID))
 		return
 	}
 	writeJSON(w, http.StatusOK, tokenResponse{
@@ -723,19 +727,19 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if !public {
 		secret, _, err := auth.GenerateApiKeySecret()
 		if err != nil {
-			h.jsonError(w, http.StatusInternalServerError, "server_error", "secret generation failed")
+			h.serverError(r.Context(), w, "secret generation failed", err)
 			return
 		}
 		hash, err := auth.HashApiKeySecret(secret)
 		if err != nil {
-			h.jsonError(w, http.StatusInternalServerError, "server_error", "secret hash failed")
+			h.serverError(r.Context(), w, "secret hash failed", err)
 			return
 		}
 		client.SecretHash = hash
 		resp.ClientSecret = secret
 	}
 	if err := h.store.UpsertClient(r.Context(), client); err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "registration failed")
+		h.serverError(r.Context(), w, "registration failed", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, resp)
@@ -868,6 +872,30 @@ func (h *Handler) jsonError(w http.ResponseWriter, status int, errCode, desc str
 	writeJSON(w, status, map[string]string{"error": errCode, "error_description": desc})
 }
 
+// serverError answers server_error and logs why. The endpoints are plain
+// HTTP, outside the RPC interceptors that log a failed call, so without this
+// a 500 left no trace: the client saw desc and the cause was gone.
+func (h *Handler) serverError(ctx context.Context, w http.ResponseWriter, desc string, err error, fields ...zap.Field) {
+	logServerError(ctx, desc, err, fields...)
+	h.jsonError(w, http.StatusInternalServerError, errServerError, desc)
+}
+
+// logServerError logs a server error the endpoint answers with desc, for the
+// paths that answer by redirect rather than JSON. Never pass a token, a code
+// or a secret in fields.
+func logServerError(ctx context.Context, desc string, err error, fields ...zap.Field) {
+	logger.FromContext(ctx).Error(serverErrorMessage,
+		append(fields, zap.String("reason", desc), zap.Error(err))...)
+}
+
+const (
+	// errServerError is RFC 6749's error code for a failure of the server's own.
+	errServerError = "server_error"
+	// serverErrorMessage is the log line of every server error the OAuth
+	// endpoints answer.
+	serverErrorMessage = "oauth server error"
+)
+
 // applyCORS sets Access-Control-* headers on /oauth/token when the request's
 // Origin is in the configured allow-list (or "*"). No-op when no origins are
 // configured — server-to-server and native-form clients don't need CORS.
@@ -956,7 +984,7 @@ type consentView struct {
 func (h *Handler) redirectToConsentUI(w http.ResponseWriter, r *http.Request, p authorizeParams, errCode string, skip bool) {
 	u, err := url.Parse(h.cfg.ConsentURL)
 	if err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "consent_url misconfigured")
+		h.serverError(r.Context(), w, "consent_url misconfigured", err)
 		return
 	}
 	q := u.Query()

@@ -92,10 +92,20 @@ func LogOutcome(base *zap.Logger) connect.ServerInterceptor {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 			start := time.Now()
 			err := next(ctx, spec, stream)
-			logFailure(base, spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), time.Since(start), err)
+			// The span the tracing interceptor opened joins the line to its
+			// trace; the request id is written below.
+			logFailure(withTrace(ctx, base), spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), time.Since(start), err)
 			return err
 		}
 	}
+}
+
+// withTrace is base with ctx's trace, or nil when base is.
+func withTrace(ctx context.Context, base *zap.Logger) *zap.Logger {
+	if base == nil {
+		return nil
+	}
+	return logger.WithTrace(ctx, base)
 }
 
 // logFailure is the whole decision, split out from the interceptor plumbing so

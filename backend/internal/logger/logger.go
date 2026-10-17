@@ -217,10 +217,10 @@ func AuditFromContext(ctx context.Context) *zap.Logger {
 	return l
 }
 
-// enrich tacks trace_id / span_id / request_id / tenant_id on the logger
-// when the corresponding context values are present. Shared by the app and
-// audit accessors so they never drift apart.
-func enrich(ctx context.Context, l *zap.Logger) *zap.Logger {
+// WithTrace is l with the trace_id and span_id of ctx's span, when it has one
+// — for a logger that writes its own request fields and must not get them
+// twice.
+func WithTrace(ctx context.Context, l *zap.Logger) *zap.Logger {
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		sc := span.SpanContext()
 		l = l.With(
@@ -228,6 +228,14 @@ func enrich(ctx context.Context, l *zap.Logger) *zap.Logger {
 			zap.String("span_id", sc.SpanID().String()),
 		)
 	}
+	return l
+}
+
+// enrich tacks trace_id / span_id / request_id / tenant_id on the logger
+// when the corresponding context values are present. Shared by the app and
+// audit accessors so they never drift apart.
+func enrich(ctx context.Context, l *zap.Logger) *zap.Logger {
+	l = WithTrace(ctx, l)
 	if rid := reqctx.RequestID(ctx, ""); rid != "" {
 		l = l.With(zap.String("request_id", rid))
 	}

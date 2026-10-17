@@ -6,9 +6,12 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
@@ -134,5 +137,37 @@ func TestOutcomeLoggerSeesAuthRejections(t *testing.T) {
 	}
 	if got := all[0].ContextMap()["code"]; got != "unauthenticated" {
 		t.Errorf("code = %v, want unauthenticated", got)
+	}
+}
+
+// A failed RPC's line carries its trace, so it joins the trace the tracing
+// interceptor opened, and the request id once — not again from the context.
+func TestFailureCarriesItsTrace(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceFlags: trace.FlagsSampled,
+	})
+	ctx := reqctx.WithRequestID(trace.ContextWithSpanContext(context.Background(), sc), "req-1")
+	fail := func(context.Context, connect.Spec, connect.ServerStream) error {
+		return connect.NewError(connect.CodeInternal, "pool closed")
+	}
+
+	_ = LogOutcome(zap.New(core))(fail)(ctx, connect.Spec{Procedure: "/paladin.iam.v1.UserSettingsService/GetMine"}, nil)
+
+	all := logs.All()
+	if len(all) != 1 {
+		t.Fatalf("lines = %d, want 1", len(all))
+	}
+	if got := all[0].ContextMap()["trace_id"]; got != sc.TraceID().String() {
+		t.Errorf("trace_id = %v, want %s", got, sc.TraceID())
+	}
+	n := 0
+	for _, f := range all[0].Context {
+		if f.Key == "request_id" {
+			n++
+		}
+	}
+	if n > 1 {
+		t.Errorf("request_id written %d times", n)
 	}
 }

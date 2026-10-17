@@ -15,7 +15,7 @@ import (
 // client session the caller drives with ListTools / CallTool.
 func dialInProcess(t *testing.T, c *Clients) *mcpsdk.ClientSession {
 	t.Helper()
-	srv := NewServer("paladin-mcp-test", "v0.0.0", c, nil)
+	srv := NewServer("paladin-mcp-test", "v0.0.0", c, nil, nil)
 	st, ct := mcpsdk.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := srv.Connect(ctx, st, nil); err != nil {

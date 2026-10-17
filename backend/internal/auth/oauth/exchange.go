@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -130,7 +132,7 @@ func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 		TTL:           ttl,
 	})
 	if err != nil {
-		h.jsonError(w, http.StatusInternalServerError, "server_error", "mint access failed")
+		h.serverError(r.Context(), w, "mint access failed", err, zap.String("client_id", client.ClientID))
 		return
 	}
 	writeJSON(w, http.StatusOK, exchangeResponse{

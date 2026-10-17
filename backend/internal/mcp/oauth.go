@@ -24,6 +24,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"go.uber.org/zap"
+
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -119,6 +122,10 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 		if !isAPIToken {
 			p, err := verifier.Verify(r.Context(), tok)
 			if err != nil {
+				// The agent is told only that the token was refused; why —
+				// expired, another audience, a key set that would not load —
+				// is here. The token itself is never logged.
+				logger.FromContext(r.Context()).Info(tokenRefusedMessage, zap.Error(err))
 				writeChallenge(w, resourceMetadataURL, "invalid_token", "the access token is missing, expired, or invalid")
 				return
 			}
@@ -131,6 +138,9 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 		bound.ServeHTTP(w, withTokenInfo(r, tok, info))
 	})
 }
+
+// tokenRefusedMessage is the log line of a bearer token the edge refused.
+const tokenRefusedMessage = "mcp access token refused"
 
 // EdgeOption tunes RequireBearer.
 type EdgeOption func(*edgeOptions)
