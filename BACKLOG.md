@@ -78,6 +78,21 @@ the same commit. Treat this file like a runtime invariant.
 
 ## MCP bridge
 
+### Self-registered OAuth clients are never removed
+
+- **Status:** Deferred.
+- **Reason:** with `auth.oauth.dynamic_registration` on, any caller may
+  register a client (RFC 7591), and nothing removes one: there is no RFC 7592
+  management endpoint, no console or RPC to delete a client, and no expiry.
+  An agent that re-registers on every install leaves a row each time; the
+  `/mcp` page lists them, marked as self-registered. Revoking the user's grant
+  ends the client's access, but the registration stays.
+- **Definition of Done:** an admin can delete a registered client from the
+  console (its grants go with it, as `refresh_tokens.oauth_client_id` cascades),
+  and self-registered clients with no live grant past a configured age are
+  reaped; unit tests and an e2e assertion.
+- **Blockers:** none.
+
 ### Admin RPCs the MCP bridge leaves off on purpose
 
 - **Status:** Won't-do (by design) unless the decision below is revisited.
