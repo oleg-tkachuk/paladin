@@ -153,7 +153,11 @@ func (a *auditInterceptor) stream(next connect.ServerFunc) connect.ServerFunc {
 		if a.shouldSkip(spec) {
 			return err
 		}
-		_ = a.writeStream(ctx, spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), err)
+		// Logged as the unary path is, and for the same reason.
+		if werr := a.writeStream(ctx, spec.Procedure, unary.Info(ctx).RequestHeader().Get(HeaderRequestID), err); werr != nil {
+			logger.FromContext(ctx).Error("audit entry not written",
+				zap.String("rpc", spec.Procedure), zap.Error(werr))
+		}
 		return err
 	}
 }
@@ -230,18 +234,9 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 	// The audit row and its mirror event commit atomically: the mirror
 	// enqueues its outbox rows on the insert's own transaction (ADR-0003).
 	// nil mirror ⇒ nil hook ⇒ InsertWithOutbox degrades to a plain Insert.
-	return a.w.InsertWithOutbox(asActor(ctx, entry.ActorTenantID), entry, a.mirrorHook(entry))
-}
-
-// asActor scopes the audit insert to its actor's tenant, which audit_log's
-// insert policy requires: a platform admin's call acting inside another
-// tenant (ActOnNamedTenant) would otherwise insert under that tenant's scope
-// and be refused.
-func asActor(ctx context.Context, actorTenant uuid.UUID) context.Context {
-	if actorTenant == uuid.Nil {
-		return ctx
-	}
-	return auth.WithActingTenant(ctx, actorTenant)
+	// The writer scopes the insert to entry's actor tenant, which audit_log's
+	// insert policy requires.
+	return a.w.InsertWithOutbox(ctx, entry, a.mirrorHook(entry))
 }
 
 // mirrorHook returns the transactional fan-out closure for entry, or nil
@@ -271,7 +266,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
 	}
-	return a.w.InsertWithOutbox(asActor(ctx, entry.ActorTenantID), entry, a.mirrorHook(entry))
+	return a.w.InsertWithOutbox(ctx, entry, a.mirrorHook(entry))
 }
 
 func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {

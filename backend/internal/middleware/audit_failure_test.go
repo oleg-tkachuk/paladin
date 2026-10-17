@@ -69,3 +69,25 @@ func TestAuditWriteFailureIsLoggedAndDoesNotFailTheRPC(t *testing.T) {
 			"defect with an external consequence, not routine noise", found[0].Level)
 	}
 }
+
+// A streaming RPC's row that fails is logged too: the stream path discarded
+// the error the unary path had already stopped discarding.
+func TestStreamAuditWriteFailureIsLogged(t *testing.T) {
+	const procedure = "/paladin.iam.v1.UserSettingsService/WatchMine"
+	core, logs := observer.New(zap.ErrorLevel)
+	w := &failingAuditWriter{}
+	a := &auditInterceptor{w: w, audience: "paladin-iam"}
+	ctx := logger.WithContext(principalCtx(uuid.New()), zap.New(core))
+	next := func(context.Context, connect.Spec, connect.ServerStream) error { return nil }
+
+	if err := a.stream(next)(ctx, connect.Spec{Procedure: procedure, StreamType: connect.StreamTypeServer}, nil); err != nil {
+		t.Fatalf("the stream must not fail on its audit row: %v", err)
+	}
+	if w.calls == 0 {
+		t.Fatal("the stream wrote no row, so nothing could fail to be logged")
+	}
+	got := logs.FilterMessage("audit entry not written").All()
+	if len(got) != 1 || got[0].ContextMap()["rpc"] != procedure {
+		t.Errorf("logged %v, want one line naming %s", got, procedure)
+	}
+}

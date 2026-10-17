@@ -494,17 +494,25 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 	if h.audit == nil {
 		return
 	}
-	_ = h.audit.Insert(ctx, admindomain.AuditEntry{
+	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
 		EntryID:       uuid.Must(uuid.NewV7()),
 		At:            h.now().UTC(),
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
 		ActorAudience: auth.AudienceIAM,
-		Action:        "iam.RefreshTokenReuseDetected",
+		Action:        actionRefreshReuse,
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "rotated refresh token replayed; token family revoked",
-	})
+	}); err != nil && h.log != nil {
+		h.log.Error("audit entry not written",
+			zap.String("action", actionRefreshReuse),
+			zap.String("user_id", userID.String()),
+			zap.Error(err))
+	}
 }
+
+// actionRefreshReuse names the audit row of a replayed rotated refresh token.
+const actionRefreshReuse = "iam.RefreshTokenReuseDetected"
 
 // tokenResponse is the RFC 6749 §5.1 success body.
 type tokenResponse struct {

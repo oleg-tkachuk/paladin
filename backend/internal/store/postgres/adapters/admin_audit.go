@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -35,7 +36,21 @@ func NewAuditRepoV2(q *sqlc.Queries, pool *pgxpool.Pool) *AuditRepoV2 {
 var _ admindomain.AuditRepository = (*AuditRepoV2)(nil)
 
 func (r *AuditRepoV2) Insert(ctx context.Context, e admindomain.AuditEntry) error {
-	return r.insertWith(ctx, r.q, e)
+	return r.insertWith(asActor(ctx, e.ActorTenantID), r.q, e)
+}
+
+// asActor scopes an audit insert to the row's actor tenant, which
+// audit_log's insert policy requires (actor_tenant_id is the session's
+// tenant, or NULL). The server writes every row about an actor it has
+// already identified, so the row's own tenant is the scope to write it in —
+// a refresh-token replay or a tenant switch carries no request principal,
+// and a platform admin acting inside another tenant runs under that
+// tenant's scope; under either, the insert was refused.
+func asActor(ctx context.Context, actorTenant uuid.UUID) context.Context {
+	if actorTenant == uuid.Nil {
+		return ctx
+	}
+	return auth.WithActingTenant(ctx, actorTenant)
 }
 
 // insertWith runs the audit INSERT against an arbitrary query set — the
@@ -97,6 +112,7 @@ func (r *AuditRepoV2) InsertWithOutbox(
 	if e.At.IsZero() {
 		e.At = time.Now().UTC()
 	}
+	ctx = asActor(ctx, e.ActorTenantID)
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("audit insert begin: %w", err)
