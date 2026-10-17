@@ -28,7 +28,7 @@ func TestToolCallsPresentTheRequestsToken(t *testing.T) {
 	}))
 	t.Cleanup(plane.Close)
 
-	server := NewServer("t", "0", mustClients(t)(NewClients(plane.Client(), plane.URL, plane.URL, plane.URL, "")), nil)
+	server := NewServer("t", "0", mustClients(t)(NewClients(plane.Client(), plane.URL, plane.URL, plane.URL, "")), nil, nil)
 	h := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server { return server }, nil)
 	ts := httptest.NewServer(RequireBearer(h, twoUsers{}, ""))
 	t.Cleanup(ts.Close)

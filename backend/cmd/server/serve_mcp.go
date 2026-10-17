@@ -345,7 +345,7 @@ func pickProfile(flag, cfgValue string) string {
 func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mcp.Clients) error {
 	profile := pickProfile(mcpProfile, cfg.MCP.Stdio.Profile)
 	filter := mcp.NewToolFilter(cfg.MCP, profile)
-	server := mcp.NewServer("paladin-mcp", version, clients, filter)
+	server := mcp.NewServer("paladin-mcp", version, clients, filter, l)
 
 	l.Info("mcp stdio starting", zap.String("profile", profile))
 	if err := server.Run(ctx, &mcpsdk.StdioTransport{}); err != nil {
@@ -364,11 +364,12 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// One server for every session. The SDK asks for it on each HTTP request
 	// (to negotiate the protocol version), and building it there reflected
 	// the whole tool catalog per request.
-	server := mcp.NewServer("paladin-mcp", version, clients, filter)
+	server := mcp.NewServer("paladin-mcp", version, clients, filter, l)
 	handler := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server {
 		return server
 	}, &mcpsdk.StreamableHTTPOptions{
 		SessionTimeout: cfg.MCP.HTTP.SessionTimeout,
+		Logger:         mcp.SDKLogger(l),
 	})
 
 	// Track live sessions off the wire — the SDK exposes no enumeration hook,

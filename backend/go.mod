@@ -65,6 +65,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/zap v1.28.0
+	go.uber.org/zap/exp v0.3.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sync v0.24.0
 	google.golang.org/genproto v0.0.0-20261012220534-4341edf3f941
