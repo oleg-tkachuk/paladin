@@ -96,6 +96,8 @@ type PromoteHandler struct {
 	// Tenants, when set, skips the events of a tenant in the trash: it is
 	// frozen, and the reconciler settles its pending uploads on restore.
 	Tenants auth.TenantStateReader
+	// Audit records the transitions events make. nil records none.
+	Audit AuditWriter
 }
 
 func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
@@ -223,6 +225,11 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			zap.String("object_id", objectID.String()),
 			zap.Bool("changed", changed),
 		)
+		// A redelivery, or an object a CompleteObject already promoted,
+		// changed nothing and is not recorded again.
+		if changed {
+			h.record(ctx, logger, ev, actionObjectUploaded, resourceName, tenantUUID, objectID)
+		}
 		return nil
 
 	case EventTypeDeleted:
@@ -283,6 +290,7 @@ func (h *PromoteHandler) settleDeleted(ctx context.Context, logger *zap.Logger, 
 		return fmt.Errorf("soft delete object: %w", err)
 	}
 	logger.Info("object's bytes are gone from the store; moved to the trash")
+	h.record(ctx, logger, ev, actionObjectDeleted, resourceName, uuid.UUID(obj.TenantID.Bytes), objectID)
 	return nil
 }
 
