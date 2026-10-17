@@ -23,6 +23,7 @@ export const MCP_SERVER_CLIENT_ID = "paladin-mcp-server";
 // RFC 7636 allows 43–128 characters; the verifier only has to match itself.
 export const PKCE_VERIFIER = "e2e-verifier-".padEnd(64, "x");
 
+export const HTTP_CREATED = 201;
 export const HTTP_FOUND = 302;
 export const HTTP_OK = 200;
 export const HTTP_BAD_REQUEST = 400;
@@ -49,15 +50,38 @@ export function claims(token: string): Record<string, unknown> {
   );
 }
 
+/**
+ * Register a public client the way an agent does (RFC 7591), for REDIRECT_URI
+ * and audiences, and return its client_id. The stack runs with
+ * auth.oauth.dynamic_registration on.
+ */
+export async function registerClient(
+  request: APIRequestContext,
+  clientName: string,
+  audiences: string[],
+): Promise<string> {
+  const res = await request.post(`${IAM_URL}/oauth/register`, {
+    data: {
+      client_name: clientName,
+      redirect_uris: [REDIRECT_URI],
+      audiences,
+      token_endpoint_auth_method: "none",
+    },
+  });
+  expect(res.status(), await res.text()).toBe(HTTP_CREATED);
+  return ((await res.json()) as { client_id: string }).client_id;
+}
+
 /** Consent as the seeded admin for resource, and exchange the code. */
 export async function grant(
   request: APIRequestContext,
   scopes: string[],
   resource: string = AUDIENCE_ADMIN,
+  clientId: string = CLIENT_ID,
 ): Promise<TokenResponse> {
   const authorize = await request.post(`${IAM_URL}/oauth/authorize`, {
     form: {
-      client_id: CLIENT_ID,
+      client_id: clientId,
       redirect_uri: REDIRECT_URI,
       scope: scopes.join(" "),
       resource,
@@ -77,19 +101,20 @@ export async function grant(
   );
   expect(code, "the redirect carries a code").toBeTruthy();
 
-  return exchangeCode(request, code as string);
+  return exchangeCode(request, code as string, clientId);
 }
 
 /** Exchange an authorization code issued for PKCE_VERIFIER. */
 export async function exchangeCode(
   request: APIRequestContext,
   code: string,
+  clientId: string = CLIENT_ID,
 ): Promise<TokenResponse> {
   const token = await request.post(`${IAM_URL}/oauth/token`, {
     form: {
       grant_type: "authorization_code",
       code,
-      client_id: CLIENT_ID,
+      client_id: clientId,
       redirect_uri: REDIRECT_URI,
       code_verifier: PKCE_VERIFIER,
     },
