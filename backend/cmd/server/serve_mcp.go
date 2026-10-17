@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -514,8 +517,10 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           middleware.LogHTTPServerErrors(mux),
 		ReadHeaderTimeout: 5 * time.Second,
+		BaseContext:       logger.HTTPBaseContext(l),
+		ErrorLog:          logger.HTTPServerErrorLog(l, addr),
 	}
 
 	go func() { // #nosec G118 -- detached ctx is intentional; the parent ctx is already canceled at shutdown time

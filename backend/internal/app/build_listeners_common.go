@@ -5,14 +5,13 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"log"
-	"net"
 	"net/http"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
@@ -48,16 +47,14 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) (*htt
 	protocols.SetUnencryptedHTTP2(true)
 	return &http.Server{
 		Addr:              c.Addr,
-		Handler:           resolver.Middleware(mux),
+		Handler:           resolver.Middleware(middleware.LogHTTPServerErrors(mux)),
 		Protocols:         protocols,
 		ReadHeaderTimeout: c.ReadHeaderTimeout,
 		ReadTimeout:       c.ReadTimeout,
 		WriteTimeout:      c.WriteTimeout,
 		IdleTimeout:       c.IdleTimeout,
 		MaxHeaderBytes:    c.MaxHeaderBytes,
-		BaseContext: func(_ net.Listener) context.Context {
-			return logger.WithContext(context.Background(), l)
-		},
+		BaseContext:       logger.HTTPBaseContext(l),
 		// Route the server's own errors — TLS handshake failures, malformed
 		// requests, anything the handler never sees — into the structured log
 		// with the listener's address attached.
@@ -69,25 +66,8 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) (*htt
 		// 127.0.0.1: client sent an HTTP request to an HTTPS server" appeared
 		// in bursts on the api pod, which serves data and iam, and the missing
 		// half of the sentence is why the client is still unidentified.
-		ErrorLog: serverErrorLog(l, c.Addr),
+		ErrorLog: logger.HTTPServerErrorLog(l, c.Addr),
 	}, nil
-}
-
-// serverErrorLog adapts zap for http.Server.ErrorLog at warn level, tagged
-// with the listener the message came from.
-//
-// NewStdLogAt only fails on an unknown level, which is a compile-time
-// constant here; a nil ErrorLog is the stdlib default (Go's global logger), so
-// falling back to it on the impossible branch loses the tag and nothing else.
-func serverErrorLog(l *zap.Logger, addr string) *log.Logger {
-	std, err := zap.NewStdLogAt(
-		l.Named("http").With(zap.String("listen_addr", addr)),
-		zapcore.WarnLevel,
-	)
-	if err != nil {
-		return nil
-	}
-	return std
 }
 
 // BuildVerifier returns a TokenVerifier pinned to a specific audience.
