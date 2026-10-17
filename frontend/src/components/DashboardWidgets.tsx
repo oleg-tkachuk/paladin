@@ -53,7 +53,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
-import { T } from "@/lib/ui/typography";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { CAPABILITIES_DOCS_URL } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
@@ -246,11 +245,7 @@ function FailedOpsWidget() {
             )}
           />
           Failed operations
-          {ops.length > 0 && (
-            <Badge variant="destructive" className={T.labelTight}>
-              {ops.length}
-            </Badge>
-          )}
+          {ops.length > 0 && <Badge variant="destructive">{ops.length}</Badge>}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
@@ -329,10 +324,7 @@ function BudgetAlertsWidget() {
           />
           Budget alerts
           {rows.length > 0 && (
-            <Badge
-              variant={overCap > 0 ? "destructive" : "secondary"}
-              className={T.labelTight}
-            >
+            <Badge variant={overCap > 0 ? "destructive" : "secondary"}>
               {rows.length} ≥{BUDGET_ALERT_THRESHOLD}%
             </Badge>
           )}

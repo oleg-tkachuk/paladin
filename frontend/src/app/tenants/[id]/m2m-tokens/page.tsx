@@ -319,7 +319,7 @@ export default function M2MTokensPage() {
                             <Badge
                               key={s}
                               variant="outline"
-                              className={cn(T.labelTight, "font-mono")}
+                              className="font-mono"
                             >
                               {s}
                             </Badge>
@@ -332,11 +332,7 @@ export default function M2MTokensPage() {
                     <TableCell className={COL_AUDIENCE}>
                       <div className="flex flex-wrap gap-1">
                         {t.audience.map((a) => (
-                          <Badge
-                            key={a}
-                            variant="secondary"
-                            className={T.labelTight}
-                          >
+                          <Badge key={a} variant="secondary">
                             {a}
                           </Badge>
                         ))}

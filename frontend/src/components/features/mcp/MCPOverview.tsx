@@ -91,7 +91,6 @@ export function MCPOverview({
               <Badge
                 key={u.name}
                 variant={u.reachable ? planeTone(u.name) : "destructive"}
-                className={T.labelTight}
                 title={u.url}
               >
                 {u.reachable ? null : (
@@ -173,10 +172,7 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
         <div className="space-y-1.5 text-sm">
           <div className="flex items-center gap-2">
             <span className="font-medium">Streamable HTTP</span>
-            <Badge
-              variant={http?.enabled ? "success" : "outline"}
-              className={T.labelTight}
-            >
+            <Badge variant={http?.enabled ? "success" : "outline"}>
               {http?.enabled ? "enabled" : "disabled"}
             </Badge>
           </div>
@@ -196,10 +192,7 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
         <div className="space-y-1.5 text-sm">
           <div className="flex items-center gap-2">
             <span className="font-medium">stdio</span>
-            <Badge
-              variant={stdio?.enabled ? "success" : "outline"}
-              className={T.labelTight}
-            >
+            <Badge variant={stdio?.enabled ? "success" : "outline"}>
               {stdio?.enabled ? "enabled" : "disabled"}
             </Badge>
           </div>

@@ -182,7 +182,7 @@ function ComponentRow({ c }: { c: Component }) {
           {c.critical && !disabled && (
             <Badge
               variant="outline"
-              className="shrink-0 px-1.5 py-0 text-sm font-normal"
+              className="shrink-0 px-1.5 py-0 font-normal"
             >
               required
             </Badge>
@@ -191,7 +191,7 @@ function ComponentRow({ c }: { c: Component }) {
             <Badge
               variant="secondary"
               title={control.title}
-              className="shrink-0 px-1.5 py-0 text-sm font-normal"
+              className="shrink-0 px-1.5 py-0 font-normal"
             >
               {control.label}
             </Badge>

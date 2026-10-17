@@ -522,7 +522,7 @@ export default function CapabilitiesPage() {
                           <Badge
                             key={op}
                             variant="outline"
-                            className={cn(T.labelTight, "font-mono")}
+                            className="font-mono"
                           >
                             {op}
                           </Badge>
@@ -542,11 +542,7 @@ export default function CapabilitiesPage() {
                     <TableCell className={COL_AUDIENCE}>
                       <div className="flex flex-wrap gap-1">
                         {c.audience.map((a) => (
-                          <Badge
-                            key={a}
-                            variant="secondary"
-                            className={T.labelTight}
-                          >
+                          <Badge key={a} variant="secondary">
                             {a}
                           </Badge>
                         ))}

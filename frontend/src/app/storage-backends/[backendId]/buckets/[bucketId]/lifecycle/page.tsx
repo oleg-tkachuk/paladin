@@ -482,14 +482,9 @@ function RuleCard({ rule, busy, onEdit, onToggle, onDelete }: RuleCardProps) {
               {rule.id}
             </span>
             {deleteOnly ? (
-              <Badge variant="warning" className={T.labelTight}>
-                not applied
-              </Badge>
+              <Badge variant="warning">not applied</Badge>
             ) : (
-              <Badge
-                variant={rule.enabled ? "success" : "outline"}
-                className={T.labelTight}
-              >
+              <Badge variant={rule.enabled ? "success" : "outline"}>
                 {rule.enabled ? "enabled" : "disabled"}
               </Badge>
             )}

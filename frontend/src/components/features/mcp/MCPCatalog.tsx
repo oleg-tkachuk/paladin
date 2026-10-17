@@ -41,23 +41,13 @@ export function EffectBadge({
   return (
     <span className="inline-flex flex-wrap gap-1">
       {tool.destructive ? (
-        <Badge variant="destructive" className={T.labelTight}>
-          destructive
-        </Badge>
+        <Badge variant="destructive">destructive</Badge>
       ) : tool.mutates ? (
-        <Badge variant="warning" className={T.labelTight}>
-          changes state
-        </Badge>
+        <Badge variant="warning">changes state</Badge>
       ) : (
-        <Badge variant="outline" className={T.labelTight}>
-          read
-        </Badge>
+        <Badge variant="outline">read</Badge>
       )}
-      {tool.openWorld ? (
-        <Badge variant="info" className={T.labelTight}>
-          open world
-        </Badge>
-      ) : null}
+      {tool.openWorld ? <Badge variant="info">open world</Badge> : null}
     </span>
   );
 }
@@ -166,21 +156,13 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
                   <TableCell className={T.code}>
                     {t.name}
                     {denied.has(t.name) ? (
-                      <Badge
-                        variant="destructive"
-                        className={`ml-2 ${T.labelTight}`}
-                      >
+                      <Badge variant="destructive" className="ml-2">
                         always denied
                       </Badge>
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={planeTone(t.audience)}
-                      className={T.labelTight}
-                    >
-                      {t.audience}
-                    </Badge>
+                    <Badge variant={planeTone(t.audience)}>{t.audience}</Badge>
                   </TableCell>
                   <TableCell>
                     <EffectBadge tool={t} />
@@ -231,15 +213,13 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
               <TableCell>
                 <span className={T.code}>{p.name}</span>
                 {inUse.has(p.name) ? (
-                  <Badge variant="success" className={`ml-2 ${T.labelTight}`}>
+                  <Badge variant="success" className="ml-2">
                     in use
                   </Badge>
                 ) : null}
               </TableCell>
               <TableCell>
-                <Badge variant="outline" className={T.labelTight}>
-                  {p.source.replace("_", " ")}
-                </Badge>
+                <Badge variant="outline">{p.source.replace("_", " ")}</Badge>
               </TableCell>
               <TableCell className="hidden @md:table-cell">
                 <div className="flex flex-wrap gap-1">
@@ -316,14 +296,9 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
                 <TableCell className={T.code}>{d}</TableCell>
                 <TableCell>
                   {t ? (
-                    <Badge
-                      variant={planeTone(t.audience)}
-                      className={T.labelTight}
-                    >
-                      {t.audience}
-                    </Badge>
+                    <Badge variant={planeTone(t.audience)}>{t.audience}</Badge>
                   ) : (
-                    <Badge variant="outline" className={T.labelTight}>
+                    <Badge variant="outline">
                       {d.includes("*") ? "pattern" : "not registered"}
                     </Badge>
                   )}

@@ -247,7 +247,7 @@ export function ObjectInspector({
                           <Badge
                             key={k}
                             variant="outline"
-                            className="font-mono text-xs"
+                            className="font-mono"
                           >
                             {k}={String(v)}
                           </Badge>

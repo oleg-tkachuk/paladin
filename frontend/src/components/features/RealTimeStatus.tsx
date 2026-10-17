@@ -132,12 +132,7 @@ export function RealTimeStatus() {
             className={cn("relative inline-flex size-2 rounded-full", meta.dot)}
           />
         </span>
-        <span
-          className={cn(
-            "text-sm font-medium uppercase tracking-wide",
-            meta.text,
-          )}
-        >
+        <span className={cn("text-sm font-medium", meta.text)}>
           {meta.label}
         </span>
       </div>

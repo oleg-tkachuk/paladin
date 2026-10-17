@@ -56,7 +56,6 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
                 variant={
                   oauth?.authorizationServerEnabled ? "success" : "outline"
                 }
-                className={T.labelTight}
               >
                 {oauth?.authorizationServerEnabled ? "enabled" : "disabled"}
               </Badge>
@@ -65,10 +64,7 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
           <div>
             <dt className={T.label}>OAuth at the MCP server</dt>
             <dd>
-              <Badge
-                variant={oauth?.edgeOauthEnabled ? "success" : "outline"}
-                className={T.labelTight}
-              >
+              <Badge variant={oauth?.edgeOauthEnabled ? "success" : "outline"}>
                 {oauth?.edgeOauthEnabled ? "enabled" : "disabled"}
               </Badge>
             </dd>
@@ -122,15 +118,12 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
                   <TableCell className={T.code}>
                     {c.clientId}
                     {c.dynamic ? (
-                      <Badge variant="info" className={`ml-2 ${T.labelTight}`}>
+                      <Badge variant="info" className="ml-2">
                         registered itself
                       </Badge>
                     ) : null}
                     {c.skipConsent ? (
-                      <Badge
-                        variant="outline"
-                        className={`ml-2 ${T.labelTight}`}
-                      >
+                      <Badge variant="outline" className="ml-2">
                         skips consent
                       </Badge>
                     ) : null}

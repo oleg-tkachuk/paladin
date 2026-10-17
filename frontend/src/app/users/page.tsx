@@ -44,7 +44,6 @@ import {
 } from "@/components/ui/table";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
-import { T } from "@/lib/ui/typography";
 
 export default function UsersPage() {
   const { tenants, error: tenantsError, fetchTenants } = useTenants();
@@ -235,7 +234,7 @@ export default function UsersPage() {
                             <Badge
                               key={r}
                               variant="outline"
-                              className={cn(T.labelTight, "font-mono")}
+                              className="font-mono"
                             >
                               {r}
                             </Badge>
@@ -248,13 +247,9 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell>
                       {u.disabled ? (
-                        <Badge variant="destructive" className={T.labelTight}>
-                          disabled
-                        </Badge>
+                        <Badge variant="destructive">disabled</Badge>
                       ) : (
-                        <Badge variant="outline" className={T.labelTight}>
-                          active
-                        </Badge>
+                        <Badge variant="outline">active</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">

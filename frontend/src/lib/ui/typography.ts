@@ -32,10 +32,6 @@ export const typography = {
   // Always above a value, always uppercase, always muted.
   label: "text-xs uppercase tracking-wider text-muted-foreground font-medium",
 
-  // The label's chip form (inside a Badge): the badge's own text size,
-  // without the medium weight.
-  labelTight: "text-sm uppercase tracking-wider text-muted-foreground",
-
   // ─── Values ────────────────────────────────────────────────────────
   // Headline values shown under a label — counts, numbers, version
   // strings, identifiers. Mono so digits align in tables and tabular

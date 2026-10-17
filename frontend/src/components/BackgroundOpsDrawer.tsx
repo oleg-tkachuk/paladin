@@ -64,7 +64,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
-import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
 
 const POLL_OPEN_MS = 2_000;
@@ -151,7 +150,7 @@ export function BackgroundOpsDrawer() {
           {summary.inProgress + summary.failed > 0 && (
             <Badge
               variant={summary.failed > 0 ? "destructive" : "secondary"}
-              className="ml-1 h-4 px-1 text-sm"
+              className="ml-1 px-1"
             >
               {summary.inProgress + summary.failed}
             </Badge>
@@ -296,11 +295,7 @@ function OpRow({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>started</span>
             <RelativeTime ts={op.createdAt} />
-            {op.done && (
-              <Badge variant="outline" className={T.labelTight}>
-                done
-              </Badge>
-            )}
+            {op.done && <Badge variant="outline">done</Badge>}
           </div>
           {opError(op) && (
             <p className="mt-1 font-mono text-sm text-destructive">

@@ -234,11 +234,7 @@ export function BucketGrantsCard({
                           className="flex items-center gap-2 hover:text-primary"
                         >
                           {t.displayName || t.slug}
-                          {t.slug && (
-                            <Badge variant="outline" className={T.labelTight}>
-                              {t.slug}
-                            </Badge>
-                          )}
+                          {t.slug && <Badge variant="outline">{t.slug}</Badge>}
                         </Link>
                       ) : (
                         <span className={T.code}>{g.tenantId}</span>
