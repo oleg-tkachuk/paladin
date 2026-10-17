@@ -331,6 +331,11 @@ services:
     init: true
     restart: on-failure
     command: ["serve", "mcp", "--config", "/app/configs/compose.yaml"]
+    # The admin plane reaches it by the dev-loop stack's name
+    # (mcp.http.sessions_url in backend/configs/compose.yaml).
+    networks:
+      default:
+        aliases: [paladin-mcp]
     ports:
       - "${PALADIN_E2E_PORT_MCP:-8095}:8095"
     depends_on:

@@ -1,3 +1,4 @@
+import { SECTION } from "@/lib/navigation/sections";
 import { describe, expect, it } from "vitest";
 
 import { ROLES } from "@/constants/roles";
@@ -41,11 +42,28 @@ describe("visibleNavigationGroups", () => {
     expect(all).toEqual(names([ROLES.tenantAdmin]));
   });
 
-  it("names the MCP entry after the page it opens", () => {
-    const entry = visibleNavigationGroups([ROLES.platformAdmin])
-      .flatMap((g) => g.items)
-      .find((i) => i.path === "/mcp");
-    expect(entry?.name).toBe("MCP server");
+  // The MCP server is a group of its own: the four questions it answers are
+  // pages, each a row, and none of them a row of System any more.
+  it("gives the MCP server a group of its pages", () => {
+    const groups = visibleNavigationGroups([ROLES.platformAdmin]);
+    const mcp = groups.find((g) => g.title === "MCP");
+    expect(mcp?.items.map((i) => i.path)).toEqual([
+      SECTION.mcp,
+      SECTION.mcpTools,
+      SECTION.mcpAccess,
+      SECTION.mcpConnect,
+    ]);
+    const system = groups.find((g) => g.title === "System");
+    expect(system?.items.some((i) => i.path?.startsWith(SECTION.mcp))).toBe(
+      false,
+    );
+  });
+
+  // Every MCP page reads the admin plane, so a principal without it gets
+  // none of them rather than four rows that fail.
+  it("leaves the MCP group to the admin plane", () => {
+    const groups = visibleNavigationGroups([ROLES.tenantUser]);
+    expect(groups.find((g) => g.title === "MCP")).toBeUndefined();
   });
 
   it("takes nothing away before the user is known", () => {

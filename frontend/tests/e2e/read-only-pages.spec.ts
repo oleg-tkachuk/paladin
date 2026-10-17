@@ -44,7 +44,14 @@ function watchRPC(page: Page) {
 const PAGES = [
   { path: "/audit", heading: /Audit Logs/i, content: /Action/ },
   { path: "/health", heading: /Health & Diagnostics/i, content: /postgres/i },
-  { path: "/mcp", heading: /MCP server/i, content: /Connecting an agent/i },
+  { path: "/mcp", heading: /MCP server/i, content: /Sessions/ },
+  { path: "/mcp/tools", heading: /^Tools$/, content: /paladin_list_backends/ },
+  { path: "/mcp/access", heading: /^Access$/, content: /How agents authorize/ },
+  {
+    path: "/mcp/connect",
+    heading: /Connect an agent/i,
+    content: /Streamable HTTP/,
+  },
   { path: "/stats", heading: /Platform Statistics/i, content: /By backend/i },
   { path: "/config", heading: /Configuration/i, content: /Cluster snapshot/i },
   { path: "/billing", heading: /Billing/i, content: /Spend over time/i },

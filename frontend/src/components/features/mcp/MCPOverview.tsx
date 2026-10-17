@@ -6,10 +6,13 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
+import { SECTION } from "@/lib/navigation/sections";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
@@ -125,13 +128,19 @@ export function MCPOverview({
       <Tile
         label="Agents on HTTP see"
         hint={
-          httpProfile ? (
-            <>
-              Profile <span className={T.code}>{httpProfile}</span>
-            </>
-          ) : (
-            "Profile unknown"
-          )
+          <>
+            {httpProfile ? (
+              <>
+                Profile <span className={T.code}>{httpProfile}</span> ·{" "}
+              </>
+            ) : null}
+            <Link
+              href={SECTION.mcpTools}
+              className="text-primary hover:underline"
+            >
+              see the tools
+            </Link>
+          </>
         }
       >
         {inspect ? (
@@ -159,7 +168,7 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
   const stdio = inspect.transports?.stdio;
   return (
     <Card className="space-y-3 p-4">
-      <h3 className={T.cardTitleProse}>Connecting an agent</h3>
+      <h3 className={T.cardTitleProse}>Transports</h3>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-1.5 text-sm">
           <div className="flex items-center gap-2">
@@ -172,7 +181,10 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
             </Badge>
           </div>
           <p className={T.hint}>
-            <span className={T.code}>POST {http?.addr || ":8095"}/mcp</span>{" "}
+            <span className={T.code}>
+              POST{" "}
+              {inspect.oauth?.resourceUrl || `${http?.addr || ":8095"}/mcp`}
+            </span>{" "}
             with <span className={T.code}>Authorization: Bearer …</span>.
             Sessions end after{" "}
             {http?.sessionTimeoutSeconds

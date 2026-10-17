@@ -20,6 +20,9 @@ export const SECTION = {
   stats: "/stats",
   audit: "/audit",
   mcp: "/mcp",
+  mcpTools: "/mcp/tools",
+  mcpAccess: "/mcp/access",
+  mcpConnect: "/mcp/connect",
   health: "/health",
   profile: "/profile",
   config: "/config",
@@ -30,6 +33,7 @@ export type Section = (typeof SECTION)[keyof typeof SECTION];
 const TENANTS_ROOT = "tenants";
 const BACKENDS_ROOT = "storage-backends";
 const BUCKETS_SEGMENT = "buckets";
+const MCP_ROOT = "mcp";
 
 /** The space a page is in: the platform's, or one tenant's workspace. */
 export type Scope =
@@ -65,7 +69,12 @@ export function sectionFor(pathname: string): Section | null {
   if (root === BACKENDS_ROOT && child === BUCKETS_SEGMENT) {
     return SECTION.buckets;
   }
-  const section = `/${root}`;
   const known = Object.values(SECTION) as string[];
+  // The MCP group's pages are sections of their own, each its sidebar row.
+  if (root === MCP_ROOT && segments[1]) {
+    const page = `/${root}/${segments[1]}`;
+    if (known.includes(page)) return page as Section;
+  }
+  const section = `/${root}`;
   return known.includes(section) ? (section as Section) : null;
 }

@@ -237,6 +237,10 @@ mcp:
     addr: "0.0.0.0:8095"
     profile: agent_safe
     session_timeout: 10m
+    # Where the admin plane asks for the sessions and the server's status
+    # (MCPInspectService). Empty, the console's MCP page read "unreachable"
+    # in this stack whatever the server was doing.
+    sessions_url: "http://paladin-mcp:8095/sessions"
   # The MCP server is its own audience (ADR-0036): it accepts paladin-mcp
   # tokens only and exchanges each as the seed client above. resource_url is
   # the URL the e2e suite reaches it at.
