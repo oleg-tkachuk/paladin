@@ -32,6 +32,7 @@ import {
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { T } from "@/lib/ui/typography";
+import { cn } from "@/lib/utils";
 
 import { MCP_PLANES, planeTone } from "./mcp-status";
 
@@ -426,7 +427,13 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
             const t = byName.get(d);
             return (
               <TableRow key={d} {...(t ? openableRow(() => setOpened(t)) : {})}>
-                <TableCell className={T.code}>{d}</TableCell>
+                {/* A long name wraps, so the plane chip beside it keeps
+                    its width on a phone instead of running off the card. */}
+                <TableCell
+                  className={cn(T.code, "whitespace-normal break-all")}
+                >
+                  {d}
+                </TableCell>
                 <TableCell>
                   {t ? (
                     <Badge variant={planeTone(t.audience)}>{t.audience}</Badge>

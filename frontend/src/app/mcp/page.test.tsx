@@ -169,6 +169,10 @@ describe("MCP tools page", () => {
     expect(screen.getAllByText("paladin_create_user").length).toBeGreaterThan(
       0,
     );
+    // A long name wraps rather than pushing the plane chip off a phone.
+    for (const cell of screen.getAllByText("paladin_create_user")) {
+      if (cell.tagName === "TD") expect(cell).toHaveClass("break-all");
+    }
   });
 });
 
