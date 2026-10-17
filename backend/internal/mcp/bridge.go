@@ -1095,11 +1095,12 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_set_object_tags",
-		Description: "Replace the tag map on an existing object. Pass an empty `tags` map to clear all tags.",
+		Description: "Replace the tag map on an existing object. Pass an empty `tags` map to clear all tags. Needs the object's current resource_version: read it with paladin_get_object first.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in setObjectTagsArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.ObjectTag.PutObjectTags(ctx, &datav1.PutObjectTagsRequest{
-			Name: in.Name,
-			Tags: in.Tags,
+			Name:            in.Name,
+			ResourceVersion: in.ResourceVersion,
+			Tags:            in.Tags,
 		}))
 	})
 
@@ -1328,8 +1329,9 @@ type presignDownloadArgs struct {
 	RequireETagMatch   bool   `json:"require_etag_match,omitempty" jsonschema:"bind the URL to the object's current ETag; the caller must send the If-Match header it returns"`
 }
 type setObjectTagsArgs struct {
-	Name string            `json:"name" jsonschema:"object resource name"`
-	Tags map[string]string `json:"tags" jsonschema:"replacement tag map; empty = clear"`
+	Name            string            `json:"name" jsonschema:"object resource name"`
+	ResourceVersion string            `json:"resource_version" jsonschema:"OCC guard; required — take it from a prior list/get"`
+	Tags            map[string]string `json:"tags" jsonschema:"replacement tag map; empty = clear"`
 }
 type deleteObjectArgs struct {
 	Name            string `json:"name" jsonschema:"object resource name"`
