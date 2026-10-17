@@ -117,7 +117,7 @@ describe("AuditEntryDetailDialog", () => {
 
     render(<AuditEntryDetailDialog entryId="e4" onOpenChange={() => {}} />);
 
-    expect(await screen.findByText("relayed by")).toBeInTheDocument();
+    expect(await screen.findByText("Relayed by")).toBeInTheDocument();
     expect(screen.getByText("paladin-mcp-server")).toBeInTheDocument();
   });
 });

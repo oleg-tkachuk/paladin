@@ -81,10 +81,7 @@ export function MCPSessions() {
         </TableHeader>
         <TableBody>
           {rows.map((s) => (
-            <TableRow
-              key={s.id}
-              {...openableRow(() => setOpened(s), `Open session ${s.id}`)}
-            >
+            <TableRow key={s.id} {...openableRow(() => setOpened(s))}>
               <TableCell className={T.code} title={s.id}>
                 {s.id.slice(0, SESSION_ID_SHOWN)}…
               </TableCell>

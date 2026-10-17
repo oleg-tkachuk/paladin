@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@/test/utils";
 
-import { RecordDialog, RecordField, openableRow } from "./RecordDialog";
+import {
+  RecordBlock,
+  RecordDialog,
+  RecordField,
+  openableRow,
+} from "./RecordDialog";
 
 function Row({ open }: { open: () => void }) {
   return (
     <table>
       <tbody>
-        <tr {...openableRow(open, "Open record r-1")}>
+        <tr {...openableRow(open)}>
           <td>
             r-1 <button type="button">copy</button>
           </td>
@@ -21,16 +26,23 @@ describe("openableRow", () => {
   it.each(["Enter", " "])("opens on %j and on a click", (key) => {
     const open = vi.fn();
     render(<Row open={open} />);
-    const row = screen.getByRole("button", { name: "Open record r-1" });
+    const row = screen.getByRole("row", { name: /r-1/ });
     fireEvent.keyDown(row, { key });
     fireEvent.click(row);
     expect(open).toHaveBeenCalledTimes(2);
   });
 
+  it("stays a row of its table that says it opens a dialog", () => {
+    render(<Row open={vi.fn()} />);
+    const row = screen.getByRole("row", { name: /r-1/ });
+    expect(row).toHaveAttribute("aria-haspopup", "dialog");
+    expect(row).toHaveAttribute("tabindex", "0");
+  });
+
   it("ignores other keys", () => {
     const open = vi.fn();
     render(<Row open={open} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "Open record r-1" }), {
+    fireEvent.keyDown(screen.getByRole("row", { name: /r-1/ }), {
       key: "a",
     });
     expect(open).not.toHaveBeenCalled();
@@ -43,6 +55,14 @@ describe("openableRow", () => {
       key: "Enter",
     });
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe("RecordBlock", () => {
+  it("shows a long value under its label, wrapped", () => {
+    render(<RecordBlock label="Before">{'{"a": 1}'}</RecordBlock>);
+    expect(screen.getByText("Before")).toBeInTheDocument();
+    expect(screen.getByText('{"a": 1}')).toHaveClass("whitespace-pre-wrap");
   });
 });
 

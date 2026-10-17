@@ -116,7 +116,7 @@ describe("a client's record", () => {
       />,
     );
     fireEvent.click(
-      screen.getByRole("button", { name: `Open client ${AGENT.clientId}` }),
+      screen.getByRole("row", { name: new RegExp(AGENT.clientId) }),
     );
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("by the configuration");

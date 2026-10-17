@@ -136,13 +136,7 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
               </TableRow>
             ) : (
               clients.map((c) => (
-                <TableRow
-                  key={c.clientId}
-                  {...openableRow(
-                    () => setOpened(c),
-                    `Open client ${c.clientId}`,
-                  )}
-                >
+                <TableRow key={c.clientId} {...openableRow(() => setOpened(c))}>
                   <TableCell className={T.code}>
                     {c.clientId}
                     {c.dynamic ? (

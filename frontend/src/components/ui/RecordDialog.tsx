@@ -85,15 +85,37 @@ export function RecordField({
 }
 
 /**
- * What makes a table row open its record: a click, or Enter or Space on the
- * row, which takes focus like a button. Spread onto the TableRow. A key
- * pressed on a control inside the row is that control's, not the row's.
+ * A block of a record too long for a field — a JSON snapshot, a payload —
+ * under its label, scrolling within itself and wrapped rather than cut.
  */
-export function openableRow(open: () => void, label: string) {
+export function RecordBlock({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className={T.label}>{label}</div>
+      <pre className="max-h-64 overflow-y-auto rounded-md border border-border bg-muted/40 p-2 font-mono text-sm leading-relaxed whitespace-pre-wrap break-all">
+        {children}
+      </pre>
+    </div>
+  );
+}
+
+/**
+ * What makes a table row open its record: a click, or Enter or Space on the
+ * focused row. Spread onto the TableRow. The row keeps its role, so it is
+ * still found and read as a row of its table, named by its cells; it says it
+ * opens a dialog. A key pressed on a control inside the row is that
+ * control's, not the row's.
+ */
+export function openableRow(open: () => void) {
   return {
-    role: "button" as const,
     tabIndex: 0,
-    "aria-label": label,
+    "aria-haspopup": "dialog" as const,
     className: "cursor-pointer hover:bg-muted/40",
     onClick: open,
     onKeyDown: (ev: React.KeyboardEvent) => {

@@ -279,10 +279,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
               </TableRow>
             ) : (
               rows.map((t) => (
-                <TableRow
-                  key={t.name}
-                  {...openableRow(() => setOpened(t), `Open tool ${t.name}`)}
-                >
+                <TableRow key={t.name} {...openableRow(() => setOpened(t))}>
                   <TableCell className={T.code}>
                     {t.name}
                     {denied.has(t.name) ? (
@@ -342,10 +339,7 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
         </TableHeader>
         <TableBody>
           {inspect.profiles.map((p) => (
-            <TableRow
-              key={p.name}
-              {...openableRow(() => setOpened(p), `Open profile ${p.name}`)}
-            >
+            <TableRow key={p.name} {...openableRow(() => setOpened(p))}>
               <TableCell>
                 <span className={T.code}>{p.name}</span>
                 {inUse.has(p.name) ? (
@@ -431,12 +425,7 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
           {inspect.alwaysDeny.map((d) => {
             const t = byName.get(d);
             return (
-              <TableRow
-                key={d}
-                {...(t
-                  ? openableRow(() => setOpened(t), `Open tool ${d}`)
-                  : {})}
-              >
+              <TableRow key={d} {...(t ? openableRow(() => setOpened(t)) : {})}>
                 <TableCell className={T.code}>{d}</TableCell>
                 <TableCell>
                   {t ? (

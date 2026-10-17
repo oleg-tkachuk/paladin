@@ -140,9 +140,7 @@ describe("MCP tools page", () => {
   it("opens a tool's record with the profiles that offer it", async () => {
     render(<MCPToolsPage />);
     fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Open tool paladin_query_objects",
-      }),
+      await screen.findByRole("row", { name: /paladin_query_objects/ }),
     );
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("paladin_query_objects does a thing");
@@ -154,9 +152,7 @@ describe("MCP tools page", () => {
     render(<MCPToolsPage />);
     fireEvent.mouseDown(await screen.findByRole("tab", { name: "Profiles" }));
     fireEvent.click(screen.getByRole("tab", { name: "Profiles" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open profile read_only" }),
-    );
+    fireEvent.click(await screen.findByRole("row", { name: /^read_only/ }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("paladin_query_*");
     expect(dialog).toHaveTextContent("Tools (2 of 4)");
@@ -257,11 +253,7 @@ describe("MCP sessions", () => {
       ],
     });
     render(<MCPInspectPage />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Open session ABCDEFGHIJKLMNOP",
-      }),
-    );
+    fireEvent.click(await screen.findByRole("row", { name: /agent-7/ }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("ABCDEFGHIJKLMNOP");
     expect(dialog).toHaveTextContent("Tool calls3");
