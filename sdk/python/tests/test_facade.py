@@ -61,6 +61,7 @@ def test_attribute_names() -> None:
     assert gen.attribute("APITokenService") == "api_token"
     assert gen.attribute("MultipartUploadService") == "multipart_upload"
     assert gen.attribute("MCPInspectService") == "mcp_inspect"
+    assert gen.attribute("OAuthClientService") == "oauth_client"
 
 
 def test_connect_leaves_out_planes_without_a_url() -> None:

@@ -229,6 +229,12 @@ var (
 	// live sessions, profiles and tool catalog, bridge status). Resource is the
 	// caller's own Tenant.
 	ActionInspectMCP = declare("InspectMCP")
+
+	// ManageOAuthClient gates deleting an OAuth Authorization Server client
+	// (OAuthClientService). A client's grants span every tenant, so the
+	// handler holds it to platform.admin first; the resource is the caller's
+	// own Tenant, which lets a tenant policy forbid it.
+	ActionManageOAuthClient = declare("ManageOAuthClient")
 )
 
 // Entity type names — must match the Cedar schema exactly.

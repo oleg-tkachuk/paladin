@@ -697,13 +697,16 @@ func TestInspectListsRegisteredClients(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("registered clients = %d, want 3", len(got))
 	}
-	if got[0].GetDynamic() || !got[0].GetTokenExchange() {
+	if got[0].GetDynamic() || !got[0].GetTokenExchange() || !got[0].GetConfigured() {
 		t.Errorf("seed client = %+v, want seeded and exchanging", got[0])
 	}
 	if !got[1].GetDynamic() || !got[1].GetCreatedAt().AsTime().Equal(created) {
 		t.Errorf("self-registered client = %+v", got[1])
 	}
-	if got[2].GetDynamic() {
+	if got[1].GetConfigured() {
+		t.Errorf("a self-registered client reads as configured: %+v", got[1])
+	}
+	if got[2].GetDynamic() || got[2].GetConfigured() {
 		t.Errorf("a client dropped from the configuration reads as self-registered: %+v", got[2])
 	}
 

@@ -145,6 +145,9 @@ var procedureKinds = map[string]Kind{
 	admin.MCPInspectServiceListSessionsProcedure:    Reads,
 	admin.MCPInspectServiceGetBridgeStatusProcedure: Reads,
 
+	// Takes a client and the grants issued to it away.
+	admin.OAuthClientServiceDeleteOAuthClientProcedure: Withdraws,
+
 	admin.PlatformOperationServiceGetOperationProcedure:    Reads,
 	admin.PlatformOperationServiceListOperationsProcedure:  Reads,
 	admin.PlatformOperationServiceCancelOperationProcedure: Withdraws,

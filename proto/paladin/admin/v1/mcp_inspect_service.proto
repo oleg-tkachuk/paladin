@@ -153,9 +153,8 @@ message MCPOAuthState {
   // authorization_server_enabled reports auth.oauth.enabled: IAM serves
   // /oauth/authorize and /oauth/token.
   bool authorization_server_enabled = 1;
-  // seed_clients are the clients the configuration registers at boot.
-  // Clients added by dynamic registration live in the database and are not
-  // listed.
+  // seed_clients are the clients the configuration registers at boot, as
+  // configured; registered_clients lists what the store holds.
   repeated MCPOAuthClient seed_clients = 2;
   // edge_oauth_enabled reports mcp.oauth.enabled: the MCP server challenges
   // with 401 and serves its protected-resource metadata.
@@ -195,6 +194,9 @@ message MCPOAuthClient {
   // created_at is when the client was registered; unset for a seed client
   // read from the configuration.
   google.protobuf.Timestamp created_at = 8;
+  // configured is true for a client the configuration seeds now. It cannot
+  // be deleted: the next boot would register it again.
+  bool configured = 9;
 }
 
 message MCPProfile {

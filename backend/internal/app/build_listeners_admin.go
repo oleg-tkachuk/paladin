@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/capabilityh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/celh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/mcpinspecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/oauthclienth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auditstream"
@@ -311,9 +312,16 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// bridge configuration (profiles, deny-list, tool catalog,
 	// upstreams, transport state). Always mounted; the admin's Cedar
 	// gate keeps it platform-admin only.
+	oauthClients := oauth.NewPgxStore(deps.Pool)
 	paladinadminv1connect.RegisterMCPInspectServiceHandler(adminServer, mcpinspecth.NewHandler(cfg.MCP, polEngine).
 		WithOAuth(cfg.Auth.OAuth).
-		WithOAuthClients(oauth.NewPgxStore(deps.Pool)))
+		WithOAuthClients(oauthClients))
+	// OAuthClientService — deleting an OAuth client, its codes and grants.
+	// The admin pool is enough: oauth_clients has no row-level security, and
+	// the cascade to refresh_tokens is the foreign key's, which RLS does not
+	// filter.
+	paladinadminv1connect.RegisterOAuthClientServiceHandler(adminServer,
+		oauthclienth.NewHandler(oauthClients, cfg.Auth.OAuth, polEngine))
 
 	paladinadminv1connect.RegisterSystemServiceHandler(adminServer, admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool)))
 

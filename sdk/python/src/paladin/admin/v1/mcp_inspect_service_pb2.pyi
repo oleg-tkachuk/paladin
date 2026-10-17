@@ -114,7 +114,7 @@ class MCPOAuthState(_message.Message):
     def __init__(self, authorization_server_enabled: _Optional[bool] = ..., seed_clients: _Optional[_Iterable[_Union[MCPOAuthClient, _Mapping]]] = ..., edge_oauth_enabled: _Optional[bool] = ..., resource_url: _Optional[str] = ..., edge_audience: _Optional[str] = ..., exchange_client_id: _Optional[str] = ..., registered_clients: _Optional[_Iterable[_Union[MCPOAuthClient, _Mapping]]] = ..., registered_clients_error: _Optional[str] = ...) -> None: ...
 
 class MCPOAuthClient(_message.Message):
-    __slots__ = ("client_id", "public", "allowed_scopes", "allowed_audiences", "token_exchange", "skip_consent", "dynamic", "created_at")
+    __slots__ = ("client_id", "public", "allowed_scopes", "allowed_audiences", "token_exchange", "skip_consent", "dynamic", "created_at", "configured")
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     PUBLIC_FIELD_NUMBER: _ClassVar[int]
     ALLOWED_SCOPES_FIELD_NUMBER: _ClassVar[int]
@@ -123,6 +123,7 @@ class MCPOAuthClient(_message.Message):
     SKIP_CONSENT_FIELD_NUMBER: _ClassVar[int]
     DYNAMIC_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    CONFIGURED_FIELD_NUMBER: _ClassVar[int]
     client_id: str
     public: bool
     allowed_scopes: _containers.RepeatedScalarFieldContainer[str]
@@ -131,7 +132,8 @@ class MCPOAuthClient(_message.Message):
     skip_consent: bool
     dynamic: bool
     created_at: _timestamp_pb2.Timestamp
-    def __init__(self, client_id: _Optional[str] = ..., public: _Optional[bool] = ..., allowed_scopes: _Optional[_Iterable[str]] = ..., allowed_audiences: _Optional[_Iterable[str]] = ..., token_exchange: _Optional[bool] = ..., skip_consent: _Optional[bool] = ..., dynamic: _Optional[bool] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    configured: bool
+    def __init__(self, client_id: _Optional[str] = ..., public: _Optional[bool] = ..., allowed_scopes: _Optional[_Iterable[str]] = ..., allowed_audiences: _Optional[_Iterable[str]] = ..., token_exchange: _Optional[bool] = ..., skip_consent: _Optional[bool] = ..., dynamic: _Optional[bool] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., configured: _Optional[bool] = ...) -> None: ...
 
 class MCPProfile(_message.Message):
     __slots__ = ("name", "tools", "raw_patterns", "deny", "source")

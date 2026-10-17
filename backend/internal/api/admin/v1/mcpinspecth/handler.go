@@ -431,6 +431,7 @@ func (h *Handler) listRegistered(ctx context.Context, st *adminv1.MCPOAuthState)
 			TokenExchange:    isSeed && sc.TokenExchange,
 			SkipConsent:      isSeed && sc.SkipConsent,
 			Dynamic:          c.SelfRegistered,
+			Configured:       isSeed,
 			CreatedAt:        timestamppb.New(c.CreatedAt),
 		})
 	}
