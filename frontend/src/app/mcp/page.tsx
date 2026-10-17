@@ -12,7 +12,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MCPConnect, MCPOverview } from "@/components/features/mcp/MCPOverview";
 import { MCPSessions } from "@/components/features/mcp/MCPSessions";
-import { MCPAuthorization } from "@/components/features/mcp/MCPAuthorization";
+import {
+  MCPAuthorization,
+  shownClients,
+} from "@/components/features/mcp/MCPAuthorization";
 import {
   MCPAlwaysDeny,
   MCPProfiles,
@@ -103,8 +106,7 @@ export default function MCPInspectPage() {
                 Always denied <Count n={inspect.alwaysDeny.length} />
               </TabsTrigger>
               <TabsTrigger value="oauth">
-                OAuth clients{" "}
-                <Count n={inspect.oauth?.seedClients.length ?? 0} />
+                OAuth clients <Count n={shownClients(inspect.oauth).length} />
               </TabsTrigger>
             </TabsList>
             <TabsContent value="sessions">

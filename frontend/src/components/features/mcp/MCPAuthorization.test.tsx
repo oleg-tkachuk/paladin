@@ -33,6 +33,8 @@ function inspect(oauth: Partial<MCPInspectResponse["oauth"]>) {
       edgeAudience: "",
       exchangeClientId: "",
       seedClients: [],
+      registeredClients: [],
+      registeredClientsError: "",
       ...oauth,
     },
   } as unknown as MCPInspectResponse;
@@ -62,8 +64,42 @@ describe("MCPAuthorization", () => {
     expect(
       screen.getByText("Accepted audience").nextElementSibling,
     ).toHaveTextContent("any plane's token");
+    expect(screen.getByText("No client is registered.")).toBeInTheDocument();
+  });
+});
+
+describe("MCPAuthorization registered clients", () => {
+  const DCR = {
+    ...AGENT,
+    clientId: "paladin-0199-dcr",
+    dynamic: true,
+  };
+
+  it("lists every registered client and marks the self-registered", () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          seedClients: [AGENT],
+          registeredClients: [{ ...AGENT, dynamic: false }, DCR],
+        } as never)}
+      />,
+    );
+    expect(screen.getByText(DCR.clientId)).toBeInTheDocument();
+    expect(screen.getAllByText("registered itself")).toHaveLength(1);
+  });
+
+  it("falls back to the configured clients, and says why", () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          seedClients: [AGENT],
+          registeredClientsError: "pool closed",
+        } as never)}
+      />,
+    );
+    expect(screen.getByText(AGENT.clientId)).toBeInTheDocument();
     expect(
-      screen.getByText("No client is registered at boot."),
+      screen.getByText(/could not be read \(pool closed\)/),
     ).toBeInTheDocument();
   });
 });
