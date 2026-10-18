@@ -55,7 +55,12 @@ import { moneyFromDecimal, moneyToNumber } from "@/lib/format/money";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import { anyRegistry } from "@/lib/connect/any-registry";
 import { SEEDED_ADMIN } from "./credentials";
-import { uniqueSlug, uniqueDisplayName, FIXTURE_SLUG_RE } from "./unique";
+import {
+  uniqueSlug,
+  uniqueDisplayName,
+  FIXTURE_SLUG_RE,
+  uniqueCollectionId,
+} from "./unique";
 
 // ─── plane base URLs (test stack) ──────────────────────────
 export const IAM_URL =
@@ -580,9 +585,8 @@ export interface SeededCollection {
 export async function seedCollection(opts: {
   tenantId: string;
   bucket: SeededBucket;
-  collectionPrefix?: string;
 }): Promise<SeededCollection> {
-  const collection = `e2e/${uniqueSlug(opts.collectionPrefix ?? "key").replace(/^[^-]+-/, "")}`;
+  const collection = uniqueCollectionId();
   const displayName = uniqueDisplayName("E2E Key");
   const bucketResourceName = `storageBackends/${opts.bucket.backendId}/buckets/${opts.bucket.bucketId}`;
   const client = collectionAdminClient();
@@ -1877,7 +1881,19 @@ export async function setTenantBudget(args: {
  * anyone, which is the product rule working; the collection then survives and
  * teardown says so rather than pretending.
  */
+// An unfiltered list leaves out the trash, and a trashed object still holds
+// its collection (the foreign key restricts): every run that tested the trash
+// left a collection behind until both were purged.
+const PURGE_LISTS = ["", 'state == "DELETED"'] as const;
+
 async function purgeObjectsIn(item: SeededCollection): Promise<void> {
+  for (const filter of PURGE_LISTS) await purgeListed(item, filter);
+}
+
+async function purgeListed(
+  item: SeededCollection,
+  filter: string,
+): Promise<void> {
   const client = createClient(ObjectService, dataTransport());
   const parent = `tenants/${item.tenantId}/collections/${item.collection}`;
   // A page at a time, deleting as we go: the cursor is over rows we are
@@ -1886,6 +1902,7 @@ async function purgeObjectsIn(item: SeededCollection): Promise<void> {
   for (let round = 0; round < 20; round++) {
     const page = await client.listObjects({
       parent,
+      filter,
       page: { pageSize: 200, pageToken: "" },
     });
     if (!page.objects.length) return;

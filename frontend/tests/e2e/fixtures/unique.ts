@@ -32,6 +32,14 @@
  */
 export const FIXTURE_SLUG_RE = /-[0-9a-f]{8}$/;
 
+/** A seeded collection's identifier, as uniqueCollectionId mints it. */
+export const FIXTURE_COLLECTION_RE = /^e2e\/[0-9a-f]{8}$/;
+
+/** Returns `e2e/<8 hex chars>`, a seeded collection's identifier. */
+export function uniqueCollectionId(): string {
+  return `e2e/${randomHex(8)}`;
+}
+
 /**
  * Returns `<prefix>-<8 hex chars>`, suitable for slugs (Postgres
  * citext + the regex `^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$` checked

@@ -26,7 +26,12 @@ import { test, expect } from "@playwright/test";
 
 import { LEAK_BASELINE_FILE, fixtureInventory } from "./fixtures/leaks";
 
-import { FIXTURE_SLUG_RE, uniqueSlug } from "./fixtures/unique";
+import {
+  FIXTURE_COLLECTION_RE,
+  FIXTURE_SLUG_RE,
+  uniqueCollectionId,
+  uniqueSlug,
+} from "./fixtures/unique";
 import {
   countAdminMemberships,
   countFixtureShapedTenants,
@@ -40,6 +45,7 @@ test("the fixture-slug convention still holds", () => {
   // guard silently stops guarding — so it is checked against the live
   // generator rather than trusted.
   expect(uniqueSlug("probe")).toMatch(FIXTURE_SLUG_RE);
+  expect(uniqueCollectionId()).toMatch(FIXTURE_COLLECTION_RE);
 });
 
 test("the environment is not full of leftover fixtures", async () => {

@@ -17,10 +17,11 @@ import { createClient } from "@connectrpc/connect";
 
 import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
+import { CollectionService } from "@/gen/paladin/admin/v1/collection_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 
 import { adminTransport, seededAdminGrantIDs } from "./seed";
-import { FIXTURE_SLUG_RE } from "./unique";
+import { FIXTURE_COLLECTION_RE, FIXTURE_SLUG_RE } from "./unique";
 
 /** The inventory the environment project writes into its output directory. */
 export const LEAK_BASELINE_FILE = "fixture-inventory.json";
@@ -43,6 +44,12 @@ export interface FixtureInventory {
   /** Storage backends, by id. */
   backends: string[];
   /**
+   * Collections, by resource name. One still holding an object — a trashed
+   * one included, which the foreign key counts like any other — refuses its
+   * delete, and the teardown only warned of it.
+   */
+  collections: string[];
+  /**
    * The seeded admin's live OAuth grants, by id. Every OAuth spec consents as
    * that admin; a grant its teardown did not give up stays live for weeks.
    */
@@ -56,6 +63,7 @@ export async function fixtureInventory(): Promise<FixtureInventory> {
     trashedTenants: [],
     buckets: [],
     backends: [],
+    collections: [],
     oauthGrants: [],
   };
 
@@ -102,6 +110,21 @@ export async function fixtureInventory(): Promise<FixtureInventory> {
     pageToken = res.page?.nextPageToken ?? "";
   } while (pageToken);
 
+  const collections = createClient(CollectionService, adminTransport());
+  pageToken = "";
+  do {
+    // An empty parent lists every tenant's, for a platform admin.
+    const res = await collections.listCollections({
+      parent: "",
+      page: { pageSize: LIST_PAGE_SIZE, pageToken },
+    });
+    for (const c of res.collections) {
+      if (FIXTURE_COLLECTION_RE.test(c.collection))
+        inventory.collections.push(c.name);
+    }
+    pageToken = res.page?.nextPageToken ?? "";
+  } while (pageToken);
+
   inventory.oauthGrants = await seededAdminGrantIDs();
 
   return inventory;
@@ -126,6 +149,7 @@ export function addedSince(
     ),
     buckets: added(before.buckets, after.buckets),
     backends: added(before.backends, after.backends),
+    collections: added(before.collections, after.collections),
     oauthGrants: added(before.oauthGrants, after.oauthGrants),
   };
 }
