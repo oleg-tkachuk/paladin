@@ -89,9 +89,11 @@ describe("BillingPage", () => {
     });
     h.series.mockResolvedValue({ buckets: [] });
     render(<BillingPage />);
-    const card = (await screen.findByText("Top ops")).closest(
-      "[data-slot=card]",
-    ) as HTMLElement;
+    // The card shows before the summary does: wait for its rows.
+    await screen.findByText("list");
+    const card = screen
+      .getByText("Top ops")
+      .closest("[data-slot=card]") as HTMLElement;
     const labels = () =>
       within(card)
         .getAllByRole("row")
