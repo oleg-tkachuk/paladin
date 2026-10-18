@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
 
 import { userClient } from "@/lib/connect/client";
 import { Card } from "@/components/ui/Card";
@@ -15,6 +16,11 @@ import {
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SortableHead } from "@/components/ui/SortHeader";
+import {
+  TableToolbar,
+  type ToolbarFilterOption,
+} from "@/components/ui/TableToolbar";
 import {
   Table,
   TableBody,
@@ -26,19 +32,82 @@ import {
 import { useNotification } from "@/components/ui/Notification";
 import { RelativeTime } from "@/components/RelativeTime";
 import { Timestamp } from "@/components/Timestamp";
-import type { OAuthGrant } from "@/gen/paladin/iam/v1/user_service_pb";
+import {
+  OAuthGrant_State,
+  type OAuthGrant,
+} from "@/gen/paladin/iam/v1/user_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
+import { useTableView } from "@/hooks/useTableView";
+import type { SortAccessors } from "@/lib/table/view";
 import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
-/** The query key of a user's grants. */
-export function oauthGrantsKey(userName: string) {
-  return ["oauthGrants", userName] as const;
+/**
+ * The query key of a user's grants: the live ones, or with inactive every one
+ * whose rows remain. Invalidating the key without the second part refetches
+ * both.
+ */
+function oauthGrantsKey(userName: string, includeInactive?: boolean) {
+  return includeInactive === undefined
+    ? (["oauthGrants", userName] as const)
+    : (["oauthGrants", userName, includeInactive] as const);
 }
 
 // The columns of the table; the empty and loading rows span them.
-const GRANT_COLUMNS = 6;
+const GRANT_COLUMNS = 7;
+
+// A grant's state, as its badge names it. UNSPECIFIED is a server too old to
+// say, which only ever lists live grants.
+const STATE = {
+  [OAuthGrant_State.UNSPECIFIED]: { label: "active", variant: "success" },
+  [OAuthGrant_State.ACTIVE]: { label: "active", variant: "success" },
+  [OAuthGrant_State.REVOKED]: { label: "revoked", variant: "destructive" },
+  [OAuthGrant_State.EXPIRED]: { label: "expired", variant: "outline" },
+} as const satisfies Record<
+  OAuthGrant_State,
+  { label: string; variant: "success" | "destructive" | "outline" }
+>;
+
+const isActive = (g: OAuthGrant) =>
+  g.state === OAuthGrant_State.ACTIVE ||
+  g.state === OAuthGrant_State.UNSPECIFIED;
+
+// Which grants show. Only "active" asks the server for live grants alone; the
+// rest ask for every grant and narrow it here.
+type StateFilter = "active" | "revoked" | "expired" | "all";
+const STATE_FILTERS: readonly ToolbarFilterOption<StateFilter>[] = [
+  { value: "active", label: "Active" },
+  { value: "revoked", label: "Revoked" },
+  { value: "expired", label: "Expired" },
+  { value: "all", label: "All" },
+];
+const DEFAULT_STATE_FILTER: StateFilter = "active";
+const KEEPS: Record<StateFilter, (g: OAuthGrant) => boolean> = {
+  active: isActive,
+  revoked: (g) => g.state === OAuthGrant_State.REVOKED,
+  expired: (g) => g.state === OAuthGrant_State.EXPIRED,
+  all: () => true,
+};
+
+type GrantColumn =
+  "application" | "access" | "state" | "plane" | "granted" | "used";
+const ms = (t: OAuthGrant["grantedAt"]) =>
+  t ? timestampDate(t).getTime() : undefined;
+const SORT_BY: SortAccessors<OAuthGrant, GrantColumn> = {
+  application: (g) => g.clientId,
+  access: (g) => access(g).label,
+  state: (g) => STATE[g.state].label,
+  plane: (g) => g.audience,
+  granted: (g) => ms(g.grantedAt),
+  used: (g) => ms(g.refreshedAt),
+};
+const SEARCH_IN = (g: OAuthGrant) => [
+  g.clientId,
+  g.audience,
+  g.scopes.join(" "),
+  STATE[g.state].label,
+];
 // A grant's access, as its badge names it: whether it may write.
 const ACCESS = {
   write: { label: "read & write", variant: "warning" },
@@ -68,14 +137,22 @@ export function ConnectedApplications({
   const { showNotification } = useNotification();
   const [opened, setOpened] = useState<OAuthGrant | null>(null);
   const [target, setTarget] = useState<OAuthGrant | null>(null);
+  const [stateFilter, setStateFilter] =
+    useState<StateFilter>(DEFAULT_STATE_FILTER);
+  const includeInactive = stateFilter !== DEFAULT_STATE_FILTER;
 
   const query = useQuery({
-    queryKey: oauthGrantsKey(userName),
+    queryKey: oauthGrantsKey(userName, includeInactive),
     queryFn: ({ signal }) =>
-      userClient.listOAuthGrants({ name: userName }, { signal }),
+      userClient.listOAuthGrants(
+        { name: userName, includeInactive },
+        { signal },
+      ),
     enabled: !!userName,
   });
-  const grants = query.data?.grants ?? [];
+  const inState = (query.data?.grants ?? []).filter(KEEPS[stateFilter]);
+  const view = useTableView(inState, { text: SEARCH_IN, accessors: SORT_BY });
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   const revoke = async () => {
     if (!target) return;
@@ -117,79 +194,126 @@ export function ConnectedApplications({
           onRetry={() => void query.refetch()}
         />
       ) : (
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Application</TableHead>
-                <TableHead>Access</TableHead>
-                <TableHead className="hidden @lg:table-cell">Plane</TableHead>
-                <TableHead className="hidden @2xl:table-cell">
-                  Granted
-                </TableHead>
-                <TableHead className="hidden @xl:table-cell">
-                  Last used
-                </TableHead>
-                <TableHead className="w-24 text-right">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {query.isPending ? (
+        <div className="space-y-3">
+          <TableToolbar
+            query={view.query}
+            onQueryChange={view.setQuery}
+            placeholder="Search by application, plane or scope…"
+            searchLabel="Search connected applications"
+            filter={{
+              label: "Grant state",
+              options: STATE_FILTERS,
+              value: stateFilter,
+              onChange: setStateFilter,
+            }}
+            count={
+              query.isPending
+                ? undefined
+                : { shown: view.rows.length, total: view.total }
+            }
+          />
+          <Card className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={GRANT_COLUMNS}>
-                    <Skeleton className="h-8 w-full" />
-                  </TableCell>
+                  <SortableHead
+                    label="Application"
+                    column="application"
+                    {...sortProps}
+                  />
+                  <SortableHead label="Access" column="access" {...sortProps} />
+                  <SortableHead label="State" column="state" {...sortProps} />
+                  <SortableHead
+                    label="Plane"
+                    column="plane"
+                    className="hidden @lg:table-cell"
+                    {...sortProps}
+                  />
+                  <SortableHead
+                    label="Granted"
+                    column="granted"
+                    className="hidden @2xl:table-cell"
+                    {...sortProps}
+                  />
+                  <SortableHead
+                    label="Last used"
+                    column="used"
+                    className="hidden @xl:table-cell"
+                    {...sortProps}
+                  />
+                  <TableHead className="w-24 text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
-              ) : grants.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={GRANT_COLUMNS}
-                    className="whitespace-normal py-8 text-center text-muted-foreground"
-                  >
-                    {own ? "You have" : "This user has"} not let any application
-                    in. An agent that authorizes through OAuth — one connected
-                    to the MCP server, say — appears here.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                grants.map((g) => (
-                  <TableRow key={g.id} {...openableRow(() => setOpened(g))}>
-                    <TableCell
-                      className={cn(T.code, "whitespace-normal break-all")}
-                    >
-                      {g.clientId}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={access(g).variant}>
-                        {access(g).label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={cn("hidden @lg:table-cell", T.code)}>
-                      {g.audience}
-                    </TableCell>
-                    <TableCell className="hidden @2xl:table-cell">
-                      <RelativeTime ts={g.grantedAt} />
-                    </TableCell>
-                    <TableCell className="hidden @xl:table-cell">
-                      <RelativeTime ts={g.refreshedAt} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => startRevoke(g)}
-                      >
-                        Revoke
-                      </Button>
+              </TableHeader>
+              <TableBody>
+                {query.isPending ? (
+                  <TableRow>
+                    <TableCell colSpan={GRANT_COLUMNS}>
+                      <Skeleton className="h-8 w-full" />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                ) : view.rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={GRANT_COLUMNS}
+                      className="whitespace-normal py-8 text-center text-muted-foreground"
+                    >
+                      {view.total > 0
+                        ? "No application matches the search."
+                        : stateFilter === DEFAULT_STATE_FILTER
+                          ? `${own ? "You have" : "This user has"} not let any application in. An agent that authorizes through OAuth — one connected to the MCP server, say — appears here.`
+                          : "No grant is in this state. Ended grants stay listed until their tokens are purged."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  view.rows.map((g) => (
+                    <TableRow key={g.id} {...openableRow(() => setOpened(g))}>
+                      <TableCell
+                        className={cn(T.code, "whitespace-normal break-all")}
+                      >
+                        {g.clientId}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={access(g).variant}>
+                          {access(g).label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATE[g.state].variant}>
+                          {STATE[g.state].label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell
+                        className={cn("hidden @lg:table-cell", T.code)}
+                      >
+                        {g.audience}
+                      </TableCell>
+                      <TableCell className="hidden @2xl:table-cell">
+                        <RelativeTime ts={g.grantedAt} />
+                      </TableCell>
+                      <TableCell className="hidden @xl:table-cell">
+                        <RelativeTime ts={g.refreshedAt} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {/* An ended grant has nothing left to revoke. */}
+                        {isActive(g) ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startRevoke(g)}
+                          >
+                            Revoke
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </div>
       )}
 
       <RecordDialog
@@ -203,6 +327,11 @@ export function ConnectedApplications({
             <RecordField label="Access">
               <Badge variant={access(opened).variant}>
                 {access(opened).label}
+              </Badge>
+            </RecordField>
+            <RecordField label="State">
+              <Badge variant={STATE[opened.state].variant}>
+                {STATE[opened.state].label}
               </Badge>
             </RecordField>
             <RecordField label="May">
@@ -228,15 +357,17 @@ export function ConnectedApplications({
             <RecordField label="Expires">
               <Timestamp ts={opened.expiresAt} />
             </RecordField>
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => startRevoke(opened)}
-              >
-                Revoke access
-              </Button>
-            </div>
+            {isActive(opened) ? (
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => startRevoke(opened)}
+                >
+                  Revoke access
+                </Button>
+              </div>
+            ) : null}
           </>
         ) : null}
       </RecordDialog>
