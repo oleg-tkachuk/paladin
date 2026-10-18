@@ -1,10 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
-import { errorMessage } from "@/hooks/errorContract";
 import { useTableSort } from "@/hooks/useTableSort";
 import Link from "next/link";
 import {
@@ -25,6 +26,7 @@ import {
 import { collectionHref, tenantHref } from "@/lib/navigation/hrefs";
 import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 import { useBackends } from "@/hooks/useBackends";
+import { collectionDeleteFailure } from "@/lib/collectionDeleteFailure";
 import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 
@@ -78,6 +80,7 @@ export default function CollectionsPage() {
     fetchBackends,
   } = useBackends();
   const { showNotification } = useNotification();
+  const router = useRouter();
 
   // Only backends that can take a Collection: a disabled or draining one
   // leaves a dialog that cannot be completed.
@@ -164,12 +167,10 @@ export default function CollectionsPage() {
       setDeleteTarget(null);
     } catch (err) {
       // The server's reason: a collection that still holds objects is one,
-      // a stale version another. This used to say the first whatever happened.
-      showNotification({
-        type: "error",
-        title: "Deletion failed",
-        message: errorMessage(err, "Delete failed"),
-      });
+      // a stale version another. When the trash holds it, the notice opens it.
+      showNotification(
+        collectionDeleteFailure(err, deleteTarget, (href) => router.push(href)),
+      );
     }
   };
 

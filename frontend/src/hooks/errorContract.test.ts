@@ -8,6 +8,7 @@ import { ErrorReason } from "@/gen/paladin/common/v1/error_reason_pb";
 import {
   PALADIN_ERROR_DOMAIN,
   errorMessage,
+  errorMetadata,
   errorReason,
   isAbortError,
 } from "./errorContract";
@@ -70,8 +71,12 @@ describe("isAbortError", () => {
 });
 
 /** A ConnectError carrying one ErrorInfo, as it arrives off the wire. */
-function withInfo(domain: string, reason: string): ConnectError {
-  const info = create(ErrorInfoSchema, { domain, reason });
+function withInfo(
+  domain: string,
+  reason: string,
+  metadata: Record<string, string> = {},
+): ConnectError {
+  const info = create(ErrorInfoSchema, { domain, reason, metadata });
   return new ConnectError("refused", Code.FailedPrecondition, undefined, [
     { desc: ErrorInfoSchema, value: info },
   ]);
@@ -112,5 +117,24 @@ describe("errorReason", () => {
       ErrorReason.UNSPECIFIED,
     );
     expect(errorReason(new Error("x"))).toBe(ErrorReason.UNSPECIFIED);
+  });
+});
+
+describe("errorMetadata", () => {
+  it("reads what the server said beyond the reason", () => {
+    expect(
+      errorMetadata(
+        withInfo(PALADIN_ERROR_DOMAIN, "ERROR_REASON_COLLECTION_NOT_EMPTY", {
+          live_objects: "2",
+        }),
+      ),
+    ).toEqual({ live_objects: "2" });
+  });
+
+  it("takes nothing from another domain, or from no error detail", () => {
+    expect(
+      errorMetadata(withInfo("googleapis.com", "X", { live_objects: "2" })),
+    ).toEqual({});
+    expect(errorMetadata(new Error("boom"))).toEqual({});
   });
 });

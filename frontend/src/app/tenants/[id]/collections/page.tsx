@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 // /tenants/<id>/collections — tenant-scoped Collection list.
 //
 // The list is read here with `parent = tenants/<tenantId>` from the route;
@@ -25,6 +27,7 @@ import {
 
 import { useCollections } from "@/hooks/useCollections";
 import { useBackends } from "@/hooks/useBackends";
+import { collectionDeleteFailure } from "@/lib/collectionDeleteFailure";
 import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 
@@ -74,6 +77,7 @@ export default function TenantCollectionsPage() {
     fetchBackends,
   } = useBackends();
   const { showNotification } = useNotification();
+  const router = useRouter();
 
   // Only backends that can actually receive a Collection. A disabled one
   // cannot, and a drained (read-only) one cannot either — offering them puts
@@ -205,12 +209,10 @@ export default function TenantCollectionsPage() {
       void fetchList(search);
     } catch (err) {
       // The server's reason: a collection that still holds objects is one,
-      // a stale version another. This used to say the first whatever happened.
-      showNotification({
-        type: "error",
-        title: "Deletion failed",
-        message: errorMessage(err, "Delete failed"),
-      });
+      // a stale version another. When the trash holds it, the notice opens it.
+      showNotification(
+        collectionDeleteFailure(err, deleteTarget, (href) => router.push(href)),
+      );
     }
   };
 
