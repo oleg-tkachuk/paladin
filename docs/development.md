@@ -13,7 +13,7 @@ problem, read [SECURITY.md](../.github/SECURITY.md) instead.
 | --- | --- | --- |
 | Go | 1.27+ | the `go` and `toolchain` directives in `backend/go.mod` and `sdk/go/go.mod`; the toolchain auto-downloads |
 | Node | 26 | matches `frontend/deploy/Dockerfile`; CI runs the same |
-| pnpm | 12.10.1 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.10.1` |
+| pnpm | 12.13.0 | pinned by `packageManager` in `frontend/package.json`; Node 26 ships no corepack, so `npm install -g pnpm@12.13.0` |
 | Docker | recent | compose stacks, testcontainers-backed integration tests |
 | [Task](https://taskfile.dev) | 3.54+ | every entry point is a task target; CI pins 3.54.0 |
 
@@ -58,7 +58,7 @@ task frontend:node:typecheck  task frontend:build
 
 ## Tests
 
-Four tiers, and they run in different places for a reason:
+Three tiers, and they run in different places for a reason:
 
 | Tier | Command | Needs |
 | --- | --- | --- |
@@ -88,10 +88,11 @@ feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|security
 
 Two things follow from this that are easy to miss:
 
-- **The type drives releases.** Once CI passes on a push to `main`, it
-  dispatches `.github/workflows/release.yaml`, where `semantic-release` reads
-  the history and computes the next version from it. A `feat:` that should
-  have been a `fix:` publishes a minor release. `fix`, `perf`, `revert` and
+- **The type drives releases.** When `.github/workflows/release.yaml` is run
+  by hand to release the product, `semantic-release` reads the history since
+  the last release and computes the next version from it; the run CI
+  dispatches after a green push to `main` does the same for the SDK's tag. A
+  `feat:` that should have been a `fix:` publishes a minor release. `fix`, `perf`, `revert` and
   `security` publish a patch; `docs`, `ci`, `chore`, `refactor`, `test`,
   `build` and `style` publish nothing on their own.
 - **One scope per commit.** A commit that touches auth and the console and

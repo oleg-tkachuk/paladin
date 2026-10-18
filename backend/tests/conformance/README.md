@@ -40,7 +40,7 @@ point it at a scratch account, not production.
 
 ## Why it drives the adapter, not the SDK
 
-The contract is not "S3" in the abstract, it is the eighteen methods
+The contract is not "S3" in the abstract, it is the methods
 `s3adapter.Client` exposes and the handlers call. Testing the SDK directly
 would pin what AWS does; testing the adapter pins what Paladin needs, including
 the parts the adapter itself decides — key composition, presign host, the
