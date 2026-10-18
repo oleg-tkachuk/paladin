@@ -337,6 +337,8 @@ func postForm(h *Handler, path string, form url.Values) *httptest.ResponseRecord
 		h.handleToken(rec, r)
 	case "/oauth/authorize":
 		h.handleAuthorize(rec, r)
+	case RevokePath:
+		h.handleRevoke(rec, r)
 	}
 	return rec
 }

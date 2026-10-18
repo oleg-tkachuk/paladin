@@ -18,6 +18,8 @@ import (
 const (
 	AuthorizePath = "/oauth/authorize"
 	TokenPath     = "/oauth/token" // #nosec G101 -- an endpoint path, not a credential
+	// RevokePath is the RFC 7009 revocation endpoint.
+	RevokePath = "/oauth/revoke"
 )
 
 // The grant types /oauth/token serves, and the RFC 8693 token type it

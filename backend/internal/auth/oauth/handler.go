@@ -133,6 +133,7 @@ func NewHandler(cfg config.OAuthAS, store Store, users UserResolver, refresh aut
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc(AuthorizePath, h.handleAuthorize)
 	mux.HandleFunc(TokenPath, h.handleToken)
+	mux.HandleFunc(RevokePath, h.handleRevoke)
 	if h.cfg.DynamicRegistration {
 		mux.HandleFunc("/oauth/register", h.handleRegister)
 	}
