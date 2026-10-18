@@ -147,8 +147,8 @@ func (r *RefreshTokenRepo) PurgeExpired(ctx context.Context, olderThan time.Time
 	return r.q.PurgeExpiredRefreshTokens(ctx, pgTS(olderThan))
 }
 
-func (r *RefreshTokenRepo) ListOAuthGrants(ctx context.Context, userID uuid.UUID, now time.Time) ([]authstore.UserOAuthGrant, error) {
-	rows, err := r.q.ListOAuthGrantsForUser(ctx, pgUUID(userID), pgTS(now))
+func (r *RefreshTokenRepo) ListOAuthGrants(ctx context.Context, userID uuid.UUID, now time.Time, includeInactive bool) ([]authstore.UserOAuthGrant, error) {
+	rows, err := r.q.ListOAuthGrantsForUser(ctx, includeInactive, pgTS(now), pgUUID(userID))
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +164,7 @@ func (r *RefreshTokenRepo) ListOAuthGrants(ctx context.Context, userID uuid.UUID
 			GrantedAt:   timeFrom(row.GrantedAt),
 			RefreshedAt: timeFrom(row.IssuedAt),
 			ExpiresAt:   timeFrom(row.ExpiresAt),
+			State:       authstore.OAuthGrantStateOf(row.Revoked, timeFrom(row.ExpiresAt), now),
 		})
 	}
 	return out, nil

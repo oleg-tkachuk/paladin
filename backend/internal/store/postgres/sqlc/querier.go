@@ -444,10 +444,12 @@ type Querier interface {
 	// account, not a display trim. Pass after_created_at='-infinity' for the
 	// first page.
 	ListMembershipsBySubject(ctx context.Context, subject string, afterCreatedAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]User, error)
-	// The OAuth grants a user holds: one row per live family of OAuth refresh
-	// tokens, carrying its newest live member and when the family began — the
-	// consent. A console login is no grant and is left out.
-	ListOAuthGrantsForUser(ctx context.Context, userID pgtype.UUID, expiresAt pgtype.Timestamptz) ([]ListOAuthGrantsForUserRow, error)
+	// The OAuth grants a user holds: one row per family of OAuth refresh tokens,
+	// carrying its newest member — whose state is the grant's, as a rotation
+	// revokes the token it replaces — and when the family began, the consent.
+	// Only live grants unless include_inactive. A console login is no grant and
+	// is left out.
+	ListOAuthGrantsForUser(ctx context.Context, includeInactive bool, now pgtype.Timestamptz, userID pgtype.UUID) ([]ListOAuthGrantsForUserRow, error)
 	// Every lock row on any version of one object, for the permanent-delete
 	// pre-check. Deleting the object removes all its versions, so a lock on an
 	// older version blocks the delete as surely as one on the current version;

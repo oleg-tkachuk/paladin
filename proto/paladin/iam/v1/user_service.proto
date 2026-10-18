@@ -143,6 +143,11 @@ message ResetPasswordResponse {
 message ListOAuthGrantsRequest {
   // The user whose grants to list.
   string name = 1 [(buf.validate.field).string.min_len = 1];
+  // include_inactive lists grants that were revoked or have expired beside
+  // the live ones. They are kept only until their tokens' rows are purged: a
+  // revoked grant until its expiry, an expired one for up to the refresh-token
+  // reaper's interval.
+  bool include_inactive = 2;
 }
 
 message ListOAuthGrantsResponse {
@@ -164,6 +169,20 @@ message OAuthGrant {
   google.protobuf.Timestamp refreshed_at = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
   // expires_at is when the grant lapses unless the client rotates again.
   google.protobuf.Timestamp expires_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // state is whether the grant still lets its client in.
+  State state = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // State is a grant's standing: decided by its newest refresh token, as a
+  // rotation revokes the token it replaces.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // The client may refresh its access.
+    STATE_ACTIVE = 1;
+    // The user, an admin or reuse detection ended it.
+    STATE_REVOKED = 2;
+    // Its client stopped rotating, and it lapsed.
+    STATE_EXPIRED = 3;
+  }
 }
 
 message RevokeOAuthGrantRequest {

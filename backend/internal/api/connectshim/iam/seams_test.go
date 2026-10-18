@@ -83,7 +83,7 @@ func (failingUser) RevokeScopes(context.Context, userh.UserRef, []auth.Scope) (*
 func (failingUser) UpdateUser(context.Context, userh.UpdateUserInput) (*authstore.User, error) {
 	return nil, errBoom
 }
-func (failingUser) ListOAuthGrants(context.Context, userh.UserRef) ([]authstore.UserOAuthGrant, error) {
+func (failingUser) ListOAuthGrants(context.Context, userh.UserRef, bool) ([]authstore.UserOAuthGrant, error) {
 	return nil, errBoom
 }
 func (failingUser) RevokeOAuthGrant(context.Context, userh.UserRef, uuid.UUID) error {

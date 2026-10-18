@@ -445,9 +445,10 @@ func (h *Handler) ResetPassword(ctx context.Context, ref UserRef, newPassword st
 // errNoGrantStore answers the grant RPCs on a handler built without a store.
 var errNoGrantStore = errors.New("oauth grants are not served here")
 
-// ListOAuthGrants returns the live OAuth grants the user gave clients: the
-// user's own, or for a tenant admin a user of the tenant.
-func (h *Handler) ListOAuthGrants(ctx context.Context, ref UserRef) ([]authstore.UserOAuthGrant, error) {
+// ListOAuthGrants returns the OAuth grants the user gave clients: the user's
+// own, or for a tenant admin a user of the tenant. Only the live ones unless
+// includeInactive, which adds those revoked or expired whose rows remain.
+func (h *Handler) ListOAuthGrants(ctx context.Context, ref UserRef, includeInactive bool) ([]authstore.UserOAuthGrant, error) {
 	u, err := h.grantTarget(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -455,7 +456,7 @@ func (h *Handler) ListOAuthGrants(ctx context.Context, ref UserRef) ([]authstore
 	if err := h.authorize(ctx, cedar.ActionReadOAuthGrants, u); err != nil {
 		return nil, err
 	}
-	grants, err := h.grants.ListOAuthGrants(auth.WithActingTenant(ctx, u.TenantID), u.UserID, h.now())
+	grants, err := h.grants.ListOAuthGrants(auth.WithActingTenant(ctx, u.TenantID), u.UserID, h.now(), includeInactive)
 	if err != nil {
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("list oauth grants: %w", err))
 	}

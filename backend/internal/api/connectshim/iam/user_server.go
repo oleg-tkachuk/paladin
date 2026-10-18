@@ -230,7 +230,7 @@ func (s *UserServer) ListOAuthGrants(ctx context.Context, req *pb.ListOAuthGrant
 	if err != nil {
 		return nil, err
 	}
-	grants, err := s.H.ListOAuthGrants(ctx, ref)
+	grants, err := s.H.ListOAuthGrants(ctx, ref, req.GetIncludeInactive())
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +265,16 @@ func oauthGrantToProto(g authstore.UserOAuthGrant) *pb.OAuthGrant {
 		GrantedAt:   timestamppb.New(g.GrantedAt),
 		RefreshedAt: timestamppb.New(g.RefreshedAt),
 		ExpiresAt:   timestamppb.New(g.ExpiresAt),
+		State:       oauthGrantStateToProto[g.State],
 	}
+}
+
+// oauthGrantStateToProto names each grant state on the wire. A state missing
+// here reads as UNSPECIFIED, which a test over every state rules out.
+var oauthGrantStateToProto = map[authstore.OAuthGrantState]pb.OAuthGrant_State{
+	authstore.OAuthGrantActive:  pb.OAuthGrant_STATE_ACTIVE,
+	authstore.OAuthGrantRevoked: pb.OAuthGrant_STATE_REVOKED,
+	authstore.OAuthGrantExpired: pb.OAuthGrant_STATE_EXPIRED,
 }
 
 var _ paladiniamv1connect.UserServiceHandler = (*UserServer)(nil)

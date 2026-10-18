@@ -159,23 +159,53 @@ type OAuthGrant struct {
 	Scopes   []string
 }
 
-// UserOAuthGrant is one grant a user holds: a live family of OAuth refresh
+// UserOAuthGrant is one grant a user holds: a family of OAuth refresh
 // tokens, named by its family id. GrantedAt is when the user consented,
 // RefreshedAt when the client last rotated, ExpiresAt when the newest token
-// lapses unless rotated again.
+// lapses unless rotated again, State whether it still lets its client in.
 type UserOAuthGrant struct {
 	ID          uuid.UUID
 	Grant       OAuthGrant
 	GrantedAt   time.Time
 	RefreshedAt time.Time
 	ExpiresAt   time.Time
+	State       OAuthGrantState
+}
+
+// OAuthGrantState is a grant's standing, read off its newest refresh token:
+// a rotation revokes the token it replaces, so only the newest one speaks
+// for the grant.
+type OAuthGrantState int
+
+const (
+	// OAuthGrantActive is a grant whose client may still refresh.
+	OAuthGrantActive OAuthGrantState = iota + 1
+	// OAuthGrantRevoked was ended by the user, an admin or reuse detection.
+	OAuthGrantRevoked
+	// OAuthGrantExpired lapsed because its client stopped rotating.
+	OAuthGrantExpired
+)
+
+// OAuthGrantStateOf classifies a grant by its newest token. A revoked token
+// is a revoked grant even past its expiry: the revoke is what ended it.
+func OAuthGrantStateOf(revoked bool, expiresAt, now time.Time) OAuthGrantState {
+	switch {
+	case revoked:
+		return OAuthGrantRevoked
+	case !expiresAt.After(now):
+		return OAuthGrantExpired
+	default:
+		return OAuthGrantActive
+	}
 }
 
 // OAuthGrantStore lists and ends the OAuth grants a user holds. Ending one
 // revokes its refresh tokens; an access token already issued lives out its
 // short lifetime.
 type OAuthGrantStore interface {
-	ListOAuthGrants(ctx context.Context, userID uuid.UUID, now time.Time) ([]UserOAuthGrant, error)
+	// ListOAuthGrants lists the user's live grants as of now, and with
+	// includeInactive the revoked and expired ones its rows still hold.
+	ListOAuthGrants(ctx context.Context, userID uuid.UUID, now time.Time, includeInactive bool) ([]UserOAuthGrant, error)
 	// RevokeOAuthGrant ends the user's grant id, and reports whether there
 	// was one: a grant of another user, or no grant at all, is not touched.
 	RevokeOAuthGrant(ctx context.Context, userID, grantID uuid.UUID) (bool, error)

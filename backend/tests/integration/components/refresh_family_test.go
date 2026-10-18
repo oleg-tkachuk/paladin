@@ -228,11 +228,12 @@ func TestOAuthGrantsListAndRevoke(t *testing.T) {
 	insert(alice, other, grant, now, 24*time.Hour)
 	console := uuid.New()
 	insert(alice, console, nil, now, 24*time.Hour)
-	insert(alice, uuid.New(), grant, now.Add(-48*time.Hour), time.Hour)
+	expired := uuid.New()
+	insert(alice, expired, grant, now.Add(-48*time.Hour), time.Hour)
 	bobs := uuid.New()
 	insert(bob, bobs, grant, now, 24*time.Hour)
 
-	got, err := repo.ListOAuthGrants(ctx, alice, now)
+	got, err := repo.ListOAuthGrants(ctx, alice, now, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,10 +268,33 @@ func TestOAuthGrantsListAndRevoke(t *testing.T) {
 	if found, err := repo.RevokeOAuthGrant(ctx, alice, rotated); err != nil || !found {
 		t.Fatalf("revoke own grant: found = %v, err = %v", found, err)
 	}
-	if got, _ := repo.ListOAuthGrants(ctx, alice, now); len(got) != 1 || got[0].ID != other {
+	if got, _ := repo.ListOAuthGrants(ctx, alice, now, false); len(got) != 1 || got[0].ID != other {
 		t.Errorf("after revoking, grants = %+v, want only %s", got, other)
 	}
-	if got, _ := repo.ListOAuthGrants(ctx, bob, now); len(got) != 1 {
+	// Asked for the inactive ones too, every grant whose rows remain shows,
+	// each in the state its newest token gives it; the console session does not.
+	all, err := repo.ListOAuthGrants(ctx, alice, now, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[uuid.UUID]authstore.OAuthGrantState{}
+	for _, g := range all {
+		states[g.ID] = g.State
+	}
+	want := map[uuid.UUID]authstore.OAuthGrantState{
+		rotated: authstore.OAuthGrantRevoked,
+		other:   authstore.OAuthGrantActive,
+		expired: authstore.OAuthGrantExpired,
+	}
+	if len(states) != len(want) {
+		t.Errorf("with inactive, grants = %v, want %v", states, want)
+	}
+	for id, w := range want {
+		if states[id] != w {
+			t.Errorf("grant %s: state = %v, want %v", id, states[id], w)
+		}
+	}
+	if got, _ := repo.ListOAuthGrants(ctx, bob, now, false); len(got) != 1 {
 		t.Errorf("bob's grants = %d after alice revoked hers, want 1", len(got))
 	}
 }
