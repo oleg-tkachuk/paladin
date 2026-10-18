@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { fireEvent, render, screen } from "@/test/utils";
 
 const h = vi.hoisted(() => ({ listUsers: vi.fn() }));
 vi.mock("@/lib/connect/client", () => ({
@@ -53,6 +53,32 @@ describe("UsersPage", () => {
       await screen.findByRole("link", { name: "Bob" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Alice" })).toBeInTheDocument();
+  });
+
+  it("narrows to the disabled users, and sorts by name", async () => {
+    h.listUsers.mockResolvedValue({
+      users: [
+        user("u-2", "Carol"),
+        { ...user("u-3", "Bob"), disabled: true },
+        user("u-1", "Alice"),
+      ],
+      page: {},
+    });
+    render(<UsersPage />);
+    await screen.findByRole("link", { name: "Carol" });
+    const names = () =>
+      screen
+        .getAllByRole("link")
+        .map((l) => l.textContent)
+        .filter((t) => ["Alice", "Bob", "Carol"].includes(t ?? ""));
+
+    fireEvent.click(screen.getByRole("button", { name: "Disabled" }));
+    expect(names()).toEqual(["Bob"]);
+    expect(screen.getByText("1 of 3")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: /^User/ }));
+    expect(names()).toEqual(["Alice", "Bob", "Carol"]);
   });
 
   it("opens each user on a page of their own", async () => {

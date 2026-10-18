@@ -25,7 +25,15 @@ import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
-import { TableToolbar } from "@/components/ui/TableToolbar";
+import {
+  TableToolbar,
+  type ToolbarFilterOption,
+} from "@/components/ui/TableToolbar";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
+import type { User } from "@/gen/paladin/iam/v1/types_pb";
+import { useTableView } from "@/hooks/useTableView";
+import type { SearchText, SortAccessors } from "@/lib/table/view";
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
@@ -41,9 +49,25 @@ import {
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 
+// The columns of the users table; the placeholder rows span them.
+const USER_COLUMNS = 6;
+
+// Whether a user may sign in: the one standing a user has.
+type UserStanding = "active" | "disabled";
+const standing = (u: User): UserStanding =>
+  u.disabled ? "disabled" : "active";
+type StandingFilter = UserStanding | "all";
+const STANDING_FILTERS: readonly ToolbarFilterOption<StandingFilter>[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "disabled", label: "Disabled" },
+];
+const DEFAULT_STANDING_FILTER: StandingFilter = "all";
+
+type UserColumn = "user" | "tenant" | "login" | "state";
+
 export default function UsersPage() {
   const { tenants, error: tenantsError, fetchTenants } = useTenants();
-  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   // The generated password is returned once and never again, so it is held
   // here until the operator dismisses it rather than shown in a toast that
@@ -85,17 +109,39 @@ export default function UsersPage() {
     [tenants],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) =>
-        u.subject.toLowerCase().includes(q) ||
-        (u.displayName || "").toLowerCase().includes(q) ||
-        u.roles.some((r) => r.toLowerCase().includes(q)) ||
-        (tenantByID.get(u.tenantId)?.slug || "").toLowerCase().includes(q),
-    );
-  }, [users, search, tenantByID]);
+  const [standingFilter, setStandingFilter] = useState<StandingFilter>(
+    DEFAULT_STANDING_FILTER,
+  );
+  const inStanding = useMemo(
+    () =>
+      standingFilter === DEFAULT_STANDING_FILTER
+        ? users
+        : users.filter((u) => standing(u) === standingFilter),
+    [users, standingFilter],
+  );
+  // A user's tenant sorts and is searched by its slug, which only the tenant
+  // list knows.
+  const sortBy = useMemo<SortAccessors<User, UserColumn>>(
+    () => ({
+      user: (u) => u.displayName || u.subject,
+      tenant: (u) => tenantByID.get(u.tenantId)?.slug ?? u.tenantId,
+      login: (u) => (u.lastLoginAt ? timestampDate(u.lastLoginAt) : undefined),
+      state: standing,
+    }),
+    [tenantByID],
+  );
+  const searchIn = useMemo<SearchText<User>>(
+    () => (u) => [
+      u.subject,
+      u.displayName,
+      u.roles.join(" "),
+      tenantByID.get(u.tenantId)?.slug,
+    ],
+    [tenantByID],
+  );
+  const view = useTableView(inStanding, { text: searchIn, accessors: sortBy });
+  const filtered = view.rows;
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
     <div className="space-y-6">
@@ -106,10 +152,21 @@ export default function UsersPage() {
       />
 
       <TableToolbar
-        query={search}
-        onQueryChange={setSearch}
+        query={view.query}
+        onQueryChange={view.setQuery}
         searchLabel="Search users"
         placeholder="Search subject, display name, role, tenant slug…"
+        filter={{
+          label: "Standing",
+          options: STANDING_FILTERS,
+          value: standingFilter,
+          onChange: setStandingFilter,
+        }}
+        count={
+          usersQuery.data
+            ? { shown: filtered.length, total: users.length }
+            : undefined
+        }
       >
         <Button
           variant="outline"
@@ -126,13 +183,31 @@ export default function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="@md:w-65">User</TableHead>
-              <TableHead className="hidden @lg:table-cell">Tenant</TableHead>
+              <SortableHead
+                label="User"
+                column="user"
+                className="@md:w-65"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Tenant"
+                column="tenant"
+                className="hidden @lg:table-cell"
+                {...sortProps}
+              />
               <TableHead className="hidden @md:table-cell">Roles</TableHead>
-              <TableHead className="hidden @md:table-cell">
-                Last login
-              </TableHead>
-              <TableHead className="w-20">State</TableHead>
+              <SortableHead
+                label="Last login"
+                column="login"
+                className="hidden @md:table-cell"
+                {...sortProps}
+              />
+              <SortableHead
+                label="State"
+                column="state"
+                className="w-20"
+                {...sortProps}
+              />
               <TableHead className="text-right @md:w-30">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -140,7 +215,7 @@ export default function UsersPage() {
             {loading && users.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={6} className="py-3">
+                  <TableCell colSpan={USER_COLUMNS} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
@@ -152,7 +227,7 @@ export default function UsersPage() {
               // empty when it is unknown. One statement, in the place the rows
               // would have been, matching /buckets and /tenants.
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
+                <TableCell colSpan={USER_COLUMNS} className="h-32 text-center">
                   <ListLoadError
                     what="Users"
                     reason={error}
@@ -162,11 +237,13 @@ export default function UsersPage() {
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
+                <TableCell colSpan={USER_COLUMNS} className="h-32 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <UserCircleIcon className="size-8 opacity-40" />
                     <p className="text-sm">
-                      {search ? "No users match your search." : "No users yet."}
+                      {users.length > 0
+                        ? "No users match your search."
+                        : "No users yet."}
                     </p>
                   </div>
                 </TableCell>
