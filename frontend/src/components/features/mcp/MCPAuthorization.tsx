@@ -54,6 +54,42 @@ function clientOrigin(c: MCPOAuthClient): string {
   return "by a configuration that no longer lists it";
 }
 
+/** The columns of the clients table. */
+const CLIENT_COLUMNS = 5;
+
+/** A client's source, as its badge names it, and the badge's variant. */
+const CLIENT_SOURCE = {
+  configured: { label: "configured", variant: "outline" },
+  registered: { label: "registered itself", variant: "info" },
+  dropped: { label: "no longer configured", variant: "warning" },
+} as const;
+
+/** The badge of a client that skips the consent screen. */
+const SKIPS_CONSENT = "skips consent";
+
+/** Which source a client has: seeded, registered itself, or seeded once. */
+function clientSource(c: MCPOAuthClient): keyof typeof CLIENT_SOURCE {
+  if (c.dynamic) return "registered";
+  return c.configured ? "configured" : "dropped";
+}
+
+/**
+ * A client's statuses, in a column of their own: badges beside an id the
+ * width of a UUID wrapped under it and broke the row. They wrap among
+ * themselves rather than past the cell.
+ */
+function ClientSource({ client }: { client: MCPOAuthClient }) {
+  const source = CLIENT_SOURCE[clientSource(client)];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <Badge variant={source.variant}>{source.label}</Badge>
+      {client.skipConsent ? (
+        <Badge variant="outline">{SKIPS_CONSENT}</Badge>
+      ) : null}
+    </div>
+  );
+}
+
 /** What a client is, in the words an operator needs. */
 function clientKind(c: MCPOAuthClient): string {
   if (c.tokenExchange) return "MCP server";
@@ -163,7 +199,8 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
           <TableHeader>
             <TableRow>
               <TableHead>Client</TableHead>
-              <TableHead>Kind</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead className="hidden @sm:table-cell">Kind</TableHead>
               <TableHead className="hidden @md:table-cell">Scopes</TableHead>
               <TableHead className="hidden @md:table-cell">Audiences</TableHead>
             </TableRow>
@@ -172,7 +209,7 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
             {clients.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={4}
+                  colSpan={CLIENT_COLUMNS}
                   className="py-8 text-center text-xs text-muted-foreground"
                 >
                   No client is registered.
@@ -185,18 +222,15 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
                     className={cn(T.code, "whitespace-normal break-all")}
                   >
                     {c.clientId}
-                    {c.dynamic ? (
-                      <Badge variant="info" className="ml-2">
-                        registered itself
-                      </Badge>
-                    ) : null}
-                    {c.skipConsent ? (
-                      <Badge variant="outline" className="ml-2">
-                        skips consent
-                      </Badge>
-                    ) : null}
                   </TableCell>
-                  <TableCell>{clientKind(c)}</TableCell>
+                  {/* On a narrow card the source outranks the kind, which the
+                      client's record still shows. */}
+                  <TableCell>
+                    <ClientSource client={c} />
+                  </TableCell>
+                  <TableCell className="hidden @sm:table-cell">
+                    {clientKind(c)}
+                  </TableCell>
                   <TableCell
                     className={`hidden @md:table-cell ${T.code} whitespace-normal break-words text-muted-foreground`}
                   >

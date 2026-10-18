@@ -298,10 +298,38 @@ describe("the clients table", () => {
     const row = screen.getByRole("row", {
       name: new RegExp(REGISTERED.clientId),
     });
-    const [client, kind, scopes, audiences] = within(row).getAllByRole("cell");
+    const [client, , kind, scopes, audiences] =
+      within(row).getAllByRole("cell");
     expect(kind).not.toHaveClass("text-xs");
     for (const cell of [client, scopes, audiences]) {
       expect(cell).toHaveClass("whitespace-normal");
     }
+  });
+
+  // A status is a column of its own: under an id the width of a UUID, its
+  // badge wrapped beneath it and broke the row.
+  it.each([
+    ["a client the configuration seeds", MCP_SERVER, "configured"],
+    ["a client that registered itself", REGISTERED, "registered itself"],
+    [
+      "a client dropped from the configuration",
+      { ...REGISTERED, clientId: "old-agent", dynamic: false },
+      "no longer configured",
+    ],
+    [
+      "a client that skips consent",
+      { ...MCP_SERVER, clientId: "console", skipConsent: true },
+      "skips consent",
+    ],
+  ])("names %s in the Source column", (_, c, label) => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({ registeredClients: [c] } as never)}
+      />,
+    );
+    const row = screen.getByRole("row", { name: new RegExp(c.clientId) });
+    const [client, source] = within(row).getAllByRole("cell");
+    expect(within(source).getByText(label)).toBeInTheDocument();
+    expect(client).toHaveTextContent(new RegExp(`^${c.clientId}$`));
   });
 });
