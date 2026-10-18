@@ -83,10 +83,13 @@ type ListOperationsRequest struct {
 	SortOrder v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
 	// mine lists only the operations the caller started, matched in the query
 	// on the subject of the caller's token. Operations from before initiators
-	// were recorded are no one's.
-	Mine          bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// were recorded are no one's. Those the caller cleared with
+	// DismissOperations are left out unless include_dismissed.
+	Mine bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
+	// include_dismissed lists, with mine, the operations the caller cleared too.
+	IncludeDismissed bool `protobuf:"varint,5,opt,name=include_dismissed,json=includeDismissed,proto3" json:"include_dismissed,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ListOperationsRequest) Reset() {
@@ -143,6 +146,13 @@ func (x *ListOperationsRequest) GetSortOrder() v1.SortOrder {
 func (x *ListOperationsRequest) GetMine() bool {
 	if x != nil {
 		return x.Mine
+	}
+	return false
+}
+
+func (x *ListOperationsRequest) GetIncludeDismissed() bool {
+	if x != nil {
+		return x.IncludeDismissed
 	}
 	return false
 }
@@ -243,30 +253,126 @@ func (x *CancelOperationRequest) GetName() string {
 	return ""
 }
 
+type DismissOperationsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Operation resource names; empty clears every finished one of the caller's.
+	Names         []string `protobuf:"bytes,1,rep,name=names,proto3" json:"names,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissOperationsRequest) Reset() {
+	*x = DismissOperationsRequest{}
+	mi := &file_paladin_data_v1_operation_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissOperationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissOperationsRequest) ProtoMessage() {}
+
+func (x *DismissOperationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_operation_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissOperationsRequest.ProtoReflect.Descriptor instead.
+func (*DismissOperationsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_operation_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DismissOperationsRequest) GetNames() []string {
+	if x != nil {
+		return x.Names
+	}
+	return nil
+}
+
+type DismissOperationsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many were cleared by this call.
+	DismissedCount int32 `protobuf:"varint,1,opt,name=dismissed_count,json=dismissedCount,proto3" json:"dismissed_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DismissOperationsResponse) Reset() {
+	*x = DismissOperationsResponse{}
+	mi := &file_paladin_data_v1_operation_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissOperationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissOperationsResponse) ProtoMessage() {}
+
+func (x *DismissOperationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_operation_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissOperationsResponse.ProtoReflect.Descriptor instead.
+func (*DismissOperationsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_operation_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DismissOperationsResponse) GetDismissedCount() int32 {
+	if x != nil {
+		return x.DismissedCount
+	}
+	return 0
+}
+
 var File_paladin_data_v1_operation_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
 	"'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xb4\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe1\x01\n" +
 	"\x15ListOperationsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
 	"\n" +
 	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x12\n" +
-	"\x04mine\x18\x04 \x01(\bR\x04mine\"\x89\x01\n" +
+	"\x04mine\x18\x04 \x01(\bR\x04mine\x12+\n" +
+	"\x11include_dismissed\x18\x05 \x01(\bR\x10includeDismissed\"\x89\x01\n" +
 	"\x16ListOperationsResponse\x12:\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1a.paladin.data.v1.OperationR\n" +
 	"operations\x123\n" +
 	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xae\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"A\n" +
+	"\x18DismissOperationsRequest\x12%\n" +
+	"\x05names\x18\x01 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xe8\a\"\x04r\x02\x10\x01R\x05names\"D\n" +
+	"\x19DismissOperationsResponse\x12'\n" +
+	"\x0fdismissed_count\x18\x01 \x01(\x05R\x0edismissedCount2\x9f\x03\n" +
 	"\x10OperationService\x12U\n" +
 	"\fGetOperation\x12$.paladin.data.v1.GetOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12f\n" +
 	"\x0eListOperations\x12&.paladin.data.v1.ListOperationsRequest\x1a'.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n" +
-	"\x0fCancelOperation\x12'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02BJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3"
+	"\x0fCancelOperation\x12'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02\x12o\n" +
+	"\x11DismissOperations\x12).paladin.data.v1.DismissOperationsRequest\x1a*.paladin.data.v1.DismissOperationsResponse\"\x03\x90\x02\x02BJZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3"
 
 var (
 	file_paladin_data_v1_operation_service_proto_rawDescOnce sync.Once
@@ -280,30 +386,34 @@ func file_paladin_data_v1_operation_service_proto_rawDescGZIP() []byte {
 	return file_paladin_data_v1_operation_service_proto_rawDescData
 }
 
-var file_paladin_data_v1_operation_service_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_paladin_data_v1_operation_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_paladin_data_v1_operation_service_proto_goTypes = []any{
-	(*GetOperationRequest)(nil),    // 0: paladin.data.v1.GetOperationRequest
-	(*ListOperationsRequest)(nil),  // 1: paladin.data.v1.ListOperationsRequest
-	(*ListOperationsResponse)(nil), // 2: paladin.data.v1.ListOperationsResponse
-	(*CancelOperationRequest)(nil), // 3: paladin.data.v1.CancelOperationRequest
-	(*v1.PageRequest)(nil),         // 4: paladin.common.v1.PageRequest
-	(v1.SortOrder)(0),              // 5: paladin.common.v1.SortOrder
-	(*Operation)(nil),              // 6: paladin.data.v1.Operation
-	(*v1.PageResponse)(nil),        // 7: paladin.common.v1.PageResponse
+	(*GetOperationRequest)(nil),       // 0: paladin.data.v1.GetOperationRequest
+	(*ListOperationsRequest)(nil),     // 1: paladin.data.v1.ListOperationsRequest
+	(*ListOperationsResponse)(nil),    // 2: paladin.data.v1.ListOperationsResponse
+	(*CancelOperationRequest)(nil),    // 3: paladin.data.v1.CancelOperationRequest
+	(*DismissOperationsRequest)(nil),  // 4: paladin.data.v1.DismissOperationsRequest
+	(*DismissOperationsResponse)(nil), // 5: paladin.data.v1.DismissOperationsResponse
+	(*v1.PageRequest)(nil),            // 6: paladin.common.v1.PageRequest
+	(v1.SortOrder)(0),                 // 7: paladin.common.v1.SortOrder
+	(*Operation)(nil),                 // 8: paladin.data.v1.Operation
+	(*v1.PageResponse)(nil),           // 9: paladin.common.v1.PageResponse
 }
 var file_paladin_data_v1_operation_service_proto_depIdxs = []int32{
-	4, // 0: paladin.data.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
-	5, // 1: paladin.data.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	6, // 2: paladin.data.v1.ListOperationsResponse.operations:type_name -> paladin.data.v1.Operation
-	7, // 3: paladin.data.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
+	6, // 0: paladin.data.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
+	7, // 1: paladin.data.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	8, // 2: paladin.data.v1.ListOperationsResponse.operations:type_name -> paladin.data.v1.Operation
+	9, // 3: paladin.data.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
 	0, // 4: paladin.data.v1.OperationService.GetOperation:input_type -> paladin.data.v1.GetOperationRequest
 	1, // 5: paladin.data.v1.OperationService.ListOperations:input_type -> paladin.data.v1.ListOperationsRequest
 	3, // 6: paladin.data.v1.OperationService.CancelOperation:input_type -> paladin.data.v1.CancelOperationRequest
-	6, // 7: paladin.data.v1.OperationService.GetOperation:output_type -> paladin.data.v1.Operation
-	2, // 8: paladin.data.v1.OperationService.ListOperations:output_type -> paladin.data.v1.ListOperationsResponse
-	6, // 9: paladin.data.v1.OperationService.CancelOperation:output_type -> paladin.data.v1.Operation
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
+	4, // 7: paladin.data.v1.OperationService.DismissOperations:input_type -> paladin.data.v1.DismissOperationsRequest
+	8, // 8: paladin.data.v1.OperationService.GetOperation:output_type -> paladin.data.v1.Operation
+	2, // 9: paladin.data.v1.OperationService.ListOperations:output_type -> paladin.data.v1.ListOperationsResponse
+	8, // 10: paladin.data.v1.OperationService.CancelOperation:output_type -> paladin.data.v1.Operation
+	5, // 11: paladin.data.v1.OperationService.DismissOperations:output_type -> paladin.data.v1.DismissOperationsResponse
+	8, // [8:12] is the sub-list for method output_type
+	4, // [4:8] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
 	4, // [4:4] is the sub-list for extension extendee
 	0, // [0:4] is the sub-list for field type_name
@@ -321,7 +431,7 @@ func file_paladin_data_v1_operation_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_data_v1_operation_service_proto_rawDesc), len(file_paladin_data_v1_operation_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

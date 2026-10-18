@@ -31,9 +31,9 @@ type recordingOperation struct {
 	mine        bool
 }
 
-func (r *recordingOperation) ListOperations(_ context.Context, _ *operationh.State, _ int32, _, _ string, newestFirst, mine bool) ([]operationh.Operation, string, error) {
-	r.newestFirst = &newestFirst
-	r.mine = mine
+func (r *recordingOperation) ListOperations(_ context.Context, in operationh.ListInput) ([]operationh.Operation, string, error) {
+	r.newestFirst = &in.NewestFirst
+	r.mine = in.Mine
 	return nil, "", nil
 }
 

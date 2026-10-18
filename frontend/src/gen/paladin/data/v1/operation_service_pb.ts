@@ -29,7 +29,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CidwYWxhZGluL2RhdGEvdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD3BhbGFkaW4uZGF0YS52MSIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEilQEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISDAoEbWluZRgEIAEoCCJ3ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi4KCm9wZXJhdGlvbnMYASADKAsyGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uEi0KBHBhZ2UYAiABKAsyHy5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABMq4CChBPcGVyYXRpb25TZXJ2aWNlElUKDEdldE9wZXJhdGlvbhIkLnBhbGFkaW4uZGF0YS52MS5HZXRPcGVyYXRpb25SZXF1ZXN0GhoucGFsYWRpbi5kYXRhLnYxLk9wZXJhdGlvbiIDkAIBEmYKDkxpc3RPcGVyYXRpb25zEiYucGFsYWRpbi5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBonLnBhbGFkaW4uZGF0YS52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlIgOQAgESWwoPQ2FuY2VsT3BlcmF0aW9uEicucGFsYWRpbi5kYXRhLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uIgOQAgJCSlpIZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vZGF0YS92MTtwYWxhZGluZGF0YXYxYgZwcm90bzM",
+    "CidwYWxhZGluL2RhdGEvdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD3BhbGFkaW4uZGF0YS52MSIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEisAEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISDAoEbWluZRgEIAEoCBIZChFpbmNsdWRlX2Rpc21pc3NlZBgFIAEoCCJ3ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi4KCm9wZXJhdGlvbnMYASADKAsyGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uEi0KBHBhZ2UYAiABKAsyHy5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIjoKGERpc21pc3NPcGVyYXRpb25zUmVxdWVzdBIeCgVuYW1lcxgBIAMoCUIPukgMkgEJEOgHIgRyAhABIjQKGURpc21pc3NPcGVyYXRpb25zUmVzcG9uc2USFwoPZGlzbWlzc2VkX2NvdW50GAEgASgFMp8DChBPcGVyYXRpb25TZXJ2aWNlElUKDEdldE9wZXJhdGlvbhIkLnBhbGFkaW4uZGF0YS52MS5HZXRPcGVyYXRpb25SZXF1ZXN0GhoucGFsYWRpbi5kYXRhLnYxLk9wZXJhdGlvbiIDkAIBEmYKDkxpc3RPcGVyYXRpb25zEiYucGFsYWRpbi5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBonLnBhbGFkaW4uZGF0YS52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlIgOQAgESWwoPQ2FuY2VsT3BlcmF0aW9uEicucGFsYWRpbi5kYXRhLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uIgOQAgISbwoRRGlzbWlzc09wZXJhdGlvbnMSKS5wYWxhZGluLmRhdGEudjEuRGlzbWlzc09wZXJhdGlvbnNSZXF1ZXN0GioucGFsYWRpbi5kYXRhLnYxLkRpc21pc3NPcGVyYXRpb25zUmVzcG9uc2UiA5ACAkJKWkhnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9kYXRhL3YxO3BhbGFkaW5kYXRhdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_paladin_common_v1_pagination,
@@ -89,11 +89,19 @@ export type ListOperationsRequest =
     /**
      * mine lists only the operations the caller started, matched in the query
      * on the subject of the caller's token. Operations from before initiators
-     * were recorded are no one's.
+     * were recorded are no one's. Those the caller cleared with
+     * DismissOperations are left out unless include_dismissed.
      *
      * @generated from field: bool mine = 4;
      */
     mine: boolean;
+
+    /**
+     * include_dismissed lists, with mine, the operations the caller cleared too.
+     *
+     * @generated from field: bool include_dismissed = 5;
+     */
+    includeDismissed: boolean;
   };
 
 /**
@@ -148,6 +156,48 @@ export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> =
   messageDesc(file_paladin_data_v1_operation_service, 3);
 
 /**
+ * @generated from message paladin.data.v1.DismissOperationsRequest
+ */
+export type DismissOperationsRequest =
+  Message<"paladin.data.v1.DismissOperationsRequest"> & {
+    /**
+     * Operation resource names; empty clears every finished one of the caller's.
+     *
+     * @generated from field: repeated string names = 1;
+     */
+    names: string[];
+  };
+
+/**
+ * Describes the message paladin.data.v1.DismissOperationsRequest.
+ * Use `create(DismissOperationsRequestSchema)` to create a new message.
+ */
+export const DismissOperationsRequestSchema: GenMessage<DismissOperationsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_operation_service, 4);
+
+/**
+ * @generated from message paladin.data.v1.DismissOperationsResponse
+ */
+export type DismissOperationsResponse =
+  Message<"paladin.data.v1.DismissOperationsResponse"> & {
+    /**
+     * How many were cleared by this call.
+     *
+     * @generated from field: int32 dismissed_count = 1;
+     */
+    dismissedCount: number;
+  };
+
+/**
+ * Describes the message paladin.data.v1.DismissOperationsResponse.
+ * Use `create(DismissOperationsResponseSchema)` to create a new message.
+ */
+export const DismissOperationsResponseSchema: GenMessage<DismissOperationsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_data_v1_operation_service, 5);
+
+/**
  * OperationService is the data-plane mirror — caller sees only operations
  * they initiated (filtered by initiator_subject from JWT).
  *
@@ -187,5 +237,19 @@ export const OperationService: GenService<{
     methodKind: "unary";
     input: typeof CancelOperationRequestSchema;
     output: typeof OperationSchema;
+  };
+  /**
+   * DismissOperations clears finished operations from the caller's own list
+   * (ListOperationsRequest.mine): those named, or with none named every one
+   * that has finished. Only the caller's own and only finished ones are
+   * cleared; others named are left as they are. The operations stay, and
+   * stay listed to everyone else.
+   *
+   * @generated from rpc paladin.data.v1.OperationService.DismissOperations
+   */
+  dismissOperations: {
+    methodKind: "unary";
+    input: typeof DismissOperationsRequestSchema;
+    output: typeof DismissOperationsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_data_v1_operation_service, 0);

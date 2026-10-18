@@ -27,6 +27,14 @@ service OperationService {
   rpc CancelOperation(CancelOperationRequest) returns (Operation) {
     option idempotency_level = IDEMPOTENT;
   }
+  // DismissOperations clears finished operations from the caller's own list
+  // (ListOperationsRequest.mine): those named, or with none named every one
+  // that has finished. Only the caller's own and only finished ones are
+  // cleared; others named are left as they are. The operations stay, and
+  // stay listed to everyone else.
+  rpc DismissOperations(DismissOperationsRequest) returns (DismissOperationsResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 message GetOperationRequest {
@@ -47,8 +55,11 @@ message ListOperationsRequest {
   paladin.common.v1.SortOrder sort_order = 3;
   // mine lists only the operations the caller started, matched in the query
   // on the subject of the caller's token. Operations from before initiators
-  // were recorded are no one's.
+  // were recorded are no one's. Those the caller cleared with
+  // DismissOperations are left out unless include_dismissed.
   bool mine = 4;
+  // include_dismissed lists, with mine, the operations the caller cleared too.
+  bool include_dismissed = 5;
 }
 
 message ListOperationsResponse {
@@ -58,4 +69,17 @@ message ListOperationsResponse {
 
 message CancelOperationRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message DismissOperationsRequest {
+  // Operation resource names; empty clears every finished one of the caller's.
+  repeated string names = 1 [(buf.validate.field).repeated = {
+    max_items: 1000
+    items: {string: {min_len: 1}}
+  }];
+}
+
+message DismissOperationsResponse {
+  // How many were cleared by this call.
+  int32 dismissed_count = 1;
 }

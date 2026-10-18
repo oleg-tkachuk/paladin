@@ -55,7 +55,8 @@ type presignHandler interface {
 
 type operationHandler interface {
 	GetOperation(ctx context.Context, opID uuid.UUID) (*operationh.Operation, error)
-	ListOperations(ctx context.Context, state *operationh.State, pageSize int32, pageToken, filter string, newestFirst, mine bool) ([]operationh.Operation, string, error)
+	ListOperations(ctx context.Context, in operationh.ListInput) ([]operationh.Operation, string, error)
+	DismissOperations(ctx context.Context, ids []uuid.UUID) (int64, error)
 	CancelOperation(ctx context.Context, opID uuid.UUID) error
 }
 

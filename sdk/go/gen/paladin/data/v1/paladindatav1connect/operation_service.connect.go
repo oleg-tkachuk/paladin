@@ -34,6 +34,9 @@ const (
 	// OperationServiceCancelOperationProcedure is the procedure name of the OperationService's
 	// CancelOperation RPC.
 	OperationServiceCancelOperationProcedure = "/paladin.data.v1.OperationService/CancelOperation"
+	// OperationServiceDismissOperationsProcedure is the procedure name of the OperationService's
+	// DismissOperations RPC.
+	OperationServiceDismissOperationsProcedure = "/paladin.data.v1.OperationService/DismissOperations"
 )
 
 var (
@@ -61,6 +64,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
+	operationServiceDismissOperationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_data_v1_operation_service_proto.Services().ByName("OperationService").Methods().ByName("DismissOperations"),
+			Procedure:        OperationServiceDismissOperationsProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // OperationServiceClient is a client for the paladin.data.v1.OperationService service.
@@ -75,6 +86,12 @@ type OperationServiceClient interface {
 	// committed is not rolled back, and an operation that finished first stays
 	// finished.
 	CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error)
+	// DismissOperations clears finished operations from the caller's own list
+	// (ListOperationsRequest.mine): those named, or with none named every one
+	// that has finished. Only the caller's own and only finished ones are
+	// cleared; others named are left as they are. The operations stay, and
+	// stay listed to everyone else.
+	DismissOperations(context.Context, *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error)
 }
 
 // NewOperationServiceClient constructs a client for the paladin.data.v1.OperationService service.
@@ -95,6 +112,12 @@ type OperationServiceHandler interface {
 	// committed is not rolled back, and an operation that finished first stays
 	// finished.
 	CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error)
+	// DismissOperations clears finished operations from the caller's own list
+	// (ListOperationsRequest.mine): those named, or with none named every one
+	// that has finished. Only the caller's own and only finished ones are
+	// cleared; others named are left as they are. The operations stay, and
+	// stay listed to everyone else.
+	DismissOperations(context.Context, *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error)
 }
 
 // RegisterOperationServiceHandler registers svc as the paladin.data.v1.OperationService
@@ -105,6 +128,7 @@ func RegisterOperationServiceHandler(server *connect.Server, svc OperationServic
 		connect.Method{Spec: operationServiceGetOperationSpec(), Handler: adapter.getOperation},
 		connect.Method{Spec: operationServiceListOperationsSpec(), Handler: adapter.listOperations},
 		connect.Method{Spec: operationServiceCancelOperationSpec(), Handler: adapter.cancelOperation},
+		connect.Method{Spec: operationServiceDismissOperationsSpec(), Handler: adapter.dismissOperations},
 	)
 }
 
@@ -121,6 +145,10 @@ func (UnimplementedOperationServiceHandler) ListOperations(context.Context, *v1.
 
 func (UnimplementedOperationServiceHandler) CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.OperationService.CancelOperation is not implemented")
+}
+
+func (UnimplementedOperationServiceHandler) DismissOperations(context.Context, *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.data.v1.OperationService.DismissOperations is not implemented")
 }
 
 type operationServiceClient struct {
@@ -146,6 +174,14 @@ func (c *operationServiceClient) ListOperations(ctx context.Context, req *v1.Lis
 func (c *operationServiceClient) CancelOperation(ctx context.Context, req *v1.CancelOperationRequest) (*v1.Operation, error) {
 	var res v1.Operation
 	if err := c.client.CallUnary(ctx, operationServiceCancelOperationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *operationServiceClient) DismissOperations(ctx context.Context, req *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error) {
+	var res v1.DismissOperationsResponse
+	if err := c.client.CallUnary(ctx, operationServiceDismissOperationsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -183,6 +219,18 @@ func (h operationServiceHandler) cancelOperation(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.CancelOperation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h operationServiceHandler) dismissOperations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DismissOperationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DismissOperations(ctx, &req)
 	if err != nil {
 		return err
 	}

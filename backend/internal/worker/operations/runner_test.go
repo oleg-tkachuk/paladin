@@ -71,7 +71,10 @@ func (m *memRepo) ReportProgress(_ context.Context, id uuid.UUID, progress []byt
 	return nil
 }
 func (m *memRepo) Cancel(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (m *memRepo) List(context.Context, uuid.UUID, *operationh.State, uuid.UUID, int32, string, bool, string) ([]operationh.Operation, string, error) {
+func (m *memRepo) Dismiss(context.Context, uuid.UUID, string, []uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (m *memRepo) List(context.Context, operationh.ListArgs) ([]operationh.Operation, string, error) {
 	return nil, "", nil
 }
 func (m *memRepo) ClaimNext(_ context.Context) (operationh.Operation, error) {

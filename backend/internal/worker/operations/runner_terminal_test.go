@@ -58,7 +58,10 @@ func (r *recordingRepo) Get(context.Context, uuid.UUID, uuid.UUID) (operationh.O
 	return operationh.Operation{}, nil
 }
 func (r *recordingRepo) Cancel(context.Context, uuid.UUID, uuid.UUID) error { return nil }
-func (r *recordingRepo) List(context.Context, uuid.UUID, *operationh.State, uuid.UUID, int32, string, bool, string) ([]operationh.Operation, string, error) {
+func (r *recordingRepo) Dismiss(context.Context, uuid.UUID, string, []uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (r *recordingRepo) List(context.Context, operationh.ListArgs) ([]operationh.Operation, string, error) {
 	return nil, "", nil
 }
 

@@ -16,16 +16,18 @@ class GetOperationRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ListOperationsRequest(_message.Message):
-    __slots__ = ("page", "filter", "sort_order", "mine")
+    __slots__ = ("page", "filter", "sort_order", "mine", "include_dismissed")
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
     MINE_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_DISMISSED_FIELD_NUMBER: _ClassVar[int]
     page: _pagination_pb2.PageRequest
     filter: str
     sort_order: _pagination_pb2.SortOrder
     mine: bool
-    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ...) -> None: ...
+    include_dismissed: bool
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ..., include_dismissed: _Optional[bool] = ...) -> None: ...
 
 class ListOperationsResponse(_message.Message):
     __slots__ = ("operations", "page")
@@ -40,3 +42,15 @@ class CancelOperationRequest(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     name: str
     def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class DismissOperationsRequest(_message.Message):
+    __slots__ = ("names",)
+    NAMES_FIELD_NUMBER: _ClassVar[int]
+    names: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class DismissOperationsResponse(_message.Message):
+    __slots__ = ("dismissed_count",)
+    DISMISSED_COUNT_FIELD_NUMBER: _ClassVar[int]
+    dismissed_count: int
+    def __init__(self, dismissed_count: _Optional[int] = ...) -> None: ...

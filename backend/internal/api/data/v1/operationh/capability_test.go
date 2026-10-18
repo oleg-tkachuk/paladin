@@ -25,7 +25,7 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 				return Operation{OperationID: opID, TenantID: tid}, nil
 			},
 			cancelFn: func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
-			listFn: func(context.Context, uuid.UUID, *State, uuid.UUID, int32, string, bool, string) ([]Operation, string, error) {
+			listFn: func(context.Context, ListArgs) ([]Operation, string, error) {
 				return nil, "", nil
 			},
 		}
@@ -39,7 +39,7 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 			return h.CancelOperation(ctx, opID)
 		},
 		"ListOperations": func(h *Handler, ctx context.Context) error {
-			_, _, err := h.ListOperations(ctx, nil, 0, "", "", false, false)
+			_, _, err := h.ListOperations(ctx, ListInput{})
 			return err
 		},
 	}

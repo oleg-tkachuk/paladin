@@ -53,7 +53,9 @@ type Operation struct {
 	DoneAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=done_at,json=doneAt,proto3" json:"done_at,omitempty"`
 	State  v1.OperationState      `protobuf:"varint,12,opt,name=state,proto3,enum=paladin.common.v1.OperationState" json:"state,omitempty"`
 	// What it acts on; unset for an operation of a type that names no objects.
-	Target        *v1.OperationTarget `protobuf:"bytes,13,opt,name=target,proto3" json:"target,omitempty"`
+	Target *v1.OperationTarget `protobuf:"bytes,13,opt,name=target,proto3" json:"target,omitempty"`
+	// When its initiator cleared it from their own list; unset while not.
+	DismissedAt   *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=dismissed_at,json=dismissedAt,proto3" json:"dismissed_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -190,6 +192,13 @@ func (x *Operation) GetTarget() *v1.OperationTarget {
 	return nil
 }
 
+func (x *Operation) GetDismissedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DismissedAt
+	}
+	return nil
+}
+
 type isOperation_Result interface {
 	isOperation_Result()
 }
@@ -269,10 +278,13 @@ type ListOperationsRequest struct {
 	SortOrder v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
 	// mine lists only the operations the caller started, matched in the query
 	// on the subject of the caller's token. Operations from before initiators
-	// were recorded are no one's.
-	Mine          bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// were recorded are no one's. Those the caller cleared with
+	// DismissOperations are left out unless include_dismissed.
+	Mine bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
+	// include_dismissed lists, with mine, the operations the caller cleared too.
+	IncludeDismissed bool `protobuf:"varint,5,opt,name=include_dismissed,json=includeDismissed,proto3" json:"include_dismissed,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ListOperationsRequest) Reset() {
@@ -329,6 +341,13 @@ func (x *ListOperationsRequest) GetSortOrder() v1.SortOrder {
 func (x *ListOperationsRequest) GetMine() bool {
 	if x != nil {
 		return x.Mine
+	}
+	return false
+}
+
+func (x *ListOperationsRequest) GetIncludeDismissed() bool {
+	if x != nil {
+		return x.IncludeDismissed
 	}
 	return false
 }
@@ -429,11 +448,101 @@ func (x *CancelOperationRequest) GetName() string {
 	return ""
 }
 
+type DismissOperationsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Operation resource names; empty clears every finished one of the caller's.
+	Names         []string `protobuf:"bytes,1,rep,name=names,proto3" json:"names,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissOperationsRequest) Reset() {
+	*x = DismissOperationsRequest{}
+	mi := &file_paladin_admin_v1_operation_service_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissOperationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissOperationsRequest) ProtoMessage() {}
+
+func (x *DismissOperationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_operation_service_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissOperationsRequest.ProtoReflect.Descriptor instead.
+func (*DismissOperationsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_operation_service_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DismissOperationsRequest) GetNames() []string {
+	if x != nil {
+		return x.Names
+	}
+	return nil
+}
+
+type DismissOperationsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many were cleared by this call.
+	DismissedCount int32 `protobuf:"varint,1,opt,name=dismissed_count,json=dismissedCount,proto3" json:"dismissed_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DismissOperationsResponse) Reset() {
+	*x = DismissOperationsResponse{}
+	mi := &file_paladin_admin_v1_operation_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissOperationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissOperationsResponse) ProtoMessage() {}
+
+func (x *DismissOperationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_operation_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissOperationsResponse.ProtoReflect.Descriptor instead.
+func (*DismissOperationsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_operation_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DismissOperationsResponse) GetDismissedCount() int32 {
+	if x != nil {
+		return x.DismissedCount
+	}
+	return 0
+}
+
 var File_paladin_admin_v1_operation_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/operation_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a!paladin/common/v1/operation.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x8d\x05\n" +
+	"(paladin/admin/v1/operation_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a!paladin/common/v1/operation.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd1\x05\n" +
 	"\tOperation\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x17\n" +
 	"\x04type\x18\x02 \x01(\tB\x03\xe0A\x03R\x04type\x120\n" +
@@ -450,27 +559,34 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x128\n" +
 	"\adone_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x06doneAt\x12<\n" +
 	"\x05state\x18\f \x01(\x0e2!.paladin.common.v1.OperationStateB\x03\xe0A\x03R\x05state\x12?\n" +
-	"\x06target\x18\r \x01(\v2\".paladin.common.v1.OperationTargetB\x03\xe0A\x03R\x06targetB\b\n" +
+	"\x06target\x18\r \x01(\v2\".paladin.common.v1.OperationTargetB\x03\xe0A\x03R\x06target\x12B\n" +
+	"\fdismissed_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vdismissedAtB\b\n" +
 	"\x06result\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xb4\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe1\x01\n" +
 	"\x15ListOperationsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
 	"\n" +
 	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x12\n" +
-	"\x04mine\x18\x04 \x01(\bR\x04mine\"\x8a\x01\n" +
+	"\x04mine\x18\x04 \x01(\bR\x04mine\x12+\n" +
+	"\x11include_dismissed\x18\x05 \x01(\bR\x10includeDismissed\"\x8a\x01\n" +
 	"\x16ListOperationsResponse\x12;\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1b.paladin.admin.v1.OperationR\n" +
 	"operations\x123\n" +
 	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name2\xbc\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"A\n" +
+	"\x18DismissOperationsRequest\x12%\n" +
+	"\x05names\x18\x01 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xe8\a\"\x04r\x02\x10\x01R\x05names\"D\n" +
+	"\x19DismissOperationsResponse\x12'\n" +
+	"\x0fdismissed_count\x18\x01 \x01(\x05R\x0edismissedCount2\xaf\x03\n" +
 	"\x18PlatformOperationService\x12W\n" +
 	"\fGetOperation\x12%.paladin.admin.v1.GetOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x12h\n" +
 	"\x0eListOperations\x12'.paladin.admin.v1.ListOperationsRequest\x1a(.paladin.admin.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12]\n" +
-	"\x0fCancelOperation\x12(.paladin.admin.v1.CancelOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x02BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
+	"\x0fCancelOperation\x12(.paladin.admin.v1.CancelOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x02\x12q\n" +
+	"\x11DismissOperations\x12*.paladin.admin.v1.DismissOperationsRequest\x1a+.paladin.admin.v1.DismissOperationsResponse\"\x03\x90\x02\x02BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_operation_service_proto_rawDescOnce sync.Once
@@ -484,46 +600,51 @@ func file_paladin_admin_v1_operation_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_operation_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_operation_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_paladin_admin_v1_operation_service_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_paladin_admin_v1_operation_service_proto_goTypes = []any{
-	(*Operation)(nil),              // 0: paladin.admin.v1.Operation
-	(*GetOperationRequest)(nil),    // 1: paladin.admin.v1.GetOperationRequest
-	(*ListOperationsRequest)(nil),  // 2: paladin.admin.v1.ListOperationsRequest
-	(*ListOperationsResponse)(nil), // 3: paladin.admin.v1.ListOperationsResponse
-	(*CancelOperationRequest)(nil), // 4: paladin.admin.v1.CancelOperationRequest
-	(*anypb.Any)(nil),              // 5: google.protobuf.Any
-	(*status.Status)(nil),          // 6: google.rpc.Status
-	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
-	(v1.OperationState)(0),         // 8: paladin.common.v1.OperationState
-	(*v1.OperationTarget)(nil),     // 9: paladin.common.v1.OperationTarget
-	(*v1.PageRequest)(nil),         // 10: paladin.common.v1.PageRequest
-	(v1.SortOrder)(0),              // 11: paladin.common.v1.SortOrder
-	(*v1.PageResponse)(nil),        // 12: paladin.common.v1.PageResponse
+	(*Operation)(nil),                 // 0: paladin.admin.v1.Operation
+	(*GetOperationRequest)(nil),       // 1: paladin.admin.v1.GetOperationRequest
+	(*ListOperationsRequest)(nil),     // 2: paladin.admin.v1.ListOperationsRequest
+	(*ListOperationsResponse)(nil),    // 3: paladin.admin.v1.ListOperationsResponse
+	(*CancelOperationRequest)(nil),    // 4: paladin.admin.v1.CancelOperationRequest
+	(*DismissOperationsRequest)(nil),  // 5: paladin.admin.v1.DismissOperationsRequest
+	(*DismissOperationsResponse)(nil), // 6: paladin.admin.v1.DismissOperationsResponse
+	(*anypb.Any)(nil),                 // 7: google.protobuf.Any
+	(*status.Status)(nil),             // 8: google.rpc.Status
+	(*timestamppb.Timestamp)(nil),     // 9: google.protobuf.Timestamp
+	(v1.OperationState)(0),            // 10: paladin.common.v1.OperationState
+	(*v1.OperationTarget)(nil),        // 11: paladin.common.v1.OperationTarget
+	(*v1.PageRequest)(nil),            // 12: paladin.common.v1.PageRequest
+	(v1.SortOrder)(0),                 // 13: paladin.common.v1.SortOrder
+	(*v1.PageResponse)(nil),           // 14: paladin.common.v1.PageResponse
 }
 var file_paladin_admin_v1_operation_service_proto_depIdxs = []int32{
-	5,  // 0: paladin.admin.v1.Operation.metadata:type_name -> google.protobuf.Any
-	6,  // 1: paladin.admin.v1.Operation.error:type_name -> google.rpc.Status
-	5,  // 2: paladin.admin.v1.Operation.response:type_name -> google.protobuf.Any
-	7,  // 3: paladin.admin.v1.Operation.created_at:type_name -> google.protobuf.Timestamp
-	7,  // 4: paladin.admin.v1.Operation.updated_at:type_name -> google.protobuf.Timestamp
-	7,  // 5: paladin.admin.v1.Operation.done_at:type_name -> google.protobuf.Timestamp
-	8,  // 6: paladin.admin.v1.Operation.state:type_name -> paladin.common.v1.OperationState
-	9,  // 7: paladin.admin.v1.Operation.target:type_name -> paladin.common.v1.OperationTarget
-	10, // 8: paladin.admin.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
-	11, // 9: paladin.admin.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	0,  // 10: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
-	12, // 11: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
-	1,  // 12: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
-	2,  // 13: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
-	4,  // 14: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
-	0,  // 15: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
-	3,  // 16: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
-	0,  // 17: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
-	15, // [15:18] is the sub-list for method output_type
-	12, // [12:15] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	7,  // 0: paladin.admin.v1.Operation.metadata:type_name -> google.protobuf.Any
+	8,  // 1: paladin.admin.v1.Operation.error:type_name -> google.rpc.Status
+	7,  // 2: paladin.admin.v1.Operation.response:type_name -> google.protobuf.Any
+	9,  // 3: paladin.admin.v1.Operation.created_at:type_name -> google.protobuf.Timestamp
+	9,  // 4: paladin.admin.v1.Operation.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 5: paladin.admin.v1.Operation.done_at:type_name -> google.protobuf.Timestamp
+	10, // 6: paladin.admin.v1.Operation.state:type_name -> paladin.common.v1.OperationState
+	11, // 7: paladin.admin.v1.Operation.target:type_name -> paladin.common.v1.OperationTarget
+	9,  // 8: paladin.admin.v1.Operation.dismissed_at:type_name -> google.protobuf.Timestamp
+	12, // 9: paladin.admin.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
+	13, // 10: paladin.admin.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	0,  // 11: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
+	14, // 12: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
+	1,  // 13: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
+	2,  // 14: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
+	4,  // 15: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
+	5,  // 16: paladin.admin.v1.PlatformOperationService.DismissOperations:input_type -> paladin.admin.v1.DismissOperationsRequest
+	0,  // 17: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
+	3,  // 18: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
+	0,  // 19: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
+	6,  // 20: paladin.admin.v1.PlatformOperationService.DismissOperations:output_type -> paladin.admin.v1.DismissOperationsResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_operation_service_proto_init() }
@@ -541,7 +662,7 @@ func file_paladin_admin_v1_operation_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_operation_service_proto_rawDesc), len(file_paladin_admin_v1_operation_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

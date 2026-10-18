@@ -40,8 +40,10 @@ type Operation struct {
 	// InitiatorSubject is the subject of the token that submitted it; "" for
 	// an operation from before initiators were recorded.
 	InitiatorSubject string
-	Type             string
-	State            State
+	// DismissedAt is when the initiator cleared it from their own list.
+	DismissedAt *time.Time
+	Type        string
+	State       State
 	// Metadata is the executor's arguments, JSON, written once at creation.
 	Metadata []byte
 	// Progress is the latest {processed, total} snapshot the worker reported,
@@ -74,8 +76,11 @@ type Repository interface {
 	// showing current activity wants the newest rows; an ascending page of 50
 	// is the 50 oldest, which is how a three-day-old failure came to be the
 	// console's idea of what is running.
-	// initiator, when set, keeps only the operations that subject started.
-	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string, newestFirst bool, initiator string) ([]Operation, string, error)
+	List(ctx context.Context, args ListArgs) ([]Operation, string, error)
+	// Dismiss clears the finished operations of initiator in tenantID from
+	// their own list — those of ids, or every one with ids empty — and
+	// reports how many it cleared.
+	Dismiss(ctx context.Context, tenantID uuid.UUID, initiator string, ids []uuid.UUID) (int64, error)
 
 	// ClaimNext is the worker-side atomic dequeue: pick the oldest
 	// PENDING row, flip it to RUNNING, return it. Returns
@@ -168,19 +173,17 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 // mine only those the caller started. filter is an optional CEL expression
 // over OperationSchema, applied after the fetch; the repo cursor is returned
 // unchanged so paging survives a page whose rows all fail the predicate.
-func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string, newestFirst, mine bool) ([]Operation, string, error) {
+func (h *Handler) ListOperations(ctx context.Context, in ListInput) ([]Operation, string, error) {
+	state, pageSize, pageToken, filter, newestFirst, mine := in.State, in.PageSize, in.PageToken, in.Filter, in.NewestFirst, in.Mine
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	var initiator string
 	if mine {
-		p, err := auth.PrincipalFromContext(ctx)
-		if err != nil || p.Subject == "" {
-			// No subject is no one's operations, never everyone's.
-			return nil, "", connect.NewError(connect.CodeUnauthenticated, "mine needs a caller with a subject")
+		if initiator, err = callerSubject(ctx); err != nil {
+			return nil, "", err
 		}
-		initiator = p.Subject
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
 		return nil, "", err
@@ -196,7 +199,11 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 		}
 		afterID = id
 	}
-	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize, filter, newestFirst, initiator)
+	page, next, err := h.repo.List(ctx, ListArgs{
+		TenantID: tenantID, State: state, AfterID: afterID, PageSize: pageSize,
+		Filter: filter, NewestFirst: newestFirst,
+		Initiator: initiator, HideDismissed: mine && !in.IncludeDismissed,
+	})
 	if err != nil {
 		return nil, "", err
 	}
@@ -247,6 +254,34 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 	return op.OperationID, nil
 }
 
+// ListArgs is one page of a tenant's operations, as the store reads it.
+type ListArgs struct {
+	TenantID uuid.UUID
+	State    *State
+	AfterID  uuid.UUID
+	PageSize int32
+	// Filter is the caller's CEL expression, pushed down where it can be.
+	Filter      string
+	NewestFirst bool
+	// Initiator, when set, keeps only the operations that subject started;
+	// HideDismissed then leaves out those it cleared from its own list.
+	Initiator     string
+	HideDismissed bool
+}
+
+// ListInput is a ListOperations request.
+type ListInput struct {
+	State       *State
+	PageSize    int32
+	PageToken   string
+	Filter      string
+	NewestFirst bool
+	// Mine lists only the caller's own operations, and leaves out those the
+	// caller dismissed unless IncludeDismissed.
+	Mine             bool
+	IncludeDismissed bool
+}
+
 // ErrNotCancellable is surfaced by repositories when the operation is in a
 // terminal state and cannot be cancelled.
 var ErrNotCancellable = errors.New("operation not in cancellable state")
@@ -261,3 +296,36 @@ var ErrOperationFinished = errors.New("operation not found or already finished")
 // the cheap "nothing to do; sleep until next tick" signal — distinct
 // from a real error.
 var ErrNoOperationToClaim = errors.New("no PENDING operation to claim")
+
+// callerSubject is the subject of the caller's token, which owns the
+// operations it started. No subject is no one's operations, never everyone's.
+func callerSubject(ctx context.Context) (string, error) {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil || p.Subject == "" {
+		return "", connect.NewError(connect.CodeUnauthenticated, "needs a caller with a subject")
+	}
+	return p.Subject, nil
+}
+
+// DismissOperations clears the caller's own finished operations from their
+// list: those of ids, or every one with ids empty. It changes only the
+// caller's view — the operations stay, listed to everyone else — so reading
+// operations is the permission it asks for.
+func (h *Handler) DismissOperations(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	tenantID, err := auth.TenantFromContext(ctx)
+	if err != nil {
+		return 0, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+	}
+	subject, err := callerSubject(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
+		return 0, err
+	}
+	n, err := h.repo.Dismiss(ctx, tenantID, subject, ids)
+	if err != nil {
+		return 0, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return n, nil
+}
