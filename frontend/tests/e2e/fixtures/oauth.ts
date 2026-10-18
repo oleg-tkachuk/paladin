@@ -29,6 +29,36 @@ export const HTTP_OK = 200;
 export const HTTP_BAD_REQUEST = 400;
 export const HTTP_UNAUTHORIZED = 401;
 
+// The RFC 7009 endpoint a client gives a grant up at.
+const REVOKE_PATH = "/oauth/revoke";
+
+/**
+ * Every grant this worker's specs were issued, by one of its refresh tokens
+ * and the client it went to. Each grant used to outlive its test: the seeded
+ * admin's connected applications held a row per grant per run, and the revoke
+ * spec waded through all of them.
+ */
+const issued: { refreshToken: string; clientId: string }[] = [];
+
+/**
+ * Give up every grant issued since the last call, as the client it went to.
+ * Any of a grant's refresh tokens ends it, rotated ones included. A client its
+ * test deleted answers invalid_client: its grants went with it.
+ */
+export async function revokeIssuedGrants(
+  request: APIRequestContext,
+): Promise<void> {
+  for (const g of issued.splice(0)) {
+    const res = await request.post(`${IAM_URL}${REVOKE_PATH}`, {
+      form: { client_id: g.clientId, token: g.refreshToken },
+    });
+    expect(
+      [HTTP_OK, HTTP_UNAUTHORIZED],
+      `revoking a grant of ${g.clientId}: ${await res.text()}`,
+    ).toContain(res.status());
+  }
+}
+
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;
@@ -120,5 +150,7 @@ export async function exchangeCode(
     },
   });
   expect(token.status(), await token.text()).toBe(HTTP_OK);
-  return (await token.json()) as TokenResponse;
+  const body = (await token.json()) as TokenResponse;
+  issued.push({ refreshToken: body.refresh_token, clientId });
+  return body;
 }

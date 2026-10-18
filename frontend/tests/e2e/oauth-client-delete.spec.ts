@@ -14,6 +14,7 @@ import {
   SCOPE_READ,
   grant,
   registerClient,
+  revokeIssuedGrants,
 } from "./fixtures/oauth";
 import { IAM_URL } from "./fixtures/seed";
 
@@ -21,6 +22,11 @@ const ACCESS_PAGE = "/mcp/access";
 const DELETE = "Delete client";
 
 test.describe("OAuth client deletion", () => {
+  // Give up every grant the test was issued, so none outlives it.
+  test.afterEach(async ({ request }) => {
+    await revokeIssuedGrants(request);
+  });
+
   test("a self-registered client goes with its grant", async ({
     page,
     request,
