@@ -116,6 +116,9 @@ echo "   as:    ${ADMIN_SUBJECT}"
 export NODE_TLS_REJECT_UNAUTHORIZED=0
 export PALADIN_E2E_BASE_URL="https://${BASE_HOST}"
 export PALADIN_E2E_IAM_URL="https://${API_HOST}"
+# The cluster's ingest listens on NATS, with no webhook to post an event to:
+# the ingest spec skips on an empty URL.
+export PALADIN_E2E_INGEST_URL=""
 export PALADIN_E2E_DATA_URL="https://${API_HOST}"
 export PALADIN_E2E_ADMIN_URL="$admin_url"
 export PALADIN_E2E_MCP_URL="$mcp_url"
