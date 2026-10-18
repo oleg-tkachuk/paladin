@@ -5,7 +5,13 @@ import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@/test/utils";
 import { OperationSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 
-import { CancelOperationButton, OperationProgressBar } from "./parts";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+
+import {
+  CancelOperationButton,
+  OperationProgressBar,
+  OperationRecord,
+} from "./parts";
 
 describe("OperationProgressBar", () => {
   it("says how far the work got, to a screen reader too", () => {
@@ -55,5 +61,27 @@ describe("CancelOperationButton", () => {
     await waitFor(() =>
       expect(onError).toHaveBeenCalledWith(expect.stringContaining("gone")),
     );
+  });
+});
+
+describe("OperationRecord", () => {
+  it("says until when a finished operation is kept", () => {
+    const op = create(OperationSchema, {
+      name: "operations/a",
+      type: "BatchCopy",
+      done: true,
+      expireTime: timestampFromDate(new Date("2026-11-01T12:00:00Z")),
+    });
+    render(<OperationRecord op={op} onClose={() => {}} />);
+    expect(screen.getByText("Kept until")).toBeInTheDocument();
+  });
+
+  it("says nothing of it for one the reaper will not remove", () => {
+    const op = create(OperationSchema, {
+      name: "operations/b",
+      type: "BatchCopy",
+    });
+    render(<OperationRecord op={op} onClose={() => {}} />);
+    expect(screen.queryByText("Kept until")).toBeNull();
   });
 });
