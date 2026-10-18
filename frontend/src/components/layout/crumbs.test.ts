@@ -17,6 +17,7 @@ describe("pageTitle", () => {
       `M2M tokens · acme · Tenants · ${PRODUCT_NAME}`,
     ],
     ["/login", `Sign in · ${PRODUCT_NAME}`],
+    ["/applications", `Connected applications · ${PRODUCT_NAME}`],
   ])("%s → %s", (path, title) => {
     expect(pageTitle(path)).toBe(title);
   });

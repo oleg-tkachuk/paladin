@@ -122,25 +122,23 @@ test.describe("OAuth grant", () => {
     );
   });
 
-  // The grant shows on the user's profile, and revoking it there ends it:
-  // the client's refresh token is refused from then on. Granted for
+  // The grant shows on the user's connected applications, and revoking it
+  // there ends it: the client's refresh token is refused from then on. Granted for
   // paladin-data, which no other spec asks for, so the rows this test acts on
   // are its own whatever runs beside it.
-  test("a grant revoked on the profile page can no longer refresh", async ({
+  test("a grant revoked on the connected applications page can no longer refresh", async ({
     page,
     request,
   }) => {
     const tok = await grant(request, [SCOPE_READ], AUDIENCE_DATA);
 
     await loginAsAdmin(page);
-    await page.goto("/profile");
-    const card = page
-      .locator("[data-slot=card]")
-      .filter({ hasText: "Connected applications" });
-    const ours = card
-      .locator("li")
+    await page.goto("/applications");
+    const ours = page
+      .getByRole("row")
       .filter({ hasText: CLIENT_ID })
-      .filter({ hasText: AUDIENCE_DATA });
+      .filter({ hasText: AUDIENCE_DATA })
+      .filter({ has: page.getByRole("button", { name: "Revoke" }) });
     await expect(ours.first()).toBeVisible({ timeout: 15_000 });
 
     // A retry may find an earlier attempt's grant too; end every one.

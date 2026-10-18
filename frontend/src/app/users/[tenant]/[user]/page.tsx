@@ -25,7 +25,8 @@ import {
 import { UserRolesCard } from "@/components/features/users/UserRolesCard";
 import { UserScopesCard } from "@/components/features/users/UserScopesCard";
 import { tenantClient, userClient } from "@/lib/connect/client";
-import { OAuthGrantsCard } from "@/components/features/OAuthGrantsCard";
+import { T } from "@/lib/ui/typography";
+import { ConnectedApplications } from "@/components/features/oauth/ConnectedApplications";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
 import { normalizeError } from "@/lib/connect/error";
 import { USERS_INDEX_HREF, userResourceName } from "@/lib/userPath";
@@ -156,7 +157,10 @@ export default function UserDetailPage() {
           </Card>
           <UserRolesCard user={user} onChanged={refresh} />
           <UserScopesCard user={user} onChanged={refresh} />
-          <OAuthGrantsCard userName={name} own={false} />
+          <section className="space-y-2">
+            <h2 className={T.cardTitleProse}>Connected applications</h2>
+            <ConnectedApplications userName={name} own={false} />
+          </section>
         </>
       ) : null}
 

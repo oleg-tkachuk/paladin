@@ -23,6 +23,8 @@ describe("visibleNavigationGroups", () => {
       "Dashboard",
       "Health Status",
       "Profile",
+      // A user's own OAuth grants, read from IAM.
+      "Connected applications",
     ]);
   });
 

@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { SECTION } from "@/lib/navigation/sections";
 import { useRouter } from "next/navigation";
 import {
   ArrowRightOnRectangleIcon,
   Bars3Icon,
   MagnifyingGlassIcon,
+  KeyIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 
@@ -139,6 +141,12 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
               <Link href="/profile">
                 <UserCircleIcon className="size-4" />
                 Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={SECTION.applications}>
+                <KeyIcon className="size-4" />
+                Connected applications
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

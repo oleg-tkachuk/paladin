@@ -17,13 +17,15 @@ const ENTITY_PARENTS = new Set([
 
 /**
  * Segments whose title-cased form is wrong: acronyms, which title case
- * turns into "Mcp" and "M2m tokens".
+ * turns into "Mcp" and "M2m tokens", and a page its one word misnames.
  */
 const SEGMENT_LABELS: Record<string, string> = {
   mcp: "MCP",
   "m2m-tokens": "M2M tokens",
   oauth: "OAuth",
   login: "Sign in",
+  // The page's own title, which one word would shorten to something vaguer.
+  applications: "Connected applications",
 };
 
 /** A UUID segment is an id wherever it sits, never words to title-case. */

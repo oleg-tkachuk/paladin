@@ -236,6 +236,11 @@ const navigationGroups: Array<{
         path: "/profile",
         icon: UserCircleIcon,
       },
+      {
+        name: "Connected applications",
+        path: SECTION.applications,
+        icon: KeyIcon,
+      },
       { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
     ],
   },
