@@ -41,8 +41,9 @@ GRANT CONNECT ON DATABASE paladin TO paladin_app;
 
 Only a superuser can grant `BYPASSRLS`, which is why the migrations do not
 create these roles themselves when they run as `paladin_migrate`. Without it
-on `paladin_migrate` and `paladin_reaper`, migrations fail on the first
-row-level-security policy.
+on `paladin_migrate` and `paladin_reaper` the migrations still succeed, but the
+cross-tenant work — outbox dispatch, lifecycle sweeps, the reapers — silently
+sees zero rows, because row-level security filters rather than errors.
 
 ## 2. Secrets
 
@@ -56,8 +57,9 @@ kubectl -n paladin create secret generic paladin-s3 \
   --from-literal=access_key='<access-key>' --from-literal=secret_key='<secret-key>'
 ```
 
-The keys are `password`, `access_key` and `secret_key` unless you name others
-in the values.
+The Postgres Secrets' key is `password` unless you set `postgres.app.key` /
+`postgres.migrate.key`; the S3 Secret must carry `access_key` and
+`secret_key`.
 
 ## 3. Values
 
@@ -86,6 +88,9 @@ storage:
     create: false
     existingSecret: paladin-s3
 ```
+
+`storage.s3CredentialsSecret` is the `primary` backend's entry; further
+backends each take one under `storage.s3CredentialsSecrets.<backend>`.
 
 `public_endpoint` is the address clients reach the store by. Uploads and
 downloads go straight from the client to the store over presigned URLs, and
@@ -124,6 +129,10 @@ helm install paladin-console oci://ghcr.io/oleg-tkachuk/charts/paladin-console \
   --version <version> -n paladin
 ```
 
+The console requests `100m` CPU with a `2000m` limit — every browser RPC passes
+through its BFF, and a lower ceiling throttles it under load — and its probes
+allow 3s (readiness) and 5s (liveness) per answer.
+
 The migrate and bootstrap Jobs run before any Deployment starts. The console
 finds the backend from its release name and namespace; if you named the backend
 release something other than `paladin-core`, set `backend.release`, and
@@ -160,9 +169,13 @@ ingress:
 ```
 
 Caddy obtains certificates itself; set `ingress.tls` to serve your own. The
-backend Ingress routes `/paladin.iam.v1.*` to the IAM plane and everything else
+backend Ingress routes `/paladin.iam.v1.*`, `/oauth` and
+`/.well-known/oauth-authorization-server` to the IAM plane and everything else
 to the data plane. The admin plane gets no public route: reach it through the
 console, or expose it behind your own controls.
+
+Both charts also carry a Traefik `IngressRoute` as the alternative, rendered
+only when `traefik.hosts` names a host.
 
 ## Network policies
 
@@ -179,6 +192,7 @@ must be named where it actually runs, or its traffic is dropped:
 | `networkPolicies.storage.namespace` (backend) | `storage` | the object store |
 | `networkPolicies.nats.namespace` / `.port` (backend) | `nats`, `4222` | NATS, when ingest uses it |
 | `networkPolicies.kubeAPIPorts` (backend) | `[6443]` | the Kubernetes API server, which every pod reads its secrets from at boot |
+| `networkPolicies.adminBrokerPorts` (backend) | `[4222, 5671, 5672, 9092, 9093]` | event-sink brokers the admin pod dials for `TestSubscription`; the dispatcher's egress is open |
 
 A policy matches the endpoint a Service resolves to, so `kubeAPIPorts` is the
 API server's own port, not the `kubernetes` Service's 443 — `kubectl get
@@ -204,8 +218,8 @@ Another controller needs `ingress.className`, its own syntax for
 `/paladin.iam.v1.` — Kubernetes' `Prefix` type does not, as it compares whole
 path segments), and its annotation for HTTPS to the backend when internal TLS
 is on. Or leave `ingress.enabled` off and point your own ingress or gateway at
-the `paladin-core-api` Service: port 8085 for `/paladin.iam.v1.*`, 8080 for the
-rest.
+the `paladin-core-api` Service: port 8085 for `/paladin.iam.v1.*`, `/oauth` and
+`/.well-known/oauth-authorization-server`, 8080 for the rest.
 
 ## Metrics and alerts
 

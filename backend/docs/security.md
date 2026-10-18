@@ -19,7 +19,11 @@ a kind, a tenant and a role set.
 For MCP clients, the api role serves an OAuth 2.1 authorization server under
 `/oauth/*` ([ADR-0009](../../docs/adr/0009-oauth-authorization-server.md)) and
 the mcp role validates its tokens as a resource server
-([ADR-0008](../../docs/adr/0008-mcp-oauth-resource-server.md)).
+([ADR-0008](../../docs/adr/0008-mcp-oauth-resource-server.md)). Those tokens
+carry the audience `paladin-mcp`, which only `/oauth/authorize` issues and
+every plane refuses; the mcp role exchanges one (RFC 8693, at `/oauth/token`)
+for a token of the plane a tool calls
+([ADR-0036](../../docs/adr/0036-the-mcp-server-is-its-own-audience.md)).
 
 **Key-bound capabilities through MCP.** The bridge cannot sign a proof with
 the agent's key, so it forwards an agent's key-bound capability only once the
@@ -29,11 +33,12 @@ agent calls `CapabilityService.Delegate` itself, with its own proof and the
 share op, naming that thumbprint as `confirmation_jkt`. The child goes to the
 bridge in `X-Paladin-Capability`, and the bridge proves possession on every
 call it forwards. The bridge is then the child's holder: a copy of the child
-works through the bridge and nowhere else. One key signs all of the bridge's
-traffic, and the replay store keeps at most
-`limes.DefaultReplayEntriesPerKey` (1000) live proofs per key, each live for
-`limes.DefaultDPoPWindow` (one minute), so key-bound calls through the bridge
-are refused past roughly 1000 a minute.
+works through the bridge and nowhere else. Proof ids are recorded in the
+`dpop_seen_proofs` table, shared by every replica
+(`internal/capability/postgres/replay.go`), at most
+`dpop.DefaultReplayEntriesPerHolder` (1000) live per holder — the capability
+the proof is presented with — each for `dpop.DefaultWindow` (one minute), so
+one delegated child is refused past roughly 1000 key-bound calls a minute.
 
 **Refresh-token rotation.** Every rotation supersedes the presented token and
 mints a successor in the same family. Presenting a superseded token is:
@@ -126,11 +131,16 @@ value in-memory, then clears the ref. The resolvable references are:
 - `api_token.hmac_key_secret` — the server-side key of the API-token digest
 - `runtime.health_snapshot_token_secret` — the `/system/health.json` token
 - `ingest.webhook.shared_secret_ref` — the storage-event webhook HMAC key
+- `capability.dpop_nonce.key_secret` — the key that signs DPoP server nonces
+- `mcp.dpop_key_secret` — the bridge's own DPoP key
+- `mcp.oauth.exchange.client_secret_ref` and
+  `auth.oauth.seed_clients[].client_secret_ref` — OAuth client secrets
 
 Every referenced Secret name must appear in
 `rbac.secretReader.secretNames` (the chart appends the ones it wires itself:
-the Postgres passwords, the S3 credentials, the bootstrap admin and the
-generated signing key); a missing name surfaces as a **403 at boot**, not a
+the Postgres passwords, the S3 credentials, the bootstrap admin, the
+generated signing key and the OAuth `client_secret_ref`s); a missing name
+surfaces as a **403 at boot**, not a
 silent skip. Out-of-cluster (no SA token) the resolver no-ops and inline
 values are used instead. An inline value and its `*_secret` reference (`signing_key` /
 `signing_key_secret`, `password` / `password_secret`, and the webhook's inline

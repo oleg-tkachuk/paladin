@@ -73,10 +73,19 @@ closed with a pointer here.
   hygiene, not authorisation (`backend/internal/mcp/profile.go`). The
   `read_only` profile offers no write tool and `agent_safe` only the object
   writes it names, which `TestLifecycleWritesStayAdminOnly` holds; capability
-  and API-token issuance, user management and policy rewrites are always
-  denied. A tool appearing in a profile is therefore not a finding when the
+  and API-token issuance, user management and policy rewrites are denied in
+  every profile unless an operator replaces the list with `mcp.always_deny`.
+  A tool appearing in a profile is therefore not a finding when the
   caller's own policy permits the RPC; a write that lands without that
   permission is.
+- **Console session.** The BFF keeps the refresh token in an `httpOnly`,
+  `SameSite=Strict` cookie, `Secure` in production builds
+  (`frontend/src/lib/auth/bff.ts`). Access tokens live in page memory only,
+  never in `localStorage` or `sessionStorage`
+  (`frontend/src/lib/auth/tokenStore.ts`); `localStorage` holds UI
+  preferences. The console must be reached only through a proxy that
+  replaces a client-sent `X-Forwarded-For`; its NetworkPolicy admits only the
+  ingress controller.
 - **Policy layers.** Built-in, tenant, bucket and collection policies are
   joined in that order; a `forbid` in any layer wins. A layer that does not
   parse freezes its scope except for its own repair. See

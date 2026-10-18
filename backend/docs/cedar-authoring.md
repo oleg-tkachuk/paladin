@@ -17,7 +17,7 @@ file in `policies/examples/`.
 | Slot      | Value |
 |-----------|-------|
 | principal | Always a `User`, keyed by the token subject. API tokens and capabilities are `User`s too; `principal.kind` tells them apart. |
-| action    | One of 47 actions (§4). |
+| action    | One of 60 actions (§4). |
 | resource  | The most specific entity the request names: `Object`, `Collection`, `Bucket`, `StorageBackend`, `User` or `Tenant`. |
 | context   | The same record for every action (§6). |
 
@@ -47,7 +47,8 @@ Four layers are concatenated, in this order, and compiled together:
      its tenant's users;
    - a machine principal (`kind` is `api_key`, `service_account` or
      `capability`) may delete and restore objects in its own tenant;
-   - `platform.tenant-provisioner` may create tenants and their storage;
+   - `platform.tenant-provisioner` may create tenants and their storage,
+     bind collections to buckets and publish them (`ConfigurePublicRead`);
    - `platform.capability-issuer` may issue, revoke and read capabilities
      (`IssueCapability`, `RevokeCapability`, `ReadCapability`);
    - a principal with a non-empty scope set that does not contain `*` is
@@ -84,7 +85,7 @@ use:
 | Role | Granted by | Reach |
 |------|------------|-------|
 | `platform.admin` | built-in | everything |
-| `platform.tenant-provisioner` | built-in | create tenants, their buckets and collections |
+| `platform.tenant-provisioner` | built-in | create tenants, their buckets and collections, and publish them |
 | `platform.capability-issuer` | built-in | issue, revoke and read capabilities for any tenant |
 | `tenant.admin` | default policy | users, user settings, quotas, audit, subscriptions in its own tenant; `InspectPolicy` |
 | `bucket.admin` | default policy | bucket configuration |
@@ -111,12 +112,13 @@ is checked against the most specific one the request names — for example,
 | `BindCollectionToBucket` | `Collection` |
 | `ManageBucket` `ConfigureBucketPolicy` `ConfigureLifecycle` `ConfigureLock` `ConfigureVersioning` `ConfigureReplication` | `Bucket` |
 | `ReadBucket` | `Bucket`, `StorageBackend`, `Tenant` |
+| `ConfigurePublicRead` | `Bucket`, `Collection` |
 | `ManageBackend` `RotateBackendCredentials` | `StorageBackend` |
 | `ReadBackend` | `StorageBackend`, `Tenant` |
 | `ManageQuota` `ReadQuota` | `Tenant`, `Bucket` |
 | `ManageTenant` `ReadTenant` `ResetQuotaUsage` `ReadAuditLog` `ExportAuditLog` `ManageSubscription` `ReadSubscription` `TestSubscription` `ReadOperation` `CancelOperation` `ReadBilling` `EnsureTenantStorage` `AuthorizeOAuth` | `Tenant` |
 | `InspectPolicy` | `Tenant`, `Collection` |
-| `IssueCapability` `DelegateCapability` `RevokeCapability` `ReadCapability` `CreateAPIToken` `RevokeAPIToken` `ReadAPIToken` `InspectMCP` | `Tenant` (the caller's own) |
+| `IssueCapability` `DelegateCapability` `RevokeCapability` `ReadCapability` `CreateAPIToken` `RevokeAPIToken` `ReadAPIToken` `InspectMCP` `ManageOAuthClient` | `Tenant` (the caller's own) |
 | `ManageUser` `ResetPassword` `GrantScopes` `ManageUserSettings` | `User` |
 | `ReadUser` `ReadUserSettings` | `User`, `Tenant` |
 | `ReadOAuthGrants` `RevokeOAuthGrant` | `User` |
@@ -127,6 +129,11 @@ destination collection), listing, counting. `ConfigureLock` (the bucket's defaul
 from `SetObjectRetention` (one object's lock), so each can be granted alone.
 `SetObjectTaint` (setting or clearing an object's taint signals) is separate
 from `UpdateObject`, because clearing a signal re-opens the content.
+`ConfigurePublicRead` (creating a public bucket or collection) is separate
+from `ManageBucket` and `ManageCollection`, so holding those is not enough to
+publish ([ADR-0027](../../docs/adr/0027-public-collections.md)).
+`ManageOAuthClient` (deleting an OAuth client) is also held to
+`platform.admin` by the handler.
 `ReadObjectPlacement` reveals an object's physical placement — its storage
 backend, bucket and key inside the bucket — in the `placement` field of
 `GetObject`, `LookupObject` and `ListObjects`. It is checked after the read is
