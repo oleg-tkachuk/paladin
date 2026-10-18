@@ -35,8 +35,27 @@ function byDeletedAt(a: Tenant, b: Tenant): number {
 
 const COLUMN_COUNT = 4;
 
+// Which trashed tenants show, by where they stand in the retention window.
+type RetentionFilter = "all" | "past" | "within";
+const RETENTION_FILTERS: readonly ToolbarFilterOption<RetentionFilter>[] = [
+  { value: "all", label: "All" },
+  { value: "past", label: "Past retention" },
+  { value: "within", label: "Within retention" },
+];
+const DEFAULT_RETENTION_FILTER: RetentionFilter = "all";
+
+type TrashColumn = "tenant" | "deleted" | "retention";
+const tsDate = (t: Tenant["deletedAt"]) => (t ? timestampDate(t) : undefined);
+const TRASH_SORT: SortAccessors<Tenant, TrashColumn> = {
+  tenant: (t) => t.displayName || t.slug,
+  deleted: (t) => tsDate(t.deletedAt),
+  retention: (t) => tsDate(t.purgeEligibleAt),
+};
+const TRASH_SEARCH = (t: Tenant) => [t.displayName, t.slug, t.tenantId];
+
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   ArchiveBoxIcon,
   ArrowUturnLeftIcon,
@@ -60,6 +79,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { SortableHead } from "@/components/ui/SortHeader";
+import {
+  TableToolbar,
+  type ToolbarFilterOption,
+} from "@/components/ui/TableToolbar";
+import { useTableView } from "@/hooks/useTableView";
+import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
 import {
   TrashRetention,
@@ -122,6 +148,25 @@ export default function TrashPage() {
     const info = first && trashAge(first.deletedAt, first.purgeEligibleAt, now);
     return info ? retentionDays(info) : null;
   }, [trashed, now]);
+  const [retention, setRetention] = useState<RetentionFilter>(
+    DEFAULT_RETENTION_FILTER,
+  );
+  const inWindow = useMemo(
+    () =>
+      retention === DEFAULT_RETENTION_FILTER
+        ? trashed
+        : trashed.filter(
+            (t) =>
+              !!trashAge(t.deletedAt, t.purgeEligibleAt, now)?.pastRetention ===
+              (retention === "past"),
+          ),
+    [trashed, retention, now],
+  );
+  const view = useTableView(inWindow, {
+    text: TRASH_SEARCH,
+    accessors: TRASH_SORT,
+  });
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
   const loading = trashQuery.isFetching;
   // Mutations refetch instead of optimistically splicing local state.
   const reload = () => void trashQuery.refetch();
@@ -217,20 +262,53 @@ export default function TrashPage() {
             </span>
             {windowDays !== null && <> · {windowDays}-day retention</>}
           </p>
+          <TableToolbar
+            query={view.query}
+            onQueryChange={view.setQuery}
+            searchLabel="Search the trash"
+            placeholder="Search by name, slug or id…"
+            filter={{
+              label: "Retention",
+              options: RETENTION_FILTERS,
+              value: retention,
+              onChange: setRetention,
+            }}
+            count={{ shown: view.rows.length, total: trashed.length }}
+          />
           <Card className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tenant</TableHead>
-                  <TableHead className="@md:w-40">Deleted</TableHead>
-                  <TableHead className="@md:w-56">Retention</TableHead>
+                  <SortableHead label="Tenant" column="tenant" {...sortProps} />
+                  <SortableHead
+                    label="Deleted"
+                    column="deleted"
+                    className="@md:w-40"
+                    {...sortProps}
+                  />
+                  <SortableHead
+                    label="Retention"
+                    column="retention"
+                    className="@md:w-56"
+                    {...sortProps}
+                  />
                   <TableHead className="@md:w-44">
                     <span className="sr-only">Actions</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {trashed.map((t) => {
+                {view.rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={COLUMN_COUNT}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      No trashed tenant matches.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {view.rows.map((t) => {
                   const busy = busyId === t.tenantId;
                   const info = trashAge(t.deletedAt, t.purgeEligibleAt, now);
                   const refusal = purgeRefusals[t.tenantId];

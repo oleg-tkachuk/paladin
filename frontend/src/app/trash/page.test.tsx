@@ -58,6 +58,53 @@ describe("TrashPage", () => {
     ];
   });
 
+  const tenantColumn = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map(
+        (r) =>
+          within(r).getAllByRole("cell")[0].querySelector("p")?.textContent,
+      );
+
+  it("narrows to the tenants past or within retention", async () => {
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.click(screen.getByRole("button", { name: "Past retention" }));
+    expect(tenantColumn()).toEqual(["Oldest", "Older"]);
+    fireEvent.click(screen.getByRole("button", { name: "Within retention" }));
+    expect(tenantColumn()).toEqual(["Newer"]);
+    expect(screen.getByText("1 of 3")).toBeInTheDocument();
+  });
+
+  it("searches the slug and sorts by name", async () => {
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search the trash" }),
+      {
+        target: { value: "smoke-old" },
+      },
+    );
+    // Both slugs start so; the oldest still leads.
+    expect(tenantColumn()).toEqual(["Oldest", "Older"]);
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search the trash" }),
+      {
+        target: { value: "" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Tenant/ }));
+    expect(tenantColumn()).toEqual(["Newer", "Older", "Oldest"]);
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search the trash" }),
+      {
+        target: { value: "absent" },
+      },
+    );
+    expect(screen.getByText("No trashed tenant matches.")).toBeInTheDocument();
+  });
+
   it("lists the oldest first and counts those past retention", async () => {
     render(<TrashPage />);
     await screen.findByText("Older");

@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { type FailedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useNotification } from "@/components/ui/Notification";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   Table,
   TableBody,
@@ -27,9 +29,16 @@ import type { BucketGrant } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { ErrorReason } from "@/gen/paladin/common/v1/error_reason_pb";
 import { errorMessage, errorReason } from "@/hooks/errorContract";
 import { useBucketGrants } from "@/hooks/useBucketGrants";
+import { useTableView } from "@/hooks/useTableView";
+import type { SearchText, SortAccessors } from "@/lib/table/view";
 import { formatDateTime } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
 import { timestampToDate } from "@/lib/utils";
+
+type GrantColumn = "tenant" | "by" | "at";
+
+// The columns of the grants table; the no-match row spans them.
+const GRANT_TABLE_COLUMNS = 4;
 
 /** What the operator reads when a revoke is refused for the tenant's collections. */
 export const GRANT_IN_USE_MESSAGE =
@@ -94,6 +103,35 @@ export function BucketGrantsCard({
     () => new Map(tenants.map((t) => [t.tenantId, t])),
     [tenants],
   );
+  // A grantee sorts and is searched by the name it shows under, which only
+  // the tenant list knows.
+  const grantee = useMemo(
+    () => (g: BucketGrant) => {
+      const t = tenantByID.get(g.tenantId);
+      return t ? t.displayName || t.slug : g.tenantId;
+    },
+    [tenantByID],
+  );
+  const sortBy = useMemo<SortAccessors<BucketGrant, GrantColumn>>(
+    () => ({
+      tenant: grantee,
+      by: (g) => g.grantedBy || undefined,
+      at: (g) => (g.grantedAt ? timestampToDate(g.grantedAt) : undefined),
+    }),
+    [grantee],
+  );
+  const searchIn = useMemo<SearchText<BucketGrant>>(
+    () => (g) => [
+      grantee(g),
+      tenantByID.get(g.tenantId)?.slug,
+      g.tenantId,
+      g.grantedBy,
+    ],
+    [grantee, tenantByID],
+  );
+  const view = useTableView(grants, { text: searchIn, accessors: sortBy });
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
+
   // Neither the owner nor a tenant already granted can be granted again.
   const grantable = useMemo(() => {
     const taken = new Set([ownerTenantId, ...grants.map((g) => g.tenantId)]);
@@ -207,63 +245,90 @@ export function BucketGrantsCard({
               : "Not shared: only the owner binds collections here."}
           </p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tenant</TableHead>
-                <TableHead className="hidden @md:table-cell">
-                  Granted by
-                </TableHead>
-                <TableHead className="hidden @md:table-cell">
-                  Granted at
-                </TableHead>
-                <TableHead className="w-12 text-right">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {grants.map((g) => {
-                const t = tenantByID.get(g.tenantId);
-                return (
-                  <TableRow key={g.tenantId}>
-                    <TableCell>
-                      {t ? (
-                        <Link
-                          href={tenantHref(t)}
-                          className="flex items-center gap-2 hover:text-primary"
-                        >
-                          {t.displayName || t.slug}
-                          {t.slug && <Badge variant="outline">{t.slug}</Badge>}
-                        </Link>
-                      ) : (
-                        <span className={T.code}>{g.tenantId}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <span className={T.code}>{g.grantedBy || "—"}</span>
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell text-xs text-muted-foreground">
-                      {g.grantedAt
-                        ? formatDateTime(timestampToDate(g.grantedAt))
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        aria-label={`Revoke ${tenantName(g.tenantId)}`}
-                        onClick={() => setRevokeTarget(g)}
-                      >
-                        <XMarkIcon className="size-4" />
-                      </Button>
+          <div className="space-y-3">
+            <TableToolbar
+              query={view.query}
+              onQueryChange={view.setQuery}
+              searchLabel="Search grants"
+              placeholder="Search by tenant or granter…"
+              count={{ shown: view.rows.length, total: view.total }}
+            />
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableHead label="Tenant" column="tenant" {...sortProps} />
+                  <SortableHead
+                    label="Granted by"
+                    column="by"
+                    className="hidden @md:table-cell"
+                    {...sortProps}
+                  />
+                  <SortableHead
+                    label="Granted at"
+                    column="at"
+                    className="hidden @md:table-cell"
+                    {...sortProps}
+                  />
+                  <TableHead className="w-12 text-right">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {view.rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={GRANT_TABLE_COLUMNS}
+                      className="py-6 text-center text-muted-foreground"
+                    >
+                      No grant matches the search.
                     </TableCell>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                ) : null}
+                {view.rows.map((g) => {
+                  const t = tenantByID.get(g.tenantId);
+                  return (
+                    <TableRow key={g.tenantId}>
+                      <TableCell>
+                        {t ? (
+                          <Link
+                            href={tenantHref(t)}
+                            className="flex items-center gap-2 hover:text-primary"
+                          >
+                            {t.displayName || t.slug}
+                            {t.slug && (
+                              <Badge variant="outline">{t.slug}</Badge>
+                            )}
+                          </Link>
+                        ) : (
+                          <span className={T.code}>{g.tenantId}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden @md:table-cell">
+                        <span className={T.code}>{g.grantedBy || "—"}</span>
+                      </TableCell>
+                      <TableCell className="hidden @md:table-cell text-xs text-muted-foreground">
+                        {g.grantedAt
+                          ? formatDateTime(timestampToDate(g.grantedAt))
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          aria-label={`Revoke ${tenantName(g.tenantId)}`}
+                          onClick={() => setRevokeTarget(g)}
+                        >
+                          <XMarkIcon className="size-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
 
