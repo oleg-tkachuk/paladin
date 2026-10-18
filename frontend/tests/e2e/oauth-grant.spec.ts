@@ -53,6 +53,9 @@ async function call(
   return ((await res.json()) as { code: string }).code;
 }
 
+// The RPC the connected applications page ends a grant with.
+const REVOKE_GRANT_RPC = "/paladin.iam.v1.UserService/RevokeOAuthGrant";
+
 test.describe("OAuth grant", () => {
   test("a read grant reads and is refused every write", async ({ request }) => {
     const tok = await grant(request, [SCOPE_READ]);
@@ -145,10 +148,16 @@ test.describe("OAuth grant", () => {
     while ((await ours.count()) > 0) {
       const remaining = await ours.count();
       await ours.first().getByRole("button", { name: "Revoke" }).click();
-      await page
-        .getByRole("alertdialog")
-        .getByRole("button", { name: "Revoke" })
-        .click();
+      // Wait for the revoke itself to answer. The open confirmation hides the
+      // table from the accessibility tree, so counting rows alone read zero
+      // while the revoke was still in flight, and the refresh below raced it.
+      const revoked = page.waitForResponse(
+        (r) => r.url().endsWith(REVOKE_GRANT_RPC) && r.ok(),
+      );
+      const confirm = page.getByRole("alertdialog");
+      await confirm.getByRole("button", { name: "Revoke" }).click();
+      await revoked;
+      await expect(confirm).toBeHidden();
       await expect(ours).toHaveCount(remaining - 1);
     }
 
