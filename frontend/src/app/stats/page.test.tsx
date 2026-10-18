@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, screen } from "@/test/utils";
+import { render, screen, within } from "@/test/utils";
 
 // The page is one RPC deep: mock adminSystemClient.getPlatformStats and assert
 // on what the operator actually reads off the screen.
@@ -167,9 +167,7 @@ describe("StatsPage", () => {
     expect(
       screen.getByText(OWNER_ONLY_BUCKETS_LABEL).parentElement,
     ).toHaveTextContent("2");
-    expect(
-      screen.getByText(`3 ${SHARED_BUCKETS_LABEL.toLowerCase()}`),
-    ).toBeInTheDocument();
+    expect(screen.getByText("3 shared")).toBeInTheDocument();
     expect(screen.queryByText(/tenant-owned/i)).not.toBeInTheDocument();
   });
 
@@ -189,9 +187,14 @@ describe("StatsPage", () => {
     );
     render(<StatsPage />);
 
-    // One flag, five censuses: every worker-fed card degrades together.
-    expect(await screen.findAllByText("unavailable")).toHaveLength(5);
-    expect(screen.getAllByText(/worker\.ops_url/).length).toBe(5);
+    // One flag, six censuses — the four worker-fed panels, the Objects
+    // panel and the per-tenant table — degrade together.
+    expect(await screen.findAllByText("unavailable")).toHaveLength(6);
+    // The reason and the fix are said once, not in every card.
+    expect(screen.getAllByText(/worker\.ops_url/)).toHaveLength(1);
+    expect(screen.getAllByText(/Census unavailable — see above/)).toHaveLength(
+      6,
+    );
     // The inventory half still renders — a dead worker must not blank the page.
     expect(screen.getByText("1 in trash")).toBeInTheDocument();
     expect(screen.queryByText("All tenants")).not.toBeInTheDocument();
@@ -221,12 +224,57 @@ describe("StatsPage", () => {
     // Quotas are opt-in, so the page says how much of the fleet the
     // enforced number covers — without that, comparing it to the live
     // census means nothing.
+    const covered = await screen.findByText("Tenants covered");
+    expect(covered.parentElement).toHaveTextContent("2 / 3");
+    // Which of the two numbers wins when they disagree is a click away,
+    // not a paragraph stretching the card.
+    expect(screen.queryByText(/authoritative count/)).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "About enforced usage" }),
+    );
     expect(
-      await screen.findByText(/Covers 2 of 3 active tenants/),
+      await screen.findByText(/census is the authoritative count of what/),
     ).toBeInTheDocument();
-    // And which of the two numbers wins when they disagree.
+  });
+
+  it("says when the census was taken beside the refresh", async () => {
+    h.getPlatformStats.mockResolvedValue(
+      response({ collectedAt: { seconds: 1_792_000_000n, nanos: 0 } }),
+    );
+    render(<StatsPage />);
+    expect(await screen.findByText(/^As of /)).toBeInTheDocument();
+  });
+
+  it("adds the diagnostics the census carries", async () => {
+    h.getPlatformStats.mockResolvedValue(response());
+    render(<StatsPage />);
+    await screen.findByText("1 in trash");
+
+    // The census reports buckets by backend; the page now shows it.
+    const buckets = screen
+      .getByRole("heading", { name: "Buckets" })
+      .closest("[data-slot=card]") as HTMLElement;
+    expect(within(buckets).getByText("By backend")).toBeInTheDocument();
+    // Each credential and subscription panel opens on its total.
+    for (const [title, total] of [
+      ["Capabilities", "6"],
+      ["M2M tokens", "4"],
+      ["Event subscriptions", "3"],
+    ]) {
+      const card = screen
+        .getByRole("heading", { name: title })
+        .closest("[data-slot=card]") as HTMLElement;
+      expect(within(card).getByText("Total").parentElement).toHaveTextContent(
+        total,
+      );
+    }
+    // A ninth panel: the object census at a glance.
+    const objects = screen
+      .getByRole("heading", { name: "Objects" })
+      .closest("[data-slot=card]") as HTMLElement;
+    expect(within(objects).getByText("By state")).toBeInTheDocument();
     expect(
-      screen.getByText(/census is the authoritative count of what is stored/),
+      within(objects).getByText("Tenants storing objects"),
     ).toBeInTheDocument();
   });
 
