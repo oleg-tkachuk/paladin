@@ -320,6 +320,11 @@ func (h *Handler) DismissOperations(ctx context.Context, ids []uuid.UUID) (int64
 	if err != nil {
 		return 0, err
 	}
+	// Clearing changes only what the caller's own list shows, never the
+	// operation: whoever may list them may tidy that list.
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
+		return 0, err
+	}
 	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
 		return 0, err
 	}

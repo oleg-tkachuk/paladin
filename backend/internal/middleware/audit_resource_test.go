@@ -46,6 +46,8 @@ var (
 		"/paladin.iam.v1.AuthService/Revoke":             true,
 		"/paladin.iam.v1.AuthService/ChangePassword":     true,
 		"/paladin.iam.v1.AuthService/SwitchTenant":       true,
+		// Clears finished operations from the caller's own list.
+		"/paladin.admin.v1.PlatformOperationService/DismissOperations": true,
 	}
 )
 

@@ -42,6 +42,10 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 			_, _, err := h.ListOperations(ctx, ListInput{})
 			return err
 		},
+		"DismissOperations": func(h *Handler, ctx context.Context) error {
+			_, err := h.DismissOperations(ctx, nil)
+			return err
+		},
 	}
 
 	cases := []struct {
@@ -54,6 +58,8 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 		{"get without get", "GetOperation", limes.Caveats{Ops: []limes.Op{limes.OpList}}, connect.CodePermissionDenied},
 		{"list with list", "ListOperations", limes.Caveats{Ops: []limes.Op{limes.OpList}}, 0},
 		{"list without list", "ListOperations", limes.Caveats{Ops: []limes.Op{limes.OpGet}}, connect.CodePermissionDenied},
+		{"dismiss with list", "DismissOperations", limes.Caveats{Ops: []limes.Op{limes.OpList}}, 0},
+		{"dismiss without list", "DismissOperations", limes.Caveats{Ops: []limes.Op{limes.OpGet}}, connect.CodePermissionDenied},
 		{"cancel with manage", "CancelOperation", limes.Caveats{Ops: []limes.Op{limes.OpManage}}, 0},
 		{"cancel with delete only", "CancelOperation", limes.Caveats{Ops: []limes.Op{limes.OpDelete}}, connect.CodePermissionDenied},
 		{

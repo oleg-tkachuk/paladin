@@ -67,6 +67,7 @@ var procedureKinds = map[string]Kind{
 	data.OperationServiceGetOperationProcedure:               Reads,
 	data.OperationServiceListOperationsProcedure:             Reads,
 	data.OperationServiceCancelOperationProcedure:            Withdraws,
+	data.OperationServiceDismissOperationsProcedure:          Withdraws,
 	data.PresignServiceRegenerateUploadUrlProcedure:          Changes,
 	data.PresignServicePresignDownloadProcedure:              Reads,
 	data.StorageBootstrapServiceEnsureTenantStorageProcedure: Changes,
@@ -148,9 +149,10 @@ var procedureKinds = map[string]Kind{
 	// Takes a client and the grants issued to it away.
 	admin.OAuthClientServiceDeleteOAuthClientProcedure: Withdraws,
 
-	admin.PlatformOperationServiceGetOperationProcedure:    Reads,
-	admin.PlatformOperationServiceListOperationsProcedure:  Reads,
-	admin.PlatformOperationServiceCancelOperationProcedure: Withdraws,
+	admin.PlatformOperationServiceGetOperationProcedure:      Reads,
+	admin.PlatformOperationServiceListOperationsProcedure:    Reads,
+	admin.PlatformOperationServiceCancelOperationProcedure:   Withdraws,
+	admin.PlatformOperationServiceDismissOperationsProcedure: Withdraws,
 
 	admin.PolicyServiceValidateProcedure:           Reads,
 	admin.PolicyServiceSimulateAuthzProcedure:      Reads,
