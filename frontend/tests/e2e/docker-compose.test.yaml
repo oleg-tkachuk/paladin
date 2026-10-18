@@ -308,6 +308,23 @@ services:
     # service_started and the suite's own readiness waits cover the gap.
     # /readyz is verified from the host instead (see run instructions).
 
+  # The event-ingest pipeline on its webhook driver (backend/configs/compose.yaml
+  # ingest:), so a storage event can be posted the way SeaweedFS posts one
+  # (tests/e2e/ingest.spec.ts). The shared secret is empty there, as in the
+  # dev stack: the suite posts unsigned.
+  ingest:
+    <<: *paladin-base
+    init: true
+    restart: on-failure
+    command: ["serve", "ingest", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "${PALADIN_E2E_PORT_INGEST:-8100}:8100"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    # Distroless image — no in-container HTTP probe possible (see api); the
+    # spec waits on /readyz from the host.
+
   admin:
     <<: *paladin-base
     init: true

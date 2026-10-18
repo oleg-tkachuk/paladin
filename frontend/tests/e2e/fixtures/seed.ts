@@ -52,6 +52,7 @@ import {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { moneyFromDecimal, moneyToNumber } from "@/lib/format/money";
+import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import { anyRegistry } from "@/lib/connect/any-registry";
 import { SEEDED_ADMIN } from "./credentials";
 import { uniqueSlug, uniqueDisplayName, FIXTURE_SLUG_RE } from "./unique";
@@ -62,6 +63,10 @@ export const IAM_URL =
 export const ADMIN_URL =
   process.env.PALADIN_E2E_ADMIN_URL ?? "http://localhost:8090";
 const DATA_URL = process.env.PALADIN_E2E_DATA_URL ?? "http://localhost:8083";
+// The ingest webhook listener. Empty means the stack has none to post to — the
+// cluster's ingest listens on NATS (scripts/e2e-cluster.sh sets it so).
+export const INGEST_URL =
+  process.env.PALADIN_E2E_INGEST_URL ?? "http://localhost:8100";
 // The streamable-HTTP MCP endpoint, and the resource URL the MCP server is
 // configured as (mcp.oauth.resource_url). The resource is an identifier, not
 // an address: compose's stays the same when its port is overridden, and the
@@ -817,6 +822,27 @@ export async function seedObject(opts: {
   key?: string;
   body?: string;
 }): Promise<SeededObject> {
+  const pending = await seedPendingObject(opts);
+  const client = createClient(ObjectService, dataTransport());
+  const done = await client.completeObject({ name: pending.name });
+  return {
+    ...pending,
+    objectId: done.objectId,
+    name: done.name || pending.name,
+  };
+}
+
+/**
+ * Reserve an object and PUT its bytes, and stop there: the row stays PENDING
+ * until something promotes it — CompleteObject, the reconciler, or a storage
+ * event reaching the ingest pipeline.
+ */
+export async function seedPendingObject(opts: {
+  tenantId: string;
+  collection: string;
+  key?: string;
+  body?: string;
+}): Promise<SeededObject> {
   const key = opts.key ?? `e2e/${uniqueSlug("obj")}.txt`;
   const body = opts.body ?? "paladin e2e payload\n";
   const client = createClient(ObjectService, dataTransport());
@@ -847,14 +873,12 @@ export async function seedObject(opts: {
       `seed.ts: presigned PUT failed: ${put.status} ${await put.text()}`,
     );
   }
-  const name = up.object?.name ?? "";
-  const done = await client.completeObject({ name });
   return {
-    objectId: done.objectId,
+    objectId: up.object?.objectId ?? "",
     key,
     collection: opts.collection,
     tenantId: opts.tenantId,
-    name: done.name || name,
+    name: up.object?.name ?? "",
   };
 }
 
@@ -882,6 +906,12 @@ export async function objectsOf(
     page: { pageSize: 200, pageToken: "" },
   });
   return res.objects.map((o) => o.key);
+}
+
+/** An object's state, by its canonical name. */
+export async function objectState(name: string): Promise<ObjectState> {
+  const client = createClient(ObjectService, dataTransport());
+  return (await client.getObject({ name })).state;
 }
 
 export async function softDeleteObject(name: string): Promise<void> {
