@@ -629,6 +629,7 @@ tasks:
     cmds:
       - ./.github/scripts/publish-plan.test.sh
       - ./.github/scripts/publish-version-check.test.sh
+      - ./.github/scripts/ghcr-cleanup-plan.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"

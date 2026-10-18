@@ -730,16 +730,19 @@ open deliberately — each notes why._
 
 ## Release
 
-### Dev builds accumulate in GHCR
+### Dev builds accumulate in GHCR — the cleanup runs as a dry run
 
-- **Status:** Deferred.
+- **Status:** In progress.
 - **Reason:** ADR-0034 publishes an image and a chart for every green merge to
-  `main`; nothing removes them yet, and Argo CD lists a chart's versions
-  through the registry on every refresh.
-- **Definition of Done:** a scheduled job deletes `-dev.` image and chart
-  versions older than a retention period from GHCR, never a release version
-  and never the newest dev build, with a test for its selection.
-- **Blockers:** none.
+  `main`, and GHCR has no retention setting. `release.yaml`'s publish job now
+  ends a dev build by deleting the older ones (`ghcr-cleanup-plan.sh`, keeping
+  the newest), but as a dry run: deleting from GHCR cannot be taken back
+  beyond its 30-day restore, so the first list is read against the registry
+  before anything goes.
+- **Definition of Done:** one dev publish's dry-run log is reviewed — only
+  `-dev.` versions and their children listed, no release, the newest kept —
+  and `DRY_RUN` in `ghcr-cleanup-plan.sh` is turned off.
+- **Blockers:** the review of that log.
 
 ## UI / Admin Console
 
