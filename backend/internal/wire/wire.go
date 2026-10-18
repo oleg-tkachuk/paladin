@@ -133,8 +133,10 @@ func ProvideTenantHandler(repos Repos, pe *policy.Engine, cfg config.Config) *te
 	return h
 }
 
-func ProvideOperationHandler(repos Repos, pe *policy.Engine) *operationh.Handler {
-	return operationh.NewHandler(repos.Operation, pe)
+func ProvideOperationHandler(repos Repos, pe *policy.Engine, cfg config.Config) *operationh.Handler {
+	h := operationh.NewHandler(repos.Operation, pe)
+	h.SetFinishedRetention(cfg.Worker.Jobs.Housekeeping.OperationsTTL)
+	return h
 }
 
 func ProvideBatchHandler(repos Repos, opH *operationh.Handler, pe *policy.Engine) *batchh.Handler {

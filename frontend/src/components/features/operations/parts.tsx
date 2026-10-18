@@ -143,6 +143,13 @@ export function OperationRecord({
               <Timestamp ts={op.doneAt} />
             </RecordField>
           ) : null}
+          {op.expireTime ? (
+            // The housekeeping reaper removes finished operations; until then
+            // they stay listed, cleared or not.
+            <RecordField label="Kept until">
+              <Timestamp ts={op.expireTime} />
+            </RecordField>
+          ) : null}
           {elapsed !== null ? (
             <RecordField label={isActive(status) ? "Running for" : "Took"}>
               {formatDuration(elapsed)}
