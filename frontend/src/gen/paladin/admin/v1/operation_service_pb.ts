@@ -21,6 +21,11 @@ import {
 import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
 import type {
+  OperationState,
+  OperationTarget,
+} from "../../common/v1/operation_pb";
+import { file_paladin_common_v1_operation } from "../../common/v1/operation_pb";
+import type {
   PageRequest,
   PageResponse,
   SortOrder,
@@ -35,12 +40,13 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIuwCCglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDQggKBnJlc3VsdCIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEihwEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXIieAoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIvCgpvcGVyYXRpb25zGAEgAygLMhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24SLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEyvAIKGFBsYXRmb3JtT3BlcmF0aW9uU2VydmljZRJXCgxHZXRPcGVyYXRpb24SJS5wYWxhZGluLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAIBEmgKDkxpc3RPcGVyYXRpb25zEicucGFsYWRpbi5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1JlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2UiA5ACARJdCg9DYW5jZWxPcGVyYXRpb24SKC5wYWxhZGluLmFkbWluLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAICQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIo4ECglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDQggKBnJlc3VsdCIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEihwEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXIieAoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIvCgpvcGVyYXRpb25zGAEgAygLMhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24SLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEyvAIKGFBsYXRmb3JtT3BlcmF0aW9uU2VydmljZRJXCgxHZXRPcGVyYXRpb24SJS5wYWxhZGluLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAIBEmgKDkxpc3RPcGVyYXRpb25zEicucGFsYWRpbi5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1JlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2UiA5ACARJdCg9DYW5jZWxPcGVyYXRpb24SKC5wYWxhZGluLmFkbWluLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAICQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
       file_google_protobuf_timestamp,
       file_google_rpc_status,
+      file_paladin_common_v1_operation,
       file_paladin_common_v1_pagination,
       file_google_api_field_behavior,
     ],
@@ -115,6 +121,25 @@ export type Operation = Message<"paladin.admin.v1.Operation"> & {
    * @generated from field: google.protobuf.Timestamp updated_at = 10;
    */
   updatedAt?: Timestamp | undefined;
+
+  /**
+   * When it finished; unset while it runs.
+   *
+   * @generated from field: google.protobuf.Timestamp done_at = 11;
+   */
+  doneAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: paladin.common.v1.OperationState state = 12;
+   */
+  state: OperationState;
+
+  /**
+   * What it acts on; unset for an operation of a type that names no objects.
+   *
+   * @generated from field: paladin.common.v1.OperationTarget target = 13;
+   */
+  target?: OperationTarget | undefined;
 };
 
 /**

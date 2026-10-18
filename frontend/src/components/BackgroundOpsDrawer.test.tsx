@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // The operations list arrives with the rest of the shell, so that is what the
@@ -35,7 +35,8 @@ function shellOps(ops: any[]) {
   h.shell.data = ops;
 }
 
-import { create } from "@bufbuild/protobuf";
+import { create, fromJson } from "@bufbuild/protobuf";
+import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 import { anyPack, StructSchema, ValueSchema } from "@bufbuild/protobuf/wkt";
 
 import { BackgroundOpsDrawer } from "./BackgroundOpsDrawer";
@@ -256,5 +257,129 @@ describe("BackgroundOpsDrawer unavailable section", () => {
       screen.getByText(/UNAVAILABLE: connection refused/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/No background operations/)).toBeNull();
+  });
+});
+
+// The drawer says what each operation did and to what, lets the list be
+// narrowed by where operations stand, and opens one to its whole record.
+describe("BackgroundOpsDrawer content", () => {
+  const T1 = "tenants/0199-t/collections/e2e/docs";
+  const resp = (json: Record<string, unknown>) => ({
+    case: "response" as const,
+    value: anyPack(StructSchema, fromJson(StructSchema, json as never)),
+  });
+  const tagsDone = {
+    name: "operations/tags-1",
+    type: "BatchUpdateTags",
+    done: true,
+    state: OperationState.SUCCEEDED,
+    target: {
+      collection: T1,
+      destination: "",
+      objectCount: 3,
+      permanent: false,
+      replace: false,
+    },
+    result: resp({
+      total: 3,
+      succeeded: 2,
+      failed: 1,
+      failures: [{ object_id: "obj-9", reason: "object is locked" }],
+    }),
+  };
+  const deleteRunning = {
+    name: "operations/del-1",
+    type: "BatchDelete",
+    done: false,
+    state: OperationState.RUNNING,
+    target: {
+      collection: T1,
+      destination: "",
+      objectCount: 1,
+      permanent: true,
+      replace: false,
+    },
+    result: { case: undefined },
+  };
+  const cancelledCopy = {
+    name: "operations/copy-1",
+    type: "BatchCopy",
+    done: true,
+    state: OperationState.CANCELLED,
+    result: {
+      case: "error",
+      value: { code: 1, message: "cancelled", details: [] },
+    },
+  };
+
+  const failedRestore = {
+    name: "operations/restore-1",
+    type: "BatchRestoreObjects",
+    done: true,
+    state: OperationState.FAILED,
+    result: {
+      case: "error",
+      value: { code: 13, message: "store unreachable", details: [] },
+    },
+  };
+
+  beforeEach(() => {
+    h.refresh.mockReset();
+    shellOps([tagsDone, deleteRunning, cancelledCopy, failedRestore]);
+  });
+
+  it("names what each did and to which collection, active work first", async () => {
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    const rows = await screen.findAllByRole("listitem");
+    expect(rows[0]).toHaveAccessibleName("Delete permanently, running");
+    const tags = screen.getByRole("listitem", { name: /Merge tags/ });
+    expect(
+      within(tags).getByRole("link", { name: "e2e/docs" }),
+    ).toHaveAttribute("href", "/tenants/0199-t/collections/e2e%2Fdocs");
+    expect(within(tags).getByText("3 objects")).toBeInTheDocument();
+    expect(
+      within(tags).getByText(/2 of 3 done · 1 failed/),
+    ).toBeInTheDocument();
+    // Cancelled is its own state, not a failure.
+    expect(
+      screen.getByRole("listitem", { name: "Copy objects, cancelled" }),
+    ).toBeInTheDocument();
+  });
+
+  it("narrows the list by state, counting each", async () => {
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    const filter = await screen.findByRole("group", { name: "Show" });
+    expect(
+      within(filter).getByRole("button", { name: /Active 1/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(filter).getByRole("button", { name: /Done 2/ }),
+    );
+    const names = screen
+      .getAllByRole("listitem")
+      .map((r) => r.getAttribute("aria-label"));
+    expect(names).toEqual(["Merge tags, done", "Copy objects, cancelled"]);
+    await userEvent.click(
+      within(filter).getByRole("button", { name: /Failed 1/ }),
+    );
+    expect(
+      screen.getAllByRole("listitem").map((r) => r.getAttribute("aria-label")),
+    ).toEqual(["Restore from trash, failed"]);
+    expect(screen.getByText(/store unreachable/)).toBeInTheDocument();
+  });
+
+  it("opens an operation to its record, with each object that failed", async () => {
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    await userEvent.click(
+      await screen.findByRole("listitem", { name: /Merge tags/ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Merge tags" });
+    expect(dialog).toHaveAccessibleDescription("operations/tags-1");
+    expect(
+      within(dialog).getByText(/obj-9\s+object is locked/),
+    ).toBeInTheDocument();
   });
 });

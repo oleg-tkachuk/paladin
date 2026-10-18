@@ -26,11 +26,12 @@ from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
 from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.rpc import status_pb2 as google_dot_rpc_dot_status__pb2
+from paladin.common.v1 import operation_pb2 as paladin_dot_common_dot_v1_dot_operation__pb2
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 from google.api import field_behavior_pb2 as google_dot_api_dot_field__behavior__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n(paladin/admin/v1/operation_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xec\x02\n\tOperation\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12\x11\n\x04type\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12&\n\x08metadata\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\x12\x11\n\x04\x64one\x18\x04 \x01(\x08\x42\x03\xe0\x41\x03\x12#\n\x05\x65rror\x18\x05 \x01(\x0b\x32\x12.google.rpc.StatusH\x00\x12(\n\x08response\x18\x06 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00\x12\x1e\n\x11initiator_subject\x18\x07 \x01(\tB\x03\xe0\x41\x03\x12\x1b\n\x13initiator_tenant_id\x18\x08 \x01(\t\x12\x33\n\ncreated_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x42\x08\n\x06result\",\n\x13GetOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x87\x01\n\x15ListOperationsRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x30\n\nsort_order\x18\x03 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\"x\n\x16ListOperationsResponse\x12/\n\noperations\x18\x01 \x03(\x0b\x32\x1b.paladin.admin.v1.Operation\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"/\n\x16\x43\x61ncelOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xbc\x02\n\x18PlatformOperationService\x12W\n\x0cGetOperation\x12%.paladin.admin.v1.GetOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x12h\n\x0eListOperations\x12\'.paladin.admin.v1.ListOperationsRequest\x1a(.paladin.admin.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12]\n\x0f\x43\x61ncelOperation\x12(.paladin.admin.v1.CancelOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x02\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n(paladin/admin/v1/operation_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a!paladin/common/v1/operation.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\x8e\x04\n\tOperation\x12\x11\n\x04name\x18\x01 \x01(\tB\x03\xe0\x41\x08\x12\x11\n\x04type\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12&\n\x08metadata\x18\x03 \x01(\x0b\x32\x14.google.protobuf.Any\x12\x11\n\x04\x64one\x18\x04 \x01(\x08\x42\x03\xe0\x41\x03\x12#\n\x05\x65rror\x18\x05 \x01(\x0b\x32\x12.google.rpc.StatusH\x00\x12(\n\x08response\x18\x06 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00\x12\x1e\n\x11initiator_subject\x18\x07 \x01(\tB\x03\xe0\x41\x03\x12\x1b\n\x13initiator_tenant_id\x18\x08 \x01(\t\x12\x33\n\ncreated_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x33\n\nupdated_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x30\n\x07\x64one_at\x18\x0b \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x35\n\x05state\x18\x0c \x01(\x0e\x32!.paladin.common.v1.OperationStateB\x03\xe0\x41\x03\x12\x37\n\x06target\x18\r \x01(\x0b\x32\".paladin.common.v1.OperationTargetB\x03\xe0\x41\x03\x42\x08\n\x06result\",\n\x13GetOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x87\x01\n\x15ListOperationsRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x30\n\nsort_order\x18\x03 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\"x\n\x16ListOperationsResponse\x12/\n\noperations\x18\x01 \x03(\x0b\x32\x1b.paladin.admin.v1.Operation\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"/\n\x16\x43\x61ncelOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xbc\x02\n\x18PlatformOperationService\x12W\n\x0cGetOperation\x12%.paladin.admin.v1.GetOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x12h\n\x0eListOperations\x12\'.paladin.admin.v1.ListOperationsRequest\x1a(.paladin.admin.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12]\n\x0f\x43\x61ncelOperation\x12(.paladin.admin.v1.CancelOperationRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x02\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -50,6 +51,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_OPERATION'].fields_by_name['created_at']._serialized_options = b'\340A\003'
   _globals['_OPERATION'].fields_by_name['updated_at']._loaded_options = None
   _globals['_OPERATION'].fields_by_name['updated_at']._serialized_options = b'\340A\003'
+  _globals['_OPERATION'].fields_by_name['done_at']._loaded_options = None
+  _globals['_OPERATION'].fields_by_name['done_at']._serialized_options = b'\340A\003'
+  _globals['_OPERATION'].fields_by_name['state']._loaded_options = None
+  _globals['_OPERATION'].fields_by_name['state']._serialized_options = b'\340A\003'
+  _globals['_OPERATION'].fields_by_name['target']._loaded_options = None
+  _globals['_OPERATION'].fields_by_name['target']._serialized_options = b'\340A\003'
   _globals['_GETOPERATIONREQUEST'].fields_by_name['name']._loaded_options = None
   _globals['_GETOPERATIONREQUEST'].fields_by_name['name']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_CANCELOPERATIONREQUEST'].fields_by_name['name']._loaded_options = None
@@ -60,16 +67,16 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PLATFORMOPERATIONSERVICE'].methods_by_name['ListOperations']._serialized_options = b'\220\002\001'
   _globals['_PLATFORMOPERATIONSERVICE'].methods_by_name['CancelOperation']._loaded_options = None
   _globals['_PLATFORMOPERATIONSERVICE'].methods_by_name['CancelOperation']._serialized_options = b'\220\002\002'
-  _globals['_OPERATION']._serialized_start=246
-  _globals['_OPERATION']._serialized_end=610
-  _globals['_GETOPERATIONREQUEST']._serialized_start=612
-  _globals['_GETOPERATIONREQUEST']._serialized_end=656
-  _globals['_LISTOPERATIONSREQUEST']._serialized_start=659
-  _globals['_LISTOPERATIONSREQUEST']._serialized_end=794
-  _globals['_LISTOPERATIONSRESPONSE']._serialized_start=796
-  _globals['_LISTOPERATIONSRESPONSE']._serialized_end=916
-  _globals['_CANCELOPERATIONREQUEST']._serialized_start=918
-  _globals['_CANCELOPERATIONREQUEST']._serialized_end=965
-  _globals['_PLATFORMOPERATIONSERVICE']._serialized_start=968
-  _globals['_PLATFORMOPERATIONSERVICE']._serialized_end=1284
+  _globals['_OPERATION']._serialized_start=281
+  _globals['_OPERATION']._serialized_end=807
+  _globals['_GETOPERATIONREQUEST']._serialized_start=809
+  _globals['_GETOPERATIONREQUEST']._serialized_end=853
+  _globals['_LISTOPERATIONSREQUEST']._serialized_start=856
+  _globals['_LISTOPERATIONSREQUEST']._serialized_end=991
+  _globals['_LISTOPERATIONSRESPONSE']._serialized_start=993
+  _globals['_LISTOPERATIONSRESPONSE']._serialized_end=1113
+  _globals['_CANCELOPERATIONREQUEST']._serialized_start=1115
+  _globals['_CANCELOPERATIONREQUEST']._serialized_end=1162
+  _globals['_PLATFORMOPERATIONSERVICE']._serialized_start=1165
+  _globals['_PLATFORMOPERATIONSERVICE']._serialized_end=1481
 # @@protoc_insertion_point(module_scope)

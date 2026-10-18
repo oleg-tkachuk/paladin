@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
@@ -37,8 +39,9 @@ func (s *BatchServer) BatchDeleteObjects(ctx context.Context, req *pb.BatchDelet
 		return nil, err
 	}
 	return &pb.Operation{
-		Name: fmt.Sprintf("operations/%s", opID),
-		Type: "BatchDelete",
+		Name:  fmt.Sprintf("operations/%s", opID),
+		Type:  batchh.OpBatchDelete,
+		State: commonpb.OperationState_OPERATION_STATE_PENDING,
 	}, nil
 }
 
@@ -66,8 +69,9 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *pb.BatchCopyObj
 		return nil, err
 	}
 	return &pb.Operation{
-		Name: fmt.Sprintf("operations/%s", opID),
-		Type: "BatchCopy",
+		Name:  fmt.Sprintf("operations/%s", opID),
+		Type:  batchh.OpBatchCopy,
+		State: commonpb.OperationState_OPERATION_STATE_PENDING,
 	}, nil
 }
 
@@ -89,8 +93,9 @@ func (s *BatchServer) BatchRestoreObjects(ctx context.Context, req *pb.BatchRest
 		return nil, err
 	}
 	return &pb.Operation{
-		Name: fmt.Sprintf("operations/%s", opID),
-		Type: "BatchRestoreObjects",
+		Name:  fmt.Sprintf("operations/%s", opID),
+		Type:  batchh.OpBatchRestoreObjects,
+		State: commonpb.OperationState_OPERATION_STATE_PENDING,
 	}, nil
 }
 
@@ -114,8 +119,9 @@ func (s *BatchServer) BatchUpdateTags(ctx context.Context, req *pb.BatchUpdateTa
 		return nil, err
 	}
 	return &pb.Operation{
-		Name: fmt.Sprintf("operations/%s", opID),
-		Type: "BatchUpdateTags",
+		Name:  fmt.Sprintf("operations/%s", opID),
+		Type:  batchh.OpBatchUpdateTags,
+		State: commonpb.OperationState_OPERATION_STATE_PENDING,
 	}, nil
 }
 

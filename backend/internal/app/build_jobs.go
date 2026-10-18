@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
@@ -382,7 +383,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		appQ := sqlc.New(deps.Pool)
 		appObjects := adapters.NewObjectRepo(appQ, deps.Pool)
 		executors := map[string]operations.Executor{
-			"BatchDelete": &operations.BatchDeleteExecutor{
+			batchh.OpBatchDelete: &operations.BatchDeleteExecutor{
 				Objects:     deps.Repos.Object,
 				Transitions: deps.SM,
 				// The hard-delete path, shared with the DeleteObject RPC. The
@@ -398,7 +399,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Erasures:  appObjects,
 				Logger:    l.Named("batch-delete"),
 			},
-			"BatchCopy": &operations.BatchCopyExecutor{
+			batchh.OpBatchCopy: &operations.BatchCopyExecutor{
 				Objects: deps.Repos.Object,
 				// Routed: BatchCopy resolves (backend, bucket) per collection
 				// and builds Locations carrying BackendID, so the router
@@ -411,11 +412,11 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				Operations:  adapters.NewOperationRepo(appQ, deps.Pool),
 				Logger:      l.Named("batch-copy"),
 			},
-			"BatchUpdateTags": &operations.BatchUpdateTagsExecutor{
+			batchh.OpBatchUpdateTags: &operations.BatchUpdateTagsExecutor{
 				Objects: deps.Repos.Object,
 				Logger:  l.Named("batch-update-tags"),
 			},
-			"BatchRestoreObjects": &operations.BatchRestoreExecutor{
+			batchh.OpBatchRestoreObjects: &operations.BatchRestoreExecutor{
 				Objects:     deps.Repos.Object,
 				Transitions: deps.SM,
 				Logger:      l.Named("batch-restore"),
