@@ -25,6 +25,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { TableToolbar } from "@/components/ui/TableToolbar";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { useTableView } from "@/hooks/useTableView";
+import {
+  DEFAULT_LIFECYCLE_FILTER,
+  LIFECYCLE_BADGE,
+  LIFECYCLE_FILTERS,
+  LIFECYCLE_FILTER_LABEL,
+  keepsLifecycle,
+  type LifecycleFilter,
+} from "@/lib/table/lifecycle";
+import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
 import { apiTokenClient } from "@/lib/connect/client";
@@ -33,7 +46,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
-import { isRevoked } from "./_constants";
+import { isRevoked, listFlagsFor, tokenLifecycle } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
 import {
@@ -57,6 +70,34 @@ const COL_USAGE = "hidden @6xl:table-cell";
 
 type UsageMap = Map<string, UsageSnap | "never">;
 const EMPTY_USAGE: UsageMap = new Map();
+
+// The columns of the table; the placeholder rows span them.
+const TOKEN_COLUMNS = 9;
+
+type TokenColumn =
+  "prefix" | "name" | "audience" | "rate" | "used" | "expires" | "status";
+const at = (t: APIToken["expiresAt"]) => (t ? timestampDate(t) : undefined);
+const TOKEN_SORT: SortAccessors<APIToken, TokenColumn> = {
+  prefix: (t) => t.prefix,
+  name: (t) => t.displayName || undefined,
+  audience: (t) => t.audience.join(" ") || undefined,
+  // An unlimited token sorts as the most generous.
+  rate: (t) =>
+    t.rateLimit.case === "rateLimitRpm"
+      ? t.rateLimit.value
+      : Number.POSITIVE_INFINITY,
+  used: (t) => at(t.lastUsedAt),
+  expires: (t) => at(t.expiresAt),
+  status: (t) => LIFECYCLE_BADGE[tokenLifecycle(t)].label,
+};
+const TOKEN_SEARCH = (t: APIToken) => [
+  t.displayName,
+  t.prefix,
+  t.audience.join(" "),
+  t.scopes.join(" "),
+  t.roles.join(" "),
+  LIFECYCLE_BADGE[tokenLifecycle(t)].label,
+];
 
 // /m2m-tokens — service-to-service hashed-bearer tokens.
 //
@@ -89,8 +130,10 @@ export default function M2MTokensPage() {
   const { showNotification } = useNotification();
 
   // ── list state ──────────────────────────────────────────────────────
-  const [includeRevoked, setIncludeRevoked] = useState(false);
-  const [includeExpired, setIncludeExpired] = useState(false);
+  const [stateFilter, setStateFilter] = useState<LifecycleFilter>(
+    DEFAULT_LIFECYCLE_FILTER,
+  );
+  const { includeRevoked, includeExpired } = listFlagsFor(stateFilter);
 
   const tokensQuery = useQuery({
     queryKey: ["m2mTokens", tenantId, includeRevoked, includeExpired],
@@ -179,7 +222,16 @@ export default function M2MTokensPage() {
   const [revokeTarget, setRevokeTarget] = useState<APIToken | null>(null);
   const [opened, setOpened] = useState<APIToken | null>(null);
 
-  const visibleTokens = useMemo(() => tokens, [tokens]);
+  const inState = useMemo(
+    () => tokens.filter((t) => keepsLifecycle(stateFilter, tokenLifecycle(t))),
+    [tokens, stateFilter],
+  );
+  const view = useTableView(inState, {
+    text: TOKEN_SEARCH,
+    accessors: TOKEN_SORT,
+  });
+  const visibleTokens = view.rows;
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
     <div className="space-y-4">
@@ -216,41 +268,68 @@ export default function M2MTokensPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-sm">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={includeRevoked}
-            onChange={(e) => setIncludeRevoked(e.target.checked)}
-            className="size-4 accent-primary"
-          />
-          <span className="text-muted-foreground">Show revoked</span>
-        </label>
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={includeExpired}
-            onChange={(e) => setIncludeExpired(e.target.checked)}
-            className="size-4 accent-primary"
-          />
-          <span className="text-muted-foreground">Show expired</span>
-        </label>
-      </div>
+      <TableToolbar
+        query={view.query}
+        onQueryChange={view.setQuery}
+        searchLabel="Search M2M tokens"
+        placeholder="Search by name, prefix, audience, role or scope…"
+        filter={{
+          label: LIFECYCLE_FILTER_LABEL,
+          options: LIFECYCLE_FILTERS,
+          value: stateFilter,
+          onChange: setStateFilter,
+        }}
+        count={
+          tokensQuery.data
+            ? { shown: visibleTokens.length, total: view.total }
+            : undefined
+        }
+      />
 
       <Card className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className={cn(COL_PREFIX, "w-35")}>Prefix</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead className={COL_AUDIENCE}>Audience</TableHead>
-              <TableHead className={COL_RATE}>Rate (rpm)</TableHead>
+              <SortableHead
+                label="Prefix"
+                column="prefix"
+                className={cn(COL_PREFIX, "w-35")}
+                {...sortProps}
+              />
+              <SortableHead label="Name" column="name" {...sortProps} />
+              <SortableHead
+                label="Audience"
+                column="audience"
+                className={COL_AUDIENCE}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Rate (rpm)"
+                column="rate"
+                className={COL_RATE}
+                {...sortProps}
+              />
               <TableHead className={cn(COL_USAGE, "w-35")}>
                 Usage (1m)
               </TableHead>
-              <TableHead className={COL_LAST_USED}>Last used</TableHead>
-              <TableHead className={COL_EXPIRES}>Expires</TableHead>
-              <TableHead className="w-25">Status</TableHead>
+              <SortableHead
+                label="Last used"
+                column="used"
+                className={COL_LAST_USED}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Expires"
+                column="expires"
+                className={COL_EXPIRES}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Status"
+                column="status"
+                className="w-25"
+                {...sortProps}
+              />
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -260,7 +339,7 @@ export default function M2MTokensPage() {
             {loading && visibleTokens.length === 0 ? (
               [0, 1, 2].map((i) => (
                 <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={9} className="py-3">
+                  <TableCell colSpan={TOKEN_COLUMNS} className="py-3">
                     <Skeleton className="h-7 w-full" />
                   </TableCell>
                 </TableRow>
@@ -268,7 +347,7 @@ export default function M2MTokensPage() {
             ) : tokensQuery.isError && !tokensQuery.data ? (
               // "No M2M tokens yet" for a failed list invites creating one that may exist.
               <TableRow>
-                <TableCell colSpan={9} className="h-40 text-center">
+                <TableCell colSpan={TOKEN_COLUMNS} className="h-40 text-center">
                   <ListLoadError
                     what="M2M tokens"
                     reason={errorMessage(tokensQuery.error)}
@@ -276,9 +355,28 @@ export default function M2MTokensPage() {
                   />
                 </TableCell>
               </TableRow>
+            ) : visibleTokens.length === 0 && view.total > 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={TOKEN_COLUMNS}
+                  className="py-8 text-center text-muted-foreground"
+                >
+                  No token matches the search.
+                </TableCell>
+              </TableRow>
+            ) : visibleTokens.length === 0 &&
+              stateFilter !== DEFAULT_LIFECYCLE_FILTER ? (
+              <TableRow>
+                <TableCell
+                  colSpan={TOKEN_COLUMNS}
+                  className="py-8 text-center text-muted-foreground"
+                >
+                  No token is in this state.
+                </TableCell>
+              </TableRow>
             ) : visibleTokens.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-40 text-center">
+                <TableCell colSpan={TOKEN_COLUMNS} className="h-40 text-center">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <KeyIcon className="size-8 opacity-40" />
                     <p className="text-sm">No M2M tokens yet.</p>
