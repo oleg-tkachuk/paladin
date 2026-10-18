@@ -8,6 +8,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
+import "paladin/common/v1/operation.proto";
 import "paladin/common/v1/pagination.proto";
 import "google/api/field_behavior.proto";
 
@@ -50,6 +51,11 @@ message Operation {
   string initiator_tenant_id = 8;
   google.protobuf.Timestamp created_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp updated_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // When it finished; unset while it runs.
+  google.protobuf.Timestamp done_at = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  paladin.common.v1.OperationState state = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // What it acts on; unset for an operation of a type that names no objects.
+  paladin.common.v1.OperationTarget target = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message GetOperationRequest {

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package paladin.common.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1";
+
+// OperationState is where a long-running operation stands. done says only
+// whether it finished; this says how, and whether it has started.
+enum OperationState {
+  OPERATION_STATE_UNSPECIFIED = 0;
+  // Accepted, not yet picked up by a worker.
+  OPERATION_STATE_PENDING = 1;
+  // A worker is running it.
+  OPERATION_STATE_RUNNING = 2;
+  OPERATION_STATE_SUCCEEDED = 3;
+  OPERATION_STATE_FAILED = 4;
+  // Stopped on request; what it had done stays done.
+  OPERATION_STATE_CANCELLED = 5;
+}
+
+// OperationTarget is what an operation acts on, as its request named it. The
+// worker's own arguments stay internal; this is the part a reader of the
+// operation needs.
+message OperationTarget {
+  // The collection the objects are in: "tenants/{tenant_id}/collections/{name}".
+  string collection = 1;
+  // A copy's destination collection, in the same form; empty for the rest.
+  string destination = 2;
+  // How many objects the request named.
+  int32 object_count = 3;
+  // A delete that removes the objects for good rather than to the trash.
+  bool permanent = 4;
+  // A tag update that replaces each object's tags rather than merging.
+  bool replace = 5;
+}

@@ -130,7 +130,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	if err != nil {
 		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchDelete args: %w", err))
 	}
-	return h.chargeAndSubmit(ctx, "BatchDelete", md)
+	return h.chargeAndSubmit(ctx, OpBatchDelete, md)
 }
 
 func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID, error) {
@@ -161,7 +161,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 	if err != nil {
 		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchCopy args: %w", err))
 	}
-	return h.chargeAndSubmit(ctx, "BatchCopy", md)
+	return h.chargeAndSubmit(ctx, OpBatchCopy, md)
 }
 
 func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs) (uuid.UUID, error) {
@@ -188,7 +188,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	if err != nil {
 		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchUpdateTags args: %w", err))
 	}
-	return h.chargeAndSubmit(ctx, "BatchUpdateTags", md)
+	return h.chargeAndSubmit(ctx, OpBatchUpdateTags, md)
 }
 
 func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObjectsArgs) (uuid.UUID, error) {
@@ -214,7 +214,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 		return uuid.Nil, err
 	}
 	md, _ := json.Marshal(args)
-	return h.chargeAndSubmit(ctx, "BatchRestoreObjects", md)
+	return h.chargeAndSubmit(ctx, OpBatchRestoreObjects, md)
 }
 
 // batchObjects is what a batch will act on: the objects of collection among

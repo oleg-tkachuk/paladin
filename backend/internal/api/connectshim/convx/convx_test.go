@@ -4,6 +4,10 @@ import (
 	"testing"
 	"time"
 
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -200,5 +204,37 @@ func TestJSONToAny(t *testing.T) {
 	}
 	if JSONToAny([]byte(`{"processed":7}`)) == nil {
 		t.Error("a JSON object was dropped")
+	}
+}
+
+// Every operation state has a wire name: one missing would read as
+// UNSPECIFIED, which the console cannot tell from a state it does not know.
+func TestOperationState_CoversEveryState(t *testing.T) {
+	states := []operationh.State{
+		operationh.StatePending, operationh.StateRunning, operationh.StateSucceeded,
+		operationh.StateFailed, operationh.StateCancelled,
+	}
+	seen := map[commonpb.OperationState]bool{}
+	for _, s := range states {
+		got := OperationState(s)
+		if got == commonpb.OperationState_OPERATION_STATE_UNSPECIFIED || seen[got] {
+			t.Errorf("state %s maps to %v", s, got)
+		}
+		seen[got] = true
+	}
+	if len(seen) != len(commonpb.OperationState_name)-1 {
+		t.Errorf("%d states map onto %d wire states", len(seen), len(commonpb.OperationState_name)-1)
+	}
+}
+
+func TestOperationTarget(t *testing.T) {
+	if got := OperationTarget("Reindex", []byte(`{}`)); got != nil {
+		t.Errorf("an unknown type has target %v", got)
+	}
+	md := []byte(`{"TenantID":"01a0f4a9-7600-77a9-862e-11ea31d523ca","Collection":"docs","ObjectIDs":["01a14f08-7312-7ae0-95ff-6e9536789c38"],"Replace":true}`)
+	got := OperationTarget(batchh.OpBatchUpdateTags, md)
+	if got.GetCollection() != "tenants/01a0f4a9-7600-77a9-862e-11ea31d523ca/collections/docs" ||
+		got.GetObjectCount() != 1 || !got.GetReplace() {
+		t.Errorf("target = %v", got)
 	}
 }

@@ -86,9 +86,14 @@ func operationToProto(o *operationh.Operation) *pb.Operation {
 		InitiatorTenantId: o.TenantID.String(),
 		CreatedAt:         convx.TsProto(o.CreatedAt),
 		UpdatedAt:         convx.TsProto(o.UpdatedAt),
+		State:             convx.OperationState(o.State),
+		Target:            convx.OperationTarget(o.Type, o.Metadata),
 	}
 	// The API's metadata is the operation's progress (AIP-151). The executor's
 	// arguments stay internal: they are the worker's input, not a report.
+	if o.DoneAt != nil {
+		out.DoneAt = convx.TsProto(*o.DoneAt)
+	}
 	if md := convx.JSONToAny(o.Progress); md != nil {
 		out.Metadata = md
 	}

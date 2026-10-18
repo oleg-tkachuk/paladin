@@ -12,6 +12,7 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -42,9 +43,14 @@ type Operation struct {
 	//
 	//	*Operation_Error
 	//	*Operation_Response
-	Result        isOperation_Result     `protobuf_oneof:"result"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Result    isOperation_Result     `protobuf_oneof:"result"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// When it finished; unset while it runs.
+	DoneAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=done_at,json=doneAt,proto3" json:"done_at,omitempty"`
+	State  v1.OperationState      `protobuf:"varint,10,opt,name=state,proto3,enum=paladin.common.v1.OperationState" json:"state,omitempty"`
+	// What it acts on; unset for an operation of a type that names no objects.
+	Target        *v1.OperationTarget `protobuf:"bytes,11,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,6 +148,27 @@ func (x *Operation) GetCreatedAt() *timestamppb.Timestamp {
 func (x *Operation) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *Operation) GetDoneAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DoneAt
+	}
+	return nil
+}
+
+func (x *Operation) GetState() v1.OperationState {
+	if x != nil {
+		return x.State
+	}
+	return v1.OperationState(0)
+}
+
+func (x *Operation) GetTarget() *v1.OperationTarget {
+	if x != nil {
+		return x.Target
 	}
 	return nil
 }
@@ -487,7 +514,7 @@ var File_paladin_data_v1_batch_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xe8\x02\n" +
+	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a!paladin/common/v1/operation.proto\"\xa1\x04\n" +
 	"\tOperation\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x120\n" +
@@ -498,7 +525,11 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tcreatedAt\x12>\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAtB\b\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tupdatedAt\x128\n" +
+	"\adone_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x06doneAt\x12<\n" +
+	"\x05state\x18\n" +
+	" \x01(\x0e2!.paladin.common.v1.OperationStateB\x03\xe0A\x03R\x05state\x12?\n" +
+	"\x06target\x18\v \x01(\v2\".paladin.common.v1.OperationTargetB\x03\xe0A\x03R\x06targetB\b\n" +
 	"\x06result\"H\n" +
 	"\x0eObjectSelector\x12\x1e\n" +
 	"\x05names\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10dR\x05names\x12\x16\n" +
@@ -553,6 +584,8 @@ var file_paladin_data_v1_batch_service_proto_goTypes = []any{
 	(*anypb.Any)(nil),                  // 7: google.protobuf.Any
 	(*status.Status)(nil),              // 8: google.rpc.Status
 	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
+	(v1.OperationState)(0),             // 10: paladin.common.v1.OperationState
+	(*v1.OperationTarget)(nil),         // 11: paladin.common.v1.OperationTarget
 }
 var file_paladin_data_v1_batch_service_proto_depIdxs = []int32{
 	7,  // 0: paladin.data.v1.Operation.metadata:type_name -> google.protobuf.Any
@@ -560,24 +593,27 @@ var file_paladin_data_v1_batch_service_proto_depIdxs = []int32{
 	7,  // 2: paladin.data.v1.Operation.response:type_name -> google.protobuf.Any
 	9,  // 3: paladin.data.v1.Operation.created_at:type_name -> google.protobuf.Timestamp
 	9,  // 4: paladin.data.v1.Operation.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 5: paladin.data.v1.BatchDeleteObjectsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
-	1,  // 6: paladin.data.v1.BatchCopyObjectsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
-	1,  // 7: paladin.data.v1.BatchRestoreObjectsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
-	1,  // 8: paladin.data.v1.BatchUpdateTagsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
-	6,  // 9: paladin.data.v1.BatchUpdateTagsRequest.tags:type_name -> paladin.data.v1.BatchUpdateTagsRequest.TagsEntry
-	2,  // 10: paladin.data.v1.BatchService.BatchDeleteObjects:input_type -> paladin.data.v1.BatchDeleteObjectsRequest
-	3,  // 11: paladin.data.v1.BatchService.BatchCopyObjects:input_type -> paladin.data.v1.BatchCopyObjectsRequest
-	4,  // 12: paladin.data.v1.BatchService.BatchRestoreObjects:input_type -> paladin.data.v1.BatchRestoreObjectsRequest
-	5,  // 13: paladin.data.v1.BatchService.BatchUpdateTags:input_type -> paladin.data.v1.BatchUpdateTagsRequest
-	0,  // 14: paladin.data.v1.BatchService.BatchDeleteObjects:output_type -> paladin.data.v1.Operation
-	0,  // 15: paladin.data.v1.BatchService.BatchCopyObjects:output_type -> paladin.data.v1.Operation
-	0,  // 16: paladin.data.v1.BatchService.BatchRestoreObjects:output_type -> paladin.data.v1.Operation
-	0,  // 17: paladin.data.v1.BatchService.BatchUpdateTags:output_type -> paladin.data.v1.Operation
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	9,  // 5: paladin.data.v1.Operation.done_at:type_name -> google.protobuf.Timestamp
+	10, // 6: paladin.data.v1.Operation.state:type_name -> paladin.common.v1.OperationState
+	11, // 7: paladin.data.v1.Operation.target:type_name -> paladin.common.v1.OperationTarget
+	1,  // 8: paladin.data.v1.BatchDeleteObjectsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
+	1,  // 9: paladin.data.v1.BatchCopyObjectsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
+	1,  // 10: paladin.data.v1.BatchRestoreObjectsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
+	1,  // 11: paladin.data.v1.BatchUpdateTagsRequest.selector:type_name -> paladin.data.v1.ObjectSelector
+	6,  // 12: paladin.data.v1.BatchUpdateTagsRequest.tags:type_name -> paladin.data.v1.BatchUpdateTagsRequest.TagsEntry
+	2,  // 13: paladin.data.v1.BatchService.BatchDeleteObjects:input_type -> paladin.data.v1.BatchDeleteObjectsRequest
+	3,  // 14: paladin.data.v1.BatchService.BatchCopyObjects:input_type -> paladin.data.v1.BatchCopyObjectsRequest
+	4,  // 15: paladin.data.v1.BatchService.BatchRestoreObjects:input_type -> paladin.data.v1.BatchRestoreObjectsRequest
+	5,  // 16: paladin.data.v1.BatchService.BatchUpdateTags:input_type -> paladin.data.v1.BatchUpdateTagsRequest
+	0,  // 17: paladin.data.v1.BatchService.BatchDeleteObjects:output_type -> paladin.data.v1.Operation
+	0,  // 18: paladin.data.v1.BatchService.BatchCopyObjects:output_type -> paladin.data.v1.Operation
+	0,  // 19: paladin.data.v1.BatchService.BatchRestoreObjects:output_type -> paladin.data.v1.Operation
+	0,  // 20: paladin.data.v1.BatchService.BatchUpdateTags:output_type -> paladin.data.v1.Operation
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_paladin_data_v1_batch_service_proto_init() }

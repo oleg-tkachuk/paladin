@@ -1,6 +1,10 @@
 package convx
 
 import (
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -79,5 +83,36 @@ func operationCode(errCode string, cancelled bool) code.Code {
 		return code.Code_UNIMPLEMENTED
 	default:
 		return code.Code_UNKNOWN
+	}
+}
+
+// operationStates names each operation state on the wire. A state missing
+// here reads as UNSPECIFIED, which a test over every state rules out.
+var operationStates = map[operationh.State]commonpb.OperationState{
+	operationh.StatePending:   commonpb.OperationState_OPERATION_STATE_PENDING,
+	operationh.StateRunning:   commonpb.OperationState_OPERATION_STATE_RUNNING,
+	operationh.StateSucceeded: commonpb.OperationState_OPERATION_STATE_SUCCEEDED,
+	operationh.StateFailed:    commonpb.OperationState_OPERATION_STATE_FAILED,
+	operationh.StateCancelled: commonpb.OperationState_OPERATION_STATE_CANCELLED,
+}
+
+// OperationState is s on the wire.
+func OperationState(s operationh.State) commonpb.OperationState {
+	return operationStates[s]
+}
+
+// OperationTarget is what an operation acts on, read from its arguments, or
+// nil for one whose type names no objects.
+func OperationTarget(opType string, metadata []byte) *commonpb.OperationTarget {
+	t, ok := batchh.DescribeOperation(opType, metadata)
+	if !ok {
+		return nil
+	}
+	return &commonpb.OperationTarget{
+		Collection:  t.Collection,
+		Destination: t.Destination,
+		ObjectCount: safecast.Int32(t.ObjectCount),
+		Permanent:   t.Permanent,
+		Replace:     t.Replace,
 	}
 }

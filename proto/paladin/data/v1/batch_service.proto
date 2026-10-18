@@ -9,6 +9,7 @@ import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 import "google/api/field_behavior.proto";
+import "paladin/common/v1/operation.proto";
 
 // BatchService — async bulk operations. All RPCs return an Operation; clients
 // poll OperationService.GetOperation for status.
@@ -45,6 +46,11 @@ message Operation {
   }
   google.protobuf.Timestamp created_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp updated_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // When it finished; unset while it runs.
+  google.protobuf.Timestamp done_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  paladin.common.v1.OperationState state = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // What it acts on; unset for an operation of a type that names no objects.
+  paladin.common.v1.OperationTarget target = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectSelector {

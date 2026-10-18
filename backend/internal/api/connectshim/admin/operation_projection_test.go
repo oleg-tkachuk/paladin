@@ -2,13 +2,16 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -126,4 +129,36 @@ func structOf(t *testing.T, a *anypb.Any) map[string]any {
 		t.Fatalf("unpack metadata: %v", err)
 	}
 	return st.AsMap()
+}
+
+// A listed operation says where it stands, when it finished, and what it
+// acted on — the drawer's whole account of it.
+func TestOperationProjection_StateTargetAndFinish(t *testing.T) {
+	tenant := uuid.New()
+	done := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	md, err := json.Marshal(batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "docs", ObjectIDs: []uuid.UUID{uuid.New()}, Permanent: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := operationToProto(&operationh.Operation{
+		OperationID: uuid.New(), TenantID: tenant, Type: batchh.OpBatchDelete,
+		State: operationh.StateCancelled, Metadata: md, DoneAt: &done,
+	})
+	if got.GetState() != commonpb.OperationState_OPERATION_STATE_CANCELLED {
+		t.Errorf("state = %v", got.GetState())
+	}
+	if !got.GetDoneAt().AsTime().Equal(done) {
+		t.Errorf("done_at = %v, want %v", got.GetDoneAt().AsTime(), done)
+	}
+	tg := got.GetTarget()
+	if tg.GetCollection() != batchh.CollectionName(tenant, "docs") || tg.GetObjectCount() != 1 || !tg.GetPermanent() {
+		t.Errorf("target = %v", tg)
+	}
+
+	running := operationToProto(&operationh.Operation{OperationID: uuid.New(), Type: "Reindex", State: operationh.StateRunning})
+	if running.GetDoneAt() != nil || running.GetTarget() != nil {
+		t.Errorf("a running operation of an unknown type: done_at %v, target %v", running.GetDoneAt(), running.GetTarget())
+	}
 }
