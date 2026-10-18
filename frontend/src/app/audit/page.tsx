@@ -18,6 +18,9 @@ import { AuditEntryDetailDialog } from "./AuditEntryDetailDialog";
 import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 
 import { Button } from "@/components/ui/button";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { useTableSort } from "@/hooks/useTableSort";
+import { AUDIT_ORDER, type AuditOrderField } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { Card } from "@/components/ui/Card";
 import {
@@ -63,8 +66,12 @@ export default function AuditPage() {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [search]);
+  // Sorted on the server: the log loads a page at a time, so a sort in the
+  // browser would order only what has loaded. A new sort starts over.
+  const { sort, toggleSort } = useTableSort<AuditOrderField>();
+  const sortProps = { current: sort, onSort: toggleSort };
   const { entries, loading, error, nextCursor, refresh, loadMore } =
-    useAuditLogs(AUDIT_PAGE_SIZE, searchFilter(debouncedSearch));
+    useAuditLogs(AUDIT_PAGE_SIZE, searchFilter(debouncedSearch), "", sort);
 
   // Live feed — SSE events are an invalidation signal, not a data source:
   // each push triggers a trailing-debounced refresh() so a burst of audit
@@ -164,10 +171,28 @@ export default function AuditPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="@md:w-45">When</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Actor</TableHead>
-              <TableHead className="hidden @2xl:table-cell">Resource</TableHead>
+              <SortableHead
+                label="When"
+                column={AUDIT_ORDER.at}
+                className="@md:w-45"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Action"
+                column={AUDIT_ORDER.action}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Actor"
+                column={AUDIT_ORDER.actor}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Resource"
+                column={AUDIT_ORDER.resource}
+                className="hidden @2xl:table-cell"
+                {...sortProps}
+              />
               <TableHead className="hidden @4xl:table-cell w-45">
                 Request
               </TableHead>

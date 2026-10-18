@@ -4,15 +4,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 const h = vi.hoisted(() => ({
-  listAuditLog: vi.fn(async () => ({
-    entries: [],
-    page: { nextPageToken: "" },
-  })),
+  listAuditLog: vi.fn(
+    async (_req: Record<string, unknown>, _opts?: unknown) => ({
+      entries: [],
+      page: { nextPageToken: "" },
+    }),
+  ),
 }));
 vi.mock("@/lib/connect/client", () => ({
   auditClient: { listAuditLog: h.listAuditLog },
 }));
 
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
+import type { AuditOrderField } from "@/lib/auditOrder";
+
+import type { SortState } from "./useTableSort";
 import { useAuditLogs } from "./useAuditLogs";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -43,6 +49,36 @@ describe("useAuditLogs", () => {
     expect(h.listAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "" }),
       expect.anything(),
+    );
+  });
+});
+
+describe("useAuditLogs sort", () => {
+  it("asks for the order and direction a sort names, and none without one", async () => {
+    h.listAuditLog.mockClear();
+    const { result, rerender } = renderHook(
+      ({ sort }) => useAuditLogs(50, "", "", sort),
+      {
+        wrapper,
+        initialProps: {
+          sort: { column: null, direction: null } as SortState<AuditOrderField>,
+        },
+      },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(h.listAuditLog.mock.lastCall?.[0]).toMatchObject({
+      orderBy: "",
+      sortOrder: SortOrder.UNSPECIFIED,
+    });
+
+    rerender({ sort: { column: "resource_name", direction: "desc" } });
+    await waitFor(() =>
+      expect(h.listAuditLog.mock.lastCall?.[0]).toMatchObject({
+        orderBy: "resource_name",
+        sortOrder: SortOrder.DESC,
+        // A new order starts from the first page, not an old cursor.
+        page: { pageToken: "" },
+      }),
     );
   });
 });

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({
-  useAuditLogs: vi.fn(() => ({
+  useAuditLogs: vi.fn((..._args: unknown[]) => ({
     entries: [],
     loading: false,
     error: null,
@@ -29,6 +29,23 @@ describe("TenantAuditLogPage", () => {
     expect(
       screen.getByRole("heading", { name: /^Audit log$/ }),
     ).toBeInTheDocument();
-    expect(h.useAuditLogs).toHaveBeenCalledWith(expect.any(Number), "", "t-1");
+    expect(h.useAuditLogs).toHaveBeenCalledWith(expect.any(Number), "", "t-1", {
+      column: null,
+      direction: null,
+    });
+  });
+
+  // The trail loads a page at a time, so its headers ask the server for the
+  // order; the third click hands it back to the server's own, newest first.
+  it("asks the server for the order a header names", () => {
+    render(<TenantAuditLogPage />);
+    const action = screen.getByRole("button", { name: /^Action/ });
+    const lastSort = () => h.useAuditLogs.mock.lastCall?.at(3);
+    fireEvent.click(action);
+    expect(lastSort()).toEqual({ column: "action", direction: "asc" });
+    fireEvent.click(action);
+    expect(lastSort()).toEqual({ column: "action", direction: "desc" });
+    fireEvent.click(action);
+    expect(lastSort()).toEqual({ column: null, direction: null });
   });
 });

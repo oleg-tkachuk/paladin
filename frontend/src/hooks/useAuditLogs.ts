@@ -7,6 +7,9 @@ import { auditClient } from "@/lib/connect/client";
 import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
+import type { SortState } from "@/hooks/useTableSort";
+import type { AuditOrderField } from "@/lib/auditOrder";
+import { toSortOrder } from "@/lib/table/sortOrder";
 
 // useAuditLogs — wrapper around admin/v1.AuditLogService.ListAuditLog.
 //
@@ -26,18 +29,28 @@ export interface UseAuditLogsResult {
   loadMore: () => Promise<void>;
 }
 
+/** No sort: the log's own order, newest first. */
+const NO_SORT: SortState<AuditOrderField> = { column: null, direction: null };
+
 /**
  * `tenantId` narrows the log to that tenant's trail — what its principals did
  * and what was done to it — in the server's query, so every page is full of
  * the tenant's entries. Empty = every tenant.
+ *
+ * `sort` is applied by the server, which pages a sorted log; the sort is part
+ * of the query key, so a new one starts again from the first page rather than
+ * resuming a cursor minted for another order.
  */
 export function useAuditLogs(
   pageSize: number = 50,
   filter: string = "",
   tenantId: string = "",
+  sort: SortState<AuditOrderField> = NO_SORT,
 ): UseAuditLogsResult {
+  const orderBy = sort.direction ? (sort.column ?? "") : "";
+  const sortOrder = toSortOrder(orderBy ? sort.direction : null);
   const query = useInfiniteQuery({
-    queryKey: ["auditLogs", pageSize, filter, tenantId],
+    queryKey: ["auditLogs", pageSize, filter, tenantId, orderBy, sortOrder],
     initialPageParam: "",
     queryFn: async ({ pageParam, signal }) => {
       try {
@@ -49,6 +62,8 @@ export function useAuditLogs(
             },
             filter,
             tenantId,
+            orderBy,
+            sortOrder,
           },
           { signal },
         );

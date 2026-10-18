@@ -6,7 +6,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
-import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
+import { toSortOrder } from "@/lib/table/sortOrder";
 import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
 import { normalizeError } from "@/lib/connect/error";
@@ -49,12 +49,6 @@ export interface UseObjectsOptions {
 }
 
 const DEFAULT_OBJECT_KEY = "default";
-
-function toSortOrder(d: UseObjectsOptions["sortDirection"]): SortOrder {
-  if (d === "asc") return SortOrder.ASC;
-  if (d === "desc") return SortOrder.DESC;
-  return SortOrder.UNSPECIFIED;
-}
 
 type BulkItem = { name: string; collection: string };
 

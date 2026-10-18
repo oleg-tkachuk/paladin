@@ -12,6 +12,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { useTableSort } from "@/hooks/useTableSort";
+import { AUDIT_ORDER, type AuditOrderField } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   ArrowPathIcon,
@@ -47,8 +50,12 @@ const TENANT_AUDIT_PAGE_SIZE = 100;
 export default function TenantAuditLogPage() {
   const tenant = useTenant();
 
+  // Sorted on the server: the log loads a page at a time, so a sort in the
+  // browser would order only what has loaded. A new sort starts over.
+  const { sort, toggleSort } = useTableSort<AuditOrderField>();
+  const sortProps = { current: sort, onSort: toggleSort };
   const { entries, loading, error, nextCursor, refresh, loadMore } =
-    useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId);
+    useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId, sort);
 
   const [search, setSearch] = useState("");
 
@@ -122,10 +129,28 @@ export default function TenantAuditLogPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="@md:w-45">When</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Actor</TableHead>
-              <TableHead className="hidden @2xl:table-cell">Resource</TableHead>
+              <SortableHead
+                label="When"
+                column={AUDIT_ORDER.at}
+                className="@md:w-45"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Action"
+                column={AUDIT_ORDER.action}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Actor"
+                column={AUDIT_ORDER.actor}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Resource"
+                column={AUDIT_ORDER.resource}
+                className="hidden @2xl:table-cell"
+                {...sortProps}
+              />
               <TableHead className="hidden @4xl:table-cell w-45">
                 Request
               </TableHead>

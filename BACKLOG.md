@@ -743,21 +743,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Cursor-paged lists sort by their one server order only
-
-- **Status:** Deferred (no consumer has asked; the order they have is the useful one).
-- **Reason:** every fully loaded table now sorts by any column in the browser
-  (`useTableView` / `sortRows`). The audit log, a tenant's audit log and a
-  collection's object trash load a page at a time behind "Load more", so a
-  client-side sort would reorder only what has loaded and misstate the rest.
-  Their server order — newest first — is kept, and their headers do not offer
-  a sort they cannot honour.
-- **Definition of Done:** the list RPCs take an `order_by` the stores push
-  down to SQL with a matching keyset cursor, and those tables' headers become
-  `SortableHead`s that send it, resetting the cursor on change.
-- **Blockers:** none — taken up when an operator needs an order other than
-  recency.
-
 ### Option: Inter and IBM Plex Mono as the console's typefaces
 
 - **Status:** Deferred (an option, decided against for now — Geist stays).
