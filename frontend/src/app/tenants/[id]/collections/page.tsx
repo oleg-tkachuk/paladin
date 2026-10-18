@@ -18,7 +18,6 @@ import Link from "next/link";
 import {
   ArrowPathIcon,
   EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
   PlusIcon,
   ServerStackIcon,
   TrashIcon,
@@ -27,12 +26,12 @@ import {
 import { useCollections } from "@/hooks/useCollections";
 import { useBackends } from "@/hooks/useBackends";
 import { useNotification } from "@/components/ui/Notification";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 
 import { listAllCollections } from "@/lib/listAllCollections";
 import { searchFilter } from "@/lib/cel";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import {
   Table,
@@ -239,17 +238,12 @@ export default function TenantCollectionsPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by name or display label…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search collections"
+        placeholder="Search by name or display label…"
+      >
         <Button
           variant="outline"
           size="icon"
@@ -258,7 +252,7 @@ export default function TenantCollectionsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       <Card className="p-0">
         <Table>

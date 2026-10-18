@@ -18,7 +18,6 @@ import {
   ArrowTopRightOnSquareIcon,
   CloudIcon,
   EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
   NoSymbolIcon,
   PauseCircleIcon,
   PlayCircleIcon,
@@ -32,13 +31,13 @@ import { useBackends } from "@/hooks/useBackends";
 import { BackendRegisterDialog } from "./BackendRegisterDialog";
 import { STORAGE_KIND_LABELS } from "@/lib/storageKind";
 import { useNotification } from "@/components/ui/Notification";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Separator } from "@/components/ui/separator";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -345,17 +344,12 @@ export default function StorageBackendsPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by ID, name, region, endpoint…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search storage backends"
+        placeholder="Search by ID, name, region, endpoint…"
+      >
         <SelectRoot
           value={state}
           onValueChange={(v) => setState(v as StateFilter)}
@@ -379,7 +373,7 @@ export default function StorageBackendsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       <SelectionBar count={selected.size} onClear={clearSelection}>
         {BULK_GROUPS.map((group, g) => (

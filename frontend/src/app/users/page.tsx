@@ -8,11 +8,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowPathIcon,
-  MagnifyingGlassIcon,
-  UserCircleIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowPathIcon, UserCircleIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { UserCreateDialog } from "@/components/features/users/UserCreateDialog";
@@ -29,8 +25,8 @@ import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -109,17 +105,12 @@ export default function UsersPage() {
         showDefaultActions={false}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search subject, display name, role, tenant slug…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search users"
+        placeholder="Search subject, display name, role, tenant slug…"
+      >
         <Button
           variant="outline"
           size="icon"
@@ -129,7 +120,7 @@ export default function UsersPage() {
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
         <Button onClick={() => setCreateOpen(true)}>New user</Button>
-      </div>
+      </TableToolbar>
 
       <Card className="p-0">
         <Table>

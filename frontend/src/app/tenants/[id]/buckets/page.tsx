@@ -27,7 +27,6 @@ import {
   ArrowPathIcon,
   ClockIcon,
   EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
   PlusIcon,
   ServerStackIcon,
   TrashIcon,
@@ -38,7 +37,7 @@ import { useBackends } from "@/hooks/useBackends";
 import { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -214,17 +213,12 @@ export default function TenantBucketsPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by name or display label…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search buckets"
+        placeholder="Search by name or display label…"
+      >
         <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
           <SelectTrigger aria-label="Filter by backend" className="w-50">
             <SelectValue placeholder="All backends" />
@@ -246,7 +240,7 @@ export default function TenantBucketsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       <BucketTable
         buckets={filtered}
