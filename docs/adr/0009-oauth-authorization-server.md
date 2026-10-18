@@ -41,6 +41,11 @@ raw HTTP (RFC 6749 is form-encoded, not Connect), gated by `auth.oauth.enabled`.
   resource's audience) plus a rotating refresh token (stored in
   `refresh_tokens`, reusing the login rotation path). Also serves
   `grant_type=refresh_token`. PKCE verified; codes are single-use.
+- **`POST /oauth/revoke`** (RFC 7009) — a client gives up a grant it holds by
+  presenting one of its refresh tokens, which revokes the grant's whole token
+  family. Authenticated as `/oauth/token` is, and published as
+  `revocation_endpoint` beside it. Access tokens are short-lived JWTs no plane
+  looks up, so revoking one is answered `unsupported_token_type`.
 - **`POST /oauth/register`** (RFC 7591) — dynamic client registration,
   flag-gated (`auth.oauth.dynamic_registration`); first-party clients
   (`desktop-agent`, `cursor`) may be pre-seeded in config. Confidential

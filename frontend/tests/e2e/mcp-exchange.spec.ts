@@ -26,6 +26,7 @@ import {
   SCOPE_WRITE,
   claims,
   grant,
+  revokeIssuedGrants,
 } from "./fixtures/oauth";
 import {
   ADMIN_URL,
@@ -155,6 +156,11 @@ class MCPSession {
 }
 
 test.describe("MCP token exchange", () => {
+  // Give up every grant the test was issued, so none outlives it.
+  test.afterEach(async ({ request }) => {
+    await revokeIssuedGrants(request);
+  });
+
   test("the MCP resource URL is issued paladin-mcp, which no plane accepts", async ({
     request,
   }) => {

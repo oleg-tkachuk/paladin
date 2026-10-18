@@ -3,6 +3,7 @@ package oauth
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
@@ -32,11 +33,25 @@ type authorizationServerMetadata struct {
 	AuthorizationEndpoint             string   `json:"authorization_endpoint,omitempty"`
 	TokenEndpoint                     string   `json:"token_endpoint,omitempty"`
 	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
+	RevocationEndpoint                string   `json:"revocation_endpoint,omitempty"`
 	JWKSURI                           string   `json:"jwks_uri,omitempty"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	// The revocation endpoint authenticates a client as the token endpoint does.
+	RevocationEndpointAuthMethodsSupported []string `json:"revocation_endpoint_auth_methods_supported,omitempty"`
+}
+
+// revocationEndpoint is where /oauth/revoke is reached: beside the token
+// endpoint, which Mount serves on the same mux. A token endpoint configured
+// at another path names no revocation endpoint rather than a guessed one.
+func revocationEndpoint(tokenEndpoint string) string {
+	base, ok := strings.CutSuffix(tokenEndpoint, TokenPath)
+	if !ok {
+		return ""
+	}
+	return base + RevokePath
 }
 
 // MetadataHandler serves the RFC 8414 metadata of this Authorization Server,
@@ -48,16 +63,23 @@ func MetadataHandler(as config.MCPOAuthAS, tokenExchange bool) http.Handler {
 	if tokenExchange {
 		grants = append(grants, GrantTypeTokenExchange)
 	}
+	revoke := revocationEndpoint(as.TokenEndpoint)
+	var revokeAuth []string
+	if revoke != "" {
+		revokeAuth = tokenEndpointAuthMethodsSupported
+	}
 	body, _ := json.MarshalIndent(authorizationServerMetadata{
-		Issuer:                            as.Issuer,
-		AuthorizationEndpoint:             as.AuthorizationEndpoint,
-		TokenEndpoint:                     as.TokenEndpoint,
-		RegistrationEndpoint:              as.RegistrationEndpoint,
-		JWKSURI:                           as.JWKSURI,
-		ResponseTypesSupported:            responseTypesSupported,
-		GrantTypesSupported:               grants,
-		CodeChallengeMethodsSupported:     codeChallengeMethodsSupported,
-		TokenEndpointAuthMethodsSupported: tokenEndpointAuthMethodsSupported,
+		Issuer:                                 as.Issuer,
+		AuthorizationEndpoint:                  as.AuthorizationEndpoint,
+		TokenEndpoint:                          as.TokenEndpoint,
+		RegistrationEndpoint:                   as.RegistrationEndpoint,
+		RevocationEndpoint:                     revoke,
+		JWKSURI:                                as.JWKSURI,
+		ResponseTypesSupported:                 responseTypesSupported,
+		GrantTypesSupported:                    grants,
+		CodeChallengeMethodsSupported:          codeChallengeMethodsSupported,
+		TokenEndpointAuthMethodsSupported:      tokenEndpointAuthMethodsSupported,
+		RevocationEndpointAuthMethodsSupported: revokeAuth,
 	}, "", "  ")
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

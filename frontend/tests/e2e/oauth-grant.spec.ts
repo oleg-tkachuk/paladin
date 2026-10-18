@@ -25,6 +25,7 @@ import {
   claims,
   grant,
   type TokenResponse,
+  revokeIssuedGrants,
 } from "./fixtures/oauth";
 import { ADMIN_URL, IAM_URL } from "./fixtures/seed";
 
@@ -57,6 +58,11 @@ async function call(
 const REVOKE_GRANT_RPC = "/paladin.iam.v1.UserService/RevokeOAuthGrant";
 
 test.describe("OAuth grant", () => {
+  // Give up every grant the test was issued, so none outlives it.
+  test.afterEach(async ({ request }) => {
+    await revokeIssuedGrants(request);
+  });
+
   test("a read grant reads and is refused every write", async ({ request }) => {
     const tok = await grant(request, [SCOPE_READ]);
     expect(claims(tok.access_token)).toMatchObject({

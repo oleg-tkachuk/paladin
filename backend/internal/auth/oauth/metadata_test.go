@@ -60,3 +60,38 @@ func TestMetadataHandler(t *testing.T) {
 		t.Errorf("grant_types_supported with token exchange = %v", got)
 	}
 }
+
+// The revocation endpoint is published beside the token endpoint, which Mount
+// serves on the same mux, and not at all when the token endpoint is
+// configured somewhere Mount does not put it.
+func TestMetadataHandler_RevocationEndpoint(t *testing.T) {
+	cases := []struct {
+		name, tokenEndpoint, want string
+	}{
+		{"beside the token endpoint", "https://iam.example.com/oauth/token", "https://iam.example.com/oauth/revoke"},
+		{"under a path prefix", "https://example.com/iam/oauth/token", "https://example.com/iam/oauth/revoke"},
+		{"a token endpoint elsewhere", "https://example.com/token", ""},
+		{"no token endpoint", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := metadataDoc(t, config.MCPOAuthAS{Issuer: "https://iam.example.com", TokenEndpoint: tc.tokenEndpoint}, false)
+			got, present := doc["revocation_endpoint"]
+			if tc.want == "" {
+				if present {
+					t.Errorf("revocation_endpoint = %v, want it omitted", got)
+				}
+				if _, auth := doc["revocation_endpoint_auth_methods_supported"]; auth {
+					t.Error("auth methods published for an omitted revocation endpoint")
+				}
+				return
+			}
+			if got != tc.want {
+				t.Errorf("revocation_endpoint = %v, want %s", got, tc.want)
+			}
+			if m := docStrings(doc, "revocation_endpoint_auth_methods_supported"); !slices.Equal(m, tokenEndpointAuthMethodsSupported) {
+				t.Errorf("revocation auth methods = %v, want the token endpoint's", m)
+			}
+		})
+	}
+}

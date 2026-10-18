@@ -26,6 +26,9 @@ const (
 	actionConsentDenied    = "iam.OAuthConsentDenied"
 	actionGrantRedeemed    = "iam.OAuthGrantRedeemed"
 	actionRefreshReuse     = "iam.RefreshTokenReuseDetected"
+	// actionGrantRevokedByClient is a client giving up a grant it holds at
+	// /oauth/revoke, as an agent does when it disconnects.
+	actionGrantRevokedByClient = "iam.OAuthGrantRevokedByClient"
 )
 
 // clientResource names a client in the audit log, as OAuthClientService does.

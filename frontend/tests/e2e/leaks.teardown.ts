@@ -8,6 +8,9 @@
  * bucket holds SeaweedFS volume slots, and leaked ones are what filled the
  * store until it refused new buckets.
  *
+ * So does an OAuth grant the seeded admin still holds: one outlives its test
+ * by weeks, and they piled up a row per grant per run.
+ *
  * Tenants new in the trash fail it too. They used to be only reported, while
  * a tenant's charges held it there (charges.tenant_id was RESTRICT); the purge
  * now removes a tenant's billing rows with it, and a trash that took leftovers
@@ -49,5 +52,6 @@ test("the run removed what it created", async ({}, testInfo) => {
     trashedTenants: [],
     buckets: [],
     backends: [],
+    oauthGrants: [],
   });
 });

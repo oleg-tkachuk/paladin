@@ -19,7 +19,7 @@ import { BackendService } from "@/gen/paladin/admin/v1/backend_service_pb";
 import { BucketService } from "@/gen/paladin/admin/v1/bucket_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
 
-import { adminTransport } from "./seed";
+import { adminTransport, seededAdminGrantIDs } from "./seed";
 import { FIXTURE_SLUG_RE } from "./unique";
 
 /** The inventory the environment project writes into its output directory. */
@@ -42,6 +42,11 @@ export interface FixtureInventory {
   buckets: string[];
   /** Storage backends, by id. */
   backends: string[];
+  /**
+   * The seeded admin's live OAuth grants, by id. Every OAuth spec consents as
+   * that admin; a grant its teardown did not give up stays live for weeks.
+   */
+  oauthGrants: string[];
 }
 
 /** Lists every fixture-shaped tenant, bucket and backend the stack holds. */
@@ -51,6 +56,7 @@ export async function fixtureInventory(): Promise<FixtureInventory> {
     trashedTenants: [],
     buckets: [],
     backends: [],
+    oauthGrants: [],
   };
 
   const tenants = createClient(TenantService, adminTransport());
@@ -96,6 +102,8 @@ export async function fixtureInventory(): Promise<FixtureInventory> {
     pageToken = res.page?.nextPageToken ?? "";
   } while (pageToken);
 
+  inventory.oauthGrants = await seededAdminGrantIDs();
+
   return inventory;
 }
 
@@ -118,5 +126,6 @@ export function addedSince(
     ),
     buckets: added(before.buckets, after.buckets),
     backends: added(before.backends, after.backends),
+    oauthGrants: added(before.oauthGrants, after.oauthGrants),
   };
 }

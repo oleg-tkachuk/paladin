@@ -119,6 +119,7 @@ func TestAPIMuxes_OAuthEndpointsFollowTheirFlags(t *testing.T) {
 	const (
 		authorize = "/oauth/authorize"
 		token     = "/oauth/token"
+		revoke    = "/oauth/revoke"
 		register  = "/oauth/register"
 	)
 
@@ -156,7 +157,7 @@ func TestAPIMuxes_OAuthEndpointsFollowTheirFlags(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, iamMux := assembleAPIMuxes(t, h, tc.set)
-			for _, path := range []string{authorize, token} {
+			for _, path := range []string{authorize, token, revoke} {
 				if got := routed(t, iamMux, path); got != tc.wantCore {
 					t.Errorf("%s routed = %v, want %v", path, got, tc.wantCore)
 				}

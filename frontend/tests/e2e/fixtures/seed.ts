@@ -794,6 +794,21 @@ export async function seedAdminTenantID(): Promise<string> {
   return adminTenantID;
 }
 
+/** The ids of the live OAuth grants the seeded admin holds. */
+export async function seededAdminGrantIDs(): Promise<string[]> {
+  const users = createClient(UserService, iamAdminTransport());
+  const tenantId = await seedAdminTenantID();
+  const page = await users.listUsers({
+    parent: `tenants/${tenantId}`,
+    page: { pageSize: 200, pageToken: "" },
+  });
+  const admin = page.users.find((u) => u.subject === SEEDED_ADMIN.subject);
+  if (!admin)
+    throw new Error(`no ${SEEDED_ADMIN.subject} in tenants/${tenantId}`);
+  const res = await users.listOAuthGrants({ name: admin.name });
+  return res.grants.map((g) => g.id);
+}
+
 export interface SeededObject {
   objectId: string;
   key: string;

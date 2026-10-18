@@ -36,6 +36,7 @@ import {
   claims,
   exchangeCode,
   pkceChallenge,
+  revokeIssuedGrants,
 } from "./fixtures/oauth";
 import { seedAdminTenantID } from "./fixtures/seed";
 
@@ -54,6 +55,11 @@ function consentURL(overrides: Record<string, string> = {}): string {
 }
 
 test.describe("OAuth consent", () => {
+  // Give up every grant the test was issued, so none outlives it.
+  test.afterEach(async ({ request }) => {
+    await revokeIssuedGrants(request);
+  });
+
   test("names the client and lists what it is asking for", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto(consentURL());
