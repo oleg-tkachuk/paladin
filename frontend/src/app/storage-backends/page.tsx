@@ -11,14 +11,19 @@
 // state it is in, what the last probe found. Every state change sits behind
 // the row's menu or the bulk bar, and disabling asks first.
 
-import React, { Fragment, useCallback, useEffect, useState } from "react";
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
 import {
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
   CloudIcon,
   EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
   NoSymbolIcon,
   PauseCircleIcon,
   PlayCircleIcon,
@@ -32,13 +37,16 @@ import { useBackends } from "@/hooks/useBackends";
 import { BackendRegisterDialog } from "./BackendRegisterDialog";
 import { STORAGE_KIND_LABELS } from "@/lib/storageKind";
 import { useNotification } from "@/components/ui/Notification";
+import { TableToolbar } from "@/components/ui/TableToolbar";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { useTableSort } from "@/hooks/useTableSort";
+import { sortRows, type SortAccessors } from "@/lib/table/view";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Separator } from "@/components/ui/separator";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -181,6 +189,16 @@ const DISABLE_CONSEQUENCE =
   "Buckets on it stop serving reads and writes until it is enabled again. " +
   "The configured default backend cannot be disabled.";
 
+// The list is searched on the server and loaded whole, so it sorts here.
+type BackendColumn = "backend" | "storage" | "region" | "state" | "health";
+const BACKEND_SORT: SortAccessors<StorageBackend, BackendColumn> = {
+  backend: (b) => b.backendId,
+  storage: (b) => STORAGE_KIND_LABELS[b.kind] || undefined,
+  region: (b) => b.region || undefined,
+  state: (b) => lifecycleState(b).label,
+  health: (b) => healthView(b).label,
+};
+
 export default function StorageBackendsPage() {
   const {
     backends,
@@ -193,6 +211,12 @@ export default function StorageBackendsPage() {
     error: listError,
   } = useBackends();
   const { showNotification } = useNotification();
+  const { sort, toggleSort } = useTableSort<BackendColumn>();
+  const sortProps = { current: sort, onSort: toggleSort };
+  const sorted = useMemo(
+    () => sortRows(backends, sort, BACKEND_SORT),
+    [backends, sort],
+  );
 
   // Server-side, like /buckets: the derived `search` field joins id, display
   // name, region and endpoint, and the state choice is a conjunct beside it.
@@ -345,17 +369,12 @@ export default function StorageBackendsPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by ID, name, region, endpoint…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search storage backends"
+        placeholder="Search by ID, name, region, endpoint…"
+      >
         <SelectRoot
           value={state}
           onValueChange={(v) => setState(v as StateFilter)}
@@ -379,7 +398,7 @@ export default function StorageBackendsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       <SelectionBar count={selected.size} onClear={clearSelection}>
         {BULK_GROUPS.map((group, g) => (
@@ -418,11 +437,26 @@ export default function StorageBackendsPage() {
                   }
                 />
               </TableHead>
-              <TableHead>Backend</TableHead>
-              <TableHead className="hidden @2xl:table-cell">Storage</TableHead>
-              <TableHead className="hidden @4xl:table-cell">Region</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead className="hidden @lg:table-cell">Health</TableHead>
+              <SortableHead label="Backend" column="backend" {...sortProps} />
+              <SortableHead
+                label="Storage"
+                column="storage"
+                className="hidden @2xl:table-cell"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Region"
+                column="region"
+                className="hidden @4xl:table-cell"
+                {...sortProps}
+              />
+              <SortableHead label="State" column="state" {...sortProps} />
+              <SortableHead
+                label="Health"
+                column="health"
+                className="hidden @lg:table-cell"
+                {...sortProps}
+              />
               <TableHead className="w-12">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -481,7 +515,7 @@ export default function StorageBackendsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              backends.map((b) => (
+              sorted.map((b) => (
                 <BackendRow
                   key={b.backendId}
                   backend={b}

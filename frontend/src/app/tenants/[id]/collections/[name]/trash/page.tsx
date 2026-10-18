@@ -11,7 +11,6 @@ import {
   ArrowUturnLeftIcon,
   ClockIcon,
   DocumentIcon,
-  MagnifyingGlassIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
@@ -23,7 +22,7 @@ import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
@@ -186,22 +185,17 @@ export default function CollectionTrashPage() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by key…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search the trash"
+        placeholder="Search by key…"
+      >
         <Badge variant="secondary" className="font-mono tabular-nums">
           {objects.length}
           {loadMore ? "+" : ""} deleted
         </Badge>
-      </div>
+      </TableToolbar>
 
       <Card className="p-0">
         <Table>

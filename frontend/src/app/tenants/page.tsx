@@ -8,7 +8,6 @@ import {
   ArrowRightIcon,
   BuildingOfficeIcon,
   EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   TrashIcon,
@@ -23,7 +22,7 @@ import { TenantEditDialog } from "./TenantEditDialog";
 import { TenantDeleteDialog } from "./TenantDeleteDialog";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import {
@@ -125,17 +124,12 @@ export default function TenantsPage() {
       />
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search tenants by ID or name…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search tenants"
+        placeholder="Search tenants by ID or name…"
+      >
         <Button
           variant="outline"
           size="icon"
@@ -146,7 +140,7 @@ export default function TenantsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       {/* Table */}
       <Card className="p-0">

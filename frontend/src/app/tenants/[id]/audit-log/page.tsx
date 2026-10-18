@@ -12,17 +12,16 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   ArrowPathIcon,
   ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
-  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import {
   Table,
@@ -100,22 +99,17 @@ export default function TenantAuditLogPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Filter by action, actor, resource, request id…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Filter the audit log"
+        placeholder="Filter by action, actor, resource, request id…"
+      >
         <span className={T.hint}>
           {entries.length} loaded
           {nextCursor ? " · more available" : ""}
         </span>
-      </div>
+      </TableToolbar>
 
       {error && (
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">

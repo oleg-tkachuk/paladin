@@ -10,7 +10,6 @@ import Link from "next/link";
 import {
   ArrowPathIcon,
   EllipsisHorizontalIcon,
-  MagnifyingGlassIcon,
   PlusIcon,
   ServerStackIcon,
   TrashIcon,
@@ -27,9 +26,9 @@ import { collectionHref, tenantHref } from "@/lib/navigation/hrefs";
 import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 import { useBackends } from "@/hooks/useBackends";
 import { useNotification } from "@/components/ui/Notification";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/Card";
 import {
   Table,
@@ -189,17 +188,12 @@ export default function CollectionsPage() {
       />
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by name or display label…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search collections"
+        placeholder="Search by name or display label…"
+      >
         <Button
           variant="outline"
           size="icon"
@@ -210,7 +204,7 @@ export default function CollectionsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       {/* Table */}
       <Card className="p-0">
