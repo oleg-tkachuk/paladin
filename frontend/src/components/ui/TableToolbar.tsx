@@ -1,7 +1,8 @@
-// The bar above a table: a search box, an optional set of filters to choose
-// one from, and how many rows show. Controlled and presentational — the page
+// The bar above a table: a search box, any further filters the page brings, an
+// optional set of choices to pick one from, and how many rows show. Controlled and presentational — the page
 // owns the query and the filter, whether it filters in the browser
 // (useTableView) or on the server, so every table looks and behaves alike.
+import type React from "react";
 import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,8 @@ interface TableToolbarProps<V extends string> {
   };
   /** The rows showing and the rows loaded; omitted, no count shows. */
   count?: { shown: number; total: number };
+  /** Further filters, such as a select, set between the search and the rest. */
+  children?: React.ReactNode;
   className?: string;
 }
 
@@ -40,6 +43,7 @@ export function TableToolbar<V extends string>({
   searchLabel,
   filter,
   count,
+  children,
   className,
 }: TableToolbarProps<V>) {
   return (
@@ -65,6 +69,7 @@ export function TableToolbar<V extends string>({
           </button>
         ) : null}
       </div>
+      {children}
       {filter ? (
         <div
           role="group"

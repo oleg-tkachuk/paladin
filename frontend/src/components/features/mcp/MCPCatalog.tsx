@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/input";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   SelectContent,
   SelectItem,
@@ -31,12 +31,34 @@ import {
   RecordField,
   openableRow,
 } from "@/components/ui/RecordDialog";
+import { useTableView } from "@/hooks/useTableView";
+import type { SortAccessors } from "@/lib/table/view";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { MCP_PLANES, planeTone } from "./mcp-status";
 
 const ALL = "__all__";
+
+// The columns of the tools table; the empty row spans them.
+const TOOL_COLUMNS = 5;
+
+// How much a call can change, for sorting by effect: reads first.
+const EFFECT_RANK = { read: 0, mutates: 1, destructive: 2 } as const;
+
+type ToolColumn = "tool" | "plane" | "effect" | "op";
+const TOOL_SORT: SortAccessors<MCPTool, ToolColumn> = {
+  tool: (t) => t.name,
+  plane: (t) => t.audience,
+  effect: (t) =>
+    t.destructive
+      ? EFFECT_RANK.destructive
+      : t.mutates
+        ? EFFECT_RANK.mutates
+        : EFFECT_RANK.read,
+  op: (t) => t.capabilityOp || undefined,
+};
+const TOOL_SEARCH = (t: MCPTool) => [t.name, t.description, t.capabilityOp];
 
 /** What a call does: reads, changes state, or may destroy something — and
  * whether it reaches past Paladin. The server sends the same as MCP hints. */
@@ -185,7 +207,6 @@ function PatternList({
  * profile X do, and what touches the data plane.
  */
 export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
-  const [query, setQuery] = useState("");
   const [plane, setPlane] = useState<string>(ALL);
   const [profile, setProfile] = useState<string>(
     inspect.transports?.http?.profile || ALL,
@@ -200,29 +221,27 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
   );
   const [opened, setOpened] = useState<MCPTool | null>(null);
 
-  const rows = inspect.toolCatalog.filter((t: MCPTool) => {
-    const q = query.trim().toLowerCase();
-    if (q && !`${t.name} ${t.description}`.toLowerCase().includes(q))
-      return false;
-    if (plane !== ALL && t.audience !== plane) return false;
-    if (inProfile && !inProfile.has(t.name)) return false;
-    return true;
+  const narrowed = inspect.toolCatalog.filter(
+    (t: MCPTool) =>
+      (plane === ALL || t.audience === plane) &&
+      (!inProfile || inProfile.has(t.name)),
+  );
+  const view = useTableView(narrowed, {
+    text: TOOL_SEARCH,
+    accessors: TOOL_SORT,
   });
+  const rows = view.rows;
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-55 flex-1">
-          <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            aria-label="Search tools"
-            placeholder="Search by name or description…"
-            className="pl-9"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+      <TableToolbar
+        query={view.query}
+        onQueryChange={view.setQuery}
+        searchLabel="Search tools"
+        placeholder="Search by name or description…"
+        count={{ shown: rows.length, total: inspect.toolCatalog.length }}
+      >
         <SelectRoot value={plane} onValueChange={setPlane}>
           <SelectTrigger aria-label="Plane" className="w-[150px]">
             <SelectValue />
@@ -249,20 +268,20 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
             ))}
           </SelectContent>
         </SelectRoot>
-        <span className={T.hint}>
-          {rows.length} of {inspect.toolCatalog.length}
-        </span>
-      </div>
+      </TableToolbar>
       <Card className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Tool</TableHead>
-              <TableHead>Plane</TableHead>
-              <TableHead>Effect</TableHead>
-              <TableHead className="hidden @md:table-cell">
-                Capability op
-              </TableHead>
+              <SortableHead label="Tool" column="tool" {...sortProps} />
+              <SortableHead label="Plane" column="plane" {...sortProps} />
+              <SortableHead label="Effect" column="effect" {...sortProps} />
+              <SortableHead
+                label="Capability op"
+                column="op"
+                className="hidden @md:table-cell"
+                {...sortProps}
+              />
               <TableHead className="hidden @2xl:table-cell">
                 Description
               </TableHead>
@@ -272,7 +291,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={TOOL_COLUMNS}
                   className="py-8 text-center text-xs text-muted-foreground"
                 >
                   No tool matches.

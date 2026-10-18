@@ -13,6 +13,13 @@ import {
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
+import { SortableHead } from "@/components/ui/SortHeader";
+import {
+  TableToolbar,
+  type ToolbarFilterOption,
+} from "@/components/ui/TableToolbar";
+import { useTableView } from "@/hooks/useTableView";
+import type { SortAccessors } from "@/lib/table/view";
 import { cn } from "@/lib/utils";
 
 import { Tile } from "./MCPOverview";
@@ -96,6 +103,29 @@ function clientKind(c: MCPOAuthClient): string {
   return c.public ? "public (PKCE)" : "confidential";
 }
 
+// Which clients show: every one, or those from one source.
+type SourceFilter = keyof typeof CLIENT_SOURCE | "all";
+const SOURCE_FILTERS: readonly ToolbarFilterOption<SourceFilter>[] = [
+  { value: "all", label: "All" },
+  ...(Object.keys(CLIENT_SOURCE) as (keyof typeof CLIENT_SOURCE)[]).map(
+    (k) => ({ value: k, label: CLIENT_SOURCE[k].label }),
+  ),
+];
+const DEFAULT_SOURCE_FILTER: SourceFilter = "all";
+
+type ClientColumn = "client" | "source" | "kind";
+const CLIENT_SORT: SortAccessors<MCPOAuthClient, ClientColumn> = {
+  client: (c) => c.clientId,
+  source: (c) => CLIENT_SOURCE[clientSource(c)].label,
+  kind: clientKind,
+};
+const CLIENT_SEARCH = (c: MCPOAuthClient) => [
+  c.clientId,
+  clientKind(c),
+  c.allowedScopes.join(" "),
+  c.allowedAudiences.join(" "),
+];
+
 /**
  * How agents authorize (ADR-0036): whether IAM is the OAuth Authorization
  * Server, the audience the MCP server accepts, and the clients registered at
@@ -104,7 +134,16 @@ function clientKind(c: MCPOAuthClient): string {
 export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
   const oauth = inspect.oauth;
   const exchanging = !!oauth?.edgeAudience;
-  const clients = shownClients(oauth);
+  const [source, setSource] = useState<SourceFilter>(DEFAULT_SOURCE_FILTER);
+  const all = shownClients(oauth);
+  const view = useTableView(
+    source === DEFAULT_SOURCE_FILTER
+      ? all
+      : all.filter((c) => clientSource(c) === source),
+    { text: CLIENT_SEARCH, accessors: CLIENT_SORT },
+  );
+  const clients = view.rows;
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
   const [opened, setOpened] = useState<MCPOAuthClient | null>(null);
   const [deleting, setDeleting] = useState<MCPOAuthClient | null>(null);
   const queryClient = useQueryClient();
@@ -194,13 +233,31 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
           read ({oauth.registeredClientsError}).
         </p>
       ) : null}
+      <TableToolbar
+        query={view.query}
+        onQueryChange={view.setQuery}
+        searchLabel="Search OAuth clients"
+        placeholder="Search by client, kind, scope or audience…"
+        filter={{
+          label: "Client source",
+          options: SOURCE_FILTERS,
+          value: source,
+          onChange: setSource,
+        }}
+        count={{ shown: clients.length, total: all.length }}
+      />
       <Card className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Client</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead className="hidden @sm:table-cell">Kind</TableHead>
+              <SortableHead label="Client" column="client" {...sortProps} />
+              <SortableHead label="Source" column="source" {...sortProps} />
+              <SortableHead
+                label="Kind"
+                column="kind"
+                className="hidden @sm:table-cell"
+                {...sortProps}
+              />
               <TableHead className="hidden @md:table-cell">Scopes</TableHead>
               <TableHead className="hidden @md:table-cell">Audiences</TableHead>
             </TableRow>
@@ -212,7 +269,9 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
                   colSpan={CLIENT_COLUMNS}
                   className="py-8 text-center text-xs text-muted-foreground"
                 >
-                  No client is registered.
+                  {all.length === 0
+                    ? "No client is registered."
+                    : "No client matches."}
                 </TableCell>
               </TableRow>
             ) : (
