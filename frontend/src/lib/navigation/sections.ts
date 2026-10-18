@@ -19,6 +19,7 @@ export const SECTION = {
   billing: "/billing",
   stats: "/stats",
   audit: "/audit",
+  operations: "/operations",
   mcp: "/mcp",
   mcpTools: "/mcp/tools",
   mcpAccess: "/mcp/access",

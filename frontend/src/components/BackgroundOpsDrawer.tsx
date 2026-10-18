@@ -17,7 +17,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 import { adminOperationClient } from "@/lib/connect/client";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
@@ -38,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
+import { SECTION } from "@/lib/navigation/sections";
 import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
 import { formatDuration } from "@/lib/format/duration";
@@ -125,6 +127,23 @@ export function BackgroundOpsDrawer() {
     [shell],
   );
 
+  // Clearing takes finished operations off this list for the signed-in user
+  // only, on the server: no names clears every finished one.
+  const [clearErr, setClearErr] = useState<string | null>(null);
+  const dismiss = useCallback(
+    async (names: string[]) => {
+      setClearErr(null);
+      try {
+        await adminOperationClient.dismissOperations({ names });
+        await shell.refresh();
+      } catch (err) {
+        setClearErr(errorMessage(err, "Clearing failed"));
+      }
+    },
+    [shell],
+  );
+  const finished = counts.all - counts.active;
+
   // While the sheet is open the operator is watching a batch move, so ask the
   // shell for a fresh copy faster than its own cadence. Closed, the shell's
   // poll is enough and this ticks into a no-op.
@@ -191,19 +210,50 @@ export function BackgroundOpsDrawer() {
           <div className="flex items-start justify-between gap-2 pr-8">
             <div>
               <SheetTitle>Background operations</SheetTitle>
-              <p className={T.hint}>{summary}</p>
+              <p className={T.hint}>
+                {summary} ·{" "}
+                <Link
+                  href={SECTION.operations}
+                  onClick={() => setOpen(false)}
+                  className="hover:text-foreground hover:underline"
+                >
+                  Open the operations page
+                </Link>
+              </p>
+              {clearErr ? (
+                <p className="text-xs text-destructive">{clearErr}</p>
+              ) : null}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              aria-label="Refresh operations"
-              onClick={() => void shell.refresh()}
-            >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                disabled={finished === 0}
+                onClick={() => void dismiss([])}
+              >
+                Clear finished
+                {finished > 0 ? (
+                  <>
+                    {" "}
+                    <span className="tabular-nums text-muted-foreground">
+                      {finished}
+                    </span>
+                  </>
+                ) : null}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label="Refresh operations"
+                onClick={() => void shell.refresh()}
+              >
+                <ArrowPathIcon
+                  className={cn("size-4", loading && "animate-spin")}
+                />
+              </Button>
+            </div>
           </div>
           <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
             {OP_FILTERS.map((f) => (
@@ -255,6 +305,7 @@ export function BackgroundOpsDrawer() {
                   key={op.name}
                   op={op}
                   onCancel={cancelOp}
+                  onDismiss={() => dismiss([op.name])}
                   onOpen={() => setOpened(op)}
                   onNavigate={() => setOpen(false)}
                 />
@@ -271,11 +322,13 @@ export function BackgroundOpsDrawer() {
 function OpRow({
   op,
   onCancel,
+  onDismiss,
   onOpen,
   onNavigate,
 }: {
   op: Operation;
   onCancel: (name: string) => Promise<void>;
+  onDismiss: () => Promise<void>;
   onOpen: () => void;
   onNavigate: () => void;
 }) {
@@ -399,7 +452,18 @@ function OpRow({
           >
             {canceling ? "Canceling…" : "Cancel"}
           </Button>
-        ) : null}
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            aria-label={`Clear ${operationLabel(op)}`}
+            title="Clear from this list"
+            onClick={() => void onDismiss()}
+          >
+            <XMarkIcon className="size-4" />
+          </Button>
+        )}
       </div>
       <ConfirmModal
         isOpen={confirmCancel}
