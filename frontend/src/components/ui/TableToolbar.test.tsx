@@ -82,6 +82,29 @@ describe("TableToolbar", () => {
     expect(screen.getByRole("button", { name: "Plane" })).toBeInTheDocument();
   });
 
+  it("sets the page's actions after the filters and the count", () => {
+    render(
+      <TableToolbar
+        query=""
+        onQueryChange={() => {}}
+        placeholder="Search…"
+        searchLabel="Search rows"
+        filter={{
+          label: "State",
+          options: FILTER_OPTIONS,
+          value: "active",
+          onChange: () => {},
+        }}
+        count={{ shown: 1, total: 1 }}
+        actions={<button type="button">New row</button>}
+      >
+        <button type="button">Plane</button>
+      </TableToolbar>,
+    );
+    const order = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(order).toEqual(["Plane", "Active", "All", "New row"]);
+  });
+
   it("counts the rows showing out of those loaded", () => {
     const { rerender } = render(
       <TableToolbar
