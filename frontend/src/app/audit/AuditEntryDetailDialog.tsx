@@ -19,6 +19,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { Timestamp } from "@/components/Timestamp";
 import { errorMessage } from "@/hooks/errorContract";
+import { isUuid } from "@/lib/resources/tenant-resolve";
+import { T } from "@/lib/ui/typography";
 
 // Decode a bytes state-snapshot to a display string. The backend stores
 // sanitized JSON; pretty-print it when it parses, else show the raw text.
@@ -82,7 +84,9 @@ export function AuditEntryDetailDialog({
               fallback="system"
             />
           </RecordField>
-          {data.actorSubject && (
+          {/* Only a user's id resolves to a name; anything else — a
+              system actor, a token — is shown as recorded above already. */}
+          {isUuid(data.actorSubject) && (
             <RecordField label="Actor id" mono>
               {data.actorSubject}
             </RecordField>
@@ -128,7 +132,7 @@ export function AuditEntryDetailDialog({
           {before && <RecordBlock label="Before">{before}</RecordBlock>}
           {after && <RecordBlock label="After">{after}</RecordBlock>}
           {!before && !after && (
-            <p className="text-muted-foreground">
+            <p className={T.hint}>
               No state snapshot recorded for this action.
             </p>
           )}
