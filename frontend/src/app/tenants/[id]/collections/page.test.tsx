@@ -64,8 +64,16 @@ describe("TenantCollectionsPage delete", () => {
       bucket: "b1",
       resourceVersion: "7",
     };
+    // The search's answer is held until the confirm is open: let go sooner,
+    // under load, it emptied the list before the row's menu was reached.
+    let answerSearch: () => void = () => {};
+    const searched = new Promise<void>((resolve) => {
+      answerSearch = resolve;
+    });
     h.listCollections.mockImplementation(({ filter }: { filter: string }) =>
-      Promise.resolve({ collections: filter ? [] : [row] }),
+      filter
+        ? searched.then(() => ({ collections: [] }))
+        : Promise.resolve({ collections: [row] }),
     );
     h.deleteCollection.mockResolvedValue(undefined);
     const user = userEvent.setup({ pointerEventsCheck: 0 });
@@ -85,6 +93,8 @@ describe("TenantCollectionsPage delete", () => {
         expect.anything(),
       ),
     );
+    // The list now holds nothing; the confirm still names the chosen row.
+    answerSearch();
     await user.click(
       await screen.findByRole("button", { name: /^Delete Collection$/ }),
     );
