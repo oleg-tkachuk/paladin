@@ -69,7 +69,10 @@ describe("AuditEntryDetailDialog", () => {
     expect(await screen.findByText(action)).toHaveClass("break-all");
     expect(screen.getByText(resource)).toHaveClass("break-all");
     expect(screen.getByText(/"subject":/)).toHaveClass("whitespace-pre-wrap");
-    expect(screen.getByRole("dialog")).toHaveClass("sm:max-w-2xl");
+    // The snapshot is a block, which widens the dialog past a field's width.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.querySelector("[data-record-block]")).not.toBeNull();
+    expect(dialog).toHaveClass("sm:has-[[data-record-block]]:max-w-3xl");
   });
 
   it("does not fetch while closed (entryId null)", () => {
