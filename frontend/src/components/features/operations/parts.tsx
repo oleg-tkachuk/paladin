@@ -4,6 +4,7 @@
 // and the operations page: its collection as a link, its state's icon, and
 // its whole record.
 
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -14,6 +15,9 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { errorMessage } from "@/hooks/errorContract";
 import {
   RecordBlock,
   RecordDialog,
@@ -35,8 +39,10 @@ import {
   operationProgress,
   operationStatus,
   parseCollectionName,
+  progressPercent,
   type OpStatus,
 } from "@/lib/operations";
+import type { OpProgress } from "@/lib/operationProgress";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -172,5 +178,81 @@ export function OperationRecord({
         </>
       ) : null}
     </RecordDialog>
+  );
+}
+
+/** How far a running operation has got, as a bar and its count. */
+export function OperationProgressBar({ progress }: { progress: OpProgress }) {
+  return (
+    <div className="space-y-0.5">
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={progress.total}
+        aria-valuenow={progress.processed}
+        className="h-1.5 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className="h-full rounded-full bg-warning transition-[width]"
+          style={{ width: `${progressPercent(progress)}%` }}
+        />
+      </div>
+      <p className={cn(T.hint, "tabular-nums")}>
+        {progress.processed} of {progress.total} processed
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Stops a running operation, once asked twice. A batch stopped part-way is
+ * not undone by starting it again: the objects it already moved or deleted
+ * stay moved or deleted, so one click on a small button must not do it.
+ * onError receives why the cancel failed, or null when a new one starts.
+ */
+export function CancelOperationButton({
+  op,
+  onCancel,
+  onError,
+}: {
+  op: Operation;
+  onCancel: (name: string) => Promise<void>;
+  onError: (message: string | null) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const cancel = useCallback(async () => {
+    setCanceling(true);
+    onError(null);
+    try {
+      await onCancel(op.name);
+    } catch (err) {
+      onError(errorMessage(err, "Cancel failed"));
+    } finally {
+      setCanceling(false);
+    }
+  }, [onCancel, onError, op.name]);
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 shrink-0 px-2 text-xs"
+        disabled={canceling}
+        onClick={() => setConfirming(true)}
+      >
+        {canceling ? "Canceling…" : "Cancel"}
+      </Button>
+      <ConfirmModal
+        isOpen={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={cancel}
+        title="Cancel this operation?"
+        message={`${operationLabel(op)} stops where it is. What it has already done is not undone.`}
+        confirmText="Cancel operation"
+        cancelText="Keep running"
+        loading={canceling}
+      />
+    </>
   );
 }

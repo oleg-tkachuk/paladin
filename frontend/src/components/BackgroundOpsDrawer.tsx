@@ -26,7 +26,6 @@ import { useShell } from "@/context/ShellContext";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
 import { Button } from "@/components/ui/button";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
   Sheet,
   SheetContent,
@@ -53,10 +52,14 @@ import {
   operationProgress,
   operationStatus,
   outcomeLine,
-  type OpStatus,
+  OP_VIEWS,
+  OP_VIEW_KEEPS,
+  type OpView,
 } from "@/lib/operations";
 import {
+  CancelOperationButton,
   CollectionLink,
+  OperationProgressBar,
   OperationRecord,
   STATUS_ICON,
   STATUS_TINT,
@@ -64,31 +67,16 @@ import {
 
 const POLL_OPEN_MS = 2_000;
 
-// Which operations the list shows.
-type OpFilter = "all" | "active" | "failed" | "done";
-const OP_FILTERS: { value: OpFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "failed", label: "Failed" },
-  { value: "done", label: "Done" },
-];
-const KEEPS: Record<OpFilter, (s: OpStatus) => boolean> = {
-  all: () => true,
-  active: isActive,
-  failed: (s) => s === "failed",
-  done: (s) => s === "succeeded" || s === "cancelled",
-};
-
 export function BackgroundOpsDrawer() {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<OpFilter>("all");
+  const [filter, setFilter] = useState<OpView>("all");
   const [opened, setOpened] = useState<Operation | null>(null);
   const shell = useShell();
   const { operations } = shell;
 
   const ops = useMemo(() => operations.data ?? [], [operations.data]);
   const counts = useMemo(() => {
-    const c: Record<OpFilter, number> = {
+    const c: Record<OpView, number> = {
       all: 0,
       active: 0,
       failed: 0,
@@ -96,13 +84,13 @@ export function BackgroundOpsDrawer() {
     };
     for (const o of ops) {
       const s = operationStatus(o);
-      for (const f of OP_FILTERS) if (KEEPS[f.value](s)) c[f.value]++;
+      for (const f of OP_VIEWS) if (OP_VIEW_KEEPS[f.value](s)) c[f.value]++;
     }
     return c;
   }, [ops]);
   // Work still going leads; the rest keep the server's order, newest first.
   const shown = useMemo(() => {
-    const kept = ops.filter((o) => KEEPS[filter](operationStatus(o)));
+    const kept = ops.filter((o) => OP_VIEW_KEEPS[filter](operationStatus(o)));
     return [
       ...kept.filter((o) => isActive(operationStatus(o))),
       ...kept.filter((o) => !isActive(operationStatus(o))),
@@ -256,7 +244,7 @@ export function BackgroundOpsDrawer() {
             </div>
           </div>
           <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
-            {OP_FILTERS.map((f) => (
+            {OP_VIEWS.map((f) => (
               <Button
                 key={f.value}
                 type="button"
@@ -339,25 +327,8 @@ function OpRow({
   const Icon = STATUS_ICON[status];
   const elapsed = operationElapsedMs(op, new Date());
   const outcome = outcomeLine(op);
-  // Local per-row state so the button disables + reports its own failure
-  // without coupling to the drawer's shared error banner.
-  const [canceling, setCanceling] = useState(false);
+  // The row reports its own cancel failure rather than the drawer's banner.
   const [cancelErr, setCancelErr] = useState<string | null>(null);
-  // A batch stopped part-way is not undone by starting it again: the objects
-  // it already moved or deleted stay moved or deleted. One click on a small
-  // button in a drawer used to do that.
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const handleCancel = useCallback(async () => {
-    setCanceling(true);
-    setCancelErr(null);
-    try {
-      await onCancel(op.name);
-    } catch (err) {
-      setCancelErr(errorMessage(err, "Cancel failed"));
-    } finally {
-      setCanceling(false);
-    }
-  }, [onCancel, op.name]);
   const row = openableRow(onOpen);
 
   return (
@@ -405,19 +376,7 @@ function OpRow({
           {/* Only work still going has progress to watch; a finished batch
               says how it ended below instead. */}
           {progress && isActive(status) ? (
-            <div className="space-y-0.5">
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-warning transition-[width]"
-                  style={{
-                    width: `${Math.min(100, (progress.processed / progress.total) * 100)}%`,
-                  }}
-                />
-              </div>
-              <p className={cn(T.hint, "tabular-nums")}>
-                {progress.processed} of {progress.total} processed
-              </p>
-            </div>
+            <OperationProgressBar progress={progress} />
           ) : null}
           <p className={cn(T.hint, "flex flex-wrap gap-x-1.5")}>
             <span>
@@ -443,15 +402,11 @@ function OpRow({
           ) : null}
         </div>
         {isActive(status) ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 shrink-0 px-2 text-xs"
-            disabled={canceling}
-            onClick={() => setConfirmCancel(true)}
-          >
-            {canceling ? "Canceling…" : "Cancel"}
-          </Button>
+          <CancelOperationButton
+            op={op}
+            onCancel={onCancel}
+            onError={setCancelErr}
+          />
         ) : (
           <Button
             variant="ghost"
@@ -465,16 +420,6 @@ function OpRow({
           </Button>
         )}
       </div>
-      <ConfirmModal
-        isOpen={confirmCancel}
-        onClose={() => setConfirmCancel(false)}
-        onConfirm={handleCancel}
-        title="Cancel this operation?"
-        message={`${operationLabel(op)} stops where it is. What it has already done is not undone.`}
-        confirmText="Cancel operation"
-        cancelText="Keep running"
-        loading={canceling}
-      />
     </li>
   );
 }

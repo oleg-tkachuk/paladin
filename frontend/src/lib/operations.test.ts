@@ -18,7 +18,9 @@ import {
   operationLabel,
   operationOutcome,
   operationStatus,
+  OP_VIEW_KEEPS,
   parseCollectionName,
+  progressPercent,
 } from "./operations";
 
 const op = (o: Partial<Operation> = {}): Operation =>
@@ -148,5 +150,16 @@ describe("operationElapsedMs", () => {
         now,
       ),
     ).toBeNull();
+  });
+});
+
+describe("progressPercent", () => {
+  it.each([
+    [{ processed: 0, total: 10 }, 0],
+    [{ processed: 5, total: 10 }, 50],
+    [{ processed: 12, total: 10 }, 100],
+    [{ processed: 3, total: 0 }, 0],
+  ])("%o → %d", (p, want) => {
+    expect(progressPercent(p)).toBe(want);
   });
 });

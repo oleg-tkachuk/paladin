@@ -185,3 +185,25 @@ export function outcomeLine(op: Operation): string | null {
   if (o.failed > 0) parts.push(`${o.failed} failed`);
   return parts.join(" · ");
 }
+
+/** How far along op's progress is, 0–100. */
+export function progressPercent(p: OpProgress): number {
+  if (p.total <= 0) return 0;
+  return Math.min(100, (p.processed / p.total) * 100);
+}
+
+/** Which operations a list shows, by where they stand. */
+export type OpView = "all" | "active" | "failed" | "done";
+export const OP_VIEWS: { value: OpView; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "failed", label: "Failed" },
+  { value: "done", label: "Done" },
+];
+/** Whether a view keeps an operation in this state. */
+export const OP_VIEW_KEEPS: Record<OpView, (s: OpStatus) => boolean> = {
+  all: () => true,
+  active: isActive,
+  failed: (s) => s === "failed",
+  done: (s) => s === "succeeded" || s === "cancelled",
+};
