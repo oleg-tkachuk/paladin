@@ -25,7 +25,7 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 				return Operation{OperationID: opID, TenantID: tid}, nil
 			},
 			cancelFn: func(context.Context, uuid.UUID, uuid.UUID) error { return nil },
-			listFn: func(context.Context, uuid.UUID, *State, uuid.UUID, int32, string, bool, string) ([]Operation, string, error) {
+			listFn: func(context.Context, ListArgs) ([]Operation, string, error) {
 				return nil, "", nil
 			},
 		}
@@ -39,7 +39,11 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 			return h.CancelOperation(ctx, opID)
 		},
 		"ListOperations": func(h *Handler, ctx context.Context) error {
-			_, _, err := h.ListOperations(ctx, nil, 0, "", "", false, false)
+			_, _, err := h.ListOperations(ctx, ListInput{})
+			return err
+		},
+		"DismissOperations": func(h *Handler, ctx context.Context) error {
+			_, err := h.DismissOperations(ctx, nil)
 			return err
 		},
 	}
@@ -54,6 +58,8 @@ func TestOperationRPCsAssertCapabilityOp(t *testing.T) {
 		{"get without get", "GetOperation", limes.Caveats{Ops: []limes.Op{limes.OpList}}, connect.CodePermissionDenied},
 		{"list with list", "ListOperations", limes.Caveats{Ops: []limes.Op{limes.OpList}}, 0},
 		{"list without list", "ListOperations", limes.Caveats{Ops: []limes.Op{limes.OpGet}}, connect.CodePermissionDenied},
+		{"dismiss with list", "DismissOperations", limes.Caveats{Ops: []limes.Op{limes.OpList}}, 0},
+		{"dismiss without list", "DismissOperations", limes.Caveats{Ops: []limes.Op{limes.OpGet}}, connect.CodePermissionDenied},
 		{"cancel with manage", "CancelOperation", limes.Caveats{Ops: []limes.Op{limes.OpManage}}, 0},
 		{"cancel with delete only", "CancelOperation", limes.Caveats{Ops: []limes.Op{limes.OpDelete}}, connect.CodePermissionDenied},
 		{

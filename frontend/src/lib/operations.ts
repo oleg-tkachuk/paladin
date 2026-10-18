@@ -8,6 +8,11 @@ import { create } from "@bufbuild/protobuf";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
+import {
+  progressFromFailure,
+  progressFromMetadata,
+  type OpProgress,
+} from "@/lib/operationProgress";
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 
 export type OpStatus =
@@ -147,4 +152,97 @@ export function operationElapsedMs(op: Operation, now: Date): number | null {
   const end = op.doneAt ? timestampDate(op.doneAt) : op.done ? null : now;
   if (!end) return null;
   return end.getTime() - timestampDate(op.createdAt).getTime();
+}
+
+/** Why op failed, in its own words; "" for one that did not. */
+export function operationError(op: Operation): string {
+  if (op.result.case === "error") return op.result.value.message || "error";
+  return "";
+}
+
+/**
+ * How far the work got — live for a running operation, last-known for one
+ * whose worker died. A failure with no snapshot is null: the console says
+ * nothing rather than guessing zero.
+ */
+export function operationProgress(op: Operation): OpProgress | null {
+  if (op.result.case === "error") {
+    return progressFromFailure(op.result.value.details);
+  }
+  return progressFromMetadata(op.metadata);
+}
+
+/** "1 object", "3 objects". */
+export const objectCountLabel = (n: number) =>
+  `${n} object${n === 1 ? "" : "s"}`;
+
+/** One line of how a finished batch went, or null for one that said not. */
+export function outcomeLine(op: Operation): string | null {
+  const o = operationOutcome(op);
+  if (!o) return null;
+  const parts = [`${o.succeeded} of ${o.total} done`];
+  if (o.alreadyApplied > 0) parts.push(`${o.alreadyApplied} already so`);
+  if (o.failed > 0) parts.push(`${o.failed} failed`);
+  return parts.join(" · ");
+}
+
+/** How far along op's progress is, 0–100. */
+export function progressPercent(p: OpProgress): number {
+  if (p.total <= 0) return 0;
+  return Math.min(100, (p.processed / p.total) * 100);
+}
+
+/** Which operations a list shows, by where they stand. */
+export type OpView = "all" | "active" | "failed" | "done";
+export const OP_VIEWS: { value: OpView; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "failed", label: "Failed" },
+  { value: "done", label: "Done" },
+];
+/** Whether a view keeps an operation in this state. */
+export const OP_VIEW_KEEPS: Record<OpView, (s: OpStatus) => boolean> = {
+  all: () => true,
+  active: isActive,
+  failed: (s) => s === "failed",
+  done: (s) => s === "succeeded" || s === "cancelled",
+};
+
+// The states as the server's filter names them (filter/cel OperationState*).
+const CEL_STATE: Record<OpStatus, string> = {
+  pending: "PENDING",
+  running: "RUNNING",
+  succeeded: "SUCCEEDED",
+  failed: "FAILED",
+  cancelled: "CANCELLED",
+};
+
+/**
+ * The server's CEL filter for a view, "" for all. Read off OP_VIEW_KEEPS, so
+ * the list the server returns and the one a client narrows cannot disagree;
+ * `state in [...]` is pushed into the query, so every page is full.
+ */
+export function operationsFilter(view: OpView): string {
+  const states = (Object.keys(CEL_STATE) as OpStatus[]).filter(
+    OP_VIEW_KEEPS[view],
+  );
+  if (states.length === Object.keys(CEL_STATE).length) return "";
+  return `state in [${states.map((s) => JSON.stringify(CEL_STATE[s])).join(", ")}]`;
+}
+
+/**
+ * Whether op matches a search, by what the page shows of it: its label, its
+ * type, its name, the collections it acts on and why it failed.
+ */
+export function operationMatches(op: Operation, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    operationLabel(op),
+    op.type,
+    op.name,
+    op.target?.collection ?? "",
+    op.target?.destination ?? "",
+    operationError(op),
+  ].some((s) => s.toLowerCase().includes(q));
 }

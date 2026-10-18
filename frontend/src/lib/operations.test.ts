@@ -18,7 +18,11 @@ import {
   operationLabel,
   operationOutcome,
   operationStatus,
+  operationMatches,
+  operationsFilter,
+  OP_VIEW_KEEPS,
   parseCollectionName,
+  progressPercent,
 } from "./operations";
 
 const op = (o: Partial<Operation> = {}): Operation =>
@@ -148,5 +152,67 @@ describe("operationElapsedMs", () => {
         now,
       ),
     ).toBeNull();
+  });
+});
+
+describe("operationsFilter", () => {
+  it.each([
+    ["all", ""],
+    ["active", 'state in ["PENDING", "RUNNING"]'],
+    ["failed", 'state in ["FAILED"]'],
+    ["done", 'state in ["SUCCEEDED", "CANCELLED"]'],
+  ] as const)("%s → %s", (view, want) => {
+    expect(operationsFilter(view)).toBe(want);
+  });
+
+  it("asks the server for exactly what the view keeps", () => {
+    expect(OP_VIEW_KEEPS.done("failed")).toBe(false);
+    expect(OP_VIEW_KEEPS.active("pending")).toBe(true);
+  });
+});
+
+describe("progressPercent", () => {
+  it.each([
+    [{ processed: 0, total: 10 }, 0],
+    [{ processed: 5, total: 10 }, 50],
+    [{ processed: 12, total: 10 }, 100],
+    [{ processed: 3, total: 0 }, 0],
+  ])("%o → %d", (p, want) => {
+    expect(progressPercent(p)).toBe(want);
+  });
+});
+
+describe("operationMatches", () => {
+  const copy = op({
+    name: "operations/0199",
+    type: "BatchCopy",
+    target: {
+      collection: "tenants/t/collections/docs",
+      destination: "tenants/t/collections/archive",
+      objectCount: 1,
+    } as never,
+  });
+  it.each([
+    ["", true],
+    ["  ", true],
+    ["copy", true],
+    ["BATCHCOPY", true],
+    ["0199", true],
+    ["docs", true],
+    ["archive", true],
+    ["trash", false],
+  ])("%j → %s", (q, want) => {
+    expect(operationMatches(copy, q)).toBe(want);
+  });
+
+  it("finds a failure by its reason", () => {
+    const failed = op({
+      type: "BatchDelete",
+      result: {
+        case: "error",
+        value: { code: 13, message: "worker lost" } as never,
+      },
+    });
+    expect(operationMatches(failed, "worker")).toBe(true);
   });
 });

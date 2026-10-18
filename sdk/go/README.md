@@ -570,7 +570,7 @@ what each field means, are documented in the `.proto` files under
 | `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |
 | `MCPInspectService` | `Inspect`, `ListSessions`, `GetBridgeStatus` |
 | `OAuthClientService` | `DeleteOAuthClient` |
-| `PlatformOperationService` | `GetOperation`, `ListOperations`, `CancelOperation` |
+| `PlatformOperationService` | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
 | `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
 | `QuotaService` | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
@@ -585,7 +585,7 @@ what each field means, are documented in the `.proto` files under
 | `MultipartUploadService` | `InitiateMultipartUpload`, `PresignPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListParts` |
 | `ObjectService` | `UploadObject`, `DownloadObject`, `GetObject`, `LookupObject`, `UpdateObject`, `CompleteObject`, `DeleteObject`, `RestoreObject`, `CopyObject`, `ListObjects`, `CountObjects`, `ListObjectVersions`, `GetObjectVersion`, `RestoreObjectVersion`, `SetObjectRetention`, `SetObjectLegalHold`, `GetObjectLock`, `SetObjectTaint` |
 | `ObjectTagService` | `GetObjectTags`, `PutObjectTags`, `DeleteObjectTags`, `ListDistinctTags` |
-| `OperationService` | `GetOperation`, `ListOperations`, `CancelOperation` |
+| `OperationService` | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
 | `PresignService` | `RegenerateUploadUrl`, `PresignDownload` |
 | `StorageBootstrapService` | `EnsureTenantStorage` |
 

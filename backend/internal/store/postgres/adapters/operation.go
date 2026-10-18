@@ -173,11 +173,25 @@ func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) er
 	return nil
 }
 
-func (r *OperationRepo) List(
-	ctx context.Context, tenantID uuid.UUID, state *operationh.State,
-	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool, initiator string,
-) ([]operationh.Operation, string, error) {
-	pageSize = pageSizeOrDefault(pageSize)
+// Dismiss implements operationh.Repository.
+func (r *OperationRepo) Dismiss(ctx context.Context, tenantID uuid.UUID, initiator string, ids []uuid.UUID) (int64, error) {
+	var pgIDs []pgtype.UUID
+	if len(ids) > 0 {
+		pgIDs = make([]pgtype.UUID, len(ids))
+		for i, id := range ids {
+			pgIDs[i] = pgUUID(id)
+		}
+	}
+	n, err := r.q.DismissOperations(ctx, pgUUID(tenantID), initiator, pgIDs)
+	if err != nil {
+		return 0, fmt.Errorf("dismiss operations: %w", err)
+	}
+	return n, nil
+}
+
+func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]operationh.Operation, string, error) {
+	tenantID, state, afterID, filter, newestFirst, initiator := args.TenantID, args.State, args.AfterID, args.Filter, args.NewestFirst, args.Initiator
+	pageSize := pageSizeOrDefault(args.PageSize)
 	var ns *sqlc.OperationState
 	if state != nil {
 		v := sqlc.OperationState(string(*state))
@@ -203,7 +217,7 @@ func (r *OperationRepo) List(
 	// has to move with the sort, and sqlc parameterises neither.
 	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
-		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator),
+		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
 			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
@@ -213,7 +227,7 @@ func (r *OperationRepo) List(
 			out = append(out, operationFromSQLC(row.Operation))
 		}
 	} else {
-		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator),
+		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
 			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
@@ -268,6 +282,7 @@ func operationFromSQLC(o sqlc.Operation) operationh.Operation {
 		OperationID:      uuidFrom(o.ID),
 		TenantID:         uuidFrom(o.TenantID),
 		InitiatorSubject: o.InitiatorSubject,
+		DismissedAt:      timePtr(o.DismissedAt),
 		Type:             o.Type,
 		State:            operationh.State(string(o.State)),
 		Metadata:         o.Metadata,

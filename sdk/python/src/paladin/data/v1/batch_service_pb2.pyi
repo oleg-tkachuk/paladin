@@ -15,7 +15,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Operation(_message.Message):
-    __slots__ = ("name", "type", "metadata", "done", "error", "response", "created_at", "updated_at", "done_at", "state", "target", "initiator_subject")
+    __slots__ = ("name", "type", "metadata", "done", "error", "response", "created_at", "updated_at", "done_at", "state", "target", "initiator_subject", "dismissed_at")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
@@ -28,6 +28,7 @@ class Operation(_message.Message):
     STATE_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_NUMBER: _ClassVar[int]
     INITIATOR_SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    DISMISSED_AT_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
     metadata: _any_pb2.Any
@@ -40,7 +41,8 @@ class Operation(_message.Message):
     state: _operation_pb2.OperationState
     target: _operation_pb2.OperationTarget
     initiator_subject: str
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., metadata: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., done: _Optional[bool] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., response: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., done_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[_operation_pb2.OperationState, str]] = ..., target: _Optional[_Union[_operation_pb2.OperationTarget, _Mapping]] = ..., initiator_subject: _Optional[str] = ...) -> None: ...
+    dismissed_at: _timestamp_pb2.Timestamp
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., metadata: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., done: _Optional[bool] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., response: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., done_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[_operation_pb2.OperationState, str]] = ..., target: _Optional[_Union[_operation_pb2.OperationTarget, _Mapping]] = ..., initiator_subject: _Optional[str] = ..., dismissed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class ObjectSelector(_message.Message):
     __slots__ = ("names", "filter")

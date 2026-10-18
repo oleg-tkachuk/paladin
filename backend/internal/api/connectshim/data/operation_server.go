@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"github.com/google/uuid"
@@ -39,9 +41,14 @@ func (s *OperationServer) GetOperation(ctx context.Context, req *pb.GetOperation
 
 func (s *OperationServer) ListOperations(ctx context.Context, req *pb.ListOperationsRequest) (*pb.ListOperationsResponse, error) {
 	m := req
-	list, next, err := s.H.ListOperations(ctx, nil,
-		m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter(),
-		m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC, m.GetMine())
+	list, next, err := s.H.ListOperations(ctx, operationh.ListInput{
+		PageSize:         m.GetPage().GetPageSize(),
+		PageToken:        m.GetPage().GetPageToken(),
+		Filter:           m.GetFilter(),
+		NewestFirst:      m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC,
+		Mine:             m.GetMine(),
+		IncludeDismissed: m.GetIncludeDismissed(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +57,22 @@ func (s *OperationServer) ListOperations(ctx context.Context, req *pb.ListOperat
 		out.Operations = append(out.Operations, dataOperationToProto(&list[i]))
 	}
 	return out, nil
+}
+
+func (s *OperationServer) DismissOperations(ctx context.Context, req *pb.DismissOperationsRequest) (*pb.DismissOperationsResponse, error) {
+	ids := make([]uuid.UUID, 0, len(req.GetNames()))
+	for _, name := range req.GetNames() {
+		id, err := dataOperationID(name)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		}
+		ids = append(ids, id)
+	}
+	n, err := s.H.DismissOperations(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.DismissOperationsResponse{DismissedCount: safecast.Int32From64(n)}, nil
 }
 
 func (s *OperationServer) CancelOperation(ctx context.Context, req *pb.CancelOperationRequest) (*pb.Operation, error) {
@@ -95,6 +118,9 @@ func dataOperationToProto(o *operationh.Operation) *pb.Operation {
 	// arguments stay internal: they are the worker's input, not a report.
 	if o.DoneAt != nil {
 		out.DoneAt = convx.TsProto(*o.DoneAt)
+	}
+	if o.DismissedAt != nil {
+		out.DismissedAt = convx.TsProto(*o.DismissedAt)
 	}
 	if md := convx.JSONToAny(o.Progress); md != nil {
 		out.Metadata = md

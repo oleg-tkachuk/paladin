@@ -47,8 +47,29 @@ func (q *Queries) CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID 
 	return err
 }
 
+const dismissOperations = `-- name: DismissOperations :execrows
+UPDATE operations
+SET dismissed_at = now()
+WHERE tenant_id = $1::uuid
+  AND initiator_subject = $2::text
+  AND state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+  AND dismissed_at IS NULL
+  AND ($3::uuid[] IS NULL OR id = ANY ($3::uuid[]))
+`
+
+// Clears finished operations from their initiator's own list: only that
+// subject's, only those that have finished, and only once. ids narrows it to
+// those operations; NULL clears every finished one.
+func (q *Queries) DismissOperations(ctx context.Context, tenantID pgtype.UUID, initiatorSubject string, ids []pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, dismissOperations, tenantID, initiatorSubject, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOperation = `-- name: GetOperation :one
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at
 FROM operations
 WHERE id = $1 AND tenant_id = $2
 `
@@ -74,12 +95,13 @@ func (q *Queries) GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgt
 		&i.Operation.DoneAt,
 		&i.Operation.Progress,
 		&i.Operation.InitiatorSubject,
+		&i.Operation.DismissedAt,
 	)
 	return i, err
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
@@ -89,26 +111,28 @@ WHERE tenant_id = $1
   -- absent only widens the scan; see ListObjects for the contract.
   -- One user's own operations (087); NULL lists everyone's in the tenant.
   AND ($4::text IS NULL OR initiator_subject = $4::text)
-  AND ($5::text[] IS NULL OR type = ANY($5::text[]))
-  AND ($6::text IS NULL OR type LIKE $6::text)
-  AND ($7::text[] IS NULL OR error_code = ANY($7::text[]))
+  -- The ones their initiator cleared from their own list (088), when asked.
+  AND (NOT $5::boolean OR dismissed_at IS NULL)
+  AND ($6::text[] IS NULL OR type = ANY($6::text[]))
+  AND ($7::text IS NULL OR type LIKE $7::text)
+  AND ($8::text[] IS NULL OR error_code = ANY($8::text[]))
   -- The filter's ` + "`" + `state == "…"` + "`" + ` compares as text, not as a cast to the enum:
   -- a literal the enum does not hold then matches no row, as the CEL pass
   -- would decide, instead of failing the whole query.
-  AND ($8::text[] IS NULL OR state::text = ANY($8::text[]))
+  AND ($9::text[] IS NULL OR state::text = ANY($9::text[]))
   -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
-  AND ($9::bool IS NULL OR (done_at IS NOT NULL) = $9::bool)
-  AND ($10::text IS NULL
-       OR coalesce(error_message, '') <> $10::text)
+  AND ($10::bool IS NULL OR (done_at IS NOT NULL) = $10::bool)
+  AND ($11::text IS NULL
+       OR coalesce(error_message, '') <> $11::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($11::timestamptz IS NULL
-       OR created_at >= $11::timestamptz)
   AND ($12::timestamptz IS NULL
-       OR created_at <= $12::timestamptz)
+       OR created_at >= $12::timestamptz)
+  AND ($13::timestamptz IS NULL
+       OR created_at <= $13::timestamptz)
 ORDER BY id
-LIMIT $13
+LIMIT $14
 `
 
 type ListOperationsRow struct {
@@ -116,12 +140,13 @@ type ListOperationsRow struct {
 }
 
 // Oldest first. The cursor compares `>`, so paging walks forward in time.
-func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
+func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
 	rows, err := q.db.Query(ctx, listOperations,
 		tenantID,
 		state,
 		afterID,
 		initiatorSubject,
+		hideDismissed,
 		typeIn,
 		typeLike,
 		errorCodeIn,
@@ -153,6 +178,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 			&i.Operation.DoneAt,
 			&i.Operation.Progress,
 			&i.Operation.InitiatorSubject,
+			&i.Operation.DismissedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -165,33 +191,35 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 }
 
 const listOperationsDesc = `-- name: ListOperationsDesc :many
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
   AND ($3::uuid IS NULL OR id < $3::uuid)
   -- One user's own operations (087); NULL lists everyone's in the tenant.
   AND ($4::text IS NULL OR initiator_subject = $4::text)
-  AND ($5::text[] IS NULL OR type = ANY($5::text[]))
-  AND ($6::text IS NULL OR type LIKE $6::text)
-  AND ($7::text[] IS NULL OR error_code = ANY($7::text[]))
+  -- The ones their initiator cleared from their own list (088), when asked.
+  AND (NOT $5::boolean OR dismissed_at IS NULL)
+  AND ($6::text[] IS NULL OR type = ANY($6::text[]))
+  AND ($7::text IS NULL OR type LIKE $7::text)
+  AND ($8::text[] IS NULL OR error_code = ANY($8::text[]))
   -- The filter's ` + "`" + `state == "…"` + "`" + ` compares as text, not as a cast to the enum:
   -- a literal the enum does not hold then matches no row, as the CEL pass
   -- would decide, instead of failing the whole query.
-  AND ($8::text[] IS NULL OR state::text = ANY($8::text[]))
+  AND ($9::text[] IS NULL OR state::text = ANY($9::text[]))
   -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
-  AND ($9::bool IS NULL OR (done_at IS NOT NULL) = $9::bool)
-  AND ($10::text IS NULL
-       OR coalesce(error_message, '') <> $10::text)
+  AND ($10::bool IS NULL OR (done_at IS NOT NULL) = $10::bool)
+  AND ($11::text IS NULL
+       OR coalesce(error_message, '') <> $11::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($11::timestamptz IS NULL
-       OR created_at >= $11::timestamptz)
   AND ($12::timestamptz IS NULL
-       OR created_at <= $12::timestamptz)
+       OR created_at >= $12::timestamptz)
+  AND ($13::timestamptz IS NULL
+       OR created_at <= $13::timestamptz)
 ORDER BY id DESC
-LIMIT $13
+LIMIT $14
 `
 
 type ListOperationsDescRow struct {
@@ -202,12 +230,13 @@ type ListOperationsDescRow struct {
 // rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 // the sort (`<` here, `>` above) or the second page walks away from the rows
 // the caller asked for, and sqlc cannot parameterise either.
-func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
+func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsDesc,
 		tenantID,
 		state,
 		afterID,
 		initiatorSubject,
+		hideDismissed,
 		typeIn,
 		typeLike,
 		errorCodeIn,
@@ -239,6 +268,7 @@ func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, 
 			&i.Operation.DoneAt,
 			&i.Operation.Progress,
 			&i.Operation.InitiatorSubject,
+			&i.Operation.DismissedAt,
 		); err != nil {
 			return nil, err
 		}

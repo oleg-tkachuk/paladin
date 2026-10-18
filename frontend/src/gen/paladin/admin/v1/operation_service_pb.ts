@@ -40,7 +40,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIo4ECglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDQggKBnJlc3VsdCIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEilQEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISDAoEbWluZRgEIAEoCCJ4ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi8KCm9wZXJhdGlvbnMYASADKAsyGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbhItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIi8KFkNhbmNlbE9wZXJhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATK8AgoYUGxhdGZvcm1PcGVyYXRpb25TZXJ2aWNlElcKDEdldE9wZXJhdGlvbhIlLnBhbGFkaW4uYWRtaW4udjEuR2V0T3BlcmF0aW9uUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgESaAoOTGlzdE9wZXJhdGlvbnMSJy5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBooLnBhbGFkaW4uYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXNwb25zZSIDkAIBEl0KD0NhbmNlbE9wZXJhdGlvbhIoLnBhbGFkaW4uYWRtaW4udjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIsUECglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDEjUKDGRpc21pc3NlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBA0IICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrABChVMaXN0T3BlcmF0aW9uc1JlcXVlc3QSLAoEcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCRIwCgpzb3J0X29yZGVyGAMgASgOMhwucGFsYWRpbi5jb21tb24udjEuU29ydE9yZGVyEgwKBG1pbmUYBCABKAgSGQoRaW5jbHVkZV9kaXNtaXNzZWQYBSABKAgieAoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIvCgpvcGVyYXRpb25zGAEgAygLMhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24SLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiOgoYRGlzbWlzc09wZXJhdGlvbnNSZXF1ZXN0Eh4KBW5hbWVzGAEgAygJQg+6SAySAQkQ6AciBHICEAEiNAoZRGlzbWlzc09wZXJhdGlvbnNSZXNwb25zZRIXCg9kaXNtaXNzZWRfY291bnQYASABKAUyrwMKGFBsYXRmb3JtT3BlcmF0aW9uU2VydmljZRJXCgxHZXRPcGVyYXRpb24SJS5wYWxhZGluLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAIBEmgKDkxpc3RPcGVyYXRpb25zEicucGFsYWRpbi5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1JlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2UiA5ACARJdCg9DYW5jZWxPcGVyYXRpb24SKC5wYWxhZGluLmFkbWluLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAICEnEKEURpc21pc3NPcGVyYXRpb25zEioucGFsYWRpbi5hZG1pbi52MS5EaXNtaXNzT3BlcmF0aW9uc1JlcXVlc3QaKy5wYWxhZGluLmFkbWluLnYxLkRpc21pc3NPcGVyYXRpb25zUmVzcG9uc2UiA5ACAkJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
@@ -143,6 +143,13 @@ export type Operation = Message<"paladin.admin.v1.Operation"> & {
    * @generated from field: paladin.common.v1.OperationTarget target = 13;
    */
   target?: OperationTarget | undefined;
+
+  /**
+   * When its initiator cleared it from their own list; unset while not.
+   *
+   * @generated from field: google.protobuf.Timestamp dismissed_at = 14;
+   */
+  dismissedAt?: Timestamp | undefined;
 };
 
 /**
@@ -209,11 +216,19 @@ export type ListOperationsRequest =
     /**
      * mine lists only the operations the caller started, matched in the query
      * on the subject of the caller's token. Operations from before initiators
-     * were recorded are no one's.
+     * were recorded are no one's. Those the caller cleared with
+     * DismissOperations are left out unless include_dismissed.
      *
      * @generated from field: bool mine = 4;
      */
     mine: boolean;
+
+    /**
+     * include_dismissed lists, with mine, the operations the caller cleared too.
+     *
+     * @generated from field: bool include_dismissed = 5;
+     */
+    includeDismissed: boolean;
   };
 
 /**
@@ -268,6 +283,48 @@ export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> =
   messageDesc(file_paladin_admin_v1_operation_service, 4);
 
 /**
+ * @generated from message paladin.admin.v1.DismissOperationsRequest
+ */
+export type DismissOperationsRequest =
+  Message<"paladin.admin.v1.DismissOperationsRequest"> & {
+    /**
+     * Operation resource names; empty clears every finished one of the caller's.
+     *
+     * @generated from field: repeated string names = 1;
+     */
+    names: string[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.DismissOperationsRequest.
+ * Use `create(DismissOperationsRequestSchema)` to create a new message.
+ */
+export const DismissOperationsRequestSchema: GenMessage<DismissOperationsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_operation_service, 5);
+
+/**
+ * @generated from message paladin.admin.v1.DismissOperationsResponse
+ */
+export type DismissOperationsResponse =
+  Message<"paladin.admin.v1.DismissOperationsResponse"> & {
+    /**
+     * How many were cleared by this call.
+     *
+     * @generated from field: int32 dismissed_count = 1;
+     */
+    dismissedCount: number;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.DismissOperationsResponse.
+ * Use `create(DismissOperationsResponseSchema)` to create a new message.
+ */
+export const DismissOperationsResponseSchema: GenMessage<DismissOperationsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_operation_service, 6);
+
+/**
  * OperationService exposes long-running operations on the admin plane.
  * Mirrors the data-plane OperationService. Both list the caller tenant's
  * operations; ListOperationsRequest.mine narrows that to the caller's own.
@@ -308,5 +365,19 @@ export const PlatformOperationService: GenService<{
     methodKind: "unary";
     input: typeof CancelOperationRequestSchema;
     output: typeof OperationSchema;
+  };
+  /**
+   * DismissOperations clears finished operations from the caller's own list
+   * (ListOperationsRequest.mine): those named, or with none named every one
+   * that has finished. Only the caller's own and only finished ones are
+   * cleared; others named are left as they are. The operations stay, and
+   * stay listed to everyone else.
+   *
+   * @generated from rpc paladin.admin.v1.PlatformOperationService.DismissOperations
+   */
+  dismissOperations: {
+    methodKind: "unary";
+    input: typeof DismissOperationsRequestSchema;
+    output: typeof DismissOperationsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_operation_service, 0);

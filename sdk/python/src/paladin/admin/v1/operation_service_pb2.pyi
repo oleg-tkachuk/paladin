@@ -16,7 +16,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Operation(_message.Message):
-    __slots__ = ("name", "type", "metadata", "done", "error", "response", "initiator_subject", "initiator_tenant_id", "created_at", "updated_at", "done_at", "state", "target")
+    __slots__ = ("name", "type", "metadata", "done", "error", "response", "initiator_subject", "initiator_tenant_id", "created_at", "updated_at", "done_at", "state", "target", "dismissed_at")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
@@ -30,6 +30,7 @@ class Operation(_message.Message):
     DONE_AT_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_NUMBER: _ClassVar[int]
+    DISMISSED_AT_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
     metadata: _any_pb2.Any
@@ -43,7 +44,8 @@ class Operation(_message.Message):
     done_at: _timestamp_pb2.Timestamp
     state: _operation_pb2.OperationState
     target: _operation_pb2.OperationTarget
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., metadata: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., done: _Optional[bool] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., response: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., initiator_subject: _Optional[str] = ..., initiator_tenant_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., done_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[_operation_pb2.OperationState, str]] = ..., target: _Optional[_Union[_operation_pb2.OperationTarget, _Mapping]] = ...) -> None: ...
+    dismissed_at: _timestamp_pb2.Timestamp
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., metadata: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., done: _Optional[bool] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., response: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., initiator_subject: _Optional[str] = ..., initiator_tenant_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., done_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[_operation_pb2.OperationState, str]] = ..., target: _Optional[_Union[_operation_pb2.OperationTarget, _Mapping]] = ..., dismissed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class GetOperationRequest(_message.Message):
     __slots__ = ("name",)
@@ -52,16 +54,18 @@ class GetOperationRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ListOperationsRequest(_message.Message):
-    __slots__ = ("page", "filter", "sort_order", "mine")
+    __slots__ = ("page", "filter", "sort_order", "mine", "include_dismissed")
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
     MINE_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_DISMISSED_FIELD_NUMBER: _ClassVar[int]
     page: _pagination_pb2.PageRequest
     filter: str
     sort_order: _pagination_pb2.SortOrder
     mine: bool
-    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ...) -> None: ...
+    include_dismissed: bool
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ..., include_dismissed: _Optional[bool] = ...) -> None: ...
 
 class ListOperationsResponse(_message.Message):
     __slots__ = ("operations", "page")
@@ -76,3 +80,15 @@ class CancelOperationRequest(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     name: str
     def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class DismissOperationsRequest(_message.Message):
+    __slots__ = ("names",)
+    NAMES_FIELD_NUMBER: _ClassVar[int]
+    names: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class DismissOperationsResponse(_message.Message):
+    __slots__ = ("dismissed_count",)
+    DISMISSED_COUNT_FIELD_NUMBER: _ClassVar[int]
+    dismissed_count: int
+    def __init__(self, dismissed_count: _Optional[int] = ...) -> None: ...

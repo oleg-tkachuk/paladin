@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 // drawer reads; cancelOperation is still its own RPC.
 const h = vi.hoisted(() => ({
   cancel: vi.fn(),
+  dismiss: vi.fn(),
   refresh: vi.fn(),
   shell: {
     status: "ok" as "ok" | "unavailable" | "loading",
@@ -15,7 +16,10 @@ const h = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/lib/connect/client", () => ({
-  adminOperationClient: { cancelOperation: h.cancel },
+  adminOperationClient: {
+    cancelOperation: h.cancel,
+    dismissOperations: h.dismiss,
+  },
 }));
 vi.mock("@/context/ShellContext", () => ({
   useShell: () => ({
@@ -400,5 +404,74 @@ describe("BackgroundOpsDrawer content", () => {
     expect(
       within(dialog).getByText(/obj-9\s+object is locked/),
     ).toBeInTheDocument();
+  });
+});
+
+// Clearing takes finished operations off the signed-in user's own list, on the
+// server; the list is read again so they leave it.
+describe("BackgroundOpsDrawer clearing", () => {
+  const finishedOp = {
+    name: "operations/old-1",
+    type: "BatchDelete",
+    done: true,
+    state: OperationState.SUCCEEDED,
+    result: { case: undefined },
+  };
+  const activeOp = {
+    name: "operations/now-1",
+    type: "BatchCopy",
+    done: false,
+    state: OperationState.RUNNING,
+    result: { case: undefined },
+  };
+
+  beforeEach(() => {
+    h.dismiss.mockReset().mockResolvedValue({ dismissedCount: 1 });
+    h.refresh.mockReset().mockResolvedValue(undefined);
+    shellOps([activeOp, finishedOp]);
+  });
+
+  it("clears every finished operation at once", async () => {
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Clear finished 1/ }),
+    );
+    expect(h.dismiss).toHaveBeenCalledWith({ names: [] });
+    await waitFor(() => expect(h.refresh).toHaveBeenCalled());
+  });
+
+  it("clears one finished operation, and offers nothing to clear on running work", async () => {
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    const running = await screen.findByRole("listitem", {
+      name: /Copy objects/,
+    });
+    expect(
+      within(running).queryByRole("button", { name: /^Clear/ }),
+    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear Move to trash" }),
+    );
+    expect(h.dismiss).toHaveBeenCalledWith({ names: ["operations/old-1"] });
+  });
+
+  it("has nothing to clear when nothing has finished", async () => {
+    shellOps([activeOp]);
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    expect(
+      await screen.findByRole("button", { name: /Clear finished/ }),
+    ).toBeDisabled();
+  });
+
+  it("says when clearing failed", async () => {
+    h.dismiss.mockRejectedValue(new Error("nope"));
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Clear finished/ }),
+    );
+    expect(await screen.findByText(/nope/)).toBeInTheDocument();
   });
 });

@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .operation_service_pb2 import CancelOperationRequest, GetOperationRequest, ListOperationsRequest, ListOperationsResponse, Operation
+from .operation_service_pb2 import CancelOperationRequest, DismissOperationsRequest, DismissOperationsResponse, GetOperationRequest, ListOperationsRequest, ListOperationsResponse, Operation
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -59,6 +59,16 @@ class PlatformOperationService(Protocol):
         CancelOperation requests cancellation. It is best-effort: work already
         committed is not rolled back, and an operation that finished first stays
         finished.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def dismiss_operations(self, request: DismissOperationsRequest, ctx: RequestContext[DismissOperationsRequest, DismissOperationsResponse], /) -> DismissOperationsResponse:
+        """
+        DismissOperations clears finished operations from the caller's own list
+        (ListOperationsRequest.mine): those named, or with none named every one
+        that has finished. Only the caller's own and only finished ones are
+        cleared; others named are left as they are. The operations stay, and
+        stay listed to everyone else.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -105,6 +115,16 @@ class PlatformOperationServiceASGIApplication(ConnectASGIApplication[PlatformOpe
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=svc.cancel_operation,
+                ),
+                "/paladin.admin.v1.PlatformOperationService/DismissOperations": Endpoint.unary(
+                    method=MethodInfo(
+                        name="DismissOperations",
+                        service_name="paladin.admin.v1.PlatformOperationService",
+                        input=DismissOperationsRequest,
+                        output=DismissOperationsResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=svc.dismiss_operations,
                 ),
             },
             interceptors=interceptors,
@@ -226,6 +246,33 @@ class PlatformOperationServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def dismiss_operations(
+        self,
+        request: DismissOperationsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> DismissOperationsResponse:
+        """
+        DismissOperations clears finished operations from the caller's own list
+        (ListOperationsRequest.mine): those named, or with none named every one
+        that has finished. Only the caller's own and only finished ones are
+        cleared; others named are left as they are. The operations stay, and
+        stay listed to everyone else.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="DismissOperations",
+                service_name="paladin.admin.v1.PlatformOperationService",
+                input=DismissOperationsRequest,
+                output=DismissOperationsResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
 class PlatformOperationServiceSync(Protocol):
     """
     OperationService exposes long-running operations on the admin plane.
@@ -251,6 +298,16 @@ class PlatformOperationServiceSync(Protocol):
         CancelOperation requests cancellation. It is best-effort: work already
         committed is not rolled back, and an operation that finished first stays
         finished.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def dismiss_operations(self, request: DismissOperationsRequest, ctx: RequestContext[DismissOperationsRequest, DismissOperationsResponse], /) -> DismissOperationsResponse:
+        """
+        DismissOperations clears finished operations from the caller's own list
+        (ListOperationsRequest.mine): those named, or with none named every one
+        that has finished. Only the caller's own and only finished ones are
+        cleared; others named are left as they are. The operations stay, and
+        stay listed to everyone else.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -295,6 +352,16 @@ class PlatformOperationServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=service.cancel_operation,
+                ),
+                "/paladin.admin.v1.PlatformOperationService/DismissOperations": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="DismissOperations",
+                        service_name="paladin.admin.v1.PlatformOperationService",
+                        input=DismissOperationsRequest,
+                        output=DismissOperationsResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                    ),
+                    function=service.dismiss_operations,
                 ),
             },
             interceptors=interceptors,
@@ -408,6 +475,32 @@ class PlatformOperationServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.PlatformOperationService",
                 input=CancelOperationRequest,
                 output=Operation,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def dismiss_operations(
+        self,
+        request: DismissOperationsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> DismissOperationsResponse:
+        """
+        DismissOperations clears finished operations from the caller's own list
+        (ListOperationsRequest.mine): those named, or with none named every one
+        that has finished. Only the caller's own and only finished ones are
+        cleared; others named are left as they are. The operations stay, and
+        stay listed to everyone else.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="DismissOperations",
+                service_name="paladin.admin.v1.PlatformOperationService",
+                input=DismissOperationsRequest,
+                output=DismissOperationsResponse,
                 idempotency_level=IdempotencyLevel.IDEMPOTENT,
             ),
             headers=headers,

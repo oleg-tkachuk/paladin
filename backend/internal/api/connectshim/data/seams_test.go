@@ -91,7 +91,10 @@ type failingOperations struct{}
 func (failingOperations) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
 	return nil, errBoom
 }
-func (failingOperations) ListOperations(context.Context, *operationh.State, int32, string, string, bool, bool) ([]operationh.Operation, string, error) {
+func (failingOperations) DismissOperations(context.Context, []uuid.UUID) (int64, error) {
+	return 0, errBoom
+}
+func (failingOperations) ListOperations(context.Context, operationh.ListInput) ([]operationh.Operation, string, error) {
 	return nil, "", errBoom
 }
 func (failingOperations) CancelOperation(context.Context, uuid.UUID) error { return errBoom }

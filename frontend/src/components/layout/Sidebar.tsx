@@ -35,6 +35,7 @@ import {
   ArchiveBoxIcon,
   TrashIcon,
   FolderIcon,
+  QueueListIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -221,6 +222,8 @@ const navigationGroups: Array<{
       // Billing spans every tenant: a platform page, not the session tenant's.
       { name: "Billing", path: "/billing", icon: CurrencyDollarIcon },
       { name: "Audit Logs", path: "/audit", icon: ClipboardDocumentListIcon },
+      // Batch work as it runs — the drawer's list, with room for detail.
+      { name: "Operations", path: SECTION.operations, icon: QueueListIcon },
       {
         name: "Health Status",
         path: "/health",

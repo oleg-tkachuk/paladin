@@ -44,6 +44,8 @@ WHERE tenant_id = $1
   -- absent only widens the scan; see ListObjects for the contract.
   -- One user's own operations (087); NULL lists everyone's in the tenant.
   AND (sqlc.narg('initiator_subject')::text IS NULL OR initiator_subject = sqlc.narg('initiator_subject')::text)
+  -- The ones their initiator cleared from their own list (088), when asked.
+  AND (NOT sqlc.arg('hide_dismissed')::boolean OR dismissed_at IS NULL)
   AND (sqlc.narg('type_in')::text[] IS NULL OR type = ANY(sqlc.narg('type_in')::text[]))
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_in')::text[] IS NULL OR error_code = ANY(sqlc.narg('error_code_in')::text[]))
@@ -77,6 +79,8 @@ WHERE tenant_id = $1
   AND (sqlc.narg('after_id')::uuid IS NULL OR id < sqlc.narg('after_id')::uuid)
   -- One user's own operations (087); NULL lists everyone's in the tenant.
   AND (sqlc.narg('initiator_subject')::text IS NULL OR initiator_subject = sqlc.narg('initiator_subject')::text)
+  -- The ones their initiator cleared from their own list (088), when asked.
+  AND (NOT sqlc.arg('hide_dismissed')::boolean OR dismissed_at IS NULL)
   AND (sqlc.narg('type_in')::text[] IS NULL OR type = ANY(sqlc.narg('type_in')::text[]))
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_in')::text[] IS NULL OR error_code = ANY(sqlc.narg('error_code_in')::text[]))
@@ -119,6 +123,18 @@ SET state   = 'CANCELLED',
     updated_at = now()
 WHERE id = $1 AND tenant_id = $2
   AND state IN ('PENDING', 'RUNNING');
+
+-- name: DismissOperations :execrows
+-- Clears finished operations from their initiator's own list: only that
+-- subject's, only those that have finished, and only once. ids narrows it to
+-- those operations; NULL clears every finished one.
+UPDATE operations
+SET dismissed_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id')::uuid
+  AND initiator_subject = sqlc.arg('initiator_subject')::text
+  AND state IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
+  AND dismissed_at IS NULL
+  AND (sqlc.narg('ids')::uuid[] IS NULL OR id = ANY (sqlc.narg('ids')::uuid[]));
 
 -- name: ReportOperationProgress :execrows
 -- Records a RUNNING operation's latest {processed, total} snapshot. Its own

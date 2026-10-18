@@ -193,7 +193,10 @@ func (failingOperation) CancelOperation(context.Context, uuid.UUID) error {
 func (failingOperation) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
 	return nil, errBoom
 }
-func (failingOperation) ListOperations(context.Context, *operationh.State, int32, string, string, bool, bool) ([]operationh.Operation, string, error) {
+func (failingOperation) DismissOperations(context.Context, []uuid.UUID) (int64, error) {
+	return 0, errBoom
+}
+func (failingOperation) ListOperations(context.Context, operationh.ListInput) ([]operationh.Operation, string, error) {
 	return nil, "", errBoom
 }
 

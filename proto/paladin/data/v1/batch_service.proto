@@ -54,6 +54,8 @@ message Operation {
   // The subject of the token that started it — for a person, their user id;
   // empty for an operation from before initiators were recorded.
   string initiator_subject = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // When its initiator cleared it from their own list; unset while not.
+  google.protobuf.Timestamp dismissed_at = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectSelector {

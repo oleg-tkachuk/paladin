@@ -23,7 +23,7 @@ browser from reaching tenant administration.
 - **Proto**: `proto/paladin/{admin,data,iam,common}/v1/`
 - **Protocol**: Connect, Connect-Web and gRPC over the same endpoints
 - **Handlers**: `backend/internal/api/connectshim/`
-- **Surface**: 147 RPCs across 27 services (inventory below)
+- **Surface**: 150 RPCs across 27 services (inventory below)
 
 ## Two headers you cannot skip
 
@@ -117,7 +117,7 @@ Every service and RPC in `proto/`, by plane.
 | `CollectionService` | 7 | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | 7 | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` — deliveries are CloudEvents 1.0 envelopes ([event-delivery-dedup.md](../../docs/event-delivery-dedup.md)) |
 | `MCPInspectService` | 3 | `Inspect`, `ListSessions`, `GetBridgeStatus` |
-| `PlatformOperationService` | 3 | `GetOperation`, `ListOperations`, `CancelOperation` |
+| `PlatformOperationService` | 4 | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
 | `PolicyService` | 3 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
 | `QuotaService` | 3 | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | 4 | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
@@ -132,7 +132,7 @@ Every service and RPC in `proto/`, by plane.
 | `MultipartUploadService` | 5 | `InitiateMultipartUpload`, `PresignPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListParts` |
 | `ObjectService` | 18 | `UploadObject`, `DownloadObject`, `GetObject`, `LookupObject`, `UpdateObject`, `CompleteObject`, `DeleteObject`, `RestoreObject`, `CopyObject`, `ListObjects`, `CountObjects`, `ListObjectVersions`, `GetObjectVersion`, `RestoreObjectVersion`, `SetObjectRetention`, `SetObjectLegalHold`, `GetObjectLock`, `SetObjectTaint` |
 | `ObjectTagService` | 4 | `GetObjectTags`, `PutObjectTags`, `DeleteObjectTags`, `ListDistinctTags` |
-| `OperationService` | 3 | `GetOperation`, `ListOperations`, `CancelOperation` |
+| `OperationService` | 4 | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
 | `PresignService` | 2 | `RegenerateUploadUrl`, `PresignDownload` |
 | `StorageBootstrapService` | 1 | `EnsureTenantStorage` |
 

@@ -34,6 +34,9 @@ const (
 	// PlatformOperationServiceCancelOperationProcedure is the procedure name of the
 	// PlatformOperationService's CancelOperation RPC.
 	PlatformOperationServiceCancelOperationProcedure = "/paladin.admin.v1.PlatformOperationService/CancelOperation"
+	// PlatformOperationServiceDismissOperationsProcedure is the procedure name of the
+	// PlatformOperationService's DismissOperations RPC.
+	PlatformOperationServiceDismissOperationsProcedure = "/paladin.admin.v1.PlatformOperationService/DismissOperations"
 )
 
 var (
@@ -61,6 +64,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
+	platformOperationServiceDismissOperationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_operation_service_proto.Services().ByName("PlatformOperationService").Methods().ByName("DismissOperations"),
+			Procedure:        PlatformOperationServiceDismissOperationsProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 )
 
 // PlatformOperationServiceClient is a client for the paladin.admin.v1.PlatformOperationService
@@ -76,6 +87,12 @@ type PlatformOperationServiceClient interface {
 	// committed is not rolled back, and an operation that finished first stays
 	// finished.
 	CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error)
+	// DismissOperations clears finished operations from the caller's own list
+	// (ListOperationsRequest.mine): those named, or with none named every one
+	// that has finished. Only the caller's own and only finished ones are
+	// cleared; others named are left as they are. The operations stay, and
+	// stay listed to everyone else.
+	DismissOperations(context.Context, *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error)
 }
 
 // NewPlatformOperationServiceClient constructs a client for the
@@ -98,6 +115,12 @@ type PlatformOperationServiceHandler interface {
 	// committed is not rolled back, and an operation that finished first stays
 	// finished.
 	CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error)
+	// DismissOperations clears finished operations from the caller's own list
+	// (ListOperationsRequest.mine): those named, or with none named every one
+	// that has finished. Only the caller's own and only finished ones are
+	// cleared; others named are left as they are. The operations stay, and
+	// stay listed to everyone else.
+	DismissOperations(context.Context, *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error)
 }
 
 // RegisterPlatformOperationServiceHandler registers svc as the
@@ -108,6 +131,7 @@ func RegisterPlatformOperationServiceHandler(server *connect.Server, svc Platfor
 		connect.Method{Spec: platformOperationServiceGetOperationSpec(), Handler: adapter.getOperation},
 		connect.Method{Spec: platformOperationServiceListOperationsSpec(), Handler: adapter.listOperations},
 		connect.Method{Spec: platformOperationServiceCancelOperationSpec(), Handler: adapter.cancelOperation},
+		connect.Method{Spec: platformOperationServiceDismissOperationsSpec(), Handler: adapter.dismissOperations},
 	)
 }
 
@@ -124,6 +148,10 @@ func (UnimplementedPlatformOperationServiceHandler) ListOperations(context.Conte
 
 func (UnimplementedPlatformOperationServiceHandler) CancelOperation(context.Context, *v1.CancelOperationRequest) (*v1.Operation, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PlatformOperationService.CancelOperation is not implemented")
+}
+
+func (UnimplementedPlatformOperationServiceHandler) DismissOperations(context.Context, *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PlatformOperationService.DismissOperations is not implemented")
 }
 
 type platformOperationServiceClient struct {
@@ -149,6 +177,14 @@ func (c *platformOperationServiceClient) ListOperations(ctx context.Context, req
 func (c *platformOperationServiceClient) CancelOperation(ctx context.Context, req *v1.CancelOperationRequest) (*v1.Operation, error) {
 	var res v1.Operation
 	if err := c.client.CallUnary(ctx, platformOperationServiceCancelOperationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *platformOperationServiceClient) DismissOperations(ctx context.Context, req *v1.DismissOperationsRequest) (*v1.DismissOperationsResponse, error) {
+	var res v1.DismissOperationsResponse
+	if err := c.client.CallUnary(ctx, platformOperationServiceDismissOperationsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -188,6 +224,18 @@ func (h platformOperationServiceHandler) cancelOperation(ctx context.Context, _ 
 		return err
 	}
 	res, err := h.svc.CancelOperation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h platformOperationServiceHandler) dismissOperations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DismissOperationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DismissOperations(ctx, &req)
 	if err != nil {
 		return err
 	}

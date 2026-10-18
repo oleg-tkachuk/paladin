@@ -17,10 +17,11 @@ import (
 // contract without a database. Methods the handler under test never calls
 // (UpdateState, ClaimNext) return zero values to satisfy the interface.
 type fakeRepo struct {
-	createFn func(ctx context.Context, op Operation) error
-	getFn    func(ctx context.Context, opID, tenantID uuid.UUID) (Operation, error)
-	cancelFn func(ctx context.Context, opID, tenantID uuid.UUID) error
-	listFn   func(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string, newestFirst bool, initiator string) ([]Operation, string, error)
+	createFn  func(ctx context.Context, op Operation) error
+	getFn     func(ctx context.Context, opID, tenantID uuid.UUID) (Operation, error)
+	cancelFn  func(ctx context.Context, opID, tenantID uuid.UUID) error
+	listFn    func(ctx context.Context, args ListArgs) ([]Operation, string, error)
+	dismissFn func(ctx context.Context, tenantID uuid.UUID, initiator string, ids []uuid.UUID) (int64, error)
 
 	lastCreate Operation
 	lastGet    struct{ opID, tenantID uuid.UUID }
@@ -59,14 +60,21 @@ func (f *fakeRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) error {
 	return f.cancelFn(ctx, opID, tenantID)
 }
 
-func (f *fakeRepo) List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string, newestFirst bool, initiator string) ([]Operation, string, error) {
-	f.lastList.tenantID = tenantID
-	f.lastList.state = state
-	f.lastList.afterID = afterID
-	f.lastList.pageSize = pageSize
-	f.lastList.filter = filter
-	f.lastList.newestFirst = newestFirst
-	return f.listFn(ctx, tenantID, state, afterID, pageSize, filter, newestFirst, initiator)
+func (f *fakeRepo) Dismiss(ctx context.Context, tenantID uuid.UUID, initiator string, ids []uuid.UUID) (int64, error) {
+	if f.dismissFn != nil {
+		return f.dismissFn(ctx, tenantID, initiator, ids)
+	}
+	return 0, nil
+}
+
+func (f *fakeRepo) List(ctx context.Context, args ListArgs) ([]Operation, string, error) {
+	f.lastList.tenantID = args.TenantID
+	f.lastList.state = args.State
+	f.lastList.afterID = args.AfterID
+	f.lastList.pageSize = args.PageSize
+	f.lastList.filter = args.Filter
+	f.lastList.newestFirst = args.NewestFirst
+	return f.listFn(ctx, args)
 }
 
 func (f *fakeRepo) ClaimNext(context.Context) (Operation, error) {
@@ -243,28 +251,28 @@ func TestListOperations(t *testing.T) {
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAuthorizer())
-		_, _, err := h.ListOperations(context.Background(), nil, 10, "", "", false, false)
+		_, _, err := h.ListOperations(context.Background(), ListInput{PageSize: 10})
 		wantCode(t, err, connect.CodeUnauthenticated)
 	})
 
 	t.Run("policy denies → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, denyAuthorizer())
-		_, _, err := h.ListOperations(authedCtx(tid), nil, 10, "", "", false, false)
+		_, _, err := h.ListOperations(authedCtx(tid), ListInput{PageSize: 10})
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
 	t.Run("invalid page token → invalid argument", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allowAuthorizer())
-		_, _, err := h.ListOperations(authedCtx(tid), nil, 10, "not-a-uuid", "", false, false)
+		_, _, err := h.ListOperations(authedCtx(tid), ListInput{PageSize: 10, PageToken: "not-a-uuid"})
 		wantCode(t, err, connect.CodeInvalidArgument)
 	})
 
 	t.Run("empty token → nil afterID and passthrough result", func(t *testing.T) {
 		state := StateRunning
-		fr := &fakeRepo{listFn: func(_ context.Context, tenant uuid.UUID, _ *State, _ uuid.UUID, _ int32, _ string, _ bool, _ string) ([]Operation, string, error) {
-			return []Operation{{TenantID: tenant, State: StateRunning}}, "next-tok", nil
+		fr := &fakeRepo{listFn: func(_ context.Context, args ListArgs) ([]Operation, string, error) {
+			return []Operation{{TenantID: args.TenantID, State: StateRunning}}, "next-tok", nil
 		}}
-		ops, next, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), &state, 25, "", "", false, false)
+		ops, next, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), ListInput{State: &state, PageSize: 25})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -284,10 +292,10 @@ func TestListOperations(t *testing.T) {
 
 	t.Run("valid token parsed into afterID", func(t *testing.T) {
 		after := uuid.New()
-		fr := &fakeRepo{listFn: func(context.Context, uuid.UUID, *State, uuid.UUID, int32, string, bool, string) ([]Operation, string, error) {
+		fr := &fakeRepo{listFn: func(context.Context, ListArgs) ([]Operation, string, error) {
 			return nil, "", nil
 		}}
-		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), nil, 10, after.String(), "", false, false)
+		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), ListInput{PageSize: 10, PageToken: after.String()})
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
@@ -298,10 +306,10 @@ func TestListOperations(t *testing.T) {
 
 	t.Run("repo error propagates unwrapped", func(t *testing.T) {
 		sentinel := errors.New("list boom")
-		fr := &fakeRepo{listFn: func(context.Context, uuid.UUID, *State, uuid.UUID, int32, string, bool, string) ([]Operation, string, error) {
+		fr := &fakeRepo{listFn: func(context.Context, ListArgs) ([]Operation, string, error) {
 			return nil, "", sentinel
 		}}
-		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), nil, 10, "", "", false, false)
+		_, _, err := NewHandler(fr, allowAuthorizer()).ListOperations(authedCtx(tid), ListInput{PageSize: 10})
 		if !errors.Is(err, sentinel) {
 			t.Fatalf("expected sentinel error passthrough, got %v", err)
 		}

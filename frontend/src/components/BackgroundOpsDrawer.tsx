@@ -17,45 +17,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  NoSymbolIcon,
-  XCircleIcon,
-} from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
 import { adminOperationClient } from "@/lib/connect/client";
-import {
-  progressFromFailure,
-  progressFromMetadata,
-  type OpProgress,
-} from "@/lib/operationProgress";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import { useShell } from "@/context/ShellContext";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
-// Operation.result is a oneof — case "error" carries google.rpc.Status,
-// whose `message` field is the human-readable failure. Extract it once
-// so the rest of the component stays oneof-agnostic.
-function opError(o: Operation): string {
-  if (o.result.case === "error") return o.result.value.message || "error";
-  return "";
-}
-
-// How far the work got — live for a running operation, last-known for one
-// whose worker died. A failure with no snapshot returns null and the row says
-// nothing rather than guessing zero.
-function opProgress(o: Operation): OpProgress | null {
-  if (o.result.case === "error") {
-    return progressFromFailure(o.result.value.details);
-  }
-  return progressFromMetadata(o.metadata);
-}
-import Link from "next/link";
-
 import { Button } from "@/components/ui/button";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import {
   Sheet,
   SheetContent,
@@ -65,72 +35,48 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
-import {
-  RecordBlock,
-  RecordDialog,
-  RecordField,
-  openableRow,
-} from "@/components/ui/RecordDialog";
+import { openableRow } from "@/components/ui/RecordDialog";
 import { RelativeTime } from "@/components/RelativeTime";
-import { Timestamp } from "@/components/Timestamp";
 import { cn } from "@/lib/utils";
+import { SECTION } from "@/lib/navigation/sections";
 import { T } from "@/lib/ui/typography";
 import { errorMessage } from "@/hooks/errorContract";
-import { collectionHref } from "@/lib/navigation/hrefs";
 import { formatDuration } from "@/lib/format/duration";
 import {
   OP_STATUS_BADGE,
   isActive,
+  objectCountLabel,
   operationElapsedMs,
+  operationError,
   operationLabel,
-  operationOutcome,
+  operationProgress,
   operationStatus,
-  parseCollectionName,
-  type OpStatus,
+  outcomeLine,
+  OP_VIEWS,
+  OP_VIEW_KEEPS,
+  type OpView,
 } from "@/lib/operations";
+import {
+  CancelOperationButton,
+  CollectionLink,
+  OperationProgressBar,
+  OperationRecord,
+  STATUS_ICON,
+  STATUS_TINT,
+} from "@/components/features/operations/parts";
 
 const POLL_OPEN_MS = 2_000;
 
-// Which operations the list shows.
-type OpFilter = "all" | "active" | "failed" | "done";
-const OP_FILTERS: { value: OpFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "failed", label: "Failed" },
-  { value: "done", label: "Done" },
-];
-const KEEPS: Record<OpFilter, (s: OpStatus) => boolean> = {
-  all: () => true,
-  active: isActive,
-  failed: (s) => s === "failed",
-  done: (s) => s === "succeeded" || s === "cancelled",
-};
-
-const STATUS_ICON = {
-  pending: ClockIcon,
-  running: ArrowPathIcon,
-  succeeded: CheckCircleIcon,
-  failed: XCircleIcon,
-  cancelled: NoSymbolIcon,
-} as const;
-const STATUS_TINT: Record<OpStatus, string> = {
-  pending: "text-muted-foreground",
-  running: "text-warning",
-  succeeded: "text-success",
-  failed: "text-destructive",
-  cancelled: "text-muted-foreground",
-};
-
 export function BackgroundOpsDrawer() {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<OpFilter>("all");
+  const [filter, setFilter] = useState<OpView>("all");
   const [opened, setOpened] = useState<Operation | null>(null);
   const shell = useShell();
   const { operations } = shell;
 
   const ops = useMemo(() => operations.data ?? [], [operations.data]);
   const counts = useMemo(() => {
-    const c: Record<OpFilter, number> = {
+    const c: Record<OpView, number> = {
       all: 0,
       active: 0,
       failed: 0,
@@ -138,13 +84,13 @@ export function BackgroundOpsDrawer() {
     };
     for (const o of ops) {
       const s = operationStatus(o);
-      for (const f of OP_FILTERS) if (KEEPS[f.value](s)) c[f.value]++;
+      for (const f of OP_VIEWS) if (OP_VIEW_KEEPS[f.value](s)) c[f.value]++;
     }
     return c;
   }, [ops]);
   // Work still going leads; the rest keep the server's order, newest first.
   const shown = useMemo(() => {
-    const kept = ops.filter((o) => KEEPS[filter](operationStatus(o)));
+    const kept = ops.filter((o) => OP_VIEW_KEEPS[filter](operationStatus(o)));
     return [
       ...kept.filter((o) => isActive(operationStatus(o))),
       ...kept.filter((o) => !isActive(operationStatus(o))),
@@ -168,6 +114,23 @@ export function BackgroundOpsDrawer() {
     },
     [shell],
   );
+
+  // Clearing takes finished operations off this list for the signed-in user
+  // only, on the server: no names clears every finished one.
+  const [clearErr, setClearErr] = useState<string | null>(null);
+  const dismiss = useCallback(
+    async (names: string[]) => {
+      setClearErr(null);
+      try {
+        await adminOperationClient.dismissOperations({ names });
+        await shell.refresh();
+      } catch (err) {
+        setClearErr(errorMessage(err, "Clearing failed"));
+      }
+    },
+    [shell],
+  );
+  const finished = counts.all - counts.active;
 
   // While the sheet is open the operator is watching a batch move, so ask the
   // shell for a fresh copy faster than its own cadence. Closed, the shell's
@@ -235,22 +198,53 @@ export function BackgroundOpsDrawer() {
           <div className="flex items-start justify-between gap-2 pr-8">
             <div>
               <SheetTitle>Background operations</SheetTitle>
-              <p className={T.hint}>{summary}</p>
+              <p className={T.hint}>
+                {summary} ·{" "}
+                <Link
+                  href={SECTION.operations}
+                  onClick={() => setOpen(false)}
+                  className="hover:text-foreground hover:underline"
+                >
+                  Open the operations page
+                </Link>
+              </p>
+              {clearErr ? (
+                <p className="text-xs text-destructive">{clearErr}</p>
+              ) : null}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              aria-label="Refresh operations"
-              onClick={() => void shell.refresh()}
-            >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                disabled={finished === 0}
+                onClick={() => void dismiss([])}
+              >
+                Clear finished
+                {finished > 0 ? (
+                  <>
+                    {" "}
+                    <span className="tabular-nums text-muted-foreground">
+                      {finished}
+                    </span>
+                  </>
+                ) : null}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label="Refresh operations"
+                onClick={() => void shell.refresh()}
+              >
+                <ArrowPathIcon
+                  className={cn("size-4", loading && "animate-spin")}
+                />
+              </Button>
+            </div>
           </div>
           <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
-            {OP_FILTERS.map((f) => (
+            {OP_VIEWS.map((f) => (
               <Button
                 key={f.value}
                 type="button"
@@ -299,6 +293,7 @@ export function BackgroundOpsDrawer() {
                   key={op.name}
                   op={op}
                   onCancel={cancelOp}
+                  onDismiss={() => dismiss([op.name])}
                   onOpen={() => setOpened(op)}
                   onNavigate={() => setOpen(false)}
                 />
@@ -307,82 +302,33 @@ export function BackgroundOpsDrawer() {
           )}
         </div>
       </SheetContent>
-      <OpRecord op={opened} onClose={() => setOpened(null)} />
+      <OperationRecord op={opened} onClose={() => setOpened(null)} />
     </Sheet>
   );
-}
-
-/** The collection an operation acts on, as a link that closes the drawer. */
-function CollectionLink({
-  name,
-  onNavigate,
-}: {
-  name: string;
-  onNavigate?: () => void;
-}) {
-  const c = parseCollectionName(name);
-  if (!c) return <span className={T.code}>{name}</span>;
-  return (
-    <Link
-      href={collectionHref(c.tenant, c.collection)}
-      onClick={onNavigate}
-      className={cn(T.code, "break-all hover:text-primary hover:underline")}
-      title={name}
-    >
-      {c.collection}
-    </Link>
-  );
-}
-
-const objects = (n: number) => `${n} object${n === 1 ? "" : "s"}`;
-
-/** One sentence of how a finished batch went. */
-function outcomeLine(op: Operation): string | null {
-  const o = operationOutcome(op);
-  if (!o) return null;
-  const parts = [`${o.succeeded} of ${o.total} done`];
-  if (o.alreadyApplied > 0) parts.push(`${o.alreadyApplied} already so`);
-  if (o.failed > 0) parts.push(`${o.failed} failed`);
-  return parts.join(" · ");
 }
 
 function OpRow({
   op,
   onCancel,
+  onDismiss,
   onOpen,
   onNavigate,
 }: {
   op: Operation;
   onCancel: (name: string) => Promise<void>;
+  onDismiss: () => Promise<void>;
   onOpen: () => void;
   onNavigate: () => void;
 }) {
   const status = operationStatus(op);
   const failed = status === "failed";
-  const progress = opProgress(op);
+  const progress = operationProgress(op);
   const badge = OP_STATUS_BADGE[status];
   const Icon = STATUS_ICON[status];
   const elapsed = operationElapsedMs(op, new Date());
   const outcome = outcomeLine(op);
-  // Local per-row state so the button disables + reports its own failure
-  // without coupling to the drawer's shared error banner.
-  const [canceling, setCanceling] = useState(false);
+  // The row reports its own cancel failure rather than the drawer's banner.
   const [cancelErr, setCancelErr] = useState<string | null>(null);
-  // A batch stopped part-way is not undone by starting it again: the objects
-  // it already moved or deleted stay moved or deleted. One click on a small
-  // button in a drawer used to do that.
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const handleCancel = useCallback(async () => {
-    setCanceling(true);
-    setCancelErr(null);
-    try {
-      await onCancel(op.name);
-    } catch (err) {
-      setCancelErr(errorMessage(err, "Cancel failed"));
-    } finally {
-      setCanceling(false);
-    }
-  }, [onCancel, op.name]);
   const row = openableRow(onOpen);
 
   return (
@@ -424,25 +370,13 @@ function OpRow({
                 </>
               ) : null}
               <span aria-hidden>·</span>
-              <span>{objects(op.target.objectCount)}</span>
+              <span>{objectCountLabel(op.target.objectCount)}</span>
             </p>
           ) : null}
           {/* Only work still going has progress to watch; a finished batch
               says how it ended below instead. */}
           {progress && isActive(status) ? (
-            <div className="space-y-0.5">
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-warning transition-[width]"
-                  style={{
-                    width: `${Math.min(100, (progress.processed / progress.total) * 100)}%`,
-                  }}
-                />
-              </div>
-              <p className={cn(T.hint, "tabular-nums")}>
-                {progress.processed} of {progress.total} processed
-              </p>
-            </div>
+            <OperationProgressBar progress={progress} />
           ) : null}
           <p className={cn(T.hint, "flex flex-wrap gap-x-1.5")}>
             <span>
@@ -457,7 +391,7 @@ function OpRow({
           </p>
           {failed ? (
             <p className="line-clamp-2 text-xs text-destructive">
-              {opError(op)}
+              {operationError(op)}
               {progress
                 ? ` — reached at least ${progress.processed} of ${progress.total} before the worker stopped`
                 : ""}
@@ -468,117 +402,24 @@ function OpRow({
           ) : null}
         </div>
         {isActive(status) ? (
+          <CancelOperationButton
+            op={op}
+            onCancel={onCancel}
+            onError={setCancelErr}
+          />
+        ) : (
           <Button
-            variant="outline"
-            size="sm"
-            className="h-7 shrink-0 px-2 text-xs"
-            disabled={canceling}
-            onClick={() => setConfirmCancel(true)}
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            aria-label={`Clear ${operationLabel(op)}`}
+            title="Clear from this list"
+            onClick={() => void onDismiss()}
           >
-            {canceling ? "Canceling…" : "Cancel"}
+            <XMarkIcon className="size-4" />
           </Button>
-        ) : null}
+        )}
       </div>
-      <ConfirmModal
-        isOpen={confirmCancel}
-        onClose={() => setConfirmCancel(false)}
-        onConfirm={handleCancel}
-        title="Cancel this operation?"
-        message={`${operationLabel(op)} stops where it is. What it has already done is not undone.`}
-        confirmText="Cancel operation"
-        cancelText="Keep running"
-        loading={canceling}
-      />
     </li>
-  );
-}
-
-/** An operation's whole record: what it was asked, how it went, why not. */
-function OpRecord({
-  op,
-  onClose,
-}: {
-  op: Operation | null;
-  onClose: () => void;
-}) {
-  const status = op ? operationStatus(op) : null;
-  const outcome = op ? operationOutcome(op) : null;
-  const progress = op ? opProgress(op) : null;
-  const elapsed = op ? operationElapsedMs(op, new Date()) : null;
-  return (
-    <RecordDialog
-      open={op !== null}
-      onOpenChange={(o) => !o && onClose()}
-      title={op ? operationLabel(op) : "Operation"}
-      subtitle={op?.name}
-    >
-      {op && status ? (
-        <>
-          <RecordField label="State">
-            <Badge variant={OP_STATUS_BADGE[status].variant}>
-              {OP_STATUS_BADGE[status].label}
-            </Badge>
-          </RecordField>
-          <RecordField label="Type" mono>
-            {op.type}
-          </RecordField>
-          {op.target ? (
-            <>
-              <RecordField label="Collection">
-                <CollectionLink name={op.target.collection} />
-              </RecordField>
-              {op.target.destination ? (
-                <RecordField label="Copied into">
-                  <CollectionLink name={op.target.destination} />
-                </RecordField>
-              ) : null}
-              <RecordField label="Objects">
-                {objects(op.target.objectCount)}
-              </RecordField>
-            </>
-          ) : null}
-          <RecordField label="Started">
-            {op.createdAt ? <Timestamp ts={op.createdAt} /> : "—"}
-          </RecordField>
-          {op.doneAt ? (
-            <RecordField label="Finished">
-              <Timestamp ts={op.doneAt} />
-            </RecordField>
-          ) : null}
-          {elapsed !== null ? (
-            <RecordField label={isActive(status) ? "Running for" : "Took"}>
-              {formatDuration(elapsed)}
-            </RecordField>
-          ) : null}
-          {progress ? (
-            <RecordField label="Progress">
-              {progress.processed} of {progress.total}
-            </RecordField>
-          ) : null}
-          {outcome ? (
-            <RecordField label="Result">
-              {outcome.succeeded} done
-              {outcome.alreadyApplied > 0
-                ? `, ${outcome.alreadyApplied} already so`
-                : ""}
-              {outcome.failed > 0 ? `, ${outcome.failed} failed` : ""} of{" "}
-              {outcome.total}
-            </RecordField>
-          ) : null}
-          {opError(op) ? (
-            <RecordField label="Error">
-              <span className="text-destructive">{opError(op)}</span>
-            </RecordField>
-          ) : null}
-          {outcome && outcome.failures.length > 0 ? (
-            <RecordBlock label="Objects that failed">
-              {outcome.failures
-                .map((f) => `${f.objectId}  ${f.reason}`)
-                .join("\n")}
-            </RecordBlock>
-          ) : null}
-        </>
-      ) : null}
-    </RecordDialog>
   );
 }
