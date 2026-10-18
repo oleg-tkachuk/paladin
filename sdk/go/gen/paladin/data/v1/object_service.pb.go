@@ -1600,11 +1600,16 @@ func (x *TagsOverride) GetTags() map[string]string {
 type ListObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent Collection: "tenants/{tenant_id}/collections/{ok}".
-	Parent        string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
-	Page          *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	Filter        string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
-	OrderBy       string          `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
-	SortOrder     v1.SortOrder    `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	Parent string          `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Page   *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	Filter string          `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	// order_by is the field the list sorts by: key, content_type, size_bytes,
+	// state, created_at or terminated_at; any other is refused. Empty lists in
+	// id order, the oldest object first. Keys sort bytewise. The page_token of
+	// a sorted list resumes only that order and direction.
+	OrderBy string `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
+	// sort_order is the direction; unspecified is ascending.
+	SortOrder     v1.SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

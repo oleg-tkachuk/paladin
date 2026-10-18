@@ -221,8 +221,9 @@ SELECT EXISTS(
 -- Two steps in one statement. search_object_ids (029) picks the page's ids
 -- with the trigram and GIN indexes (026–028), which RLS would otherwise keep
 -- out of the plan; this query then reads those rows under the caller's RLS,
--- which still decides what is returned. The page is the function's LIMIT;
--- keyset on id (UUIDv7, monotonic-by-time).
+-- which still decides what is returned. The page is the function's LIMIT,
+-- keyset on (order_by, id) (085). ANY() keeps no order, so the caller sorts
+-- the rows by the same key.
 --
 -- No join to collections: the name is the argument, and joining cost a
 -- collections scan per returned row (the planner cannot size the id array).
@@ -243,7 +244,10 @@ WHERE o.id = ANY (ARRAY(
             sqlc.narg('metadata_contains')::jsonb,
             sqlc.narg('after_id')::uuid,
             sqlc.arg('page_size')::integer,
-            sqlc.arg('live_only')::boolean)))
+            sqlc.arg('live_only')::boolean,
+            sqlc.arg('order_by')::text,
+            sqlc.arg('sort_desc')::boolean,
+            sqlc.narg('after_value')::text)))
   AND o.tenant_id = sqlc.arg('tenant_id')::uuid
   AND o.collection_id = (
         SELECT c.id FROM collections c
