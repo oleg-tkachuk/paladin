@@ -1,12 +1,12 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { RecordDialog, RecordField } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { T } from "@/lib/ui/typography";
 
-import { isExpired, isRevoked } from "./_constants";
+import { isRevoked, tokenLifecycle } from "./_constants";
+import { LifecycleBadge } from "@/components/ui/LifecycleBadge";
 
 // The share of its cap past which a token's usage reads as a warning.
 const NEAR_CAP_RATIO = 0.9;
@@ -24,25 +24,7 @@ export type UsageSnap = {
 
 /** A token's place in its lifecycle, as the table and its record show it. */
 export function TokenStatus({ token }: { token: APIToken }) {
-  if (isRevoked(token)) {
-    return (
-      <Badge variant="destructive" className={T.code}>
-        revoked
-      </Badge>
-    );
-  }
-  if (isExpired(token)) {
-    return (
-      <Badge variant="outline" className={T.code}>
-        expired
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="success" className={T.code}>
-      active
-    </Badge>
-  );
+  return <LifecycleBadge state={tokenLifecycle(token)} className={T.code} />;
 }
 
 /**

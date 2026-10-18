@@ -89,6 +89,51 @@ describe("MCPAuthorization", () => {
   });
 });
 
+describe("MCPAuthorization client table", () => {
+  const clientColumn = () =>
+    within(screen.getByRole("table"))
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => within(r).getAllByRole("cell")[0].textContent);
+  const shown = () =>
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          registeredClients: [MCP_SERVER, REGISTERED, AGENT],
+        } as never)}
+      />,
+    );
+
+  it("narrows the clients to one source", () => {
+    shown();
+    fireEvent.click(screen.getByRole("button", { name: "registered itself" }));
+    expect(clientColumn()).toEqual([REGISTERED.clientId]);
+    expect(screen.getByText("1 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(clientColumn()).toHaveLength(3);
+  });
+
+  it("searches the scopes and audiences too, and sorts by client", () => {
+    shown();
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search OAuth clients" }),
+      { target: { value: "paladin-mcp" } },
+    );
+    // Both agents allow the paladin-mcp audience; the server's id holds it.
+    expect(clientColumn()).toHaveLength(3);
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search OAuth clients" }),
+      { target: { value: "" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Client/ }));
+    expect(clientColumn()).toEqual([
+      REGISTERED.clientId,
+      AGENT.clientId,
+      MCP_SERVER.clientId,
+    ]);
+  });
+});
+
 describe("MCPAuthorization registered clients", () => {
   const DCR = {
     ...AGENT,
@@ -106,7 +151,10 @@ describe("MCPAuthorization registered clients", () => {
       />,
     );
     expect(screen.getByText(DCR.clientId)).toBeInTheDocument();
-    expect(screen.getAllByText("registered itself")).toHaveLength(1);
+    // Counted in the table: the source filter names the source too.
+    expect(
+      within(screen.getByRole("table")).getAllByText("registered itself"),
+    ).toHaveLength(1);
   });
 
   it("falls back to the configured clients, and says why", () => {

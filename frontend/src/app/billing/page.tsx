@@ -22,11 +22,13 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import { Select } from "@/components/ui/Select";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { useTableSort } from "@/hooks/useTableSort";
+import { sortRows, type SortAccessors } from "@/lib/table/view";
 import { SpendChart } from "@/components/features/billing/SpendChart";
 import {
   fillSeries,
@@ -158,6 +160,13 @@ function KPITile({
   );
 }
 
+type BreakdownColumn = "label" | "spend" | "charges";
+const BREAKDOWN_SORT: SortAccessors<TopEntry, BreakdownColumn> = {
+  label: (e) => e.label || undefined,
+  spend: (e) => moneyToNanos(e.spent),
+  charges: (e) => e.chargeCount,
+};
+
 // Top-N breakdown card. linkPrefix optional — when set, each row
 // becomes a Link to /capabilities?id=<label> etc. (used for the
 // capability_id breakdown). Truncates the label to 16 mono chars
@@ -176,6 +185,13 @@ function BreakdownCard({
   linkBuilder?: (label: string) => string;
   emptyHint: string;
 }) {
+  // A top-N list arrives ranked and short: it sorts, but has nothing to search.
+  const { sort, toggleSort } = useTableSort<BreakdownColumn>();
+  const rows = useMemo(
+    () => sortRows(entries, sort, BREAKDOWN_SORT),
+    [entries, sort],
+  );
+  const sortProps = { current: sort, onSort: toggleSort };
   return (
     <Card className="space-y-3 p-4">
       <h3 className={T.cardTitleProse}>{title}</h3>
@@ -185,13 +201,25 @@ function BreakdownCard({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Label</TableHead>
-              <TableHead className="text-right">Spend</TableHead>
-              <TableHead className="text-right">Charges</TableHead>
+              <SortableHead label="Label" column="label" {...sortProps} />
+              <SortableHead
+                label="Spend"
+                column="spend"
+                align="end"
+                className="text-right"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Charges"
+                column="charges"
+                align="end"
+                className="text-right"
+                {...sortProps}
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((e) => {
+            {rows.map((e) => {
               const label = e.label || "—";
               const display =
                 label.length > 24

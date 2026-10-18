@@ -68,6 +68,20 @@ describe("TableToolbar", () => {
     expect(onChange).toHaveBeenCalledWith("all");
   });
 
+  it("sets the page's own filters in the bar", () => {
+    render(
+      <TableToolbar
+        query=""
+        onQueryChange={() => {}}
+        placeholder="Search…"
+        searchLabel="Search rows"
+      >
+        <button type="button">Plane</button>
+      </TableToolbar>,
+    );
+    expect(screen.getByRole("button", { name: "Plane" })).toBeInTheDocument();
+  });
+
   it("counts the rows showing out of those loaded", () => {
     const { rerender } = render(
       <TableToolbar

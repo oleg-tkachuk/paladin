@@ -13,14 +13,18 @@ import type { MCPSession } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { RelativeTime } from "@/components/RelativeTime";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { useTableView } from "@/hooks/useTableView";
+import type { SortAccessors } from "@/lib/table/view";
 import { T } from "@/lib/ui/typography";
 
 import { useMcpLive } from "./mcp-status";
@@ -28,6 +32,22 @@ import { errorMessage } from "@/hooks/errorContract";
 
 /** Characters of a session id shown; enough to tell rows apart. */
 const SESSION_ID_SHOWN = 8;
+
+// The columns of the sessions table; the no-match row spans them.
+const SESSION_COLUMNS = 6;
+
+type SessionColumn =
+  "session" | "agent" | "started" | "seen" | "calls" | "requests";
+const at = (t: MCPSession["startedAt"]) => (t ? timestampDate(t) : undefined);
+const SESSION_SORT: SortAccessors<MCPSession, SessionColumn> = {
+  session: (s) => s.id,
+  agent: (s) => s.agentSubject || undefined,
+  started: (s) => at(s.startedAt),
+  seen: (s) => at(s.lastSeen),
+  calls: (s) => s.toolCallCount,
+  requests: (s) => s.requestCount,
+};
+const SESSION_SEARCH = (s: MCPSession) => [s.id, s.agentSubject];
 
 /**
  * Live streamable-HTTP sessions, refreshed while the page is open.
@@ -44,8 +64,13 @@ export function MCPSessions() {
     : status.data && !status.data.reachable
       ? status.data.error || "the MCP server could not be reached"
       : null;
-  const rows = sessions.data?.sessions ?? [];
+  const all = sessions.data?.sessions ?? [];
   const [opened, setOpened] = useState<MCPSession | null>(null);
+  const view = useTableView(all, {
+    text: SESSION_SEARCH,
+    accessors: SESSION_SORT,
+  });
+  const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   if (sessions.isPending || status.isPending) {
     return (
@@ -55,7 +80,7 @@ export function MCPSessions() {
       </Card>
     );
   }
-  if (rows.length === 0) {
+  if (all.length === 0) {
     return (
       <Card className="p-8 text-center">
         <p className={unreachable ? "text-sm text-warning" : T.helper}>
@@ -67,71 +92,102 @@ export function MCPSessions() {
     );
   }
   return (
-    <Card className="p-0">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Session</TableHead>
-            <TableHead>Agent</TableHead>
-            <TableHead>Started</TableHead>
-            <TableHead>Last seen</TableHead>
-            <TableHead className="text-right">Tool calls</TableHead>
-            <TableHead className="text-right">Requests</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((s) => (
-            <TableRow key={s.id} {...openableRow(() => setOpened(s))}>
-              <TableCell className={T.code} title={s.id}>
-                {s.id.slice(0, SESSION_ID_SHOWN)}…
-              </TableCell>
-              <TableCell>
-                {s.agentSubject || (
-                  <span className="text-muted-foreground">unknown</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <RelativeTime ts={s.startedAt} />
-              </TableCell>
-              <TableCell>
-                <RelativeTime ts={s.lastSeen} />
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {s.toolCallCount.toString()}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {s.requestCount.toString()}
-              </TableCell>
+    <div className="space-y-3">
+      <TableToolbar
+        query={view.query}
+        onQueryChange={view.setQuery}
+        searchLabel="Search sessions"
+        placeholder="Search by session or agent…"
+        count={{ shown: view.rows.length, total: view.total }}
+      />
+      <Card className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableHead label="Session" column="session" {...sortProps} />
+              <SortableHead label="Agent" column="agent" {...sortProps} />
+              <SortableHead label="Started" column="started" {...sortProps} />
+              <SortableHead label="Last seen" column="seen" {...sortProps} />
+              <SortableHead
+                label="Tool calls"
+                column="calls"
+                align="end"
+                className="text-right"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Requests"
+                column="requests"
+                align="end"
+                className="text-right"
+                {...sortProps}
+              />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <RecordDialog
-        open={opened !== null}
-        onOpenChange={(o) => !o && setOpened(null)}
-        title="Session"
-        subtitle={opened?.id}
-      >
-        {opened ? (
-          <>
-            <RecordField label="Agent" mono>
-              {opened.agentSubject || "unknown"}
-            </RecordField>
-            <RecordField label="Started">
-              <Timestamp ts={opened.startedAt} />
-            </RecordField>
-            <RecordField label="Last seen">
-              <Timestamp ts={opened.lastSeen} />
-            </RecordField>
-            <RecordField label="Tool calls">
-              {opened.toolCallCount.toString()}
-            </RecordField>
-            <RecordField label="Requests">
-              {opened.requestCount.toString()}
-            </RecordField>
-          </>
-        ) : null}
-      </RecordDialog>
-    </Card>
+          </TableHeader>
+          <TableBody>
+            {view.rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={SESSION_COLUMNS}
+                  className="py-8 text-center text-xs text-muted-foreground"
+                >
+                  No session matches the search.
+                </TableCell>
+              </TableRow>
+            ) : null}
+            {view.rows.map((s) => (
+              <TableRow key={s.id} {...openableRow(() => setOpened(s))}>
+                <TableCell className={T.code} title={s.id}>
+                  {s.id.slice(0, SESSION_ID_SHOWN)}…
+                </TableCell>
+                <TableCell>
+                  {s.agentSubject || (
+                    <span className="text-muted-foreground">unknown</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <RelativeTime ts={s.startedAt} />
+                </TableCell>
+                <TableCell>
+                  <RelativeTime ts={s.lastSeen} />
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {s.toolCallCount.toString()}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {s.requestCount.toString()}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <RecordDialog
+          open={opened !== null}
+          onOpenChange={(o) => !o && setOpened(null)}
+          title="Session"
+          subtitle={opened?.id}
+        >
+          {opened ? (
+            <>
+              <RecordField label="Agent" mono>
+                {opened.agentSubject || "unknown"}
+              </RecordField>
+              <RecordField label="Started">
+                <Timestamp ts={opened.startedAt} />
+              </RecordField>
+              <RecordField label="Last seen">
+                <Timestamp ts={opened.lastSeen} />
+              </RecordField>
+              <RecordField label="Tool calls">
+                {opened.toolCallCount.toString()}
+              </RecordField>
+              <RecordField label="Requests">
+                {opened.requestCount.toString()}
+              </RecordField>
+            </>
+          ) : null}
+        </RecordDialog>
+      </Card>
+    </div>
   );
 }

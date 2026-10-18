@@ -205,3 +205,63 @@ describe("M2MTokensPage paging", () => {
     expect(h.list.mock.calls[1][0].pageToken).toBe("p2");
   });
 });
+
+describe("M2MTokensPage state and search", () => {
+  const REVOKED_AT = { seconds: 1_700_000_000n };
+
+  it("asks for ended tokens only when a state shows them", async () => {
+    h.list.mockImplementation(({ includeRevoked }) =>
+      Promise.resolve({
+        apiTokens: includeRevoked
+          ? [
+              makeToken("tok-live", "live-one"),
+              { ...makeToken("tok-gone", "gone-one"), revokedAt: REVOKED_AT },
+            ]
+          : [makeToken("tok-live", "live-one")],
+      }),
+    );
+    render(<M2MTokensPage />);
+    expect(await screen.findByText("live-one")).toBeInTheDocument();
+    expect(h.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeRevoked: false, includeExpired: false }),
+      expect.anything(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
+    expect(await screen.findByText("gone-one")).toBeInTheDocument();
+    expect(h.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeRevoked: true, includeExpired: false }),
+      expect.anything(),
+    );
+    // Only the revoked one shows under Revoked.
+    expect(screen.queryByText("live-one")).toBeNull();
+  });
+
+  it("searches the tokens it lists", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [
+        makeToken("tok-a", "ci-uploader"),
+        makeToken("tok-b", "nightly"),
+      ],
+    });
+    render(<M2MTokensPage />);
+    await screen.findByText("nightly");
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search M2M tokens" }),
+      {
+        target: { value: "NIGHT" },
+      },
+    );
+    expect(screen.queryByText("ci-uploader")).toBeNull();
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search M2M tokens" }),
+      {
+        target: { value: "absent" },
+      },
+    );
+    expect(
+      screen.getByText("No token matches the search."),
+    ).toBeInTheDocument();
+  });
+});

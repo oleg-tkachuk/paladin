@@ -17,10 +17,8 @@ import {
 } from "@/components/ui/RecordDialog";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SortableHead } from "@/components/ui/SortHeader";
-import {
-  TableToolbar,
-  type ToolbarFilterOption,
-} from "@/components/ui/TableToolbar";
+import { LifecycleBadge } from "@/components/ui/LifecycleBadge";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   Table,
   TableBody,
@@ -38,6 +36,15 @@ import {
 } from "@/gen/paladin/iam/v1/user_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import { useTableView } from "@/hooks/useTableView";
+import {
+  DEFAULT_LIFECYCLE_FILTER,
+  LIFECYCLE_BADGE,
+  LIFECYCLE_FILTERS,
+  LIFECYCLE_FILTER_LABEL,
+  keepsLifecycle,
+  type Lifecycle,
+  type LifecycleFilter,
+} from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
 import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 import { T } from "@/lib/ui/typography";
@@ -57,38 +64,16 @@ function oauthGrantsKey(userName: string, includeInactive?: boolean) {
 // The columns of the table; the empty and loading rows span them.
 const GRANT_COLUMNS = 7;
 
-// A grant's state, as its badge names it. UNSPECIFIED is a server too old to
-// say, which only ever lists live grants.
-const STATE = {
-  [OAuthGrant_State.UNSPECIFIED]: { label: "active", variant: "success" },
-  [OAuthGrant_State.ACTIVE]: { label: "active", variant: "success" },
-  [OAuthGrant_State.REVOKED]: { label: "revoked", variant: "destructive" },
-  [OAuthGrant_State.EXPIRED]: { label: "expired", variant: "outline" },
-} as const satisfies Record<
-  OAuthGrant_State,
-  { label: string; variant: "success" | "destructive" | "outline" }
->;
-
-const isActive = (g: OAuthGrant) =>
-  g.state === OAuthGrant_State.ACTIVE ||
-  g.state === OAuthGrant_State.UNSPECIFIED;
-
-// Which grants show. Only "active" asks the server for live grants alone; the
-// rest ask for every grant and narrow it here.
-type StateFilter = "active" | "revoked" | "expired" | "all";
-const STATE_FILTERS: readonly ToolbarFilterOption<StateFilter>[] = [
-  { value: "active", label: "Active" },
-  { value: "revoked", label: "Revoked" },
-  { value: "expired", label: "Expired" },
-  { value: "all", label: "All" },
-];
-const DEFAULT_STATE_FILTER: StateFilter = "active";
-const KEEPS: Record<StateFilter, (g: OAuthGrant) => boolean> = {
-  active: isActive,
-  revoked: (g) => g.state === OAuthGrant_State.REVOKED,
-  expired: (g) => g.state === OAuthGrant_State.EXPIRED,
-  all: () => true,
-};
+// A grant's lifecycle state. UNSPECIFIED is a server too old to say, which
+// only ever lists live grants.
+const LIFECYCLE_OF = {
+  [OAuthGrant_State.UNSPECIFIED]: "active",
+  [OAuthGrant_State.ACTIVE]: "active",
+  [OAuthGrant_State.REVOKED]: "revoked",
+  [OAuthGrant_State.EXPIRED]: "expired",
+} as const satisfies Record<OAuthGrant_State, Lifecycle>;
+const lifecycle = (g: OAuthGrant): Lifecycle => LIFECYCLE_OF[g.state];
+const isActive = (g: OAuthGrant) => lifecycle(g) === "active";
 
 type GrantColumn =
   "application" | "access" | "state" | "plane" | "granted" | "used";
@@ -97,7 +82,7 @@ const ms = (t: OAuthGrant["grantedAt"]) =>
 const SORT_BY: SortAccessors<OAuthGrant, GrantColumn> = {
   application: (g) => g.clientId,
   access: (g) => access(g).label,
-  state: (g) => STATE[g.state].label,
+  state: (g) => LIFECYCLE_BADGE[lifecycle(g)].label,
   plane: (g) => g.audience,
   granted: (g) => ms(g.grantedAt),
   used: (g) => ms(g.refreshedAt),
@@ -106,7 +91,7 @@ const SEARCH_IN = (g: OAuthGrant) => [
   g.clientId,
   g.audience,
   g.scopes.join(" "),
-  STATE[g.state].label,
+  LIFECYCLE_BADGE[lifecycle(g)].label,
 ];
 // A grant's access, as its badge names it: whether it may write.
 const ACCESS = {
@@ -137,9 +122,11 @@ export function ConnectedApplications({
   const { showNotification } = useNotification();
   const [opened, setOpened] = useState<OAuthGrant | null>(null);
   const [target, setTarget] = useState<OAuthGrant | null>(null);
-  const [stateFilter, setStateFilter] =
-    useState<StateFilter>(DEFAULT_STATE_FILTER);
-  const includeInactive = stateFilter !== DEFAULT_STATE_FILTER;
+  const [stateFilter, setStateFilter] = useState<LifecycleFilter>(
+    DEFAULT_LIFECYCLE_FILTER,
+  );
+  // Only the live grants come by default; any other state asks for them all.
+  const includeInactive = stateFilter !== DEFAULT_LIFECYCLE_FILTER;
 
   const query = useQuery({
     queryKey: oauthGrantsKey(userName, includeInactive),
@@ -150,7 +137,9 @@ export function ConnectedApplications({
       ),
     enabled: !!userName,
   });
-  const inState = (query.data?.grants ?? []).filter(KEEPS[stateFilter]);
+  const inState = (query.data?.grants ?? []).filter((g) =>
+    keepsLifecycle(stateFilter, lifecycle(g)),
+  );
   const view = useTableView(inState, { text: SEARCH_IN, accessors: SORT_BY });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
@@ -201,8 +190,8 @@ export function ConnectedApplications({
             placeholder="Search by application, plane or scope…"
             searchLabel="Search connected applications"
             filter={{
-              label: "Grant state",
-              options: STATE_FILTERS,
+              label: LIFECYCLE_FILTER_LABEL,
+              options: LIFECYCLE_FILTERS,
               value: stateFilter,
               onChange: setStateFilter,
             }}
@@ -261,7 +250,7 @@ export function ConnectedApplications({
                     >
                       {view.total > 0
                         ? "No application matches the search."
-                        : stateFilter === DEFAULT_STATE_FILTER
+                        : stateFilter === DEFAULT_LIFECYCLE_FILTER
                           ? `${own ? "You have" : "This user has"} not let any application in. An agent that authorizes through OAuth — one connected to the MCP server, say — appears here.`
                           : "No grant is in this state. Ended grants stay listed until their tokens are purged."}
                     </TableCell>
@@ -280,9 +269,7 @@ export function ConnectedApplications({
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={STATE[g.state].variant}>
-                          {STATE[g.state].label}
-                        </Badge>
+                        <LifecycleBadge state={lifecycle(g)} />
                       </TableCell>
                       <TableCell
                         className={cn("hidden @lg:table-cell", T.code)}
@@ -330,9 +317,7 @@ export function ConnectedApplications({
               </Badge>
             </RecordField>
             <RecordField label="State">
-              <Badge variant={STATE[opened.state].variant}>
-                {STATE[opened.state].label}
-              </Badge>
+              <LifecycleBadge state={lifecycle(opened)} />
             </RecordField>
             <RecordField label="May">
               <ul className="space-y-0.5">

@@ -63,6 +63,27 @@ beforeEach(() => {
 });
 
 describe("BucketGrantsCard", () => {
+  it("sorts the grantees by the name they show under, and searches the slug", async () => {
+    h.listBucketGrants.mockResolvedValue({
+      grants: [grant("t-globex"), grant("t-acme"), grant("t-gone")],
+    });
+    renderCard();
+    await screen.findByRole("link", { name: /Acme/ });
+    const grantees = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => within(r).getAllByRole("cell")[0].textContent);
+    await userEvent.click(screen.getByRole("button", { name: /^Tenant/ }));
+    // A tenant the list does not know shows, and sorts, by its id.
+    expect(grantees()).toEqual(["Acmeacme", "Globexglobex", "t-gone"]);
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Search grants" }),
+      "glob",
+    );
+    expect(grantees()).toEqual(["Globexglobex"]);
+  });
+
   it("lists each grant by tenant name, with who granted it", async () => {
     h.listBucketGrants.mockResolvedValue({ grants: [grant("t-acme")] });
     renderCard();
