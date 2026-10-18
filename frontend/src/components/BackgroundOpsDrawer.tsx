@@ -427,7 +427,9 @@ function OpRow({
               <span>{objects(op.target.objectCount)}</span>
             </p>
           ) : null}
-          {progress && !failed ? (
+          {/* Only work still going has progress to watch; a finished batch
+              says how it ended below instead. */}
+          {progress && isActive(status) ? (
             <div className="space-y-0.5">
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
