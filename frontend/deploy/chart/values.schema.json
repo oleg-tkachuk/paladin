@@ -251,6 +251,10 @@
         },
         "periodSeconds": {
           "type": "integer"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "type": "object"
@@ -344,6 +348,10 @@
         },
         "periodSeconds": {
           "type": "integer"
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "type": "object"

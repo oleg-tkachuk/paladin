@@ -197,12 +197,17 @@ networkPolicies:
 # Sized for Next.js standalone SSR on the dev cluster. Tune in
 # values-{staging,prod}.yaml overlays. requests.cpu is REQUIRED for
 # HPA-on-CPU to work.
+#
+# The CPU limit is a ceiling for bursts, not the working size: every browser
+# RPC passes through this process, and at 500m a full e2e run kept it throttled
+# in half of its CFS periods. The probes then missed their timeout, the one
+# replica left the Service, and the ingress answered 502 for every page.
 resources:
   requests:
     cpu: 100m
     memory: 256Mi
   limits:
-    cpu: 500m
+    cpu: 2000m
     memory: 512Mi
 
 # Both probes hit the trivial process-alive route (no backend/DB calls).
@@ -214,12 +219,18 @@ resources:
 # timed six fetches against the kubelet's 1s default, and under load the one
 # replica dropped out of the Service and the ingress answered 503 for every
 # page.
+#
+# Both say how long an answer may take: the kubelet's default is 1s, which a
+# busy event loop misses without anything being wrong. Liveness waits longer
+# than readiness — a slow answer should take the pod out of rotation long
+# before it gets it restarted.
 livenessProbe:
   httpGet:
     path: /api/health/live
     port: 3000
   initialDelaySeconds: 30
   periodSeconds: 30
+  timeoutSeconds: 5
 
 readinessProbe:
   httpGet:
@@ -227,6 +238,7 @@ readinessProbe:
     port: 3000
   initialDelaySeconds: 15
   periodSeconds: 15
+  timeoutSeconds: 3
 
 autoscaling:
   enabled: false

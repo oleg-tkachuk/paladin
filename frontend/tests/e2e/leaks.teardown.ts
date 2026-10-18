@@ -8,6 +8,9 @@
  * bucket holds SeaweedFS volume slots, and leaked ones are what filled the
  * store until it refused new buckets.
  *
+ * So does a collection: a trashed object still holds one, and every run that
+ * tested the trash left two behind with only a warning in the log.
+ *
  * So does an OAuth grant the seeded admin still holds: one outlives its test
  * by weeks, and they piled up a row per grant per run.
  *
@@ -52,6 +55,7 @@ test("the run removed what it created", async ({}, testInfo) => {
     trashedTenants: [],
     buckets: [],
     backends: [],
+    collections: [],
     oauthGrants: [],
   });
 });

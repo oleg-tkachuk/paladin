@@ -72,7 +72,6 @@ export type MakeGrant = (
 export type MakeCollection = (opts: {
   tenantId: string;
   bucket: SeededBucket;
-  collectionPrefix?: string;
 }) => Promise<SeededCollection>;
 
 interface Registry {

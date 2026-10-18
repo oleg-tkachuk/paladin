@@ -233,6 +233,21 @@ check "console: readiness probes the console itself" \
     "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.containers[0].readinessProbe.httpGet.path' "$scratch/console-defaults.yaml")" \
     "/api/health/live"
 
+# console_container <render> <yq path> — a field of the console container.
+console_container() {
+    yq ea -r "[select(.kind == \"Deployment\")] | .[0] | .spec.template.spec.containers[0] | $2" "$scratch/console-$1.yaml"
+}
+
+# The probes name their own timeout: at the kubelet's 1s default a busy event
+# loop missed them, and the only replica left the Service mid-run.
+readonly CONSOLE_READINESS_TIMEOUT=3
+readonly CONSOLE_LIVENESS_TIMEOUT=5
+readonly CONSOLE_CPU_LIMIT=2000m
+check "console: readiness timeout" "$(console_container defaults .readinessProbe.timeoutSeconds)" "$CONSOLE_READINESS_TIMEOUT"
+check "console: liveness timeout" "$(console_container defaults .livenessProbe.timeoutSeconds)" "$CONSOLE_LIVENESS_TIMEOUT"
+# At 500m a full e2e run throttled the console in half of its CFS periods.
+check "console: CPU limit" "$(console_container defaults .resources.limits.cpu)" "$CONSOLE_CPU_LIMIT"
+
 console other-release --set backend.release=pic --set backend.namespace=platform
 check "console: release without the chart name is suffixed" "$(console_env other-release PALADIN_ADMIN_URL)" \
     "http://pic-paladin-core-admin.platform.svc.cluster.local:8090"
