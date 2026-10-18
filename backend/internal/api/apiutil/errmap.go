@@ -69,6 +69,16 @@ func RegisterError(sentinel error, code connect.Code, reason commonv1.ErrorReaso
 	registry[sentinel] = mapping{code, reason}
 }
 
+// MetadataError is a domain error that says more than its reason: what it
+// returns goes into the ErrorInfo's metadata, so a client reads the facts
+// (how many objects, which state) without parsing the message. The keys are
+// part of the reason's contract and are documented on it in
+// common/v1/error_reason.proto.
+type MetadataError interface {
+	error
+	ErrorMetadata() map[string]string
+}
+
 // MapError converts a domain error into a *connect.Error with the right
 // code. Resolution order:
 //   - nil → nil
@@ -89,22 +99,30 @@ func MapError(err error) error {
 	}
 	for sentinel, m := range canonical {
 		if errors.Is(err, sentinel) {
-			return withReason(connect.NewError(m.code, err.Error()).WithCause(err), m.reason)
+			return withReason(connect.NewError(m.code, err.Error()).WithCause(err), m.reason, metadataOf(err))
 		}
 	}
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 	for sentinel, m := range registry {
 		if errors.Is(err, sentinel) {
-			return withReason(connect.NewError(m.code, err.Error()).WithCause(err), m.reason)
+			return withReason(connect.NewError(m.code, err.Error()).WithCause(err), m.reason, metadataOf(err))
 		}
 	}
 	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
-// withReason attaches the ErrorInfo for reason to e.
-func withReason(e *connect.Error, reason commonv1.ErrorReason) *connect.Error {
-	detail, err := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
+// metadataOf is what err says beyond its reason, nil when it says nothing.
+func metadataOf(err error) map[string]string {
+	if me, ok := errors.AsType[MetadataError](err); ok {
+		return me.ErrorMetadata()
+	}
+	return nil
+}
+
+// withReason attaches the ErrorInfo for reason, and its metadata, to e.
+func withReason(e *connect.Error, reason commonv1.ErrorReason, metadata map[string]string) *connect.Error {
+	detail, err := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain, Metadata: metadata})
 	if err != nil { // only a message that cannot be marshalled fails, and this one can
 		return e
 	}

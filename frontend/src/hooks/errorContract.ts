@@ -72,17 +72,27 @@ export function isAbortError(err: unknown): boolean {
  * for the text: errorMessage stays the message.
  */
 export function errorReason(err: unknown): ErrorReason {
-  if (!(err instanceof ConnectError)) {
-    return ErrorReason.UNSPECIFIED;
-  }
-  for (const info of err.findDetails(ErrorInfoSchema)) {
-    if (info.domain !== PALADIN_ERROR_DOMAIN) {
-      continue;
-    }
-    const value = ErrorReasonSchema.values.find((v) => v.name === info.reason);
-    if (value) {
-      return value.number as ErrorReason;
-    }
-  }
-  return ErrorReason.UNSPECIFIED;
+  const info = paladinErrorInfo(err);
+  if (!info) return ErrorReason.UNSPECIFIED;
+  const value = ErrorReasonSchema.values.find((v) => v.name === info.reason);
+  return value ? (value.number as ErrorReason) : ErrorReason.UNSPECIFIED;
+}
+
+/**
+ * What the server said beyond the reason: the metadata of the same ErrorInfo,
+ * whose keys each reason documents in common/v1/error_reason.proto. Empty when
+ * there is none — an error from elsewhere, or a reason that says nothing more.
+ */
+export function errorMetadata(err: unknown): Readonly<Record<string, string>> {
+  return paladinErrorInfo(err)?.metadata ?? {};
+}
+
+/** The server's own ErrorInfo on err, the "paladin" domain's; null if none. */
+function paladinErrorInfo(err: unknown) {
+  if (!(err instanceof ConnectError)) return null;
+  return (
+    err
+      .findDetails(ErrorInfoSchema)
+      .find((info) => info.domain === PALADIN_ERROR_DOMAIN) ?? null
+  );
 }

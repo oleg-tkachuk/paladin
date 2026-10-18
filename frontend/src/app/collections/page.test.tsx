@@ -14,11 +14,17 @@ const h = vi.hoisted(() => ({
   fetchBuckets: vi.fn(() => Promise.resolve()),
   fetchBackends: vi.fn(),
   showNotification: vi.fn(),
+  push: vi.fn(),
   // The page renders ListLoadError; without `error` here that branch never
   // runs and the guard is untested. Same omission as /tenants had.
   error: null as string | null,
 }));
 
+// The delete notice opens a collection's trash through the router.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: h.push }),
+}));
 vi.mock("@/hooks/useCollections", () => ({
   useCollections: (options: unknown) => {
     h.options = options;
@@ -77,6 +83,11 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 
+import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
+
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import { PALADIN_ERROR_DOMAIN } from "@/hooks/errorContract";
 import CollectionsPage from "./page";
 
 beforeEach(() => {
@@ -255,5 +266,46 @@ describe("CollectionsPage bucket column", () => {
       "title",
       "storageBackends/primary/buckets/pool",
     );
+  });
+});
+
+// Refused because the trash holds it: the notice says so and opens that trash,
+// in the tenant the row belongs to.
+describe("CollectionsPage delete refused", () => {
+  it("offers the trash that holds the collection", async () => {
+    h.collections = [
+      { collection: "c1", tenantId: "t-a", bucket: "", resourceVersion: "3" },
+    ];
+    h.deleteCollection.mockRejectedValueOnce(
+      new ConnectError(
+        "collection still holds 1 object in its trash",
+        Code.FailedPrecondition,
+        undefined,
+        [
+          {
+            desc: ErrorInfoSchema,
+            value: create(ErrorInfoSchema, {
+              domain: PALADIN_ERROR_DOMAIN,
+              reason: "ERROR_REASON_COLLECTION_NOT_EMPTY",
+              metadata: { live_objects: "0", trashed_objects: "1" },
+            }),
+          },
+        ],
+      ),
+    );
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<CollectionsPage />);
+    await user.click(screen.getByRole("button", { name: "Actions for c1" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: /Delete Collection/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^Delete Collection$/ }),
+    );
+    await vi.waitFor(() => expect(h.showNotification).toHaveBeenCalled());
+    const notice = h.showNotification.mock.calls.at(-1)?.[0];
+    expect(notice.action.label).toBe("Open its trash");
+    notice.action.onClick();
+    expect(h.push).toHaveBeenCalledWith("/tenants/t-a/collections/c1/trash");
   });
 });

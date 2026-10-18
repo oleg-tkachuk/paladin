@@ -38,3 +38,11 @@ export function parseBucketName(
   const m = /^storageBackends\/([^/]+)\/buckets\/([^/]+)$/.exec(name);
   return m ? { backendId: m[1], bucketId: m[2] } : null;
 }
+
+/** A collection's trash, its trashed objects to purge or restore. */
+export function collectionTrashHref(
+  tenant: string,
+  collection: string,
+): string {
+  return `${collectionHref(tenant, collection)}/trash`;
+}

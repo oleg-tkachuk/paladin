@@ -44,7 +44,11 @@ const (
 	ErrorReason_ERROR_REASON_FAILED_PRECONDITION ErrorReason = 6
 	ErrorReason_ERROR_REASON_UNAUTHENTICATED     ErrorReason = 7
 	// Specific conditions.
-	ErrorReason_ERROR_REASON_SUBJECT_TAKEN                  ErrorReason = 8
+	ErrorReason_ERROR_REASON_SUBJECT_TAKEN ErrorReason = 8
+	// The collection still holds objects, so it cannot be deleted. A trashed
+	// object holds it as much as a live one: until it is purged or restored it
+	// can still come back. ErrorInfo.metadata says how many of each, as base-10
+	// integers: "live_objects" and "trashed_objects".
 	ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY           ErrorReason = 9
 	ErrorReason_ERROR_REASON_COLLECTION_EXISTS              ErrorReason = 10
 	ErrorReason_ERROR_REASON_BUCKET_NOT_FOUND               ErrorReason = 11

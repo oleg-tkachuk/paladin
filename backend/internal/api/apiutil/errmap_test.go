@@ -115,3 +115,37 @@ func TestMapErrorScopeMismatchIsInternal(t *testing.T) {
 		t.Errorf("code = %v, want %v", got, connect.CodeInternal)
 	}
 }
+
+type countedErr struct{ n string }
+
+func (e countedErr) Error() string                    { return "counted: " + e.n }
+func (e countedErr) Is(target error) bool             { return target == ErrFailedPrecondition }
+func (e countedErr) ErrorMetadata() map[string]string { return map[string]string{"count": e.n} }
+
+// What a MetadataError says beyond its reason reaches the ErrorInfo; an error
+// that says nothing more carries no metadata.
+func TestMapError_Metadata(t *testing.T) {
+	metadataOfMapped := func(err error) map[string]string {
+		var cerr *connect.Error
+		if !errors.As(MapError(err), &cerr) {
+			t.Fatalf("%v did not map to a connect error", err)
+		}
+		for _, d := range cerr.Details() {
+			v, verr := connectproto.UnmarshalErrorDetail(d)
+			if verr != nil {
+				t.Fatalf("detail does not decode: %v", verr)
+			}
+			if info, ok := v.(*errdetails.ErrorInfo); ok {
+				return info.GetMetadata()
+			}
+		}
+		t.Fatalf("no ErrorInfo on %v", err)
+		return nil
+	}
+	if got := metadataOfMapped(fmt.Errorf("wrapped: %w", countedErr{"3"})); got["count"] != "3" {
+		t.Errorf("metadata = %v, want count=3", got)
+	}
+	if got := metadataOfMapped(ErrFailedPrecondition); len(got) != 0 {
+		t.Errorf("metadata = %v, want none", got)
+	}
+}

@@ -29,6 +29,7 @@ type fakeRepo struct {
 	listFn     func(ctx context.Context, args ListCollectionsArgs) ([]Collection, string, error)
 	statsFn    func(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionStats, error)
 	rebindFn   func(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error
+	holdingFn  func(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionHolding, error)
 
 	lastCreate   CreateCollectionArgs
 	lastUpdate   UpdateCollectionArgs
@@ -88,6 +89,13 @@ func (f *fakeRepo) DeleteTx(ctx context.Context, _ pgx.Tx, tenantID uuid.UUID, c
 		return nil
 	}
 	return f.deleteTxFn(ctx, tenantID, collection, expectedVersion)
+}
+
+func (f *fakeRepo) Holding(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionHolding, error) {
+	if f.holdingFn == nil {
+		return CollectionHolding{}, nil
+	}
+	return f.holdingFn(ctx, tenantID, collection)
 }
 
 func (f *fakeRepo) Get(ctx context.Context, tenantID uuid.UUID, collection string) (Collection, error) {

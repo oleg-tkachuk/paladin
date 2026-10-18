@@ -4,6 +4,7 @@ import {
   backendHref,
   bucketHref,
   collectionHref,
+  collectionTrashHref,
   parseBucketName,
   tenantHref,
 } from "./hrefs";
@@ -20,6 +21,9 @@ describe("hrefs", () => {
     expect(tenantHref("acme")).toBe("/tenants/acme");
     expect(collectionHref("acme", "docs")).toBe(
       "/tenants/acme/collections/docs",
+    );
+    expect(collectionTrashHref("acme", "docs")).toBe(
+      "/tenants/acme/collections/docs/trash",
     );
   });
 

@@ -7,8 +7,15 @@ import { render, screen, waitFor } from "@/test/utils";
 const h = vi.hoisted(() => ({
   listCollections: vi.fn(),
   deleteCollection: vi.fn(),
+  showNotification: vi.fn(),
+  push: vi.fn(),
 }));
 
+// The delete notice opens a collection's trash through the router.
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: h.push }),
+}));
 vi.mock("@/lib/connect/client", () => ({
   collectionClient: { listCollections: h.listCollections },
 }));
@@ -35,9 +42,14 @@ vi.mock("@/hooks/useBackends", () => ({
   }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
-  useNotification: () => ({ showNotification: vi.fn() }),
+  useNotification: () => ({ showNotification: h.showNotification }),
 }));
 
+import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
+
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import { PALADIN_ERROR_DOMAIN } from "@/hooks/errorContract";
 import TenantCollectionsPage from "./page";
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 
@@ -175,5 +187,57 @@ describe("TenantCollectionsPage public read", () => {
     expect(screen.getByText("public").closest("tr")).toHaveTextContent(
       "photos",
     );
+  });
+});
+
+// A collection only its trash holds used to fail with "has live objects" and
+// nowhere to go; the notice now says so and opens that trash.
+describe("TenantCollectionsPage delete refused", () => {
+  it("offers the trash that holds the collection", async () => {
+    h.listCollections.mockResolvedValue({
+      collections: [
+        {
+          collection: "c1",
+          tenantId: "t-1",
+          bucket: "b1",
+          resourceVersion: "7",
+        },
+      ],
+    });
+    h.deleteCollection.mockRejectedValue(
+      new ConnectError(
+        "collection still holds 1 object in its trash; purge or restore them first",
+        Code.FailedPrecondition,
+        undefined,
+        [
+          {
+            desc: ErrorInfoSchema,
+            value: create(ErrorInfoSchema, {
+              domain: PALADIN_ERROR_DOMAIN,
+              reason: "ERROR_REASON_COLLECTION_NOT_EMPTY",
+              metadata: { live_objects: "0", trashed_objects: "1" },
+            }),
+          },
+        ],
+      ),
+    );
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<TenantCollectionsPage />);
+    await user.click(
+      await screen.findByRole("button", { name: "Actions for c1" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /Delete Collection/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^Delete Collection$/ }),
+    );
+
+    await waitFor(() => expect(h.showNotification).toHaveBeenCalled());
+    const notice = h.showNotification.mock.calls.at(-1)?.[0];
+    expect(notice.message).toMatch(/in its trash/);
+    expect(notice.action.label).toBe("Open its trash");
+    notice.action.onClick();
+    expect(h.push).toHaveBeenCalledWith("/tenants/t-1/collections/c1/trash");
   });
 });
