@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -116,6 +117,8 @@ type Repository interface {
 	// Rebind atomically swaps the (backend_id, bucket_name) target. DB
 	// trigger enforces tenancy on single-tenant buckets.
 	Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error
+	// Holding counts what keeps the collection from being deleted.
+	Holding(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionHolding, error)
 
 	// RunInTx + the *Tx variants are the ADR-0003 seam: mutation + outbox
 	// fan-out on one tx so a crash can't leave a committed change without
@@ -472,6 +475,9 @@ func (h *Handler) DeleteCollection(
 				"resource_version": expectedVersion,
 			})
 	}); err != nil {
+		if errors.Is(err, ErrCollectionHasObjects) {
+			err = h.notEmpty(ctx, tenantID, collection)
+		}
 		return mapVersionErr(err)
 	}
 	apiutil.StashResource(ctx, resourceName)
@@ -666,9 +672,59 @@ func (h *Handler) authorizeFull(
 // the Collection still has rows in `objects` referencing it. The FK
 // constraint is ON DELETE RESTRICT — operators must purge / move the
 // objects first. Handler maps this to FAILED_PRECONDITION so the UI
-// can surface a clear "remove the files first" prompt.
-var ErrCollectionHasObjects = errors.New(
-	"collection has live objects; remove or move them before deleting")
+// can surface a clear "remove the files first" prompt. DeleteCollection
+// answers with a *CollectionNotEmptyError, which says what holds it.
+var ErrCollectionHasObjects = errors.New("collection still holds objects")
+
+// The ErrorInfo metadata keys of ERROR_REASON_COLLECTION_NOT_EMPTY, as
+// common/v1/error_reason.proto documents them.
+const (
+	MetaLiveObjects    = "live_objects"
+	MetaTrashedObjects = "trashed_objects"
+)
+
+// CollectionHolding is what keeps a collection from being deleted: its live
+// objects, and those in its trash — which the foreign key counts the same.
+type CollectionHolding struct {
+	Live    int64
+	Trashed int64
+}
+
+// CollectionNotEmptyError is ErrCollectionHasObjects with the counts that
+// caused it. "has live objects" used to be the whole answer, which was wrong
+// whenever the trash alone held the collection.
+type CollectionNotEmptyError struct{ Holding CollectionHolding }
+
+func (e *CollectionNotEmptyError) Error() string {
+	h := e.Holding
+	switch {
+	case h.Trashed == 0:
+		return fmt.Sprintf("collection still holds %s; delete them first", objectCount(h.Live))
+	case h.Live == 0:
+		return fmt.Sprintf("collection still holds %s in its trash; purge or restore them first", objectCount(h.Trashed))
+	default:
+		return fmt.Sprintf("collection still holds %s, %d of them in its trash; delete, purge or restore them first",
+			objectCount(h.Live+h.Trashed), h.Trashed)
+	}
+}
+
+func (e *CollectionNotEmptyError) Is(target error) bool { return target == ErrCollectionHasObjects }
+
+// ErrorMetadata implements apiutil.MetadataError.
+func (e *CollectionNotEmptyError) ErrorMetadata() map[string]string {
+	return map[string]string{
+		MetaLiveObjects:    strconv.FormatInt(e.Holding.Live, 10),
+		MetaTrashedObjects: strconv.FormatInt(e.Holding.Trashed, 10),
+	}
+}
+
+// objectCount is "1 object", "3 objects".
+func objectCount(n int64) string {
+	if n == 1 {
+		return "1 object"
+	}
+	return fmt.Sprintf("%d objects", n)
+}
 
 // ErrCollectionExists is returned when a Create is refused because the tenant
 // already has a Collection by that name — UNIQUE (tenant_id, collection).
@@ -687,6 +743,17 @@ var ErrBucketNotFound = errors.New("bucket not found on this backend")
 // ErrVersionMismatch is returned when optimistic-concurrency control fails.
 // Repositories should surface it so handlers can map to CodeAborted.
 var ErrVersionMismatch = errors.New("resource_version mismatch")
+
+// notEmpty says what holds a collection whose delete the foreign key refused.
+// Counted after the refused transaction, which can run nothing more; a count
+// that fails leaves the refusal as it was rather than hiding it.
+func (h *Handler) notEmpty(ctx context.Context, tenantID uuid.UUID, collection string) error {
+	holding, err := h.repo.Holding(ctx, tenantID, collection)
+	if err != nil {
+		return ErrCollectionHasObjects
+	}
+	return &CollectionNotEmptyError{Holding: holding}
+}
 
 func mapVersionErr(err error) error {
 	return apiutil.MapError(err)

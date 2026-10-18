@@ -187,6 +187,22 @@ func (r *CollectionRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenant
 	return nil
 }
 
+// Holding counts a collection's live objects and those in its trash —
+// CountObjects's two readings of the same rows, which the foreign key from
+// objects holds the collection by alike.
+func (r *CollectionRepo) Holding(ctx context.Context, tenantID uuid.UUID, collection string) (objectkey.CollectionHolding, error) {
+	live, err := r.q.CountObjects(ctx, pgUUID(tenantID), collection, nil, true)
+	if err != nil {
+		return objectkey.CollectionHolding{}, fmt.Errorf("count live objects: %w", err)
+	}
+	trashed := sqlc.ObjectStateDELETED
+	inTrash, err := r.q.CountObjects(ctx, pgUUID(tenantID), collection, &trashed, false)
+	if err != nil {
+		return objectkey.CollectionHolding{}, fmt.Errorf("count trashed objects: %w", err)
+	}
+	return objectkey.CollectionHolding{Live: live, Trashed: inTrash}, nil
+}
+
 func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error {
 	rows, err := r.q.BindCollectionToBucket(ctx, pgUUID(tenantID), collection, backendID, bucketName, expectedVersion)
 	if err != nil {
