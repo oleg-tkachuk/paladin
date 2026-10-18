@@ -8,6 +8,8 @@ export const ROUTES_WITHOUT_ADMIN_PLANE: readonly string[] = [
   "/",
   "/health",
   "/profile",
+  // A user's own OAuth grants, read from IAM.
+  "/applications",
 ];
 
 const ROOT = "/";

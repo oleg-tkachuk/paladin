@@ -25,6 +25,7 @@ export const SECTION = {
   mcpConnect: "/mcp/connect",
   health: "/health",
   profile: "/profile",
+  applications: "/applications",
   config: "/config",
 } as const;
 

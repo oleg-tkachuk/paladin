@@ -34,8 +34,6 @@ import {
 } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
 import { ChangePasswordCard } from "@/components/features/ChangePasswordCard";
-import { OAuthGrantsCard } from "@/components/features/OAuthGrantsCard";
-import { userResourceName } from "@/lib/userPath";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { useAuth } from "@/context/AuthContext";
@@ -425,12 +423,6 @@ export default function ProfilePage() {
       </Card>
 
       <ChangePasswordCard />
-      {user ? (
-        <OAuthGrantsCard
-          userName={userResourceName(user.tenantId, user.userId)}
-          own
-        />
-      ) : null}
     </div>
   );
 }

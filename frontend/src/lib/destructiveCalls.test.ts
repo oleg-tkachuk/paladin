@@ -31,7 +31,8 @@ const GUARDED: Record<string, string> = {
     "it is the confirmation",
   "components/features/buckets/BucketGrantsCard.tsx::revokeBucketGrant":
     "ConfirmModal",
-  "components/features/OAuthGrantsCard.tsx::revokeOAuthGrant": "ConfirmModal",
+  "components/features/oauth/ConnectedApplications.tsx::revokeOAuthGrant":
+    "ConfirmModal",
   "components/features/mcp/MCPAuthorization.tsx::deleteOAuthClient":
     "ConfirmModal",
   "app/collections/page.tsx::deleteCollection": "AlertDialog on the page",
