@@ -27,6 +27,7 @@ out() { printf '%s\n' "$plan" | sed -n "s/^$1=//p"; }
 
 [ "$(out packages)" = "paladin-core,charts/paladin-core" ] || fail "packages: $(out packages)"
 [ "$(out keep)" = "1" ] || fail "keeps $(out keep) dev builds, want the newest alone"
+[ "$(out dry_run)" = "false" ] || fail "dry_run is $(out dry_run): the cleanup deletes nothing"
 
 # The action matches tags with shell-style wildcards, as [[ == ]] does.
 glob="$(out delete_tags)"

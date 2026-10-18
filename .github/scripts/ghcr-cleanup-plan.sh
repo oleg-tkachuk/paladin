@@ -20,9 +20,9 @@ set -euo pipefail
 
 # Dev builds kept per package: the newest, which the dev cluster follows.
 readonly DEV_BUILDS_KEPT=1
-# Report what would be deleted and delete nothing, until the list has been
-# read once against the registry.
-readonly DRY_RUN=true
+# Deletes for real: the first dry run's list was read against the registry —
+# only dev builds and their children, no release, the newest kept.
+readonly DRY_RUN=false
 
 image="${1:-}"
 chart="${2:-}"
