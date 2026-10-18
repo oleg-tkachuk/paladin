@@ -14,16 +14,21 @@ listener, each accepting only tokens minted for it:
 | iam | 8085 | `paladin-iam` | `paladin.iam.v1` |
 | admin | 8090 | `paladin-admin` | `paladin.admin.v1` |
 
-The audience is enforced, not advisory: the data and admin muxes are wrapped
-with `RequireAudience`, and the iam plane's verifier expects `paladin-iam`, so
-a `paladin-data` token presented to the admin plane is rejected before any
-handler runs. This is what stops a token handed to a
+A binary run on the host with the config defaults serves data on 8083
+(`#LocalDataPort` in `backend/internal/config/schema.cue`); the chart and the
+compose config pin 8080.
+
+The audience is enforced, not advisory: each plane's JWT verifier expects
+that plane's audience, and the data and admin muxes are also wrapped with
+`RequireAudience`, so a `paladin-data` token presented to the admin plane is
+rejected before any handler runs. This is what stops a token handed to a
 browser from reaching tenant administration.
 
 - **Proto**: `proto/paladin/{admin,data,iam,common}/v1/`
 - **Protocol**: Connect, Connect-Web and gRPC over the same endpoints
-- **Handlers**: `backend/internal/api/connectshim/`
-- **Surface**: 150 RPCs across 27 services (inventory below)
+- **Handlers**: `backend/internal/api/{admin,data,iam}/v1/`, adapted to the
+  generated Connect interfaces in `backend/internal/api/connectshim/`
+- **Surface**: 157 RPCs across 28 services (inventory below)
 
 ## Two headers you cannot skip
 
@@ -74,11 +79,19 @@ you read back, or omit the path entirely.
 
 ## Authentication
 
-A bearer JWT on every call except `AuthService.Login` and the health probes:
+A bearer token on every call except `AuthService.Login`, `RefreshToken` and
+`ExchangeAudience`, which carry their credential in the request, and the HTTP
+health probes ([health.md](../../docs/health.md)). `HealthService` is an
+authenticated RPC like any other.
 
 ```
 Authorization: Bearer <jwt>
 ```
+
+An API token (`paladin_pat_…`) goes in the same header, or in
+`X-Paladin-API-Token` behind a proxy that strips `Authorization`; a capability
+token goes in `X-Paladin-Capability`, or in `Authorization` under the
+`capability` scheme (`DPoP` for a key-bound one).
 
 Claims that matter: `aud` (must match the plane), `tenant` (the tenant the
 request acts on), `roles` (compared verbatim; platform roles use dot form —
@@ -110,13 +123,14 @@ Every service and RPC in `proto/`, by plane.
 | `APITokenService` | 5 | `Create`, `Revoke`, `List`, `GetSelf`, `GetUsage` |
 | `AuditLogService` | 3 | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | 10 | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
-| `BillingService` | 2 | `GetTenantSummary`, `GetTenantTimeSeries` |
-| `BucketService` | 11 | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `ListAccessibleBuckets` |
+| `BillingService` | 3 | `GetTenantSummary`, `GetTenantTimeSeries`, `GetBillingSettings` |
+| `BucketService` | 14 | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
 | `CELService` | 1 | `Validate` |
 | `CapabilityService` | 8 | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |
 | `CollectionService` | 7 | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | 7 | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` — deliveries are CloudEvents 1.0 envelopes ([event-delivery-dedup.md](../../docs/event-delivery-dedup.md)) |
 | `MCPInspectService` | 3 | `Inspect`, `ListSessions`, `GetBridgeStatus` |
+| `OAuthClientService` | 1 | `DeleteOAuthClient` |
 | `PlatformOperationService` | 4 | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
 | `PolicyService` | 3 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
 | `QuotaService` | 3 | `GetQuota`, `SetQuota`, `ResetUsage` |
@@ -142,7 +156,7 @@ Every service and RPC in `proto/`, by plane.
 | --- | --- | --- |
 | `AuthService` | 8 | `Login`, `RefreshToken`, `Revoke`, `WhoAmI`, `ChangePassword`, `ExchangeAudience`, `ListMyMemberships`, `SwitchTenant` |
 | `HealthService` | 2 | `GetVersion`, `GetHealth` |
-| `UserService` | 8 | `CreateUser`, `GetUser`, `UpdateUser`, `DeleteUser`, `ListUsers`, `GrantScopes`, `RevokeScopes`, `ResetPassword` |
+| `UserService` | 10 | `CreateUser`, `GetUser`, `UpdateUser`, `DeleteUser`, `ListUsers`, `GrantScopes`, `RevokeScopes`, `ResetPassword`, `ListOAuthGrants`, `RevokeOAuthGrant` |
 | `UserSettingsService` | 5 | `GetMine`, `UpdateMine`, `GetForUser`, `ListByTenant`, `DeleteForUser` |
 
 Paladin never proxies object bytes. Uploads and downloads are presigned URLs
@@ -210,8 +224,27 @@ same way everywhere. The ones worth branching on:
 | `unauthenticated` | no token, wrong audience, or bad credentials |
 
 `already_exists` and `failed_precondition` are deliberately distinct: a caller
-retrying a create needs to tell "it exists" from "something else is wrong",
-and the code is the only part of the answer it can branch on.
+retrying a create needs to tell "it exists" from "something else is wrong".
+
+Within a code, the reason says which condition it was: an error mapped from a
+domain condition carries a `google.rpc.ErrorInfo` with `domain` `paladin` and
+`reason` set to a `paladin.common.v1.ErrorReason` value name
+(`proto/paladin/common/v1/error_reason.proto`) — `VERSION_CONFLICT`,
+`COLLECTION_NOT_EMPTY`, `BUCKET_NOT_FOUND`, the `CAPABILITY_*` refusals.
+Branch on the reason, never on the message; a reason a client does not know
+counts as the code alone. Some reasons carry `ErrorInfo.metadata`:
+`ERROR_REASON_COLLECTION_NOT_EMPTY` (`failed_precondition`, from
+`DeleteCollection`) says what holds the collection, as base-10 integers under
+`live_objects` and `trashed_objects` — a trashed object holds it as much as a
+live one.
+
+## Pagination
+
+List RPCs take a `paladin.common.v1.PageRequest`: `page_size` from 0 to 1000,
+0 meaning the server default, and each RPC caps it at its own maximum;
+`page_token` is the opaque `next_page_token` of the previous response. An
+empty `next_page_token` is the last page. `total_size` is set only where an
+RPC documents it.
 
 ## Validation
 
@@ -222,7 +255,7 @@ offending field named.
 ## Compatibility
 
 The wire contract is pinned to a published baseline tag (`API_BASELINE_TAG` in
-`backend/scripts/proto-breaking.sh`, `api/v0.14.0` at time of writing) and
+`backend/scripts/proto-breaking.sh`, `api/v0.20.0` at time of writing) and
 `buf breaking` runs against it in `verify-all`. Pre-1.0
 the project still breaks compatibility deliberately — see
 [docs/upgrading.md](../../docs/upgrading.md), which records every such change
