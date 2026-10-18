@@ -728,22 +728,6 @@ open deliberately — each notes why._
   names for the same subsystem is how this drift starts.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
 
-## Release
-
-### Dev builds accumulate in GHCR — the cleanup runs as a dry run
-
-- **Status:** In progress.
-- **Reason:** ADR-0034 publishes an image and a chart for every green merge to
-  `main`, and GHCR has no retention setting. `release.yaml`'s publish job now
-  ends a dev build by deleting the older ones (`ghcr-cleanup-plan.sh`, keeping
-  the newest), but as a dry run: deleting from GHCR cannot be taken back
-  beyond its 30-day restore, so the first list is read against the registry
-  before anything goes.
-- **Definition of Done:** one dev publish's dry-run log is reviewed — only
-  `-dev.` versions and their children listed, no release, the newest kept —
-  and `DRY_RUN` in `ghcr-cleanup-plan.sh` is turned off.
-- **Blockers:** the review of that log.
-
 ## UI / Admin Console
 
 ### Option: Inter and IBM Plex Mono as the console's typefaces
