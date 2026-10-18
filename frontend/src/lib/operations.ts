@@ -8,6 +8,11 @@ import { create } from "@bufbuild/protobuf";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
+import {
+  progressFromFailure,
+  progressFromMetadata,
+  type OpProgress,
+} from "@/lib/operationProgress";
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 
 export type OpStatus =
@@ -147,4 +152,36 @@ export function operationElapsedMs(op: Operation, now: Date): number | null {
   const end = op.doneAt ? timestampDate(op.doneAt) : op.done ? null : now;
   if (!end) return null;
   return end.getTime() - timestampDate(op.createdAt).getTime();
+}
+
+/** Why op failed, in its own words; "" for one that did not. */
+export function operationError(op: Operation): string {
+  if (op.result.case === "error") return op.result.value.message || "error";
+  return "";
+}
+
+/**
+ * How far the work got — live for a running operation, last-known for one
+ * whose worker died. A failure with no snapshot is null: the console says
+ * nothing rather than guessing zero.
+ */
+export function operationProgress(op: Operation): OpProgress | null {
+  if (op.result.case === "error") {
+    return progressFromFailure(op.result.value.details);
+  }
+  return progressFromMetadata(op.metadata);
+}
+
+/** "1 object", "3 objects". */
+export const objectCountLabel = (n: number) =>
+  `${n} object${n === 1 ? "" : "s"}`;
+
+/** One line of how a finished batch went, or null for one that said not. */
+export function outcomeLine(op: Operation): string | null {
+  const o = operationOutcome(op);
+  if (!o) return null;
+  const parts = [`${o.succeeded} of ${o.total} done`];
+  if (o.alreadyApplied > 0) parts.push(`${o.alreadyApplied} already so`);
+  if (o.failed > 0) parts.push(`${o.failed} failed`);
+  return parts.join(" · ");
 }
