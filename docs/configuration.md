@@ -61,9 +61,9 @@ auth:
 
 A bare string is accepted as shorthand for `{name: <string>}`. A few
 fields take the same reference under a `_ref` name instead
-(`ingest.webhook.shared_secret_ref`, the OAuth `client_secret_ref`s).
-`ingest.nats.token_ref` and `ingest.rabbitmq.url_ref` are accepted but not
-resolved; set `token` / `url` instead.
+(`ingest.webhook.shared_secret_ref`, `ingest.nats.token_ref`,
+`ingest.rabbitmq.url_ref`, the OAuth `client_secret_ref`s). Each takes a value
+or a reference, never both.
 
 Resolution happens only when `KUBERNETES_SERVICE_HOST` is set:
 `K8sSecretResolver` (`backend/internal/config/resolver.go`) reads each

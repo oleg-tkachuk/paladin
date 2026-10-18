@@ -1175,7 +1175,16 @@ config:
       max_body_bytes: 1048576
     dedup_ttl: 24h
     reaper_interval: 1h
-    # nats / rabbitmq blocks are populated when those drivers land.
+    # driver: nats or rabbitmq take their credential the same way: inline for
+    # dev, or a reference resolved at boot (add its `name` to
+    # rbac.secretReader.secretNames). Set only one of each pair.
+    # nats:
+    #   url: nats://nats.nats.svc:4222
+    #   subject: seaweedfs.events
+    #   token_ref: { name: paladin-ingest-nats, key: token }
+    # rabbitmq:
+    #   url_ref: { name: paladin-ingest-amqp, key: url }   # amqps://user:pass@host:5671/
+    #   queue: paladin-ingest
 
 # ─── Bootstrap admin Secret ────────────────────────────────────────────────
 #

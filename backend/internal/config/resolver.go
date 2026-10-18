@@ -280,6 +280,27 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		cfg.Ingest.Webhook.SharedSecretRef = SecretRef{}
 	}
 
+	// Ingest broker credentials, the same way: the NATS token, and the AMQP
+	// URL, which carries its user and password. The schema accepted both
+	// references long before anything resolved them, so a deploy that set one
+	// connected with no credential at all.
+	if cfg.Ingest.NATS.TokenRef.Name != "" {
+		tok, err := r.resolveSecret(ctx, &cfg.Ingest.NATS.TokenRef)
+		if err != nil {
+			return fmt.Errorf("ingest.nats.token_ref: %w", err)
+		}
+		cfg.Ingest.NATS.Token = tok
+		cfg.Ingest.NATS.TokenRef = SecretRef{}
+	}
+	if cfg.Ingest.RabbitMQ.URLRef.Name != "" {
+		url, err := r.resolveSecret(ctx, &cfg.Ingest.RabbitMQ.URLRef)
+		if err != nil {
+			return fmt.Errorf("ingest.rabbitmq.url_ref: %w", err)
+		}
+		cfg.Ingest.RabbitMQ.URL = url
+		cfg.Ingest.RabbitMQ.URLRef = SecretRef{}
+	}
+
 	// The MCP server's own client secret, for its token exchange.
 	if cfg.MCP.OAuth.Exchange.ClientSecretRef != nil {
 		sec, err := r.resolveSecret(ctx, cfg.MCP.OAuth.Exchange.ClientSecretRef)

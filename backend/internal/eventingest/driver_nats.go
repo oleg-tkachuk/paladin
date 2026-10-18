@@ -33,8 +33,8 @@ import (
 //
 // Auth: token + TLS for now. NATS supports many flavours (NKeys,
 // JWTs); the common pair covers a working-in-prod path. The token
-// comes from ingest.nats.token as given: ingest.nats.token_ref is
-// accepted by the schema but not resolved yet (BACKLOG.md).
+// arrives resolved: ingest.nats.token_ref is read into
+// ingest.nats.token at config load (config.ResolveConfig).
 type NATSDriver struct {
 	URL         string
 	Subject     string
