@@ -24,8 +24,10 @@
 : "${PALADIN_E2E_PORT_UI:=3000}"
 : "${PALADIN_E2E_PORT_PG:=5434}"
 : "${PALADIN_E2E_PORT_MCP:=8095}"
+: "${PALADIN_E2E_PORT_INGEST:=8100}"
 export PALADIN_E2E_PORT_DATA PALADIN_E2E_PORT_IAM PALADIN_E2E_PORT_ADMIN
 export PALADIN_E2E_PORT_S3 PALADIN_E2E_PORT_UI PALADIN_E2E_PORT_PG PALADIN_E2E_PORT_MCP
+export PALADIN_E2E_PORT_INGEST
 
 stack_data_url="http://localhost:${PALADIN_E2E_PORT_DATA}"
 stack_iam_url="http://localhost:${PALADIN_E2E_PORT_IAM}"
@@ -33,6 +35,7 @@ stack_admin_url="http://localhost:${PALADIN_E2E_PORT_ADMIN}"
 stack_s3_url="http://localhost:${PALADIN_E2E_PORT_S3}"
 stack_ui_url="http://localhost:${PALADIN_E2E_PORT_UI}"
 stack_mcp_url="http://localhost:${PALADIN_E2E_PORT_MCP}/mcp"
+stack_ingest_url="http://localhost:${PALADIN_E2E_PORT_INGEST}"
 
 # stack_export_urls — publish the plane addresses under the one name every
 # suite reads.
@@ -53,6 +56,7 @@ stack_export_urls() {
     export PALADIN_E2E_IAM_URL="$stack_iam_url"
     export PALADIN_E2E_ADMIN_URL="$stack_admin_url"
     export PALADIN_E2E_MCP_URL="$stack_mcp_url"
+    export PALADIN_E2E_INGEST_URL="$stack_ingest_url"
 }
 
 # require_free_ports <re-run command> [extra port ...]
@@ -67,7 +71,7 @@ require_free_ports() {
     shift
     local ports=("$PALADIN_E2E_PORT_DATA" "$PALADIN_E2E_PORT_IAM"
         "$PALADIN_E2E_PORT_ADMIN" "$PALADIN_E2E_PORT_S3" "$PALADIN_E2E_PORT_PG"
-        "$PALADIN_E2E_PORT_MCP" "$@")
+        "$PALADIN_E2E_PORT_MCP" "$PALADIN_E2E_PORT_INGEST" "$@")
     local busy="" port holders owner
     for port in "${ports[@]}"; do
         if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
