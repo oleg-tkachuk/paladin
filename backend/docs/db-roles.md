@@ -13,12 +13,22 @@ compromised pod credential can only do what `paladin_app` is allowed to do —
 which excludes `DROP TABLE`, `ALTER ROLE`, `TRUNCATE`, schema-level
 `CREATE`, and role management.
 
-One function is the exception to "DML only": `paladin_app` holds EXECUTE on
-`search_object_ids` (migration 029), a SECURITY DEFINER function owned by
-`paladin_migrate` that lets object search use its indexes under RLS. It
-returns object ids only, for the session's own tenant, and the rows are
-then read under `paladin_app`'s RLS as usual — see ADR-0019. A runtime role
-not named `paladin_app` needs the same grant.
+Two functions are the exception to "DML only", each with `EXECUTE` revoked
+from `PUBLIC` and granted to `paladin_app` alone:
+
+- `search_object_ids` (migration 029, re-signed in 078, 081 and 085), a
+  SECURITY DEFINER function owned by `paladin_migrate` that lets object search
+  use its indexes under RLS. It returns object ids only, for the session's own
+  tenant, and the rows are then read under `paladin_app`'s RLS as usual — see
+  ADR-0019.
+- `list_audit_entry_ids` (migration 086), SECURITY INVOKER, so `audit_log`'s
+  RLS still decides what the caller sees.
+
+A runtime role not named `paladin_app` needs the same grants.
+
+The `limes` schema is pgstore's. Migration 076 grants `paladin_app` and
+`paladin_reaper` `USAGE` on it and DML on its tables, with default privileges
+for tables created later.
 
 In **dev**, all three can be the same superuser — `migrate_dsn` defaults to
 empty and goose runs as the runtime role. In **production**, the

@@ -118,8 +118,8 @@ func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 
 	// One envelope, one record in the typical case. If a publisher batches
 	// multiple records we take the first; the rest are still in `Data` for a
-	// handler that wants fan-out. (Future: a batched-Parse on Source emitting
-	// one CloudEvent per record — tracked in BACKLOG.)
+	// handler that wants fan-out. A batched Parse emitting one CloudEvent per
+	// record is in BACKLOG.md.
 	r := env.Records[0]
 
 	if s.BucketName != "" && r.S3.Bucket.Name != s.BucketName {

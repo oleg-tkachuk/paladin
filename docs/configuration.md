@@ -60,8 +60,10 @@ auth:
 ```
 
 A bare string is accepted as shorthand for `{name: <string>}`. A few
-fields take the same reference under a `_ref` name instead (`shared_secret_ref`,
-`token_ref`, `url_ref`).
+fields take the same reference under a `_ref` name instead
+(`ingest.webhook.shared_secret_ref`, the OAuth `client_secret_ref`s).
+`ingest.nats.token_ref` and `ingest.rabbitmq.url_ref` are accepted but not
+resolved; set `token` / `url` instead.
 
 Resolution happens only when `KUBERNETES_SERVICE_HOST` is set:
 `K8sSecretResolver` (`backend/internal/config/resolver.go`) reads each
@@ -123,17 +125,17 @@ comment. What each top-level block owns:
 | `admin` | the admin listener (`:8090`), and `tenants.trash_retention` — how long a trashed tenant waits before it is surfaced for purge ([deletion-semantics.md](deletion-semantics.md#tenant)) |
 | `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
-| `auth` | JWT signing, token TTLs, login rate limiting |
+| `auth` | JWT signing, token TTLs, login rate limiting, the OAuth 2.1 authorization server (`auth.oauth`, ADR-0009) |
 | `security` | nothing to set: `log_sensitive` is retired (accepted, ignored, warned about) |
 | `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
-| `middleware` | interceptor defaults shared by every plane |
+| `middleware` | interceptor defaults shared by every plane; the per-tenant rate limit is counted in Postgres, and its `burst`, `max_tenants` and `cleanup_*` keys are accepted but no longer read |
 | `worker` | job intervals, leases, reaper batch sizes ([ops-housekeeping.md](../backend/docs/ops-housekeeping.md)) |
 | `dispatcher` | outbox drain loop and sink behaviour; every delivery is a CloudEvents 1.0 envelope ([event-delivery-dedup.md](event-delivery-dedup.md)) |
 | `storage` | backends, routing, SSE, per-backend auth mode ([backend-registry.md](../backend/docs/backend-registry.md)) |
 | `ingest` | the storage-notification receiver: driver, webhook, dedup ([storage-ingest.md](storage-ingest.md)) |
 | `cedar` | policy cache TTL, canonical collection entity UIDs ([cedar-authoring.md](../backend/docs/cedar-authoring.md)) |
-| `mcp` | the MCP server and its upstreams |
-| `capability` | issuer, signing key, verification, budgets |
+| `mcp` | the MCP server and its upstreams, its OAuth resource-server posture and per-plane token exchange (ADR-0036), tool profiles and `always_deny`, the bridge's DPoP key |
+| `capability` | issuer, signing key, verification, budgets, DPoP server nonces |
 | `api_token` | the HMAC key for token lookup digests |
 
 ### Client address behind proxies

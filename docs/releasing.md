@@ -1,13 +1,15 @@
 # Releasing
 
 Two release streams and one baseline. Each stream tracks what its
-consumers actually depend on, and each is cut automatically from the commits
+consumers actually depend on, and each is versioned from the commits
 that touch it ([`release.config.cjs`](../.github/release/release.config.cjs)).
+The SDK's tag is cut automatically; the product's when a maintainer runs the
+release workflow.
 
 | Tag | Cut by | Publishes | Versioned by |
 | --- | --- | --- | --- |
-| `vX.Y.Z` | semantic-release, after a green push to `main` | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
-| `sdk/go/vX.Y.Z` | semantic-release, in the same run | the tag, which the Go proxy and pip resolve, and a GitHub release | the commits that touch `sdk/` or `proto/` |
+| `vX.Y.Z` | semantic-release, when `release.yaml` is run by hand | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
+| `sdk/go/vX.Y.Z` | semantic-release, after a green push to `main` | the tag, which the Go proxy and pip resolve, and a GitHub release | the commits that touch `sdk/` or `proto/` |
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
 The SDK release's notes list only their own `feat`, `fix`, `perf`,
@@ -79,13 +81,19 @@ sorts after the last release and before the next one, so a deployment that
 follows prereleases takes each dev build as it lands and the release that
 follows it. A dev build gets no GitHub release and moves no floating tag;
 [`publish-version-check.sh`](../.github/scripts/publish-version-check.sh) refuses
-one that derived a release version.
+one that derived a release version. Once it is pushed and signed, the same job
+deletes that component's older dev builds — image and chart, with their
+platform manifests, signatures and attestations — from GHCR, keeping only the
+newest ([`ghcr-cleanup-plan.sh`](../.github/scripts/ghcr-cleanup-plan.sh),
+run through `dataaxiom/ghcr-cleanup-action`). Only versions carrying the
+`-dev.` mark are matched, so a release is never deleted.
 
 A commit is built from its own sha, so it is published even when `main` has
-moved past it by the time its CI passes. The one commit that gets no dev build
+moved past it by the time its CI passes. The one code commit that gets no dev build
 is one whose CI run never finished: GitHub cancels a run still queued when a
 newer push to `main` queues behind it, and the newer commit's build carries
-its change.
+its change. A documentation-only push dispatches no release run, so it gets
+none either.
 
 ### Signatures and SBOMs
 
@@ -109,8 +117,8 @@ repository's release workflow and know what is inside it.
 - **Charts too.** Each chart is signed by digest with the same identity, and
   verified in the same job.
 
-The logic is [`.github/scripts/release-sign.sh`](../scripts/release-sign.sh) and
-[`.github/scripts/release-sign-chart.sh`](../scripts/release-sign-chart.sh);
+The logic is [`.github/scripts/release-sign.sh`](../.github/scripts/release-sign.sh) and
+[`.github/scripts/release-sign-chart.sh`](../.github/scripts/release-sign-chart.sh);
 `task -t Taskfile.dev.yaml verify:release-signing` runs both with a throwaway
 key against a local registry.
 
@@ -150,7 +158,7 @@ scope. One version covers both languages: the Go module resolves
 through hatch-vcs, so neither carries a version to edit. A release is the
 tag; nothing else is published, and the Python package is not on PyPI yet.
 The release workflow asks the Go module proxy for each new module tag
-([`.github/scripts/warm-go-proxy.sh`](../scripts/warm-go-proxy.sh)), so `go get
+([`.github/scripts/warm-go-proxy.sh`](../.github/scripts/warm-go-proxy.sh)), so `go get
 …@latest` and the README's SDK badge see it at once rather than when the
 proxy next refreshes.
 
@@ -162,7 +170,7 @@ commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section in
 [upgrading.md](upgrading.md) headed `## vX.Y.Z — …` for the release that
 ships it. Pre-1.0 such a release is only a minor, so its notes list these
 commits first, under *Behaviour changes*, with a link to that section
-([`.github/scripts/stream-release-notes.sh`](../scripts/stream-release-notes.sh)).
+([`.github/scripts/stream-release-notes.sh`](../.github/scripts/stream-release-notes.sh)).
 
 ### Which servers an SDK release works with
 

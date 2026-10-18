@@ -70,6 +70,7 @@ Prometheus rendering replaces dots with underscores and adds unit and
 | `paladin.outbox.pending.max_per_tenant` | gauge | the deepest single tenant's pending backlog | `internal/worker/metrics.go` |
 | `paladin.objects.pending_overdue` | gauge | `PENDING` objects past their presign expiry plus the reconciler's grace | `internal/worker/metrics.go` |
 | `paladin.objects.pending_overdue.age` | gauge | how far past that deadline the oldest one is, in seconds | `internal/worker/metrics.go` |
+| `paladin.tenants.past_trash_retention` | gauge | trashed tenants past `admin.tenants.trash_retention`, which nothing purges on its own | `internal/worker/trash_retention_gauge.go` |
 | `paladin.tenant.ratelimit.decisions` | counter | per-tenant rate-limit decisions | `internal/middleware/tenant_ratelimit.go` |
 | `paladin.tenant.ratelimit.fail_open` | counter | requests admitted because the bucket store failed | `internal/middleware/tenant_ratelimit.go` |
 | `paladin.api_token.verify.duration_ms` | histogram | API-token verify latency | `internal/auth/api_token_metrics.go` |

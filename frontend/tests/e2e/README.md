@@ -47,10 +47,13 @@ KUBE_CONTEXT=orbstack ./scripts/e2e-cluster.sh            # whole suite
 KUBE_CONTEXT=orbstack ./scripts/e2e-cluster.sh tests/e2e/shell.spec.ts
 ```
 
-The script reads the bootstrap admin's password from its Secret, uses the
+It runs from any directory as `frontend/scripts/e2e-cluster.sh`, against the
+release in `NAMESPACE` (default `paladin`). The script reads the bootstrap
+admin's password from its Secret (or `ADMIN_PASSWORD`), uses the
 console and API ingress hosts (`BASE_HOST`, `API_HOST`, defaulting to
-`paladin.local` and `api.paladin.local`), and port-forwards the admin plane,
-which has no ingress route, unless `ADMIN_URL` names one. Every test signs in
+`paladin.local` and `api.paladin.local`), and port-forwards the admin plane
+and the MCP server, which have no ingress route, unless `ADMIN_URL` and
+`MCP_URL` name one. Every test signs in
 through the login form, so the target's login rate limits must be lifted, or
 the run stalls on `/login` within its first minute.
 
@@ -115,10 +118,13 @@ tests/e2e/
 │   ├── unique.ts          # uniqueSlug() — UUID-suffixed identifiers
 │   ├── auth.ts            # loginAsAdmin(), logout() — UI-driven
 │   ├── navigate.ts        # gotoSettled(), clickWhenSettled()
+│   ├── oauth.ts           # the OAuth grant driven over HTTP: consent, code, exchange
+│   ├── leaks.ts           # fixtureInventory(), addedSince() — the leak check
 │   ├── resources.ts       # the `test` whose fixtures delete what they made
 │   └── seed.ts            # seedTenant, seedBucket, seedCollection,
 │                          # seedCapability, … — Connect-RPC direct
 ├── environment.setup.ts   # runs first, gates the rest — see below
+├── leaks.teardown.ts      # runs last, fails on anything the run left behind
 ├── auth.spec.ts           # US1 — login + AuthGate redirect
 ├── scope.spec.ts          # US2 — scope picker behavior
 ├── buckets.spec.ts        # US3 — bucket → Collection navigation
@@ -128,7 +134,7 @@ tests/e2e/
 ├── seaweedfs-s3.json      # SeaweedFS S3 identity for the dev credentials
 └── docker-compose.test.yaml   # seaweedfs, seaweedfs-setup, postgres,
                                # migrate, promote-app-role, bootstrap,
-                               # api (data + iam), admin, ui
+                               # api (data + iam), ingest, admin, mcp, ui
 ```
 
 ## The environment gate
@@ -162,11 +168,28 @@ from one function. Because the count depends on that, the gate's first test
 asserts a freshly minted slug still matches, so changing the generator fails
 loudly instead of quietly blinding the guard.
 
+It also records an inventory of the fixture-shaped resources already there
+(`fixtures/leaks.ts`), the baseline for the leak check below.
+
 The gate never deletes anything. To clear a full stack:
 
 ```bash
 docker compose -p paladin-e2e -f tests/e2e/docker-compose.test.yaml down -v
 ```
+
+## Teardown and the leak check
+
+Every resource a test makes through the `test` in `fixtures/resources.ts` is
+removed after it, in foreign-key order: objects, collections, bucket grants,
+buckets, backends, users, tenants. Removal purges rather than trashes —
+objects are deleted permanently, the trashed ones included (a trashed object
+still holds its collection), and a tenant is trashed and then purged.
+
+`leaks.teardown.ts` runs as the environment project's teardown, after every
+test. It takes the inventory again and fails, by name, on anything new since
+the run started: active or trashed tenants, buckets, backends, collections
+and the seeded admin's OAuth grants. Rows that were there before the run are
+not its to answer for, so the check holds on a shared stack.
 
 ## The FR-008 test (capabilities.spec.ts T032)
 
@@ -210,6 +233,6 @@ For the full troubleshooting table + SDD context, see
 
 `task -t Taskfile.dev.yaml verify-e2e` runs the whole suite. With
 `PALADIN_E2E_SHARD=1/2` it runs one slice, in Playwright's `--shard` form;
-CI builds the images once (`verify-e2e:images`, handed over by
-`scripts/e2e-images.sh`) and runs both slices on separate runners with
+CI builds the images once (`verify-e2e:images`, handed over by the
+repository's `scripts/e2e-images.sh`) and runs both slices on separate runners with
 `verify-e2e:run`, each against its own stack.

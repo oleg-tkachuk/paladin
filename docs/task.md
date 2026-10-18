@@ -95,7 +95,7 @@ component at a time.
 | Task 3.54+ | every gate is a task |
 | [Go](https://go.dev/dl/) 1.27+ | `backend/` and `sdk/go/`, per their `go.mod`; the toolchain auto-downloads |
 | [Node](https://nodejs.org) 26 | the console; the version its image ships and CI verifies with |
-| [pnpm](https://pnpm.io) 12.10 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.10.1` |
+| [pnpm](https://pnpm.io) 12.13 | pinned by `packageManager` in `frontend/package.json`; Node 26 has no corepack, so `npm install -g pnpm@12.13.0` |
 
 `verify-all` also shells out to golangci-lint, buf, helm, yq and python3. On
 macOS, `brew bundle` installs that set. The [Brewfile](../Brewfile) says which

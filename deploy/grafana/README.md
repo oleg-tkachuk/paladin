@@ -31,7 +31,7 @@ single click pivots between them:
 
 - **Log → trace.** Paladin stamps `trace_id` / `span_id` / `request_id` /
   `tenant_id` onto every log line written while serving an RPC
-  (`middleware.LogContextStreaming`). The Loki datasource's *derived field* extracts `trace_id`
+  (`middleware.LogContext`). The Loki datasource's *derived field* extracts `trace_id`
   and turns it into a "View trace" link into Tempo.
 - **Trace → log.** Tempo's `tracesToLogsV2` jumps from a span back to the log
   lines sharing its `trace_id`.
@@ -59,7 +59,7 @@ Rate / Errors / Duration for every Paladin Connect RPC across all three planes
   `/metrics` on `metrics.port` (`metrics.mode: scrape`).
 - **Metric name:** `rpc_server_call_duration_seconds_{bucket,sum,count}`, the
   Prometheus rendering of OTel `rpc.server.call.duration` (unit `s`,
-  semconv 1.43, emitted by otelconnect v0.10.0).
+  semconv 1.43, emitted by otelconnect v0.12.0).
 - **Labels:** `rpc_method` in its fully qualified form
   (`paladin.data.v1.ObjectService/GetObject`), `rpc_system_name`, and
   `error_type` on failed calls. There is no `rpc_service` label; the panels

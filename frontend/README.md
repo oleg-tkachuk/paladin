@@ -61,10 +61,11 @@ frontend/
 │   │   ├── buckets/  collections/  upload/  trash/
 │   │   ├── policies/     Cedar policy editing and simulation
 │   │   ├── mcp/          MCP upstream inspection
-│   │   ├── audit/  billing/  stats/  ops/  health/
-│   │   └── storage-backends/  users/  profile/  oauth/  login/  config/
+│   │   ├── audit/  billing/  stats/  ops/  operations/  health/
+│   │   └── storage-backends/  users/  applications/  profile/  oauth/  login/  config/
 │   ├── components/       shared UI (shadcn/ui + Tailwind)
-│   ├── context/          React providers: auth, scope, shell, stats
+│   ├── context/          React providers: auth, scope, shell, stats, actions,
+│   │                     breadcrumb names, refresh
 │   ├── hooks/            data hooks; error contract in hooks/README.md
 │   ├── constants/        API contract constants, role names
 │   ├── gen/              GENERATED Connect-ES stubs — do not hand-edit

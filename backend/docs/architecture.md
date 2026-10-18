@@ -54,8 +54,9 @@ plane runs without `BYPASSRLS`, so a missing policy is a missing wall.
 4. **Events.** The state change and its outbox row commit in one
    transaction (ADR-0003); the dispatcher delivers them to subscriptions.
 5. **Housekeeping.** Workers reap expired `PENDING` objects and abandoned
-   multipart sessions, drain the purge queue, roll partitions and reconcile
-   quota usage ([ops-housekeeping.md](ops-housekeeping.md)).
+   multipart sessions, drain the purge queue, roll partitions, reconcile
+   quota usage and drop finished operations once `operations_ttl` has passed
+   ([ops-housekeeping.md](ops-housekeeping.md)).
 
 ## Transport Layer
 
@@ -66,7 +67,7 @@ package and token audience. All three run as the `paladin_app` database role
 | Plane | Package | Serves |
 |-------|---------|--------|
 | **data** | `paladin.data.v1` | Object lifecycle, multipart, presign, batch, tags, operations, storage bootstrap |
-| **admin** | `paladin.admin.v1` | Tenants, buckets, backends, collections, quotas, policy, CEL, capabilities, API tokens, tenant budgets, event subscriptions, audit, billing, platform operations, MCP inspection, system |
+| **admin** | `paladin.admin.v1` | Tenants, buckets, backends, collections, quotas, policy, CEL, capabilities, API tokens, OAuth clients, tenant budgets, event subscriptions, audit, billing, platform operations, MCP inspection, system |
 | **iam** | `paladin.iam.v1` | Auth, users, user settings, health |
 
 Each plane's handlers live under `internal/api/connectshim/<plane>/`, one
@@ -94,30 +95,36 @@ in one shared chain — the planes accept different credentials and enforce
 different audiences. The data plane's order, which carries the most
 constraints:
 
-1. **OTel** — trace and span per RPC
-2. **LogOutcome** — logs failed calls, including auth rejections
-3. **Auth (JWT)** — verifies non-PAT bearers; steps aside for a PAT or a
+1. **Recover · ScrubInternal** — a panic is answered as an internal error;
+   an internal error reaches the caller as its code and a request id
+2. **OTel** — trace and span per RPC
+3. **LogOutcome** — logs failed calls, including auth rejections
+4. **Auth (JWT)** — verifies non-PAT bearers; steps aside for a PAT or a
    capability-only request, which carries no `Authorization` header
    (ADR-0010: a capability may be the entire credential)
-4. **API token** — verifies `paladin_pat_…` and establishes the principal
-5. **Capability** — same, for capability credentials
-6. **RequireAudience** — after 3–5, since it reads the principal they set
-7. **ActOnNamedTenant** — a platform admin's request acts on the tenant it
-   names; everything below keys on that tenant
-8. **Tenant rate limit** — per-tenant token bucket, before any database work
-9. **Log context** — adds trace, request and tenant ids to handler logs
-10. **QuotaSoftCheck** — tenant and bucket scope
-11. **Validation** — `buf.validate` rules via `protovalidate`
-12. **Idempotency** — `idempotency_keys` for replayable writes
-13. **Audit** — records every write in the trail of the tenant it acted on,
+5. **API token** — verifies `paladin_pat_…` and establishes the principal
+6. **Capability** — same, for capability credentials
+7. **RequireAudience** — after 4–6, since it reads the principal they set
+8. **RequireOAuthWriteScope** — an OAuth client without the write scope may
+   call only RPCs the contract marks `NO_SIDE_EFFECTS` (ADR-0035)
+9. **Tenant gate · freeze** — refuses a trashed or purged tenant's
+   credentials, and any change to a tenant in the trash
+10. **ActOnNamedTenant** — a platform admin's request acts on the tenant it
+    names; everything below keys on that tenant
+11. **Tenant rate limit** — per-tenant token bucket, before any database work
+12. **Log context** — adds trace, request and tenant ids to handler logs
+13. **QuotaSoftCheck** — tenant and bucket scope
+14. **Validation** — `buf.validate` rules via `protovalidate`
+15. **Idempotency** — `idempotency_keys` for replayable writes
+16. **Audit** — records every write in the trail of the tenant it acted on,
     whoever made it; calls that only issue a presigned URL are skipped
 
-The admin and iam chains differ in credentials and audience, and each ends in
-an audit interceptor (`middleware.AuditWithMirror`) that writes the row for a
-mutation before the RPC returns (ADR-0004). The iam chain lets `Login`,
-`RefreshToken` and `ExchangeAudience` through anonymously and adds a login
-rate limit; the admin chain requires an `Idempotency-Key` on every `Create*` and
-`Issue*` RPC.
+The admin and iam chains differ in credentials and audience, share steps 1–3
+and 8–9, and each has an audit interceptor (`middleware.AuditWithMirror`) that
+writes the row for a mutation before the RPC returns (ADR-0004). The iam chain
+lets `Login`, `RefreshToken` and `ExchangeAudience` through anonymously and
+adds a login rate limit; the admin chain requires an `Idempotency-Key` on every
+`Create*` and `Issue*` RPC.
 
 ## Runtime Entry Points
 
@@ -134,7 +141,7 @@ role; there is no all-in-one mode:
 | `serve ingest` | Storage notifications: webhook, NATS, RabbitMQ, SQS |
 | `serve mcp` | MCP bridge (`--embedded` hosts the handlers in-process) |
 | `migrate` | Apply the migrations |
-| `bootstrap` | Create the platform admin and mirror configured storage backends into the database |
+| `bootstrap` | Create the platform admin, mirror configured storage backends into the database, and probe the features of any never probed |
 
 Composition lives in `internal/app/` — `build_listeners_*.go` assemble the
 serving planes, `build_jobs.go` the background workers, `build_deps.go` the

@@ -13,7 +13,7 @@ Python SDK's wheel beside each protobuf major and Python it supports, every
 cell of [`sdk/python/compat.json`](../sdk/python/compat.json) side by side in
 one job (`verify-py-sdk-compat` locally), and runs the client lifecycle stress in
 `sdk/python/tests/test_lifecycle.py` at a count high enough to catch an
-intermittent abort at exit. [`.github/scripts/ci-groups.sh`](../scripts/ci-groups.sh)
+intermittent abort at exit. [`.github/scripts/ci-groups.sh`](../.github/scripts/ci-groups.sh)
 decides which groups a set of paths reaches; a console-only change does not
 run the backend's tests. Run by hand, it runs every group. A final `All checks
 passed` job is the one check branch protection requires, so a group that was
@@ -30,7 +30,10 @@ Any other green push to `main` dispatches
 build** of that commit — both images and both charts at
 `<next patch>-dev.<time>.g<sha>` — and cuts `sdk/go/v*` when a commit touched
 the SDK. The dev cluster follows the dev builds, so it runs every change as it
-lands.
+lands. Each dev publish then deletes the older dev builds of that component's
+image and chart from GHCR, keeping only the newest
+([`ghcr-cleanup-plan.sh`](../.github/scripts/ghcr-cleanup-plan.sh)); releases
+are never deleted.
 
 The product is **released by hand**, as a train ([ADR-0034](adr/0034-the-product-releases-as-a-train.md)):
 running `release.yaml` from the Actions tab, or `gh workflow run release.yaml`,
@@ -52,6 +55,7 @@ flowchart LR
     ok{{"<b>All checks passed</b><br/>required by main"}}
     head{"head is the<br/>commit CI passed?"}
     dev["<b>dev build</b> backend · frontend<br/>x.y.z-dev.… → dev cluster"]
+    clean["<b>GHCR cleanup</b><br/>older dev builds deleted<br/>newest kept · releases never"]
     sdk["semantic-release<br/>SDK stream"]
     hand(["release.yaml run by hand"])
     passed{"CI passed<br/>on main's head?"}
@@ -64,10 +68,11 @@ flowchart LR
     chg --> v & py & img & deep & wf
     img --> e2e
     v & py & e2e & deep & wf --> ok
-    ok -- "push to main" --> head
-    head -- yes --> dev & sdk
+    ok -- "push to main" --> dev & head
+    dev --> clean
+    head -- yes --> sdk
     sdk -- "a module's commits" --> mods
-    head -- "no: the newer commit's CI publishes it" --> skip(["nothing"])
+    head -- "no: the newer commit's CI tags it" --> skip(["no SDK tag"])
     hand --> passed
     passed -- yes --> tag --> pub --> ann
     pin(["push to main changing<br/>go.mod · package.json · compose"]) -. "badges.yaml" .-> badges
@@ -75,7 +80,7 @@ flowchart LR
     classDef role fill:#DCFCE7,stroke:#16A34A,color:#14532D
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class chg,v,py,img,e2e,deep,wf,tag,pub,dev,sdk role
+    class chg,v,py,img,e2e,deep,wf,tag,pub,dev,clean,sdk role
     class skip,badges,pin,hand optional
     class ok,ann,mods external
 ```

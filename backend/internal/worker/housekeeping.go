@@ -62,8 +62,8 @@ func (r *RefreshTokenPurger) log() *zap.Logger {
 // the partial index `idx_operations_terminal_done_at` (the schema baseline (001_initial_schema.sql))
 // excludes them anyway, so the reaper never reads them.
 //
-// Disabled when TTL == 0. Default TTL chosen at the call site
-// (cmd/server/root.go) — recommended 30 days so support has a window to
+// Disabled when TTL == 0. TTL is worker.jobs.housekeeping.operations_ttl,
+// 14 days by default (config/schema.cue), so support has a window to
 // reconstruct what happened in the run-up to a failed batch.
 type OperationsReaper struct {
 	Repo OperationsReaperRepo

@@ -230,7 +230,7 @@ p = paladin.connect(endpoints, token_source=session, transfer=transfer)
 | `rewrite=fn` | The general form: any URL to any URL, the signed Host still kept. Not with `split_horizon`. |
 | `transport=`, `async_transport=` | A `pyqwest.SyncHTTPTransport` of your own for the sync workflows, and a `pyqwest.HTTPTransport` for the async ones — a proxy, TLS settings. Build it with `follow_redirects=False`: one that follows them cannot be stopped from here. |
 | `connect(…, transfer=t)` | Every `upload` and `download` through that data plane uses `t`; without it, a shared default. |
-| `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied; `Content-Length` among them too, since a streamed body has no length the HTTP client could find — send a body of exactly that length. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
+| `stream(method, signed, headers=None, content=None)`, `astream(…)` | One presigned request of your own — a URL the server signed that the workflows do not send, such as a PUT minted for another service. A context manager yielding storage's 2xx `pyqwest` response, unread; `method` applies when `signed.method` is empty. The signed Host and `signed.required_headers` are sent, and the rewrite applied; `Content-Length` among them too, since a streamed body has no length the HTTP client could find — send a body of exactly that length. Any other status is a `TransferError`, reported to the hooks; on success report it yourself with the `Transfer`'s `ended(method, host_of(signed), moved, started, None)`, `started` from `time.monotonic()` before the call. |
 | `TransferError` | A request storage refused, or answered with a redirect: `method`, `host` (the URL's query is the signature and is not kept), `status`, and the first 512 bytes of the `body`. |
 
 ### TLS
@@ -322,7 +322,8 @@ except paladin.NotFoundError:
     pass  # already gone
 except paladin.FailedPreconditionError as err:
     if err.reason == error_reason_pb2.ERROR_REASON_COLLECTION_NOT_EMPTY:
-        ...  # empty it first
+        ...  # empty it first: the ErrorInfo in decoded_details counts what
+             # holds it, under "live_objects" and "trashed_objects"
 ```
 ### Resource names and object URIs
 
@@ -448,7 +449,9 @@ range requests. `ensure_tenant_storage` reports a bucket and collections
 created the first time and existing after, for any backend id. `put` stores
 an object directly; `fail_upload` removes a pending one, as the server does
 when its upload fails — a failed object is deleted, and its key is free; `tenant` and `collection()` name the fake's tenant and
-its collections, all of which exist; `requests()` lists the RPCs received,
+its collections, all of which exist; `public_collection()` names one served as
+the server serves a public collection — the fake names each object, serves it
+unsigned at its `public_url`, and refuses a delete that is not permanent; `requests()` lists the RPCs received,
 each a `Request` with its `procedure`, `headers` by lower-case name and
 `message` — a copy of the request — for a test of what the client sent.
 `calls(procedure, match=None)` returns a procedure's requests whose message

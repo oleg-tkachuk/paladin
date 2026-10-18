@@ -40,7 +40,8 @@ ReplicaSet). That is the motivation for the lock rules below.
 Production applies migrations as `paladin_migrate`: the owner of the
 database, with `BYPASSRLS` and nothing more. The roles, the database and the
 extensions are created by the Postgres operator before any migration runs.
-So a migration cannot create roles or extensions, or set a custom parameter
+So a migration cannot create roles (`002` attempts it and tolerates the
+refusal) or an untrusted extension (`025`'s `pg_trgm` is trusted), or set a custom parameter
 such as `paladin.cross_tenant` in a function definition (Postgres 15 and later
 require superuser for that). A function that must read across tenants runs as
 `SECURITY DEFINER` instead, with a pinned `search_path` and schema-qualified

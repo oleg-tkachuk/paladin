@@ -20,7 +20,7 @@ counter is the only signal.
   limiter (`internal/middleware/tenant_ratelimit.go`), on the api and admin
   planes. Its buckets are `tenant_rate_buckets`, one row per tenant per
   minute, written through the RLS runtime pool.
-- `paladin_api_token_ratelimit_fail_open_total` — the per-token limiter
+- `paladin_api_token_ratelimit_fail_open_total{tenant_id}` — the per-token limiter
   (`internal/auth/api_token_interceptor.go`), for API tokens created with a
   `rate_limit_rpm` above zero; a cap of 0 is refused without it. Its buckets are `api_token_rate_buckets`.
 

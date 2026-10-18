@@ -298,7 +298,8 @@ the kind alone.
 _, err := p.Admin.Collection.DeleteCollection(ctx, req)
 switch {
 case paladin.Reason(err) == commonv1.ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY:
-	// empty it first
+	// empty it first: the ErrorInfo in Details counts what holds it, under
+	// "live_objects" and "trashed_objects"
 case errors.Is(err, paladin.ErrNotFound):
 	// already gone
 }
@@ -421,7 +422,9 @@ range requests. `EnsureTenantStorage` reports a bucket and collections
 created the first time and existing after, for any backend id. `Put` stores
 an object directly; `FailUpload` removes a pending one, as the server does
 when its upload fails — a failed object is deleted, and its key is free; `Tenant` and `Collection` name the fake's tenant and its
-collections, all of which exist; `Requests` lists the RPCs received, each
+collections, all of which exist; `PublicCollection` names one served as the
+server serves a public collection — the fake names each object, serves it
+unsigned at its `public_url`, and refuses a delete that is not permanent; `Requests` lists the RPCs received, each
 with its `Procedure`, `Header` and `Message` — a copy of the request — for a
 test of what the client sent. `Calls(procedure, match)` returns a
 procedure's requests whose message `match` accepts, so a test sharing the
@@ -519,7 +522,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
 | Biscuit attenuation | `limes.Attenuate`, from [limes](https://github.com/oleg-tkachuk/limes) | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
-| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `pyqwest`'s own spans, through `http_client` and `Transfer(otel=True)` | `connectrpc-otel` 0.2.0 fails on connect-python 0.9.0. |
+| OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `connectrpc-otel` through `interceptors`, and `pyqwest`'s own spans through `http_client` and `Transfer(otel=True)` | |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
 

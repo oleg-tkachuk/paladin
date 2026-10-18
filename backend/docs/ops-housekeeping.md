@@ -8,7 +8,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 
 | Job | What it does | Key | Default |
 |---|---|---|---|
-| `reconciler` | promotes `PENDING` objects whose bytes arrived; fails ones whose upload URL expired | `reconciler.interval`, `.min_object_age` | `30s`, `2h` |
+| `reconciler` | promotes `PENDING` objects whose bytes arrived; deletes the row of one whose upload URL expired (`statemachine.DiscardFailed`) | `reconciler.interval`, `.min_object_age` | `30s`, `2h` |
 | `bucket_reconciler` | creates and deletes buckets on their backend, from the outbox | `reconciler.interval` | `30s` |
 | `multipart_reaper` | aborts multipart sessions older than the TTL; ticks on `housekeeping.interval` | `housekeeping.multipart_ttl` | `72h` |
 | `multipart_abort_drainer` | pays the abort debt a cascade delete recorded in `pending_multipart_aborts`; runs only while `multipart_ttl` is non-zero | `purge_drain.interval` | `1m` |
@@ -17,11 +17,12 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `lifecycle_hard_delete` | after the cooling-off window, deletes the row, then the bytes (a failure stays queued for `purge_drainer`) | `housekeeping.hard_delete_after` | `0` (off) |
 | `quota_reconciler` | recomputes quota usage from live objects; resets daily counters | `quota_reconcile.interval` | `15m` |
 | `audit_purger` | deletes `audit_log` rows older than the TTL | `housekeeping.audit_log_ttl` | `8760h` |
-| `operations_purger` | deletes terminal `operations` rows older than the TTL | `housekeeping.operations_ttl` | `336h` |
+| `operations_purger` | deletes terminal `operations` rows, and the `erased_objects` tombstones, older than the TTL | `housekeeping.operations_ttl` | `336h` |
 | `event_delivery_purger` | deletes delivered and failed `event_deliveries` rows whose last attempt is older than the TTL | `housekeeping.event_deliveries_ttl` | `336h` |
 | `partition_maintainer` | creates `audit_log` (monthly) and `idempotency_keys` (daily) partitions ahead; drops expired ones | `housekeeping.interval` | `1h` |
 | `idempotency_purger` | deletes expired idempotency keys | `housekeeping.interval` | `1h` |
 | `tenant_rate_bucket_sweeper` | drops elapsed per-tenant rate-limit windows | `housekeeping.interval` | `1h` |
+| `trash_retention_gauge` | publishes `paladin.tenants.past_trash_retention`, the trashed tenants past `admin.tenants.trash_retention`; purges nothing | `housekeeping.interval`, `admin.tenants.trash_retention` | `1h`, `720h` |
 | `refresh_token_reaper` | deletes expired refresh tokens | `refresh_token_reap.interval` | `1h` |
 | `api_token_purger` | deletes API tokens expired for longer than the grace | `api_token.interval`, `.expired_for` | `1h`, `168h` |
 | `oauth_client_reaper` | deletes self-registered OAuth clients older than `max_age` that hold no live grant and no redeemable code, and authorization codes expired for longer than `expired_codes_for`; seeded clients are never removed; runs only on the reaper pool | `oauth_client_reap.interval`, `.max_age`, `.expired_codes_for` | `1h`, `168h`, `24h` |
@@ -150,6 +151,9 @@ Operations rows are larger than audit rows because the `metadata` and
   (`audit_log_ttl`); this row is the execution detail, which stops being
   interesting once it is stale. Raise it where batch post-mortems routinely
   run older than a fortnight — the cost is table size, quantified below.
+- A finished operation reports `expire_time = done_at + operations_ttl` to
+  API callers, and the console shows it as "Kept until"; with
+  `operations_ttl: 0` the field is unset.
 
 ### Worked example
 
@@ -235,7 +239,7 @@ worker:
 - `operations_ttl: 0` is reasonable for small deployments where the
   table never grows large enough to matter.
 
-When `OperationsTTL <= 0`, the worker exits cleanly at startup (no
-ticking, no DB load).
+When `operations_ttl` is `0`, `operations_purger` is not started (no
+ticking, no DB load); the worker's other jobs run as usual.
 
 ---
