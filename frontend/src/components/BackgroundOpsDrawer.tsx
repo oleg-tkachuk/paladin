@@ -187,15 +187,17 @@ export function BackgroundOpsDrawer() {
       : counts.failed > 0
         ? `${counts.failed} failed`
         : "Operations";
-  const summary =
+  const standing =
     counts.active + counts.failed === 0
-      ? "Nothing running"
+      ? "nothing running"
       : [
           counts.active > 0 && `${counts.active} active`,
           counts.failed > 0 && `${counts.failed} failed`,
         ]
           .filter(Boolean)
           .join(" · ");
+  // The list is the signed-in user's own (the shell asks with mine).
+  const summary = `Yours only · ${standing}`;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

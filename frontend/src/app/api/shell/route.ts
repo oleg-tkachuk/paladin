@@ -147,6 +147,9 @@ export async function GET(req: Request) {
             // failure became the drawer's idea of current activity while
             // everything that ran since stayed out of view.
             sortOrder: SortOrder.DESC,
+            // The drawer is the signed-in user's: their own operations, matched
+            // on the server, never the rest of the tenant's.
+            mine: true,
           },
           { headers },
         ),
