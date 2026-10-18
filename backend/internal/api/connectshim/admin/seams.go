@@ -105,7 +105,7 @@ var _ eventSubscriptionHandler = (*eventsubh.Handler)(nil)
 type operationHandler interface {
 	CancelOperation(ctx context.Context, opID uuid.UUID) error
 	GetOperation(ctx context.Context, opID uuid.UUID) (*operationh.Operation, error)
-	ListOperations(ctx context.Context, state *operationh.State, pageSize int32, pageToken, filter string, newestFirst bool) ([]operationh.Operation, string, error)
+	ListOperations(ctx context.Context, state *operationh.State, pageSize int32, pageToken, filter string, newestFirst, mine bool) ([]operationh.Operation, string, error)
 }
 
 var _ operationHandler = (*operationh.Handler)(nil)

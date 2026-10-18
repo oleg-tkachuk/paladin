@@ -42,7 +42,9 @@ type Operation struct {
 	//
 	//	*Operation_Error
 	//	*Operation_Response
-	Result            isOperation_Result     `protobuf_oneof:"result"`
+	Result isOperation_Result `protobuf_oneof:"result"`
+	// The subject of the token that started it — for a person, their user id;
+	// empty for an operation from before initiators were recorded.
 	InitiatorSubject  string                 `protobuf:"bytes,7,opt,name=initiator_subject,json=initiatorSubject,proto3" json:"initiator_subject,omitempty"`
 	InitiatorTenantId string                 `protobuf:"bytes,8,opt,name=initiator_tenant_id,json=initiatorTenantId,proto3" json:"initiator_tenant_id,omitempty"`
 	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -264,7 +266,11 @@ type ListOperationsRequest struct {
 	// ascending cursor is the 50 OLDEST operations, so the console's
 	// background-ops drawer showed a three-day-old failure and none of the
 	// operations that had run since.
-	SortOrder     v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	SortOrder v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	// mine lists only the operations the caller started, matched in the query
+	// on the subject of the caller's token. Operations from before initiators
+	// were recorded are no one's.
+	Mine          bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -318,6 +324,13 @@ func (x *ListOperationsRequest) GetSortOrder() v1.SortOrder {
 		return x.SortOrder
 	}
 	return v1.SortOrder(0)
+}
+
+func (x *ListOperationsRequest) GetMine() bool {
+	if x != nil {
+		return x.Mine
+	}
+	return false
 }
 
 type ListOperationsResponse struct {
@@ -440,12 +453,13 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\x06target\x18\r \x01(\v2\".paladin.common.v1.OperationTargetB\x03\xe0A\x03R\x06targetB\b\n" +
 	"\x06result\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xa0\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xb4\x01\n" +
 	"\x15ListOperationsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
 	"\n" +
-	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"\x8a\x01\n" +
+	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x12\n" +
+	"\x04mine\x18\x04 \x01(\bR\x04mine\"\x8a\x01\n" +
 	"\x16ListOperationsResponse\x12;\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1b.paladin.admin.v1.OperationR\n" +

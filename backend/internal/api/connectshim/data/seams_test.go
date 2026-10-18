@@ -91,7 +91,7 @@ type failingOperations struct{}
 func (failingOperations) GetOperation(context.Context, uuid.UUID) (*operationh.Operation, error) {
 	return nil, errBoom
 }
-func (failingOperations) ListOperations(context.Context, *operationh.State, int32, string, string, bool) ([]operationh.Operation, string, error) {
+func (failingOperations) ListOperations(context.Context, *operationh.State, int32, string, string, bool, bool) ([]operationh.Operation, string, error) {
 	return nil, "", errBoom
 }
 func (failingOperations) CancelOperation(context.Context, uuid.UUID) error { return errBoom }

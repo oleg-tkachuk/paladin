@@ -51,6 +51,9 @@ message Operation {
   paladin.common.v1.OperationState state = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
   // What it acts on; unset for an operation of a type that names no objects.
   paladin.common.v1.OperationTarget target = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // The subject of the token that started it — for a person, their user id;
+  // empty for an operation from before initiators were recorded.
+  string initiator_subject = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectSelector {

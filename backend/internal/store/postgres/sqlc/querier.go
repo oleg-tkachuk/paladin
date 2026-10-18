@@ -120,7 +120,7 @@ type Querier interface {
 	// collection_id is resolved by the caller via ResolveCollectionID.
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string, createdByOperation pgtype.UUID) error
 	// Long-running operation queries.
-	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte) error
+	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte, initiatorSubject string) error
 	// v2 storage_backends queries — full CRUD over the now-first-class entity.
 	// The Create RPC. A plain INSERT: creating something that already exists is a
 	// unique violation, which the adapter maps to ErrAlreadyExists.
@@ -481,12 +481,12 @@ type Querier interface {
 	// still checked against every row.
 	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
-	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
+	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query
 	// rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 	// the sort (`<` here, `>` above) or the second page walks away from the rows
 	// the caller asked for, and sqlc cannot parameterise either.
-	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error)
+	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
 	ListPendingBucketDeletions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketDeletionsRow, error)

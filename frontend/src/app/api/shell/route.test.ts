@@ -45,6 +45,7 @@ vi.mock("@bufbuild/protobuf", async (orig) => {
 
 vi.mock("@/lib/server/upstream", () => ({ planeTransport: () => ({}) }));
 
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { GET } from "./route";
 
 // Minimal unsigned JWT carrying an `aud` claim — the gate only base64url-
@@ -92,6 +93,16 @@ describe("GET /api/shell", () => {
     for (const [name, section] of Object.entries(body)) {
       expect(section.status, `${name}: ${section.reason ?? ""}`).toBe("ok");
     }
+  });
+
+  // The drawer is the signed-in user's: the shell asks for their own
+  // operations, so the rest of the tenant's never reach the browser.
+  it("asks for the caller's own operations, newest first", async () => {
+    await GET(shellReq(bothTokens()));
+    expect(h.listOperations).toHaveBeenCalledWith(
+      expect.objectContaining({ mine: true, sortOrder: SortOrder.DESC }),
+      expect.anything(),
+    );
   });
 
   it("greys one section without touching the others", async () => {

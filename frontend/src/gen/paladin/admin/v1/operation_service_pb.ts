@@ -40,7 +40,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIo4ECglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDQggKBnJlc3VsdCIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEihwEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXIieAoWTGlzdE9wZXJhdGlvbnNSZXNwb25zZRIvCgpvcGVyYXRpb25zGAEgAygLMhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24SLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEyvAIKGFBsYXRmb3JtT3BlcmF0aW9uU2VydmljZRJXCgxHZXRPcGVyYXRpb24SJS5wYWxhZGluLmFkbWluLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAIBEmgKDkxpc3RPcGVyYXRpb25zEicucGFsYWRpbi5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1JlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2UiA5ACARJdCg9DYW5jZWxPcGVyYXRpb24SKC5wYWxhZGluLmFkbWluLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbiIDkAICQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIo4ECglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDQggKBnJlc3VsdCIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEilQEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISDAoEbWluZRgEIAEoCCJ4ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi8KCm9wZXJhdGlvbnMYASADKAsyGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbhItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIi8KFkNhbmNlbE9wZXJhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQATK8AgoYUGxhdGZvcm1PcGVyYXRpb25TZXJ2aWNlElcKDEdldE9wZXJhdGlvbhIlLnBhbGFkaW4uYWRtaW4udjEuR2V0T3BlcmF0aW9uUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgESaAoOTGlzdE9wZXJhdGlvbnMSJy5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBooLnBhbGFkaW4uYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXNwb25zZSIDkAIBEl0KD0NhbmNlbE9wZXJhdGlvbhIoLnBhbGFkaW4uYWRtaW4udjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
@@ -103,6 +103,9 @@ export type Operation = Message<"paladin.admin.v1.Operation"> & {
     | { case: undefined; value?: undefined };
 
   /**
+   * The subject of the token that started it — for a person, their user id;
+   * empty for an operation from before initiators were recorded.
+   *
    * @generated from field: string initiator_subject = 7;
    */
   initiatorSubject: string;
@@ -202,6 +205,15 @@ export type ListOperationsRequest =
      * @generated from field: paladin.common.v1.SortOrder sort_order = 3;
      */
     sortOrder: SortOrder;
+
+    /**
+     * mine lists only the operations the caller started, matched in the query
+     * on the subject of the caller's token. Operations from before initiators
+     * were recorded are no one's.
+     *
+     * @generated from field: bool mine = 4;
+     */
+    mine: boolean;
   };
 
 /**
@@ -257,8 +269,8 @@ export const CancelOperationRequestSchema: GenMessage<CancelOperationRequest> =
 
 /**
  * OperationService exposes long-running operations on the admin plane.
- * Mirrors the data-plane OperationService (read access there is restricted
- * to operations the caller initiated; admin sees all).
+ * Mirrors the data-plane OperationService. Both list the caller tenant's
+ * operations; ListOperationsRequest.mine narrows that to the caller's own.
  *
  * @generated from service paladin.admin.v1.PlatformOperationService
  */

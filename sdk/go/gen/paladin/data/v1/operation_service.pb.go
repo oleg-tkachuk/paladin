@@ -80,7 +80,11 @@ type ListOperationsRequest struct {
 	// ASC — the original behaviour. See the admin-plane twin for why DESC
 	// exists: an ascending page of 50 is the 50 oldest rows, which is not what
 	// "what is running now" means.
-	SortOrder     v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	SortOrder v1.SortOrder `protobuf:"varint,3,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	// mine lists only the operations the caller started, matched in the query
+	// on the subject of the caller's token. Operations from before initiators
+	// were recorded are no one's.
+	Mine          bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -134,6 +138,13 @@ func (x *ListOperationsRequest) GetSortOrder() v1.SortOrder {
 		return x.SortOrder
 	}
 	return v1.SortOrder(0)
+}
+
+func (x *ListOperationsRequest) GetMine() bool {
+	if x != nil {
+		return x.Mine
+	}
+	return false
 }
 
 type ListOperationsResponse struct {
@@ -238,12 +249,13 @@ const file_paladin_data_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
 	"'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xa0\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xb4\x01\n" +
 	"\x15ListOperationsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
 	"\n" +
-	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"\x89\x01\n" +
+	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x12\n" +
+	"\x04mine\x18\x04 \x01(\bR\x04mine\"\x89\x01\n" +
 	"\x16ListOperationsResponse\x12:\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1a.paladin.data.v1.OperationR\n" +
