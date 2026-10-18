@@ -23,6 +23,7 @@ import {
   CircleStackIcon,
   CpuChipIcon,
   CubeIcon,
+  InformationCircleIcon,
   ServerStackIcon,
   ShieldCheckIcon,
   UserGroupIcon,
@@ -34,6 +35,11 @@ import { adminSystemClient } from "@/lib/connect/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -62,6 +68,13 @@ import { OWNER_ONLY_BUCKETS_LABEL, SHARED_BUCKETS_LABEL } from "./bucketLabels";
 // the object census is a GROUP BY over every row in `objects`.
 const POLL_INTERVAL = 30_000;
 
+// The headline tile's word for shared buckets: the panel below spells it out,
+// and the full phrase was cut short in a tile a sixth of the page wide.
+const SHARED_BUCKETS_SHORT = "shared";
+
+// The panels, three by three on a wide page.
+const PANEL_GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3";
+
 // PageRequest.page_size 0: the server's own page of the per-tenant table.
 const SERVER_PAGE_SIZE = 0;
 
@@ -86,7 +99,10 @@ function num(n: bigint | number | undefined): string {
 
 // ─── Building blocks ────────────────────────────────────────────────────────
 
-/** Headline metric: big number over a label, optional secondary line. */
+/**
+ * A headline tile: its label on one line, the number and what qualifies it on
+ * the next. One row of six across a wide page, rather than a tall block each.
+ */
 function Metric({
   label,
   value,
@@ -101,16 +117,16 @@ function Metric({
   accent?: string;
 }) {
   return (
-    <div className="flex items-start gap-2.5">
-      {Icon && (
-        <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-      )}
-      <div className="min-w-0">
-        <div className={T.label}>{label}</div>
-        <div className={cn("text-2xl font-mono tabular-nums", accent)}>
+    <div className="min-w-0">
+      <div className={cn(T.label, "flex items-center gap-1.5")}>
+        {Icon && <Icon className="size-4 shrink-0" />}
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
+        <span className={cn("text-xl font-mono tabular-nums", accent)}>
           {value}
-        </div>
-        {sub && <div className={T.hint}>{sub}</div>}
+        </span>
+        {sub && <span className={cn(T.hint, "truncate")}>{sub}</span>}
       </div>
     </div>
   );
@@ -185,8 +201,10 @@ function BreakdownCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="flex flex-row items-center gap-2 px-4 py-3">
+    // The Card's own gap and padding came on top of the header's, which left
+    // a band of empty card between every title and its numbers.
+    <Card className="flex flex-col gap-0 py-0">
+      <CardHeader className="flex flex-row items-center gap-2 px-4 py-2.5">
         <Icon className="size-5 shrink-0 text-muted-foreground" />
         <CardTitle className={cn(T.cardTitleProse, "min-w-0 truncate")}>
           {title}
@@ -226,6 +244,10 @@ function CensusUnavailable({ className }: { className?: string }) {
   );
 }
 
+// What a worker-fed card says while the census is down; the reason and the
+// fix are said once, above the panels, rather than in every card.
+const CENSUS_UNAVAILABLE_SHORT = "Census unavailable — see above.";
+
 /**
  * Breakdown card whose body depends on the worker leg: renders the badge in
  * the header and swaps the body for the explanation when the leg is down,
@@ -244,7 +266,7 @@ function RLSCard({
 }) {
   return (
     <BreakdownCard title={title} icon={icon} badge={<RLSBadge up={up} />}>
-      {up ? children : <CensusUnavailable />}
+      {up ? children : <p className={T.hint}>{CENSUS_UNAVAILABLE_SHORT}</p>}
     </BreakdownCard>
   );
 }
@@ -274,25 +296,44 @@ function QuotaDrift({
   quotas?: QuotaStats;
   activeTenants?: bigint;
 }) {
-  const covered = quotas?.tenantScoped ?? 0n;
   return (
     <>
-      <div className={cn(T.label, "pb-1")}>Enforced usage</div>
+      <div className={cn(T.label, "flex items-center gap-1 pb-1")}>
+        Enforced usage
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={ENFORCED_USAGE_HELP}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <InformationCircleIcon className="size-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 text-sm">
+            The number upload rejections are made from. It is reconciled from
+            live objects on an interval, so it can trail the object census by
+            one reconcile period; the census is the authoritative count of what
+            is stored. Quotas are opt-in, so it covers only the tenants that
+            have one.
+          </PopoverContent>
+        </Popover>
+      </div>
+      <Row
+        label="Tenants covered"
+        value={`${num(quotas?.tenantScoped)} / ${num(activeTenants)}`}
+      />
       <Row label="Objects counted" value={num(quotas?.usageObjectCount)} />
       <Row
         label="Bytes counted"
         value={formatBytes(quotas?.usageTotalBytes ?? 0n)}
       />
-      <p className={cn(T.hint, "pt-1.5 leading-relaxed")}>
-        Covers {num(covered)} of {num(activeTenants)} active tenants — quotas
-        are opt-in. This is the number upload rejections are made from,
-        reconciled from live objects on an interval, so it can trail the object
-        census below by one reconcile period. The census is the authoritative
-        count of what is stored.
-      </p>
     </>
   );
 }
+
+/** What the enforced-usage help button is named. */
+const ENFORCED_USAGE_HELP = "About enforced usage";
 
 // ─── Object census ──────────────────────────────────────────────────────────
 
@@ -431,16 +472,19 @@ export default function StatsPage() {
         description="Cross-tenant census of tenants, storage, and objects."
         showDefaultActions={false}
         actions={
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => void refetch()}
-            aria-label="Refresh"
-          >
-            <ArrowPathIcon
-              className={cn("size-4", isFetching && "animate-spin")}
-            />
-          </Button>
+          <div className="flex items-center gap-3">
+            {collectedAt && <span className={T.hint}>As of {collectedAt}</span>}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void refetch()}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", isFetching && "animate-spin")}
+              />
+            </Button>
+          </div>
         }
       />
 
@@ -454,9 +498,9 @@ export default function StatsPage() {
 
       {isLoading && !data ? (
         <>
-          <Skeleton className="h-23 rounded-xl" />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
+          <Skeleton className="h-16 rounded-xl" />
+          <div className={PANEL_GRID}>
+            {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-50 rounded-xl" />
             ))}
           </div>
@@ -464,8 +508,8 @@ export default function StatsPage() {
       ) : data ? (
         <>
           {/* ─── Headline strip ───────────────────────────────────────── */}
-          <Card>
-            <CardContent className="flex flex-wrap items-start gap-x-8 gap-y-4 px-5 py-4">
+          <Card className="py-3">
+            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 xl:grid-cols-6">
               <Metric
                 label="Tenants"
                 value={num(data.tenants?.active)}
@@ -481,7 +525,7 @@ export default function StatsPage() {
               <Metric
                 label="Buckets"
                 value={num(data.buckets?.total)}
-                sub={`${num(data.buckets?.shared)} ${SHARED_BUCKETS_LABEL.toLowerCase()}`}
+                sub={`${num(data.buckets?.shared)} ${SHARED_BUCKETS_SHORT}`}
                 icon={ArchiveBoxIcon}
               />
               <Metric
@@ -506,15 +550,19 @@ export default function StatsPage() {
                 }
                 icon={CubeIcon}
               />
-              <div className="ml-auto text-right">
-                <div className={T.label}>As of</div>
-                <div className={T.value}>{collectedAt ?? "—"}</div>
-              </div>
             </CardContent>
           </Card>
 
-          {/* ─── Inventory breakdowns ─────────────────────────────────── */}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {!rlsUp && (
+            <Card className="border-l-2 border-l-chart-3 py-3">
+              <CardContent>
+                <CensusUnavailable />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ─── Inventory and the worker-fed censuses, three by three ──── */}
+          <div className={PANEL_GRID}>
             <BreakdownCard title="Tenants" icon={UsersIcon}>
               <Row label="Active" value={num(data.tenants?.active)} />
               <Row
@@ -612,6 +660,12 @@ export default function StatsPage() {
                 map={data.buckets?.byProvisionState ?? {}}
                 empty="No buckets."
               />
+              <Separator className="my-2" />
+              <div className={cn(T.label, "pb-1")}>By backend</div>
+              <MapRows
+                map={data.buckets?.byBackend ?? {}}
+                empty="No buckets."
+              />
             </BreakdownCard>
 
             <BreakdownCard title="Collections" icon={CircleStackIcon}>
@@ -632,10 +686,7 @@ export default function StatsPage() {
                 empty="No collections."
               />
             </BreakdownCard>
-          </div>
 
-          {/* ─── RLS'd inventory: quotas, capabilities, tokens, events ─── */}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <RLSCard title="Quotas" icon={ChartPieIcon} up={rlsUp}>
               <Row
                 label="Tenant-scoped"
@@ -690,6 +741,7 @@ export default function StatsPage() {
             </RLSCard>
 
             <RLSCard title="Capabilities" icon={ShieldCheckIcon} up={rlsUp}>
+              <Row label="Total" value={num(rls?.capabilities?.total)} />
               <Row label="Active" value={num(rls?.capabilities?.active)} />
               <Row label="Expired" value={num(rls?.capabilities?.expired)} />
               <Row label="Revoked" value={num(rls?.capabilities?.revoked)} />
@@ -723,6 +775,7 @@ export default function StatsPage() {
             </RLSCard>
 
             <RLSCard title="M2M tokens" icon={CpuChipIcon} up={rlsUp}>
+              <Row label="Total" value={num(rls?.apiTokens?.total)} />
               <Row label="Active" value={num(rls?.apiTokens?.active)} />
               <Row label="Expired" value={num(rls?.apiTokens?.expired)} />
               <Row label="Revoked" value={num(rls?.apiTokens?.revoked)} />
@@ -755,6 +808,7 @@ export default function StatsPage() {
             </RLSCard>
 
             <RLSCard title="Event subscriptions" icon={BoltIcon} up={rlsUp}>
+              <Row label="Total" value={num(rls?.subscriptions?.total)} />
               <Row label="Enabled" value={num(rls?.subscriptions?.enabled)} />
               <Row
                 label="Disabled"
@@ -776,10 +830,44 @@ export default function StatsPage() {
                 empty="No enabled subscriptions."
               />
             </RLSCard>
+
+            <RLSCard title="Objects" icon={CubeIcon} up={rlsUp && !!objects}>
+              <Row label="Total" value={num(objects?.totalCount)} />
+              <Row
+                label="Stored"
+                value={formatBytes(objects?.totalBytes ?? 0n)}
+              />
+              <Separator className="my-2" />
+              <div className={cn(T.label, "pb-1")}>By state</div>
+              {stateColumns.length === 0 ? (
+                <p className={T.hint}>No objects stored yet.</p>
+              ) : (
+                stateColumns.map((st) => (
+                  <Row
+                    key={st}
+                    label={st.toLowerCase()}
+                    value={num(globalStates[st]?.count ?? 0n)}
+                    accent={
+                      (globalStates[st]?.count ?? 0n) > 0n
+                        ? STATE_ACCENT[st]
+                        : undefined
+                    }
+                  />
+                ))
+              )}
+              <Separator className="my-2" />
+              <Row
+                label="Tenants storing objects"
+                value={num(
+                  BigInt(objects?.tenants.length ?? 0) +
+                    (objects?.tenantsTruncated ?? 0n),
+                )}
+              />
+            </RLSCard>
           </div>
 
           {/* ─── Object census ────────────────────────────────────────── */}
-          <Card>
+          <Card className="gap-0 py-0">
             <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
               <div className="flex items-center gap-2">
                 <CubeIcon className="size-5 shrink-0 text-muted-foreground" />
@@ -792,7 +880,9 @@ export default function StatsPage() {
             <Separator />
             <CardContent className="px-0 py-0">
               {!rlsUp || !objects ? (
-                <CensusUnavailable className="px-4 py-6" />
+                <p className={cn(T.hint, "px-4 py-6")}>
+                  {CENSUS_UNAVAILABLE_SHORT}
+                </p>
               ) : objects.tenants.length === 0 ? (
                 <p className="px-4 py-6 text-sm text-muted-foreground">
                   No objects stored yet.
