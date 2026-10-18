@@ -106,4 +106,51 @@ test.describe("Background operations", () => {
     // nothing, with the reason only visible in the console.
     expect(rejected, `filter rejected: ${rejected.join(" | ")}`).toEqual([]);
   });
+
+  // The operations page lists the user's own work, and clearing one takes it
+  // off that list on the server — not just in the browser — while "Show
+  // cleared" still finds it.
+  test("the operations page lists, clears and still finds an operation", async ({
+    page,
+    makeCollection,
+  }) => {
+    test.skip(
+      !STACK_RUNS_WORKER,
+      "an operation can be cleared only once the worker has finished it",
+    );
+    await loginAsAdmin(page);
+    const tenantId = await seedAdminTenantID();
+    const bucket = await seedPhysicalBucket();
+    const collection = await makeCollection({ tenantId, bucket });
+    const obj = await seedObject({
+      tenantId,
+      collection: collection.collection,
+    });
+    const operation = await seedBatchTagOperation({
+      tenantId,
+      collection: collection.collection,
+      objectName: obj.name,
+    });
+    await waitForOperationDone(operation);
+
+    await page.goto("/operations");
+    await page
+      .getByRole("searchbox", { name: "Search the operations" })
+      .fill(operation);
+    const row = page.getByRole("row", { name: /Merge tags, done/ });
+    await expect(row).toBeVisible();
+
+    await row.getByRole("button", { name: "Clear Merge tags" }).click();
+    await expect(row).toHaveCount(0);
+
+    // A reload asks the server again: the clear was recorded there.
+    await page.reload();
+    await page
+      .getByRole("searchbox", { name: "Search the operations" })
+      .fill(operation);
+    await expect(row).toHaveCount(0);
+    await page.getByRole("switch", { name: "Show cleared" }).click();
+    await expect(row).toBeVisible();
+    await expect(row.getByText("cleared")).toBeVisible();
+  });
 });
