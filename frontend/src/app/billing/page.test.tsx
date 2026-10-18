@@ -75,6 +75,33 @@ describe("BillingPage", () => {
     topOps: [],
   };
 
+  it("sorts a breakdown by spend as an amount, not as text", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      total: usd(12_000_000_000n),
+      chargeCount: 3n,
+      // Ranked by the server; "9" outsorts "10" as text but not as money.
+      topOps: [
+        { label: "put", spent: usd(10_000_000_000n), chargeCount: 1n },
+        { label: "get", spent: usd(9_000_000_000n), chargeCount: 1n },
+        { label: "list", spent: usd(500_000_000n), chargeCount: 1n },
+      ],
+    });
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    const card = (await screen.findByText("Top ops")).closest(
+      "[data-slot=card]",
+    ) as HTMLElement;
+    const labels = () =>
+      within(card)
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => within(r).getAllByRole("cell")[0].textContent);
+    expect(labels()).toEqual(["put", "get", "list"]);
+    fireEvent.click(within(card).getByRole("button", { name: /^Spend/ }));
+    expect(labels()).toEqual(["list", "get", "put"]);
+  });
+
   // The console's scope is usually the platform tenant, which is billed
   // nothing; the page reads whichever tenant ?tenant= names.
   it("reads the tenant the URL names, over the scope's", async () => {
