@@ -18,7 +18,11 @@ import React, {
   useState,
 } from "react";
 import Link from "next/link";
-import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  ArrowRightIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 
 import { adminOperationClient } from "@/lib/connect/client";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
@@ -198,16 +202,17 @@ export function BackgroundOpsDrawer() {
           <div className="flex items-start justify-between gap-2 pr-8">
             <div>
               <SheetTitle>Background operations</SheetTitle>
-              <p className={T.hint}>
-                {summary} ·{" "}
-                <Link
-                  href={SECTION.operations}
-                  onClick={() => setOpen(false)}
-                  className="hover:text-foreground hover:underline"
-                >
-                  Open the operations page
-                </Link>
-              </p>
+              <p className={T.hint}>{summary}</p>
+              {/* A line of its own: run on after the summary it wrapped in
+                  the narrow header and read as more of the same grey text. */}
+              <Link
+                href={SECTION.operations}
+                onClick={() => setOpen(false)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                Open the operations page
+                <ArrowRightIcon className="size-3" aria-hidden />
+              </Link>
               {clearErr ? (
                 <p className="text-xs text-destructive">{clearErr}</p>
               ) : null}
