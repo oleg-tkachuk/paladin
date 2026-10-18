@@ -354,17 +354,17 @@ type Querier interface {
 	// still active — the worker must run retention-gated cleanup on it — and so
 	// is 'rolling_back', which the worker must finish rolling back.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error)
-	// Cursor: (at, id) tuple. Optional predicates use the canonical
-	// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
-	// constant-folds the disabled branches at plan time.
+	// One page of the log in the order the caller names: list_audit_entry_ids
+	// (086) applies the predicates, the order and the keyset on (field, id); this
+	// reads those rows. ANY() keeps no order, so the caller sorts them by the
+	// same key.
 	//
-	// The action_eq / action_prefix / at_gte / at_lte predicates are
-	// populated by audith.applyAuditPushdown when the caller supplies a
-	// CEL filter whose top-level conjuncts the extractor recognises. The
-	// full CEL program ALWAYS still runs in-memory after this fetch, so
-	// pushdown only narrows the candidate set; correctness lives in the
-	// handler, not in this WHERE clause.
-	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error)
+	// The action_eq / action_prefix / at_gte / at_lte predicates are populated
+	// by audith.applyAuditPushdown when the caller supplies a CEL filter whose
+	// top-level conjuncts the extractor recognises. The full CEL program ALWAYS
+	// still runs in-memory after this fetch, so pushdown only narrows the
+	// candidate set; correctness lives in the handler, not in this WHERE clause.
+	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, orderBy string, sortDesc bool, afterValue *string, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error)
 	// A bucket's grants, oldest first.
 	ListBucketGrants(ctx context.Context, backendName string, bucketName string) ([]ListBucketGrantsRow, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)

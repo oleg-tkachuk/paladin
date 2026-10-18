@@ -2,8 +2,12 @@ package audith
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -51,7 +55,7 @@ func (f *fakeAuditRepo) List(_ context.Context, args admindomain.ListAuditArgs) 
 	next := ""
 	if f.calls < len(f.pages) && len(page) > 0 {
 		last := page[len(page)-1]
-		next = last.At.Format(time.RFC3339Nano) + "/" + last.EntryID.String()
+		next = admindomain.AuditCursor(args.Order, last)
 	}
 	return page, next, nil
 }
@@ -243,23 +247,41 @@ func TestExportAuditLogAppliesCELFilter(t *testing.T) {
 	}
 }
 
-func TestDecodeCursorRoundTrip(t *testing.T) {
-	at := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
-	id := uuid.New()
-	tok := at.Format(time.RFC3339Nano) + "/" + id.String()
-	gotAt, gotID := decodeCursor(tok)
-	if !gotAt.Equal(at) {
-		t.Errorf("at: got %v want %v", gotAt, at)
+// An order the log cannot sort by is refused, naming those it can; no order
+// is newest first.
+func TestAuditOrder(t *testing.T) {
+	if got, err := auditOrder(keyset.Order{}); err != nil || got != admindomain.DefaultAuditOrder {
+		t.Errorf("empty order = %+v, %v; want newest first", got, err)
 	}
-	if gotID != id {
-		t.Errorf("id: got %v want %v", gotID, id)
+	for _, f := range admindomain.AuditOrderFields {
+		if got, err := auditOrder(keyset.Order{Field: f, Desc: true}); err != nil || got.Field != f || !got.Desc {
+			t.Errorf("%s: %+v, %v", f, got, err)
+		}
+	}
+	_, err := auditOrder(keyset.Order{Field: "request_id"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), admindomain.AuditOrderByAction) {
+		t.Errorf("unknown field: %v, want InvalidArgument naming the accepted ones", err)
 	}
 }
 
-func TestDecodeCursorInvalid(t *testing.T) {
-	at, id := decodeCursor("garbage")
-	if !at.IsZero() || id != uuid.Nil {
-		t.Errorf("expected zero-values for malformed cursor")
+// failingListRepo answers List with err.
+type failingListRepo struct {
+	admindomain.AuditRepository
+	err error
+}
+
+func (r failingListRepo) List(context.Context, admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
+	return nil, "", r.err
+}
+
+// A page token the store cannot resume is the caller's to fix.
+func TestListAuditLog_RefusesAnUnusableToken(t *testing.T) {
+	for _, cause := range []error{keyset.ErrMalformed, keyset.ErrOrderChanged} {
+		h := NewHandler(failingListRepo{err: fmt.Errorf("list audit entries: %w", cause)}, allowAuthorizer{})
+		_, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t), admindomain.ListAuditArgs{PageSize: 2, PageToken: "x"}, "")
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%v: code = %v, want InvalidArgument", cause, connect.CodeOf(err))
+		}
 	}
 }
 
@@ -341,13 +363,14 @@ func TestListAuditLogFillsAPageAcrossBatches(t *testing.T) {
 		// Full in the middle of the third batch: the next page starts after
 		// the last row returned, not after the batch, whose last row was
 		// never looked at by the caller.
-		if want := admindomain.AuditCursor(e); next != want {
+		if want := admindomain.AuditCursor(admindomain.DefaultAuditOrder, e); next != want {
 			t.Errorf("cursor = %q, want %q", next, want)
 		}
 		// Each batch after the first resumes where the one before ended.
-		if len(repo.seen) != 3 || repo.seen[1].AfterID != repo.pages[0][1].EntryID ||
-			repo.seen[2].AfterID != repo.pages[1][1].EntryID {
-			t.Errorf("batches resumed at %v", afterIDs(repo.seen))
+		if len(repo.seen) != 3 ||
+			repo.seen[1].PageToken != admindomain.AuditCursor(admindomain.DefaultAuditOrder, repo.pages[0][1]) ||
+			repo.seen[2].PageToken != admindomain.AuditCursor(admindomain.DefaultAuditOrder, repo.pages[1][1]) {
+			t.Errorf("batches resumed at %v", pageTokens(repo.seen))
 		}
 	})
 
@@ -409,10 +432,10 @@ func subjects(es []admindomain.AuditEntry) []string {
 	return out
 }
 
-func afterIDs(as []admindomain.ListAuditArgs) []uuid.UUID {
-	out := make([]uuid.UUID, 0, len(as))
+func pageTokens(as []admindomain.ListAuditArgs) []string {
+	out := make([]string, 0, len(as))
 	for _, a := range as {
-		out = append(out, a.AfterID)
+		out = append(out, a.PageToken)
 	}
 	return out
 }

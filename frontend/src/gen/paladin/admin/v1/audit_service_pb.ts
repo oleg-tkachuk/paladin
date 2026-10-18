@@ -17,7 +17,11 @@ import type { OperationSchema } from "./operation_service_pb";
 import { file_paladin_admin_v1_operation_service } from "./operation_service_pb";
 import type { AuditLogEntry, AuditLogEntrySchema } from "./types_pb";
 import { file_paladin_admin_v1_types } from "./types_pb";
-import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
+import type {
+  PageRequest,
+  PageResponse,
+  SortOrder,
+} from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -27,7 +31,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_audit_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiRwYWxhZGluL2FkbWluL3YxL2F1ZGl0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEicwoTTGlzdEF1ZGl0TG9nUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEh4KCXRlbmFudF9pZBgDIAEoCUILukgI2AEBcgOwAQEidwoUTGlzdEF1ZGl0TG9nUmVzcG9uc2USMAoHZW50cmllcxgBIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuQXVkaXRMb2dFbnRyeRItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIjQKF0dldEF1ZGl0TG9nRW50cnlSZXF1ZXN0EhkKCGVudHJ5X2lkGAEgASgJQge6SARyAhABIkUKFUV4cG9ydEF1ZGl0TG9nUmVxdWVzdBIOCgZmaWx0ZXIYASABKAkSHAoLZGVzdGluYXRpb24YAiABKAlCB7pIBHICEAEytwIKD0F1ZGl0TG9nU2VydmljZRJiCgxMaXN0QXVkaXRMb2cSJS5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1Jlc3BvbnNlIgOQAgESYwoQR2V0QXVkaXRMb2dFbnRyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0QXVkaXRMb2dFbnRyeVJlcXVlc3QaHy5wYWxhZGluLmFkbWluLnYxLkF1ZGl0TG9nRW50cnkiA5ACARJbCg5FeHBvcnRBdWRpdExvZxInLnBhbGFkaW4uYWRtaW4udjEuRXhwb3J0QXVkaXRMb2dSZXF1ZXN0GhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24iA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    "CiRwYWxhZGluL2FkbWluL3YxL2F1ZGl0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEitwEKE0xpc3RBdWRpdExvZ1JlcXVlc3QSLAoEcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCRIeCgl0ZW5hbnRfaWQYAyABKAlCC7pICNgBAXIDsAEBEhAKCG9yZGVyX2J5GAQgASgJEjAKCnNvcnRfb3JkZXIYBSABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXIidwoUTGlzdEF1ZGl0TG9nUmVzcG9uc2USMAoHZW50cmllcxgBIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuQXVkaXRMb2dFbnRyeRItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIjQKF0dldEF1ZGl0TG9nRW50cnlSZXF1ZXN0EhkKCGVudHJ5X2lkGAEgASgJQge6SARyAhABIkUKFUV4cG9ydEF1ZGl0TG9nUmVxdWVzdBIOCgZmaWx0ZXIYASABKAkSHAoLZGVzdGluYXRpb24YAiABKAlCB7pIBHICEAEytwIKD0F1ZGl0TG9nU2VydmljZRJiCgxMaXN0QXVkaXRMb2cSJS5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1Jlc3BvbnNlIgOQAgESYwoQR2V0QXVkaXRMb2dFbnRyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0QXVkaXRMb2dFbnRyeVJlcXVlc3QaHy5wYWxhZGluLmFkbWluLnYxLkF1ZGl0TG9nRW50cnkiA5ACARJbCg5FeHBvcnRBdWRpdExvZxInLnBhbGFkaW4uYWRtaW4udjEuRXhwb3J0QXVkaXRMb2dSZXF1ZXN0GhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24iA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_paladin_admin_v1_operation_service,
@@ -64,6 +68,24 @@ export type ListAuditLogRequest =
      * @generated from field: string tenant_id = 3;
      */
     tenantId: string;
+
+    /**
+     * order_by is the field the log sorts by: at, action, actor_subject or
+     * resource_name; any other is refused. Empty is newest first. Text sorts
+     * bytewise. The page_token of a sorted list resumes only that order and
+     * direction.
+     *
+     * @generated from field: string order_by = 4;
+     */
+    orderBy: string;
+
+    /**
+     * sort_order is the direction of a named order_by; unspecified is
+     * ascending. With no order_by, only ascending turns newest-first around.
+     *
+     * @generated from field: paladin.common.v1.SortOrder sort_order = 5;
+     */
+    sortOrder: SortOrder;
   };
 
 /**
@@ -152,8 +174,9 @@ export const ExportAuditLogRequestSchema: GenMessage<ExportAuditLogRequest> =
  */
 export const AuditLogService: GenService<{
   /**
-   * ListAuditLog returns audit entries newest-first. The log is append-only:
-   * there is no RPC that mutates or deletes an entry.
+   * ListAuditLog returns audit entries, newest first unless order_by names
+   * another order. The log is append-only: there is no RPC that mutates or
+   * deletes an entry.
    *
    * @generated from rpc paladin.admin.v1.AuditLogService.ListAuditLog
    */

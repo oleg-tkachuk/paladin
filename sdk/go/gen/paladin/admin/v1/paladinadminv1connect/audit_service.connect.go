@@ -65,8 +65,9 @@ var (
 
 // AuditLogServiceClient is a client for the paladin.admin.v1.AuditLogService service.
 type AuditLogServiceClient interface {
-	// ListAuditLog returns audit entries newest-first. The log is append-only:
-	// there is no RPC that mutates or deletes an entry.
+	// ListAuditLog returns audit entries, newest first unless order_by names
+	// another order. The log is append-only: there is no RPC that mutates or
+	// deletes an entry.
 	ListAuditLog(context.Context, *v1.ListAuditLogRequest) (*v1.ListAuditLogResponse, error)
 	// GetAuditLogEntry returns a single entry by id, including the full request
 	// context recorded at the time.
@@ -84,8 +85,9 @@ func NewAuditLogServiceClient(client *connect.Client) AuditLogServiceClient {
 
 // AuditLogServiceHandler is an implementation of the paladin.admin.v1.AuditLogService service.
 type AuditLogServiceHandler interface {
-	// ListAuditLog returns audit entries newest-first. The log is append-only:
-	// there is no RPC that mutates or deletes an entry.
+	// ListAuditLog returns audit entries, newest first unless order_by names
+	// another order. The log is append-only: there is no RPC that mutates or
+	// deletes an entry.
 	ListAuditLog(context.Context, *v1.ListAuditLogRequest) (*v1.ListAuditLogResponse, error)
 	// GetAuditLogEntry returns a single entry by id, including the full request
 	// context recorded at the time.
