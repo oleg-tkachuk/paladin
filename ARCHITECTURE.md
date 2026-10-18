@@ -62,9 +62,10 @@ flowchart TB
 What each role reaches. Every role but `mcp` (in its default bridge mode)
 uses PostgreSQL; `ingest` also receives storage notifications, over a webhook,
 NATS, RabbitMQ or SQS. The S3 calls each role makes are in [Storage](#storage).
-`admin` also reads two roles' ops listeners: the worker's for the console's
-`/stats` census, the dispatcher's for its queue view (see
-[Isolation](#how-a-request-is-authorised)).
+`admin` also reads three other roles' listeners: the worker's ops listener for
+the console's `/stats` census, the dispatcher's for its queue view (see
+[Isolation](#how-a-request-is-authorised)), and the `mcp` server's live
+sessions.
 
 ```mermaid
 flowchart LR
@@ -73,6 +74,7 @@ flowchart LR
     worker["<b>worker</b>"]
     ingest["<b>ingest</b><br/>off by default"]
     dispatcher["<b>dispatcher</b>"]
+    mcp["<b>mcp</b>"]
 
     s3[("<b>S3 backends</b>")]
     pg[("<b>PostgreSQL</b><br/>row-level security")]
@@ -89,6 +91,7 @@ flowchart LR
     dispatcher --> sinks
     admin -. "ops: /stats census" .-> worker
     admin -. "ops: queue stats" .-> dispatcher
+    admin -. "MCP sessions" .-> mcp
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -96,7 +99,7 @@ flowchart LR
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class api,admin,worker,dispatcher role
+    class api,admin,worker,dispatcher,mcp role
     class ingest optional
     class pg,s3 store
     class sinks external
@@ -109,8 +112,9 @@ it, and each role gets its own resource envelope and network policy.
 `serve mcp` holds no data of its own: in its default bridge mode it exposes
 the api and admin RPCs as MCP tools and calls those planes over HTTP with the
 caller's credential, so every policy and quota check still happens there.
-With `--embedded` it hosts those handlers in-process instead, and then opens
-the database itself.
+With `mcp.oauth.exchange` set, that credential is a token exchanged for each
+plane from the caller's own (ADR-0036). With `--embedded` it hosts those
+handlers in-process instead, and then opens the database itself.
 
 ## How a request is authorised
 
@@ -170,12 +174,14 @@ api plane signs locally. What Paladin itself sends to S3:
 
 | Role | Calls | Why |
 | --- | --- | --- |
-| api | `HeadObject` | verify a completed upload |
-| api | `CreateMultipartUpload`, `CompleteMultipartUpload`, `AbortMultipartUpload` | open and close a multipart upload; its parts are uploaded over presigned URLs |
+| api | `HeadObject`, and `HeadBucket` when it answers not-found | verify a completed upload |
+| api | `CreateMultipartUpload`, `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListParts` | open, close and resume a multipart upload; its parts are uploaded over presigned URLs |
 | api, worker | `CopyObject`, `DeleteObject` | server-side copy; permanent delete, purge of the trash |
-| worker | `CreateBucket`, `DeleteBucket` | provision and remove buckets |
-| worker | `GetObject` → `PutObject` | copy objects during an operator-started migration between backends — the one path where bytes pass through a Paladin process |
+| worker | `CreateBucket`, `HeadBucket`, `DeleteBucket`, `PutBucketTagging`, `PutBucketPolicy` | provision and remove buckets, tag a bucket with its owner, open a public bucket to unsigned reads |
+| worker | `GetObject` → multipart upload | copy objects between backends during an operator-started migration — the one path where bytes pass through a Paladin process |
 | admin | `ListBuckets` | health probe of a registered backend |
+| admin | `HeadBucket` | before registering a bucket: refuse to provision one that exists, or to adopt one that does not |
+| admin, bootstrap | object, multipart, copy and bucket-policy calls in a scratch bucket it creates and removes, or under a prefix of the configured bucket | probe which S3 features a backend supports (ADR-0026) |
 
 ```mermaid
 sequenceDiagram

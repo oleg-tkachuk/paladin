@@ -70,6 +70,17 @@ Numbered, immutable once accepted, superseded rather than edited. See
 | [0023](adr/0023-one-metrics-contract.md) | One metrics contract from process to alert |
 | [0024](adr/0024-credential-actions-and-the-capability-issuer-grant.md) | Credential actions named per resource; the capability issuer's built-in grant |
 | [0025](adr/0025-bucket-quotas-are-platform-configuration.md) | Bucket quotas are platform configuration, outside RLS |
+| [0026](adr/0026-storage-backend-features-are-probed.md) | A storage backend's S3 features are probed, recorded and shown |
+| [0027](adr/0027-public-collections.md) | Public collections — anonymous reads from a public bucket |
+| [0028](adr/0028-bucket-ownership.md) | A bucket row is a claim — Paladin registers only what it means to manage |
+| [0029](adr/0029-capability-outside-the-request-path.md) | Capabilities for work the verifier does not see |
+| [0030](adr/0030-agpl-with-apache-client-surface.md) | AGPL for the service, Apache-2.0 for what clients embed |
+| [0031](adr/0031-capability-verify-then-handler.md) | A capability is verified in the interceptor and checked in the handler |
+| [0032](adr/0032-every-bucket-has-a-tenant-owner.md) | Every bucket has a tenant owner, and sharing is granted |
+| [0033](adr/0033-console-separates-platform-from-tenant-workspace.md) | The console separates the platform from a tenant's workspace |
+| [0034](adr/0034-the-product-releases-as-a-train.md) | The product releases as a train; the dev cluster follows dev builds |
+| [0035](adr/0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md) | An OAuth grant is bound to its client, and its scopes are enforced |
+| [0036](adr/0036-the-mcp-server-is-its-own-audience.md) | The MCP server is its own audience and exchanges the caller's token |
 
 ## Runbooks
 
