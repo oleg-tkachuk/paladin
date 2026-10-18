@@ -15,6 +15,9 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { useObjects } from "@/hooks/useObjects";
+import { useTableSort } from "@/hooks/useTableSort";
+import { OBJECT_ORDER, type ObjectOrderField } from "@/lib/objectOrder";
+import { SortableHead } from "@/components/ui/SortHeader";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { buildObjectFilter } from "@/lib/objectFilter";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
@@ -73,6 +76,11 @@ export default function CollectionTrashPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Sorted on the server: the trash loads a page at a time, so a sort in the
+  // browser would order only what has loaded. A new sort starts the list over.
+  const { sort, toggleSort } = useTableSort<ObjectOrderField>();
+  const sortProps = { current: sort, onSort: toggleSort };
+
   const {
     objects,
     loading,
@@ -87,6 +95,8 @@ export default function CollectionTrashPage() {
       status: TRASHED_STATE,
       search: debouncedSearch,
     }),
+    orderBy: sort.column ?? undefined,
+    sortDirection: sort.direction,
   });
   const [useRelativeTime, setUseRelativeTime] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -208,22 +218,41 @@ export default function CollectionTrashPage() {
                   aria-label="Select all"
                 />
               </TableHead>
-              <TableHead>Name</TableHead>
+              <SortableHead
+                label="Name"
+                column={OBJECT_ORDER.key}
+                {...sortProps}
+              />
               <TableHead className="hidden @md:table-cell">Tag</TableHead>
-              <TableHead className="hidden @2xl:table-cell">MIME</TableHead>
-              <TableHead className="hidden @md:table-cell text-right">
-                Size
-              </TableHead>
-              <TableHead className="hidden @xs:table-cell">
-                <button
-                  type="button"
-                  onClick={() => setUseRelativeTime((v) => !v)}
-                  className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
-                >
-                  Deleted at
-                  <ClockIcon className="size-3" />
-                </button>
-              </TableHead>
+              <SortableHead
+                label="MIME"
+                column={OBJECT_ORDER.contentType}
+                className="hidden @2xl:table-cell"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Size"
+                column={OBJECT_ORDER.size}
+                className="hidden @md:table-cell text-right"
+                align="end"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Deleted at"
+                column={OBJECT_ORDER.terminatedAt}
+                className="hidden @xs:table-cell"
+                {...sortProps}
+                after={
+                  <button
+                    type="button"
+                    aria-label="Toggle relative time"
+                    onClick={() => setUseRelativeTime((v) => !v)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <ClockIcon className="size-3" />
+                  </button>
+                }
+              />
               <TableHead className="hidden @2xl:table-cell text-right">
                 <Tooltip>
                   <TooltipTrigger asChild>

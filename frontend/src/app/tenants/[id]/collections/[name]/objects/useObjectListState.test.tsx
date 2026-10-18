@@ -73,3 +73,29 @@ describe("useObjectListState filter escaping", () => {
     expect(filter).toBe('metadata["k\\""] == "v\\" || true || \\""');
   });
 });
+
+describe("useObjectListState sort from the URL", () => {
+  const sortFor = (query: string) => {
+    params.current = new URLSearchParams(query);
+    return renderHook(() => useObjectListState()).result.current.sort;
+  };
+
+  it("keeps a sort the server applies", () => {
+    expect(sortFor("sort=size_bytes&dir=desc")).toEqual({
+      column: "size_bytes",
+      direction: "desc",
+    });
+  });
+
+  // The page once sent these and the server ignored them; it now refuses
+  // them, so an old link would fail the list instead of loading it.
+  it.each(["status", "object_tag", "anything"])(
+    "drops a sort by %s",
+    (column) => {
+      expect(sortFor(`sort=${column}&dir=asc`)).toEqual({
+        column: "",
+        direction: null,
+      });
+    },
+  );
+});

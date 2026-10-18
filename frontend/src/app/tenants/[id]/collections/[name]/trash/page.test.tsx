@@ -11,11 +11,15 @@ const h = vi.hoisted(() => ({
   bulkDeleteObjects: vi.fn(),
   bulkRestoreObjects: vi.fn(),
   loadMore: undefined as undefined | (() => void),
-  options: [] as Array<{ filter?: string }>,
+  options: [] as Array<{
+    filter?: string;
+    orderBy?: string;
+    sortDirection?: "asc" | "desc" | null;
+  }>,
 }));
 
 vi.mock("@/hooks/useObjects", () => ({
-  useObjects: (options: { filter?: string }) => (
+  useObjects: (options: (typeof h.options)[number]) => (
     h.options.push(options),
     {
       objects: [
@@ -238,5 +242,39 @@ describe("CollectionTrashPage record", () => {
     fireEvent.click(within(row).getByRole("checkbox"));
     fireEvent.click(within(row).getByRole("button", { name: /^Restore$/ }));
     expect(screen.queryByRole("dialog", { name: "old.pdf" })).toBeNull();
+  });
+});
+
+// The trash loads a page at a time, so it sorts on the server: a header asks
+// the list for that order, and the next click for the other way.
+describe("CollectionTrashPage sorting", () => {
+  beforeEach(() => {
+    h.blocked = null;
+    h.options = [];
+  });
+
+  it("asks the server for the order its headers name", () => {
+    render(
+      <TooltipProvider>
+        <CollectionTrashPage />
+      </TooltipProvider>,
+    );
+    expect(h.options.at(-1)).toMatchObject({ orderBy: undefined });
+    const deleted = screen.getByRole("button", { name: /^Deleted at/ });
+    fireEvent.click(deleted);
+    expect(h.options.at(-1)).toMatchObject({
+      orderBy: "terminated_at",
+      sortDirection: "asc",
+    });
+    fireEvent.click(deleted);
+    expect(h.options.at(-1)).toMatchObject({
+      orderBy: "terminated_at",
+      sortDirection: "desc",
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Size/ }));
+    expect(h.options.at(-1)).toMatchObject({
+      orderBy: "size_bytes",
+      sortDirection: "asc",
+    });
   });
 });
