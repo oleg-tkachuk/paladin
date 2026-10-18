@@ -82,9 +82,12 @@ func (m memUsers) FindBySubjectGlobal(_ context.Context, subject string) ([]auth
 }
 
 type memRefresh struct {
-	inserted, revoked, userRevoked, familyRevoked int
-	getErr                                        error // when set, Get returns it (e.g. ErrTokenRevoked)
-	rows                                          map[uuid.UUID]authstore.RefreshToken
+	inserted, revoked, superseded, userRevoked, familyRevoked int
+	getErr                                                    error // when set, Get returns it (e.g. ErrTokenRevoked)
+	// supersedeErr is what Supersede returns: ErrAlreadyRotated is a token
+	// revoked or rotated between the handler's read and its write.
+	supersedeErr error
+	rows         map[uuid.UUID]authstore.RefreshToken
 	// grant is what a jti Insert never stored reads as: nil is a console
 	// login, set is a token this handler issued before the test began.
 	grant *authstore.OAuthGrant
@@ -112,7 +115,10 @@ func (m *memRefresh) Get(_ context.Context, jti uuid.UUID) (authstore.RefreshTok
 }
 func (m *memRefresh) Revoke(context.Context, uuid.UUID) error { m.revoked++; return nil }
 func (m *memRefresh) Supersede(context.Context, uuid.UUID) error {
-	m.revoked++
+	if m.supersedeErr != nil {
+		return m.supersedeErr
+	}
+	m.superseded++
 	return nil
 }
 func (m *memRefresh) GetAny(ctx context.Context, jti uuid.UUID) (authstore.RefreshToken, error) {
@@ -527,6 +533,43 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 	e := audit.entries[0]
 	if !strings.Contains(e.Action, "Reuse") || e.ErrorMessage == "" {
 		t.Errorf("audit entry should name the reuse + carry an error message (is_error): %+v", e)
+	}
+}
+
+// A token that was live when read and is revoked before the rotation writes —
+// the user revoking the grant, or a concurrent refresh of the same token —
+// mints nothing. An unconditional revoke there let the rotation insert a live
+// successor into a family the user had just ended.
+func TestToken_RefreshRefusedWhenTheTokenEndsMidRotation(t *testing.T) {
+	store := newMemStore()
+	store.clients[publicClient().ClientID] = publicClient()
+	u := sampleUser()
+	refresh := &memRefresh{
+		supersedeErr: authstore.ErrAlreadyRotated,
+		grant:        &authstore.OAuthGrant{ClientID: publicClient().ClientID, Audience: "paladin-admin"},
+	}
+	audit := &memAudit{}
+	h := testHandler(t, store, refresh, u).WithAudit(audit)
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	if err != nil {
+		t.Fatalf("issuer: %v", err)
+	}
+	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.Must(uuid.NewV7())})
+	if err != nil {
+		t.Fatalf("mint refresh: %v", err)
+	}
+
+	rec := postForm(h, "/oauth/token", url.Values{
+		"grant_type": {"refresh_token"}, "client_id": {"desktop-agent"}, "refresh_token": {rt},
+	})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "invalid_grant") {
+		t.Fatalf("status = %d body = %s, want 400 invalid_grant", rec.Code, rec.Body.String())
+	}
+	if refresh.inserted != 0 {
+		t.Errorf("a successor was inserted into an ended family (%d)", refresh.inserted)
+	}
+	if refresh.familyRevoked != 0 || len(audit.entries) != 0 {
+		t.Errorf("a lost race is no replay: family revocations = %d, audit rows = %d", refresh.familyRevoked, len(audit.entries))
 	}
 }
 

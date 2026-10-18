@@ -527,9 +527,18 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Rotate: revoke the presented refresh before minting a fresh pair (RFC 6749
-	// §6), keeping the same family so the chain stays linked for reuse-detection.
-	if err := h.refresh.Revoke(auth.WithActingTenant(r.Context(), stored.TenantID), jti); err != nil {
+	// Rotate: supersede the presented refresh before minting a fresh pair (RFC
+	// 6749 §6), keeping the same family so the chain stays linked for
+	// reuse-detection. Supersede writes only a token still live, so a revoke of
+	// the grant or a concurrent refresh landing after the read above wins: this
+	// rotation then mints nothing, rather than a live successor in a family
+	// that was just ended. Losing that race is no replay; the family is left
+	// as the winner put it.
+	if err := h.refresh.Supersede(auth.WithActingTenant(r.Context(), stored.TenantID), jti); err != nil {
+		if errors.Is(err, authstore.ErrAlreadyRotated) {
+			h.jsonError(w, http.StatusBadRequest, "invalid_grant", "refresh token rejected")
+			return
+		}
 		h.serverError(r.Context(), w, "rotation failed", err, zap.String("client_id", client.ClientID))
 		return
 	}
