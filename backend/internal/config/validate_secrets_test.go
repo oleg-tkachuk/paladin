@@ -204,3 +204,44 @@ func TestValidate_MCPExchange(t *testing.T) {
 		})
 	}
 }
+
+// The ingest credentials take a value or a reference, never both: until the
+// references were resolved, setting one beside a value silently used the value.
+func TestValidate_SecretMutex_Ingest(t *testing.T) {
+	ref := SecretRef{Name: "x", Key: "k"}
+	cases := []struct {
+		name string
+		set  func(*Config)
+		want string
+	}{
+		{"webhook", func(c *Config) {
+			c.Ingest.Webhook.SharedSecret, c.Ingest.Webhook.SharedSecretRef = "inline", ref
+		}, "ingest.webhook: cannot specify both shared_secret and shared_secret_ref"},
+		{"nats", func(c *Config) {
+			c.Ingest.NATS.Token, c.Ingest.NATS.TokenRef = "inline", ref
+		}, "ingest.nats: cannot specify both token and token_ref"},
+		{"rabbitmq", func(c *Config) {
+			c.Ingest.RabbitMQ.URL, c.Ingest.RabbitMQ.URLRef = "amqp://u:p@h/", ref
+		}, "ingest.rabbitmq: cannot specify both url and url_ref"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := minimalValidConfig()
+			tc.set(&c)
+			mustReject(t, c, tc.want)
+		})
+	}
+	// Either one alone is accepted.
+	for _, set := range []func(*Config){
+		func(c *Config) { c.Ingest.NATS.TokenRef = ref },
+		func(c *Config) { c.Ingest.NATS.Token = "inline" },
+		func(c *Config) { c.Ingest.RabbitMQ.URLRef = ref },
+		func(c *Config) { c.Ingest.RabbitMQ.URL = "amqp://u:p@h/" },
+	} {
+		c := minimalValidConfig()
+		set(&c)
+		if err := c.Validate(); err != nil {
+			t.Errorf("Validate() = %v, want one of value or reference accepted", err)
+		}
+	}
+}

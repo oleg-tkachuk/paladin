@@ -243,6 +243,15 @@ func (c *Config) Validate() error {
 	if c.APIToken.HMACKey != "" && c.APIToken.HMACKeySecret != nil {
 		return fmt.Errorf("api_token: cannot specify both hmac_key and hmac_key_secret")
 	}
+	if c.Ingest.Webhook.SharedSecret != "" && c.Ingest.Webhook.SharedSecretRef.Name != "" {
+		return fmt.Errorf("ingest.webhook: cannot specify both shared_secret and shared_secret_ref")
+	}
+	if c.Ingest.NATS.Token != "" && c.Ingest.NATS.TokenRef.Name != "" {
+		return fmt.Errorf("ingest.nats: cannot specify both token and token_ref")
+	}
+	if c.Ingest.RabbitMQ.URL != "" && c.Ingest.RabbitMQ.URLRef.Name != "" {
+		return fmt.Errorf("ingest.rabbitmq: cannot specify both url and url_ref")
+	}
 	if c.Runtime.HealthSnapshotToken != "" && c.Runtime.HealthSnapshotTokenSecret != nil {
 		return fmt.Errorf("runtime: cannot specify both health_snapshot_token and health_snapshot_token_secret")
 	}

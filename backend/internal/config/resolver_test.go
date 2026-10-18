@@ -165,6 +165,76 @@ func TestResolveConfig_InCluster_SigningKeyAndWebhookSecret(t *testing.T) {
 	}
 }
 
+// The ingest broker credentials: the NATS token and the AMQP URL, which
+// carries the broker's user and password. Both references passed the schema
+// while nothing resolved them, so a deploy that set one connected without a
+// credential.
+func TestResolveConfig_InCluster_IngestBrokerCredentials(t *testing.T) {
+	t.Setenv(DefaultK8sServiceHostEnvKey, "10.0.0.1")
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token")
+	nsPath := filepath.Join(dir, "namespace")
+	if err := os.WriteFile(tokenPath, []byte("fake-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nsPath, []byte("paladin"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const amqpURL = "amqps://ingest:pw@broker:5671/"
+	r := newTestResolver(t, tokenPath, nsPath,
+		secret("paladin", "paladin-ingest-nats", "token", "resolved-nats-token"),
+		secret("paladin", "paladin-ingest-amqp", "url", amqpURL),
+	)
+
+	cfg := &Config{}
+	cfg.Ingest.NATS.TokenRef = SecretRef{Name: "paladin-ingest-nats", Key: "token"}
+	cfg.Ingest.RabbitMQ.URLRef = SecretRef{Name: "paladin-ingest-amqp", Key: "url"}
+
+	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+		t.Fatalf("ResolveConfig() error = %v, want nil", err)
+	}
+	if got := cfg.Ingest.NATS.Token; got != "resolved-nats-token" {
+		t.Errorf("Ingest.NATS.Token = %q, want resolved-nats-token", got)
+	}
+	if cfg.Ingest.NATS.TokenRef.Name != "" {
+		t.Errorf("Ingest.NATS.TokenRef = %+v, want cleared", cfg.Ingest.NATS.TokenRef)
+	}
+	if got := cfg.Ingest.RabbitMQ.URL; got != amqpURL {
+		t.Errorf("Ingest.RabbitMQ.URL = %q, want %q", got, amqpURL)
+	}
+	if cfg.Ingest.RabbitMQ.URLRef.Name != "" {
+		t.Errorf("Ingest.RabbitMQ.URLRef = %+v, want cleared", cfg.Ingest.RabbitMQ.URLRef)
+	}
+}
+
+// A reference to a Secret that cannot be read fails the boot, naming the field.
+func TestResolveConfig_InCluster_IngestRefMissing(t *testing.T) {
+	t.Setenv(DefaultK8sServiceHostEnvKey, "10.0.0.1")
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token")
+	nsPath := filepath.Join(dir, "namespace")
+	if err := os.WriteFile(tokenPath, []byte("fake-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nsPath, []byte("paladin"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := newTestResolver(t, tokenPath, nsPath)
+	for name, set := range map[string]func(*Config){
+		"ingest.nats.token_ref":   func(c *Config) { c.Ingest.NATS.TokenRef = SecretRef{Name: "absent", Key: "token"} },
+		"ingest.rabbitmq.url_ref": func(c *Config) { c.Ingest.RabbitMQ.URLRef = SecretRef{Name: "absent", Key: "url"} },
+	} {
+		cfg := &Config{}
+		set(cfg)
+		err := r.ResolveConfig(context.Background(), cfg)
+		if err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s: ResolveConfig() = %v, want an error naming the field", name, err)
+		}
+	}
+}
+
 // The health snapshot token gates /system/health.json; a production token
 // comes from a Secret so it never sits in the config ConfigMap.
 func TestResolveConfig_InCluster_HealthSnapshotToken(t *testing.T) {

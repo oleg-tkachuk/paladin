@@ -375,7 +375,7 @@ func buildNATSDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, erro
 // is consumed at the configured prefetch.
 func buildRabbitMQDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, error) {
 	if cfg.RabbitMQ.URL == "" {
-		return nil, fmt.Errorf("ingest: rabbitmq.url required when driver=rabbitmq")
+		return nil, fmt.Errorf("ingest: rabbitmq.url or rabbitmq.url_ref required when driver=rabbitmq")
 	}
 	if cfg.RabbitMQ.Queue == "" {
 		return nil, fmt.Errorf("ingest: rabbitmq.queue required when driver=rabbitmq")

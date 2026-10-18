@@ -396,21 +396,6 @@ open deliberately — each notes why._
 
 ## Features
 
-### Ingest broker credentials cannot come from a secret reference
-
-- **Status:** Deferred.
-- **Reason:** `ingest.nats.token_ref` and `ingest.rabbitmq.url_ref` pass the
-  schema (`config/schema.cue`) but `ResolveConfig` resolves neither, and
-  `serve ingest` reads `ingest.nats.token` / `ingest.rabbitmq.url` as given —
-  so a reference that is set is silently ignored and the broker credential has
-  to sit in the config file.
-- **Definition of Done:** both references resolve like
-  `ingest.webhook.shared_secret_ref` (through the allowlisted resolver, into
-  the plain field), a configuration naming both a value and a reference is
-  refused, with a resolver test for each, and `docs/configuration.md` drops
-  its "accepted but not resolved" note.
-- **Blockers:** none.
-
 ### Ingest acts on the first record of a batched S3 notification only
 
 - **Status:** Deferred.
