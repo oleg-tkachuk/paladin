@@ -70,11 +70,44 @@ them, so they must exist before it runs.
 | `040`–`042` | `audit_log.resource_tenant_id`, its backfill and index |
 | `043` | `rabbitmq` in the `event_sink_kind` enum |
 | `044` | `bucket_quotas`: bucket caps move out of `quotas`, outside RLS ([ADR-0025](../../docs/adr/0025-bucket-quotas-are-platform-configuration.md)) |
+| `045` | `idempotency_keys.request_hash`: a key reused for a different request is refused, not replayed |
+| `046` | `checksum_part_size_bytes` beside a multipart object's composite checksum |
+| `047` | NOTIFY `tenant_state` when a tenant is trashed, restored or removed |
+| `048` | `storage_backend_features`, what the backend probe found per S3 feature (ADR-0026) |
+| `049` | public buckets and collections (ADR-0027): `public_read`, `public_base_url`, `cache_control` and the triggers that fix them at creation |
+| `050` | `buckets.created_on_backend` — only a bucket Paladin created may be deleted on its backend |
+| `051`–`053` | `charges.external_ref`, `reservation_id`, `overrun` and their unique indexes |
+| `054` | `capability_records.issued_by`, the issuing principal |
+| `055`, `056` | money in nanos: unbounded `numeric` with nine-decimal CHECKs, then their validation |
+| `057`, `058` | an ancestor's ceilings in columns; capability JSON rewritten to limes v0.4 spelling |
+| `059` | `tenant_budgets.resource_version` defaults to 0 |
+| `060` | `dpop_seen_proofs`, proof ids per key, replaces `dpop_seen_jti` |
+| `061` | `tenants_purge_lock_guard`: a tenant holding a locked object cannot be purged |
+| `062`–`064` | one storage migration per tenant: duplicates removed, a unique index replaces the plain one |
+| `065` | storage-migration rollback (`rolling_back`, `rebound_at`, the rollback cursor) |
+| `066` | ceilings: NULL is unlimited, 0 allows nothing |
+| `067` | the ledger and the meter no longer reference capability records, so they outlive a purge |
+| `068` | `dpop_seen_proofs` recreated, counted per holder |
+| `069` | `tenant_budgets.period` and `charges.tenant_period` |
+| `070` | quota caps nullable: NULL is no cap, 0 allows nothing |
+| `071` | drop the unused `object_tags` |
+| `072` | `api_tokens.rate_limit_rpm` nullable: NULL is no cap |
+| `073` | `operations.progress`, out of `metadata` |
+| `074` | `erased_objects`, tombstones of permanently deleted objects, kept as long as terminal operations |
+| `075` | `objects.created_by_operation`, so a reissued batch copy can adopt its own `PENDING` rows |
 | `076` | the capability tables are dropped, their rows with them; capabilities move to the `limes` schema |
 | `077` | the `capability_revoked` triggers on the `limes` schema go; pgstore notifies revocations itself |
+| `078` | `search_object_ids` takes the state filter as text and checks it itself |
 | `079` | objects kept as FAILED are deleted and the label leaves `object_state` |
 | `080` | every bucket gets an owner (`owner_tenant_id NOT NULL`) and sharing becomes `bucket_grants` (ADR-0032) |
 | `081` | an object list whose filter names no state lists the live objects: `search_object_ids` takes `p_live_only` |
+| `082` | `refresh_tokens` records the OAuth grant it came from: client, audience, scopes (ADR-0035) |
+| `083` | `audit_log.relayed_by`, the OAuth client that relayed a call (ADR-0036) |
+| `084` | `oauth_clients.self_registered` |
+| `085` | `search_object_ids` sorts by the caller's `order_by`, with a keyset on (field, id) |
+| `086` | `list_audit_entry_ids`, sorted and keyset-paged audit listing (`SECURITY INVOKER`) |
+| `087` | `operations.initiator_subject` and its index, for the console's own-operations list |
+| `088` | `operations.dismissed_at`: the initiator cleared it from their own list |
 
 Each file's header comment says why it exists.
 
@@ -104,7 +137,7 @@ trail stays resolvable, and renames are recorded in `tenant_slug_history`.
 `dpop_seen_proofs`.
 
 **Storage topology** — `storage_backends`, `storage_backend_health`,
-`buckets`, `replication_state`. A bucket row can exist before the physical
+`storage_backend_features`, `buckets`, `bucket_grants`, `replication_state`. A bucket row can exist before the physical
 bucket does: `provision_state` carries the asynchronous provisioning.
 
 **Namespaces** — `collections`. A collection is a logical namespace bound to
@@ -113,7 +146,8 @@ segment of the storage path, which is why queries resolve names at the
 boundary and carry ids inside.
 
 **Objects** — `objects`, `object_versions`, `object_locks`,
-`multipart_uploads`, `pending_multipart_aborts`, `pending_purges`. State is the
+`multipart_uploads`, `pending_multipart_aborts`, `pending_purges`,
+`erased_objects`. State is the
 `object_state` enum: `PENDING` → `AVAILABLE`, and `DELETED` for soft
 deletion. An object that cannot become available is deleted, not kept in a
 state of its own (`statemachine.DiscardFailed`; FAILED was dropped in 079). `objects.current_version_id` carries a deferred composite FK
@@ -122,9 +156,9 @@ either order within one transaction but can never disagree at commit.
 
 **Governance** — `quotas` (one per tenant), `bucket_quotas` (one per bucket,
 deliberately not RLS'd: a bucket's cap is platform configuration, like the
-bucket), `tenant_rate_buckets`. Quota caps are `NOT NULL DEFAULT 0` where 0
-means "no cap" — the convention every reader uses (`max_x > 0 AND usage_x >=
-max_x`). Nullable caps would poison those comparisons three-valued.
+bucket), `tenant_rate_buckets`. A quota cap of NULL is no cap and 0 is a cap
+that allows nothing (`070`); before it, 0 meant "no cap", so a quota could not
+stop all writes and a reader could not tell the two apart.
 
 **Capabilities** — the `limes` schema, pgstore's: `capabilities`,
 `revocations`, `biscuit_revocations` (revoked copies of a capability's
@@ -219,7 +253,10 @@ invisible, which `tests/integration/components/acting_tenant_test.go` pins.
 
 `tenants`, `storage_backends` and `buckets` stay uncovered for a different
 reason: they are platform-level resources with no single owning tenant, so
-there is no tenant to scope a connection to. `dpop_seen_proofs` has no policy
+there is no tenant to scope a connection to. `bucket_quotas` and
+`bucket_grants` are platform configuration of the same kind (`044`, `080`), and
+`storage_backend_features` is an observation of a backend (`048`).
+`dpop_seen_proofs` has no policy
 either: a proof id belongs to no tenant and its uniqueness must hold across
 all of them.
 
@@ -245,6 +282,9 @@ See [db-roles.md](db-roles.md) for the role split.
 | `object_locks_enforce_no_weakening` | `object_locks` | A retention window may be extended, never shortened; `COMPLIANCE` has no bypass, `GOVERNANCE` needs the same bypass |
 | `tenants_purge_lock_guard` | `tenants` | A tenant cannot be deleted while anything it owns is under legal hold or unexpired retention; runs before any foreign key, reads across RLS, same `GOVERNANCE` bypass |
 | `collections_enforce_bucket_tenancy` | `collections` | A collection binds only to a bucket its tenant owns or holds a grant on (`bucket_grants`, ADR-0032), raising the named constraint `collections_bucket_tenancy` otherwise — RLS cannot catch this, because the inserted row carries the *attacker's* `tenant_id` and passes the policy cleanly |
+| `buckets_public_read_immutable` | `buckets` | `public_read` and `public_base_url` are fixed at creation (`buckets_public_read_fixed`) |
+| `collections_enforce_bucket_visibility` | `collections` | a collection's `public_read` equals its bucket's, is fixed at creation, and a public collection never moves bucket |
+| `tenants_state_notify` | `tenants` | `pg_notify('tenant_state', '*')` on trash, restore or delete, so every replica clears its tenant-liveness cache |
 | `*_notify_policy_changed` | `tenants`, `collections`, `buckets` | `pg_notify('policy_changed', …)` so the Cedar engine invalidates its cache |
 | `multipart_uploads_abort_debt` | `multipart_uploads` | A cascade delete records the S3 abort it still owes in `pending_multipart_aborts` |
 | `audit_log_notify` | `audit_log` | `pg_notify('paladin_audit', …)` for the live audit stream |
@@ -273,9 +313,9 @@ Object locks gate both: `legal_hold` and an unexpired `retain_until` block
 the purge, and the worker has no governance bypass — `GOVERNANCE` is
 honoured exactly like `COMPLIANCE` there.
 
-**Housekeeping** (see [ops-housekeeping.md](ops-housekeeping.md)) fails
+**Housekeeping** (see [ops-housekeeping.md](ops-housekeeping.md)) deletes
 expired `PENDING` objects, aborts abandoned multipart sessions, purges
-terminal `operations`, drops expired partitions, and drains `pending_purges`
+terminal `operations` and `erased_objects`, drops expired partitions, and drains `pending_purges`
 and `pending_multipart_aborts`.
 
 ## Hand-written SQL
