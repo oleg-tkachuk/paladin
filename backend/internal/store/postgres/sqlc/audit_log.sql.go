@@ -79,44 +79,37 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtyp
 const listAuditEntries = `-- name: ListAuditEntries :many
 SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by
 FROM audit_log
-WHERE ($1::text IS NULL
-       OR actor_subject = $1::text)
-  AND ($2::uuid IS NULL
-       OR actor_tenant_id = $2::uuid)
-  -- A tenant's trail: what its principals did, and what was done to it.
-  AND ($3::uuid IS NULL
-       OR actor_tenant_id = $3::uuid
-       OR resource_tenant_id = $3::uuid)
-  AND ($4::text IS NULL
-       OR action = $4::text)
-  AND ($5::text IS NULL
-       OR action LIKE $5::text)
-  AND ($6::timestamptz IS NULL
-       OR at >= $6::timestamptz)
-  AND ($7::timestamptz IS NULL
-       OR at <= $7::timestamptz)
-  AND ($8::timestamptz IS NULL
-       OR at < $8::timestamptz
-       OR (at = $8::timestamptz AND id < $9::uuid))
-ORDER BY at DESC, id DESC
-LIMIT $10
+WHERE id = ANY (ARRAY(
+        SELECT list_audit_entry_ids(
+            $1::text,
+            $2::uuid,
+            $3::uuid,
+            $4::text,
+            $5::text,
+            $6::timestamptz,
+            $7::timestamptz,
+            $8::text,
+            $9::boolean,
+            $10::text,
+            $11::uuid,
+            $12::integer)))
 `
 
 type ListAuditEntriesRow struct {
 	AuditLog AuditLog `json:"audit_log"`
 }
 
-// Cursor: (at, id) tuple. Optional predicates use the canonical
-// sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
-// constant-folds the disabled branches at plan time.
+// One page of the log in the order the caller names: list_audit_entry_ids
+// (086) applies the predicates, the order and the keyset on (field, id); this
+// reads those rows. ANY() keeps no order, so the caller sorts them by the
+// same key.
 //
-// The action_eq / action_prefix / at_gte / at_lte predicates are
-// populated by audith.applyAuditPushdown when the caller supplies a
-// CEL filter whose top-level conjuncts the extractor recognises. The
-// full CEL program ALWAYS still runs in-memory after this fetch, so
-// pushdown only narrows the candidate set; correctness lives in the
-// handler, not in this WHERE clause.
-func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, afterAt pgtype.Timestamptz, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
+// The action_eq / action_prefix / at_gte / at_lte predicates are populated
+// by audith.applyAuditPushdown when the caller supplies a CEL filter whose
+// top-level conjuncts the extractor recognises. The full CEL program ALWAYS
+// still runs in-memory after this fetch, so pushdown only narrows the
+// candidate set; correctness lives in the handler, not in this WHERE clause.
+func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, orderBy string, sortDesc bool, afterValue *string, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listAuditEntries,
 		actorSubject,
 		actorTenantID,
@@ -125,7 +118,9 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 		actionPrefix,
 		atGte,
 		atLte,
-		afterAt,
+		orderBy,
+		sortDesc,
+		afterValue,
 		afterID,
 		pageSize,
 	)

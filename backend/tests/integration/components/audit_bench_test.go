@@ -129,13 +129,11 @@ func BenchmarkAuditListPushdown(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			matched, scanned := 0, 0
-			var afterAt time.Time
-			var afterID uuid.UUID
+			var token string
 			for matched < 50 {
-				page, _, err := repo.List(ctx, admindomain.ListAuditArgs{
-					PageSize: 1000,
-					AfterAt:  afterAt,
-					AfterID:  afterID,
+				page, next, err := repo.List(ctx, admindomain.ListAuditArgs{
+					PageSize:  1000,
+					PageToken: token,
 				})
 				if err != nil {
 					b.Fatal(err)
@@ -149,8 +147,10 @@ func BenchmarkAuditListPushdown(b *testing.B) {
 						matched++
 					}
 				}
-				last := page[len(page)-1]
-				afterAt, afterID = last.At, last.EntryID
+				if next == "" {
+					break
+				}
+				token = next
 			}
 			if matched == 0 {
 				b.Fatalf("no_pushdown matched nothing after scanning %d rows", scanned)

@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -140,17 +143,24 @@ func (r *AuditRepoV2) Get(ctx context.Context, entryID uuid.UUID) (admindomain.A
 
 func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
+	order := args.Order
+	if order.Field == "" {
+		order = admindomain.DefaultAuditOrder
+	}
+	afterID := pgtype.UUID{}
+	var afterValue *string
+	if args.PageToken != "" {
+		c, err := keyset.Decode(args.PageToken, order)
+		if err != nil {
+			return nil, "", fmt.Errorf("list audit entries: %w", err)
+		}
+		afterID, afterValue = pgUUID(c.ID), &c.Value
+	}
 
-	// Optional predicates ride the canonical sqlc OR-NULL idiom: pass
-	// nil / zero-valued pgtype to opt out, the query's
-	// `(sqlc.narg(x) IS NULL OR …)` branch becomes a constant TRUE
-	// at plan time. Postgres folds the disabled branches away — the
-	// cost of unused predicates is one comparison-against-NULL each,
-	// which the planner handles inline.
-	//
-	// CEL pushdown (audith.applyAuditPushdown) populates ActionEq /
-	// ActionPrefix / AtGTE / AtLTE; the in-memory CEL pass after the
-	// fetch is still authoritative for correctness.
+	// Optional predicates are NULL to opt out; list_audit_entry_ids (086)
+	// adds only those set. CEL pushdown (audith.applyAuditPushdown)
+	// populates ActionEq / ActionPrefix / AtGTE / AtLTE; the in-memory CEL
+	// pass after the fetch is still authoritative for correctness.
 	rows, err := r.q.ListAuditEntries(ctx,
 		strPtrNonEmpty(args.ActorSubject),
 		pgUUIDOptional(args.ActorTenantID),
@@ -159,8 +169,7 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 		likePrefixOrNil(args.ActionPrefix),
 		tsOptional(args.AtGTE),
 		tsOptional(args.AtLTE),
-		tsOptional(args.AfterAt),
-		pgUUID(args.AfterID),
+		order.Field, order.Desc, afterValue, afterID,
 		pageSize,
 	)
 	if err != nil {
@@ -170,9 +179,14 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 	for _, row := range rows {
 		out = append(out, auditEntryFromModel(row.AuditLog))
 	}
+	// ANY() keeps no order; the function chose the page, this puts it back
+	// in the order it chose it by.
+	slices.SortFunc(out, func(a, b admindomain.AuditEntry) int {
+		return admindomain.CompareAuditEntries(order, a, b)
+	})
 	var next string
 	if len(out) == int(pageSize) && len(out) > 0 {
-		next = admindomain.AuditCursor(out[len(out)-1])
+		next = admindomain.AuditCursor(order, out[len(out)-1])
 	}
 	return out, next, nil
 }

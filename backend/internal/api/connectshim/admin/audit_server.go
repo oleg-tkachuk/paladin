@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
-	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
+	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -30,16 +31,17 @@ func NewAuditServer(h *audith.Handler) *AuditServer { return &AuditServer{H: h} 
 
 func (s *AuditServer) ListAuditLog(ctx context.Context, req *pb.ListAuditLogRequest) (*pb.ListAuditLogResponse, error) {
 	m := req
-	args := admindomain.ListAuditArgs{PageSize: m.GetPage().GetPageSize()}
+	args := admindomain.ListAuditArgs{
+		PageSize:  m.GetPage().GetPageSize(),
+		PageToken: m.GetPage().GetPageToken(),
+		Order:     auditOrderOf(m.GetOrderBy(), m.GetSortOrder()),
+	}
 	if id := m.GetTenantId(); id != "" {
 		tenant, err := uuid.Parse(id)
 		if err != nil {
 			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
 		}
 		args.TrailTenantID = tenant
-	}
-	if tok := m.GetPage().GetPageToken(); tok != "" {
-		args.AfterAt, args.AfterID = decodeAuditCursor(tok)
 	}
 	list, next, err := s.H.ListAuditLog(ctx, args, m.GetFilter())
 	if err != nil {
@@ -92,18 +94,16 @@ func (s *AuditServer) ExportAuditLog(ctx context.Context, req *pb.ExportAuditLog
 
 var _ paladinadminv1connect.AuditLogServiceHandler = (*AuditServer)(nil)
 
-func decodeAuditCursor(tok string) (time.Time, uuid.UUID) {
-	idx := strings.LastIndex(tok, "/")
-	if idx <= 0 {
-		return time.Time{}, uuid.Nil
+// auditOrderOf is the order a request names. A named field is ascending
+// unless DESC is asked for; no field is newest first unless ASC is, which is
+// the order the log was always read in.
+func auditOrderOf(orderBy string, dir commonpb.SortOrder) keyset.Order {
+	if orderBy == "" {
+		if dir == commonpb.SortOrder_SORT_ORDER_ASC {
+			return keyset.Order{Field: admindomain.AuditOrderByAt}
+		}
+		// The handler reads no order as admindomain.DefaultAuditOrder.
+		return keyset.Order{}
 	}
-	at, err := time.Parse(time.RFC3339Nano, tok[:idx])
-	if err != nil {
-		return time.Time{}, uuid.Nil
-	}
-	id, err := uuid.Parse(tok[idx+1:])
-	if err != nil {
-		return time.Time{}, uuid.Nil
-	}
-	return at, id
+	return keyset.Order{Field: orderBy, Desc: dir == commonpb.SortOrder_SORT_ORDER_DESC}
 }

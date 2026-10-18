@@ -6,8 +6,13 @@ package audith
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -77,6 +82,9 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 	if err != nil {
 		return nil, "", err
 	}
+	if args.Order, err = auditOrder(args.Order); err != nil {
+		return nil, "", err
+	}
 	// Non-platform admins can see only their own tenant's entries.
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		if args.ActorTenantID != uuid.Nil && args.ActorTenantID != caller {
@@ -100,7 +108,7 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 	// program still runs in-memory below; pushdown only narrows the
 	// candidate set on the way out of Postgres.
 	applyAuditPushdown(&args, filter)
-	page, next, err := h.repo.List(ctx, args)
+	page, next, err := h.listPage(ctx, args)
 	if err != nil {
 		return nil, "", err
 	}
@@ -132,7 +140,7 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 				// Full mid-batch: resume after the last row returned, not
 				// after the batch, or the rest of it would be skipped.
 				if i < len(page)-1 || next != "" {
-					return out, admindomain.AuditCursor(page[i]), nil
+					return out, admindomain.AuditCursor(args.Order, page[i]), nil
 				}
 				return out, "", nil
 			}
@@ -140,8 +148,8 @@ func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditAr
 		if next == "" || batches == maxFilteredBatches {
 			return out, next, nil
 		}
-		args.AfterAt, args.AfterID = decodeCursor(next)
-		if page, next, err = h.repo.List(ctx, args); err != nil {
+		args.PageToken = next
+		if page, next, err = h.listPage(ctx, args); err != nil {
 			return nil, "", err
 		}
 	}
@@ -259,7 +267,7 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 	if err != nil {
 		return nil, err
 	}
-	args := admindomain.ListAuditArgs{PageSize: 1000}
+	args := admindomain.ListAuditArgs{PageSize: 1000, Order: admindomain.DefaultAuditOrder}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		args.ActorTenantID = caller
 	}
@@ -303,10 +311,7 @@ func (h *Handler) ExportAuditLog(ctx context.Context, filter, destination string
 		if next == "" {
 			break
 		}
-		// Decode cursor into ListAuditArgs. The List adapter returns a
-		// "{rfc3339nano}/{uuid}" cursor; reuse the same parser used by the
-		// connectshim. Inline-decoded here to avoid an import cycle.
-		args.AfterAt, args.AfterID = decodeCursor(next)
+		args.PageToken = next
 	}
 	out.RowCount = len(out.Entries)
 	return out, nil
@@ -330,23 +335,25 @@ func projectExportEntry(e admindomain.AuditEntry) ExportAuditLogEntry {
 	}
 }
 
-// decodeCursor mirrors adapters.decodeAuditCursor for the export loop.
-// Liberal on parse failure — returns zero time + Nil UUID so the next
-// List call starts from the top (idempotent re-export rather than an
-// abrupt fail).
-func decodeCursor(tok string) (time.Time, uuid.UUID) {
-	for i := len(tok) - 1; i >= 0; i-- {
-		if tok[i] == '/' {
-			at, err := time.Parse(time.RFC3339Nano, tok[:i])
-			if err != nil {
-				return time.Time{}, uuid.Nil
-			}
-			id, err := uuid.Parse(tok[i+1:])
-			if err != nil {
-				return time.Time{}, uuid.Nil
-			}
-			return at, id
-		}
+// auditOrder is the sort a request names, or InvalidArgument naming the
+// fields it may name instead. An empty one is newest first.
+func auditOrder(o keyset.Order) (keyset.Order, error) {
+	if o.Field == "" {
+		return admindomain.DefaultAuditOrder, nil
 	}
-	return time.Time{}, uuid.Nil
+	if !slices.Contains(admindomain.AuditOrderFields, o.Field) {
+		return keyset.Order{}, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Sprintf("order_by %q: the audit log sorts by one of %s", o.Field, strings.Join(admindomain.AuditOrderFields, ", ")))
+	}
+	return o, nil
+}
+
+// listPage reads one store page; a page token the store cannot resume is
+// the caller's to fix, not an internal error.
+func (h *Handler) listPage(ctx context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditEntry, string, error) {
+	page, next, err := h.repo.List(ctx, args)
+	if errors.Is(err, keyset.ErrMalformed) || errors.Is(err, keyset.ErrOrderChanged) {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, "page_token: "+err.Error()).WithCause(err)
+	}
+	return page, next, err
 }

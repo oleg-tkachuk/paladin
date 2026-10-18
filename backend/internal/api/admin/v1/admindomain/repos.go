@@ -1,8 +1,10 @@
 package admindomain
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -12,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 )
 
@@ -211,12 +214,59 @@ type AuditRepository interface {
 	List(ctx context.Context, args ListAuditArgs) ([]AuditEntry, string, error)
 }
 
-// AuditCursor is the page token that resumes a listing after e: the log is
-// read newest first by (at, id), so the next page starts strictly below it.
-// ListAuditLog's handler and the store both cut pages, and both must spell
-// the token alike.
-func AuditCursor(e AuditEntry) string {
-	return e.At.UTC().Format(time.RFC3339Nano) + "/" + e.EntryID.String()
+// The fields ListAuditLog sorts by, as order_by names them: AuditLogEntry's
+// own field names. list_audit_entry_ids (migration 086) maps each to its
+// column, and an integration test sorts by every one.
+const (
+	AuditOrderByAt       = "at"
+	AuditOrderByAction   = "action"
+	AuditOrderByActor    = "actor_subject"
+	AuditOrderByResource = "resource_name"
+)
+
+// AuditOrderFields lists every order_by ListAuditLog accepts.
+var AuditOrderFields = []string{AuditOrderByAt, AuditOrderByAction, AuditOrderByActor, AuditOrderByResource}
+
+// DefaultAuditOrder is the order of an empty order_by: newest first.
+var DefaultAuditOrder = keyset.Order{Field: AuditOrderByAt, Desc: true}
+
+// AuditSortValue is e's value of an order field, as a page token carries it.
+func AuditSortValue(field string, e AuditEntry) string {
+	switch field {
+	case AuditOrderByAction:
+		return e.Action
+	case AuditOrderByActor:
+		return e.ActorSubject
+	case AuditOrderByResource:
+		return e.ResourceName
+	default:
+		return e.At.UTC().Format(time.RFC3339Nano)
+	}
+}
+
+// CompareAuditEntries orders a and b the way list_audit_entry_ids does: by
+// the field — text bytewise, as COLLATE "C" does — then by id, the whole
+// reversed for a descending order.
+func CompareAuditEntries(order keyset.Order, a, b AuditEntry) int {
+	var c int
+	if order.Field == AuditOrderByAt {
+		c = a.At.Compare(b.At)
+	} else {
+		c = strings.Compare(AuditSortValue(order.Field, a), AuditSortValue(order.Field, b))
+	}
+	if c == 0 {
+		c = bytes.Compare(a.EntryID[:], b.EntryID[:])
+	}
+	if order.Desc {
+		return -c
+	}
+	return c
+}
+
+// AuditCursor is the page token that resumes a listing in order after e.
+// ListAuditLog's handler and the store both cut pages, and both mint it here.
+func AuditCursor(order keyset.Order, e AuditEntry) string {
+	return keyset.Encode(keyset.Cursor{Order: order, Value: AuditSortValue(order.Field, e), ID: e.EntryID})
 }
 
 type ListAuditArgs struct {
@@ -225,9 +275,11 @@ type ListAuditArgs struct {
 	// TrailTenantID selects a tenant's trail: entries its principals made OR
 	// entries on its resources (AuditEntry.ResourceTenant). uuid.Nil = all.
 	TrailTenantID uuid.UUID
-	AfterAt       time.Time
-	AfterID       uuid.UUID
-	PageSize      int32
+	// Order is the sort; the handler resolves an empty one to
+	// DefaultAuditOrder. PageToken, when set, was minted for it.
+	Order     keyset.Order
+	PageToken string
+	PageSize  int32
 
 	// CEL-pushdown predicates. Optional — populated by the audit
 	// handler from the caller's CEL filter when a recognised conjunct

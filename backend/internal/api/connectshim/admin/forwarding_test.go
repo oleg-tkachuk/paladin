@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
-	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -333,23 +334,36 @@ func (r *recordingAudit) ListAuditLog(_ context.Context, args admindomain.ListAu
 	return nil, "", nil
 }
 
-func TestListAuditLog_DecodesTheCursor(t *testing.T) {
-	at := time.Date(2026, 5, 4, 3, 2, 1, 0, time.UTC)
-	id := uuid.New()
-	h := &recordingAudit{}
-	srv := &AuditServer{H: h}
-
-	_, err := srv.ListAuditLog(context.Background(), &pb.ListAuditLogRequest{
-		Page: &commonv1.PageRequest{PageToken: at.Format(time.RFC3339Nano) + "/" + id.String()},
-	})
-	if err != nil {
-		t.Fatalf("listing: %v", err)
+// The page token reaches the handler as sent, for the store to read against
+// the order the request names.
+func TestListAuditLog_ForwardsTheTokenAndOrder(t *testing.T) {
+	cases := []struct {
+		name    string
+		orderBy string
+		dir     commonv1.SortOrder
+		want    keyset.Order
+	}{
+		{"no order is the handler's default", "", commonv1.SortOrder_SORT_ORDER_UNSPECIFIED, keyset.Order{}},
+		{"no order descending is the same", "", commonv1.SortOrder_SORT_ORDER_DESC, keyset.Order{}},
+		{"no order ascending turns it around", "", commonv1.SortOrder_SORT_ORDER_ASC, keyset.Order{Field: admindomain.AuditOrderByAt}},
+		{"a named field is ascending by default", admindomain.AuditOrderByAction, commonv1.SortOrder_SORT_ORDER_UNSPECIFIED, keyset.Order{Field: admindomain.AuditOrderByAction}},
+		{"and descending when asked", admindomain.AuditOrderByAction, commonv1.SortOrder_SORT_ORDER_DESC, keyset.Order{Field: admindomain.AuditOrderByAction, Desc: true}},
 	}
-	if !h.args.AfterAt.Equal(at) || h.args.AfterID != id {
-		t.Errorf("cursor decoded to (%v, %v), want (%v, %v) — an unreadable cursor "+
-			"silently becomes the zero value, so paging restarts at the top and "+
-			"the reader sees the same entries again",
-			h.args.AfterAt, h.args.AfterID, at, id)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &recordingAudit{}
+			srv := &AuditServer{H: h}
+			if _, err := srv.ListAuditLog(context.Background(), &pb.ListAuditLogRequest{
+				Page:      &commonv1.PageRequest{PageToken: "tok"},
+				OrderBy:   tc.orderBy,
+				SortOrder: tc.dir,
+			}); err != nil {
+				t.Fatalf("listing: %v", err)
+			}
+			if h.args.PageToken != "tok" || h.args.Order != tc.want {
+				t.Errorf("handler got token %q, order %+v; want tok, %+v", h.args.PageToken, h.args.Order, tc.want)
+			}
+		})
 	}
 }
 

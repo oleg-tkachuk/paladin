@@ -82,9 +82,7 @@ func TestAuditTenantTrail(t *testing.T) {
 		if next == "" {
 			break
 		}
-		at, id, _ := strings.Cut(next, "/")
-		args.AfterAt, _ = time.Parse(time.RFC3339Nano, at)
-		args.AfterID = uuid.MustParse(id)
+		args.PageToken = next
 	}
 
 	want := map[uuid.UUID]bool{}

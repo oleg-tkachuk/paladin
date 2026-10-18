@@ -30,36 +30,29 @@ WHERE ctid IN (
 );
 
 -- name: ListAuditEntries :many
--- Cursor: (at, id) tuple. Optional predicates use the canonical
--- sqlc OR-NULL idiom — caller passes NULL to opt out, Postgres
--- constant-folds the disabled branches at plan time.
+-- One page of the log in the order the caller names: list_audit_entry_ids
+-- (086) applies the predicates, the order and the keyset on (field, id); this
+-- reads those rows. ANY() keeps no order, so the caller sorts them by the
+-- same key.
 --
--- The action_eq / action_prefix / at_gte / at_lte predicates are
--- populated by audith.applyAuditPushdown when the caller supplies a
--- CEL filter whose top-level conjuncts the extractor recognises. The
--- full CEL program ALWAYS still runs in-memory after this fetch, so
--- pushdown only narrows the candidate set; correctness lives in the
--- handler, not in this WHERE clause.
+-- The action_eq / action_prefix / at_gte / at_lte predicates are populated
+-- by audith.applyAuditPushdown when the caller supplies a CEL filter whose
+-- top-level conjuncts the extractor recognises. The full CEL program ALWAYS
+-- still runs in-memory after this fetch, so pushdown only narrows the
+-- candidate set; correctness lives in the handler, not in this WHERE clause.
 SELECT sqlc.embed(audit_log)
 FROM audit_log
-WHERE (sqlc.narg('actor_subject')::text IS NULL
-       OR actor_subject = sqlc.narg('actor_subject')::text)
-  AND (sqlc.narg('actor_tenant_id')::uuid IS NULL
-       OR actor_tenant_id = sqlc.narg('actor_tenant_id')::uuid)
-  -- A tenant's trail: what its principals did, and what was done to it.
-  AND (sqlc.narg('trail_tenant_id')::uuid IS NULL
-       OR actor_tenant_id = sqlc.narg('trail_tenant_id')::uuid
-       OR resource_tenant_id = sqlc.narg('trail_tenant_id')::uuid)
-  AND (sqlc.narg('action_eq')::text IS NULL
-       OR action = sqlc.narg('action_eq')::text)
-  AND (sqlc.narg('action_prefix')::text IS NULL
-       OR action LIKE sqlc.narg('action_prefix')::text)
-  AND (sqlc.narg('at_gte')::timestamptz IS NULL
-       OR at >= sqlc.narg('at_gte')::timestamptz)
-  AND (sqlc.narg('at_lte')::timestamptz IS NULL
-       OR at <= sqlc.narg('at_lte')::timestamptz)
-  AND (sqlc.narg('after_at')::timestamptz IS NULL
-       OR at < sqlc.narg('after_at')::timestamptz
-       OR (at = sqlc.narg('after_at')::timestamptz AND id < sqlc.arg('after_id')::uuid))
-ORDER BY at DESC, id DESC
-LIMIT sqlc.arg('page_size');
+WHERE id = ANY (ARRAY(
+        SELECT list_audit_entry_ids(
+            sqlc.narg('actor_subject')::text,
+            sqlc.narg('actor_tenant_id')::uuid,
+            sqlc.narg('trail_tenant_id')::uuid,
+            sqlc.narg('action_eq')::text,
+            sqlc.narg('action_prefix')::text,
+            sqlc.narg('at_gte')::timestamptz,
+            sqlc.narg('at_lte')::timestamptz,
+            sqlc.arg('order_by')::text,
+            sqlc.arg('sort_desc')::boolean,
+            sqlc.narg('after_value')::text,
+            sqlc.narg('after_id')::uuid,
+            sqlc.arg('page_size')::integer)));

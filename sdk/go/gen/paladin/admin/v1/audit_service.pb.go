@@ -35,7 +35,15 @@ type ListAuditLogRequest struct {
 	// tenant included. Applied in the query, so every page holds up to
 	// page_size of them. Empty = every tenant. A caller other than a platform
 	// admin may name only its own tenant.
-	TenantId      string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	TenantId string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// order_by is the field the log sorts by: at, action, actor_subject or
+	// resource_name; any other is refused. Empty is newest first. Text sorts
+	// bytewise. The page_token of a sorted list resumes only that order and
+	// direction.
+	OrderBy string `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
+	// sort_order is the direction of a named order_by; unspecified is
+	// ascending. With no order_by, only ascending turns newest-first around.
+	SortOrder     v1.SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -89,6 +97,20 @@ func (x *ListAuditLogRequest) GetTenantId() string {
 		return x.TenantId
 	}
 	return ""
+}
+
+func (x *ListAuditLogRequest) GetOrderBy() string {
+	if x != nil {
+		return x.OrderBy
+	}
+	return ""
+}
+
+func (x *ListAuditLogRequest) GetSortOrder() v1.SortOrder {
+	if x != nil {
+		return x.SortOrder
+	}
+	return v1.SortOrder(0)
 }
 
 type ListAuditLogResponse struct {
@@ -245,11 +267,14 @@ var File_paladin_admin_v1_audit_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_audit_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\x8b\x01\n" +
+	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xe3\x01\n" +
 	"\x13ListAuditLogRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12(\n" +
-	"\ttenant_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\"\x86\x01\n" +
+	"\ttenant_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\x12\x19\n" +
+	"\border_by\x18\x04 \x01(\tR\aorderBy\x12;\n" +
+	"\n" +
+	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"\x86\x01\n" +
 	"\x14ListAuditLogResponse\x129\n" +
 	"\aentries\x18\x01 \x03(\v2\x1f.paladin.admin.v1.AuditLogEntryR\aentries\x123\n" +
 	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"=\n" +
@@ -282,25 +307,27 @@ var file_paladin_admin_v1_audit_service_proto_goTypes = []any{
 	(*GetAuditLogEntryRequest)(nil), // 2: paladin.admin.v1.GetAuditLogEntryRequest
 	(*ExportAuditLogRequest)(nil),   // 3: paladin.admin.v1.ExportAuditLogRequest
 	(*v1.PageRequest)(nil),          // 4: paladin.common.v1.PageRequest
-	(*AuditLogEntry)(nil),           // 5: paladin.admin.v1.AuditLogEntry
-	(*v1.PageResponse)(nil),         // 6: paladin.common.v1.PageResponse
-	(*Operation)(nil),               // 7: paladin.admin.v1.Operation
+	(v1.SortOrder)(0),               // 5: paladin.common.v1.SortOrder
+	(*AuditLogEntry)(nil),           // 6: paladin.admin.v1.AuditLogEntry
+	(*v1.PageResponse)(nil),         // 7: paladin.common.v1.PageResponse
+	(*Operation)(nil),               // 8: paladin.admin.v1.Operation
 }
 var file_paladin_admin_v1_audit_service_proto_depIdxs = []int32{
 	4, // 0: paladin.admin.v1.ListAuditLogRequest.page:type_name -> paladin.common.v1.PageRequest
-	5, // 1: paladin.admin.v1.ListAuditLogResponse.entries:type_name -> paladin.admin.v1.AuditLogEntry
-	6, // 2: paladin.admin.v1.ListAuditLogResponse.page:type_name -> paladin.common.v1.PageResponse
-	0, // 3: paladin.admin.v1.AuditLogService.ListAuditLog:input_type -> paladin.admin.v1.ListAuditLogRequest
-	2, // 4: paladin.admin.v1.AuditLogService.GetAuditLogEntry:input_type -> paladin.admin.v1.GetAuditLogEntryRequest
-	3, // 5: paladin.admin.v1.AuditLogService.ExportAuditLog:input_type -> paladin.admin.v1.ExportAuditLogRequest
-	1, // 6: paladin.admin.v1.AuditLogService.ListAuditLog:output_type -> paladin.admin.v1.ListAuditLogResponse
-	5, // 7: paladin.admin.v1.AuditLogService.GetAuditLogEntry:output_type -> paladin.admin.v1.AuditLogEntry
-	7, // 8: paladin.admin.v1.AuditLogService.ExportAuditLog:output_type -> paladin.admin.v1.Operation
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 1: paladin.admin.v1.ListAuditLogRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	6, // 2: paladin.admin.v1.ListAuditLogResponse.entries:type_name -> paladin.admin.v1.AuditLogEntry
+	7, // 3: paladin.admin.v1.ListAuditLogResponse.page:type_name -> paladin.common.v1.PageResponse
+	0, // 4: paladin.admin.v1.AuditLogService.ListAuditLog:input_type -> paladin.admin.v1.ListAuditLogRequest
+	2, // 5: paladin.admin.v1.AuditLogService.GetAuditLogEntry:input_type -> paladin.admin.v1.GetAuditLogEntryRequest
+	3, // 6: paladin.admin.v1.AuditLogService.ExportAuditLog:input_type -> paladin.admin.v1.ExportAuditLogRequest
+	1, // 7: paladin.admin.v1.AuditLogService.ListAuditLog:output_type -> paladin.admin.v1.ListAuditLogResponse
+	6, // 8: paladin.admin.v1.AuditLogService.GetAuditLogEntry:output_type -> paladin.admin.v1.AuditLogEntry
+	8, // 9: paladin.admin.v1.AuditLogService.ExportAuditLog:output_type -> paladin.admin.v1.Operation
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_audit_service_proto_init() }

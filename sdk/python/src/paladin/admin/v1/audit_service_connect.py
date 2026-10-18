@@ -43,8 +43,9 @@ class AuditLogService(Protocol):
     """
     async def list_audit_log(self, request: ListAuditLogRequest, ctx: RequestContext[ListAuditLogRequest, ListAuditLogResponse], /) -> ListAuditLogResponse:
         """
-        ListAuditLog returns audit entries newest-first. The log is append-only:
-        there is no RPC that mutates or deletes an entry.
+        ListAuditLog returns audit entries, newest first unless order_by names
+        another order. The log is append-only: there is no RPC that mutates or
+        deletes an entry.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -157,8 +158,9 @@ class AuditLogServiceClient(ConnectClient):
         use_get: bool = False,
     ) -> ListAuditLogResponse:
         """
-        ListAuditLog returns audit entries newest-first. The log is append-only:
-        there is no RPC that mutates or deletes an entry.
+        ListAuditLog returns audit entries, newest first unless order_by names
+        another order. The log is append-only: there is no RPC that mutates or
+        deletes an entry.
         """
         return await self.execute_unary(
             request=request,
@@ -233,8 +235,9 @@ class AuditLogServiceSync(Protocol):
     """
     def list_audit_log(self, request: ListAuditLogRequest, ctx: RequestContext[ListAuditLogRequest, ListAuditLogResponse], /) -> ListAuditLogResponse:
         """
-        ListAuditLog returns audit entries newest-first. The log is append-only:
-        there is no RPC that mutates or deletes an entry.
+        ListAuditLog returns audit entries, newest first unless order_by names
+        another order. The log is append-only: there is no RPC that mutates or
+        deletes an entry.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -345,8 +348,9 @@ class AuditLogServiceClientSync(ConnectClientSync):
         use_get: bool = False,
     ) -> ListAuditLogResponse:
         """
-        ListAuditLog returns audit entries newest-first. The log is append-only:
-        there is no RPC that mutates or deletes an entry.
+        ListAuditLog returns audit entries, newest first unless order_by names
+        another order. The log is append-only: there is no RPC that mutates or
+        deletes an entry.
         """
         return self.execute_unary(
             request=request,
