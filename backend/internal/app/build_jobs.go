@@ -197,8 +197,8 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	})
 
 	// Partition maintainer — pre-creates upcoming partitions and DROPs whole
-	// partitions past retention for the RANGE-partitioned tables (migrations
-	// 041 audit_log monthly, 042 idempotency_keys daily). This is the
+	// partitions past retention for the RANGE-partitioned tables (the schema
+	// baseline, 001: audit_log monthly, idempotency_keys daily). This is the
 	// DROP-PARTITION payoff; the *Purger DELETEs above stay as the backstop
 	// for the DEFAULT partition. Runs on partitionPool (the DDL-capable migrate
 	// role) — its CREATE/ATTACH/DROP PARTITION need table ownership the reaper

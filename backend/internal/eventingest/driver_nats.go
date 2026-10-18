@@ -32,9 +32,9 @@ import (
 //     redelivers (broker-side retry budget governs how many times).
 //
 // Auth: token + TLS for now. NATS supports many flavours (NKeys,
-// JWTs); the common pair covers a working-in-prod path. Secret
-// resolution happens in cfg.Ingest.NATS.TokenRef one level up;
-// at this layer we receive a resolved string.
+// JWTs); the common pair covers a working-in-prod path. The token
+// comes from ingest.nats.token as given: ingest.nats.token_ref is
+// accepted by the schema but not resolved yet (BACKLOG.md).
 type NATSDriver struct {
 	URL         string
 	Subject     string
