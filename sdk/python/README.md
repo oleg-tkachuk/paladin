@@ -605,7 +605,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `EventSubscriptionService` | `create_subscription`, `get_subscription`, `update_subscription`, `delete_subscription`, `list_subscriptions`, `test_subscription`, `redrive_failed_deliveries` |
 | `MCPInspectService` | `inspect`, `list_sessions`, `get_bridge_status` |
 | `OAuthClientService` | `delete_o_auth_client` |
-| `PlatformOperationService` | `get_operation`, `list_operations`, `cancel_operation` |
+| `PlatformOperationService` | `get_operation`, `list_operations`, `cancel_operation`, `dismiss_operations` |
 | `PolicyService` | `validate`, `simulate_authz`, `get_effective_policy` |
 | `QuotaService` | `get_quota`, `set_quota`, `reset_usage` |
 | `SystemService` | `get_config`, `get_dispatcher_stats`, `get_platform_stats`, `list_platform_stats_tenants` |
@@ -620,7 +620,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `MultipartUploadService` | `initiate_multipart_upload`, `presign_part`, `complete_multipart_upload`, `abort_multipart_upload`, `list_parts` |
 | `ObjectService` | `upload_object`, `download_object`, `get_object`, `lookup_object`, `update_object`, `complete_object`, `delete_object`, `restore_object`, `copy_object`, `list_objects`, `count_objects`, `list_object_versions`, `get_object_version`, `restore_object_version`, `set_object_retention`, `set_object_legal_hold`, `get_object_lock`, `set_object_taint` |
 | `ObjectTagService` | `get_object_tags`, `put_object_tags`, `delete_object_tags`, `list_distinct_tags` |
-| `OperationService` | `get_operation`, `list_operations`, `cancel_operation` |
+| `OperationService` | `get_operation`, `list_operations`, `cancel_operation`, `dismiss_operations` |
 | `PresignService` | `regenerate_upload_url`, `presign_download` |
 | `StorageBootstrapService` | `ensure_tenant_storage` |
 
