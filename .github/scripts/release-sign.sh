@@ -41,6 +41,8 @@ readonly ATTESTATION_OS=unknown
 
 # shellcheck source=SCRIPTDIR/release-sign-mode.sh
 source "$(dirname "$0")/release-sign-mode.sh"
+# shellcheck source=SCRIPTDIR/release-retry.sh
+source "$(dirname "$0")/release-retry.sh"
 
 mkdir -p "$sbom_dir"
 ref="${image}@${digest}"
@@ -57,21 +59,21 @@ if [ -z "$platforms" ]; then
 fi
 
 echo ">>> [sign] $ref and its platform manifests"
-cosign sign --yes --recursive "${sign_args[@]}" "$ref"
+retry cosign sign --yes --recursive "${sign_args[@]}" "$ref"
 
 name="${image##*/}"
 while read -r platform pdigest; do
     pref="${image}@${pdigest}"
     sbom="${sbom_dir}/${name}-${platform}.spdx.json"
     echo ">>> [sbom] $platform: $pref"
-    syft scan "registry:${pref}" --output "${SBOM_FORMAT}=${sbom}" --quiet
-    cosign attest --yes "${sign_args[@]}" --type "$SBOM_TYPE" --predicate "$sbom" "$pref"
+    retry syft scan "registry:${pref}" --output "${SBOM_FORMAT}=${sbom}" --quiet
+    retry cosign attest --yes "${sign_args[@]}" --type "$SBOM_TYPE" --predicate "$sbom" "$pref"
 done <<<"$platforms"
 
 echo ">>> [verify] signatures and SBOM attestations"
-cosign verify "${verify_args[@]}" "$ref" >/dev/null
+retry cosign verify "${verify_args[@]}" "$ref" >/dev/null
 while read -r platform pdigest; do
-    cosign verify "${verify_args[@]}" "${image}@${pdigest}" >/dev/null
-    cosign verify-attestation "${verify_args[@]}" --type "$SBOM_TYPE" "${image}@${pdigest}" >/dev/null
+    retry cosign verify "${verify_args[@]}" "${image}@${pdigest}" >/dev/null
+    retry cosign verify-attestation "${verify_args[@]}" --type "$SBOM_TYPE" "${image}@${pdigest}" >/dev/null
     echo "    $platform: signed, SBOM attested"
 done <<<"$platforms"
