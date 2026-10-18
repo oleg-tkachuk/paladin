@@ -98,16 +98,22 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, iD pgtype.UUID, userID
 }
 
 const listOAuthGrantsForUser = `-- name: ListOAuthGrantsForUser :many
-SELECT DISTINCT ON (rt.family_id)
-       rt.family_id, rt.oauth_client_id, rt.oauth_audience, rt.oauth_scopes,
-       rt.issued_at, rt.expires_at,
-       (SELECT min(f.issued_at) FROM refresh_tokens AS f WHERE f.family_id = rt.family_id)::timestamptz AS granted_at
-FROM refresh_tokens AS rt
-WHERE rt.user_id = $1
-  AND rt.oauth_client_id IS NOT NULL
-  AND rt.revoked = FALSE
-  AND rt.expires_at > $2
-ORDER BY rt.family_id, rt.issued_at DESC
+WITH newest AS (
+    SELECT DISTINCT ON (rt.family_id)
+           rt.family_id, rt.oauth_client_id, rt.oauth_audience, rt.oauth_scopes,
+           rt.issued_at, rt.expires_at, rt.revoked,
+           (SELECT min(f.issued_at) FROM refresh_tokens AS f WHERE f.family_id = rt.family_id)::timestamptz AS granted_at
+    FROM refresh_tokens AS rt
+    WHERE rt.user_id = $3
+      AND rt.oauth_client_id IS NOT NULL
+    ORDER BY rt.family_id, rt.issued_at DESC
+)
+SELECT family_id, oauth_client_id, oauth_audience, oauth_scopes,
+       issued_at, expires_at, revoked, granted_at
+FROM newest
+WHERE $1::boolean
+   OR (revoked = FALSE AND expires_at > $2::timestamptz)
+ORDER BY granted_at DESC, family_id
 `
 
 type ListOAuthGrantsForUserRow struct {
@@ -117,14 +123,17 @@ type ListOAuthGrantsForUserRow struct {
 	OauthScopes   []string           `json:"oauth_scopes"`
 	IssuedAt      pgtype.Timestamptz `json:"issued_at"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	Revoked       bool               `json:"revoked"`
 	GrantedAt     pgtype.Timestamptz `json:"granted_at"`
 }
 
-// The OAuth grants a user holds: one row per live family of OAuth refresh
-// tokens, carrying its newest live member and when the family began — the
-// consent. A console login is no grant and is left out.
-func (q *Queries) ListOAuthGrantsForUser(ctx context.Context, userID pgtype.UUID, expiresAt pgtype.Timestamptz) ([]ListOAuthGrantsForUserRow, error) {
-	rows, err := q.db.Query(ctx, listOAuthGrantsForUser, userID, expiresAt)
+// The OAuth grants a user holds: one row per family of OAuth refresh tokens,
+// carrying its newest member — whose state is the grant's, as a rotation
+// revokes the token it replaces — and when the family began, the consent.
+// Only live grants unless include_inactive. A console login is no grant and
+// is left out.
+func (q *Queries) ListOAuthGrantsForUser(ctx context.Context, includeInactive bool, now pgtype.Timestamptz, userID pgtype.UUID) ([]ListOAuthGrantsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listOAuthGrantsForUser, includeInactive, now, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +148,7 @@ func (q *Queries) ListOAuthGrantsForUser(ctx context.Context, userID pgtype.UUID
 			&i.OauthScopes,
 			&i.IssuedAt,
 			&i.ExpiresAt,
+			&i.Revoked,
 			&i.GrantedAt,
 		); err != nil {
 			return nil, err

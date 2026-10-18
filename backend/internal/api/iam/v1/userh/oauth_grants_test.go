@@ -14,14 +14,15 @@ import (
 
 // fakeGrants records what the handler asked of the store.
 type fakeGrants struct {
-	grants    []authstore.UserOAuthGrant
-	listedFor uuid.UUID
-	revoked   struct{ user, grant uuid.UUID }
-	found     bool
+	grants         []authstore.UserOAuthGrant
+	listedFor      uuid.UUID
+	listedInactive bool
+	revoked        struct{ user, grant uuid.UUID }
+	found          bool
 }
 
-func (f *fakeGrants) ListOAuthGrants(_ context.Context, userID uuid.UUID, _ time.Time) ([]authstore.UserOAuthGrant, error) {
-	f.listedFor = userID
+func (f *fakeGrants) ListOAuthGrants(_ context.Context, userID uuid.UUID, _ time.Time, includeInactive bool) ([]authstore.UserOAuthGrant, error) {
+	f.listedFor, f.listedInactive = userID, includeInactive
 	return f.grants, nil
 }
 
@@ -48,9 +49,12 @@ func grantFixture(t *testing.T) (authstore.User, *fakeGrants, *recordingAuthoriz
 
 func TestListOAuthGrants(t *testing.T) {
 	u, g, az, h := grantFixture(t)
-	got, err := h.ListOAuthGrants(ctxAs(u.TenantID), ref(u))
+	got, err := h.ListOAuthGrants(ctxAs(u.TenantID), ref(u), true)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !g.listedInactive {
+		t.Error("include_inactive was not passed to the store")
 	}
 	if len(got) != 1 || g.listedFor != u.UserID {
 		t.Errorf("listed %d grants for %s, want 1 for %s", len(got), g.listedFor, u.UserID)
@@ -86,10 +90,10 @@ func TestOAuthGrants_Refusals(t *testing.T) {
 
 	// Another tenant's user is not found, to anyone but a platform admin.
 	h := NewHandler(&fakeUserRepo{user: u}, allowAuthorizer{}).WithOAuthGrants(g)
-	if _, err := h.ListOAuthGrants(ctxAs(uuid.New(), "tenant.admin"), ref(u)); code(err) != connect.CodeNotFound {
+	if _, err := h.ListOAuthGrants(ctxAs(uuid.New(), "tenant.admin"), ref(u), false); code(err) != connect.CodeNotFound {
 		t.Errorf("another tenant's user: code = %v, want NotFound", code(err))
 	}
-	if _, err := h.ListOAuthGrants(ctxAs(uuid.New(), "platform.admin"), ref(u)); err != nil {
+	if _, err := h.ListOAuthGrants(ctxAs(uuid.New(), "platform.admin"), ref(u), false); err != nil {
 		t.Errorf("a platform admin: %v", err)
 	}
 
@@ -101,12 +105,12 @@ func TestOAuthGrants_Refusals(t *testing.T) {
 
 	// No store: the RPCs are not served, rather than answering empty.
 	bare := NewHandler(&fakeUserRepo{user: u}, allowAuthorizer{})
-	if _, err := bare.ListOAuthGrants(ctxAs(u.TenantID), ref(u)); code(err) != connect.CodeUnimplemented {
+	if _, err := bare.ListOAuthGrants(ctxAs(u.TenantID), ref(u), false); code(err) != connect.CodeUnimplemented {
 		t.Errorf("no store: code = %v, want Unimplemented", code(err))
 	}
 
 	// No caller at all.
-	if _, err := h.ListOAuthGrants(context.Background(), ref(u)); code(err) != connect.CodeUnauthenticated {
+	if _, err := h.ListOAuthGrants(context.Background(), ref(u), false); code(err) != connect.CodeUnauthenticated {
 		t.Errorf("anonymous: code = %v, want Unauthenticated", code(err))
 	}
 }

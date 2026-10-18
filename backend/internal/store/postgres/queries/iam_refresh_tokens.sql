@@ -99,19 +99,27 @@ WHERE ctid IN (
 );
 
 -- name: ListOAuthGrantsForUser :many
--- The OAuth grants a user holds: one row per live family of OAuth refresh
--- tokens, carrying its newest live member and when the family began — the
--- consent. A console login is no grant and is left out.
-SELECT DISTINCT ON (rt.family_id)
-       rt.family_id, rt.oauth_client_id, rt.oauth_audience, rt.oauth_scopes,
-       rt.issued_at, rt.expires_at,
-       (SELECT min(f.issued_at) FROM refresh_tokens AS f WHERE f.family_id = rt.family_id)::timestamptz AS granted_at
-FROM refresh_tokens AS rt
-WHERE rt.user_id = $1
-  AND rt.oauth_client_id IS NOT NULL
-  AND rt.revoked = FALSE
-  AND rt.expires_at > $2
-ORDER BY rt.family_id, rt.issued_at DESC;
+-- The OAuth grants a user holds: one row per family of OAuth refresh tokens,
+-- carrying its newest member — whose state is the grant's, as a rotation
+-- revokes the token it replaces — and when the family began, the consent.
+-- Only live grants unless include_inactive. A console login is no grant and
+-- is left out.
+WITH newest AS (
+    SELECT DISTINCT ON (rt.family_id)
+           rt.family_id, rt.oauth_client_id, rt.oauth_audience, rt.oauth_scopes,
+           rt.issued_at, rt.expires_at, rt.revoked,
+           (SELECT min(f.issued_at) FROM refresh_tokens AS f WHERE f.family_id = rt.family_id)::timestamptz AS granted_at
+    FROM refresh_tokens AS rt
+    WHERE rt.user_id = sqlc.arg(user_id)
+      AND rt.oauth_client_id IS NOT NULL
+    ORDER BY rt.family_id, rt.issued_at DESC
+)
+SELECT family_id, oauth_client_id, oauth_audience, oauth_scopes,
+       issued_at, expires_at, revoked, granted_at
+FROM newest
+WHERE sqlc.arg(include_inactive)::boolean
+   OR (revoked = FALSE AND expires_at > sqlc.arg(now)::timestamptz)
+ORDER BY granted_at DESC, family_id;
 
 -- name: RevokeOAuthGrant :execrows
 -- End one OAuth grant: the family, as RevokeRefreshTokenFamily does, but

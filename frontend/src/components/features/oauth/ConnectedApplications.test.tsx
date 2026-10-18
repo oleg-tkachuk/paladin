@@ -13,6 +13,8 @@ vi.mock("@/lib/connect/client", () => ({
   userClient: { listOAuthGrants: h.list, revokeOAuthGrant: h.revoke },
 }));
 
+import { OAuthGrant_State } from "@/gen/paladin/iam/v1/user_service_pb";
+
 import { ConnectedApplications } from "./ConnectedApplications";
 
 const USER = "tenants/t1/users/u1";
@@ -24,6 +26,7 @@ const GRANT = {
   grantedAt: { seconds: 1_700_000_000n },
   refreshedAt: { seconds: 1_700_000_600n },
   expiresAt: { seconds: 1_700_604_800n },
+  state: OAuthGrant_State.ACTIVE,
 };
 const WRITER = {
   ...GRANT,
@@ -31,6 +34,27 @@ const WRITER = {
   clientId: "writer-agent",
   scopes: ["paladin.read", "paladin.write"],
 };
+
+const REVOKED = {
+  ...GRANT,
+  id: "0199-revoked",
+  clientId: "revoked-agent",
+  grantedAt: { seconds: 1_600_000_000n },
+  state: OAuthGrant_State.REVOKED,
+};
+const EXPIRED = {
+  ...GRANT,
+  id: "0199-expired",
+  clientId: "expired-agent",
+  state: OAuthGrant_State.EXPIRED,
+};
+
+/** The application column, top to bottom. */
+const shownClients = () =>
+  screen
+    .getAllByRole("row")
+    .slice(1)
+    .map((r) => within(r).getAllByRole("cell")[0].textContent);
 
 const row = (clientId: string) =>
   screen.findByRole("row", { name: new RegExp(clientId) });
@@ -50,7 +74,67 @@ describe("ConnectedApplications", () => {
     expect(
       within(await row(WRITER.clientId)).getByText("read & write"),
     ).toBeInTheDocument();
-    expect(h.list).toHaveBeenCalledWith({ name: USER }, expect.anything());
+    expect(h.list).toHaveBeenCalledWith(
+      { name: USER, includeInactive: false },
+      expect.anything(),
+    );
+  });
+
+  it("asks for ended grants only when a state other than active is chosen", async () => {
+    h.list.mockImplementation(({ includeInactive }) =>
+      Promise.resolve({
+        grants: includeInactive ? [GRANT, REVOKED, EXPIRED] : [GRANT],
+      }),
+    );
+    render(<ConnectedApplications userName={USER} own />);
+    await row(GRANT.clientId);
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
+    expect(await row(REVOKED.clientId)).toBeInTheDocument();
+    expect(h.list).toHaveBeenLastCalledWith(
+      { name: USER, includeInactive: true },
+      expect.anything(),
+    );
+    expect(shownClients()).toEqual([REVOKED.clientId]);
+    // An ended grant shows its state, and offers nothing to revoke.
+    const revoked = await row(REVOKED.clientId);
+    expect(within(revoked).getByText("revoked")).toBeInTheDocument();
+    expect(
+      within(revoked).queryByRole("button", { name: "Revoke" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await waitFor(() => expect(shownClients()).toHaveLength(3));
+    expect(screen.getByText("3 shown")).toBeInTheDocument();
+  });
+
+  it("searches the application, plane and scopes", async () => {
+    h.list.mockResolvedValue({ grants: [GRANT, WRITER] });
+    render(<ConnectedApplications userName={USER} own />);
+    await row(GRANT.clientId);
+    const search = screen.getByRole("searchbox", {
+      name: "Search connected applications",
+    });
+    fireEvent.change(search, { target: { value: "WRITE" } });
+    expect(shownClients()).toEqual([WRITER.clientId]);
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "nothing-like-it" } });
+    expect(
+      screen.getByText("No application matches the search."),
+    ).toBeInTheDocument();
+  });
+
+  it("sorts by a column, then the other way, then as listed", async () => {
+    h.list.mockResolvedValue({ grants: [WRITER, GRANT] });
+    render(<ConnectedApplications userName={USER} own />);
+    await row(GRANT.clientId);
+    const header = screen.getByRole("button", { name: /Application/ });
+    fireEvent.click(header);
+    expect(shownClients()).toEqual([GRANT.clientId, WRITER.clientId]);
+    fireEvent.click(header);
+    expect(shownClients()).toEqual([WRITER.clientId, GRANT.clientId]);
+    fireEvent.click(header);
+    expect(shownClients()).toEqual([WRITER.clientId, GRANT.clientId]);
   });
 
   it("opens an application's grant from its row, scopes spelled out", async () => {
