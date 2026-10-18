@@ -61,7 +61,9 @@ const GUARDED: Record<string, string> = {
   "app/tenants/[id]/quotas/page.tsx::resetUsage": "ConfirmModal",
   "app/trash/page.tsx::purgeTenant": "AlertDialog on the page",
   "components/BackgroundOpsDrawer.tsx::cancelOperation":
-    "ConfirmModal on each row",
+    "CancelOperationButton's ConfirmModal on each row",
+  "app/operations/page.tsx::cancelOperation":
+    "CancelOperationButton's ConfirmModal on each row",
   "components/features/ObjectDetailView.tsx::purgeObject": "ConfirmModal",
   "components/features/users/UserRowActions.tsx::deleteUser": "Modal",
   "components/features/users/UserScopesCard.tsx::revokeScopes":

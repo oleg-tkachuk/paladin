@@ -43,6 +43,15 @@ describe("visibleNavigationGroups", () => {
     expect(all).toEqual(names([ROLES.tenantAdmin]));
   });
 
+  // The operations page reads the admin plane, as the drawer does.
+  it("lists Operations under System, for the admin plane only", () => {
+    const system = visibleNavigationGroups([ROLES.platformAdmin]).find(
+      (g) => g.title === "System",
+    );
+    expect(system?.items.map((i) => i.path)).toContain(SECTION.operations);
+    expect(names([ROLES.tenantUser])).not.toContain("Operations");
+  });
+
   // The MCP server is a group of its own: the four questions it answers are
   // pages, each a row, and none of them a row of System any more.
   it("gives the MCP server a group of its pages", () => {

@@ -207,3 +207,42 @@ export const OP_VIEW_KEEPS: Record<OpView, (s: OpStatus) => boolean> = {
   failed: (s) => s === "failed",
   done: (s) => s === "succeeded" || s === "cancelled",
 };
+
+// The states as the server's filter names them (filter/cel OperationState*).
+const CEL_STATE: Record<OpStatus, string> = {
+  pending: "PENDING",
+  running: "RUNNING",
+  succeeded: "SUCCEEDED",
+  failed: "FAILED",
+  cancelled: "CANCELLED",
+};
+
+/**
+ * The server's CEL filter for a view, "" for all. Read off OP_VIEW_KEEPS, so
+ * the list the server returns and the one a client narrows cannot disagree;
+ * `state in [...]` is pushed into the query, so every page is full.
+ */
+export function operationsFilter(view: OpView): string {
+  const states = (Object.keys(CEL_STATE) as OpStatus[]).filter(
+    OP_VIEW_KEEPS[view],
+  );
+  if (states.length === Object.keys(CEL_STATE).length) return "";
+  return `state in [${states.map((s) => JSON.stringify(CEL_STATE[s])).join(", ")}]`;
+}
+
+/**
+ * Whether op matches a search, by what the page shows of it: its label, its
+ * type, its name, the collections it acts on and why it failed.
+ */
+export function operationMatches(op: Operation, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    operationLabel(op),
+    op.type,
+    op.name,
+    op.target?.collection ?? "",
+    op.target?.destination ?? "",
+    operationError(op),
+  ].some((s) => s.toLowerCase().includes(q));
+}

@@ -20,6 +20,7 @@ import {
   ServerStackIcon,
   BuildingOfficeIcon,
   ClockIcon,
+  QueueListIcon,
 } from "@heroicons/react/24/outline";
 import { useActions } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
@@ -35,6 +36,7 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
+import { SECTION } from "@/lib/navigation/sections";
 import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
 interface SearchResult {
   id: string;
@@ -218,6 +220,15 @@ export function CommandPalette() {
           icon: ChartBarIcon,
           href: "/stats",
           onSelect: () => router.push("/stats"),
+        },
+        {
+          id: "nav-operations",
+          type: "nav",
+          title: "Operations",
+          subtitle: "Batch work as it runs, and how it ended",
+          icon: QueueListIcon,
+          href: SECTION.operations,
+          onSelect: () => router.push(SECTION.operations),
         },
         {
           id: "nav-health",
