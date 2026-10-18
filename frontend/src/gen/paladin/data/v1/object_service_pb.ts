@@ -891,11 +891,18 @@ export type ListObjectsRequest =
     filter: string;
 
     /**
+     * order_by is the field the list sorts by: key, content_type, size_bytes,
+     * state, created_at or terminated_at; any other is refused. Empty lists in
+     * id order, the oldest object first. Keys sort bytewise. The page_token of
+     * a sorted list resumes only that order and direction.
+     *
      * @generated from field: string order_by = 4;
      */
     orderBy: string;
 
     /**
+     * sort_order is the direction; unspecified is ascending.
+     *
      * @generated from field: paladin.common.v1.SortOrder sort_order = 5;
      */
     sortOrder: SortOrder;

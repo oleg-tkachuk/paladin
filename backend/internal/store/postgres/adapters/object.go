@@ -1,7 +1,6 @@
 package adapters
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -232,17 +232,21 @@ func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args o
 
 func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsArgs) ([]objecth.Object, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
-	var afterID uuid.UUID
+	// No order named is id order, as the handler resolves an empty order_by.
+	if args.Order.Field == "" {
+		args.Order.Field = objectOrderByID
+	}
+	var after *keyset.Cursor
 	if args.PageToken != "" {
-		id, err := uuid.Parse(args.PageToken)
+		c, err := keyset.Decode(args.PageToken, args.Order)
 		if err != nil {
-			return nil, "", fmt.Errorf("parse page_token: %w", err)
+			return nil, "", fmt.Errorf("list objects: %w", err)
 		}
-		afterID = id
+		after = &c
 	}
 
-	rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection,
-		objectBranchHints(args.Filter), liveObjectsOnly(args.Filter), afterID, pageSize)
+	rows, nextCursor, more, err := r.candidates(ctx, args.TenantID, args.Collection,
+		objectBranchHints(args.Filter), liveObjectsOnly(args.Filter), args.Order, after, pageSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("list objects: %w", err)
 	}
@@ -261,7 +265,7 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 	// filtered rows on the next page.
 	var next string
 	if more {
-		next = nextID.String()
+		next = keyset.Encode(nextCursor)
 	}
 	return out, next, nil
 }
@@ -296,10 +300,11 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 	var (
 		matched int64
 		scanned int64
-		afterID uuid.UUID
+		after   *keyset.Cursor
 	)
+	order := keyset.Order{Field: objectOrderByID}
 	for {
-		rows, nextID, more, err := r.candidates(ctx, args.TenantID, args.Collection, branches, liveObjectsOnly(args.Filter), afterID, pageSize)
+		rows, next, more, err := r.candidates(ctx, args.TenantID, args.Collection, branches, liveObjectsOnly(args.Filter), order, after, pageSize)
 		if err != nil {
 			return 0, false, fmt.Errorf("count objects scan: %w", err)
 		}
@@ -316,7 +321,7 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 		if !more {
 			return matched, true, nil
 		}
-		afterID = nextID
+		after = &next
 	}
 }
 
@@ -332,78 +337,80 @@ func liveObjectsOnly(filter string) bool {
 	return err == nil && !mentions
 }
 
-// candidates returns one keyset page of objects that may match: those
-// after afterID, in id order, admitted by at least one branch.
+// candidates returns one keyset page of objects that may match: those after
+// the cursor in order, admitted by at least one branch.
 //
 // One branch is one query. Several — a filter with `||` or `in` — are one
 // query each, merged by mergeCandidatePages.
 //
-// more reports that rows may follow next; next is the cursor for them.
+// more reports that rows may follow; next is the cursor for them.
 func (r *ObjectRepo) candidates(
 	ctx context.Context, tenantID uuid.UUID, collection string,
-	branches []objectHints, liveOnly bool, afterID uuid.UUID, pageSize int32,
-) (rows []sqlc.ListObjectsRow, next uuid.UUID, more bool, err error) {
+	branches []objectHints, liveOnly bool, order keyset.Order, after *keyset.Cursor, pageSize int32,
+) (rows []sqlc.ListObjectsRow, next keyset.Cursor, more bool, err error) {
+	afterID := pgtype.UUID{}
+	var afterValue *string
+	if after != nil {
+		afterID = pgUUID(after.ID)
+		if order.Field != objectOrderByID {
+			afterValue = &after.Value
+		}
+	}
 	err = r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
-		rows, next, more = nil, uuid.UUID{}, false
+		rows, next, more = nil, keyset.Cursor{}, false
 		pages := make([][]sqlc.ListObjectsRow, 0, len(branches))
 		for _, h := range branches {
 			page, err := q.ListObjects(ctx, collection, pgUUID(tenantID),
 				h.state, h.prefix, h.substr,
 				h.contentType, h.contentTypePrefix,
 				h.tags, h.metadata,
-				pgUUID(afterID), pageSize, liveOnly)
+				afterID, pageSize, liveOnly,
+				order.Field, order.Desc, afterValue)
 			if err != nil {
 				return err
 			}
 			pages = append(pages, page)
 		}
-		rows, next, more = mergeCandidatePages(pages, int(pageSize))
+		rows, next, more = mergeCandidatePages(pages, int(pageSize), order)
 		return nil
 	})
 	return rows, next, more, err
 }
 
-// mergeCandidatePages merges per-branch keyset pages (each in id order, each
-// at most pageSize long) into one page: the union, in id order, cut to
-// pageSize.
+// mergeCandidatePages merges per-branch keyset pages (each in order, each at
+// most pageSize long) into one page: the union, in order, cut to pageSize.
+// A single branch is sorted too: the query's ANY() keeps no order.
 //
 // The cut is what keeps the walk from skipping rows. A branch that filled its
-// page may have more after its last id; but its pageSize rows are all in the
-// union, so the union's first pageSize ids never pass that last id, and
-// nothing that branch has not yet returned can sort before the cursor.
+// page may have more after its last row; but its pageSize rows are all in the
+// union, so the union's first pageSize rows never pass that last row, and
+// nothing that branch has not yet returned can sort before the cursor. That
+// holds for any total order, which (sort key, id) is.
 // more is set when any branch filled its page or the union was cut.
-func mergeCandidatePages(pages [][]sqlc.ListObjectsRow, pageSize int) (rows []sqlc.ListObjectsRow, next uuid.UUID, more bool) {
-	idOf := func(r sqlc.ListObjectsRow) uuid.UUID { return uuid.UUID(r.Object.ID.Bytes) }
-	if len(pages) == 1 {
-		rows = pages[0]
-	} else {
-		seen := map[uuid.UUID]bool{}
-		for _, page := range pages {
-			for _, row := range page {
-				if id := idOf(row); !seen[id] {
-					seen[id] = true
-					rows = append(rows, row)
-				}
+func mergeCandidatePages(pages [][]sqlc.ListObjectsRow, pageSize int, order keyset.Order) (rows []sqlc.ListObjectsRow, next keyset.Cursor, more bool) {
+	seen := map[[16]byte]bool{}
+	for _, page := range pages {
+		for _, row := range page {
+			if id := row.Object.ID.Bytes; !seen[id] {
+				seen[id] = true
+				rows = append(rows, row)
 			}
 		}
-		// Postgres orders uuid bytewise, as bytes.Compare does.
-		sort.Slice(rows, func(i, j int) bool {
-			a, b := idOf(rows[i]), idOf(rows[j])
-			return bytes.Compare(a[:], b[:]) < 0
-		})
-	}
-	for _, page := range pages {
 		if len(page) == pageSize {
 			more = true
 		}
 	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return compareObjectRows(order, rows[i].Object, rows[j].Object) < 0
+	})
 	if len(rows) > pageSize {
 		rows, more = rows[:pageSize], true
 	}
 	if more && len(rows) > 0 {
-		return rows, idOf(rows[len(rows)-1]), true
+		last := rows[len(rows)-1].Object
+		return rows, keyset.Cursor{Order: order, Value: objectSortValue(order.Field, last), ID: uuid.UUID(last.ID.Bytes)}, true
 	}
-	return rows, uuid.UUID{}, false
+	return rows, keyset.Cursor{}, false
 }
 
 // ListDistinctTags returns one page of tag facets for the Collection's live

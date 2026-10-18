@@ -384,7 +384,12 @@ message ListObjectsRequest {
   string parent = 1 [(buf.validate.field).string.min_len = 1];
   paladin.common.v1.PageRequest page = 2;
   string filter = 3;
+  // order_by is the field the list sorts by: key, content_type, size_bytes,
+  // state, created_at or terminated_at; any other is refused. Empty lists in
+  // id order, the oldest object first. Keys sort bytewise. The page_token of
+  // a sorted list resumes only that order and direction.
   string order_by = 4;
+  // sort_order is the direction; unspecified is ascending.
   paladin.common.v1.SortOrder sort_order = 5;
 }
 

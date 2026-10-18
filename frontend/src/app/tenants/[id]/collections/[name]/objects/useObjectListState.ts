@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { buildObjectFilter } from "@/lib/objectFilter";
+import { isObjectOrderField } from "@/lib/objectOrder";
+
 import { getNextSort, type SortState } from "./_view";
 
 export interface ObjectListState {
@@ -64,9 +66,16 @@ export function useObjectListState(): ObjectListState {
   const [recursive, setRecursive] = useState(
     searchParams.get("recursive") === "true",
   );
-  const [sort, setSort] = useState<SortState>({
-    column: searchParams.get("sort") || "",
-    direction: (searchParams.get("dir") as "asc" | "desc") || null,
+  // A sort the server cannot apply is dropped rather than sent: an old link
+  // may still name a column the list once only pretended to sort by.
+  const [sort, setSort] = useState<SortState>(() => {
+    const column = searchParams.get("sort") || "";
+    return isObjectOrderField(column)
+      ? {
+          column,
+          direction: (searchParams.get("dir") as "asc" | "desc") || null,
+        }
+      : { column: "", direction: null };
   });
 
   const syncToUrl = useCallback(

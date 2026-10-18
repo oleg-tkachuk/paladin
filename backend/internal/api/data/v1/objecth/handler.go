@@ -33,6 +33,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -482,9 +483,10 @@ type ListObjectsArgs struct {
 	// adapter can extract SQL pushdown predicates (state, key, content type,
 	// tag and metadata equality) from it. The
 	// CompiledCEL remains authoritative as a post-load pass.
-	Filter   string
-	OrderBy  string
-	SortDesc bool
+	Filter string
+	// Order is the sort, validated by the handler; its page token was minted
+	// for it.
+	Order keyset.Order
 }
 
 // CountObjectsArgs carries the inputs for Repository.CountObjects. When
@@ -1040,6 +1042,10 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	if err != nil {
 		return nil, "", err
 	}
+	order, err := objectOrder(in.OrderBy, in.SortDesc)
+	if err != nil {
+		return nil, "", err
+	}
 	// Capability gate: a listing reads the whole collection, so it is
 	// asserted against the collection's URI prefix. A capability confined to
 	// part of the collection is refused rather than shown every row's name —
@@ -1075,9 +1081,11 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 		PageToken:   in.PageToken,
 		CompiledCEL: prog,
 		Filter:      in.Filter,
-		OrderBy:     in.OrderBy,
-		SortDesc:    in.SortDesc,
+		Order:       order,
 	})
+	if errors.Is(err, keyset.ErrMalformed) || errors.Is(err, keyset.ErrOrderChanged) {
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, "page_token: "+err.Error()).WithCause(err)
+	}
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}

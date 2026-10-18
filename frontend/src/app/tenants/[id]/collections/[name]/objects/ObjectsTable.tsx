@@ -29,6 +29,7 @@ import { OBJECT_COLUMN_CLASS } from "@/components/features/objects/columns";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 
 import { SortableHead } from "@/components/ui/SortHeader";
+import { OBJECT_ORDER } from "@/lib/objectOrder";
 import type { SortState } from "./_view";
 
 // Per-row callbacks forwarded verbatim to ObjectTableRow. Derived from its own
@@ -111,25 +112,22 @@ export function ObjectsTable({
             {visibleColumns.has("key") && (
               <SortableHead
                 label="Name / ID"
-                column="key"
+                column={OBJECT_ORDER.key}
                 current={sort}
                 onSort={onSort}
               />
             )}
+            {/* Tags are a map, so there is no one value to sort them by. */}
             {visibleColumns.has("object_tag") && (
-              <SortableHead
-                className={OBJECT_COLUMN_CLASS.object_tag}
-                label="Object Tags"
-                column="object_tag"
-                current={sort}
-                onSort={onSort}
-              />
+              <TableHead className={OBJECT_COLUMN_CLASS.object_tag}>
+                Object Tags
+              </TableHead>
             )}
             {visibleColumns.has("mime") && (
               <SortableHead
                 className={OBJECT_COLUMN_CLASS.mime}
                 label="MIME"
-                column="content_type"
+                column={OBJECT_ORDER.contentType}
                 current={sort}
                 onSort={onSort}
               />
@@ -138,7 +136,7 @@ export function ObjectsTable({
               <SortableHead
                 className={cn(OBJECT_COLUMN_CLASS.size, "text-right")}
                 label="Size"
-                column="size_bytes"
+                column={OBJECT_ORDER.size}
                 current={sort}
                 onSort={onSort}
                 align="end"
@@ -147,7 +145,7 @@ export function ObjectsTable({
             {visibleColumns.has("status") && (
               <SortableHead
                 label="State"
-                column="status"
+                column={OBJECT_ORDER.state}
                 current={sort}
                 onSort={onSort}
               />
@@ -156,7 +154,7 @@ export function ObjectsTable({
               <SortableHead
                 className={OBJECT_COLUMN_CLASS.created}
                 label="Created"
-                column="created_at"
+                column={OBJECT_ORDER.createdAt}
                 current={sort}
                 onSort={onSort}
                 after={

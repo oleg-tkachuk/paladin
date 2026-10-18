@@ -492,7 +492,10 @@ WHERE o.id = ANY (ARRAY(
             $9::jsonb,
             $10::uuid,
             $11::integer,
-            $12::boolean)))
+            $12::boolean,
+            $13::text,
+            $14::boolean,
+            $15::text)))
   AND o.tenant_id = $2::uuid
   AND o.collection_id = (
         SELECT c.id FROM collections c
@@ -518,14 +521,15 @@ type ListObjectsRow struct {
 // Two steps in one statement. search_object_ids (029) picks the page's ids
 // with the trigram and GIN indexes (026–028), which RLS would otherwise keep
 // out of the plan; this query then reads those rows under the caller's RLS,
-// which still decides what is returned. The page is the function's LIMIT;
-// keyset on id (UUIDv7, monotonic-by-time).
+// which still decides what is returned. The page is the function's LIMIT,
+// keyset on (order_by, id) (085). ANY() keeps no order, so the caller sorts
+// the rows by the same key.
 //
 // No join to collections: the name is the argument, and joining cost a
 // collections scan per returned row (the planner cannot size the id array).
 // The collection is resolved once, by its unique (tenant_id, name), and
 // still checked against every row.
-func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		collection,
 		tenantID,
@@ -539,6 +543,9 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 		afterID,
 		pageSize,
 		liveOnly,
+		orderBy,
+		sortDesc,
+		afterValue,
 	)
 	if err != nil {
 		return nil, err

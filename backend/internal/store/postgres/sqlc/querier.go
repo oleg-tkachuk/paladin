@@ -471,14 +471,15 @@ type Querier interface {
 	// Two steps in one statement. search_object_ids (029) picks the page's ids
 	// with the trigram and GIN indexes (026–028), which RLS would otherwise keep
 	// out of the plan; this query then reads those rows under the caller's RLS,
-	// which still decides what is returned. The page is the function's LIMIT;
-	// keyset on id (UUIDv7, monotonic-by-time).
+	// which still decides what is returned. The page is the function's LIMIT,
+	// keyset on (order_by, id) (085). ANY() keeps no order, so the caller sorts
+	// the rows by the same key.
 	//
 	// No join to collections: the name is the argument, and joining cost a
 	// collections scan per returned row (the planner cannot size the id array).
 	// The collection is resolved once, by its unique (tenant_id, name), and
 	// still checked against every row.
-	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query

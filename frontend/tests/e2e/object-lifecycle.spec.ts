@@ -79,6 +79,36 @@ test.describe("US6 — Object lifecycle", () => {
     await expectKeyVisible(page, obj.key);
   });
 
+  // The headers sort on the server: seeded b, a, c — so id order is not key
+  // order — the list reads a, b, c by key and c, b, a the other way. Until
+  // the server applied order_by, the header changed and the rows did not.
+  test("sorting by name orders the list on the server, either way", async ({
+    page,
+    makeCollection,
+  }) => {
+    await loginAsAdmin(page);
+    const { tenantId, tenantSlug, collection } =
+      await seedScope(makeCollection);
+    const keys = ["sort-b", "sort-a", "sort-c"];
+    for (const key of keys) await seedObject({ tenantId, collection, key });
+
+    await gotoSettled(page, objectsURL(tenantSlug, collection));
+    await expectKeyVisible(page, "sort-c");
+    const listed = () =>
+      page
+        .getByRole("row")
+        .filter({ hasText: /sort-[abc]/ })
+        .evaluateAll((rows) =>
+          rows.map((r) => r.textContent?.match(/sort-[abc]/)?.[0]),
+        );
+
+    const header = page.getByRole("button", { name: /^Name \/ ID/ });
+    await header.click();
+    await expect.poll(listed).toEqual(["sort-a", "sort-b", "sort-c"]);
+    await header.click();
+    await expect.poll(listed).toEqual(["sort-c", "sort-b", "sort-a"]);
+  });
+
   test("the object list is scoped to its collection", async ({
     page,
     makeCollection,
