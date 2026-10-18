@@ -120,6 +120,9 @@ func operationToProto(o *operationh.Operation) *pb.Operation {
 	if o.DismissedAt != nil {
 		out.DismissedAt = convx.TsProto(*o.DismissedAt)
 	}
+	if o.ExpireAt != nil {
+		out.ExpireTime = convx.TsProto(*o.ExpireAt)
+	}
 	if md := convx.JSONToAny(o.Progress); md != nil {
 		out.Metadata = md
 	}

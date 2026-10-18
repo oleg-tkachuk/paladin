@@ -42,8 +42,11 @@ type Operation struct {
 	InitiatorSubject string
 	// DismissedAt is when the initiator cleared it from their own list.
 	DismissedAt *time.Time
-	Type        string
-	State       State
+	// ExpireAt is when the housekeeping reaper removes it (expiresAt); nil
+	// while it runs and while finished operations are kept indefinitely.
+	ExpireAt *time.Time
+	Type     string
+	State    State
 	// Metadata is the executor's arguments, JSON, written once at creation.
 	Metadata []byte
 	// Progress is the latest {processed, total} snapshot the worker reported,
@@ -94,6 +97,23 @@ type Handler struct {
 	policy cedar.Authorizer
 	// cel compiles and caches List filters (program cache only).
 	cel *celpkg.Evaluator
+	// finishedRetention is worker.jobs.housekeeping.operations_ttl: how long
+	// the reaper keeps a finished operation. Zero keeps them indefinitely.
+	finishedRetention time.Duration
+}
+
+// SetFinishedRetention sets how long a finished operation is kept before the
+// housekeeping reaper removes it, which each operation reports as ExpireAt.
+func (h *Handler) SetFinishedRetention(d time.Duration) { h.finishedRetention = d }
+
+// expiresAt is when the reaper removes an operation that finished at doneAt:
+// nil while it runs, and when retention keeps finished ones indefinitely.
+func expiresAt(doneAt *time.Time, retention time.Duration) *time.Time {
+	if doneAt == nil || retention <= 0 {
+		return nil
+	}
+	t := doneAt.Add(retention)
+	return &t
 }
 
 func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
@@ -149,6 +169,7 @@ func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation,
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
+	op.ExpireAt = expiresAt(op.DoneAt, h.finishedRetention)
 	return &op, nil
 }
 
@@ -210,6 +231,9 @@ func (h *Handler) ListOperations(ctx context.Context, in ListInput) ([]Operation
 	page, err = celpkg.FilterPage(h.cel, celpkg.OperationSchema, filter, page, operationRow)
 	if err != nil {
 		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
+	for i := range page {
+		page[i].ExpireAt = expiresAt(page[i].DoneAt, h.finishedRetention)
 	}
 	return page, next, nil
 }

@@ -56,6 +56,10 @@ message Operation {
   string initiator_subject = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
   // When its initiator cleared it from their own list; unset while not.
   google.protobuf.Timestamp dismissed_at = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // When the housekeeping reaper removes it: done_at plus the configured
+  // retention of finished operations. Unset while it runs, and when finished
+  // operations are kept indefinitely.
+  google.protobuf.Timestamp expire_time = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectSelector {
