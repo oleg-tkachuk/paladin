@@ -181,7 +181,9 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
             ) : (
               clients.map((c) => (
                 <TableRow key={c.clientId} {...openableRow(() => setOpened(c))}>
-                  <TableCell className={T.code}>
+                  <TableCell
+                    className={cn(T.code, "whitespace-normal break-all")}
+                  >
                     {c.clientId}
                     {c.dynamic ? (
                       <Badge variant="info" className="ml-2">
@@ -194,14 +196,14 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
                       </Badge>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-xs">{clientKind(c)}</TableCell>
+                  <TableCell>{clientKind(c)}</TableCell>
                   <TableCell
-                    className={`hidden @md:table-cell ${T.code} text-muted-foreground`}
+                    className={`hidden @md:table-cell ${T.code} whitespace-normal break-words text-muted-foreground`}
                   >
                     {c.allowedScopes.join(" ") || "—"}
                   </TableCell>
                   <TableCell
-                    className={`hidden @md:table-cell ${T.code} text-muted-foreground`}
+                    className={`hidden @md:table-cell ${T.code} whitespace-normal break-words text-muted-foreground`}
                   >
                     {c.allowedAudiences.join(" ") || "—"}
                   </TableCell>
