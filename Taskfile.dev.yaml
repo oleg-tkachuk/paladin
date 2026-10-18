@@ -253,6 +253,7 @@ tasks:
       - task: verify:taskfile-drift
       - task: verify:publish-target
       - task: verify:new-release-tag
+      - task: verify:release-retry
       - task: verify:stream-release-notes
       - task: verify:propose-upgrade-sections
       - task: verify:badge-versions
@@ -557,6 +558,13 @@ tasks:
     # A mismatch builds inside the tree and cannot be fetched outside it.
     cmds:
       - ./scripts/go-module-paths.test.sh
+
+  verify:release-retry:
+    desc: "Fail when the release scripts would give up on a service's passing failure, or retry forever"
+    # One 409 from the Sigstore transparency log failed a signing, and the
+    # image never reached the dev cluster.
+    cmds:
+      - ./.github/scripts/release-retry.test.sh
 
   verify:new-release-tag:
     desc: "Fail when release.yaml would take an earlier run's tag for its own"

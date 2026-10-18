@@ -21,11 +21,13 @@ chart=$1
 
 # shellcheck source=SCRIPTDIR/release-sign-mode.sh
 source "$(dirname "$0")/release-sign-mode.sh"
+# shellcheck source=SCRIPTDIR/release-retry.sh
+source "$(dirname "$0")/release-retry.sh"
 
 digest=$(crane digest "$chart")
 ref="${chart%:*}@${digest}"
 
 echo ">>> [sign] $chart ($digest)"
-cosign sign --yes "${sign_args[@]}" "$ref"
-cosign verify "${verify_args[@]}" "$ref" >/dev/null
+retry cosign sign --yes "${sign_args[@]}" "$ref"
+retry cosign verify "${verify_args[@]}" "$ref" >/dev/null
 echo "    signed and verified"
