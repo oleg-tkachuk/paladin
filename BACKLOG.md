@@ -375,22 +375,6 @@ open deliberately — each notes why._
 
 ---
 
-## Dependencies
-
-### `golang.org/x/crypto` GO-2026-5932 has no fix upstream
-
-- **Status:** Open, and not actionable — recorded so it is not re-discovered.
-- **Reason:** `govulncheck` reports GO-2026-5932 against
-`golang.org/x/crypto@v0.57.0` with **Fixed in: N/A**. No release resolves
-this: bumping the dependency cannot help until upstream ships something.
-Unreachable from our code today, so `sec:vuln` stays green.
-- **Definition of Done:** upstream publishes a fixed version, we take it, and
-this entry goes. If the advisory is instead withdrawn or re-scored, delete it
-with a note in the commit saying which.
-- **Blockers:** upstream. Worth re-checking whenever `sec:vuln` output is read
-rather than on a schedule — the first sign of it mattering would be the
-finding moving from "packages you import" to "your code is affected".
-
 ## Performance / Scale
 
 ### Per-table autovacuum tuning
