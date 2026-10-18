@@ -475,3 +475,24 @@ describe("BackgroundOpsDrawer clearing", () => {
     expect(await screen.findByText(/nope/)).toBeInTheDocument();
   });
 });
+
+// The way to the page with room for detail: a link of its own, not the tail
+// of the summary line it used to wrap in.
+describe("BackgroundOpsDrawer operations page link", () => {
+  beforeEach(() => {
+    h.refresh.mockReset().mockResolvedValue(undefined);
+    shellOps([]);
+  });
+
+  it("leads to the operations page and closes the drawer", async () => {
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    const link = await screen.findByRole("link", {
+      name: "Open the operations page",
+    });
+    expect(link).toHaveAttribute("href", "/operations");
+    expect(screen.getByText(/^Yours only/)).not.toContainElement(link);
+    await userEvent.click(link);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+});
