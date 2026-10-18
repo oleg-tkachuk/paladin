@@ -217,6 +217,25 @@ describe("BackgroundOpsDrawer progress", () => {
     expect(screen.queryByText(/ of /)).not.toBeInTheDocument();
   });
 
+  // A finished batch keeps its last progress report; the row says how it
+  // ended instead of showing a full bar that reads as still going.
+  it("shows no progress for a finished operation", async () => {
+    shellOps([
+      {
+        name: "operations/done-1",
+        type: "BatchUpdateTags",
+        done: true,
+        createdAt: undefined,
+        metadata: anyStruct({ processed: 1, total: 1 }),
+        result: { case: undefined },
+      },
+    ]);
+    render(<BackgroundOpsDrawer />);
+    await openDrawer();
+    await screen.findByRole("listitem", { name: /Merge tags/ });
+    expect(screen.queryByText(/processed/)).toBeNull();
+  });
+
   it("shows live progress for a running operation", async () => {
     shellOps([
       {

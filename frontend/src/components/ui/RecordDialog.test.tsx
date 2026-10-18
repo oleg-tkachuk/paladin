@@ -119,6 +119,15 @@ describe("RecordDialog width", () => {
     }
   });
 
+  // A gap on both axes on the field replaced the column gap the subgrid takes
+  // from the dialog, and every label ran into its value.
+  it("leaves the gap between labels and values to the dialog", () => {
+    dialogFor(<RecordField label="Collection">e2e/docs</RecordField>);
+    const field = screen.getByText("Collection").parentElement as HTMLElement;
+    expect(field.className).not.toMatch(/(^|\s)(sm:)?gap-[\d.]+(\s|$)/);
+    expect(field).toHaveClass("gap-y-0.5");
+  });
+
   it("keeps a short field beside its label, in the shared column", () => {
     const dialog = dialogFor(
       <RecordField label="Audience">paladin-iam</RecordField>,

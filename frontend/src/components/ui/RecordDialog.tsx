@@ -128,8 +128,10 @@ export function RecordField({
     <div
       {...(stacked ? { [WIDE_FIELD]: "" } : {})}
       className={cn(
-        "grid min-w-0 gap-0.5",
-        stacked ? "sm:gap-1" : "sm:grid-cols-subgrid sm:items-baseline",
+        // Row gap only: a gap on both axes would replace the gap between the
+        // label column and the values that the subgrid takes from the dialog.
+        "grid min-w-0 gap-y-0.5",
+        stacked ? "sm:gap-y-1" : "sm:grid-cols-subgrid sm:items-baseline",
       )}
     >
       <span className={T.helper}>{label}</span>
