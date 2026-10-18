@@ -129,18 +129,23 @@ export default function TenantsPage() {
         onQueryChange={setSearch}
         searchLabel="Search tenants"
         placeholder="Search tenants by ID or name…"
-      >
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => {
-            void fetchTenants();
-          }}
-          aria-label="Refresh"
-        >
-          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
-        </Button>
-      </TableToolbar>
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                void fetchTenants();
+              }}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
+        }
+      />
 
       {/* Table */}
       <Card className="p-0">

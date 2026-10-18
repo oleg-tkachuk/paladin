@@ -1,5 +1,6 @@
 // The bar above a table: a search box, any further filters the page brings, an
-// optional set of choices to pick one from, and how many rows show. Controlled and presentational — the page
+// optional set of choices to pick one from, how many rows show, and last the
+// page's own actions (refresh, create), kept apart from the filters. Controlled and presentational — the page
 // owns the query and the filter, whether it filters in the browser
 // (useTableView) or on the server, so every table looks and behaves alike.
 import type React from "react";
@@ -33,6 +34,8 @@ interface TableToolbarProps<V extends string> {
   count?: { shown: number; total: number };
   /** Further filters, such as a select, set between the search and the rest. */
   children?: React.ReactNode;
+  /** The page's actions on the list, set at the end of the bar. */
+  actions?: React.ReactNode;
   className?: string;
 }
 
@@ -44,6 +47,7 @@ export function TableToolbar<V extends string>({
   filter,
   count,
   children,
+  actions,
   className,
 }: TableToolbarProps<V>) {
   return (
@@ -99,6 +103,9 @@ export function TableToolbar<V extends string>({
             ? `${count.total} shown`
             : `${count.shown} of ${count.total}`}
         </span>
+      ) : null}
+      {actions ? (
+        <div className="ml-auto flex items-center gap-2">{actions}</div>
       ) : null}
     </div>
   );

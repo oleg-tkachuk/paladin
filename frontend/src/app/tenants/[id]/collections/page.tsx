@@ -243,16 +243,21 @@ export default function TenantCollectionsPage() {
         onQueryChange={setSearch}
         searchLabel="Search collections"
         placeholder="Search by name or display label…"
-      >
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => void fetchList(search)}
-          aria-label="Refresh"
-        >
-          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
-        </Button>
-      </TableToolbar>
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void fetchList(search)}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
+        }
+      />
 
       <Card className="p-0">
         <Table>
