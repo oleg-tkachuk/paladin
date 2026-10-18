@@ -100,3 +100,36 @@ test.describe("Object trash — version + restore", () => {
     });
   });
 });
+
+// A collection whose last object is in its trash cannot be deleted — the
+// trashed object can still be restored — and the refusal used to say "has
+// live objects", which it had none of. It now says the trash holds it, and
+// the notice opens that trash.
+test.describe("Object trash — holds its collection", () => {
+  test("a delete the trash refuses says so and opens the trash", async ({
+    page,
+    makeCollection,
+  }) => {
+    await loginAsAdmin(page);
+    const { tenantId, collection } = await seedScope(makeCollection);
+    const obj = await seedObject({ tenantId, collection });
+    await softDeleteObject(obj.name);
+
+    await gotoSettled(page, `/tenants/${tenantId}/collections`);
+    await page
+      .getByRole("button", { name: `Actions for ${collection}` })
+      .click();
+    await page.getByRole("menuitem", { name: /Delete Collection/i }).click();
+    await page.getByRole("button", { name: /^Delete Collection$/ }).click();
+
+    await expect(page.getByText(/1 object in its trash/)).toBeVisible();
+    await page.getByRole("button", { name: "Open its trash" }).click();
+    // The tenant segment lands as its slug: the workspace canonicalises an id.
+    await expect(page).toHaveURL(
+      new RegExp(`/collections/${encodeURIComponent(collection)}/trash$`),
+    );
+    await expect(
+      page.getByRole("row").filter({ hasText: obj.objectId }),
+    ).toBeVisible({ timeout: 10_000 });
+  });
+});
