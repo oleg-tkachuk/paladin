@@ -12,7 +12,6 @@ import {
   BuildingOfficeIcon,
   ChevronRightIcon,
   FolderIcon,
-  MagnifyingGlassIcon,
   ServerStackIcon,
   TagIcon,
 } from "@heroicons/react/24/outline";
@@ -22,7 +21,10 @@ import { listAllCollections } from "@/lib/listAllCollections";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SortableHead } from "@/components/ui/SortHeader";
+import { TableToolbar } from "@/components/ui/TableToolbar";
+import { useTableSort } from "@/hooks/useTableSort";
+import { filterRows, sortRows, type SortAccessors } from "@/lib/table/view";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -44,6 +46,12 @@ import { useBucket } from "../bucket-context";
 /** How many skeleton cards stand in while the first read is in flight. */
 const SKELETON_CARDS = 2;
 
+type CollectionColumn = "collection" | "display";
+const COLLECTION_SORT: SortAccessors<Collection, CollectionColumn> = {
+  collection: (c) => c.collection,
+  display: (c) => c.displayName || undefined,
+};
+
 interface TenantCollections {
   tenantId: string;
   slug: string;
@@ -55,6 +63,8 @@ export default function BucketCollectionsPage() {
   const { bucket } = useBucket();
   const { tenants, fetchTenants } = useTenants();
   const [search, setSearch] = useState("");
+  const { sort, toggleSort } = useTableSort<CollectionColumn>();
+  const sortProps = { current: sort, onSort: toggleSort };
 
   // useTenants has no auto-fetch; names fall back to the tenant id.
   useEffect(() => {
@@ -77,11 +87,32 @@ export default function BucketCollectionsPage() {
     ? errorMessage(collectionsQuery.error, "Failed to load")
     : null;
 
+  const tenantByID = useMemo(
+    () => new Map(tenants.map((t) => [t.tenantId, t])),
+    [tenants],
+  );
+
+  // A collection matches on its own names or on its tenant's, so a search
+  // for a tenant shows every collection it keeps here.
+  const matching = useMemo(
+    () =>
+      filterRows(collections, search, (c) => {
+        const t = tenantByID.get(c.tenantId);
+        return [
+          c.collection,
+          c.displayName,
+          t?.slug,
+          t?.displayName,
+          c.tenantId,
+        ];
+      }),
+    [collections, search, tenantByID],
+  );
+
   // By tenant: who stored what here.
-  const groups = useMemo(() => {
-    const tenantByID = new Map(tenants.map((t) => [t.tenantId, t]));
+  const filtered = useMemo(() => {
     const byTenant = new Map<string, TenantCollections>();
-    for (const c of collections) {
+    for (const c of sortRows(matching, sort, COLLECTION_SORT)) {
       const t = tenantByID.get(c.tenantId);
       const slug = t?.slug || c.tenantId;
       const group = byTenant.get(c.tenantId) ?? {
@@ -96,41 +127,21 @@ export default function BucketCollectionsPage() {
     return [...byTenant.values()].sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
-  }, [collections, tenants]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return groups;
-    return groups
-      .map((g) => ({
-        ...g,
-        collections: g.collections.filter(
-          (c) =>
-            c.collection.toLowerCase().includes(q) ||
-            (c.displayName || "").toLowerCase().includes(q),
-        ),
-      }))
-      .filter(
-        (g) =>
-          g.collections.length > 0 ||
-          g.slug.toLowerCase().includes(q) ||
-          g.displayName.toLowerCase().includes(q),
-      );
-  }, [groups, search]);
+  }, [matching, sort, tenantByID]);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-60">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search tenant or collection…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search this bucket's collections"
+        placeholder="Search tenant or collection…"
+        count={
+          collectionsQuery.data
+            ? { shown: matching.length, total: collections.length }
+            : undefined
+        }
+      >
         <Button
           variant="outline"
           size="icon"
@@ -139,7 +150,7 @@ export default function BucketCollectionsPage() {
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
-      </div>
+      </TableToolbar>
 
       {listError ? (
         <Card>
@@ -197,8 +208,17 @@ export default function BucketCollectionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="@md:w-65">Collection</TableHead>
-                    <TableHead>Display name</TableHead>
+                    <SortableHead
+                      label="Collection"
+                      column="collection"
+                      className="@md:w-65"
+                      {...sortProps}
+                    />
+                    <SortableHead
+                      label="Display name"
+                      column="display"
+                      {...sortProps}
+                    />
                     <TableHead className="@md:w-45 text-right">
                       Browse
                     </TableHead>

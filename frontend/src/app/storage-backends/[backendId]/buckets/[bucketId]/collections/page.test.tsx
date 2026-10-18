@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { fireEvent, render, screen } from "@/test/utils";
 
 // A bucket's Collections tab: what each tenant stores in it, by tenant, each
 // Collection linking to its one page in its tenant's workspace (ADR-0033).
@@ -67,6 +67,36 @@ describe("BucketCollectionsPage", () => {
       "href",
       "/tenants/tenant-a/collections/docs",
     );
+  });
+
+  it("shows every collection of a tenant the search names", async () => {
+    render(<BucketCollectionsPage />);
+    await screen.findByText("docs");
+    fireEvent.change(
+      screen.getByRole("searchbox", {
+        name: "Search this bucket's collections",
+      }),
+      { target: { value: "tenant-a" } },
+    );
+    // The tenant matched, not its collections' names: both still show.
+    expect(screen.getByText("docs")).toBeInTheDocument();
+    expect(screen.getByText("media")).toBeInTheDocument();
+    expect(screen.queryByText("logs")).toBeNull();
+    expect(screen.getByText("2 of 3")).toBeInTheDocument();
+  });
+
+  it("sorts the collections inside each tenant", async () => {
+    render(<BucketCollectionsPage />);
+    await screen.findByText("docs");
+    const tenantA = () =>
+      screen
+        .getAllByRole("link")
+        .map((l) => l.textContent)
+        .filter((t) => t === "docs" || t === "media");
+    const [header] = screen.getAllByRole("button", { name: /^Collection/ });
+    fireEvent.click(header);
+    fireEvent.click(header);
+    expect(tenantA()).toEqual(["media", "docs"]);
   });
 
   it("says nothing is bound when the bucket holds no collection", async () => {
