@@ -610,3 +610,23 @@ describe("StorageBackendsPage load failure", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("StorageBackendsPage sorting", () => {
+  it("sorts the loaded backends by a column, then back", () => {
+    h.backends = [
+      makeBackend({ backendId: "bravo", region: "eu-west-1" }),
+      makeBackend({ backendId: "alpha", region: "us-east-1", enabled: false }),
+      makeBackend({ backendId: "charlie", region: "ap-south-1" }),
+    ];
+    render(<StorageBackendsPage />);
+    const ids = () =>
+      screen
+        .getAllByRole("checkbox", { name: /^Select (?!all)/ })
+        .map((c) => c.getAttribute("aria-label")?.replace("Select ", ""));
+    fireEvent.click(screen.getByRole("button", { name: /^Region/ }));
+    expect(ids()).toEqual(["charlie", "bravo", "alpha"]);
+    fireEvent.click(screen.getByRole("button", { name: /^State/ }));
+    // Disabled before Enabled, by the state's name.
+    expect(ids()[0]).toBe("alpha");
+  });
+});
