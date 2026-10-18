@@ -14,7 +14,8 @@
 
 set -euo pipefail
 
-readonly DEV_MARK="-dev."
+# shellcheck source=SCRIPTDIR/dev-mark.sh
+. "$(dirname "$0")/dev-mark.sh"
 
 kind="${1:-}"
 version="${2:-}"

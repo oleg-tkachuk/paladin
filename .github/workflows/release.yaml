@@ -352,6 +352,9 @@ jobs:
             printf 'version=%s\n' "$version"
             printf 'image=%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$name"
             printf 'chart=%s/%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$CHART_PATH" "$chart"
+            # The same two as GHCR package names, which carry no registry or owner.
+            printf 'package=%s\n' "$name"
+            printf 'chart_package=%s/%s\n' "$CHART_PATH" "$chart"
             printf 'file=%s/%s\n' "$COMPONENT" "$dockerfile"
             printf 'context=%s/%s\n' "$COMPONENT" "$context"
             # The same three values the library's image:build passes.
@@ -465,6 +468,33 @@ jobs:
           set -euo pipefail
           export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
           ./.github/scripts/release-sign-chart.sh "${CHART}:${VERSION}"
+
+      # Last, once the new dev build is pushed and signed: the older dev builds
+      # of this component's image and chart go, the newest stays, and a
+      # release run deletes nothing. GHCR has no retention setting of its own.
+      - name: Plan the cleanup of older dev builds
+        id: cleanup
+        if: env.KIND == 'dev'
+        env:
+          PACKAGE: ${{ steps.resolve.outputs.package }}
+          CHART_PACKAGE: ${{ steps.resolve.outputs.chart_package }}
+        run: ./.github/scripts/ghcr-cleanup-plan.sh "$PACKAGE" "$CHART_PACKAGE" >>"$GITHUB_OUTPUT"
+
+      # Not actions/delete-package-versions: it counts every package version
+      # alike, and a multi-arch image is several — its platform manifests, its
+      # signatures and attestations are versions too, untagged or tagged
+      # sha256-<digest>. Keeping "the newest N versions" with it deletes parts
+      # of the images it keeps. This one deletes an image with its children and
+      # leaves those of the images it keeps.
+      - name: Delete older dev builds
+        if: env.KIND == 'dev'
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          packages: ${{ steps.cleanup.outputs.packages }}
+          delete-tags: ${{ steps.cleanup.outputs.delete_tags }}
+          keep-n-tagged: ${{ steps.cleanup.outputs.keep }}
+          dry-run: ${{ steps.cleanup.outputs.dry_run }}
 
   # The GitHub release, once every component's image and chart is in GHCR.
   # `needs` alone would skip this when publish fails; the explicit result
