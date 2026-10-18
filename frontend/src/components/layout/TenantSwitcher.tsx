@@ -1,6 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import {
+  sessionTenantLabel,
+  shortTenantId,
+} from "@/lib/tenant/sessionTenantLabel";
 import { useRouter } from "next/navigation";
 import {
   ArrowPathIcon,
@@ -73,9 +77,11 @@ export const TenantSwitcher: React.FC = () => {
   // The token's slug stands in when the tenant record is not readable — a
   // principal without the admin audience never loads it.
   const tenantLabel =
-    tenant?.displayName?.trim() ||
-    user?.tenantSlug?.trim() ||
-    (tenantId ? shortId(tenantId) : "no tenant");
+    sessionTenantLabel({
+      displayName: tenant?.displayName,
+      slug: user?.tenantSlug,
+      id: tenantId,
+    }) ?? "no tenant";
 
   const doSwitch = useCallback(
     async (targetId: string) => {
@@ -169,7 +175,7 @@ export const TenantSwitcher: React.FC = () => {
                 // The signed-in row carries the same name as the trigger.
                 const name = isCurrent
                   ? tenantLabel
-                  : m.tenantSlug?.trim() || shortId(m.tenantId);
+                  : m.tenantSlug?.trim() || shortTenantId(m.tenantId);
                 return (
                   <CommandItem
                     key={m.tenantId}
@@ -266,10 +272,6 @@ export const TenantSwitcher: React.FC = () => {
     </Popover>
   );
 };
-
-function shortId(id: string): string {
-  return `${id.slice(0, 8)}…`;
-}
 
 // Two-letter monogram from a name, falling back to "?" when it is blank.
 function tenantMonogram(name: string): string {

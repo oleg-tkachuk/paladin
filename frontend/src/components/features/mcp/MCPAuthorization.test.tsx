@@ -283,3 +283,25 @@ describe("EffectBadge", () => {
     ).toEqual(labels);
   });
 });
+
+// The row reads at one size, and a long client id or audience list wraps
+// rather than pushing the last column off the card.
+describe("the clients table", () => {
+  it("keeps the row's size and wraps what is long", () => {
+    render(
+      <MCPAuthorization
+        inspect={inspect({
+          registeredClients: [MCP_SERVER, REGISTERED],
+        } as never)}
+      />,
+    );
+    const row = screen.getByRole("row", {
+      name: new RegExp(REGISTERED.clientId),
+    });
+    const [client, kind, scopes, audiences] = within(row).getAllByRole("cell");
+    expect(kind).not.toHaveClass("text-xs");
+    for (const cell of [client, scopes, audiences]) {
+      expect(cell).toHaveClass("whitespace-normal");
+    }
+  });
+});

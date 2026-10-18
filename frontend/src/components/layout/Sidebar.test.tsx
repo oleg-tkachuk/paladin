@@ -8,7 +8,6 @@ import {
   GROUP_LABEL_CLASS,
   SESSION_TENANT_GROUP,
   activeNavHref,
-  sessionTenantGroupTitle,
   visibleNavigationGroups,
   type NavTarget,
 } from "./Sidebar";
@@ -107,15 +106,6 @@ describe("activeNavHref", () => {
     ["/somewhere-else", null],
   ])("%s lights %s", (path, want) => {
     expect(activeNavHref(path, targets)).toBe(want);
-  });
-});
-
-describe("sessionTenantGroupTitle", () => {
-  it("names the session tenant once it is known", () => {
-    expect(sessionTenantGroupTitle("acme")).toBe(
-      `${SESSION_TENANT_GROUP} · acme`,
-    );
-    expect(sessionTenantGroupTitle(null)).toBe(SESSION_TENANT_GROUP);
   });
 });
 

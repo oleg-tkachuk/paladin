@@ -1,5 +1,7 @@
 "use client";
 
+import { useScope } from "@/context/ScopeContext";
+import { sessionTenantLabel } from "@/lib/tenant/sessionTenantLabel";
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -100,10 +102,12 @@ export function activeNavHref(
 /** The group of shortcuts into the session tenant's workspace. */
 export const SESSION_TENANT_GROUP = "Your tenant";
 
-/** That group's heading: the session tenant, named, once it is known. */
-export function sessionTenantGroupTitle(tenant: string | null): string {
-  return tenant ? `${SESSION_TENANT_GROUP} · ${tenant}` : SESSION_TENANT_GROUP;
-}
+// The line under that group's heading naming the tenant: the heading keeps
+// the short label every group has, and a long name — or the id, when nothing
+// names the tenant — is cut to the sidebar's width rather than wrapping the
+// heading over three lines.
+const SESSION_TENANT_NAME_CLASS =
+  "truncate px-2 pb-1.5 text-sm font-medium text-sidebar-foreground";
 
 const navigationGroups: Array<{
   title: string;
@@ -354,6 +358,12 @@ function SidebarBody({
   // wiring; TenantLayout's resolver canonicalises those at landing
   // via replaceState.
   const tenantHandle = user?.tenantSlug || user?.tenantId || null;
+  const { tenant } = useScope();
+  const sessionTenantName = sessionTenantLabel({
+    displayName: tenant?.displayName,
+    slug: user?.tenantSlug,
+    id: user?.tenantId,
+  });
   const resolveItemHref = (item: NavItem): string | null => {
     if (item.path) return item.path;
     if (!tenantHandle) return null;
@@ -436,11 +446,20 @@ function SidebarBody({
                     groupIdx > 0 && "mt-7",
                   )}
                 >
-                  {group.title === SESSION_TENANT_GROUP
-                    ? sessionTenantGroupTitle(tenantHandle)
-                    : group.title}
+                  {group.title}
                 </div>
               )}
+              {!collapsed &&
+              group.title === SESSION_TENANT_GROUP &&
+              sessionTenantName ? (
+                <div
+                  className={SESSION_TENANT_NAME_CLASS}
+                  title={user?.tenantId}
+                  data-testid="session-tenant-name"
+                >
+                  {sessionTenantName}
+                </div>
+              ) : null}
               {group.items.map((item) => {
                 const href = resolveItemHref(item);
                 // Tenant-scoped item without a known tenant — hide
