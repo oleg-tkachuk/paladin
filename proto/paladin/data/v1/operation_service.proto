@@ -45,6 +45,10 @@ message ListOperationsRequest {
   // exists: an ascending page of 50 is the 50 oldest rows, which is not what
   // "what is running now" means.
   paladin.common.v1.SortOrder sort_order = 3;
+  // mine lists only the operations the caller started, matched in the query
+  // on the subject of the caller's token. Operations from before initiators
+  // were recorded are no one's.
+  bool mine = 4;
 }
 
 message ListOperationsResponse {

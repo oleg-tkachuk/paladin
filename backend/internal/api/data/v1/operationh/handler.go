@@ -37,8 +37,11 @@ const (
 type Operation struct {
 	OperationID uuid.UUID
 	TenantID    uuid.UUID
-	Type        string
-	State       State
+	// InitiatorSubject is the subject of the token that submitted it; "" for
+	// an operation from before initiators were recorded.
+	InitiatorSubject string
+	Type             string
+	State            State
 	// Metadata is the executor's arguments, JSON, written once at creation.
 	Metadata []byte
 	// Progress is the latest {processed, total} snapshot the worker reported,
@@ -71,7 +74,8 @@ type Repository interface {
 	// showing current activity wants the newest rows; an ascending page of 50
 	// is the 50 oldest, which is how a three-day-old failure came to be the
 	// console's idea of what is running.
-	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string, newestFirst bool) ([]Operation, string, error)
+	// initiator, when set, keeps only the operations that subject started.
+	List(ctx context.Context, tenantID uuid.UUID, state *State, afterID uuid.UUID, pageSize int32, filter string, newestFirst bool, initiator string) ([]Operation, string, error)
 
 	// ClaimNext is the worker-side atomic dequeue: pick the oldest
 	// PENDING row, flip it to RUNNING, return it. Returns
@@ -160,14 +164,23 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	return nil
 }
 
-// ListOperations returns one page of the caller tenant's operations. filter is
-// an optional CEL expression over OperationSchema, applied after the fetch;
-// the repo cursor is returned unchanged so paging survives a page whose rows
-// all fail the predicate.
-func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string, newestFirst bool) ([]Operation, string, error) {
+// ListOperations returns one page of the caller tenant's operations, or with
+// mine only those the caller started. filter is an optional CEL expression
+// over OperationSchema, applied after the fetch; the repo cursor is returned
+// unchanged so paging survives a page whose rows all fail the predicate.
+func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int32, pageToken, filter string, newestFirst, mine bool) ([]Operation, string, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+	}
+	var initiator string
+	if mine {
+		p, err := auth.PrincipalFromContext(ctx)
+		if err != nil || p.Subject == "" {
+			// No subject is no one's operations, never everyone's.
+			return nil, "", connect.NewError(connect.CodeUnauthenticated, "mine needs a caller with a subject")
+		}
+		initiator = p.Subject
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
 		return nil, "", err
@@ -183,7 +196,7 @@ func (h *Handler) ListOperations(ctx context.Context, state *State, pageSize int
 		}
 		afterID = id
 	}
-	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize, filter, newestFirst)
+	page, next, err := h.repo.List(ctx, tenantID, state, afterID, pageSize, filter, newestFirst, initiator)
 	if err != nil {
 		return nil, "", err
 	}
@@ -224,6 +237,9 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 		Type:        opType,
 		State:       StatePending,
 		Metadata:    metadata,
+	}
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		op.InitiatorSubject = p.Subject
 	}
 	if err := h.repo.Create(ctx, op); err != nil {
 		return uuid.Nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)

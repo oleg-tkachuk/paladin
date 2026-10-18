@@ -28,11 +28,28 @@ const (
 type recordingOperation struct {
 	failingOperation
 	newestFirst *bool
+	mine        bool
 }
 
-func (r *recordingOperation) ListOperations(_ context.Context, _ *operationh.State, _ int32, _, _ string, newestFirst bool) ([]operationh.Operation, string, error) {
+func (r *recordingOperation) ListOperations(_ context.Context, _ *operationh.State, _ int32, _, _ string, newestFirst, mine bool) ([]operationh.Operation, string, error) {
 	r.newestFirst = &newestFirst
+	r.mine = mine
 	return nil, "", nil
+}
+
+// mine reaches the handler, and the initiator reaches the caller.
+func TestListPlatformOperations_MineAndInitiator(t *testing.T) {
+	h := &recordingOperation{}
+	if _, err := (&OperationServer{H: h}).ListOperations(context.Background(), &pb.ListOperationsRequest{Mine: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !h.mine {
+		t.Error("mine did not reach the handler")
+	}
+	got := operationToProto(&operationh.Operation{OperationID: uuid.New(), InitiatorSubject: "0199-user"})
+	if got.GetInitiatorSubject() != "0199-user" {
+		t.Errorf("initiator_subject = %q", got.GetInitiatorSubject())
+	}
 }
 
 func TestListPlatformOperationsSortOrder(t *testing.T) {

@@ -1,8 +1,8 @@
 -- Long-running operation queries.
 
 -- name: CreateOperation :exec
-INSERT INTO operations (id, tenant_id, type, state, metadata)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO operations (id, tenant_id, type, state, metadata, initiator_subject)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetOperation :one
 SELECT sqlc.embed(operations)
@@ -42,6 +42,8 @@ WHERE tenant_id = $1
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
+  -- One user's own operations (087); NULL lists everyone's in the tenant.
+  AND (sqlc.narg('initiator_subject')::text IS NULL OR initiator_subject = sqlc.narg('initiator_subject')::text)
   AND (sqlc.narg('type_in')::text[] IS NULL OR type = ANY(sqlc.narg('type_in')::text[]))
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_in')::text[] IS NULL OR error_code = ANY(sqlc.narg('error_code_in')::text[]))
@@ -73,6 +75,8 @@ FROM operations
 WHERE tenant_id = $1
   AND (sqlc.narg('state')::operation_state IS NULL OR state = sqlc.narg('state')::operation_state)
   AND (sqlc.narg('after_id')::uuid IS NULL OR id < sqlc.narg('after_id')::uuid)
+  -- One user's own operations (087); NULL lists everyone's in the tenant.
+  AND (sqlc.narg('initiator_subject')::text IS NULL OR initiator_subject = sqlc.narg('initiator_subject')::text)
   AND (sqlc.narg('type_in')::text[] IS NULL OR type = ANY(sqlc.narg('type_in')::text[]))
   AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
   AND (sqlc.narg('error_code_in')::text[] IS NULL OR error_code = ANY(sqlc.narg('error_code_in')::text[]))

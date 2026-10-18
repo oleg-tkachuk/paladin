@@ -168,7 +168,7 @@ func TestPushdown_Operations(t *testing.T) {
 	// against. The parameter arrived with the operations-widget fix
 	// (c14798c3) and this call site was never recompiled — the suite is
 	// build-tagged, so nothing noticed.
-	got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, 2, `type == "BatchUpdateTags"`, false)
+	got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, 2, `type == "BatchUpdateTags"`, false, "")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestPushdown_OperationsStateAndDone(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
-			got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, pageSize, tc.filter, false)
+			got, _, err := repo.List(ctx, tenantID, nil, uuid.Nil, pageSize, tc.filter, false, "")
 			if err != nil {
 				t.Fatalf("list: %v", err)
 			}

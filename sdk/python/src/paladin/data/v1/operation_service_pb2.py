@@ -27,7 +27,7 @@ from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pa
 from paladin.data.v1 import batch_service_pb2 as paladin_dot_data_dot_v1_dot_batch__service__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\",\n\x13GetOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x87\x01\n\x15ListOperationsRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x30\n\nsort_order\x18\x03 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\"w\n\x16ListOperationsResponse\x12.\n\noperations\x18\x01 \x03(\x0b\x32\x1a.paladin.data.v1.Operation\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"/\n\x16\x43\x61ncelOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xae\x02\n\x10OperationService\x12U\n\x0cGetOperation\x12$.paladin.data.v1.GetOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12\x66\n\x0eListOperations\x12&.paladin.data.v1.ListOperationsRequest\x1a\'.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n\x0f\x43\x61ncelOperation\x12\'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\",\n\x13GetOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\x95\x01\n\x15ListOperationsRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x30\n\nsort_order\x18\x03 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\x12\x0c\n\x04mine\x18\x04 \x01(\x08\"w\n\x16ListOperationsResponse\x12.\n\noperations\x18\x01 \x03(\x0b\x32\x1a.paladin.data.v1.Operation\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"/\n\x16\x43\x61ncelOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xae\x02\n\x10OperationService\x12U\n\x0cGetOperation\x12$.paladin.data.v1.GetOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12\x66\n\x0eListOperations\x12&.paladin.data.v1.ListOperationsRequest\x1a\'.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n\x0f\x43\x61ncelOperation\x12\'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -48,11 +48,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETOPERATIONREQUEST']._serialized_start=162
   _globals['_GETOPERATIONREQUEST']._serialized_end=206
   _globals['_LISTOPERATIONSREQUEST']._serialized_start=209
-  _globals['_LISTOPERATIONSREQUEST']._serialized_end=344
-  _globals['_LISTOPERATIONSRESPONSE']._serialized_start=346
-  _globals['_LISTOPERATIONSRESPONSE']._serialized_end=465
-  _globals['_CANCELOPERATIONREQUEST']._serialized_start=467
-  _globals['_CANCELOPERATIONREQUEST']._serialized_end=514
-  _globals['_OPERATIONSERVICE']._serialized_start=517
-  _globals['_OPERATIONSERVICE']._serialized_end=819
+  _globals['_LISTOPERATIONSREQUEST']._serialized_end=358
+  _globals['_LISTOPERATIONSRESPONSE']._serialized_start=360
+  _globals['_LISTOPERATIONSRESPONSE']._serialized_end=479
+  _globals['_CANCELOPERATIONREQUEST']._serialized_start=481
+  _globals['_CANCELOPERATIONREQUEST']._serialized_end=528
+  _globals['_OPERATIONSERVICE']._serialized_start=531
+  _globals['_OPERATIONSERVICE']._serialized_end=833
 # @@protoc_insertion_point(module_scope)

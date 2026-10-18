@@ -37,8 +37,8 @@ _GZIP_COMPRESSION = GzipCompression()
 class PlatformOperationService(Protocol):
     """
     OperationService exposes long-running operations on the admin plane.
-    Mirrors the data-plane OperationService (read access there is restricted
-    to operations the caller initiated; admin sees all).
+    Mirrors the data-plane OperationService. Both list the caller tenant's
+    operations; ListOperationsRequest.mine narrows that to the caller's own.
     """
     async def get_operation(self, request: GetOperationRequest, ctx: RequestContext[GetOperationRequest, Operation], /) -> Operation:
         """
@@ -122,8 +122,8 @@ class PlatformOperationServiceASGIApplication(ConnectASGIApplication[PlatformOpe
 class PlatformOperationServiceClient(ConnectClient):
     """
     OperationService exposes long-running operations on the admin plane.
-    Mirrors the data-plane OperationService (read access there is restricted
-    to operations the caller initiated; admin sees all).
+    Mirrors the data-plane OperationService. Both list the caller tenant's
+    operations; ListOperationsRequest.mine narrows that to the caller's own.
     """
     def __init__(
         self,
@@ -229,8 +229,8 @@ class PlatformOperationServiceClient(ConnectClient):
 class PlatformOperationServiceSync(Protocol):
     """
     OperationService exposes long-running operations on the admin plane.
-    Mirrors the data-plane OperationService (read access there is restricted
-    to operations the caller initiated; admin sees all).
+    Mirrors the data-plane OperationService. Both list the caller tenant's
+    operations; ListOperationsRequest.mine narrows that to the caller's own.
     """
     def get_operation(self, request: GetOperationRequest, ctx: RequestContext[GetOperationRequest, Operation], /) -> Operation:
         """
@@ -312,8 +312,8 @@ class PlatformOperationServiceWSGIApplication(ConnectWSGIApplication):
 class PlatformOperationServiceClientSync(ConnectClientSync):
     """
     OperationService exposes long-running operations on the admin plane.
-    Mirrors the data-plane OperationService (read access there is restricted
-    to operations the caller initiated; admin sees all).
+    Mirrors the data-plane OperationService. Both list the caller tenant's
+    operations; ListOperationsRequest.mine narrows that to the caller's own.
     """
     def __init__(
         self,

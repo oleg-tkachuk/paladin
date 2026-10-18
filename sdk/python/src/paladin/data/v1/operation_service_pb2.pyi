@@ -16,14 +16,16 @@ class GetOperationRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ListOperationsRequest(_message.Message):
-    __slots__ = ("page", "filter", "sort_order")
+    __slots__ = ("page", "filter", "sort_order", "mine")
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
+    MINE_FIELD_NUMBER: _ClassVar[int]
     page: _pagination_pb2.PageRequest
     filter: str
     sort_order: _pagination_pb2.SortOrder
-    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ...) -> None: ...
+    mine: bool
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ...) -> None: ...
 
 class ListOperationsResponse(_message.Message):
     __slots__ = ("operations", "page")

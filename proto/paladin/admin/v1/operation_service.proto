@@ -13,8 +13,8 @@ import "paladin/common/v1/pagination.proto";
 import "google/api/field_behavior.proto";
 
 // OperationService exposes long-running operations on the admin plane.
-// Mirrors the data-plane OperationService (read access there is restricted
-// to operations the caller initiated; admin sees all).
+// Mirrors the data-plane OperationService. Both list the caller tenant's
+// operations; ListOperationsRequest.mine narrows that to the caller's own.
 service PlatformOperationService {
   // GetOperation returns the current state of a long-running operation. done
   // distinguishes finished from in-flight; result carries either the response
@@ -47,6 +47,8 @@ message Operation {
     google.rpc.Status error = 5;
     google.protobuf.Any response = 6;
   }
+  // The subject of the token that started it — for a person, their user id;
+  // empty for an operation from before initiators were recorded.
   string initiator_subject = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
   string initiator_tenant_id = 8;
   google.protobuf.Timestamp created_at = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
@@ -78,6 +80,10 @@ message ListOperationsRequest {
   // background-ops drawer showed a three-day-old failure and none of the
   // operations that had run since.
   paladin.common.v1.SortOrder sort_order = 3;
+  // mine lists only the operations the caller started, matched in the query
+  // on the subject of the caller's token. Operations from before initiators
+  // were recorded are no one's.
+  bool mine = 4;
 }
 
 message ListOperationsResponse {

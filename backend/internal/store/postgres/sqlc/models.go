@@ -583,18 +583,19 @@ type ObjectVersion struct {
 }
 
 type Operation struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     pgtype.UUID        `json:"tenant_id"`
-	Type         string             `json:"type"`
-	State        OperationState     `json:"state"`
-	Metadata     []byte             `json:"metadata"`
-	Response     []byte             `json:"response"`
-	ErrorCode    *string            `json:"error_code"`
-	ErrorMessage *string            `json:"error_message"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DoneAt       pgtype.Timestamptz `json:"done_at"`
-	Progress     []byte             `json:"progress"`
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	Type             string             `json:"type"`
+	State            OperationState     `json:"state"`
+	Metadata         []byte             `json:"metadata"`
+	Response         []byte             `json:"response"`
+	ErrorCode        *string            `json:"error_code"`
+	ErrorMessage     *string            `json:"error_message"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DoneAt           pgtype.Timestamptz `json:"done_at"`
+	Progress         []byte             `json:"progress"`
+	InitiatorSubject string             `json:"initiator_subject"`
 }
 
 type PendingMultipartAbort struct {

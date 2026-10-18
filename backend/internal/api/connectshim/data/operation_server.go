@@ -41,7 +41,7 @@ func (s *OperationServer) ListOperations(ctx context.Context, req *pb.ListOperat
 	m := req
 	list, next, err := s.H.ListOperations(ctx, nil,
 		m.GetPage().GetPageSize(), m.GetPage().GetPageToken(), m.GetFilter(),
-		m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC)
+		m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC, m.GetMine())
 	if err != nil {
 		return nil, err
 	}
@@ -82,13 +82,14 @@ func dataOperationToProto(o *operationh.Operation) *pb.Operation {
 		return nil
 	}
 	out := &pb.Operation{
-		Name:      fmt.Sprintf("operations/%s", o.OperationID),
-		Type:      o.Type,
-		Done:      o.State == operationh.StateSucceeded || o.State == operationh.StateFailed || o.State == operationh.StateCancelled,
-		CreatedAt: convx.TsProto(o.CreatedAt),
-		UpdatedAt: convx.TsProto(o.UpdatedAt),
-		State:     convx.OperationState(o.State),
-		Target:    convx.OperationTarget(o.Type, o.Metadata),
+		Name:             fmt.Sprintf("operations/%s", o.OperationID),
+		Type:             o.Type,
+		Done:             o.State == operationh.StateSucceeded || o.State == operationh.StateFailed || o.State == operationh.StateCancelled,
+		CreatedAt:        convx.TsProto(o.CreatedAt),
+		UpdatedAt:        convx.TsProto(o.UpdatedAt),
+		State:            convx.OperationState(o.State),
+		InitiatorSubject: o.InitiatorSubject,
+		Target:           convx.OperationTarget(o.Type, o.Metadata),
 	}
 	// The API's metadata is the operation's progress (AIP-151). The executor's
 	// arguments stay internal: they are the worker's input, not a report.

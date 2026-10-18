@@ -50,9 +50,12 @@ type Operation struct {
 	DoneAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=done_at,json=doneAt,proto3" json:"done_at,omitempty"`
 	State  v1.OperationState      `protobuf:"varint,10,opt,name=state,proto3,enum=paladin.common.v1.OperationState" json:"state,omitempty"`
 	// What it acts on; unset for an operation of a type that names no objects.
-	Target        *v1.OperationTarget `protobuf:"bytes,11,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Target *v1.OperationTarget `protobuf:"bytes,11,opt,name=target,proto3" json:"target,omitempty"`
+	// The subject of the token that started it — for a person, their user id;
+	// empty for an operation from before initiators were recorded.
+	InitiatorSubject string `protobuf:"bytes,12,opt,name=initiator_subject,json=initiatorSubject,proto3" json:"initiator_subject,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Operation) Reset() {
@@ -171,6 +174,13 @@ func (x *Operation) GetTarget() *v1.OperationTarget {
 		return x.Target
 	}
 	return nil
+}
+
+func (x *Operation) GetInitiatorSubject() string {
+	if x != nil {
+		return x.InitiatorSubject
+	}
+	return ""
 }
 
 type isOperation_Result interface {
@@ -514,7 +524,7 @@ var File_paladin_data_v1_batch_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a!paladin/common/v1/operation.proto\"\xa1\x04\n" +
+	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a!paladin/common/v1/operation.proto\"\xd3\x04\n" +
 	"\tOperation\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x120\n" +
@@ -529,7 +539,8 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\adone_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x06doneAt\x12<\n" +
 	"\x05state\x18\n" +
 	" \x01(\x0e2!.paladin.common.v1.OperationStateB\x03\xe0A\x03R\x05state\x12?\n" +
-	"\x06target\x18\v \x01(\v2\".paladin.common.v1.OperationTargetB\x03\xe0A\x03R\x06targetB\b\n" +
+	"\x06target\x18\v \x01(\v2\".paladin.common.v1.OperationTargetB\x03\xe0A\x03R\x06target\x120\n" +
+	"\x11initiator_subject\x18\f \x01(\tB\x03\xe0A\x03R\x10initiatorSubjectB\b\n" +
 	"\x06result\"H\n" +
 	"\x0eObjectSelector\x12\x1e\n" +
 	"\x05names\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10dR\x05names\x12\x16\n" +

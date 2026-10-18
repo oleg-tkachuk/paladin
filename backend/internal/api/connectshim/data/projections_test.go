@@ -30,7 +30,7 @@ type recordingOperations struct {
 	newestFirst *bool
 }
 
-func (r *recordingOperations) ListOperations(_ context.Context, _ *operationh.State, _ int32, _, _ string, newestFirst bool) ([]operationh.Operation, string, error) {
+func (r *recordingOperations) ListOperations(_ context.Context, _ *operationh.State, _ int32, _, _ string, newestFirst, _ bool) ([]operationh.Operation, string, error) {
 	r.newestFirst = &newestFirst
 	return nil, "", nil
 }

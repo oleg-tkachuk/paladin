@@ -112,6 +112,7 @@ func (r *OperationRepo) Create(ctx context.Context, op operationh.Operation) err
 		op.Type,
 		sqlc.OperationState(string(op.State)),
 		op.Metadata,
+		op.InitiatorSubject,
 	)
 }
 
@@ -174,7 +175,7 @@ func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) er
 
 func (r *OperationRepo) List(
 	ctx context.Context, tenantID uuid.UUID, state *operationh.State,
-	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool,
+	afterID uuid.UUID, pageSize int32, filter string, newestFirst bool, initiator string,
 ) ([]operationh.Operation, string, error) {
 	pageSize = pageSizeOrDefault(pageSize)
 	var ns *sqlc.OperationState
@@ -202,7 +203,7 @@ func (r *OperationRepo) List(
 	// has to move with the sort, and sqlc parameterises neither.
 	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
-		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
+		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator),
 			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
@@ -212,7 +213,7 @@ func (r *OperationRepo) List(
 			out = append(out, operationFromSQLC(row.Operation))
 		}
 	} else {
-		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID),
+		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator),
 			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
@@ -264,17 +265,18 @@ func (r *OperationRepo) ReclaimStale(ctx context.Context, staleAfter time.Durati
 
 func operationFromSQLC(o sqlc.Operation) operationh.Operation {
 	return operationh.Operation{
-		OperationID:  uuidFrom(o.ID),
-		TenantID:     uuidFrom(o.TenantID),
-		Type:         o.Type,
-		State:        operationh.State(string(o.State)),
-		Metadata:     o.Metadata,
-		Progress:     o.Progress,
-		Response:     o.Response,
-		ErrorCode:    derefStr(o.ErrorCode),
-		ErrorMessage: derefStr(o.ErrorMessage),
-		CreatedAt:    timeFrom(o.CreatedAt),
-		UpdatedAt:    timeFrom(o.UpdatedAt),
-		DoneAt:       timePtr(o.DoneAt),
+		OperationID:      uuidFrom(o.ID),
+		TenantID:         uuidFrom(o.TenantID),
+		InitiatorSubject: o.InitiatorSubject,
+		Type:             o.Type,
+		State:            operationh.State(string(o.State)),
+		Metadata:         o.Metadata,
+		Progress:         o.Progress,
+		Response:         o.Response,
+		ErrorCode:        derefStr(o.ErrorCode),
+		ErrorMessage:     derefStr(o.ErrorMessage),
+		CreatedAt:        timeFrom(o.CreatedAt),
+		UpdatedAt:        timeFrom(o.UpdatedAt),
+		DoneAt:           timePtr(o.DoneAt),
 	}
 }
