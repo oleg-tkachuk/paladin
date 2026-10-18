@@ -1,18 +1,24 @@
 # Storage event ingest — sources, wire formats & config
 
-The ingest plane (`internal/eventingest`) lets objects written **directly to
-the storage bucket** — bypassing Paladin's data-plane RPCs — still get promoted to
-`AVAILABLE`. A storage backend fires a notification when a key lands; the
-ingest pod (`serve ingest`) consumes it, normalises it to a CloudEvents 1.0
-envelope, parses the object path into `(tenant_id, collection, key)`, and runs
-the same PROMOTE the data plane would have.
+The ingest plane (`internal/eventingest`) settles objects Paladin has already
+registered from what the storage backend reports. A storage backend fires a
+notification when a key lands or goes; the ingest pod (`serve ingest`, with
+`ingest.enabled: true`) consumes it, normalises it to a CloudEvents 1.0
+envelope, parses the object path into `(tenant_id, collection, key)`, and:
 
-This is a safety net for the "someone wrote straight to S3" case (a legacy
-pipeline, `mc cp`, another service). Without it Paladin's DB would never learn the
-object exists. The worker's **Reconciler** (`internal/worker/reconciler.go`)
-is the second safety net — it HEADs `PENDING` rows on a schedule regardless
-of events — so a missed or absent notification for an upload made through
-Paladin degrades *latency*, not correctness.
+- on an upload, runs the same PROMOTE (`PENDING` → `AVAILABLE`) the data
+  plane's `CompleteObject` would have — what drives completion for a
+  collection whose `completion_mode` is `IMPLICIT`;
+- on a delete, HEADs the object where its row places it and moves an
+  `AVAILABLE` object whose bytes are gone to the trash (see
+  [deletion-semantics.md](deletion-semantics.md#deleted-from-the-bucket-not-through-paladin)).
+
+An event for a key with no object row — a write that bypassed Paladin
+entirely — is logged and skipped: ingest never creates rows. Events of a
+tenant in the trash are skipped too. The worker's **Reconciler**
+(`internal/worker/reconciler.go`) is the safety net — it HEADs `PENDING`
+rows on a schedule regardless of events — so a missed or absent notification
+for an upload made through Paladin degrades *latency*, not correctness.
 
 ---
 
@@ -31,7 +37,7 @@ Driver (transport)          Source (format)
          ─→ Worker.Deliver ←─
                  │
                  ▼
-        dedup (ingested_events) → Handler → PromoteToAvailable
+        dedup (ingested_events) → Handler → PromoteToAvailable | SoftDelete
 ```
 
 - **Driver** — where events arrive. Config: `ingest.driver` = `webhook` |
@@ -202,7 +208,7 @@ S3-compatible store that speaks bucket notifications.
   both set it, reused on retry); falls back to a hash of
   `(key, eventName, sequencer)`.
 - **Batching:** one CloudEvent per envelope (first `Records` entry); the rest
-  stay in `Data`. Per-record fan-out is BACKLOG'd.
+  stay in `Data` and are not acted on.
 
 ### MinIO config recipe
 

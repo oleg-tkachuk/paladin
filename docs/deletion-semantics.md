@@ -20,10 +20,10 @@ their parent, and children that hold their parent hostage.
 
 | Parent | `ON DELETE CASCADE` — vanishes silently | `ON DELETE RESTRICT` — blocks the delete |
 | --- | --- | --- |
-| `tenants` | `quotas`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `object_tags`, `multipart_uploads`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections` |
-| `storage_backends` | `storage_backend_health` | `buckets` |
-| `buckets` | `replication_state`, `bucket_quotas` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
-| `collections` | — | `objects` |
+| `tenants` | `quotas`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `multipart_uploads`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets`, `erased_objects`, `bucket_grants` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections` |
+| `storage_backends` | `storage_backend_health`, `storage_backend_features` | `buckets` |
+| `buckets` | `replication_state`, `bucket_quotas`, `bucket_grants` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
+| `collections` | `erased_objects` | `objects` |
 | `objects` | `object_versions`, `multipart_uploads` | — |
 
 Two things are worth reading off that table directly.
@@ -73,7 +73,8 @@ trash. The console's Trash page shows each tenant's age ("In trash 12 days")
 and marks it **Past retention** from that moment on. Nothing purges a tenant
 when its retention lapses: purge is irreversible and `PurgeTenant` refuses
 while the tenant still owns collections or locked objects, so it stays an
-operator's call.
+operator's call. The worker publishes the count of tenants past retention as
+`paladin_tenants_past_trash_retention`, every `worker.jobs.housekeeping.interval`.
 
 There is no one-shot hard delete. There used to be — `DeleteTenant(force=true)`
 — and it is gone: landing the tenant in a different state is a different
@@ -112,8 +113,14 @@ names what it destroys.
 
 ## Collection
 
-`DeleteCollection` refuses while the collection still holds objects. No flag
-overrides that — `objects.collection_id` is `ON DELETE RESTRICT`. The proto
+`DeleteCollection` refuses while the collection still holds objects — trashed
+ones included, since a trashed object keeps its row. No flag overrides that —
+`objects.collection_id` is `ON DELETE RESTRICT`. The refusal is
+`FAILED_PRECONDITION` with reason `COLLECTION_NOT_EMPTY`; its message says how
+many live and how many trashed objects hold the collection, and its
+`ErrorInfo` metadata carries the two counts as `live_objects` and
+`trashed_objects`. Purge or restore the trashed ones, delete the live ones,
+then delete the collection. The proto
 used to claim `force=true` did; the handler never read it for that and could
 not have. `skip_version_check` waives the OCC guard, which is all it ever did.
 
@@ -121,6 +128,13 @@ not have. `skip_version_check` waives the OCC guard, which is all it ever did.
 
 `DeleteObject` moves the object to the trash; `RestoreObject` brings it back.
 `permanent=true` destroys it irrecoverably.
+
+Nothing empties the object trash by default. With
+`worker.jobs.housekeeping.hard_delete_after` above zero (default `0s`, off),
+the worker's `LifecycleHardDeleter` removes objects trashed longer than that:
+the row first, recorded as a purge debt, then the bytes, with
+`paladin.object.purged` once they are gone. Bucket lifecycle rules only move
+expired objects to the trash; they never delete permanently.
 
 `resource_version` is **required on every delete**, including the permanent
 one. This is not ceremony: `expected_version=0` disables the check in SQL, so
@@ -200,8 +214,9 @@ bucket.
 
 ## Practical order for removing a tenant completely
 
-1. Delete or purge its objects (`permanent=true`, or let the trash TTL expire).
-2. Delete its collections (possible once the objects are gone).
+1. Delete or purge its objects (`permanent=true`, or let
+   `hard_delete_after` expire them from the trash).
+2. Delete its collections (possible once no object is left, the trash included).
 3. Delete its buckets — with `delete_on_backend=true` if the remote bucket
    should go too.
 4. Delete its users.

@@ -27,7 +27,7 @@ quiet.
 | `capability_exhausted` | the capability's budget, or a delegating ancestor's | `ResourceExhausted` |
 | `tenant_exhausted` | the tenant's budget | `ResourceExhausted` |
 | `unit_mismatch` | a counter that holds another currency | `FailedPrecondition` |
-| `error` | the charge itself failed | `Unavailable` |
+| `error` | the charge itself failed | `Unavailable`; `FailedPrecondition` for a capability no longer on record or a counter overflow, `InvalidArgument` for an invalid charge |
 
 The rule counts the two `*_exhausted` outcomes and `unit_mismatch`, which are
 `metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes`. `error`

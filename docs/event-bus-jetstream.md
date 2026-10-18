@@ -52,6 +52,10 @@ retry-stable delivery-row id). The server persists it and **dedups** an
 at-least-once redelivery within the stream's duplicate window — so the outbox's
 at-least-once delivery becomes an effectively-once publish onto the bus.
 
+NATS sinks need `dispatcher.sinks.nats.enabled` (on by default); with it off
+the admin API refuses an enabled NATS subscription and the dispatcher fails
+its deliveries.
+
 Subject convention: `paladin.events.<tenant_id>.<class>` lets consumers wildcard by
 tenant (`paladin.events.<id>.>`) or by class across tenants (`paladin.events.*.object`).
 
@@ -97,5 +101,5 @@ replay safe.
 `PALADIN_EVENTS` uses **limits** retention (drop oldest past an age/size cap), not
 interest retention — consumers are external and transient, so the stream must
 not depend on any of them acking. Size the age cap to the longest replay window
-you want to support; monitor with the `paladin.outbox.pending` gauge (producer-side
+you want to support; monitor with the `paladin_outbox_pending` gauge (producer-side
 backlog) and `nats stream info PALADIN_EVENTS` (stored bytes / message count).

@@ -44,8 +44,9 @@ keeps the rule quiet.
    The pods log the same when it changes: `read replica out of sync;
    routing reads to the primary`, with the error or the lag.
 
-2. **Unreachable.** With an empty `replica.dsn` the chart derives the
-   standby's host from the primary's, `<cluster>-rw` → `<cluster>-ro`.
+2. **Unreachable.** With an empty `replica.dsn` Paladin derives the
+   standby's host from the primary's, `<cluster>-rw` → `<cluster>-ro`
+   (`internal/config/replica_dsn.go`).
    Check that Service has endpoints:
 
    ```
