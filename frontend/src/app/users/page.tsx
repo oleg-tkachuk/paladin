@@ -167,17 +167,22 @@ export default function UsersPage() {
             ? { shown: filtered.length, total: users.length }
             : undefined
         }
-      >
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={refreshUsers}
-          aria-label="Refresh"
-        >
-          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
-        </Button>
-        <Button onClick={() => setCreateOpen(true)}>New user</Button>
-      </TableToolbar>
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={refreshUsers}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>New user</Button>
+          </>
+        }
+      />
 
       <Card className="p-0">
         <Table>

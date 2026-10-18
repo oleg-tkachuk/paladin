@@ -177,6 +177,20 @@ export default function BucketsPage() {
         onQueryChange={setSearch}
         searchLabel="Search buckets"
         placeholder="Search by name or display label…"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void refetch()}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
+        }
       >
         <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
           <SelectTrigger aria-label="Filter by backend" className="w-50">
@@ -204,14 +218,6 @@ export default function BucketsPage() {
             <SelectItem value={SHARING.ownerOnly}>Owner only</SelectItem>
           </SelectContent>
         </SelectRoot>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => void refetch()}
-          aria-label="Refresh"
-        >
-          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
-        </Button>
       </TableToolbar>
 
       <BucketTable

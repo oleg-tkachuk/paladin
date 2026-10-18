@@ -374,6 +374,20 @@ export default function StorageBackendsPage() {
         onQueryChange={setSearch}
         searchLabel="Search storage backends"
         placeholder="Search by ID, name, region, endpoint…"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void refetch()}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
+        }
       >
         <SelectRoot
           value={state}
@@ -390,14 +404,6 @@ export default function StorageBackendsPage() {
             ))}
           </SelectContent>
         </SelectRoot>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => void refetch()}
-          aria-label="Refresh"
-        >
-          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
-        </Button>
       </TableToolbar>
 
       <SelectionBar count={selected.size} onClear={clearSelection}>

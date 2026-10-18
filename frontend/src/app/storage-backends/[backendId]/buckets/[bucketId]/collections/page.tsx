@@ -141,16 +141,21 @@ export default function BucketCollectionsPage() {
             ? { shown: matching.length, total: collections.length }
             : undefined
         }
-      >
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => void collectionsQuery.refetch()}
-          aria-label="Refresh collections"
-        >
-          <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
-        </Button>
-      </TableToolbar>
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void collectionsQuery.refetch()}
+              aria-label="Refresh collections"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
+        }
+      />
 
       {listError ? (
         <Card>
