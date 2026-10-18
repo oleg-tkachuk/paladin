@@ -124,3 +124,30 @@ describe("AuditEntryDetailDialog", () => {
     expect(screen.getByText("paladin-mcp-server")).toBeInTheDocument();
   });
 });
+
+// The actor's id is shown beside the name only when a name was looked up for
+// it: a system actor is its own name, and twice read as a mistake.
+describe("AuditEntryDetailDialog actor", () => {
+  const entry = (actorSubject: string) => ({
+    entryId: "e1",
+    at: { seconds: 1_700_000_000n },
+    action: "iam.bootstrap_backend.noop",
+    actorSubject,
+    actorTenantId: "",
+    resourceName: "storageBackends/primary",
+  });
+
+  it("shows a system actor once", async () => {
+    h.get.mockReset().mockResolvedValue(entry("system:bootstrap"));
+    render(<AuditEntryDetailDialog entryId="e1" onOpenChange={() => {}} />);
+    expect(await screen.findAllByText("system:bootstrap")).toHaveLength(1);
+    expect(screen.queryByText("Actor id")).toBeNull();
+  });
+
+  it("keeps a user's id beside their name", async () => {
+    const id = "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+    h.get.mockReset().mockResolvedValue(entry(id));
+    render(<AuditEntryDetailDialog entryId="e1" onOpenChange={() => {}} />);
+    expect(await screen.findByText("Actor id")).toBeInTheDocument();
+  });
+});
