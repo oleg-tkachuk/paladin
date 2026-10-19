@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useNotification } from "@/components/ui/Notification";
 import { copyToClipboard } from "@/lib/utils";
-import { capabilityClient } from "@/lib/connect/client";
+import { capabilityDetailQuery } from "@/lib/queries/details";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import type { Money } from "@/gen/google/type/money_pb";
 
@@ -30,28 +30,33 @@ type UsageEntry =
  * why it was revoked, which the list does not carry.
  */
 export function CapabilityDetailsDialog({
+  id,
   cap,
   usageEntry,
   onClose,
 }: {
+  /** The capability to show; null keeps the dialog closed. */
+  id: string | null;
+  /** Its row from the page's list, shown before the record answers. */
   cap: Capability | null;
   usageEntry: UsageEntry;
   onClose: () => void;
 }) {
   const { showNotification } = useNotification();
   const recordQuery = useQuery({
-    queryKey: ["capability", "record", cap?.id],
-    queryFn: ({ signal }) => capabilityClient.get({ id: cap!.id }, { signal }),
-    enabled: !!cap,
+    ...capabilityDetailQuery(id ?? ""),
+    enabled: !!id,
   });
+  // A capability linked by id may not be in the list the page browsed.
+  const shown = cap ?? recordQuery.data?.capability ?? null;
   const record: RecordEntry = recordQuery.isError
     ? "unavailable"
     : recordQuery.data;
 
   return (
-    <Dialog open={!!cap} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={!!id} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl">
-        {cap && (
+        {shown ? (
           <>
             <DialogHeader>
               <DialogTitle>Capability details</DialogTitle>
@@ -59,12 +64,12 @@ export function CapabilityDetailsDialog({
                 Full record as stored on the admin plane.
               </DialogDescription>
             </DialogHeader>
-            <DetailsBody cap={cap} usageEntry={usageEntry} record={record} />
+            <DetailsBody cap={shown} usageEntry={usageEntry} record={record} />
             <DialogFooter>
               <Button
                 variant="outline"
                 onClick={() => {
-                  void copyToClipboard(cap.id);
+                  void copyToClipboard(shown.id);
                   showNotification({
                     type: "success",
                     title: "Copied",
@@ -78,6 +83,15 @@ export function CapabilityDetailsDialog({
               <Button onClick={onClose}>Close</Button>
             </DialogFooter>
           </>
+        ) : (
+          <DialogHeader>
+            <DialogTitle>Capability details</DialogTitle>
+            <DialogDescription>
+              {recordQuery.isError
+                ? `No capability ${id} is on record, or it is not visible to you.`
+                : "Reading the capability…"}
+            </DialogDescription>
+          </DialogHeader>
         )}
       </DialogContent>
     </Dialog>

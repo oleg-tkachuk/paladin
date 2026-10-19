@@ -36,6 +36,8 @@ vi.mock("./AuditEntryDetailDialog", () => ({
     entryId ? <div role="dialog">{entryId}</div> : null,
 }));
 
+import { LINKED_ROW_ATTR } from "@/components/ui/table";
+
 import AuditPage from "./page";
 
 const SEARCH_BOX = "Filter by action, actor, resource, request id…";
@@ -77,6 +79,7 @@ describe("AuditPage search", () => {
 describe("AuditPage rows", () => {
   beforeEach(() => {
     h.search = "";
+    window.history.replaceState(null, "", "/audit");
     h.entries = [
       {
         entryId: "entry-1",
@@ -97,5 +100,48 @@ describe("AuditPage rows", () => {
     expect(row).toHaveAttribute("aria-haspopup", "dialog");
     act(row);
     expect(screen.getByRole("dialog")).toHaveTextContent("entry-1");
+  });
+});
+
+// The open entry is in the URL: an open entry's address is its link, and a
+// link to one opens it with its row marked.
+describe("AuditPage linked entry", () => {
+  beforeEach(() => {
+    h.entries = [
+      {
+        entryId: "entry-1",
+        action: "admin.TenantService.DeleteTenant",
+        actorSubject: "user:ops",
+        resourceName: "tenants/t-1",
+        errorMessage: "",
+      },
+      {
+        entryId: "entry-2",
+        action: "admin.TenantService.CreateTenant",
+        actorSubject: "user:ops",
+        resourceName: "tenants/t-2",
+        errorMessage: "",
+      },
+    ];
+  });
+
+  it("opens the entry a link names, marking its row", () => {
+    window.history.replaceState(null, "", "/audit?id=entry-2");
+    h.search = "id=entry-2";
+    render(<AuditPage />);
+    expect(screen.getByRole("dialog")).toHaveTextContent("entry-2");
+    const linked = screen.getByRole("row", { name: /tenants\/t-2/ });
+    expect(linked).toHaveAttribute(LINKED_ROW_ATTR);
+    expect(
+      screen.getByRole("row", { name: /tenants\/t-1/ }),
+    ).not.toHaveAttribute(LINKED_ROW_ATTR);
+  });
+
+  it("puts an entry opened from its row in the address", () => {
+    window.history.replaceState(null, "", "/audit");
+    h.search = "";
+    render(<AuditPage />);
+    fireEvent.click(screen.getByRole("row", { name: /tenants\/t-1/ }));
+    expect(window.location.search).toBe("?id=entry-1");
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { render, screen, waitFor } from "@/test/utils";
 import {
+  LINKED_ROW_ATTR,
   Table,
   TableBody,
   TableCell,
@@ -45,5 +46,24 @@ describe("Table cell labels", () => {
       "data-label",
       "Size",
     );
+  });
+});
+
+describe("TableRow linked", () => {
+  // Tailwind sees only literal class text, so the highlight names the
+  // attribute itself; this holds it to the constant the hook sets.
+  it("highlights the row carrying the linked attribute", () => {
+    render(
+      <table>
+        <tbody>
+          <TableRow {...{ [LINKED_ROW_ATTR]: true }}>
+            <td>r</td>
+          </TableRow>
+        </tbody>
+      </table>,
+    );
+    const row = screen.getByRole("row");
+    expect(row).toHaveAttribute(LINKED_ROW_ATTR);
+    expect(row.className).toContain(`${LINKED_ROW_ATTR}:bg-primary`);
   });
 });

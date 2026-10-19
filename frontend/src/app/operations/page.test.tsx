@@ -46,6 +46,8 @@ vi.mock("@/components/features/audit/ActorName", () => ({
   ActorName: ({ subject }: { subject: string }) => subject,
 }));
 
+import { LINKED_ROW_ATTR } from "@/components/ui/table";
+
 import OperationsPage from "./page";
 
 const running = create(OperationSchema, {
@@ -171,5 +173,28 @@ describe("OperationsPage", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "operations/old-1",
     );
+  });
+
+  it("puts the open record in the address, and opens one a link names", async () => {
+    window.history.replaceState(null, "", "/operations");
+    const { unmount } = render(<OperationsPage />);
+    await userEvent.click(screen.getByRole("row", { name: /Move to trash/ }));
+    expect(window.location.search).toBe(
+      `?id=${encodeURIComponent("operations/old-1")}`,
+    );
+    unmount();
+    window.history.replaceState(
+      null,
+      "",
+      `/operations?id=${encodeURIComponent("operations/run-1")}`,
+    );
+    render(<OperationsPage />);
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "operations/run-1",
+    );
+    const linked = document.querySelectorAll(`tr[${LINKED_ROW_ATTR}]`);
+    expect(linked).toHaveLength(1);
+    expect(linked[0]).toHaveTextContent("operations/run-1");
+    window.history.replaceState(null, "", "/operations");
   });
 });

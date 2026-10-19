@@ -1,6 +1,7 @@
 "use client";
 
 import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { useLinkedRow } from "@/hooks/useLinkedRow";
 import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -90,7 +91,8 @@ export default function AuditPage() {
   // rows costs one ListAuditLog, and the full entry (incl. before/after)
   // flows through the same RPC path as a manual refresh.
   // Row-click detail (GetAuditLogEntry by id) + header-triggered export.
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // The open entry is in the URL, so an open entry's address links to it.
+  const detail = useLinkedRow();
   const [exportOpen, setExportOpen] = useState(false);
 
   const [live, setLive] = useState(true);
@@ -214,11 +216,12 @@ export default function AuditPage() {
               ) : (
                 filtered.map((e) => {
                   const hasError = !!e.errorMessage;
-                  const row = openableRow(() => setDetailId(e.entryId));
+                  const row = openableRow(() => detail.open(e.entryId));
                   return (
                     <TableRow
                       key={e.entryId}
                       {...row}
+                      {...detail.rowProps(e.entryId)}
                       className={cn(
                         row.className,
                         hasError && "bg-destructive/5",
@@ -353,9 +356,9 @@ export default function AuditPage() {
         )}
 
         <AuditEntryDetailDialog
-          entryId={detailId}
+          entryId={detail.linkedId}
           onOpenChange={(o) => {
-            if (!o) setDetailId(null);
+            if (!o) detail.close();
           }}
         />
         <ExportAuditLogDialog open={exportOpen} onOpenChange={setExportOpen} />

@@ -38,6 +38,7 @@ import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
 import { IssueCapabilityDialog } from "./IssueCapabilityDialog";
 import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
+import { useLinkedRow } from "@/hooks/useLinkedRow";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
@@ -299,7 +300,9 @@ export default function CapabilitiesPage() {
   // already carries plus the usage snapshot we've already fetched —
   // no extra RPC. Token plaintext is NOT shown (the issuer keeps no
   // copy by design; only the freshly-issued reveal panel sees it).
-  const [detailsTarget, setDetailsTarget] = useState<Capability | null>(null);
+  // The capability open in it is in the URL (?id=), so the audit log can
+  // link to one and an open one's address is its link.
+  const linked = useLinkedRow();
 
   // ── revoke ──────────────────────────────────────────────────────────
   const [revokeTarget, setRevokeTarget] = useState<Capability | null>(null);
@@ -307,6 +310,9 @@ export default function CapabilitiesPage() {
   const [copyUsageOpen, setCopyUsageOpen] = useState(false);
 
   const visibleItems = useMemo(() => items, [items]);
+  // The audit log links by id alone; the dialog reads a capability the
+  // browsed list does not hold from its record.
+  const listedTarget = items.find((c) => c.id === linked.linkedId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -497,7 +503,11 @@ export default function CapabilitiesPage() {
               visibleItems.map((c) => {
                 const expired = isExpired(c);
                 return (
-                  <TableRow key={c.id} className="group">
+                  <TableRow
+                    key={c.id}
+                    className="group"
+                    {...linked.rowProps(c.id)}
+                  >
                     <TableCell>
                       <span
                         className="block max-w-24 truncate @xl:max-w-65 font-mono text-xs"
@@ -654,7 +664,7 @@ export default function CapabilitiesPage() {
                         <Dropdown.Menu className="py-1">
                           <Dropdown.Item
                             className="p-0"
-                            onClick={() => setDetailsTarget(c)}
+                            onClick={() => linked.open(c.id)}
                           >
                             <div className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent">
                               <EyeIcon className="size-4 text-muted-foreground" />
@@ -692,9 +702,10 @@ export default function CapabilitiesPage() {
 
       {/* ─── Details dialog ────────────────────────────────────────── */}
       <CapabilityDetailsDialog
-        cap={detailsTarget}
-        usageEntry={detailsTarget ? usage.get(detailsTarget.id) : undefined}
-        onClose={() => setDetailsTarget(null)}
+        id={linked.linkedId}
+        cap={listedTarget}
+        usageEntry={linked.linkedId ? usage.get(linked.linkedId) : undefined}
+        onClose={linked.close}
       />
 
       {/* ─── Revoke confirm ────────────────────────────────────────── */}
