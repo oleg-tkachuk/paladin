@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useMemo, useState } from "react";
 
 import { useTableFilter, useTableQuery } from "@/hooks/useTableUrl";
@@ -244,20 +246,14 @@ export default function OperationsPage() {
                 </TableCell>
               </TableRow>
             ) : shown.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={COLUMNS} className="h-40 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <QueueListIcon className="size-8 opacity-40" />
-                    <p className="text-sm">
-                      {operations.length > 0
-                        ? "No operation matches this search."
-                        : view !== "all"
-                          ? "No operation in this state."
-                          : "No operations yet."}
-                    </p>
-                  </div>
-                </TableCell>
-              </TableRow>
+              <EmptyTableRow
+                colSpan={COLUMNS}
+                icon={QueueListIcon}
+                what="operations"
+                reason={emptyReason({
+                  filtered: operations.length > 0 || view !== DEFAULT_OP_VIEW,
+                })}
+              />
             ) : (
               shown.map((op) => (
                 <OperationRow

@@ -835,11 +835,12 @@ order they are being taken up.
 #### Page templates: list, detail, settings
 
 - **Status:** Aspirational.
-- **Reason:** each page arranges its header, toolbar, table and empty state by
-  hand, and they drift.
+- **Reason:** each page arranges its header, toolbar, table and load error by
+  hand, and they drift. The empty state is shared now (`EmptyState`), so a
+  list's "nothing here" reads alike; the rest of the page is not.
 - **Definition of Done:** `ListPage`, `DetailPage` and `SettingsPage` layouts
-  that pages fill; empty states with the page's primary action in the list
-  template.
+  that pages fill, with the list template taking the toolbar, the load error
+  and the `EmptyState` as slots.
 - **Blockers:** none.
 
 #### Per-user table preferences: density, columns, default sort
@@ -922,16 +923,15 @@ order they are being taken up.
   carry the exact value wherever a value is shortened.
 - **Blockers:** none.
 
-#### Voice, empty states and local confirmations
+#### Voice and local confirmations
 
 - **Status:** Aspirational.
-- **Reason:** messages are written page by page in different voices, empty
-  states say only that nothing is there, and every success is a toast in a
-  corner.
+- **Reason:** messages are written page by page in different voices, and
+  every success is a toast in a corner. (Empty states are shared now, with
+  what the rows are for and the action that makes the first.)
 - **Definition of Done:** a short voice guide applied to the existing
-  messages; empty states that say what the thing is for and offer the action;
-  a success confirmed where it happened (the row, the field) rather than only
-  in a toast.
+  messages; a success confirmed where it happened (the row, the field) rather
+  than only in a toast.
 - **Blockers:** none.
 
 #### Remembered context and a live tab title

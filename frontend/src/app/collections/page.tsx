@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import { useRouter } from "next/navigation";
 
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
@@ -271,28 +273,17 @@ export default function CollectionsPage() {
                 </TableCell>
               </TableRow>
             ) : sorted.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={COLUMNS} className="h-48 text-center">
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <ServerStackIcon className="size-10 opacity-40" />
-                    <p className="text-sm">
-                      {search
-                        ? "No Collections match your search."
-                        : "No Collections yet."}
-                    </p>
-                    {!search && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateOpen(true)}
-                      >
-                        <PlusIcon className="size-4" />
-                        Provision the first Collection
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
+              <EmptyTableRow
+                colSpan={COLUMNS}
+                icon={ServerStackIcon}
+                what="collections"
+                reason={emptyReason({ filtered: !!search })}
+                purpose="A collection is a tenant's namespace of objects, stored in one bucket."
+                action={{
+                  label: "Provision the first collection",
+                  onClick: () => setCreateOpen(true),
+                }}
+              />
             ) : (
               sorted.map((ok) => (
                 <TableRow
