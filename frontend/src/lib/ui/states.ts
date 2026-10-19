@@ -23,6 +23,10 @@ export const SIDEBAR_HOVER_SURFACE = "hover:bg-sidebar-accent/60";
 /** The current item: the open page in the sidebar, the inspected row. */
 export const SELECTED_SURFACE = "bg-primary/10";
 
+/** The open page in the sidebar: the accent's tint filled in, a step
+ *  stronger than a selected row, on the sidebar's deeper ground. */
+export const SIDEBAR_SELECTED_SURFACE = "bg-primary/15";
+
 /** A control held down: it gives a pixel, unless it opens a menu. */
 export const PRESSED = "active:not-aria-[haspopup]:translate-y-px";
 
