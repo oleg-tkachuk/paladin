@@ -152,10 +152,14 @@ export function useObject(
     [object, refresh, bumpRefresh, showNotification],
   );
 
-  const softDeleteObject = useCallback(async () => {
-    if (!object) return;
+  // Resolves to the object as the trash holds it; the caller offers the Undo
+  // (useUndoTrash), so this says nothing on success.
+  const softDeleteObject = useCallback(async (): Promise<
+    Object$ | undefined
+  > => {
+    if (!object) return undefined;
     try {
-      await objectClient.deleteObject({
+      const res = await objectClient.deleteObject({
         name: object.name,
         resourceVersion: object.resourceVersion,
         permanent: false,
@@ -163,11 +167,7 @@ export function useObject(
       });
       await refresh();
       bumpRefresh("objects");
-      showNotification({
-        type: "success",
-        title: "Object Trashed",
-        message: "Object has been moved to the trash bin.",
-      });
+      return res.object;
     } catch (err: unknown) {
       showNotification({
         type: "error",

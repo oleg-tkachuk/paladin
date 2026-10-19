@@ -5,6 +5,7 @@ import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useObject } from "@/hooks/useObject";
+import { useUndoTrash } from "@/hooks/useUndoTrash";
 import { DocumentIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { copyToClipboard } from "@/lib/utils";
 import { useNotification } from "@/components/ui/Notification";
@@ -60,6 +61,7 @@ export function ObjectDetailView({
     restoreObject,
     purgeObject,
   } = useObject(collection, parentCollection);
+  const { offerUndo } = useUndoTrash();
 
   // Active tab (Object | Versions). Persisted in URL hash so a deep link
   // from the audit log (`#versions`) lands on the right view, and so the
@@ -135,7 +137,7 @@ export function ObjectDetailView({
     setIsConfirming(true);
     try {
       if (confirmAction === "trash") {
-        await softDeleteObject();
+        offerUndo(await softDeleteObject());
         router.push(backHref);
       } else if (confirmAction === "purge") {
         await purgeObject();

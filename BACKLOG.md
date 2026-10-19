@@ -798,16 +798,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Undo after a soft delete
-
-- **Status:** Aspirational.
-- **Reason:** a delete that only moves to the trash still ends in a toast that
-  says it is done; the way back is to find the trash and restore by hand.
-- **Definition of Done:** the toast after a soft delete carries Undo, which
-  restores from the trash through the existing restore RPC behind the confirm
-  the console requires for every restore.
-- **Blockers:** none.
-
 #### Policy simulator: can this subject do this action on this resource
 
 - **Status:** Aspirational.

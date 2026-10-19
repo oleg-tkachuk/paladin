@@ -135,14 +135,16 @@ export function useObjects(options: UseObjectsOptions = {}) {
   // Mutations: fire the RPC, then bumpRefresh("objects") → queryKey changes →
   // the list refetches. (Replaces the old optimistic local setObjects edits.)
   const softDeleteObject = useCallback(
-    async (obj: Object$): Promise<void> => {
-      await objectClient.deleteObject({
+    /** Resolves to the object as the trash holds it, for an Undo. */
+    async (obj: Object$): Promise<Object$ | undefined> => {
+      const res = await objectClient.deleteObject({
         name: obj.name,
         resourceVersion: obj.resourceVersion,
         permanent: false,
         bypassGovernanceRetention: false,
       });
       bumpRefresh("objects");
+      return res.object;
     },
     [bumpRefresh],
   );

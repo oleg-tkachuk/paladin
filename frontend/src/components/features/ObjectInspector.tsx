@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useObject } from "@/hooks/useObject";
+import { useUndoTrash } from "@/hooks/useUndoTrash";
 import { ObjectPreview } from "@/components/features/objects/ObjectPreview";
 import { useScope } from "@/context/ScopeContext";
 import {
@@ -52,6 +53,7 @@ export function ObjectInspector({
   const effectiveParent = parentCollection || scopedCollection;
   const { object, downloadUrl, loading, softDeleteObject, restoreObject } =
     useObject(collection || undefined, effectiveParent);
+  const { offerUndo } = useUndoTrash();
   // Trash and restore are both confirmed before they run.
   const [pending, setPending] = useState<"trash" | "restore" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,7 @@ export function ObjectInspector({
     setBusy(true);
     try {
       if (pending === "trash") {
-        await softDeleteObject();
+        offerUndo(await softDeleteObject());
         onClose();
       } else if (pending === "restore") {
         await restoreObject();
