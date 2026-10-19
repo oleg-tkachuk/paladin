@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { LoadingBar } from "@/components/layout/LoadingBar";
 import { RecordVisits } from "@/components/layout/ResourceLinks";
 import { OperationNotifier } from "@/components/OperationNotifier";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
@@ -103,6 +104,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 <UndoTrashProvider>
                   <AuthGate publicRoutes={STANDALONE_ROUTES}>
                     <div className="flex min-h-screen w-full bg-background text-foreground">
+                      <LoadingBar />
                       <GlobalShortcuts />
                       <RecordVisits />
                       <OperationNotifier />

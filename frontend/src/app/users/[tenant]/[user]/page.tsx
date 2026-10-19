@@ -4,6 +4,7 @@
 // scopes, with the same disable / reset / delete actions as the list. The
 // path mirrors the resource name, tenants/<tenant>/users/<user>.
 
+import { userDetailQuery } from "@/lib/queries/details";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +25,7 @@ import {
 } from "@/components/features/users/UserRowActions";
 import { UserRolesCard } from "@/components/features/users/UserRolesCard";
 import { UserScopesCard } from "@/components/features/users/UserScopesCard";
-import { tenantClient, userClient } from "@/lib/connect/client";
+import { tenantClient } from "@/lib/connect/client";
 import { T } from "@/lib/ui/typography";
 import { ConnectedApplications } from "@/components/features/oauth/ConnectedApplications";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
@@ -54,10 +55,8 @@ export default function UserDetailPage() {
   const name = userResourceName(tenant, userId);
   const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
 
-  const query = useQuery({
-    queryKey: ["user", name],
-    queryFn: ({ signal }) => userClient.getUser({ name }, { signal }),
-  });
+  // The same query the users list warms on hover (lib/queries/details).
+  const query = useQuery(userDetailQuery(name));
   const user = query.data;
   const refresh = () => void query.refetch();
 

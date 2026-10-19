@@ -10,6 +10,7 @@
 // tenant, bounce to the canonical path so the address bar tells
 // the truth.
 
+import { collectionDetailQuery } from "@/lib/queries/details";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notFound, useParams, useRouter } from "next/navigation";
@@ -19,7 +20,6 @@ import { ArrowPathIcon, KeyIcon } from "@heroicons/react/24/outline";
 import { CollectionTabs } from "@/components/layout/CollectionTabs";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/button";
-import { collectionClient } from "@/lib/connect/client";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -27,9 +27,6 @@ import { T } from "@/lib/ui/typography";
 import { useTenant } from "../../tenant-context";
 import { CollectionProvider } from "./collection-context";
 import { errorMessage } from "@/hooks/errorContract";
-
-const collectionResourceName = (tenantId: string, collection: string) =>
-  `tenants/${tenantId}/collections/${collection}`;
 
 export default function CollectionDetailLayout({
   children,
@@ -46,20 +43,10 @@ export default function CollectionDetailLayout({
   const collectionName = decodeURIComponent(rawName);
 
   const queryClient = useQueryClient();
-  const collectionCacheKey = [
-    "collection",
-    tenant.tenantId,
-    collectionName,
-  ] as const;
-  const collectionQuery = useQuery({
-    queryKey: collectionCacheKey,
-    retry: false, // NotFound short-circuits to notFound(); a retry won't help.
-    queryFn: ({ signal }) =>
-      collectionClient.getCollection(
-        { name: collectionResourceName(tenant.tenantId, collectionName) },
-        { signal },
-      ),
-  });
+  // The same query a list row warms on hover (lib/queries/details).
+  const detail = collectionDetailQuery(tenant.tenantId, collectionName);
+  const collectionCacheKey = detail.queryKey;
+  const collectionQuery = useQuery(detail);
   const collection = collectionQuery.data ?? null;
   const loading = collectionQuery.isFetching;
   const notFoundFlag =

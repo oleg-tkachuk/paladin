@@ -852,15 +852,17 @@ order they are being taken up.
   explanation with a link to the ADR or doc page; the texts live in one module.
 - **Blockers:** none.
 
-#### Faster-feeling navigation: prefetch, optimistic updates, progress
+#### Optimistic updates for changes whose answer is known
 
 - **Status:** Aspirational.
-- **Reason:** nothing is prefetched, every mutation waits for its answer to
-  show, and a slow route gives no sign it is loading.
-- **Definition of Done:** detail queries prefetched on row hover; optimistic
-  updates for the renames, toggles and deletes whose answer is known; a thin
-  progress bar for route changes and long requests; no layout shift while
-  data arrives.
+- **Reason:** every mutation waits for its answer before the page shows it.
+  (A thin bar now marks first loads and saves, and rows warm their detail
+  page's query on hover, through shared query options in
+  `lib/queries/details`.)
+- **Definition of Done:** the renames, toggles and deletes whose result the
+  console can predict show at once and roll back on a refusal, one mutation
+  at a time with a test of the rollback; more detail pages read through
+  `lib/queries/details` so their rows can warm them.
 - **Blockers:** none.
 
 #### Motion: view transitions and micro-animations

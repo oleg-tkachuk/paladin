@@ -1,5 +1,7 @@
 "use client";
 
+import { IntentTableRow } from "@/components/ui/IntentTableRow";
+import { collectionDetailQuery } from "@/lib/queries/details";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import { useRouter } from "next/navigation";
@@ -340,7 +342,14 @@ export default function TenantCollectionsPage() {
                 />
               ) : (
                 sorted.map((ok) => (
-                  <TableRow key={ok.collection} className="group">
+                  <IntentTableRow
+                    key={ok.collection}
+                    className="group"
+                    query={collectionDetailQuery(
+                      tenant.tenantId,
+                      ok.collection,
+                    )}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
@@ -394,7 +403,7 @@ export default function TenantCollectionsPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
-                  </TableRow>
+                  </IntentTableRow>
                 ))
               )}
             </TableBody>
