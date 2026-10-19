@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { RecordVisits } from "@/components/layout/ResourceLinks";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { AuthGate } from "@/components/AuthGate";
 import { SettingsSync } from "@/components/SettingsSync";
@@ -102,6 +103,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                   <AuthGate publicRoutes={STANDALONE_ROUTES}>
                     <div className="flex min-h-screen w-full bg-background text-foreground">
                       <GlobalShortcuts />
+                      <RecordVisits />
                       <CommandPalette />
                       <KeyboardHelp />
                       <Sidebar

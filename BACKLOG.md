@@ -798,34 +798,26 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Command palette: actions, recent items, shortcut sheet
+#### Command palette: the create actions of the scope
 
 - **Status:** Aspirational.
-- **Reason:** the palette only navigates; creating a tenant or a bucket starts
-  from its page, and the shortcuts are discoverable only from the help dialog.
-- **Definition of Done:** palette entries for the create and refresh actions
-  of the current scope; recently opened resources first; a `?` overlay listing
-  every shortcut from the one registry the handlers read.
-- **Blockers:** none.
-
-#### Pinned and recent resources in the sidebar
-
-- **Status:** Aspirational.
-- **Reason:** an operator who works in three tenants navigates to each through
-  the tenant list every time.
-- **Definition of Done:** pin and recent lists in the sidebar, kept in the
-  user's settings `preferences` rather than browser storage, so they follow
-  the user.
+- **Reason:** the palette navigates, lists the pinned and recent resources
+  and carries the actions a page registers, but creating a tenant, a bucket
+  or a collection still starts from its page.
+- **Definition of Done:** palette entries for the create actions of the
+  current scope, opening the same dialogs the pages open, registered through
+  the actions registry rather than hard-coded in the palette.
 - **Blockers:** none.
 
 #### Keyboard navigation in tables
 
-- **Status:** Aspirational.
-- **Reason:** every list needs the mouse to move between rows and open one.
+- **Status:** Deferred (owner decision 2026-10-19: not a priority now).
+- **Reason:** every list needs the mouse to move between rows and open one;
+  the rest of the programme comes first.
 - **Definition of Done:** `j`/`k` move a row focus, `Enter` opens it, `x`
   selects it where the table selects; one hook every table uses, off while a
   text field has focus.
-- **Blockers:** none.
+- **Blockers:** none — taken up when it is asked for.
 
 #### One Live toggle for every refreshing view
 

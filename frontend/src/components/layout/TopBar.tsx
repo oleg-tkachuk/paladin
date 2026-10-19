@@ -1,5 +1,6 @@
 "use client";
 
+import { PinToggle } from "@/components/layout/ResourceLinks";
 import Link from "next/link";
 import { SECTION } from "@/lib/navigation/sections";
 import { useRouter } from "next/navigation";
@@ -101,6 +102,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
       </button>
 
       <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+        <PinToggle />
         <TenantSwitcher />
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
         <RealTimeStatus />
