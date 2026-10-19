@@ -5,6 +5,8 @@
 // resource scope freely); this surface is the focused one for an
 // operator already inside the Collection context.
 
+import { Confirmation } from "@/components/ui/Confirmation";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { useTenantChangesBlocked } from "../../../tenant-context";
 import { useCallback, useState } from "react";
 import Link from "next/link";
@@ -69,6 +71,8 @@ export default function CollectionPolicyPage() {
     }
   }, [policyText, showNotification]);
 
+  // Confirmed beside the Save button, where it was pressed.
+  const { shown: saved, confirm: confirmSaved } = useConfirmation();
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -78,18 +82,14 @@ export default function CollectionPolicyPage() {
         cedarPolicy: policyText,
       });
       setCollection(updated);
-      showNotification({
-        type: "success",
-        title: "Policy saved",
-        message: collection.collection,
-      });
+      confirmSaved();
     } catch (err) {
       const msg = errorMessage(err, "Save failed");
       showNotification({ type: "error", title: "Save failed", message: msg });
     } finally {
       setSaving(false);
     }
-  }, [collection, policyText, setCollection, showNotification]);
+  }, [collection, policyText, setCollection, showNotification, confirmSaved]);
 
   return (
     <Card className="space-y-3 p-4">
@@ -104,6 +104,7 @@ export default function CollectionPolicyPage() {
           </Link>
         </h2>
         <div className="flex gap-2">
+          <Confirmation shown={saved}>Saved</Confirmation>
           <Button
             variant="outline"
             size="sm"

@@ -1,5 +1,7 @@
 "use client";
 
+import { Confirmation } from "@/components/ui/Confirmation";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { NotifyOperationsField } from "@/components/features/NotifyOperationsField";
 import { ResourceLinksField } from "@/components/features/ResourceLinksField";
 import { useCallback, useMemo, useState } from "react";
@@ -271,6 +273,8 @@ function PreferencesCard() {
   const detectedLocale = useMemo(() => browserLocale(), []);
   const now = new Date();
 
+  // Confirmed beside the Save button, where it was pressed.
+  const { shown: saved, confirm: confirmSaved } = useConfirmation();
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -287,11 +291,7 @@ function PreferencesCard() {
         preferences: {},
       });
       await loadMine();
-      showNotification({
-        type: "success",
-        title: "Saved",
-        message: "Your preferences are saved.",
-      });
+      confirmSaved();
     } catch (err) {
       showNotification({
         type: "error",
@@ -301,7 +301,7 @@ function PreferencesCard() {
     } finally {
       setSaving(false);
     }
-  }, [timezone, locale, theme, showNotification, loadMine]);
+  }, [timezone, locale, theme, showNotification, loadMine, confirmSaved]);
 
   const handleReset = useCallback(() => {
     setTimezone(settings?.timezone || "");
@@ -420,6 +420,7 @@ function PreferencesCard() {
                 >
                   Reset
                 </Button>
+                <Confirmation shown={saved}>Saved</Confirmation>
                 <Button size="sm" onClick={handleSave} disabled={!canSave}>
                   {saving ? "Saving…" : "Save changes"}
                 </Button>

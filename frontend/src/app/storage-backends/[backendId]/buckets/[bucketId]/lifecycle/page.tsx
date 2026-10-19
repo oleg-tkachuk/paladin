@@ -250,7 +250,7 @@ export default function BucketLifecyclePage() {
           showNotification({
             type: "error",
             title: "Bucket changed elsewhere",
-            message: "Reloaded the latest version — please retry your change.",
+            message: "The latest version is loaded; make the change once more.",
           });
           return false;
         }

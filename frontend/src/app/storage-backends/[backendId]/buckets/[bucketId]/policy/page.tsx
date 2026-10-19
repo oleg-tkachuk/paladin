@@ -6,6 +6,8 @@
 // verbatim; the only differences are which client + RPC and which
 // resource the editor maps to.
 
+import { Confirmation } from "@/components/ui/Confirmation";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import {
@@ -69,6 +71,8 @@ export default function BucketPolicyPage() {
     }
   }, [policyText, showNotification]);
 
+  // Confirmed beside the Save button, where it was pressed.
+  const { shown: saved, confirm: confirmSaved } = useConfirmation();
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -78,18 +82,14 @@ export default function BucketPolicyPage() {
         cedarPolicy: policyText,
       });
       setBucket(updated);
-      showNotification({
-        type: "success",
-        title: "Policy saved",
-        message: bucket.bucketId,
-      });
+      confirmSaved();
     } catch (err) {
       const msg = errorMessage(err, "Save failed");
       showNotification({ type: "error", title: "Save failed", message: msg });
     } finally {
       setSaving(false);
     }
-  }, [bucket, policyText, setBucket, showNotification]);
+  }, [bucket, policyText, setBucket, showNotification, confirmSaved]);
 
   return (
     <Card className="space-y-3 p-4">
@@ -104,6 +104,7 @@ export default function BucketPolicyPage() {
           </Link>
         </h2>
         <div className="flex gap-2">
+          <Confirmation shown={saved}>Saved</Confirmation>
           <Button
             variant="outline"
             size="sm"

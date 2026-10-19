@@ -6,6 +6,8 @@
  * role it offers away, but not one it would never grant.
  */
 
+import { Confirmation } from "@/components/ui/Confirmation";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { useState } from "react";
 
 import { Card } from "@/components/ui/Card";
@@ -57,6 +59,9 @@ export function UserRolesCard({
     );
   }
 
+  // Confirmed beside the Save button, where it was pressed.
+  const { shown: saved, confirm: confirmSaved } = useConfirmation();
+
   async function save() {
     const res = await updateUser({
       name: user.name,
@@ -71,7 +76,7 @@ export function UserRolesCard({
       });
       return;
     }
-    showNotification({ type: "success", title: "Roles saved", message: "" });
+    confirmSaved();
     onChanged();
   }
 
@@ -139,6 +144,7 @@ export function UserRolesCard({
         >
           Discard
         </Button>
+        <Confirmation shown={saved}>Saved</Confirmation>
         <Button disabled={!changed || busy} onClick={() => void save()}>
           {busy ? "Saving…" : "Save roles"}
         </Button>

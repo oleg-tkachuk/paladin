@@ -852,17 +852,6 @@ order they are being taken up.
   opens.
 - **Blockers:** none — taken up when it is asked for.
 
-#### Voice and local confirmations
-
-- **Status:** Aspirational.
-- **Reason:** messages are written page by page in different voices, and
-  every success is a toast in a corner. (Empty states are shared now, with
-  what the rows are for and the action that makes the first.)
-- **Definition of Done:** a short voice guide applied to the existing
-  messages; a success confirmed where it happened (the row, the field) rather
-  than only in a toast.
-- **Blockers:** none.
-
 #### CSV export of a list
 
 - **Status:** Deferred (owner decision 2026-10-19: not now).

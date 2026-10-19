@@ -95,7 +95,7 @@ export function useObject(
         if (!isNotFound) {
           showNotification({
             type: "error",
-            title: "Sync Failed",
+            title: "Sync failed",
             message:
               err instanceof Error
                 ? err.message
@@ -136,13 +136,13 @@ export function useObject(
         bumpRefresh("objects");
         showNotification({
           type: "success",
-          title: "Update Successful",
-          message: "Object metadata has been synchronized.",
+          title: "Object updated",
+          message: "Its metadata is saved.",
         });
       } catch (err: unknown) {
         showNotification({
           type: "error",
-          title: "Update Failed",
+          title: "Update failed",
           message:
             (err as Error).message || "Could not update object metadata.",
         });
@@ -171,7 +171,7 @@ export function useObject(
     } catch (err: unknown) {
       showNotification({
         type: "error",
-        title: "Action Failed",
+        title: "Trash failed",
         message: (err as Error).message,
       });
       throw err;
@@ -191,13 +191,13 @@ export function useObject(
       bumpRefresh("objects");
       showNotification({
         type: "success",
-        title: "Object Purged",
-        message: "Object has been permanently deleted.",
+        title: "Object purged",
+        message: "It is deleted for good.",
       });
     } catch (err: unknown) {
       showNotification({
         type: "error",
-        title: "Action Failed",
+        title: "Purge failed",
         message: (err as Error).message,
       });
       throw err;
@@ -215,13 +215,13 @@ export function useObject(
       bumpRefresh("objects");
       showNotification({
         type: "success",
-        title: "Object Restored",
-        message: "Object has been recovered from the trash bin.",
+        title: "Object restored",
+        message: "It is back from the trash.",
       });
     } catch (err: unknown) {
       showNotification({
         type: "error",
-        title: "Restore Failed",
+        title: "Restore failed",
         message: (err as Error).message,
       });
       throw err;

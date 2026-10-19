@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useState } from "react";
 import { CheckIcon, ClipboardIcon } from "@heroicons/react/24/outline";
 
 import {
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { FOCUS_RING } from "@/lib/ui/states";
@@ -18,9 +18,6 @@ import { FOCUS_RING } from "@/lib/ui/states";
 // A value longer than this reads better under its label than beside it: it
 // would wrap in a narrow column into a block of fragments.
 const RECORD_INLINE_MAX_CHARS = 48;
-
-// How long a copy button shows that it copied.
-const COPIED_FOR_MS = 1500;
 
 // What the dialog's content is told about itself, read by its width: a field
 // too long to sit beside its label, and a block of text, each widen it.
@@ -181,12 +178,7 @@ export function RecordBlock({
  * dialog is opened from many pages, not all of them inside a notifier.
  */
 function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), COPIED_FOR_MS);
-    return () => clearTimeout(t);
-  }, [copied]);
+  const { shown: copied, confirm } = useConfirmation();
   const Icon = copied ? CheckIcon : ClipboardIcon;
   return (
     <button
@@ -194,7 +186,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       aria-label={copied ? "Copied" : label}
       title={copied ? "Copied" : label}
       onClick={() => {
-        void navigator.clipboard?.writeText(value).then(() => setCopied(true));
+        void navigator.clipboard?.writeText(value).then(confirm);
       }}
       className={cn(
         "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",

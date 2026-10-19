@@ -2,11 +2,10 @@
 
 import React from "react";
 import { ClipboardIcon, CheckIcon } from "@heroicons/react/24/outline";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { cn } from "@/lib/utils";
 import { PRESSED } from "@/lib/ui/states";
 
-/** How long the copied tick stays before the icon returns. */
-export const COPIED_TICK_MS = 2_000;
 /** What the live region says once the value is on the clipboard. */
 export const COPIED_NOTICE = "Copied";
 
@@ -25,14 +24,13 @@ export function IdentifierCopy({
 }: IdentifierCopyProps) {
   // Confirmed where it happened — the tick on the button, said to assistive
   // technology through the live region — not by a toast across the screen.
-  const [copied, setCopied] = React.useState(false);
+  const { shown: copied, confirm } = useConfirmation();
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPIED_TICK_MS);
+      confirm();
     } catch (err) {
       console.error("Failed to copy", err);
     }

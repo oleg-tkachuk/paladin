@@ -127,7 +127,7 @@ export function ObjectDetailView({
     } else {
       showNotification({
         type: "warning",
-        title: "Download Unavailable",
+        title: "Download unavailable",
         message: "This object is not in a state that allows downloading.",
       });
     }

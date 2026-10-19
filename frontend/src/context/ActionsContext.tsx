@@ -65,13 +65,13 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
       setUndoStack((prev) => prev.slice(0, -1));
       showNotification({
         type: "success",
-        title: "Action Reverted",
-        message: "The last operation has been undone.",
+        title: "Undone",
+        message: "The last change is reversed.",
       });
     } catch (err: unknown) {
       showNotification({
         type: "error",
-        title: "Undo Failed",
+        title: "Undo failed",
         message: (err as Error).message,
       });
     }
@@ -90,8 +90,8 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
 
           showNotification({
             type: "success",
-            title: "Action Performed",
-            message: `${action.label} completed.`,
+            title: "Done",
+            message: action.label,
             action: {
               label: "Undo",
               onClick: () => undoLastAction(),
@@ -101,7 +101,7 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
       } catch (err: unknown) {
         showNotification({
           type: "error",
-          title: "Action Failed",
+          title: "Action failed",
           message: (err as Error).message,
         });
       }

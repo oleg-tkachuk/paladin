@@ -86,7 +86,7 @@ export function useObjectLock(
         bumpRefresh("objects");
         showNotification({
           type: "success",
-          title: "Retention Applied",
+          title: "Retention applied",
           message:
             mode === "COMPLIANCE"
               ? "This version is now retained under COMPLIANCE and cannot be released early."
@@ -95,7 +95,7 @@ export function useObjectLock(
       } catch (err: unknown) {
         showNotification({
           type: "error",
-          title: "Retention Not Applied",
+          title: "Retention not applied",
           message: normalizeError(err).message,
         });
         throw err;

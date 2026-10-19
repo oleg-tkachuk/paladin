@@ -185,6 +185,9 @@ describe("ProfilePage preferences", () => {
     expect(trigger).toHaveTextContent("Dark");
     await userEvent.click(trigger);
     await userEvent.click(await screen.findByRole("option", { name: "Ember" }));
+    const confirmed = () =>
+      screen.getAllByRole("status").some((s) => s.textContent === "Saved");
+    expect(confirmed()).toBe(false);
     await userEvent.click(save());
     await waitFor(() =>
       expect(h.updateMine).toHaveBeenCalledWith(
@@ -195,6 +198,8 @@ describe("ProfilePage preferences", () => {
         }),
       ),
     );
+    // Confirmed beside Save, where it was pressed.
+    await waitFor(() => expect(confirmed()).toBe(true));
   });
 
   it("says the preferences could not be loaded, and offers no Save", async () => {
