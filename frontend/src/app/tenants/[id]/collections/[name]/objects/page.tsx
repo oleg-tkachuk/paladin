@@ -8,6 +8,9 @@
 // (filters, bulk operations, multipart upload state, copy/move
 // dialog, saved views) carries over verbatim.
 
+import { TableScope } from "@/components/ui/TableScope";
+import { useTablePrefs } from "@/hooks/useTablePrefs";
+import { COLUMN_OPTIONS } from "@/components/features/objects/columns";
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import React, {
@@ -53,6 +56,9 @@ import { useUpload } from "@/hooks/useUpload";
 import { useUndoTrash } from "@/hooks/useUndoTrash";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { useTenantChangesBlocked } from "../../../tenant-context";
+
+/** The object table's id in the user's table preferences. */
+const OBJECTS_TABLE_ID = "objects";
 
 /** How often the list asks again while Live. */
 const OBJECTS_LIVE_POLL_MS = 15_000;
@@ -317,23 +323,16 @@ function CollectionObjectsContent() {
 
   const { registerAction, unregisterAction, executeAction } = useActions();
 
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
-    new Set([
-      "key",
-      "object_tag",
-      "mime",
-      "size",
-      "status",
-      "created",
-      "actions",
-    ]),
+  // The columns the user hid stay hidden, in this browser and the next:
+  // they are the object table's preferences, not this page's state.
+  const { prefs: tablePrefs, toggleColumn: hideOrShow } =
+    useTablePrefs(OBJECTS_TABLE_ID);
+  const visibleColumns = new Set(
+    COLUMN_OPTIONS.map((c) => c.id).filter(
+      (id) => !(tablePrefs.hidden ?? []).includes(id),
+    ),
   );
-  const toggleColumn = (col: string) => {
-    const next = new Set(visibleColumns);
-    if (next.has(col)) next.delete(col);
-    else next.add(col);
-    setVisibleColumns(next);
-  };
+  const toggleColumn = (col: string) => void hideOrShow(col);
 
   const toggleSelect = (
     id: string,
@@ -638,247 +637,251 @@ function CollectionObjectsContent() {
   const someChecked = selectedIds.size > 0 && !allChecked;
 
   return (
-    <div className="space-y-4">
-      <ObjectInspector
-        collection={selectedInspectorKey}
-        parentCollection={collection}
-        onClose={() => setSelectedInspectorKey(null)}
-      />
-      <BulkActionsToolbar
-        selectedCount={selectedIds.size}
-        onEditLabels={() => setIsBulkEditing(true)}
-        onBulkDelete={handleBulkDelete}
-        onBulkRestore={
-          selectionTrashed
-            ? () => confirmBulkRestore(selectionItems)
-            : undefined
-        }
-        onBulkCopy={publicCollection ? undefined : () => setBulkCopyOpen(true)}
-        onClearSelection={() => setSelectedIds(new Set())}
-        isProcessing={isBulkDeleting}
-      />
-      <SaveViewModal
-        isOpen={isSavingView}
-        viewName={newViewName}
-        onViewNameChange={setNewViewName}
-        onSave={saveView}
-        onClose={() => setIsSavingView(false)}
-      />
-      <BulkEditModal
-        isOpen={isBulkEditing}
-        selectedCount={selectedIds.size}
-        labels={bulkLabels}
-        onLabelsChange={setBulkLabels}
-        onSubmit={handleBulkPatch}
-        onClose={() => setIsBulkEditing(false)}
-        isProcessing={isBulkDeleting}
-      />
+    <TableScope id={OBJECTS_TABLE_ID} sort={sort}>
+      <div className="space-y-4">
+        <ObjectInspector
+          collection={selectedInspectorKey}
+          parentCollection={collection}
+          onClose={() => setSelectedInspectorKey(null)}
+        />
+        <BulkActionsToolbar
+          selectedCount={selectedIds.size}
+          onEditLabels={() => setIsBulkEditing(true)}
+          onBulkDelete={handleBulkDelete}
+          onBulkRestore={
+            selectionTrashed
+              ? () => confirmBulkRestore(selectionItems)
+              : undefined
+          }
+          onBulkCopy={
+            publicCollection ? undefined : () => setBulkCopyOpen(true)
+          }
+          onClearSelection={() => setSelectedIds(new Set())}
+          isProcessing={isBulkDeleting}
+        />
+        <SaveViewModal
+          isOpen={isSavingView}
+          viewName={newViewName}
+          onViewNameChange={setNewViewName}
+          onSave={saveView}
+          onClose={() => setIsSavingView(false)}
+        />
+        <BulkEditModal
+          isOpen={isBulkEditing}
+          selectedCount={selectedIds.size}
+          labels={bulkLabels}
+          onLabelsChange={setBulkLabels}
+          onSubmit={handleBulkPatch}
+          onClose={() => setIsBulkEditing(false)}
+          isProcessing={isBulkDeleting}
+        />
 
-      {/* Collection scope is fixed by the URL — show it as a static
+        {/* Collection scope is fixed by the URL — show it as a static
           context badge instead of a picker. The OK is already in the
           page header above (rendered by the OK detail layout); this
           local badge keeps the operator anchored when the toolbar
           gets long. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card/40 p-3">
-        <div className="min-w-0 space-y-0.5">
-          <Label className={T.label}>Collection</Label>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="info" className={T.code}>
-              {collection}
-            </Badge>
-            {collectionResource.bucket && (
-              <span className="min-w-0 break-all text-xs text-muted-foreground font-mono">
-                → {collectionResource.bucket}
-              </span>
-            )}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card/40 p-3">
+          <div className="min-w-0 space-y-0.5">
+            <Label className={T.label}>Collection</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="info" className={T.code}>
+                {collection}
+              </Badge>
+              {collectionResource.bucket && (
+                <span className="min-w-0 break-all text-xs text-muted-foreground font-mono">
+                  → {collectionResource.bucket}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              Drop files on the list to upload them here.
+            </p>
+            <input
+              ref={fileInput}
+              type="file"
+              multiple
+              hidden
+              aria-label={`Files to upload to ${collection}`}
+              onChange={(e) => {
+                uploadFiles(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
+            <LiveToggle
+              state={liveState({ live })}
+              onToggle={() => setLive((v) => !v)}
+              intervalMs={OBJECTS_LIVE_POLL_MS}
+            />
+            <Button
+              size="sm"
+              onClick={() => fileInput.current?.click()}
+              disabled={!!changesBlocked}
+              title={changesBlocked ?? undefined}
+            >
+              <ArrowUpTrayIcon className="size-4" />
+              Upload
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <p className="text-xs text-muted-foreground">
-            Drop files on the list to upload them here.
-          </p>
-          <input
-            ref={fileInput}
-            type="file"
-            multiple
-            hidden
-            aria-label={`Files to upload to ${collection}`}
-            onChange={(e) => {
-              uploadFiles(Array.from(e.target.files ?? []));
-              e.target.value = "";
+
+        <UploadQueue queue={queue} onClear={clearQueue} />
+
+        <div {...dropProps} data-drop-zone className="relative space-y-4">
+          {dragging ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/5"
+            >
+              <span className="rounded-md bg-card px-3 py-1.5 text-sm font-medium shadow-sm">
+                Drop to upload to {collection}
+              </span>
+            </div>
+          ) : null}
+          <ObjectsFilterBar
+            filter={{
+              search,
+              status,
+              tag: tagFilter,
+              type: typeFilter,
+              meta: metaFilter,
+              recursive,
+            }}
+            onFilterChange={(patch) => {
+              if ("search" in patch) handleSearchChange(patch.search!);
+              if ("status" in patch) handleStatusChange(patch.status);
+              if ("tag" in patch) handleTagChange(patch.tag);
+              if ("type" in patch) handleTypeChange(patch.type);
+              if ("meta" in patch) handleMetaChange(patch.meta);
+              if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
+            }}
+            tagOptions={mergedTagOptions}
+            visibleColumns={visibleColumns}
+            onToggleColumn={toggleColumn}
+            savedViews={savedViews}
+            onApplyView={applyView}
+            onDeleteView={deleteView}
+            onSaveView={() => setIsSavingView(true)}
+            loading={loading}
+            onRefresh={refresh}
+          />
+
+          <FolderTrail
+            collection={collection}
+            prefix={prefix}
+            onOpen={handlePrefixChange}
+          />
+          <ObjectsTable
+            folders={
+              delimiter
+                ? {
+                    prefix,
+                    list: folders,
+                    truncated: foldersTruncated,
+                    onOpen: handlePrefixChange,
+                  }
+                : undefined
+            }
+            objects={objects}
+            loading={loading}
+            error={error}
+            nextCursor={nextCursor}
+            onLoadMore={() => loadMore?.()}
+            onRefresh={refresh}
+            selectedIds={selectedIds}
+            allChecked={allChecked}
+            someChecked={someChecked}
+            onToggleSelectAll={toggleSelectAll}
+            sort={sort}
+            onSort={handleSort}
+            visibleColumns={visibleColumns}
+            useRelativeTime={useRelativeTime}
+            onToggleRelativeTime={() => setUseRelativeTime((v) => !v)}
+            selectedInspectorKey={selectedInspectorKey}
+            editingLabelsId={editingLabelsId}
+            editLabelsValue={editLabelsValue}
+            search={search}
+            status={status}
+            rowProps={{
+              onToggleSelect: toggleSelect,
+              onInspect: setSelectedInspectorKey,
+              onStartInlineEdit: handleStartInlineEdit,
+              onSaveInlineLabels: handleSaveInlineLabels,
+              onCancelInlineEdit: () => setEditingLabelsId(null),
+              onEditLabelsValueChange: setEditLabelsValue,
+              onCopyToClipboard: copyToClipboard,
+              onSoftDelete: publicCollection ? undefined : handleSoftDelete,
+              onHardDelete: handleHardDelete,
+              onCopy: publicCollection
+                ? undefined
+                : (o) =>
+                    setCopyMove({
+                      open: true,
+                      type: "copy",
+                      obj: o,
+                      destKey: o.key + "-copy",
+                    }),
+              onMove: publicCollection
+                ? undefined
+                : (o) =>
+                    setCopyMove({
+                      open: true,
+                      type: "move",
+                      obj: o,
+                      destKey: o.key,
+                    }),
+              onGenerateDownloadUrl: async (key, collectionOfRow) => {
+                const o = objects.find(
+                  (x) => x.key === key && x.collection === collectionOfRow,
+                );
+                if (!o) return undefined;
+                const url = await generateDownloadUrl(o.name);
+                return url ? { url: url.url } : undefined;
+              },
             }}
           />
-          <LiveToggle
-            state={liveState({ live })}
-            onToggle={() => setLive((v) => !v)}
-            intervalMs={OBJECTS_LIVE_POLL_MS}
-          />
-          <Button
-            size="sm"
-            onClick={() => fileInput.current?.click()}
-            disabled={!!changesBlocked}
-            title={changesBlocked ?? undefined}
-          >
-            <ArrowUpTrayIcon className="size-4" />
-            Upload
-          </Button>
         </div>
-      </div>
 
-      <UploadQueue queue={queue} onClear={clearQueue} />
+        <div className="flex justify-center pb-4">
+          <Badge variant="secondary" className="font-mono tabular-nums">
+            {objects.length} objects
+          </Badge>
+        </div>
 
-      <div {...dropProps} data-drop-zone className="relative space-y-4">
-        {dragging ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/5"
-          >
-            <span className="rounded-md bg-card px-3 py-1.5 text-sm font-medium shadow-sm">
-              Drop to upload to {collection}
-            </span>
-          </div>
-        ) : null}
-        <ObjectsFilterBar
-          filter={{
-            search,
-            status,
-            tag: tagFilter,
-            type: typeFilter,
-            meta: metaFilter,
-            recursive,
-          }}
-          onFilterChange={(patch) => {
-            if ("search" in patch) handleSearchChange(patch.search!);
-            if ("status" in patch) handleStatusChange(patch.status);
-            if ("tag" in patch) handleTagChange(patch.tag);
-            if ("type" in patch) handleTypeChange(patch.type);
-            if ("meta" in patch) handleMetaChange(patch.meta);
-            if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
-          }}
-          tagOptions={mergedTagOptions}
-          visibleColumns={visibleColumns}
-          onToggleColumn={toggleColumn}
-          savedViews={savedViews}
-          onApplyView={applyView}
-          onDeleteView={deleteView}
-          onSaveView={() => setIsSavingView(true)}
-          loading={loading}
-          onRefresh={refresh}
+        <BulkCopyDialog
+          open={bulkCopyOpen}
+          count={selectionItems.length}
+          sourceCollection={collection}
+          onConfirm={handleBulkCopy}
+          onClose={() => setBulkCopyOpen(false)}
         />
 
-        <FolderTrail
-          collection={collection}
-          prefix={prefix}
-          onOpen={handlePrefixChange}
+        {/* ─── Copy / Move dialog ───────────────────────────────────────── */}
+        <CopyMoveDialog
+          open={copyMove.open}
+          type={copyMove.type}
+          sourceKey={copyMove.obj?.key || ""}
+          destKey={copyMove.destKey}
+          onDestKeyChange={(v) => setCopyMove((p) => ({ ...p, destKey: v }))}
+          onConfirm={handleCopyMove}
+          onClose={() => setCopyMove((p) => ({ ...p, open: false }))}
         />
-        <ObjectsTable
-          folders={
-            delimiter
-              ? {
-                  prefix,
-                  list: folders,
-                  truncated: foldersTruncated,
-                  onOpen: handlePrefixChange,
-                }
-              : undefined
-          }
-          objects={objects}
-          loading={loading}
-          error={error}
-          nextCursor={nextCursor}
-          onLoadMore={() => loadMore?.()}
-          onRefresh={refresh}
-          selectedIds={selectedIds}
-          allChecked={allChecked}
-          someChecked={someChecked}
-          onToggleSelectAll={toggleSelectAll}
-          sort={sort}
-          onSort={handleSort}
-          visibleColumns={visibleColumns}
-          useRelativeTime={useRelativeTime}
-          onToggleRelativeTime={() => setUseRelativeTime((v) => !v)}
-          selectedInspectorKey={selectedInspectorKey}
-          editingLabelsId={editingLabelsId}
-          editLabelsValue={editLabelsValue}
-          search={search}
-          status={status}
-          rowProps={{
-            onToggleSelect: toggleSelect,
-            onInspect: setSelectedInspectorKey,
-            onStartInlineEdit: handleStartInlineEdit,
-            onSaveInlineLabels: handleSaveInlineLabels,
-            onCancelInlineEdit: () => setEditingLabelsId(null),
-            onEditLabelsValueChange: setEditLabelsValue,
-            onCopyToClipboard: copyToClipboard,
-            onSoftDelete: publicCollection ? undefined : handleSoftDelete,
-            onHardDelete: handleHardDelete,
-            onCopy: publicCollection
-              ? undefined
-              : (o) =>
-                  setCopyMove({
-                    open: true,
-                    type: "copy",
-                    obj: o,
-                    destKey: o.key + "-copy",
-                  }),
-            onMove: publicCollection
-              ? undefined
-              : (o) =>
-                  setCopyMove({
-                    open: true,
-                    type: "move",
-                    obj: o,
-                    destKey: o.key,
-                  }),
-            onGenerateDownloadUrl: async (key, collectionOfRow) => {
-              const o = objects.find(
-                (x) => x.key === key && x.collection === collectionOfRow,
-              );
-              if (!o) return undefined;
-              const url = await generateDownloadUrl(o.name);
-              return url ? { url: url.url } : undefined;
-            },
-          }}
+
+        {/* ─── Confirmation (trash, purge, restore) ────────────────────── */}
+        <ConfirmModal
+          isOpen={confirm.open}
+          type={confirm.type}
+          title={confirm.title}
+          message={confirm.message}
+          warning={confirm.warning}
+          confirmText={confirm.confirmText}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm((p) => ({ ...p, open: false }))}
         />
       </div>
-
-      <div className="flex justify-center pb-4">
-        <Badge variant="secondary" className="font-mono tabular-nums">
-          {objects.length} objects
-        </Badge>
-      </div>
-
-      <BulkCopyDialog
-        open={bulkCopyOpen}
-        count={selectionItems.length}
-        sourceCollection={collection}
-        onConfirm={handleBulkCopy}
-        onClose={() => setBulkCopyOpen(false)}
-      />
-
-      {/* ─── Copy / Move dialog ───────────────────────────────────────── */}
-      <CopyMoveDialog
-        open={copyMove.open}
-        type={copyMove.type}
-        sourceKey={copyMove.obj?.key || ""}
-        destKey={copyMove.destKey}
-        onDestKeyChange={(v) => setCopyMove((p) => ({ ...p, destKey: v }))}
-        onConfirm={handleCopyMove}
-        onClose={() => setCopyMove((p) => ({ ...p, open: false }))}
-      />
-
-      {/* ─── Confirmation (trash, purge, restore) ────────────────────── */}
-      <ConfirmModal
-        isOpen={confirm.open}
-        type={confirm.type}
-        title={confirm.title}
-        message={confirm.message}
-        warning={confirm.warning}
-        confirmText={confirm.confirmText}
-        onConfirm={confirm.onConfirm}
-        onClose={() => setConfirm((p) => ({ ...p, open: false }))}
-      />
-    </div>
+    </TableScope>
   );
 }
 

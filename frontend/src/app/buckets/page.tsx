@@ -53,6 +53,10 @@ import {
   type Sharing,
 } from "@/components/features/buckets/BucketTable";
 import { bucketHref } from "@/lib/navigation/hrefs";
+import { TableScope } from "@/components/ui/TableScope";
+
+/** This list's id in the user's table preferences. */
+const TABLE_ID = "buckets";
 
 /** The bucket tab the row menu opens. */
 const LIFECYCLE_TAB = "lifecycle";
@@ -102,6 +106,7 @@ export default function BucketsPage() {
     undefined,
     {
       url: PAGE_TABLE,
+      tableId: TABLE_ID,
       columns: BUCKET_SORT_COLUMNS,
     },
   );
@@ -167,152 +172,156 @@ export default function BucketsPage() {
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Buckets"
-        description="Every bucket on every backend: who owns it, and which tenants it is shared with."
-        showDefaultActions={false}
-        actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            New bucket
-          </Button>
-        }
-      />
-
-      {/* Filter bar */}
-      <TableToolbar
-        query={search}
-        onQueryChange={setSearch}
-        searchLabel="Search buckets"
-        placeholder="Search by name or display label…"
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => void refetch()}
-              aria-label="Refresh"
-            >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
+    <TableScope id={TABLE_ID} sort={sort}>
+      <div className="space-y-6">
+        <PageHeader
+          title="Buckets"
+          description="Every bucket on every backend: who owns it, and which tenants it is shared with."
+          showDefaultActions={false}
+          actions={
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <PlusIcon className="size-4" />
+              New bucket
             </Button>
-          </>
-        }
-      >
-        <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
-          <SelectTrigger aria-label="Filter by backend" className="w-50">
-            <SelectValue placeholder="All backends" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_BACKENDS}>All backends</SelectItem>
-            {backends.map((b) => (
-              <SelectItem key={b} value={b}>
-                {b}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </SelectRoot>
-        <SelectRoot
-          value={sharing}
-          onValueChange={(v) => setSharing(v as Sharing)}
-        >
-          <SelectTrigger aria-label="Filter by sharing" className="w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={SHARING.all}>Shared or not</SelectItem>
-            <SelectItem value={SHARING.shared}>Shared</SelectItem>
-            <SelectItem value={SHARING.ownerOnly}>Owner only</SelectItem>
-          </SelectContent>
-        </SelectRoot>
-      </TableToolbar>
+          }
+        />
 
-      <BucketTable
-        buckets={filtered}
-        tenants={tenantNames}
-        loading={loading}
-        error={listError}
-        onRetry={() => void refetch()}
-        sort={sort}
-        onSort={handleSort}
-        empty={
-          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <ArchiveBoxIcon className="size-10 opacity-40" />
-            <p className="text-sm">
-              {/*
+        {/* Filter bar */}
+        <TableToolbar
+          query={search}
+          onQueryChange={setSearch}
+          searchLabel="Search buckets"
+          placeholder="Search by name or display label…"
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => void refetch()}
+                aria-label="Refresh"
+              >
+                <ArrowPathIcon
+                  className={cn("size-4", loading && "animate-spin")}
+                />
+              </Button>
+            </>
+          }
+        >
+          <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
+            <SelectTrigger aria-label="Filter by backend" className="w-50">
+              <SelectValue placeholder="All backends" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_BACKENDS}>All backends</SelectItem>
+              {backends.map((b) => (
+                <SelectItem key={b} value={b}>
+                  {b}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </SelectRoot>
+          <SelectRoot
+            value={sharing}
+            onValueChange={(v) => setSharing(v as Sharing)}
+          >
+            <SelectTrigger aria-label="Filter by sharing" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SHARING.all}>Shared or not</SelectItem>
+              <SelectItem value={SHARING.shared}>Shared</SelectItem>
+              <SelectItem value={SHARING.ownerOnly}>Owner only</SelectItem>
+            </SelectContent>
+          </SelectRoot>
+        </TableToolbar>
+
+        <BucketTable
+          buckets={filtered}
+          tenants={tenantNames}
+          loading={loading}
+          error={listError}
+          onRetry={() => void refetch()}
+          sort={sort}
+          onSort={handleSort}
+          empty={
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+              <ArchiveBoxIcon className="size-10 opacity-40" />
+              <p className="text-sm">
+                {/*
                 Three states, not two. With the filter server-side an empty
                 table means one of: the debounce has not fired yet, the request
                 is in flight, or the server really found nothing. Collapsing
                 the first two into "No buckets match" tells an operator their
                 bucket is gone while they are still typing its name.
               */}
-              {searchPending
-                ? "Searching…"
-                : hasFilters
-                  ? "No buckets match your filters."
-                  : "No buckets yet."}
-            </p>
-            {!searchPending && !hasFilters && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setCreateOpen(true)}
-              >
-                <PlusIcon className="size-4" />
-                Create the first bucket
-              </Button>
-            )}
-          </div>
-        }
-        rowActions={(b) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 opacity-60 group-hover:opacity-100"
-                aria-label={`Actions for ${b.bucketId}`}
-              >
-                <EllipsisHorizontalIcon className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={bucketHref(b.backendId, b.bucketId, LIFECYCLE_TAB)}>
-                  <ClockIcon className="size-4" />
-                  Lifecycle rules
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => setDeleteTarget(b)}
-              >
-                <TrashIcon className="size-4" />
-                Delete bucket
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      />
+                {searchPending
+                  ? "Searching…"
+                  : hasFilters
+                    ? "No buckets match your filters."
+                    : "No buckets yet."}
+              </p>
+              {!searchPending && !hasFilters && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCreateOpen(true)}
+                >
+                  <PlusIcon className="size-4" />
+                  Create the first bucket
+                </Button>
+              )}
+            </div>
+          }
+          rowActions={(b) => (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 opacity-60 group-hover:opacity-100"
+                  aria-label={`Actions for ${b.bucketId}`}
+                >
+                  <EllipsisHorizontalIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link
+                    href={bucketHref(b.backendId, b.bucketId, LIFECYCLE_TAB)}
+                  >
+                    <ClockIcon className="size-4" />
+                    Lifecycle rules
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setDeleteTarget(b)}
+                >
+                  <TrashIcon className="size-4" />
+                  Delete bucket
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        />
 
-      <BucketCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        backends={backendRows}
-        backendsFailed={failedRead(backendsError, fetchBackends)}
-        tenants={tenants}
-        tenantsFailed={failedRead(tenantsError, fetchTenants)}
-        createBucket={createBucket}
-      />
+        <BucketCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          backends={backendRows}
+          backendsFailed={failedRead(backendsError, fetchBackends)}
+          tenants={tenants}
+          tenantsFailed={failedRead(tenantsError, fetchTenants)}
+          createBucket={createBucket}
+        />
 
-      <BucketDeleteDialog
-        target={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        deleteBucket={deleteBucket}
-      />
-    </div>
+        <BucketDeleteDialog
+          target={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          deleteBucket={deleteBucket}
+        />
+      </div>
+    </TableScope>
   );
 }
 

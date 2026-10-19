@@ -8,3 +8,14 @@ export const OBJECT_COLUMN_CLASS = {
   size: "hidden @4xl:table-cell",
   mime: "hidden @6xl:table-cell",
 } as const;
+
+/** The object list's columns, each of which the user may hide. */
+export const COLUMN_OPTIONS = [
+  { id: "key", label: "Name / ID" },
+  { id: "object_tag", label: "ObjectTag" },
+  { id: "mime", label: "MIME Type" },
+  { id: "size", label: "Size" },
+  { id: "status", label: "Sync Status" },
+  { id: "created", label: "Initialization" },
+  { id: "actions", label: "Operations" },
+];

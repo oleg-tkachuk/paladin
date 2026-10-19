@@ -842,16 +842,6 @@ order they are being taken up.
   template.
 - **Blockers:** none.
 
-#### Per-user table preferences: density, columns, default sort
-
-- **Status:** Aspirational.
-- **Reason:** the user settings carry a `preferences` field nothing reads,
-  while every table shows every column at one density.
-- **Definition of Done:** density, visible columns and a default sort per
-  table, kept in `preferences` under one typed key per table and applied
-  through the shared table hooks; the URL still overrides the default sort.
-- **Blockers:** none.
-
 #### Mobile layout for the main pages
 
 - **Status:** Aspirational.

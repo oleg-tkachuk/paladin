@@ -59,6 +59,10 @@ import {
 import { openableRow } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { TableScope } from "@/components/ui/TableScope";
+
+/** This list's id in the user's table preferences. */
+const TABLE_ID = "m2mTokens";
 
 // Optional columns appear by the width of the table's card (see Table):
 // least useful goes first, so Status and the actions menu always fit.
@@ -233,296 +237,313 @@ export default function M2MTokensPage() {
     text: TOKEN_SEARCH,
     accessors: TOKEN_SORT,
     url: PAGE_TABLE,
+    tableId: TABLE_ID,
   });
   const visibleTokens = view.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold">M2M Tokens</h2>
-          <p className={cn(T.helper, "max-w-prose")}>
-            Service-to-service hashed-bearer tokens for{" "}
-            <span className="font-mono">{tenant.displayName}</span>.
-            Audience-pinned and optionally rate-limited.
-          </p>
+    <TableScope id={TABLE_ID} sort={view.sort}>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold">M2M Tokens</h2>
+            <p className={cn(T.helper, "max-w-prose")}>
+              Service-to-service hashed-bearer tokens for{" "}
+              <span className="font-mono">{tenant.displayName}</span>.
+              Audience-pinned and optionally rate-limited.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void fetchTokens()}
+              disabled={loading}
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+              disabled={Boolean(changesBlocked)}
+              title={changesBlocked ?? undefined}
+            >
+              <PlusIcon className="size-4" />
+              New token
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchTokens()}
-            disabled={loading}
-          >
-            <ArrowPathIcon
-              className={cn("size-4", loading && "animate-spin")}
-            />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-            disabled={Boolean(changesBlocked)}
-            title={changesBlocked ?? undefined}
-          >
-            <PlusIcon className="size-4" />
-            New token
-          </Button>
-        </div>
-      </div>
 
-      <TableToolbar
-        query={view.query}
-        onQueryChange={view.setQuery}
-        searchLabel="Search M2M tokens"
-        placeholder="Search by name, prefix, audience, role or scope…"
-        filter={{
-          label: LIFECYCLE_FILTER_LABEL,
-          options: LIFECYCLE_FILTERS,
-          value: stateFilter,
-          onChange: setStateFilter,
-        }}
-        count={
-          tokensQuery.data
-            ? { shown: visibleTokens.length, total: view.total }
-            : undefined
-        }
-      />
+        <TableToolbar
+          query={view.query}
+          onQueryChange={view.setQuery}
+          searchLabel="Search M2M tokens"
+          placeholder="Search by name, prefix, audience, role or scope…"
+          filter={{
+            label: LIFECYCLE_FILTER_LABEL,
+            options: LIFECYCLE_FILTERS,
+            value: stateFilter,
+            onChange: setStateFilter,
+          }}
+          count={
+            tokensQuery.data
+              ? { shown: visibleTokens.length, total: view.total }
+              : undefined
+          }
+        />
 
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead
-                label="Prefix"
-                column="prefix"
-                className={cn(COL_PREFIX, "w-35")}
-                {...sortProps}
-              />
-              <SortableHead label="Name" column="name" {...sortProps} />
-              <SortableHead
-                label="Audience"
-                column="audience"
-                className={COL_AUDIENCE}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Rate (rpm)"
-                column="rate"
-                className={COL_RATE}
-                {...sortProps}
-              />
-              <TableHead className={cn(COL_USAGE, "w-35")}>
-                Usage (1m)
-              </TableHead>
-              <SortableHead
-                label="Last used"
-                column="used"
-                className={COL_LAST_USED}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Expires"
-                column="expires"
-                className={COL_EXPIRES}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Status"
-                column="status"
-                className="w-25"
-                {...sortProps}
-              />
-              <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && visibleTokens.length === 0 ? (
-              [0, 1, 2].map((i) => (
-                <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={TOKEN_COLUMNS} className="py-3">
-                    <Skeleton className="h-7 w-full" />
+        <Card className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableHead
+                  label="Prefix"
+                  column="prefix"
+                  className={cn(COL_PREFIX, "w-35")}
+                  {...sortProps}
+                />
+                <SortableHead label="Name" column="name" {...sortProps} />
+                <SortableHead
+                  label="Audience"
+                  column="audience"
+                  className={COL_AUDIENCE}
+                  {...sortProps}
+                />
+                <SortableHead
+                  label="Rate (rpm)"
+                  column="rate"
+                  className={COL_RATE}
+                  {...sortProps}
+                />
+                <TableHead className={cn(COL_USAGE, "w-35")}>
+                  Usage (1m)
+                </TableHead>
+                <SortableHead
+                  label="Last used"
+                  column="used"
+                  className={COL_LAST_USED}
+                  {...sortProps}
+                />
+                <SortableHead
+                  label="Expires"
+                  column="expires"
+                  className={COL_EXPIRES}
+                  {...sortProps}
+                />
+                <SortableHead
+                  label="Status"
+                  column="status"
+                  className="w-25"
+                  {...sortProps}
+                />
+                <TableHead className="w-12 text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading && visibleTokens.length === 0 ? (
+                [0, 1, 2].map((i) => (
+                  <TableRow key={`s-${i}`}>
+                    <TableCell colSpan={TOKEN_COLUMNS} className="py-3">
+                      <Skeleton className="h-7 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : tokensQuery.isError && !tokensQuery.data ? (
+                // "No M2M tokens yet" for a failed list invites creating one that may exist.
+                <TableRow>
+                  <TableCell
+                    colSpan={TOKEN_COLUMNS}
+                    className="h-40 text-center"
+                  >
+                    <ListLoadError
+                      what="M2M tokens"
+                      reason={errorMessage(tokensQuery.error)}
+                      onRetry={() => void tokensQuery.refetch()}
+                    />
                   </TableCell>
                 </TableRow>
-              ))
-            ) : tokensQuery.isError && !tokensQuery.data ? (
-              // "No M2M tokens yet" for a failed list invites creating one that may exist.
-              <TableRow>
-                <TableCell colSpan={TOKEN_COLUMNS} className="h-40 text-center">
-                  <ListLoadError
-                    what="M2M tokens"
-                    reason={errorMessage(tokensQuery.error)}
-                    onRetry={() => void tokensQuery.refetch()}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : visibleTokens.length === 0 && view.total > 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={TOKEN_COLUMNS}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  No token matches the search.
-                </TableCell>
-              </TableRow>
-            ) : visibleTokens.length === 0 &&
-              stateFilter !== DEFAULT_LIFECYCLE_FILTER ? (
-              <TableRow>
-                <TableCell
-                  colSpan={TOKEN_COLUMNS}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  No token is in this state.
-                </TableCell>
-              </TableRow>
-            ) : visibleTokens.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={TOKEN_COLUMNS} className="h-40 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <KeyIcon className="size-8 opacity-40" />
-                    <p className="text-sm">No M2M tokens yet.</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setCreateOpen(true)}
-                      disabled={Boolean(changesBlocked)}
-                      title={changesBlocked ?? undefined}
-                    >
-                      <PlusIcon className="size-4" />
-                      Create the first one
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              visibleTokens.map((t) => {
-                const revoked = isRevoked(t);
-                const row = openableRow(() => setOpened(t));
-                return (
-                  <TableRow
-                    key={t.id}
-                    {...row}
-                    className={cn(row.className, "group")}
+              ) : visibleTokens.length === 0 && view.total > 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={TOKEN_COLUMNS}
+                    className="py-8 text-center text-muted-foreground"
                   >
-                    <TableCell className={COL_PREFIX}>
-                      <span className="font-mono text-xs">
-                        paladin_pat_{t.prefix}…
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-medium whitespace-normal break-words">
-                      {t.displayName || (
-                        <span className="italic text-muted-foreground">
-                          (unnamed)
+                    No token matches the search.
+                  </TableCell>
+                </TableRow>
+              ) : visibleTokens.length === 0 &&
+                stateFilter !== DEFAULT_LIFECYCLE_FILTER ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={TOKEN_COLUMNS}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    No token is in this state.
+                  </TableCell>
+                </TableRow>
+              ) : visibleTokens.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={TOKEN_COLUMNS}
+                    className="h-40 text-center"
+                  >
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <KeyIcon className="size-8 opacity-40" />
+                      <p className="text-sm">No M2M tokens yet.</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCreateOpen(true)}
+                        disabled={Boolean(changesBlocked)}
+                        title={changesBlocked ?? undefined}
+                      >
+                        <PlusIcon className="size-4" />
+                        Create the first one
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visibleTokens.map((t) => {
+                  const revoked = isRevoked(t);
+                  const row = openableRow(() => setOpened(t));
+                  return (
+                    <TableRow
+                      key={t.id}
+                      {...row}
+                      className={cn(row.className, "group")}
+                    >
+                      <TableCell className={COL_PREFIX}>
+                        <span className="font-mono text-xs">
+                          paladin_pat_{t.prefix}…
                         </span>
-                      )}
-                      {t.scopes.length > 0 ? (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {t.scopes.map((s) => (
-                            <Badge
-                              key={s}
-                              variant="outline"
-                              className="font-mono"
-                            >
-                              {s}
+                      </TableCell>
+                      <TableCell className="font-medium whitespace-normal break-words">
+                        {t.displayName || (
+                          <span className="italic text-muted-foreground">
+                            (unnamed)
+                          </span>
+                        )}
+                        {t.scopes.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {t.scopes.map((s) => (
+                              <Badge
+                                key={s}
+                                variant="outline"
+                                className="font-mono"
+                              >
+                                {s}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className={cn("mt-1", T.hint)}>tenant-wide</div>
+                        )}
+                      </TableCell>
+                      <TableCell className={COL_AUDIENCE}>
+                        <div className="flex flex-wrap gap-1">
+                          {t.audience.map((a) => (
+                            <Badge key={a} variant="secondary">
+                              {a}
                             </Badge>
                           ))}
                         </div>
-                      ) : (
-                        <div className={cn("mt-1", T.hint)}>tenant-wide</div>
-                      )}
-                    </TableCell>
-                    <TableCell className={COL_AUDIENCE}>
-                      <div className="flex flex-wrap gap-1">
-                        {t.audience.map((a) => (
-                          <Badge key={a} variant="secondary">
-                            {a}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell
-                      className={cn(COL_RATE, T.code, "text-muted-foreground")}
-                    >
-                      {t.rateLimit.case === "rateLimitRpm"
-                        ? t.rateLimit.value
-                        : "∞"}
-                    </TableCell>
-                    <TableCell className={cn(COL_USAGE, T.code)}>
-                      <TokenUsage
-                        revoked={revoked}
-                        usage={usage.get(t.id)}
-                        readAtMs={readAtMs}
-                      />
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        COL_LAST_USED,
-                        T.code,
-                        "text-muted-foreground",
-                      )}
-                    >
-                      {t.lastUsedAt ? <Timestamp ts={t.lastUsedAt} /> : "never"}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        COL_EXPIRES,
-                        T.code,
-                        "text-muted-foreground",
-                      )}
-                    >
-                      {t.expiresAt ? <Timestamp ts={t.expiresAt} /> : "never"}
-                    </TableCell>
-                    <TableCell>
-                      <TokenStatus token={t} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {!revoked && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 opacity-60 group-hover:opacity-100"
-                          aria-label={`Revoke ${t.displayName || t.prefix}`}
-                          onClick={() => setRevokeTarget(t)}
-                        >
-                          <TrashIcon className="size-4" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          COL_RATE,
+                          T.code,
+                          "text-muted-foreground",
+                        )}
+                      >
+                        {t.rateLimit.case === "rateLimitRpm"
+                          ? t.rateLimit.value
+                          : "∞"}
+                      </TableCell>
+                      <TableCell className={cn(COL_USAGE, T.code)}>
+                        <TokenUsage
+                          revoked={revoked}
+                          usage={usage.get(t.id)}
+                          readAtMs={readAtMs}
+                        />
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          COL_LAST_USED,
+                          T.code,
+                          "text-muted-foreground",
+                        )}
+                      >
+                        {t.lastUsedAt ? (
+                          <Timestamp ts={t.lastUsedAt} />
+                        ) : (
+                          "never"
+                        )}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          COL_EXPIRES,
+                          T.code,
+                          "text-muted-foreground",
+                        )}
+                      >
+                        {t.expiresAt ? <Timestamp ts={t.expiresAt} /> : "never"}
+                      </TableCell>
+                      <TableCell>
+                        <TokenStatus token={t} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!revoked && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 opacity-60 group-hover:opacity-100"
+                            aria-label={`Revoke ${t.displayName || t.prefix}`}
+                            onClick={() => setRevokeTarget(t)}
+                          >
+                            <TrashIcon className="size-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </Card>
 
-      <TokenRecordDialog
-        token={opened}
-        usage={opened ? usage.get(opened.id) : undefined}
-        readAtMs={readAtMs}
-        onClose={() => setOpened(null)}
-      />
+        <TokenRecordDialog
+          token={opened}
+          usage={opened ? usage.get(opened.id) : undefined}
+          readAtMs={readAtMs}
+          onClose={() => setOpened(null)}
+        />
 
-      {/* ─── Create dialog ───────────────────────────────────────────── */}
-      <CreateTokenDialog
-        open={createOpen}
-        tenantId={tenantId}
-        onClose={() => {
-          setCreateOpen(false);
-          void fetchTokens();
-        }}
-        onCreated={() => void fetchTokens()}
-      />
+        {/* ─── Create dialog ───────────────────────────────────────────── */}
+        <CreateTokenDialog
+          open={createOpen}
+          tenantId={tenantId}
+          onClose={() => {
+            setCreateOpen(false);
+            void fetchTokens();
+          }}
+          onCreated={() => void fetchTokens()}
+        />
 
-      {/* ─── Revoke confirm ────────────────────────────────────────── */}
-      <RevokeTokenDialog
-        token={revokeTarget}
-        onClose={() => setRevokeTarget(null)}
-        onRevoked={() => void fetchTokens()}
-      />
-    </div>
+        {/* ─── Revoke confirm ────────────────────────────────────────── */}
+        <RevokeTokenDialog
+          token={revokeTarget}
+          onClose={() => setRevokeTarget(null)}
+          onRevoked={() => void fetchTokens()}
+        />
+      </div>
+    </TableScope>
   );
 }
