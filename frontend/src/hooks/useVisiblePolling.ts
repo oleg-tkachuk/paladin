@@ -9,9 +9,14 @@ import { useEffect, useRef } from "react";
  * away so the data is fresh before the next scheduled poll.
  *
  * `fn` is kept in a ref so callers don't need a stable callback; the
- * interval only re-arms when `intervalMs` changes.
+ * interval only re-arms when `intervalMs` changes. Not `enabled` — a view
+ * whose Live switch is off — it does nothing at all.
  */
-export function useVisiblePolling(fn: () => void, intervalMs: number) {
+export function useVisiblePolling(
+  fn: () => void,
+  intervalMs: number,
+  enabled = true,
+) {
   const fnRef = useRef(fn);
   // Ref updated in an effect, not during render (react-hooks/refs):
   // ticks only ever fire after the commit anyway.
@@ -20,6 +25,7 @@ export function useVisiblePolling(fn: () => void, intervalMs: number) {
   });
 
   useEffect(() => {
+    if (!enabled) return;
     // `alive` guards every invocation so a tick that was already queued
     // (interval or visibilitychange) can't call fn after unmount — e.g.
     // a fast route transition between the effect committing and a poll
@@ -37,5 +43,5 @@ export function useVisiblePolling(fn: () => void, intervalMs: number) {
       clearInterval(id);
       document.removeEventListener("visibilitychange", run);
     };
-  }, [intervalMs]);
+  }, [intervalMs, enabled]);
 }

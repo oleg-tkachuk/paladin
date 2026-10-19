@@ -9,6 +9,8 @@ import {
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
+import { LiveToggle } from "@/components/ui/LiveToggle";
+import { liveState } from "@/lib/live";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 import { searchFilter } from "@/lib/cel";
@@ -105,29 +107,10 @@ export default function AuditPage() {
         showDefaultActions={false}
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLive((v) => !v)}
-              aria-pressed={live}
-              title={
-                live
-                  ? connected
-                    ? "Live — new entries appear automatically"
-                    : "Live enabled — reconnecting…"
-                  : "Live updates paused"
-              }
-            >
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  live && connected && "bg-success animate-pulse",
-                  live && !connected && "bg-warning",
-                  !live && "bg-muted-foreground/40",
-                )}
-              />
-              Live
-            </Button>
+            <LiveToggle
+              state={liveState({ live, connected })}
+              onToggle={() => setLive((v) => !v)}
+            />
             <Button
               variant="outline"
               size="sm"
