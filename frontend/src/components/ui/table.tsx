@@ -3,8 +3,19 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { useTableDensity } from "@/components/ui/TableScope";
+import type { Density } from "@/lib/preferences/tablePrefs";
+
+/** How rows are set, by the density the user chose for the table. */
+const DENSITY_CLASS: Record<Density, string> = {
+  comfortable: "",
+  compact:
+    "[&_[data-slot=table-cell]]:py-1 [&_[data-slot=table-head]]:h-8 text-xs",
+};
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  // Inside a TableScope, the user's density for that table.
+  const density = useTableDensity();
   return (
     // A size container, so a page shows optional columns by the width the
     // table actually has (`hidden @2xl:table-cell`), not the viewport's: the
@@ -16,7 +27,12 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        data-density={density}
+        className={cn(
+          "w-full caption-bottom text-sm",
+          DENSITY_CLASS[density],
+          className,
+        )}
         {...props}
       />
     </div>

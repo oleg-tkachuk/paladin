@@ -8,6 +8,7 @@ export const PREFERENCE_KEYS = {
   recent: "console.recent",
   pinned: "console.pinned",
   notifyOperations: "console.notifyOperations",
+  tables: "console.tables",
 } as const;
 
 export type PreferenceKey =

@@ -9,6 +9,7 @@ import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 
 /** One choice of a toolbar filter. */
 export interface ToolbarFilterOption<V extends string> {
@@ -105,9 +106,11 @@ export function TableToolbar<V extends string>({
             : `${count.shown} of ${count.total}`}
         </span>
       ) : null}
-      {actions ? (
-        <div className="ml-auto flex items-center gap-2">{actions}</div>
-      ) : null}
+      <div className="ml-auto flex items-center gap-2">
+        {/* The table's own menu, when the list is in a TableScope. */}
+        <TablePrefsMenu />
+        {actions}
+      </div>
     </div>
   );
 }

@@ -26,6 +26,7 @@ export function useTableView<R, C extends string>(
     accessors,
     initialSort,
     url,
+    tableId,
   }: {
     /** The fields a search looks in. */
     text: SearchText<R>;
@@ -34,13 +35,15 @@ export function useTableView<R, C extends string>(
     initialSort?: SortState<C>;
     /** Where the view lives in the URL; a module-level constant. */
     url?: TableUrl;
+    /** The table's id in the user's preferences, for its default sort. */
+    tableId?: string;
   },
 ) {
   const [query, setQuery] = useTableQuery(url);
   const columns = useMemo(() => Object.keys(accessors) as C[], [accessors]);
   const { sort, toggleSort } = useTableSort<C>(
     initialSort,
-    url ? { url, columns } : undefined,
+    url ? { url, columns, tableId } : undefined,
   );
   const shown = useMemo(
     () => sortRows(filterRows(rows, query, text), sort, accessors),
