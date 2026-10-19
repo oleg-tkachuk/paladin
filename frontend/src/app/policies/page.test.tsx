@@ -39,7 +39,7 @@ vi.mock("@/hooks/useCollections", () => ({
     h.collectionOptions.push(options),
     {
       collections: [],
-      fetchCollections: h.fetchCollections,
+      refetch: h.fetchCollections,
       loading: false,
     }
   ),
@@ -139,6 +139,8 @@ describe("PoliciesPage collection targets", () => {
   // The system-wide editor may target any tenant's Collection.
   it("reads every tenant's collections", () => {
     render(<PoliciesPage />);
-    expect(h.collectionOptions).toContainEqual({ catalogue: true });
+    expect(h.collectionOptions).toContainEqual(
+      expect.objectContaining({ catalogue: true }),
+    );
   });
 });

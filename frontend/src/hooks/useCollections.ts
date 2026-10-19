@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 
 import { collectionClient } from "@/lib/connect/client";
@@ -10,14 +11,19 @@ import {
   CollectionSchema,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { useActingTenantId } from "@/hooks/useActingTenant";
-import { useBumpRefresh } from "@/context/RefreshContext";
-import { API_PAGE_SIZE_MAX } from "@/constants";
+import { useBumpRefresh, type RefreshTopic } from "@/context/RefreshContext";
 import { errorMessage } from "@/hooks/errorContract";
 import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
+import { useOptimistic } from "@/hooks/useOptimistic";
+import { edit } from "@/lib/optimistic";
+import {
+  COLLECTIONS_PARENT_INDEX,
+  COLLECTIONS_QUERY_KEY,
+  collectionsQuery,
+} from "@/lib/queries/collections";
 
 // Ceiling on how many pages one exhaustive fetch will follow — a backstop, not
 // a limit anyone should reach.
-const MAX_LIST_PAGES = 20;
 
 /**
  * useCollections — wrapper around admin/v1.CollectionService.
@@ -49,100 +55,56 @@ export interface UseCollectionsOptions {
    * Without it, the tenant the page acts on.
    */
   catalogue?: boolean;
+  /** CEL over the collections, applied on the server; "" for none. */
+  filter?: string;
+  /** False holds the read, as a dialog does until it opens. */
+  enabled?: boolean;
 }
+
+/** The collection a list row is, by its tenant and its id. */
+const isCollection =
+  (tenantId: string, collection: string) => (c: Collection) =>
+    c.tenantId === tenantId && c.collection === collection;
 
 export function useCollections({
   catalogue = false,
+  filter = "",
+  enabled = true,
 }: UseCollectionsOptions = {}) {
   const actingTenantId = useActingTenantId();
   const tenantParent =
     !catalogue && actingTenantId ? `tenants/${actingTenantId}` : "";
-  // `bumpRefresh` is deliberately absent from the mutation dep arrays below,
-  // and each one carries a disable comment saying so. The two hook rules want
-  // opposite things here: exhaustive-deps warns that it is missing, and adding
-  // it makes preserve-manual-memoization fail outright ("Could not preserve
-  // existing manual memoization") — an error, not a warning, and one that
-  // switches the React Compiler off for the whole callback.
-  //
-  // Omitting it is safe for the same reason the compiler can drop it: `bump`
-  // is a useCallback with no dependencies inside the provider, and the
-  // no-provider fallback is a module-level constant, so its identity never
-  // changes and there is no stale closure to capture. See
-  // context/RefreshContext.tsx. If that ever stops being true, the disables
-  // below are the places to revisit — and this comment is why they exist
-  // rather than being a blanket rule-off.
   const bumpRefresh = useBumpRefresh();
+  const qc = useQueryClient();
+  const optimistic = useOptimistic();
 
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pageTokens, setPageTokens] = useState<string[]>([""]);
+  const query = useQuery({
+    ...collectionsQuery(tenantParent, filter),
+    // A tenant page waits for its tenant; the catalogue's parent is "".
+    enabled: enabled && (catalogue || Boolean(actingTenantId)),
+    // While a new search loads, keep showing the last result of this scope:
+    // without it every keystroke emptied the table for a round trip. Never
+    // across scopes: another tenant's rows must not stand in for these.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[COLLECTIONS_PARENT_INDEX] === tenantParent
+        ? previous
+        : undefined,
+  });
+  const collections = useMemo(() => query.data ?? [], [query.data]);
+  const error = query.error
+    ? errorMessage(query.error, "Failed to fetch collections")
+    : null;
+  const { refetch: refetchQuery } = query;
+  const refetch = useCallback(() => void refetchQuery(), [refetchQuery]);
 
-  const fetchCollections = useCallback(
-    async (filter: string = "", pageToken: string = "") => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await collectionClient.listCollections({
-          parent: tenantParent,
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken },
-          filter,
-        });
-        setCollections(res.collections);
-        return {
-          collections: res.collections,
-          nextPageToken: res.page?.nextPageToken ?? "",
-        };
-      } catch (err) {
-        // Query contract (state-only): surface via `error`, never throw.
-        setError(errorMessage(err, "Failed to fetch collections"));
-        return { collections: [], nextPageToken: "" };
-      } finally {
-        setLoading(false);
-      }
+  // Every collections list reads again after a change: the server's answer
+  // may differ from the prediction, and other scopes hold the same rows.
+  const settle = useCallback(
+    (also: RefreshTopic[] = []) => {
+      void qc.invalidateQueries({ queryKey: COLLECTIONS_QUERY_KEY });
+      bumpRefresh(["collections", ...also]);
     },
-    [tenantParent],
-  );
-
-  /**
-   * Every collection, following nextPageToken to the end.
-   *
-   * Distinct from fetchCollections, which stays single-page on purpose: the
-   * /collections table has real pagination controls and a caller that wants
-   * page 3 must get page 3. The pickers want something else — the upload
-   * page's collection selector and the policy editor's target list are
-   * choosing from a set, and a set silently cut at one page hides the choice
-   * the operator came to make. That is the defect this closes, the same one
-   * the bucket picker had.
-   */
-  const fetchAllCollections = useCallback(
-    async (filter: string = "") => {
-      setLoading(true);
-      setError(null);
-      try {
-        let token = "";
-        let pages = 0;
-        const acc: Collection[] = [];
-        do {
-          const res = await collectionClient.listCollections({
-            parent: tenantParent,
-            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-            filter,
-          });
-          acc.push(...res.collections);
-          token = res.page?.nextPageToken ?? "";
-          pages += 1;
-        } while (token && pages < MAX_LIST_PAGES);
-        setCollections(acc);
-        return { collections: acc, nextPageToken: token };
-      } catch (err) {
-        setError(errorMessage(err, "Failed to fetch collections"));
-        return { collections: [], nextPageToken: "" };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [tenantParent],
+    [qc, bumpRefresh],
   );
 
   const createCollection = useCallback(
@@ -155,7 +117,6 @@ export function useCollections({
       publicRead: { cacheControl: string } | null = null,
     ): Promise<Collection> => {
       try {
-        setError(null);
         const tenantId = actingTenantId;
         const collectionResource = create(CollectionSchema, {
           name: collectionResourceName(tenantId, collection),
@@ -180,59 +141,49 @@ export function useCollections({
           collection,
           collectionResource,
         });
-        setCollections((prev) => [...prev, created]);
-        bumpRefresh("collections");
+        // The server routes it to a bucket: nothing to predict.
+        settle();
         return created;
       } catch (err) {
         // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
-    [tenantParent, actingTenantId],
+    [tenantParent, actingTenantId, settle],
   );
 
   const deleteCollection = useCallback(
     async (
       collection: string,
       resourceVersion: string = "",
-      // Waives the OCC guard, nothing more. The server refuses a collection
-      // that still holds objects whatever this says — that is a foreign key,
-      // not a policy.
       skipVersionCheck: boolean = false,
-      // The Collection's tenant, where a list spans tenants; the tenant the
-      // page acts on otherwise.
       tenant: string = actingTenantId,
     ): Promise<void> => {
+      // Mutation contract (throw-only): caller surfaces via errorMessage().
       try {
-        setError(null);
-        const tenantId = tenant;
-        await collectionClient.deleteCollection({
-          name: collectionResourceName(tenantId, collection),
-          resourceVersion,
-          skipVersionCheck,
-        });
-        setCollections((prev) =>
-          prev.filter(
-            (b) => !(b.collection === collection && b.tenantId === tenantId),
-          ),
+        await optimistic(
+          [
+            edit<Collection[]>(COLLECTIONS_QUERY_KEY, (list) =>
+              list.filter((c) => !isCollection(tenant, collection)(c)),
+            ),
+          ],
+          () =>
+            collectionClient.deleteCollection({
+              name: collectionResourceName(tenant, collection),
+              resourceVersion,
+              skipVersionCheck,
+            }),
         );
-        // Deleting a Collection may have removed (or trashed) every object
-        // beneath it — fan out to "objects" so any open list refetches.
-        bumpRefresh(["collections", "objects"]);
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
+      } finally {
+        settle(["objects"]);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
-    [actingTenantId],
+    [actingTenantId, optimistic, settle],
   );
 
   const getCollection = useCallback(
     async (collection: string): Promise<Collection | null> => {
       try {
-        setError(null);
         return await collectionClient.getCollection({
           name: collectionResourceName(actingTenantId, collection),
         });
@@ -251,40 +202,45 @@ export function useCollections({
       updatePaths: MaskField<typeof CollectionSchema>[],
       fields: { displayName?: string; cedarPolicy?: string } = {},
     ): Promise<Collection> => {
+      const tenantId = actingTenantId;
+      const collectionResource = create(CollectionSchema, {
+        name: collectionResourceName(tenantId, collection),
+        tenantId,
+        collection,
+        displayName: fields.displayName ?? "",
+        cedarPolicy: fields.cedarPolicy ?? "",
+        resourceVersion,
+      });
+      // Only the fields the mask names change; the rest stay as they are.
+      const changed = Object.fromEntries(
+        updatePaths.map((path) => [path, collectionResource[path]]),
+      );
       try {
-        setError(null);
-        const tenantId = actingTenantId;
-        const collectionResource = create(CollectionSchema, {
-          name: collectionResourceName(tenantId, collection),
-          tenantId,
-          collection,
-          displayName: fields.displayName ?? "",
-          cedarPolicy: fields.cedarPolicy ?? "",
-          resourceVersion,
-        });
-        const updated = await collectionClient.updateCollection({
-          name: collectionResourceName(tenantId, collection),
-          resourceVersion,
-          updateMask: fieldMask(CollectionSchema, ...updatePaths),
-          collectionResource,
-        });
-        setCollections((prev) =>
-          prev.map((b) => (b.collection === collection ? updated : b)),
+        return await optimistic(
+          [
+            edit<Collection[]>(COLLECTIONS_QUERY_KEY, (list) =>
+              list.map((c) =>
+                isCollection(tenantId, collection)(c)
+                  ? { ...c, ...changed }
+                  : c,
+              ),
+            ),
+          ],
+          () =>
+            collectionClient.updateCollection({
+              name: collectionResourceName(tenantId, collection),
+              resourceVersion,
+              updateMask: fieldMask(CollectionSchema, ...updatePaths),
+              collectionResource,
+            }),
         );
-        bumpRefresh("collections");
-        return updated;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
+      } finally {
+        settle();
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bumpRefresh is stable; see the note at its declaration
-    [actingTenantId],
+    [actingTenantId, optimistic, settle],
   );
 
-  // Stats RPC was removed during the proto refactor. Surface a stable shape
-  // returning zeros so consumers (collection detail page) keep compiling;
-  // the dashboard tile that used it is now blank rather than wrong.
   const getCollectionStats = useCallback(
     async (
       _collection: string,
@@ -302,16 +258,13 @@ export function useCollections({
 
   return {
     collections,
-    loading,
+    loading: query.isFetching,
     error,
-    fetchCollections,
-    fetchAllCollections,
+    refetch,
     createCollection,
     deleteCollection,
     getCollection,
     updateCollection,
     getCollectionStats,
-    pageTokens,
-    setPageTokens,
   };
 }

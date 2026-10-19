@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   fetchCollections: vi.fn((_filter?: string) => Promise.resolve()),
   collections: [] as Array<Record<string, unknown>>,
   options: undefined as unknown,
+  // Every filter the page asked the hook for, in order.
+  filters: [] as string[],
   createCollection: vi.fn(() => Promise.resolve()),
   deleteCollection: vi.fn(() => Promise.resolve()),
   fetchBuckets: vi.fn(() => Promise.resolve()),
@@ -26,14 +28,16 @@ vi.mock("next/navigation", async (importOriginal) => ({
   useRouter: () => ({ push: h.push }),
 }));
 vi.mock("@/hooks/useCollections", () => ({
-  useCollections: (options: unknown) => {
+  useCollections: (options: { filter?: string }) => {
     h.options = options;
+    if (h.filters.at(-1) !== options.filter)
+      h.filters.push(options.filter ?? "");
     return {
       collections: h.collections,
       nextPageToken: "",
       loading: false,
       error: h.error,
-      fetchAllCollections: h.fetchCollections,
+      refetch: h.fetchCollections,
       createCollection: h.createCollection,
       deleteCollection: h.deleteCollection,
     };
@@ -109,11 +113,6 @@ describe("CollectionsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("fetches collections on mount", () => {
-    render(<CollectionsPage />);
-    expect(h.fetchCollections).toHaveBeenCalled();
-  });
-
   it("opens the provision dialog from the header action", async () => {
     render(<CollectionsPage />);
     await userEvent.click(
@@ -145,14 +144,14 @@ describe("CollectionsPage search", () => {
 
   it("sends a CEL expression, not the raw box contents", () => {
     render(<CollectionsPage />);
-    h.fetchCollections.mockClear();
+    h.filters = [];
 
     typeInSearch("logs");
     act(() => {
       vi.advanceTimersByTime(400);
     });
 
-    const sent = h.fetchCollections.mock.calls.map((c) => c[0]);
+    const sent = h.filters;
     // The regression: "logs" reaching the plane as a filter.
     expect(sent).not.toContain("logs");
     expect(sent.at(-1)).toBe('search.contains("logs")');
@@ -160,7 +159,7 @@ describe("CollectionsPage search", () => {
 
   it("debounces instead of listing once per keystroke", () => {
     render(<CollectionsPage />);
-    h.fetchCollections.mockClear();
+    h.filters = [];
 
     typeInSearch("l");
     act(() => {
@@ -174,14 +173,13 @@ describe("CollectionsPage search", () => {
     act(() => {
       vi.advanceTimersByTime(100);
     });
-    expect(h.fetchCollections.mock.calls.filter((c) => c[0])).toHaveLength(0);
+    expect(h.filters.filter(Boolean)).toHaveLength(0);
 
     act(() => {
       vi.advanceTimersByTime(400);
     });
-    const filtered = h.fetchCollections.mock.calls.filter((c) => c[0]);
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0][0]).toBe('search.contains("log")');
+    const filtered = h.filters.filter(Boolean);
+    expect(filtered).toEqual(['search.contains("log")']);
   });
 });
 
@@ -220,7 +218,7 @@ describe("CollectionsPage catalogue", () => {
   // The platform's catalogue: every tenant's, not the session tenant's.
   it("reads every tenant's collections", () => {
     render(<CollectionsPage />);
-    expect(h.options).toEqual({ catalogue: true });
+    expect(h.options).toMatchObject({ catalogue: true });
   });
 
   // One name in two tenants is two collections, each its tenant's.

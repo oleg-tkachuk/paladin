@@ -28,12 +28,18 @@ vi.mock("../tenant-context", () => ({
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: { roles: ["platform.admin"], tenantId: "t-1" } }),
 }));
-vi.mock("@/hooks/useCollections", () => ({
-  useCollections: () => ({
-    createCollection: vi.fn(),
-    deleteCollection: h.deleteCollection,
-  }),
-}));
+// The list is the real hook's, read through the client mock above; the
+// changes are stubbed, so a test sees the arguments a delete is made with.
+vi.mock("@/hooks/useCollections", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/hooks/useCollections")>();
+  return {
+    useCollections: (options?: Parameters<typeof real.useCollections>[0]) => ({
+      ...real.useCollections(options),
+      createCollection: vi.fn(),
+      deleteCollection: h.deleteCollection,
+    }),
+  };
+});
 vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({
     backends: [],
