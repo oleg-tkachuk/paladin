@@ -3,7 +3,6 @@
 import { DEFAULT_OBJECT_KEY } from "@/constants";
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import Image from "next/image";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useObject } from "@/hooks/useObject";
 import { DocumentIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
@@ -22,7 +21,7 @@ import {
 import { ObjectTagsCard } from "@/components/features/ObjectTagsCard";
 import { ObjectLockCard } from "@/components/features/ObjectLockCard";
 import { ObjectSpecsPanel } from "@/components/features/ObjectSpecsPanel";
-import { T } from "@/lib/ui/typography";
+import { ObjectPreview } from "@/components/features/objects/ObjectPreview";
 
 interface ObjectDetailViewProps {
   collection: string;
@@ -163,7 +162,6 @@ export function ObjectDetailView({
   }
 
   const fileName = object.key.split("/").pop() || object.key;
-  const isImage = object.contentType?.startsWith("image/");
 
   return (
     <div className="space-y-6">
@@ -218,25 +216,8 @@ export function ObjectDetailView({
             <TabsContent value="object" className="space-y-4">
               {/* Preview */}
               <Card className="overflow-hidden p-0">
-                <div className="flex min-h-90 items-center justify-center bg-muted">
-                  {isImage && downloadUrl ? (
-                    <Image
-                      src={downloadUrl.url}
-                      alt={fileName}
-                      width={800}
-                      height={600}
-                      className="max-h-[450px] w-auto rounded-md object-contain"
-                      loading="eager"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <DocumentIcon className="size-12" />
-                      <p className={T.hint}>
-                        {object.contentType || "Binary object"}
-                      </p>
-                    </div>
-                  )}
+                <div className="flex h-112 items-center justify-center bg-muted">
+                  <ObjectPreview object={object} downloadUrl={downloadUrl} />
                 </div>
               </Card>
 

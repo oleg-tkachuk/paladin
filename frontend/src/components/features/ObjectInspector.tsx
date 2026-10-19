@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useObject } from "@/hooks/useObject";
+import { ObjectPreview } from "@/components/features/objects/ObjectPreview";
 import { useScope } from "@/context/ScopeContext";
 import {
   useTenantChangesBlocked,
@@ -76,7 +77,6 @@ export function ObjectInspector({
     }
   };
 
-  const isImage = object?.contentType?.startsWith("image/");
   const publicObject = Boolean(object?.publicUrl);
 
   return (
@@ -149,21 +149,7 @@ export function ObjectInspector({
             <>
               {/* Preview */}
               <div className="flex aspect-video items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
-                {isImage && downloadUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={downloadUrl.url}
-                    alt="Preview"
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <DocumentIcon className="size-10" />
-                    <span className={T.hint}>
-                      {object.contentType || "binary"}
-                    </span>
-                  </div>
-                )}
+                <ObjectPreview object={object} downloadUrl={downloadUrl} />
               </div>
 
               {/* Specs */}

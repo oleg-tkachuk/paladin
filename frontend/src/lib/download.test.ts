@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { attachmentDisposition } from "./download";
+import { attachmentDisposition, inlineDisposition } from "./download";
 
 describe("attachmentDisposition", () => {
   it.each([
@@ -24,5 +24,14 @@ describe("attachmentDisposition", () => {
     ["an empty key", "", "attachment"],
   ])("%s", (_, key, want) => {
     expect(attachmentDisposition(key)).toBe(want);
+  });
+});
+
+describe("inlineDisposition", () => {
+  it.each([
+    ["a name", "docs/report.pdf", "inline; filename*=UTF-8''report.pdf"],
+    ["an empty key", "", "inline"],
+  ])("%s", (_, key, want) => {
+    expect(inlineDisposition(key)).toBe(want);
   });
 });
