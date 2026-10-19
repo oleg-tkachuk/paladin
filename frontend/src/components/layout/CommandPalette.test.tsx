@@ -47,6 +47,20 @@ const h = vi.hoisted(() => ({
 }));
 export type { Rows };
 
+// The pinned and recent resources are tested with their hook.
+const links = vi.hoisted(() => ({
+  pinned: [] as { href: string; label: string; kind: string }[],
+  recent: [] as { href: string; label: string; kind: string }[],
+}));
+vi.mock("@/hooks/useResourceLinks", () => ({
+  useResourceLinks: () => ({
+    pinned: links.pinned,
+    recent: links.recent,
+    visit: () => {},
+    togglePin: async () => {},
+    isPinned: () => false,
+  }),
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: h.push }) }));
 vi.mock("@/context/ActionsContext", () => ({
   useActions: () => ({ actions: [] }),
@@ -300,5 +314,34 @@ describe("CommandPalette chord labels", () => {
     fireEvent.keyDown(document.body, { key: NAV_PREFIX });
     fireEvent.keyDown(document.body, { key: "b" });
     expect(h.push).not.toHaveBeenCalled();
+  });
+});
+
+// The resources the user pinned and opened lately lead the empty palette.
+describe("CommandPalette pinned and recent", () => {
+  afterEach(() => {
+    links.pinned = [];
+    links.recent = [];
+  });
+
+  it("lists the pinned, then the recent, before the pages", () => {
+    links.pinned = [{ href: "/tenants/acme", label: "Acme", kind: "Tenant" }];
+    links.recent = [
+      {
+        href: "/tenants/acme/collections/docs",
+        label: "docs",
+        kind: "Collection",
+      },
+    ];
+    render(<CommandPalette />);
+    act(() => {
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+    });
+    const titles = screen
+      .getAllByRole("button")
+      .map((b) => b.textContent ?? "")
+      .filter((t) => /Pinned|Recent/.test(t));
+    expect(titles[0]).toMatch(/Acme.*Pinned · Tenant/);
+    expect(titles[1]).toMatch(/docs.*Recent · Collection/);
   });
 });

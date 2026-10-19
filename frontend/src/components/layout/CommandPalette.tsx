@@ -1,5 +1,7 @@
 "use client";
 
+import { useResourceLinks } from "@/hooks/useResourceLinks";
+import { groupedLinks } from "@/lib/preferences/resourceLinks";
 import React, {
   useState,
   useEffect,
@@ -31,7 +33,7 @@ import {
   collectionClient,
   backendClient,
 } from "@/lib/connect/client";
-import { ArchiveBoxIcon, TagIcon } from "@heroicons/react/24/outline";
+import { ArchiveBoxIcon, StarIcon, TagIcon } from "@heroicons/react/24/outline";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
@@ -255,9 +257,25 @@ export function CommandPalette() {
   // Default-state list (palette open, no query): show the tenant
   // jumps first when a tenant is in scope, then the global static
   // navs. Searching merges both pools; see performSearch below.
+  // The pinned and recent resources lead the list, and are searched too.
+  const { pinned, recent } = useResourceLinks();
+  const linkNavs: SearchResult[] = useMemo(
+    () =>
+      groupedLinks(pinned, recent).map(({ link, group }) => ({
+        id: `${group}-${link.href}`,
+        type: "nav",
+        title: link.label,
+        subtitle: `${group === "pinned" ? "Pinned" : "Recent"} · ${link.kind}`,
+        icon: group === "pinned" ? StarIcon : ClockIcon,
+        href: link.href,
+        onSelect: () => router.push(link.href),
+      })),
+    [pinned, recent, router],
+  );
+
   const defaultNavs = useMemo(
-    () => [...tenantScopedNavs, ...staticNavs].filter(reachable),
-    [tenantScopedNavs, staticNavs, reachable],
+    () => [...linkNavs, ...tenantScopedNavs, ...staticNavs].filter(reachable),
+    [linkNavs, tenantScopedNavs, staticNavs, reachable],
   );
 
   const performSearch = useCallback(
@@ -294,6 +312,7 @@ export function CommandPalette() {
       // typing "buckets" while in tenant T see "Buckets in T" first).
       const lowerQuery = searchQuery.toLowerCase();
       const navResults: SearchResult[] = [
+        ...linkNavs,
         ...tenantScopedNavs,
         ...staticNavs,
       ].filter(
@@ -480,6 +499,7 @@ export function CommandPalette() {
     },
     [
       actions,
+      linkNavs,
       staticNavs,
       tenantScopedNavs,
       router,

@@ -2,6 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+// The pinned and recent resources are tested with their hook.
+vi.mock("@/hooks/useResourceLinks", () => ({
+  useResourceLinks: () => ({
+    pinned: [],
+    recent: [],
+    visit: () => {},
+    togglePin: async () => {},
+    isPinned: () => false,
+  }),
+}));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   usePathname: () => "/",

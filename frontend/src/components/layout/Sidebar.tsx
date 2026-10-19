@@ -1,5 +1,6 @@
 "use client";
 
+import { SidebarResourceLinks } from "@/components/layout/ResourceLinks";
 import { useScope } from "@/context/ScopeContext";
 import { sessionTenantLabel } from "@/lib/tenant/sessionTenantLabel";
 import { useState } from "react";
@@ -437,6 +438,12 @@ function SidebarBody({
       */}
       <ScrollArea className="min-h-0 flex-1 paladin-scroll">
         <nav className="px-3 py-4">
+          {!collapsed && (
+            <SidebarResourceLinks
+              onNavigate={onNavigate}
+              groupLabelClass={GROUP_LABEL_CLASS}
+            />
+          )}
           {groups.map((group, groupIdx) => (
             <div key={group.title} className="space-y-0.5">
               {!collapsed && (
