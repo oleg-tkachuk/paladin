@@ -13,11 +13,10 @@ import { useMemo, useState } from "react";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DetailPage } from "@/components/layout/templates/DetailPage";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { ListLoadError } from "@/components/ui/ListLoadError";
 import { RelativeTime } from "@/components/RelativeTime";
 import {
   PasswordResetResult,
@@ -86,88 +85,92 @@ export default function UserDetailPage() {
   useNameCrumbs(crumbNames);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={user ? user.displayName || user.subject : "User"}
-        description={user ? user.subject : name}
-        showDefaultActions={false}
-        actions={
-          <div className="flex items-center gap-2">
-            {user && (
-              <UserRowActions
-                user={user}
-                onChanged={refresh}
-                onDeleted={() => router.push(USERS_INDEX_HREF)}
-                onResetPassword={setResetTarget}
-              />
-            )}
-            <Button variant="outline" size="sm" asChild>
-              <Link href={USERS_INDEX_HREF}>
-                <ArrowLeftIcon className="size-4" />
-                All users
-              </Link>
-            </Button>
-          </div>
-        }
-      />
-
-      {query.isPending ? (
-        <Skeleton className="h-40 w-full" />
-      ) : query.error ? (
-        <Card className="p-6">
-          <ListLoadError
-            what="User"
-            reason={normalizeError(query.error).message}
-            onRetry={refresh}
-          />
-        </Card>
-      ) : user ? (
-        <>
-          <Card className="space-y-2 p-5">
-            <h2 className="text-sm font-semibold">Identity</h2>
-            <dl className="space-y-1.5">
-              <Fact label="Subject">
-                <span className="font-mono text-xs">{user.subject}</span>
-              </Fact>
-              <Fact label="User ID">
-                <CopyableId value={user.userId} label="user ID" />
-              </Fact>
-              <Fact label="Tenant">
-                <Link
-                  href={`/tenants/${encodeURIComponent(slug || user.tenantId)}`}
-                  className="font-mono text-xs hover:text-primary hover:underline"
-                >
-                  {slug || user.tenantId}
-                </Link>
-              </Fact>
-              <Fact label="State">
-                {user.disabled ? (
-                  <Badge variant="destructive">disabled</Badge>
-                ) : (
-                  <Badge variant="outline">active</Badge>
+    <>
+      <DetailPage
+        header={
+          <PageHeader
+            title={user ? user.displayName || user.subject : "User"}
+            description={user ? user.subject : name}
+            showDefaultActions={false}
+            actions={
+              <div className="flex items-center gap-2">
+                {user && (
+                  <UserRowActions
+                    user={user}
+                    onChanged={refresh}
+                    onDeleted={() => router.push(USERS_INDEX_HREF)}
+                    onResetPassword={setResetTarget}
+                  />
                 )}
-              </Fact>
-              <Fact label="Last login">
-                <RelativeTime ts={user.lastLoginAt} />
-              </Fact>
-              <Fact label="Created">
-                <RelativeTime ts={user.createdAt} />
-              </Fact>
-            </dl>
-          </Card>
-          <UserRolesCard user={user} onChanged={refresh} />
-          <UserScopesCard user={user} onChanged={refresh} />
-          <section className="space-y-2">
-            <h2 className={T.cardTitleProse}>Connected applications</h2>
-            <ConnectedApplications userName={name} own={false} />
-          </section>
-        </>
-      ) : null}
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={USERS_INDEX_HREF}>
+                    <ArrowLeftIcon className="size-4" />
+                    All users
+                  </Link>
+                </Button>
+              </div>
+            }
+          />
+        }
+        pending={query.isPending}
+        error={
+          query.error
+            ? {
+                what: "User",
+                reason: normalizeError(query.error).message,
+                onRetry: refresh,
+              }
+            : null
+        }
+      >
+        {user ? (
+          <>
+            <Card className="space-y-2 p-5">
+              <h2 className="text-sm font-semibold">Identity</h2>
+              <dl className="space-y-1.5">
+                <Fact label="Subject">
+                  <span className="font-mono text-xs">{user.subject}</span>
+                </Fact>
+                <Fact label="User ID">
+                  <CopyableId value={user.userId} label="user ID" />
+                </Fact>
+                <Fact label="Tenant">
+                  <Link
+                    href={`/tenants/${encodeURIComponent(slug || user.tenantId)}`}
+                    className="font-mono text-xs hover:text-primary hover:underline"
+                  >
+                    {slug || user.tenantId}
+                  </Link>
+                </Fact>
+                <Fact label="State">
+                  {user.disabled ? (
+                    <Badge variant="destructive">disabled</Badge>
+                  ) : (
+                    <Badge variant="outline">active</Badge>
+                  )}
+                </Fact>
+                <Fact label="Last login">
+                  <RelativeTime ts={user.lastLoginAt} />
+                </Fact>
+                <Fact label="Created">
+                  <RelativeTime ts={user.createdAt} />
+                </Fact>
+              </dl>
+            </Card>
+            <UserRolesCard user={user} onChanged={refresh} />
+            <UserScopesCard user={user} onChanged={refresh} />
+            <section className="space-y-2">
+              <h2 className={T.cardTitleProse}>Connected applications</h2>
+              <ConnectedApplications userName={name} own={false} />
+            </section>
+          </>
+        ) : null}
+      </DetailPage>
 
       <PasswordResetResult
         target={resetTarget}
         onClose={() => setResetTarget(null)}
       />
-    </div>
+    </>
   );
 }

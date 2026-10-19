@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircleIcon, KeyIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { SettingsPage } from "@/components/layout/templates/SettingsPage";
 import {
   Card,
   CardContent,
@@ -87,18 +88,19 @@ function browserLocale(): string {
 
 export default function ProfilePage() {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Profile"
-        description="Your account, how the console shows things to you, and your password."
-        showDefaultActions={false}
-      />
-      <AccountCard />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <PreferencesCard />
-        <ChangePasswordCard />
-      </div>
-    </div>
+    <SettingsPage
+      header={
+        <PageHeader
+          title="Profile"
+          description="Your account, how the console shows things to you, and your password."
+          showDefaultActions={false}
+        />
+      }
+      summary={<AccountCard />}
+    >
+      <PreferencesCard />
+      <ChangePasswordCard />
+    </SettingsPage>
   );
 }
 
