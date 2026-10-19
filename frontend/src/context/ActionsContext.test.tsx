@@ -80,3 +80,34 @@ describe("usePageAction", () => {
     ).not.toThrow();
   });
 });
+
+// The objects page registers its Undo under one id after every bulk trash;
+// the registry kept the first and ignored the rest, so a second trash's Undo
+// restored the first batch.
+describe("registerAction", () => {
+  it("replaces an action registered again under the same id", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { result } = renderHook(() => useActions(), { wrapper });
+    act(() =>
+      result.current.registerAction({
+        id: "objects.bulk_restore_last",
+        label: "Undo: Restore Objects",
+        category: "operation",
+        perform: first,
+      }),
+    );
+    act(() =>
+      result.current.registerAction({
+        id: "objects.bulk_restore_last",
+        label: "Undo: Restore Objects",
+        category: "operation",
+        perform: second,
+      }),
+    );
+    expect(result.current.actions).toHaveLength(1);
+    await act(() => result.current.executeAction("objects.bulk_restore_last"));
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+});
