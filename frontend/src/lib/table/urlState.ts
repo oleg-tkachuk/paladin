@@ -11,6 +11,8 @@ export const TABLE_PARAMS = {
   sort: "sort",
   dir: "dir",
   filter: "filter",
+  /** The row a link points at: opened, highlighted and scrolled to. */
+  row: "id",
 } as const;
 
 export type TableParam = keyof typeof TABLE_PARAMS;

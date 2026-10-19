@@ -2,6 +2,9 @@
 
 import { SidebarResourceLinks } from "@/components/layout/ResourceLinks";
 import { useScope } from "@/context/ScopeContext";
+import { KeyChord } from "@/components/ui/KeyChord";
+import { useActingTenant } from "@/hooks/useActingTenant";
+import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
 import { sessionTenantLabel } from "@/lib/tenant/sessionTenantLabel";
 import { useState } from "react";
 import Link from "next/link";
@@ -368,6 +371,9 @@ function SidebarBody({
   // via replaceState.
   const tenantHandle = user?.tenantSlug || user?.tenantId || null;
   const { tenant } = useScope();
+  // The g-jump that lands on a row, named beside it; the tenant on screen
+  // decides where the scoped jumps go, as the handler does.
+  const jumpBase = tenantBasePath(useActingTenant());
   const sessionTenantName = sessionTenantLabel({
     displayName: tenant?.displayName,
     slug: user?.tenantSlug,
@@ -483,6 +489,7 @@ function SidebarBody({
                 if (href === null) return null;
                 const active = isCurrent(href);
                 const Icon = item.icon;
+                const chord = chordFor(href, jumpBase);
                 const link = (
                   <Link
                     key={item.name}
@@ -518,6 +525,12 @@ function SidebarBody({
                     {!collapsed && (
                       <>
                         <span className="truncate">{item.name}</span>
+                        {chord && (
+                          <KeyChord
+                            chord={chord}
+                            className="ml-auto hidden group-hover:flex group-focus-visible:flex"
+                          />
+                        )}
                       </>
                     )}
                   </Link>
@@ -526,7 +539,13 @@ function SidebarBody({
                 return collapsed ? (
                   <Tooltip key={item.name}>
                     <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right">{item.name}</TooltipContent>
+                    <TooltipContent
+                      side="right"
+                      className="flex items-center gap-2"
+                    >
+                      {item.name}
+                      {chord && <KeyChord chord={chord} />}
+                    </TooltipContent>
                   </Tooltip>
                 ) : (
                   link

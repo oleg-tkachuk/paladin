@@ -100,12 +100,19 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   );
 }
 
+/**
+ * Marks the row a link points at (useLinkedRow). The class below spells the
+ * attribute out, since Tailwind finds a class only as literal text; a test
+ * holds the two together.
+ */
+export const LINKED_ROW_ATTR = "data-linked";
+
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-linked:bg-primary/10 data-linked:shadow-[inset_2px_0_0_var(--primary)]",
         className,
       )}
       {...props}
