@@ -3,7 +3,6 @@
 // A bucket's overview: what it is, who owns it, and who it is shared with.
 // Its settings are the other tabs; what each tenant stores is Collections.
 
-import { useEffect } from "react";
 import Link from "next/link";
 import {
   ClockIcon,
@@ -28,10 +27,11 @@ const NONE = "—";
 
 export default function BucketOverviewPage() {
   const { bucket, owner, refetch } = useBucket();
-  const { tenants, error: tenantsError, fetchTenants } = useTenants();
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
+  const {
+    tenants,
+    error: tenantsError,
+    refetch: refetchTenants,
+  } = useTenants();
 
   const ruleCount = bucket.lifecycleRules.length;
   const enabledCount = bucket.lifecycleRules.filter((r) => r.enabled).length;
@@ -114,7 +114,7 @@ export default function BucketOverviewPage() {
         bucketName={bucket.name}
         ownerTenantId={bucket.ownerTenantId}
         tenants={tenants}
-        tenantsFailed={failedRead(tenantsError, fetchTenants)}
+        tenantsFailed={failedRead(tenantsError, refetchTenants)}
         onChanged={() => void refetch()}
       />
 

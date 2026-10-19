@@ -102,7 +102,7 @@ export default function PoliciesPage() {
 
   const {
     tenants,
-    fetchTenants,
+    refetch: refetchTenants,
     loading: tenantsLoading,
     error: tenantsError,
   } = useTenants();
@@ -121,9 +121,6 @@ export default function PoliciesPage() {
     // while the scope picks one.
   } = useCollections({ catalogue: true, enabled: scope === "collection" });
 
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
   useEffect(() => {
     if (scope === "bucket") void fetchBuckets();
   }, [scope, fetchBuckets]);
@@ -388,7 +385,7 @@ export default function PoliciesPage() {
   // and stayed disabled, which reads as nothing to attach a policy to.
   const targetFailed =
     scope === "tenant"
-      ? failedRead(tenantsError, fetchTenants)
+      ? failedRead(tenantsError, refetchTenants)
       : scope === "bucket"
         ? failedRead(bucketsError, fetchBuckets)
         : failedRead(collectionsError, refetchCollections);

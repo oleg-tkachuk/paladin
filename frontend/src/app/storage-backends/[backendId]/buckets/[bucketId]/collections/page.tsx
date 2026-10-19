@@ -4,7 +4,7 @@
 // the owner, or a tenant it granted the bucket — and those Collections, each
 // linking to its page in its tenant's workspace.
 
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -64,18 +64,13 @@ interface TenantCollections {
 
 export default function BucketCollectionsPage() {
   const { bucket } = useBucket();
-  const { tenants, fetchTenants } = useTenants();
+  const { tenants } = useTenants();
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   const { sort, toggleSort } = useTableSort<CollectionColumn>(undefined, {
     url: PAGE_TABLE,
     columns: SORT_COLUMNS,
   });
   const sortProps = { current: sort, onSort: toggleSort };
-
-  // useTenants has no auto-fetch; names fall back to the tenant id.
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
 
   // Narrowed server-side by the `bucket` field of ListCollectionsRequest
   // (platform.admin gated), so only this bucket's Collections are read.

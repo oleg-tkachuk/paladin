@@ -810,12 +810,13 @@ order they are being taken up.
 - **Status:** Aspirational.
 - **Reason:** the users' disable, rename, role change and delete and the
   event subscriptions' toggle and delete show at once and roll back on a
-  refusal, through `optimistically` in `lib/optimistic`. The tenants,
-  buckets, collections and storage backends lists are held in `useState` by
-  their hooks rather than in the query cache, so their changes still wait.
-- **Definition of Done:** those four lists read through the query cache, and
-  their predictable changes (a tenant's rename, a collection's delete) take
-  `optimistically` with a test of the rollback; more detail pages read
+  refusal, through `optimistically` in `lib/optimistic`, and so do the
+  tenants' rename, trash, restore and purge, read through the query cache
+  (`lib/queries/tenants`). The buckets, collections and storage backends
+  lists are still held in `useState` by their hooks, so their changes wait.
+- **Definition of Done:** those three lists read through the query cache,
+  and their predictable changes (a collection's delete, a backend's drain)
+  take `optimistically` with a test of the rollback; more detail pages read
   through `lib/queries/details` so their rows can warm them.
 - **Blockers:** none.
 

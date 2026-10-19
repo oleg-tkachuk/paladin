@@ -55,7 +55,6 @@ const TRASH_SEARCH = (t: Tenant) => [t.displayName, t.slug, t.tenantId];
 
 import { HelpTip } from "@/components/ui/HelpTip";
 import { Fragment, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import {
   ArchiveBoxIcon,
@@ -107,11 +106,17 @@ import { TableScope } from "@/components/ui/TableScope";
 const TABLE_ID = "trash";
 
 export default function TrashPage() {
-  // `error` is the hook's query-error state (set by fetchTenants on failure);
-  // the contract makes fetchTenants state-only, so we read it here instead of
-  // catching a throw. restoreTenant/purgeTenant are mutations (throw-only) and
-  // surface via toasts below.
-  const { fetchTenants, restoreTenant, purgeTenant, error } = useTenants();
+  // The trash, as its own cached list. Restore and purge take the row out at
+  // once and put it back when refused (useTenants); they throw, and the page
+  // reports the refusal.
+  const {
+    tenants: trashedTenants,
+    loading,
+    error,
+    fetchedAt,
+    restoreTenant,
+    purgeTenant,
+  } = useTenants("trashed");
   const [busyId, setBusyId] = useState<string | null>(null);
   // The action awaiting the operator's confirmation. Both restore and purge
   // are asked first: either one changes which tenants exist.
@@ -125,23 +130,12 @@ export default function TrashPage() {
   );
   const { showNotification } = useNotification();
 
-  // only_trashed=true → exclusively soft-deleted rows. We read the RETURN
-  // value of fetchTenants rather than the hook's shared `tenants` (which
-  // would conflict with the /tenants page when both are mounted in the same
-  // tab session). fetchTenants is a query: on failure it sets the hook's
-  // `error` (rendered in the banner) and returns an empty page — no throw.
-  const trashQuery = useQuery({
-    queryKey: ["trashedTenants"],
-    queryFn: () =>
-      fetchTenants("", "", { onlyTrashed: true }).then((res) => res.tenants),
-  });
   const trashed = useMemo(
-    () => [...(trashQuery.data ?? [])].sort(byDeletedAt),
-    [trashQuery.data],
+    () => [...trashedTenants].sort(byDeletedAt),
+    [trashedTenants],
   );
   // Ages are read against the moment the list was fetched, so a row does not
   // change under the operator between refreshes.
-  const fetchedAt = trashQuery.dataUpdatedAt;
   const now = useMemo(() => new Date(fetchedAt || Date.now()), [fetchedAt]);
   const pastRetention = useMemo(
     () =>
@@ -178,15 +172,11 @@ export default function TrashPage() {
     tableId: TABLE_ID,
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
-  const loading = trashQuery.isFetching;
-  // Mutations refetch instead of optimistically splicing local state.
-  const reload = () => void trashQuery.refetch();
 
   const handleRestore = async (t: Tenant) => {
     setBusyId(t.tenantId);
     try {
       const restored = await restoreTenant(t.tenantId);
-      reload();
       showNotification({
         type: "success",
         title: "Tenant restored",
@@ -208,7 +198,6 @@ export default function TrashPage() {
     try {
       await purgeTenant(t.tenantId);
       setPurgeRefusals(({ [t.tenantId]: _, ...rest }) => rest);
-      reload();
       showNotification({
         type: "success",
         title: "Tenant purged",

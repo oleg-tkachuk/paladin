@@ -157,10 +157,7 @@ export default function TenantBucketsPage() {
 
   // Owners and grantees by name: every tenant a platform admin may list, and
   // this one, which a tenant's own admin can read when it may list no other.
-  const { tenants, fetchTenants } = useTenants();
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
+  const { tenants } = useTenants();
   const tenantNames = useMemo(
     () =>
       tenantLabelMap([

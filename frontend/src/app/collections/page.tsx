@@ -83,10 +83,7 @@ export default function CollectionsPage() {
     filter: searchFilter(debouncedSearch),
   });
   // The rows span tenants; each names its own.
-  const { tenants, fetchTenants } = useTenants();
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
+  const { tenants } = useTenants();
   const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
   const {
     backends: backendRows,

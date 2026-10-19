@@ -22,7 +22,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@/hooks/useTenants", () => ({
   useTenants: () => ({
     tenants: h.tenants,
-    fetchTenants: h.fetchTenants,
+    refetch: h.fetchTenants,
     loading: false,
     error: h.tenantsError,
   }),
@@ -89,11 +89,6 @@ describe("PoliciesPage", () => {
     expect(screen.getByRole("tab", { name: /Editor/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Effective/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Simulate/i })).toBeInTheDocument();
-  });
-
-  it("fetches the tenant list on mount", () => {
-    render(<PoliciesPage />);
-    expect(h.fetchTenants).toHaveBeenCalled();
   });
 
   it("shows the Cedar editor textarea and a disabled reload until a target is picked", () => {

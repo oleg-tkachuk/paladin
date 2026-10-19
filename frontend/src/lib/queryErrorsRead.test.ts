@@ -26,8 +26,6 @@ const ALLOWED: Record<string, string> = {
     "names the bucket's owner, shown by its id until read; a change the frozen owner refuses is refused by the server too",
   "app/users/[tenant]/[user]/page.tsx#tenantQuery":
     "names the tenant in the trail; a failed lookup shows its id, which the page already has",
-  "app/trash/page.tsx#trashQuery":
-    "its queryFn is useTenants().fetchTenants, whose error the page renders",
   "components/features/audit/ActorName.tsx#user":
     "a failed lookup shows the subject id, which is what it resolves",
   "components/SettingsSync.tsx#{data, isPending}":
