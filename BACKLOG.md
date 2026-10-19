@@ -798,17 +798,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Command palette: the create actions of the scope
-
-- **Status:** Aspirational.
-- **Reason:** the palette navigates, lists the pinned and recent resources
-  and carries the actions a page registers, but creating a tenant, a bucket
-  or a collection still starts from its page.
-- **Definition of Done:** palette entries for the create actions of the
-  current scope, opening the same dialogs the pages open, registered through
-  the actions registry rather than hard-coded in the palette.
-- **Blockers:** none.
-
 #### Keyboard navigation in tables
 
 - **Status:** Deferred (owner decision 2026-10-19: not a priority now).

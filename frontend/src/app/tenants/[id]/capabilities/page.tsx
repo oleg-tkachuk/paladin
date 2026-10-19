@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { HelpTip } from "@/components/ui/HelpTip";
 import { listAllPages } from "@/lib/listAllPages";
 import { API_PAGE_SIZE_MAX } from "@/constants";
@@ -267,6 +269,19 @@ export default function CapabilitiesPage() {
 
   // ── issue dialog ────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page does.
+  usePageAction(
+    !changesBlocked
+      ? {
+          id: CREATE_ACTION.capability,
+          label: "Issue capability",
+          description: "A capability for an agent or a user of this tenant",
+          icon: PlusIcon,
+          category: "create",
+          perform: () => setCreateOpen(true),
+        }
+      : null,
+  );
   // The Issue dialog owns its form + reveal state. The page keeps only the
   // open flag (above) + the two callbacks the dialog needs:
 

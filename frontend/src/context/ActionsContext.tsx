@@ -3,6 +3,8 @@
 import React, {
   createContext,
   useContext,
+  useEffect,
+  useRef,
   useState,
   useCallback,
   useMemo,
@@ -16,7 +18,7 @@ export interface Action {
   description?: string;
   icon?: React.ElementType;
   shortcut?: string;
-  category: "navigation" | "operation" | "system";
+  category: "navigation" | "operation" | "system" | "create";
   perform: () => Promise<void> | void;
   undo?: () => Promise<void> | void;
 }
@@ -128,6 +130,49 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
   return (
     <ActionsContext.Provider value={value}>{children}</ActionsContext.Provider>
   );
+}
+
+/** The registry when one is mounted; a page rendered alone has none. */
+function useActionsOptional() {
+  return useContext(ActionsContext);
+}
+
+/** What a page offers the palette while it is on screen. */
+export type PageAction = Omit<Action, "undo">;
+
+/**
+ * Offers `action` in the command palette while the calling page is mounted;
+ * null offers nothing, as for a create the page has disabled. Selecting it
+ * runs the page's latest `perform`, so it opens the same dialog the page's
+ * own button does. Without an ActionsProvider it does nothing.
+ */
+export function usePageAction(action: PageAction | null) {
+  const registry = useActionsOptional();
+  const perform = useRef(action?.perform);
+  useEffect(() => {
+    perform.current = action?.perform;
+  });
+  const register = registry?.registerAction;
+  const unregister = registry?.unregisterAction;
+  const id = action?.id;
+  const label = action?.label;
+  const description = action?.description;
+  const icon = action?.icon;
+  const shortcut = action?.shortcut;
+  const category = action?.category;
+  useEffect(() => {
+    if (!register || !unregister || !id || !label || !category) return;
+    register({
+      id,
+      label,
+      description,
+      icon,
+      shortcut,
+      category,
+      perform: () => perform.current?.(),
+    });
+    return () => unregister(id);
+  }, [register, unregister, id, label, description, icon, shortcut, category]);
 }
 
 export function useActions() {

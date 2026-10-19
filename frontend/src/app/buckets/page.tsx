@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -120,6 +122,15 @@ export default function BucketsPage() {
 
   // ─── create ───────────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page is on screen.
+  usePageAction({
+    id: CREATE_ACTION.bucket,
+    label: "New bucket",
+    description: "A bucket on a storage backend",
+    icon: PlusIcon,
+    category: "create",
+    perform: () => setCreateOpen(true),
+  });
 
   // ─── delete ───────────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
