@@ -81,7 +81,7 @@ export function ChangePasswordCard() {
   }
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="px-6">
         <CardTitle className="text-base">Password</CardTitle>
         <CardDescription>
@@ -91,7 +91,7 @@ export function ChangePasswordCard() {
       </CardHeader>
       <CardContent className="px-6">
         <form onSubmit={submit} className="space-y-4">
-          <div className="grid gap-x-8 gap-y-4 md:grid-cols-3">
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="current-password">Current password</Label>
               <PasswordInput
@@ -128,11 +128,11 @@ export function ChangePasswordCard() {
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t pt-4">
             <ul
               id="new-password-rules"
               aria-label="Password requirements"
-              className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm"
+              className="space-y-1.5 text-sm"
             >
               {rules.map((r) => (
                 <li

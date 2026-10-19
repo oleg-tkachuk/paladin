@@ -92,8 +92,10 @@ export default function ProfilePage() {
         showDefaultActions={false}
       />
       <AccountCard />
-      <PreferencesCard />
-      <ChangePasswordCard />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PreferencesCard />
+        <ChangePasswordCard />
+      </div>
     </div>
   );
 }
@@ -285,7 +287,7 @@ function PreferencesCard() {
   }, [settings]);
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="px-6">
         <CardTitle className="text-base">Preferences</CardTitle>
         <CardDescription>
@@ -310,7 +312,7 @@ function PreferencesCard() {
           </div>
         ) : (
           <>
-            <div className="grid gap-x-8 gap-y-6 md:grid-cols-3">
+            <div className="space-y-5">
               <div className="space-y-1.5">
                 <Label htmlFor="prof-theme">Theme</Label>
                 <SelectRoot value={theme} onValueChange={setTheme}>
