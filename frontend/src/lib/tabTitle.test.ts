@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { OperationSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 
-import { FAILED_MARK, titleWithActivity } from "./tabTitle";
+import { FAILED_MARK, activitySignal, titleWithActivity } from "./tabTitle";
 
 const op = (state: OperationState) => create(OperationSchema, { state });
 
@@ -32,5 +32,21 @@ describe("titleWithActivity", () => {
     ],
   ])("%s", (_, ops, want) => {
     expect(titleWithActivity("Users · Paladin", ops)).toBe(want);
+  });
+});
+
+describe("activitySignal", () => {
+  it.each([
+    ["no operations", [], "idle"],
+    ["only finished ones", [op(OperationState.SUCCEEDED)], "idle"],
+    ["one running", [op(OperationState.RUNNING)], "running"],
+    ["one queued", [op(OperationState.PENDING)], "running"],
+    [
+      "a failure beside running work",
+      [op(OperationState.RUNNING), op(OperationState.FAILED)],
+      "failed",
+    ],
+  ])("%s → %s", (_, ops, want) => {
+    expect(activitySignal(ops)).toBe(want);
   });
 });

@@ -8,6 +8,15 @@ import { isActive, operationStatus } from "./operations";
 /** Set before the title while one of the user's operations has failed. */
 export const FAILED_MARK = "⚠";
 
+/** What the tab's icon shows: a failure outranks work still running. */
+export type ActivitySignal = "idle" | "running" | "failed";
+
+export function activitySignal(ops: readonly Operation[]): ActivitySignal {
+  const statuses = ops.map(operationStatus);
+  if (statuses.includes("failed")) return "failed";
+  return statuses.some(isActive) ? "running" : "idle";
+}
+
 export function titleWithActivity(
   title: string,
   ops: readonly Operation[],
