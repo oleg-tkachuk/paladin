@@ -2,13 +2,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// IdentifierCopy pulls showNotification from the Notification context; the
-// component under test only needs it to be callable, so stub the hook.
-vi.mock("@/components/ui/Notification", () => ({
-  useNotification: () => ({ showNotification: vi.fn() }),
-}));
-
-import { IdentifierCopy } from "./IdentifierCopy";
+import { COPIED_NOTICE, IdentifierCopy } from "./IdentifierCopy";
+import { CopyableId } from "./CopyableId";
 
 const writeText = vi.fn().mockResolvedValue(undefined);
 
@@ -49,5 +44,26 @@ describe("IdentifierCopy", () => {
     expect(button).toHaveFocus();
     await userEvent.keyboard("{Enter}");
     expect(writeText).toHaveBeenCalledWith("cap_01");
+  });
+});
+
+// A copy is confirmed where it happened: the button names itself, and its
+// live region says so — no toast, and no notification context needed.
+describe("IdentifierCopy confirmation", () => {
+  it("is named, and says it copied", async () => {
+    render(<IdentifierCopy value="tnt_abc123" label="tenant ID" iconOnly />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Copy tenant ID" }),
+    );
+    expect(await screen.findByText(COPIED_NOTICE)).toBeInTheDocument();
+  });
+});
+
+describe("CopyableId", () => {
+  it("shows the value and copies it", async () => {
+    render(<CopyableId value="01a0f4a9" label="user ID" />);
+    expect(screen.getByText("01a0f4a9")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Copy user ID" }));
+    expect(writeText).toHaveBeenCalledWith("01a0f4a9");
   });
 });
