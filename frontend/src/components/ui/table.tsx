@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { labelCells } from "@/lib/table/cellLabels";
 import { useTableDensity } from "@/components/ui/TableScope";
 import type { Density } from "@/lib/preferences/tablePrefs";
 
@@ -13,9 +14,34 @@ const DENSITY_CLASS: Record<Density, string> = {
     "[&_[data-slot=table-cell]]:py-1 [&_[data-slot=table-head]]:h-8 text-xs",
 };
 
+/**
+ * Below a phone's width of table (the container's @md), a row is set out as
+ * a card: the header is hidden and each cell reads "column: value", from the
+ * data-label labelCells gives it. A cell the page hides at that width stays
+ * hidden, and a row spanning the table (an empty state) stays one block.
+ */
+const STACKED_CLASS = [
+  "@max-md:[&_thead]:hidden",
+  "@max-md:[&_tbody]:block @max-md:[&_tr]:block",
+  "@max-md:[&_tbody_tr]:mb-2 @max-md:[&_tbody_tr]:rounded-lg @max-md:[&_tbody_tr]:border",
+  "@max-md:[&_td:not(.hidden)]:flex @max-md:[&_td]:items-center @max-md:[&_td]:justify-between @max-md:[&_td]:gap-3 @max-md:[&_td]:whitespace-normal",
+  "@max-md:[&_td[data-label]]:before:content-[attr(data-label)] @max-md:[&_td]:before:text-xs @max-md:[&_td]:before:text-muted-foreground",
+].join(" ");
+
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   // Inside a TableScope, the user's density for that table.
   const density = useTableDensity();
+  // Each body cell learns its column's name, and learns it again as rows
+  // come and go, for the stacked layout above.
+  const ref = React.useRef<HTMLTableElement>(null);
+  React.useEffect(() => {
+    const table = ref.current;
+    if (!table) return;
+    labelCells(table);
+    const observer = new MutationObserver(() => labelCells(table));
+    observer.observe(table, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
   return (
     // A size container, so a page shows optional columns by the width the
     // table actually has (`hidden @2xl:table-cell`), not the viewport's: the
@@ -26,11 +52,13 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
       className="@container relative w-full overflow-x-auto"
     >
       <table
+        ref={ref}
         data-slot="table"
         data-density={density}
         className={cn(
           "w-full caption-bottom text-sm",
           DENSITY_CLASS[density],
+          STACKED_CLASS,
           className,
         )}
         {...props}

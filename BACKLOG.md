@@ -843,15 +843,6 @@ order they are being taken up.
   and the `EmptyState` as slots.
 - **Blockers:** none.
 
-#### Mobile layout for the main pages
-
-- **Status:** Aspirational.
-- **Reason:** below a tablet's width the tables scroll sideways.
-- **Definition of Done:** tables render as cards under the small breakpoint
-  on the tenant, bucket, collection, object, user and operation lists; the
-  shell's sidebar collapses to a sheet.
-- **Blockers:** none.
-
 #### Contextual help linking to the ADRs
 
 - **Status:** Aspirational.
