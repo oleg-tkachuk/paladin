@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 import { yamlConfig } from "./src/config";
-import {
-  OAUTH_CONSENT_PATH,
-  contentSecurityPolicy,
-} from "./src/lib/security/csp";
 
 // Bake the UI's own version + commit + build-time into the client
 // bundle. The dashboard renders these alongside the backend's
@@ -15,12 +11,12 @@ import {
 // the NEXT_PUBLIC_* vars below cover the UI half.
 const uiMeta = yamlConfig.runtimeConfig.public.uiMetadata;
 
-// Security headers applied to every response; the CSP is built in
-// src/lib/security/csp.ts.
+// Security headers applied to every response. The CSP is not among them: it
+// names the deployment's storage origins, so src/proxy.ts sets it when the
+// server runs (src/lib/security/csp.ts builds it).
 const isDev = process.env.NODE_ENV !== "production";
 
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: contentSecurityPolicy({ isDev }) },
   // HSTS only in production. On http://localhost dev a 2-year HSTS would
   // make the browser refuse plain-HTTP to localhost for everything on
   // that port — poisoning every developer's machine after one visit.
@@ -45,20 +41,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
-    return [
-      { source: "/:path*", headers: securityHeaders },
-      // Later wins for the same header: the consent page's policy without
-      // form-action (see contentSecurityPolicy).
-      {
-        source: OAUTH_CONSENT_PATH,
-        headers: [
-          {
-            key: "Content-Security-Policy",
-            value: contentSecurityPolicy({ isDev, consent: true }),
-          },
-        ],
-      },
-    ];
+    return [{ source: "/:path*", headers: securityHeaders }];
   },
   env: {
     // PALADIN_GRPC_URL used to be set here from the config file's

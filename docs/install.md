@@ -126,12 +126,23 @@ helm install paladin-core oci://ghcr.io/oleg-tkachuk/charts/paladin-core \
 
 ```bash
 helm install paladin-console oci://ghcr.io/oleg-tkachuk/charts/paladin-console \
-  --version <version> -n paladin
+  --version <version> -n paladin -f paladin-console.yaml
 ```
 
 The console requests `100m` CPU with a `2000m` limit — every browser RPC passes
 through its BFF, and a lower ceiling throttles it under load — and its probes
 allow 3s (readiness) and 5s (liveness) per answer.
+
+The browser uploads to and previews from the stores directly, so the console's
+Content-Security-Policy has to allow each backend's `public_endpoint`. Name
+them as origins in `storageOrigins`; one left out makes every upload through
+the console fail in the browser:
+
+```yaml
+# paladin-console.yaml
+storageOrigins:
+  - https://s3.example.com
+```
 
 The migrate and bootstrap Jobs run before any Deployment starts. The console
 finds the backend from its release name and namespace; if you named the backend
