@@ -7,6 +7,11 @@ import { cn } from "@/lib/utils";
  * Card component (`variant`). The `variant` prop is consumed locally —
  * it never reaches the DOM and avoids React unknown-attribute warnings.
  */
+/**
+ * overflow-clip, not -hidden: both cut the content to the rounded corners,
+ * but -hidden makes the card a scroll container, and a sticky header inside
+ * one sticks to the card, which never scrolls, instead of to the page.
+ */
 function Card({
   className,
   size = "default",
@@ -29,7 +34,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-4 overflow-clip rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         variant && variantClass[variant],
         className,
       )}

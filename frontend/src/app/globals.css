@@ -64,11 +64,22 @@
      page (a card, the active tab); floating hovers over it (a menu, a
      tooltip); overlay takes the screen (a dialog, a sheet). The shadow's
      colour is the palette's, so a dark ground gets a deeper one. */
-  --shadow-raised: 0 1px 2px 0 var(--elevation-shadow);
+  --shadow-raised:
+    0 1px 2px 0 var(--elevation-shadow),
+    inset 0 1px 0 0 var(--elevation-highlight);
   --shadow-floating:
     0 4px 12px -2px var(--elevation-shadow),
-    0 2px 4px -2px var(--elevation-shadow);
-  --shadow-overlay: 0 24px 48px -12px var(--elevation-shadow-strong);
+    0 2px 4px -2px var(--elevation-shadow),
+    inset 0 1px 0 0 var(--elevation-highlight);
+  --shadow-overlay:
+    0 24px 48px -12px var(--elevation-shadow-strong),
+    inset 0 1px 0 0 var(--elevation-highlight);
+
+  /* Line heights: the four the console sets, pinned (typeScale.test). */
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-relaxed: 1.625;
 }
 
 :root {
@@ -122,6 +133,7 @@
 
   --elevation-shadow: rgb(29 23 32 / 8%);
   --elevation-shadow-strong: rgb(29 23 32 / 22%);
+  --elevation-highlight: transparent;
 }
 
 .light {
@@ -142,7 +154,8 @@
   --foreground: oklch(0.955 0.006 230);
   --card: oklch(0.213 0.015 232);
   --card-foreground: oklch(0.955 0.006 230);
-  --popover: oklch(0.213 0.015 232);
+  /* A step above the card: what floats reads as nearer (see elevation). */
+  --popover: oklch(0.25 0.016 232);
   --popover-foreground: oklch(0.955 0.006 230);
 
   /* Brand: calm teal. Foreground is dark — teal is light enough to carry it. */
@@ -189,8 +202,9 @@
   --sidebar-border: oklch(1 0 0 / 6%);
   --sidebar-ring: oklch(0.74 0.1 194 / 55%);
 
-  --elevation-shadow: rgb(0 0 0 / 35%);
-  --elevation-shadow-strong: rgb(0 0 0 / 60%);
+  --elevation-shadow: rgb(0 0 0 / 20%);
+  --elevation-shadow-strong: rgb(0 0 0 / 45%);
+  --elevation-highlight: rgb(255 255 255 / 6%);
 }
 
 .ember {
@@ -204,7 +218,8 @@
   --foreground: #ece7f1;
   --card: #1e1a24;
   --card-foreground: #ece7f1;
-  --popover: #1e1a24;
+  /* A step above the card: what floats reads as nearer (see elevation). */
+  --popover: #26212e;
   --popover-foreground: #ece7f1;
 
   --primary: #ff7a3d;
@@ -243,8 +258,9 @@
   --sidebar-border: #322c3c;
   --sidebar-ring: #ff7a3d;
 
-  --elevation-shadow: rgb(0 0 0 / 35%);
-  --elevation-shadow-strong: rgb(0 0 0 / 60%);
+  --elevation-shadow: rgb(0 0 0 / 20%);
+  --elevation-shadow-strong: rgb(0 0 0 / 45%);
+  --elevation-highlight: rgb(255 255 255 / 6%);
 }
 
 @layer base {
@@ -288,4 +304,30 @@
   .paladin-scroll::-webkit-scrollbar-thumb:hover {
     background: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
   }
+}
+
+/* The chosen one of a set of option cards, or the selected entry of a list:
+   a border that fades from the accent, over the surface's own fill. */
+@utility border-active {
+  border-color: transparent;
+  background:
+    linear-gradient(
+        color-mix(
+          in oklab,
+          var(--primary) 10%,
+          var(--active-ground, var(--card))
+        ),
+        color-mix(
+          in oklab,
+          var(--primary) 10%,
+          var(--active-ground, var(--card))
+        )
+      )
+      padding-box,
+    linear-gradient(
+        135deg,
+        var(--primary),
+        color-mix(in oklab, var(--primary) 15%, transparent)
+      )
+      border-box;
 }

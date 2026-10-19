@@ -22,6 +22,8 @@ import {
   ROLE_DESCRIPTIONS,
 } from "@/constants/roles";
 import { T } from "@/lib/ui/typography";
+import { CHECKED_OPTION } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 interface UserForRoles {
   name: string;
@@ -108,7 +110,10 @@ export function UserRolesCard({
             <label
               key={role}
               htmlFor={id}
-              className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 has-[[data-state=checked]]:border-primary/50"
+              className={cn(
+                "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2",
+                CHECKED_OPTION,
+              )}
             >
               <Checkbox
                 id={id}
