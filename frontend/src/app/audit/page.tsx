@@ -47,6 +47,7 @@ import { RelayedBy } from "@/components/features/audit/RelayedBy";
 import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
+import { CapabilityHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "audit";
@@ -313,14 +314,22 @@ export default function AuditPage() {
                       // route — TenantLayout's resolver canonicalises
                       // UUID→slug on landing.
                       e.actorTenantId ? (
-                        <Link
-                          href={`/tenants/${encodeURIComponent(e.actorTenantId)}/capabilities?id=${e.capabilityId}`}
-                          className={cn(T.code, "text-primary hover:underline")}
-                          title={e.capabilityId}
-                          onClick={(ev) => ev.stopPropagation()}
+                        <CapabilityHoverCard
+                          id={e.capabilityId}
+                          tenantId={e.actorTenantId}
                         >
-                          {e.capabilityId.slice(0, 8)}…
-                        </Link>
+                          <Link
+                            href={`/tenants/${encodeURIComponent(e.actorTenantId)}/capabilities?id=${e.capabilityId}`}
+                            className={cn(
+                              T.code,
+                              "text-primary hover:underline",
+                            )}
+                            title={e.capabilityId}
+                            onClick={(ev) => ev.stopPropagation()}
+                          >
+                            {e.capabilityId.slice(0, 8)}…
+                          </Link>
+                        </CapabilityHoverCard>
                       ) : (
                         // No actor_tenant_id (system action): show
                         // the id as text so the column still

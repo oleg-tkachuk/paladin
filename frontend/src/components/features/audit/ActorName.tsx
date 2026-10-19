@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { userClient } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { isUuid } from "@/lib/resources/tenant-resolve";
+import { UserHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
 /** How long a resolved name is reused; users are renamed rarely. */
 export const ACTOR_NAME_STALE_MS = 5 * 60_000;
@@ -43,5 +44,13 @@ export function ActorName({
 
   if (!subject) return <>{fallback}</>;
   const name = user.data?.displayName || user.data?.subject;
-  return <span title={subject}>{name || subject}</span>;
+  const label = <span title={subject}>{name || subject}</span>;
+  // A person can be profiled; "system:bootstrap" and the like cannot.
+  return resolvable ? (
+    <UserHoverCard name={`tenants/${tenantId}/users/${subject}`}>
+      {label}
+    </UserHoverCard>
+  ) : (
+    label
+  );
 }

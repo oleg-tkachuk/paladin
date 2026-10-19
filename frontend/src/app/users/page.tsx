@@ -58,6 +58,7 @@ import {
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { TableScope } from "@/components/ui/TableScope";
+import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "users";
@@ -298,12 +299,14 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell className="hidden @lg:table-cell">
                     {tenant ? (
-                      <Link
-                        href={`/tenants/${encodeURIComponent(tenant.slug)}`}
-                        className="text-xs hover:text-primary hover:underline"
-                      >
-                        {tenant.slug}
-                      </Link>
+                      <TenantHoverCard handle={tenant.slug}>
+                        <Link
+                          href={`/tenants/${encodeURIComponent(tenant.slug)}`}
+                          className="text-xs hover:text-primary hover:underline"
+                        >
+                          {tenant.slug}
+                        </Link>
+                      </TenantHoverCard>
                     ) : (
                       <span className="font-mono text-sm text-muted-foreground">
                         {u.tenantId.slice(0, 8)}…

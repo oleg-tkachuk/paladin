@@ -829,18 +829,6 @@ order they are being taken up.
   `prefers-reduced-motion`.
 - **Blockers:** none — taken up only if asked for.
 
-#### Hover cards for tenants, buckets, users and capabilities
-
-- **Status:** Deferred (owner decision 2026-10-19: not now).
-- **Reason:** a tenant, bucket, user or capability named in a table shows an
-  id or a slug; what it is needs another page. (Identifiers copy in one
-  click, through `CopyableId`, confirmed on the button rather than by toast.)
-- **Definition of Done:** a hover card for each of the four with the
-  essentials and a link, reading through `lib/queries/details` so a card and
-  the detail page share one cached query; each card queries only once it
-  opens.
-- **Blockers:** none — taken up when it is asked for.
-
 #### CSV export of a list
 
 - **Status:** Deferred (owner decision 2026-10-19: not now).

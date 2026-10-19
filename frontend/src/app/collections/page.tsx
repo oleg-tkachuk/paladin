@@ -57,6 +57,7 @@ import { CollectionCreateDialog } from "@/components/features/collections/Collec
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
+import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "collections";
@@ -311,13 +312,15 @@ export default function CollectionsPage() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={tenantHref(ok.tenantId)}
-                    title={ok.tenantId}
-                    className="block max-w-48 truncate text-sm hover:text-primary"
-                  >
-                    {tenantLabel(tenantNames, ok.tenantId)}
-                  </Link>
+                  <TenantHoverCard handle={ok.tenantId}>
+                    <Link
+                      href={tenantHref(ok.tenantId)}
+                      title={ok.tenantId}
+                      className="block max-w-48 truncate text-sm hover:text-primary"
+                    >
+                      {tenantLabel(tenantNames, ok.tenantId)}
+                    </Link>
+                  </TenantHoverCard>
                 </TableCell>
                 <TableCell className="hidden @xs:table-cell">
                   {ok.displayName || (
