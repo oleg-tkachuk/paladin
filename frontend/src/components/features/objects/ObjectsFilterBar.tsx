@@ -102,16 +102,31 @@ export function ObjectsFilterBar({
   const onTypeChange = (value: string | undefined) =>
     onFilterChange({ type: value });
   return (
-    <div className="flex flex-wrap items-center gap-4 bg-card/30 border border-border rounded-2xl p-4">
-      <div className="flex-1 min-w-60 relative group">
-        <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
-        <input
-          type="text"
-          placeholder="Search objects..."
-          className="w-full bg-foreground/5 border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:bg-foreground/[0.08] transition-all"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
+    <div className="flex flex-col gap-3 bg-card/30 border border-border rounded-2xl p-4">
+      {/* The refresh sits with the search, on the line every width keeps:
+          last in the wrapping filter row, it fell onto a line of its own. */}
+      <div className="flex items-center gap-2" data-testid="objects-search-row">
+        <div className="flex-1 min-w-0 relative group">
+          <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <input
+            type="text"
+            placeholder="Search objects..."
+            className="w-full bg-foreground/5 border border-border rounded-xl pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:bg-foreground/[0.08] transition-all"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => onRefresh()}
+          aria-label="Refresh the object list"
+          title="Refresh the object list"
+          className="shrink-0 p-2.5 text-muted-foreground hover:text-foreground bg-foreground/5 border border-border rounded-xl transition-colors"
+        >
+          <ArrowPathIcon
+            className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+          />
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -252,16 +267,6 @@ export function ObjectsFilterBar({
             ))}
           </Dropdown.Menu>
         </Dropdown>
-
-        <button
-          onClick={() => onRefresh()}
-          title="Refresh object list from backend"
-          className="p-2 text-muted-foreground hover:text-foreground bg-foreground/5 border border-border rounded-xl transition-colors"
-        >
-          <ArrowPathIcon
-            className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-          />
-        </button>
       </div>
     </div>
   );

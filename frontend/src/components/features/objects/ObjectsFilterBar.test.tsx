@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ObjectsFilterBar, type FilterState } from "./ObjectsFilterBar";
@@ -115,5 +115,21 @@ describe("ObjectsFilterBar status", () => {
       "Available",
       "Deleted",
     ]);
+  });
+});
+
+// The refresh sat last in the wrapping row of filters and fell onto a line
+// of its own; it belongs with the search, on the line every width keeps.
+describe("ObjectsFilterBar refresh", () => {
+  it("sits in the search row, named, and refreshes", async () => {
+    const props = bar();
+    const row = screen.getByTestId("objects-search-row");
+    expect(
+      within(row).getByPlaceholderText(/Search objects/),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Refresh the object list" }),
+    );
+    expect(props.onRefresh).toHaveBeenCalled();
   });
 });
