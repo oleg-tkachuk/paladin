@@ -18,6 +18,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 )
 
 // TestSQSSinkBatchDelivery_Wire pins the SendMessageBatch fan-in against a
@@ -31,9 +32,12 @@ func TestSQSSinkBatchDelivery_Wire(t *testing.T) {
 	}
 	ctx := context.Background()
 
+	if err := testimage.Ensure(ctx, testimage.ElasticMQ); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "softwaremill/elasticmq-native:1.6.11",
+			Image:        testimage.ElasticMQ,
 			ExposedPorts: []string{"9324/tcp"},
 			WaitingFor:   wait.ForListeningPort("9324/tcp").WithStartupTimeout(60 * time.Second),
 		},
