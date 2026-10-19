@@ -25,7 +25,7 @@ import {
   ClockIcon,
   QueueListIcon,
 } from "@heroicons/react/24/outline";
-import { useActions } from "@/context/ActionsContext";
+import { useActions, type Action } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
 import { useActingTenant } from "@/hooks/useActingTenant";
 import {
@@ -51,6 +51,22 @@ interface SearchResult {
   /** Where selecting it goes, so a route the principal cannot use is left out. */
   href?: string;
   onSelect: () => void;
+}
+
+/** Orders a page's create action ahead of its other actions. */
+const createFirst = (a: Action) => (a.category === "create" ? 0 : 1);
+
+/** An action a page registered, as a palette entry. */
+function actionResult(a: Action): SearchResult {
+  return {
+    id: `action-${a.id}`,
+    type: "action",
+    title: a.label,
+    subtitle: a.description,
+    icon: a.icon || CommandLineIcon,
+    shortcut: a.shortcut,
+    onSelect: () => a.perform(),
+  };
 }
 
 export function CommandPalette() {
@@ -274,9 +290,16 @@ export function CommandPalette() {
     [pinned, recent, router],
   );
 
+  // What the page on screen offers — its create action above all — leads the
+  // list: it is what the page was opened to do.
   const defaultNavs = useMemo(
-    () => [...linkNavs, ...tenantScopedNavs, ...staticNavs].filter(reachable),
-    [linkNavs, tenantScopedNavs, staticNavs, reachable],
+    () => [
+      ...[...actions]
+        .sort((a, b) => createFirst(a) - createFirst(b))
+        .map(actionResult),
+      ...[...linkNavs, ...tenantScopedNavs, ...staticNavs].filter(reachable),
+    ],
+    [actions, linkNavs, tenantScopedNavs, staticNavs, reachable],
   );
 
   const performSearch = useCallback(
@@ -297,15 +320,7 @@ export function CommandPalette() {
             (a.description &&
               a.description.toLowerCase().includes(searchQuery.toLowerCase())),
         )
-        .map((a) => ({
-          id: `action-${a.id}`,
-          type: "action",
-          title: a.label,
-          subtitle: a.description,
-          icon: a.icon || CommandLineIcon,
-          shortcut: a.shortcut,
-          onSelect: () => a.perform(),
-        }));
+        .map(actionResult);
 
       // Tenant-scoped jumps + global static navs both in the search
       // pool. Tenant-scoped entries naturally rank higher because

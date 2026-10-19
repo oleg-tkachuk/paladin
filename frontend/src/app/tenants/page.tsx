@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
@@ -85,6 +87,15 @@ export default function TenantsPage() {
   // live inside their respective Tenant*Dialog components; the page only holds
   // which one is open (set by the row menu / New tenant button).
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page is on screen.
+  usePageAction({
+    id: CREATE_ACTION.tenant,
+    label: "New tenant",
+    description: "A workspace with its own policy",
+    icon: PlusIcon,
+    category: "create",
+    perform: () => setCreateOpen(true),
+  });
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
 

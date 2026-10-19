@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   deleteCollection: vi.fn(),
   showNotification: vi.fn(),
   push: vi.fn(),
+  changesBlocked: null as string | null,
 }));
 
 // The delete notice opens a collection's trash through the router.
@@ -20,7 +21,7 @@ vi.mock("@/lib/connect/client", () => ({
   collectionClient: { listCollections: h.listCollections },
 }));
 vi.mock("../tenant-context", () => ({
-  useTenantChangesBlocked: () => null,
+  useTenantChangesBlocked: () => h.changesBlocked,
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
   useTenantOptional: () => ({ tenantId: "t-1" }),
 }));
@@ -50,6 +51,8 @@ import { create } from "@bufbuild/protobuf";
 
 import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
 import { PALADIN_ERROR_DOMAIN } from "@/hooks/errorContract";
+import { CREATE_ACTION } from "@/lib/paletteActions";
+import { renderWithActions } from "@/test/withActions";
 import TenantCollectionsPage from "./page";
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 
@@ -239,5 +242,27 @@ describe("TenantCollectionsPage delete refused", () => {
     expect(notice.action.label).toBe("Open its trash");
     notice.action.onClick();
     expect(h.push).toHaveBeenCalledWith("/tenants/t-1/collections/c1/trash");
+  });
+});
+
+// The palette offers the create only while the page's own button is enabled.
+describe("TenantCollectionsPage palette", () => {
+  it("offers New collection, opening the create dialog", async () => {
+    h.listCollections.mockResolvedValue({ collections: [] });
+    h.changesBlocked = null;
+    const view = renderWithActions(<TenantCollectionsPage />);
+    expect(view.actionIds()).toContain(CREATE_ACTION.tenantCollection);
+    await view.run(CREATE_ACTION.tenantCollection);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    view.unmount();
+  });
+
+  it("offers no create while the tenant's changes are blocked", () => {
+    h.listCollections.mockResolvedValue({ collections: [] });
+    h.changesBlocked = "The tenant is being deleted.";
+    const view = renderWithActions(<TenantCollectionsPage />);
+    expect(view.actionIds()).not.toContain(CREATE_ACTION.tenantCollection);
+    view.unmount();
+    h.changesBlocked = null;
   });
 });

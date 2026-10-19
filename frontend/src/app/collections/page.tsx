@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import { useRouter } from "next/navigation";
@@ -112,6 +114,15 @@ export default function CollectionsPage() {
 
   // ── create
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page is on screen.
+  usePageAction({
+    id: CREATE_ACTION.collection,
+    label: "New collection",
+    description: "A collection in your tenant",
+    icon: PlusIcon,
+    category: "create",
+    perform: () => setCreateOpen(true),
+  });
 
   // ── delete
   // The row as it was when Delete was chosen. Its resourceVersion is the OCC
