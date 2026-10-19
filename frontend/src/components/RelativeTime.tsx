@@ -1,7 +1,7 @@
 "use client";
 
 // RelativeTime — humanised "3 minutes ago" / "in 2 days" with tooltip
-// showing the absolute ISO string for precision. Used everywhere
+// showing the date it stands for (exactTime). Used everywhere
 // audit-y timestamps appear: audit log rows, activity timelines, file
 // modified-at columns. Replaces ad-hoc `formatDate(ts)` calls that
 // produced unscannable wall-of-ISO output.
@@ -13,7 +13,11 @@
 import React, { useEffect, useState } from "react";
 
 import { timestampToDate } from "@/lib/utils";
-import { DISPLAY_LOCALE, formatDateTime } from "@/lib/format/locale";
+import {
+  DISPLAY_LOCALE,
+  formatDateTime,
+  formatInstant,
+} from "@/lib/format/locale";
 
 type TimestampInput =
   | Date
@@ -81,6 +85,15 @@ export interface RelativeTimeProps {
   absolute?: boolean;
 }
 
+/**
+ * What the tooltip says: a relative time ("3 min ago") shows the date it
+ * stands for, as the console writes dates; an absolute one, already a date,
+ * shows the instant with its offset, to match against logs.
+ */
+export function exactTime(d: Date, absolute: boolean): string {
+  return absolute ? formatInstant(d) : formatDateTime(d);
+}
+
 export function RelativeTime({
   ts,
   refreshMs = 60_000,
@@ -120,7 +133,7 @@ export function RelativeTime({
   const iso = d.toISOString();
   const human = absolute ? formatDateTime(d) : relativeFormat(d, new Date());
   return (
-    <time dateTime={iso} title={iso} className={className}>
+    <time dateTime={iso} title={exactTime(d, absolute)} className={className}>
       {human}
     </time>
   );
