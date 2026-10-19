@@ -5,12 +5,7 @@ import { useEffect } from "react";
 import { useCrumbNames } from "@/context/CrumbNamesContext";
 import { useShell } from "@/context/ShellContext";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
-import {
-  applyFavicon,
-  badgedIconUrl,
-  dotColor,
-  originalIconHref,
-} from "@/lib/favicon";
+import { applyFavicon, badgedIconUrl, dotColor } from "@/lib/favicon";
 import { activitySignal, titleWithActivity } from "@/lib/tabTitle";
 
 import { pageTitle } from "./crumbs";
@@ -33,10 +28,8 @@ export function ShellPageTitle({ pathname }: { pathname: string }) {
       applyFavicon(null);
       return;
     }
-    const src = originalIconHref();
-    if (!src) return;
     let current = true;
-    badgedIconUrl(src, dotColor(signal))
+    badgedIconUrl(dotColor(signal))
       .then((url) => {
         if (current && url) applyFavicon(url);
       })

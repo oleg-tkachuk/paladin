@@ -2,13 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CONSOLE_ICON_HREF,
   DOT_TOKEN,
   FAVICON_SIZE_PX,
-  ORIGINAL_HREF_ATTR,
   applyFavicon,
   dotColor,
   drawBadge,
-  originalIconHref,
 } from "./favicon";
 
 const OWN = "/favicon.ico?v1";
@@ -27,34 +26,25 @@ afterEach(() => {
 });
 
 describe("applyFavicon", () => {
-  it("points every icon link at the badge, keeping each one's own", () => {
+  it("points every icon link at the badge", () => {
     const links = icons(OWN, "/icon.png");
     applyFavicon(BADGED);
     expect(links.map((l) => l.getAttribute("href"))).toEqual([BADGED, BADGED]);
-    expect(links.map((l) => l.getAttribute(ORIGINAL_HREF_ATTR))).toEqual([
-      OWN,
-      "/icon.png",
+  });
+
+  it("puts the console's own icon back", () => {
+    const links = icons(OWN, "/icon.png");
+    applyFavicon(BADGED);
+    applyFavicon(null);
+    expect(links.map((l) => l.getAttribute("href"))).toEqual([
+      CONSOLE_ICON_HREF,
+      CONSOLE_ICON_HREF,
     ]);
   });
 
-  it("keeps the first own href across rewrites, and restores it", () => {
-    const [link] = icons(OWN);
+  it("touches nothing on a page that declares no icon", () => {
     applyFavicon(BADGED);
-    applyFavicon("data:image/png;base64,BBBB");
-    expect(originalIconHref()).toBe(OWN);
-    applyFavicon(null);
-    expect(link.getAttribute("href")).toBe(OWN);
-    expect(link.hasAttribute(ORIGINAL_HREF_ATTR)).toBe(false);
-  });
-
-  it("leaves an icon it never rewrote alone on restore", () => {
-    const [link] = icons(OWN);
-    applyFavicon(null);
-    expect(link.getAttribute("href")).toBe(OWN);
-  });
-
-  it("finds no own icon on a page that declares none", () => {
-    expect(originalIconHref()).toBeNull();
+    expect(document.head.innerHTML).toBe("");
   });
 });
 

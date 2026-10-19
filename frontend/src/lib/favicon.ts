@@ -16,8 +16,12 @@ export const DOT_TOKEN: Record<Exclude<ActivitySignal, "idle">, string> = {
   failed: "--destructive",
 };
 
-/** Marks the icon links the console has rewritten, holding their own href. */
-export const ORIGINAL_HREF_ATTR = "data-original-href";
+/**
+ * The console's own icon (app/favicon.ico). Drawn from and restored to this
+ * constant rather than to the href read off the page, so nothing the DOM
+ * holds is written back into it.
+ */
+export const CONSOLE_ICON_HREF = "/favicon.ico";
 
 const ICON_LINKS = 'link[rel~="icon"]';
 
@@ -63,41 +67,17 @@ export function dotColor(
   return getComputedStyle(root).getPropertyValue(DOT_TOKEN[signal]).trim();
 }
 
-/** The console's own icon, as the page declares it before any rewrite. */
-export function originalIconHref(doc: Document = document): string | null {
-  const link = doc.querySelector<HTMLLinkElement>(ICON_LINKS);
-  if (!link) return null;
-  return link.getAttribute(ORIGINAL_HREF_ATTR) ?? link.getAttribute("href");
-}
-
-/**
- * Points every icon link at `href`, or back at its own icon when `href` is
- * null. Each link keeps its own href aside the first time it is rewritten.
- */
+/** Points every icon link at `href`, or back at the console's own icon. */
 export function applyFavicon(href: string | null, doc: Document = document) {
   doc.querySelectorAll<HTMLLinkElement>(ICON_LINKS).forEach((link) => {
-    const own = link.getAttribute(ORIGINAL_HREF_ATTR);
-    if (href === null) {
-      if (own !== null) {
-        link.setAttribute("href", own);
-        link.removeAttribute(ORIGINAL_HREF_ATTR);
-      }
-      return;
-    }
-    if (own === null) {
-      link.setAttribute(ORIGINAL_HREF_ATTR, link.getAttribute("href") ?? "");
-    }
-    link.setAttribute("href", href);
+    link.setAttribute("href", href ?? CONSOLE_ICON_HREF);
   });
 }
 
-/** The icon at `src` with a dot of `color`, as a data URL. */
-export async function badgedIconUrl(
-  src: string,
-  color: string,
-): Promise<string | null> {
+/** The console's icon with a dot of `color`, as a data URL. */
+export async function badgedIconUrl(color: string): Promise<string | null> {
   const icon = new Image();
-  icon.src = src;
+  icon.src = CONSOLE_ICON_HREF;
   await icon.decode();
   const canvas = document.createElement("canvas");
   canvas.width = FAVICON_SIZE_PX;

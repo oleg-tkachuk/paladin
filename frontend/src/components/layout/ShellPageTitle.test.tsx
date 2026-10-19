@@ -11,7 +11,7 @@ vi.mock("@/context/ShellContext", () => ({
 }));
 
 const f = vi.hoisted(() => ({
-  badgedIconUrl: vi.fn(async (_src: string, color: string) => `data:${color}`),
+  badgedIconUrl: vi.fn(async (color: string) => `data:${color}`),
 }));
 vi.mock("@/lib/favicon", async (orig) => ({
   ...(await orig<typeof import("@/lib/favicon")>()),
@@ -19,9 +19,11 @@ vi.mock("@/lib/favicon", async (orig) => ({
   dotColor: (signal: string) => signal,
 }));
 
+import { CONSOLE_ICON_HREF } from "@/lib/favicon";
+
 import { ShellPageTitle } from "./ShellPageTitle";
 
-const OWN_ICON = "/favicon.ico";
+const OWN_ICON = CONSOLE_ICON_HREF;
 const iconHref = () =>
   document.querySelector('link[rel="icon"]')?.getAttribute("href");
 
@@ -43,7 +45,7 @@ describe("ShellPageTitle's icon", () => {
     h.ops = [create(OperationSchema, { state: OperationState.RUNNING })];
     const { rerender } = render(<ShellPageTitle pathname="/users" />);
     await waitFor(() => expect(iconHref()).toBe("data:running"));
-    expect(f.badgedIconUrl).toHaveBeenCalledWith(OWN_ICON, "running");
+    expect(f.badgedIconUrl).toHaveBeenCalledWith("running");
     h.ops = [create(OperationSchema, { state: OperationState.SUCCEEDED })];
     rerender(<ShellPageTitle pathname="/users" />);
     await waitFor(() => expect(iconHref()).toBe(OWN_ICON));
@@ -56,7 +58,7 @@ describe("ShellPageTitle's icon", () => {
     h.ops = [create(OperationSchema, { state: OperationState.FAILED })];
     rerender(<ShellPageTitle pathname="/users" />);
     await waitFor(() => expect(iconHref()).toBe("data:failed"));
-    expect(f.badgedIconUrl).toHaveBeenLastCalledWith(OWN_ICON, "failed");
+    expect(f.badgedIconUrl).toHaveBeenLastCalledWith("failed");
   });
 
   it("leaves the plain icon while nothing runs", async () => {
