@@ -1,92 +1,177 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-const h = vi.hoisted(() => ({ getMine: vi.fn() }));
-vi.mock("@/lib/connect/client", () => ({
-  userSettingsClient: { getMine: h.getMine, updateMine: vi.fn() },
+import { render, screen, waitFor, within } from "@/test/utils";
+
+const h = vi.hoisted(() => ({
+  getMine: vi.fn(),
+  updateMine: vi.fn(),
+  user: {
+    userId: "0199-user-id",
+    subject: "admin",
+    displayName: "Ada Admin",
+    tenantId: "t-1",
+    tenantSlug: "acme",
+    roles: ["platform.admin"] as string[],
+  },
 }));
-vi.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({
-    user: { subject: "admin", tenantId: "t-1", roles: ["platform.admin"] },
-  }),
+vi.mock("@/lib/connect/client", () => ({
+  userSettingsClient: { getMine: h.getMine, updateMine: h.updateMine },
+}));
+vi.mock("@/context/AuthContext", () => ({ useAuth: () => ({ user: h.user }) }));
+vi.mock("@/context/ScopeContext", () => ({
+  useScope: () => ({ tenant: { displayName: "Acme Corp" } }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: vi.fn() }),
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
-vi.mock("@/components/features/OAuthGrantsCard", () => ({
-  OAuthGrantsCard: () => null,
-}));
 vi.mock("@/components/features/ChangePasswordCard", () => ({
   ChangePasswordCard: () => null,
 }));
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
 import { setDisplayTimeZone } from "@/lib/format/locale";
 import { USER_SETTINGS_QUERY_KEY } from "@/lib/theme";
 import ProfilePage from "./page";
-import { SETTINGS_APPLIED_NOTE } from "./_constants";
+import { LOCALE_NOT_APPLIED_NOTE } from "./_constants";
 
-const DEFAULTS = {
-  timezone: "",
-  locale: "",
-  theme: "",
-  resourceVersion: "0",
+const DEFAULTS = { timezone: "", locale: "", theme: "", resourceVersion: "0" };
+const SAVED = {
+  timezone: "Europe/London",
+  locale: "en-GB",
+  theme: "dark",
+  resourceVersion: "2",
+  updatedAt: { seconds: BigInt(Date.parse("2026-09-30T10:00:00Z") / 1000) },
 };
 
-describe("ProfilePage sync footer", () => {
-  beforeEach(() => {
-    h.getMine.mockReset();
-  });
+beforeEach(() => {
+  h.getMine.mockReset().mockResolvedValue(SAVED);
+  h.updateMine.mockReset().mockResolvedValue({});
+  h.user.roles = ["platform.admin"];
+});
 
-  it("does not report a sync time for settings that were never saved", async () => {
-    h.getMine.mockResolvedValue(DEFAULTS);
+const save = () => screen.getByRole("button", { name: "Save changes" });
+
+describe("ProfilePage account", () => {
+  it("names the user, their tenant and what each role is for", async () => {
+    h.user.roles = ["platform.admin", "platform.capability-issuer"];
     render(<ProfilePage />);
-
-    expect(
-      await screen.findByText("Defaults — not saved yet."),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Last synced/)).toBeNull();
-  });
-
-  it("reports when saved settings were last synced", async () => {
-    h.getMine.mockResolvedValue({
-      ...DEFAULTS,
-      resourceVersion: "3",
-      updatedAt: { seconds: BigInt(Date.parse("2026-09-30T10:00:00Z") / 1000) },
-    });
-    setDisplayTimeZone("UTC");
-    render(<ProfilePage />);
-
-    expect(await screen.findByText(/Last synced/)).toBeInTheDocument();
-    expect(screen.getByText("2026-09-30 10:00:00 +00:00")).toHaveAttribute(
-      "title",
-      "2026-09-30 10:00:00Z",
+    expect(screen.getByText("Ada Admin")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Acme Corp" })).toHaveAttribute(
+      "href",
+      "/tenants/acme",
     );
-    setDisplayTimeZone(undefined);
+    expect(screen.getByText("platform.capability-issuer")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Issues capabilities for any tenant/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0199-user-id")).toBeInTheDocument();
+  });
+
+  it("names a tenant.user's tenant without a link it could not open", () => {
+    h.user.roles = ["tenant.user"];
+    render(<ProfilePage />);
+    expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Acme Corp" })).toBeNull();
   });
 });
 
 describe("ProfilePage preferences", () => {
-  beforeEach(() => {
-    h.getMine.mockReset();
-  });
+  it("says when the settings were saved, or that they never were", async () => {
+    setDisplayTimeZone("UTC");
+    const { unmount } = render(<ProfilePage />);
+    expect(
+      await screen.findByText("2026-09-30 10:00:00 +00:00"),
+    ).toBeInTheDocument();
+    unmount();
+    setDisplayTimeZone(undefined);
 
-  // The console applies the theme only; the card says which settings take
-  // effect rather than presenting all three as if they did.
-  it("says which settings the console applies", async () => {
     h.getMine.mockResolvedValue(DEFAULTS);
     render(<ProfilePage />);
-    expect(await screen.findByText(SETTINGS_APPLIED_NOTE)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Not saved yet — these are the defaults."),
+    ).toBeInTheDocument();
   });
-});
 
-// A failed read showed the defaults and "not saved yet", with Save ready to
-// write those defaults over the real settings.
-describe("ProfilePage failed read", () => {
-  beforeEach(() => {
-    h.getMine.mockReset();
+  it("says plainly that the console does not apply the locale", async () => {
+    render(<ProfilePage />);
+    expect(
+      await screen.findByText(LOCALE_NOT_APPLIED_NOTE),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Timezone", "Europe/London"],
+    ["Locale", "uk-UA"],
+  ])("%s is one field, with suggestions", async (label, suggestion) => {
+    render(<ProfilePage />);
+    const field = await screen.findByLabelText(label);
+    const options = [
+      ...document.querySelectorAll(
+        `datalist#${field.getAttribute("list")} option`,
+      ),
+    ].map((o) => o.getAttribute("value"));
+    expect(options).toContain(suggestion);
+  });
+
+  it("shows the time in the chosen zone, and refuses one it does not know", async () => {
+    render(<ProfilePage />);
+    const tz = await screen.findByLabelText("Timezone");
+    expect(screen.getByText(/^Now there: \d\d:\d\d · GMT/)).toBeInTheDocument();
+    await userEvent.clear(tz);
+    await userEvent.type(tz, "Mars/Olympus");
+    expect(tz).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByText("Not a time zone this browser knows."),
+    ).toBeInTheDocument();
+    expect(save()).toBeDisabled();
+  });
+
+  it("requires a time zone and a locale, as the server does", async () => {
+    render(<ProfilePage />);
+    await userEvent.clear(await screen.findByLabelText("Locale"));
+    expect(screen.getByText("Required.")).toBeInTheDocument();
+    expect(save()).toBeDisabled();
+  });
+
+  it("shows how a locale writes numbers and dates", async () => {
+    render(<ProfilePage />);
+    const loc = await screen.findByLabelText("Locale");
+    await userEvent.clear(loc);
+    await userEvent.type(loc, "de-DE");
+    expect(screen.getByText(/^Writes 1\.234\.567,89/)).toBeInTheDocument();
+  });
+
+  it("fills a field from this browser", async () => {
+    render(<ProfilePage />);
+    const tz = await screen.findByLabelText("Timezone");
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await userEvent.clear(tz);
+    await userEvent.click(
+      screen.getByRole("button", { name: `Use this browser's (${detected})` }),
+    );
+    expect(tz).toHaveValue(detected);
+  });
+
+  it("saves a theme picked from the swatches", async () => {
+    render(<ProfilePage />);
+    const group = await screen.findByRole("radiogroup", { name: "Theme" });
+    expect(within(group).getByRole("radio", { name: "Dark" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await userEvent.click(within(group).getByRole("radio", { name: "Ember" }));
+    await userEvent.click(save());
+    await waitFor(() =>
+      expect(h.updateMine).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme: "ember",
+          timezone: "Europe/London",
+          locale: "en-GB",
+        }),
+      ),
+    );
   });
 
   it("says the preferences could not be loaded, and offers no Save", async () => {
@@ -95,58 +180,19 @@ describe("ProfilePage failed read", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Preferences could not be loaded/,
     );
-    expect(screen.queryByText("Defaults — not saved yet.")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Save/ })).toBeNull();
   });
-});
 
-// Each preference had a quick-pick select AND a full-width text input for the
-// same value, so "UTC" showed twice and the second copy spanned the card.
-describe("ProfilePage preference fields", () => {
-  beforeEach(() => {
-    h.getMine.mockReset();
-  });
-
-  it.each([
-    ["Timezone", "Europe/Kyiv"],
-    ["Locale", "uk-UA"],
-  ])("%s is one field, with suggestions", async (label, suggestion) => {
-    h.getMine.mockResolvedValue(DEFAULTS);
-    render(<ProfilePage />);
-    const field = await screen.findByLabelText(label);
-    expect(
-      screen.queryAllByLabelText(new RegExp(`^Common ${label}`, "i")),
-    ).toEqual([]);
-    const listId = field.getAttribute("list");
-    expect(listId).toBeTruthy();
-    const options = [
-      ...document.querySelectorAll(`datalist#${listId} option`),
-    ].map((o) => o.getAttribute("value"));
-    expect(options).toContain(suggestion);
-  });
-
-  // The server refuses an empty time zone; the hint used to promise a default.
-  it("does not offer an empty time zone", async () => {
-    h.getMine.mockResolvedValue(DEFAULTS);
-    render(<ProfilePage />);
-    await screen.findByLabelText("Timezone");
-    expect(screen.queryByText(/Empty = server default/)).toBeNull();
-  });
-});
-
-// The shell reads the same settings query on sign-in, so by the time this page
-// mounts the snapshot is usually cached already. The form must show it.
-describe("ProfilePage with settings already loaded", () => {
-  it("shows the saved values", async () => {
+  // The shell reads the same settings query on sign-in, so by the time this
+  // page mounts the snapshot is usually cached already. The form must show it.
+  it("shows settings already in the cache", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
     client.setQueryData(USER_SETTINGS_QUERY_KEY, {
-      ...DEFAULTS,
+      ...SAVED,
       timezone: "Asia/Tokyo",
       locale: "uk-UA",
-      theme: "light",
-      resourceVersion: "2",
     });
     render(
       <QueryClientProvider client={client}>

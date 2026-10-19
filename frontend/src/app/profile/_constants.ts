@@ -1,3 +1,4 @@
-// The preferences card's statement of which settings the console applies.
-export const SETTINGS_APPLIED_NOTE =
-  "The console applies your theme and time zone. Locale is saved for clients that read it; the console writes numbers and dates in one format for every operator, so a screen reads the same to a colleague.";
+// What the locale field says about the console: it saves the locale, and
+// does not apply it.
+export const LOCALE_NOT_APPLIED_NOTE =
+  "Saved for API clients and other apps. The console itself writes numbers and dates the same way for every operator, so a screen reads the same to a colleague.";
