@@ -14,6 +14,9 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DashboardWidgets } from "@/components/DashboardWidgets";
 import { DispatcherStatsCard } from "@/components/DispatcherStatsCard";
+import { FirstRunChecklist } from "@/components/dashboard/FirstRunChecklist";
+import { MyOperationsWidget } from "@/components/dashboard/MyOperationsWidget";
+import { QuotaAlertsWidget } from "@/components/dashboard/QuotaAlertsWidget";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,8 +145,16 @@ export default function DashboardPage() {
 
       {adminPlane ? (
         <>
+          <FirstRunChecklist />
+
           {/* ─── Attention widgets: recent activity, failed ops, budgets ── */}
           <DashboardWidgets />
+
+          {/* ─── Mine and the limits: my operations, quotas near their caps */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <MyOperationsWidget />
+            <QuotaAlertsWidget />
+          </div>
 
           {/* ─── Event-dispatcher backlog (SystemService.GetDispatcherStats) */}
           <DispatcherStatsCard />

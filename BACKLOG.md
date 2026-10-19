@@ -819,16 +819,18 @@ order they are being taken up.
   text field has focus.
 - **Blockers:** none — taken up when it is asked for.
 
-#### Dashboard: my operations, tenants near their limits, health, first run
+#### Dashboard: a trend for the tenants nearest their limits
 
-- **Status:** Aspirational.
-- **Reason:** the dashboard shows platform totals; it does not show what needs
-  the operator's attention.
-- **Definition of Done:** the user's recent operations; tenants nearest their
-  quota or budget with a sparkline each; one line of backend health; a
-  checklist for an empty installation (backend, tenant, bucket, first token).
-- **Blockers:** tenants near budget needs a cross-tenant read; see "Billing
-  has no view across tenants".
+- **Status:** Blocked.
+- **Reason:** the dashboard lists the user's operations, the tenants near
+  their budget (TenantBudgetService.Summarize), how many quotas sit at or
+  near their caps and a first-run checklist, but not how any of them got
+  there: nothing serves a usage or spend series across tenants.
+- **Definition of Done:** a sparkline beside each tenant near its budget or
+  quota, from a cross-tenant series the API serves, not assembled in the
+  browser tenant by tenant.
+- **Blockers:** the cross-tenant read limes is growing — see "Billing has no
+  view across tenants".
 
 #### Page templates: list, detail, settings
 

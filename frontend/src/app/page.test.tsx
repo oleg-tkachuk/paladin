@@ -2,6 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@/test/utils";
 
 const h = vi.hoisted(() => ({ roles: ["platform.admin"] as string[] }));
+// The new dashboard cards are tested on their own.
+vi.mock("@/components/dashboard/FirstRunChecklist", () => ({
+  FirstRunChecklist: () => null,
+}));
+vi.mock("@/components/dashboard/MyOperationsWidget", () => ({
+  MyOperationsWidget: () => <div data-testid="my-operations" />,
+}));
+vi.mock("@/components/dashboard/QuotaAlertsWidget", () => ({
+  QuotaAlertsWidget: () => <div data-testid="quota-alerts" />,
+}));
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: { subject: "someone", roles: h.roles } }),
 }));
@@ -31,6 +41,8 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
     expect(screen.getByText("admin widgets")).toBeInTheDocument();
     expect(screen.getByText("dispatcher")).toBeInTheDocument();
+    expect(screen.getByTestId("my-operations")).toBeInTheDocument();
+    expect(screen.getByTestId("quota-alerts")).toBeInTheDocument();
     expect(screen.queryByText(/holds no admin role/)).toBeNull();
   });
 
@@ -42,6 +54,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText(/holds no admin role/)).toBeInTheDocument();
     expect(screen.queryByText("admin widgets")).toBeNull();
     expect(screen.queryByText("dispatcher")).toBeNull();
+    expect(screen.queryByTestId("quota-alerts")).toBeNull();
     expect(screen.queryByRole("link", { name: /upload/i })).toBeNull();
   });
 });

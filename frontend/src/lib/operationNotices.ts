@@ -4,13 +4,12 @@
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
 import {
+  isActive,
   operationLabel,
   operationStatus,
   outcomeLine,
   type OpStatus,
 } from "./operations";
-
-const ACTIVE: ReadonlySet<OpStatus> = new Set(["pending", "running"]);
 
 /** Each operation's status, by name, as one look at the list saw it. */
 export type StatusByName = ReadonlyMap<string, OpStatus>;
@@ -30,15 +29,13 @@ export function finishedSince(
 ): Operation[] {
   return ops.filter((op) => {
     const was = before.get(op.name);
-    return (
-      was !== undefined && ACTIVE.has(was) && !ACTIVE.has(operationStatus(op))
-    );
+    return was !== undefined && isActive(was) && !isActive(operationStatus(op));
   });
 }
 
 /** Whether any operation is still running, so the list is worth watching. */
 export function anyActive(ops: readonly Operation[]): boolean {
-  return ops.some((op) => ACTIVE.has(operationStatus(op)));
+  return ops.some((op) => isActive(operationStatus(op)));
 }
 
 const VERB: Record<OpStatus, string> = {
