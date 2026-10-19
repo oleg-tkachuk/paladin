@@ -36,6 +36,8 @@ const ALLOWED: Record<string, string> = {
     "an optional hint: a failed lookup shows no hint, and nothing else",
   "context/ScopeContext.tsx#tenantQuery":
     "the scope shows the tenant id it already has, and logs the failure",
+  "hooks/usePreference.ts#{data}":
+    "the pinned and recent lists read as empty until the settings load; /profile renders a failed read",
   "hooks/useDistinctTags.ts#{data}":
     "tag filter options; the object list reports its own failed read",
   "components/DashboardWidgets.tsx#{data}":
