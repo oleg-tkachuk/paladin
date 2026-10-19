@@ -90,8 +90,10 @@ message BatchCopyObjectsRequest {
   ObjectSelector selector = 2 [(buf.validate.field).required = true];
   // Destination Collection resource name.
   string destination_collection = 3 [(buf.validate.field).string.min_len = 1];
-  // CEL expression evaluated against each source Object to compute dest key.
-  string destination_key_template = 4 [(buf.validate.field).string.min_len = 1];
+  // Each copy is written at this prefix followed by its source's key; empty
+  // keeps the source's key. A literal, not an expression. No longer than S3
+  // allows a key to be.
+  string destination_key_prefix = 4 [(buf.validate.field).string.max_bytes = 1024];
 }
 
 message BatchRestoreObjectsRequest {

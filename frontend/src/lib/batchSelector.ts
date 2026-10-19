@@ -4,7 +4,6 @@ import { getOption } from "@bufbuild/protobuf";
 
 import { field as validateField } from "@/gen/buf/validate/validate_pb";
 import { ObjectSelectorSchema } from "@/gen/paladin/data/v1/batch_service_pb";
-import { celString } from "@/lib/cel";
 
 /**
  * The most names one ObjectSelector takes, read from the contract: past it
@@ -54,18 +53,6 @@ export function selectorBatches(
     }
   }
   return out;
-}
-
-/** The CEL variable a copy's key template reads the source key from. */
-const SOURCE_KEY = "key";
-
-/**
- * The destination_key_template for a copy: the source key, under a prefix
- * when one is given. The prefix is a string literal, so whatever is typed
- * cannot change the expression around it.
- */
-export function copyKeyTemplate(prefix: string): string {
-  return prefix ? `${celString(prefix)} + ${SOURCE_KEY}` : SOURCE_KEY;
 }
 
 /** Why a bulk copy cannot go where it is aimed, or null when it can. */

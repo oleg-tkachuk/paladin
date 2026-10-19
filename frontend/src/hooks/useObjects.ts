@@ -4,11 +4,7 @@ import { useCallback, useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 
 import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
-import {
-  copyKeyTemplate,
-  selectorBatches,
-  type BatchItem,
-} from "@/lib/batchSelector";
+import { selectorBatches, type BatchItem } from "@/lib/batchSelector";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { toSortOrder } from "@/lib/table/sortOrder";
@@ -270,7 +266,7 @@ export function useObjects(options: UseObjectsOptions = {}) {
             sourceParent: parentFor(ok),
             selector: { names, filter: "" },
             destinationCollection: parentFor(destinationCollection),
-            destinationKeyTemplate: copyKeyTemplate(keyPrefix),
+            destinationKeyPrefix: keyPrefix,
           }),
         ),
       );

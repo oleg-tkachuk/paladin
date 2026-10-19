@@ -44,6 +44,20 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — BatchCopyObjects takes a key prefix, as it always ran
+
+`BatchCopyObjectsRequest.destination_key_template` is now
+`destination_key_prefix` (field 4). The field was documented as a CEL
+expression over the source object, but the server always used it as a literal
+prefix: a caller who sent `"backup/" + key` got that text, quotes and all, in
+front of every copied key. The name now says what it does, an empty prefix
+keeps each source's key, and the MCP tool `paladin_batch_copy` takes
+`destination_key_prefix` too.
+
+The wire number is unchanged, so a binary client that sent a plain prefix
+keeps working; a JSON client, and any client that sent an expression, has to
+change.
+
 ## Unreleased — the console names the storage origins it uploads to
 
 The console's Content-Security-Policy allowed only its own origin, so the

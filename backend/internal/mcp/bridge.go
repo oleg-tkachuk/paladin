@@ -1196,7 +1196,7 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_batch_copy",
-		Description: "Asynchronously server-side-copy many objects into a destination collection. Select sources by `names` (≤100) or CEL `filter`; each destination key is computed by `destination_key_template` (a CEL expression over the source Object). Returns an Operation; poll via paladin_get_operation.",
+		Description: "Asynchronously server-side-copy many objects into a destination collection. Select sources by `names` (≤100) or CEL `filter`; each copy is written at `destination_key_prefix` followed by its source's key (empty keeps the key). Returns an Operation; poll via paladin_get_operation.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in batchCopyArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Batch.BatchCopyObjects(ctx, &datav1.BatchCopyObjectsRequest{
 			SourceParent: in.SourceParent,
@@ -1204,8 +1204,8 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 				Names:  in.Names,
 				Filter: in.Filter,
 			},
-			DestinationCollection:  in.DestinationCollection,
-			DestinationKeyTemplate: in.DestinationKeyTemplate,
+			DestinationCollection: in.DestinationCollection,
+			DestinationKeyPrefix:  in.DestinationKeyPrefix,
 		}))
 	})
 
@@ -1404,11 +1404,11 @@ type batchDeleteArgs struct {
 	Permanent bool     `json:"permanent,omitempty" jsonschema:"true = irrecoverable purge; default false = soft delete"`
 }
 type batchCopyArgs struct {
-	SourceParent           string   `json:"source_parent" jsonschema:"source Collection: tenants/{tenant_id_or_slug}/collections/{ok}"`
-	Names                  []string `json:"names,omitempty" jsonschema:"explicit source object resource names; ≤100. Use filter for larger sets."`
-	Filter                 string   `json:"filter,omitempty" jsonschema:"CEL filter over the source Object"`
-	DestinationCollection  string   `json:"destination_collection" jsonschema:"destination Collection resource name"`
-	DestinationKeyTemplate string   `json:"destination_key_template" jsonschema:"CEL expression over the source Object that computes each destination key (e.g. 'object.key')"`
+	SourceParent          string   `json:"source_parent" jsonschema:"source Collection: tenants/{tenant_id_or_slug}/collections/{ok}"`
+	Names                 []string `json:"names,omitempty" jsonschema:"explicit source object resource names; ≤100. Use filter for larger sets."`
+	Filter                string   `json:"filter,omitempty" jsonschema:"CEL filter over the source Object"`
+	DestinationCollection string   `json:"destination_collection" jsonschema:"destination Collection resource name"`
+	DestinationKeyPrefix  string   `json:"destination_key_prefix,omitempty" jsonschema:"prefix put before each source key to name its copy, e.g. backup/2026/; empty keeps the key"`
 }
 type batchRestoreArgs struct {
 	Parent string   `json:"parent" jsonschema:"tenants/{tenant_id_or_slug}/collections/{ok}"`

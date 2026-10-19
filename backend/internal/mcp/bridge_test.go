@@ -123,10 +123,10 @@ func TestDataMutationToolsDispatch(t *testing.T) {
 		{
 			tool: "paladin_batch_copy",
 			args: map[string]any{
-				"source_parent":            "tenants/t1/collections/ok1",
-				"names":                    []string{"objects/o1"},
-				"destination_collection":   "tenants/t1/collections/ok2",
-				"destination_key_template": "object.key",
+				"source_parent":          "tenants/t1/collections/ok1",
+				"names":                  []string{"objects/o1"},
+				"destination_collection": "tenants/t1/collections/ok2",
+				"destination_key_prefix": "backup/",
 			},
 			want: "/paladin.data.v1.BatchService/BatchCopyObjects",
 		},

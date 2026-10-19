@@ -122,7 +122,7 @@ describe("useObjects bulk actions", () => {
       sourceParent: "tenants/t1/collections/docs",
       selector: { names: [items(1)[0].name], filter: "" },
       destinationCollection: "tenants/t1/collections/archive",
-      destinationKeyTemplate: '"2026/" + key',
+      destinationKeyPrefix: "2026/",
     });
   });
 });

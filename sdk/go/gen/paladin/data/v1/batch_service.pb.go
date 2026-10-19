@@ -349,10 +349,12 @@ type BatchCopyObjectsRequest struct {
 	Selector     *ObjectSelector `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	// Destination Collection resource name.
 	DestinationCollection string `protobuf:"bytes,3,opt,name=destination_collection,json=destinationCollection,proto3" json:"destination_collection,omitempty"`
-	// CEL expression evaluated against each source Object to compute dest key.
-	DestinationKeyTemplate string `protobuf:"bytes,4,opt,name=destination_key_template,json=destinationKeyTemplate,proto3" json:"destination_key_template,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Each copy is written at this prefix followed by its source's key; empty
+	// keeps the source's key. A literal, not an expression. No longer than S3
+	// allows a key to be.
+	DestinationKeyPrefix string `protobuf:"bytes,4,opt,name=destination_key_prefix,json=destinationKeyPrefix,proto3" json:"destination_key_prefix,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *BatchCopyObjectsRequest) Reset() {
@@ -406,9 +408,9 @@ func (x *BatchCopyObjectsRequest) GetDestinationCollection() string {
 	return ""
 }
 
-func (x *BatchCopyObjectsRequest) GetDestinationKeyTemplate() string {
+func (x *BatchCopyObjectsRequest) GetDestinationKeyPrefix() string {
 	if x != nil {
-		return x.DestinationKeyTemplate
+		return x.DestinationKeyPrefix
 	}
 	return ""
 }
@@ -571,12 +573,12 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\x19BatchDeleteObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12C\n" +
 	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12\x1c\n" +
-	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\x8f\x02\n" +
+	"\tpermanent\x18\x03 \x01(\bR\tpermanent\"\x8c\x02\n" +
 	"\x17BatchCopyObjectsRequest\x12,\n" +
 	"\rsource_parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fsourceParent\x12C\n" +
 	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\x12>\n" +
-	"\x16destination_collection\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x12A\n" +
-	"\x18destination_key_template\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x16destinationKeyTemplate\"\x82\x01\n" +
+	"\x16destination_collection\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x15destinationCollection\x12>\n" +
+	"\x16destination_key_prefix\x18\x04 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\x14destinationKeyPrefix\"\x82\x01\n" +
 	"\x1aBatchRestoreObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12C\n" +
 	"\bselector\x18\x02 \x01(\v2\x1f.paladin.data.v1.ObjectSelectorB\x06\xbaH\x03\xc8\x01\x01R\bselector\"\x98\x02\n" +
