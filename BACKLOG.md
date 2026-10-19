@@ -825,16 +825,6 @@ order they are being taken up.
   the console requires for every restore.
 - **Blockers:** none.
 
-#### Policy simulator: can this subject do this action on this resource
-
-- **Status:** Aspirational.
-- **Reason:** answering "why was this refused" means reading Cedar policies by
-  hand; the engine that decides is not reachable from the console.
-- **Definition of Done:** a page that takes a principal, an action and a
-  resource, asks the server to evaluate them against the live policy set, and
-  shows the decision with the policies that decided it.
-- **Blockers:** needs an evaluate RPC on the admin plane.
-
 #### Command palette: actions, recent items, shortcut sheet
 
 - **Status:** Aspirational.
