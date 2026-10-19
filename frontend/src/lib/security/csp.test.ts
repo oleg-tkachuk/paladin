@@ -29,6 +29,7 @@ describe("contentSecurityPolicy", () => {
     const strict = contentSecurityPolicy({ isDev: false });
     expect(strict).toContain("connect-src 'self';");
     expect(strict).toContain("img-src 'self' data: blob:;");
+    expect(strict).toContain("frame-src 'self';");
 
     const csp = contentSecurityPolicy({
       isDev: false,
@@ -40,7 +41,10 @@ describe("contentSecurityPolicy", () => {
     expect(csp).toContain(
       "img-src 'self' data: blob: https://s3.example.com http://localhost:9000;",
     );
-    // Nothing else opens: scripts and frames stay on this origin.
+    expect(csp).toContain(
+      "frame-src 'self' https://s3.example.com http://localhost:9000;",
+    );
+    // Nothing else opens: scripts stay on this origin.
     expect(csp).toContain("default-src 'self';");
     expect(csp).not.toMatch(/script-src[^;]*s3\.example/);
   });

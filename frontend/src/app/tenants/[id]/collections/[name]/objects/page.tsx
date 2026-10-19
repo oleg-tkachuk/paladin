@@ -9,7 +9,15 @@
 // dialog, saved views) carries over verbatim.
 
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
-import React, { useEffect, useMemo, useState } from "react";
+import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 
 import { useActions } from "@/context/ActionsContext";
 import { useObjects } from "@/hooks/useObjects";
@@ -32,8 +40,14 @@ import { useCollection } from "../collection-context";
 import { SavedViewSchema, type SavedView } from "./_view";
 import { useObjectListState } from "./useObjectListState";
 import { CopyMoveDialog } from "./CopyMoveDialog";
+import { BulkCopyDialog } from "./BulkCopyDialog";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
+import { Button } from "@/components/ui/button";
+import { UploadQueue } from "@/components/features/upload/UploadQueue";
+import { useUpload } from "@/hooks/useUpload";
+import { useFileDrop } from "@/hooks/useFileDrop";
+import { useTenantChangesBlocked } from "../../../tenant-context";
 
 const STAYS_RESTORABLE =
   "It stays restorable from the Trash tab until it is purged.";
@@ -74,6 +88,22 @@ function CollectionObjectsContent() {
     handleRecursiveChange,
   } = useObjectListState();
 
+  // Files dropped on the list, or chosen with Upload, land in this
+  // collection; a trashed tenant takes no new objects.
+  const changesBlocked = useTenantChangesBlocked();
+  const { queue, uploadFile, clearQueue } = useUpload();
+  const uploadFiles = useCallback(
+    (files: File[]) => {
+      for (const file of files) void uploadFile(file, collection);
+    },
+    [uploadFile, collection],
+  );
+  const { dragging, dropProps } = useFileDrop({
+    disabled: !!changesBlocked,
+    onFiles: uploadFiles,
+  });
+  const fileInput = useRef<HTMLInputElement>(null);
+
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [selectedInspectorKey, setSelectedInspectorKey] = useState<
     string | null
@@ -90,6 +120,7 @@ function CollectionObjectsContent() {
     purgeObject,
     bulkDeleteObjects,
     bulkRestoreObjects,
+    bulkCopyObjects,
     bulkPatchObjects,
     copyObject,
     generateDownloadUrl,
@@ -373,6 +404,28 @@ function CollectionObjectsContent() {
     });
   };
 
+  // The selection, as the objects it names; a restore is offered when every
+  // one of them is in the trash.
+  const selectedObjects = objects.filter((o) => selectedIds.has(o.objectId));
+  const selectionTrashed =
+    selectedObjects.length > 0 &&
+    selectedObjects.every((o) => o.state === ObjectState.DELETED);
+  const selectionItems = selectedObjects.map((o) => ({
+    name: o.name,
+    collection: o.collection,
+  }));
+  const [bulkCopyOpen, setBulkCopyOpen] = useState(false);
+  const handleBulkCopy = async (destination: string, prefix: string) => {
+    await bulkCopyObjects(selectionItems, destination, prefix);
+    setBulkCopyOpen(false);
+    setSelectedIds(new Set());
+    showNotification({
+      type: "success",
+      title: "Copy started",
+      message: `${selectionItems.length} objects are being copied to ${destination}; the operation shows its progress.`,
+    });
+  };
+
   const confirmBulkRestore = (items: { name: string; collection: string }[]) =>
     setConfirm({
       open: true,
@@ -385,6 +438,7 @@ function CollectionObjectsContent() {
       confirmText: `Restore ${items.length} objects`,
       onConfirm: async () => {
         await bulkRestoreObjects(items);
+        setSelectedIds(new Set());
         await refresh();
       },
     });
@@ -571,6 +625,12 @@ function CollectionObjectsContent() {
         selectedCount={selectedIds.size}
         onEditLabels={() => setIsBulkEditing(true)}
         onBulkDelete={handleBulkDelete}
+        onBulkRestore={
+          selectionTrashed
+            ? () => confirmBulkRestore(selectionItems)
+            : undefined
+        }
+        onBulkCopy={publicCollection ? undefined : () => setBulkCopyOpen(true)}
         onClearSelection={() => setSelectedIds(new Set())}
         isProcessing={isBulkDeleting}
       />
@@ -610,104 +670,148 @@ function CollectionObjectsContent() {
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Listing namespace inside this tenant.
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-muted-foreground">
+            Drop files on the list to upload them here.
+          </p>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            aria-label={`Files to upload to ${collection}`}
+            onChange={(e) => {
+              uploadFiles(Array.from(e.target.files ?? []));
+              e.target.value = "";
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={() => fileInput.current?.click()}
+            disabled={!!changesBlocked}
+            title={changesBlocked ?? undefined}
+          >
+            <ArrowUpTrayIcon className="size-4" />
+            Upload
+          </Button>
+        </div>
       </div>
 
-      <ObjectsFilterBar
-        filter={{
-          search,
-          status,
-          tag: tagFilter,
-          type: typeFilter,
-          meta: metaFilter,
-          recursive,
-        }}
-        onFilterChange={(patch) => {
-          if ("search" in patch) handleSearchChange(patch.search!);
-          if ("status" in patch) handleStatusChange(patch.status);
-          if ("tag" in patch) handleTagChange(patch.tag);
-          if ("type" in patch) handleTypeChange(patch.type);
-          if ("meta" in patch) handleMetaChange(patch.meta);
-          if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
-        }}
-        tagOptions={mergedTagOptions}
-        visibleColumns={visibleColumns}
-        onToggleColumn={toggleColumn}
-        savedViews={savedViews}
-        onApplyView={applyView}
-        onDeleteView={deleteView}
-        onSaveView={() => setIsSavingView(true)}
-        loading={loading}
-        onRefresh={refresh}
-      />
+      <UploadQueue queue={queue} onClear={clearQueue} />
 
-      <ObjectsTable
-        objects={objects}
-        loading={loading}
-        error={error}
-        nextCursor={nextCursor}
-        onLoadMore={() => loadMore?.()}
-        onRefresh={refresh}
-        selectedIds={selectedIds}
-        allChecked={allChecked}
-        someChecked={someChecked}
-        onToggleSelectAll={toggleSelectAll}
-        sort={sort}
-        onSort={handleSort}
-        visibleColumns={visibleColumns}
-        useRelativeTime={useRelativeTime}
-        onToggleRelativeTime={() => setUseRelativeTime((v) => !v)}
-        selectedInspectorKey={selectedInspectorKey}
-        editingLabelsId={editingLabelsId}
-        editLabelsValue={editLabelsValue}
-        search={search}
-        status={status}
-        rowProps={{
-          onToggleSelect: toggleSelect,
-          onInspect: setSelectedInspectorKey,
-          onStartInlineEdit: handleStartInlineEdit,
-          onSaveInlineLabels: handleSaveInlineLabels,
-          onCancelInlineEdit: () => setEditingLabelsId(null),
-          onEditLabelsValueChange: setEditLabelsValue,
-          onCopyToClipboard: copyToClipboard,
-          onSoftDelete: publicCollection ? undefined : handleSoftDelete,
-          onHardDelete: handleHardDelete,
-          onCopy: publicCollection
-            ? undefined
-            : (o) =>
-                setCopyMove({
-                  open: true,
-                  type: "copy",
-                  obj: o,
-                  destKey: o.key + "-copy",
-                }),
-          onMove: publicCollection
-            ? undefined
-            : (o) =>
-                setCopyMove({
-                  open: true,
-                  type: "move",
-                  obj: o,
-                  destKey: o.key,
-                }),
-          onGenerateDownloadUrl: async (key, collectionOfRow) => {
-            const o = objects.find(
-              (x) => x.key === key && x.collection === collectionOfRow,
-            );
-            if (!o) return undefined;
-            const url = await generateDownloadUrl(o.name);
-            return url ? { url: url.url } : undefined;
-          },
-        }}
-      />
+      <div {...dropProps} data-drop-zone className="relative space-y-4">
+        {dragging ? (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/5"
+          >
+            <span className="rounded-md bg-card px-3 py-1.5 text-sm font-medium shadow-sm">
+              Drop to upload to {collection}
+            </span>
+          </div>
+        ) : null}
+        <ObjectsFilterBar
+          filter={{
+            search,
+            status,
+            tag: tagFilter,
+            type: typeFilter,
+            meta: metaFilter,
+            recursive,
+          }}
+          onFilterChange={(patch) => {
+            if ("search" in patch) handleSearchChange(patch.search!);
+            if ("status" in patch) handleStatusChange(patch.status);
+            if ("tag" in patch) handleTagChange(patch.tag);
+            if ("type" in patch) handleTypeChange(patch.type);
+            if ("meta" in patch) handleMetaChange(patch.meta);
+            if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
+          }}
+          tagOptions={mergedTagOptions}
+          visibleColumns={visibleColumns}
+          onToggleColumn={toggleColumn}
+          savedViews={savedViews}
+          onApplyView={applyView}
+          onDeleteView={deleteView}
+          onSaveView={() => setIsSavingView(true)}
+          loading={loading}
+          onRefresh={refresh}
+        />
+
+        <ObjectsTable
+          objects={objects}
+          loading={loading}
+          error={error}
+          nextCursor={nextCursor}
+          onLoadMore={() => loadMore?.()}
+          onRefresh={refresh}
+          selectedIds={selectedIds}
+          allChecked={allChecked}
+          someChecked={someChecked}
+          onToggleSelectAll={toggleSelectAll}
+          sort={sort}
+          onSort={handleSort}
+          visibleColumns={visibleColumns}
+          useRelativeTime={useRelativeTime}
+          onToggleRelativeTime={() => setUseRelativeTime((v) => !v)}
+          selectedInspectorKey={selectedInspectorKey}
+          editingLabelsId={editingLabelsId}
+          editLabelsValue={editLabelsValue}
+          search={search}
+          status={status}
+          rowProps={{
+            onToggleSelect: toggleSelect,
+            onInspect: setSelectedInspectorKey,
+            onStartInlineEdit: handleStartInlineEdit,
+            onSaveInlineLabels: handleSaveInlineLabels,
+            onCancelInlineEdit: () => setEditingLabelsId(null),
+            onEditLabelsValueChange: setEditLabelsValue,
+            onCopyToClipboard: copyToClipboard,
+            onSoftDelete: publicCollection ? undefined : handleSoftDelete,
+            onHardDelete: handleHardDelete,
+            onCopy: publicCollection
+              ? undefined
+              : (o) =>
+                  setCopyMove({
+                    open: true,
+                    type: "copy",
+                    obj: o,
+                    destKey: o.key + "-copy",
+                  }),
+            onMove: publicCollection
+              ? undefined
+              : (o) =>
+                  setCopyMove({
+                    open: true,
+                    type: "move",
+                    obj: o,
+                    destKey: o.key,
+                  }),
+            onGenerateDownloadUrl: async (key, collectionOfRow) => {
+              const o = objects.find(
+                (x) => x.key === key && x.collection === collectionOfRow,
+              );
+              if (!o) return undefined;
+              const url = await generateDownloadUrl(o.name);
+              return url ? { url: url.url } : undefined;
+            },
+          }}
+        />
+      </div>
 
       <div className="flex justify-center pb-4">
         <Badge variant="secondary" className="font-mono tabular-nums">
           {objects.length} objects
         </Badge>
       </div>
+
+      <BulkCopyDialog
+        open={bulkCopyOpen}
+        count={selectionItems.length}
+        sourceCollection={collection}
+        onConfirm={handleBulkCopy}
+        onClose={() => setBulkCopyOpen(false)}
+      />
 
       {/* ─── Copy / Move dialog ───────────────────────────────────────── */}
       <CopyMoveDialog

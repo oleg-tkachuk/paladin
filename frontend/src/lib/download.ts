@@ -5,9 +5,25 @@
  * any character survives; the server re-encodes it before signing.
  */
 export function attachmentDisposition(key: string): string {
+  return disposition(ATTACHMENT, key);
+}
+
+/**
+ * The Content-Disposition a preview URL is signed with: inline, so a frame
+ * shows the object rather than saving it. Only for kinds the browser renders
+ * without running the object as a page of the store's origin (a PDF).
+ */
+export function inlineDisposition(key: string): string {
+  return disposition(INLINE, key);
+}
+
+const ATTACHMENT = "attachment";
+const INLINE = "inline";
+
+function disposition(type: string, key: string): string {
   const base = key.split("/").filter(Boolean).pop();
-  if (!base) return "attachment";
-  return `attachment; filename*=UTF-8''${encodeRfc5987(base)}`;
+  if (!base) return type;
+  return `${type}; filename*=UTF-8''${encodeRfc5987(base)}`;
 }
 
 /** encodeURIComponent, plus the characters it leaves that RFC 5987's

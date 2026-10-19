@@ -4,7 +4,8 @@
  * and (in dev) inline/eval scripts, and the BFF talks to same-origin
  * /api/rpc. The one other place the browser goes is a storage backend, on a
  * presigned URL: the deployment names those origins (storageOrigins.ts), and
- * they are added to connect-src for uploads and img-src for previews.
+ * they are added to connect-src for uploads and text previews, img-src for
+ * images and frame-src for PDFs.
  * 'unsafe-eval' is dev-only.
  */
 
@@ -47,6 +48,7 @@ export function contentSecurityPolicy(opts: {
     `img-src 'self' data: blob:${storage}`,
     `script-src 'self' 'unsafe-inline'${opts.isDev ? " 'unsafe-eval'" : ""}`,
     `connect-src 'self'${storage}`,
+    `frame-src 'self'${storage}`,
     ...(opts.consent ? [] : [FORM_ACTION_SELF]),
   ];
   return directives

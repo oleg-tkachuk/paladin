@@ -8,10 +8,15 @@ const h = vi.hoisted(() => ({
     objects: [],
     page: { nextPageToken: "" },
   })),
+  batchDeleteObjects: vi.fn(async () => ({})),
+  batchCopyObjects: vi.fn(async () => ({})),
 }));
 vi.mock("@/lib/connect/client", () => ({
   objectClient: { listObjects: h.listObjects },
-  batchClient: {},
+  batchClient: {
+    batchDeleteObjects: h.batchDeleteObjects,
+    batchCopyObjects: h.batchCopyObjects,
+  },
   presignClient: {},
 }));
 vi.mock("@/context/AuthContext", () => ({
@@ -23,6 +28,7 @@ vi.mock("@/context/RefreshContext", () => ({
 }));
 
 import { useObjects } from "./useObjects";
+import { SELECTOR_MAX_NAMES } from "@/lib/batchSelector";
 import { TenantProvider } from "@/app/tenants/[id]/tenant-context";
 import type { ResolvedTenant } from "@/lib/resources/tenant-resolve";
 
@@ -87,5 +93,36 @@ describe("useObjects tenant", () => {
     expect(h.listObjects).toHaveBeenCalledWith(
       expect.objectContaining({ parent: "tenants/t1/collections/docs" }),
     );
+  });
+});
+
+// A selector takes at most SELECTOR_MAX_NAMES names; a selection that grew
+// past it through "load more" was refused whole.
+describe("useObjects bulk actions", () => {
+  const items = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      name: `tenants/t1/collections/docs/objects/o${i}`,
+      collection: "docs",
+    }));
+
+  it("splits a selection past the selector's cap", async () => {
+    const { result } = renderHook(() => useObjects({ collection: "docs" }), {
+      wrapper,
+    });
+    await result.current.bulkDeleteObjects(items(SELECTOR_MAX_NAMES + 1));
+    expect(h.batchDeleteObjects).toHaveBeenCalledTimes(2);
+  });
+
+  it("copies into the other collection under the prefix", async () => {
+    const { result } = renderHook(() => useObjects({ collection: "docs" }), {
+      wrapper,
+    });
+    await result.current.bulkCopyObjects(items(1), "archive", "2026/");
+    expect(h.batchCopyObjects).toHaveBeenCalledWith({
+      sourceParent: "tenants/t1/collections/docs",
+      selector: { names: [items(1)[0].name], filter: "" },
+      destinationCollection: "tenants/t1/collections/archive",
+      destinationKeyTemplate: '"2026/" + key',
+    });
   });
 });
