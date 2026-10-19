@@ -1,5 +1,6 @@
 "use client";
 
+import { HelpTip } from "@/components/ui/HelpTip";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ShareIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -200,6 +201,7 @@ export function BucketGrantsCard({
         <CardTitle className="flex items-center gap-2 text-base">
           <ShareIcon className="size-5 text-chart-5" />
           Shared with
+          <HelpTip topic="bucketGrants" />
           <span className="text-xs font-normal text-muted-foreground">
             Tenants other than the owner that may bind collections here
           </span>

@@ -11,6 +11,7 @@
 // tab: on success, push the returned resource into context so
 // sibling tabs see fresh data without a refetch.
 
+import { HelpTip } from "@/components/ui/HelpTip";
 import { useTenantChangesBlocked } from "../../tenant-context";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { useCallback, useEffect, useState } from "react";
@@ -171,12 +172,13 @@ export default function CollectionOverviewPage() {
           </dd>
 
           <dt className="text-muted-foreground">Access</dt>
-          <dd>
+          <dd className="flex items-center gap-2">
             {isPublic ? (
               <PublicReadBadge />
             ) : (
               <span className="text-xs text-muted-foreground">private</span>
             )}
+            <HelpTip topic="publicRead" />
           </dd>
 
           {isPublic && (

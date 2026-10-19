@@ -843,15 +843,6 @@ order they are being taken up.
   and the `EmptyState` as slots.
 - **Blockers:** none.
 
-#### Contextual help linking to the ADRs
-
-- **Status:** Aspirational.
-- **Reason:** terms such as public read, retention or capability spend are
-  explained only in the ADRs, which the console never links to.
-- **Definition of Done:** a `?` beside the terms that need it, opening a short
-  explanation with a link to the ADR or doc page; the texts live in one module.
-- **Blockers:** none.
-
 #### Faster-feeling navigation: prefetch, optimistic updates, progress
 
 - **Status:** Aspirational.

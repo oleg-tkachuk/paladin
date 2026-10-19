@@ -53,6 +53,7 @@ const TRASH_SORT: SortAccessors<Tenant, TrashColumn> = {
 };
 const TRASH_SEARCH = (t: Tenant) => [t.displayName, t.slug, t.tenantId];
 
+import { HelpTip } from "@/components/ui/HelpTip";
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -229,7 +230,11 @@ export default function TrashPage() {
     <TableScope id={TABLE_ID} sort={view.sort}>
       <div className="space-y-6">
         <PageHeader
-          title="Trash"
+          title={
+            <span className="flex items-center gap-2">
+              Trash <HelpTip topic="tenantTrash" />
+            </span>
+          }
           description="Deleted tenants wait here until they are restored or purged. Nothing is purged automatically."
           showDefaultActions={false}
         />
