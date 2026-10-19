@@ -15,7 +15,18 @@ const h = vi.hoisted(() => ({
     tenantSlug: "acme",
     roles: ["platform.admin"] as string[],
   },
+  // Set to make two different zone names one zone, as an alias is.
+  sameZone: undefined as boolean | undefined,
 }));
+vi.mock("@/lib/format/preferences", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("@/lib/format/preferences")>();
+  return {
+    ...real,
+    isSameTimeZone: (a: string, b: string) =>
+      h.sameZone ?? real.isSameTimeZone(a, b),
+  };
+});
 vi.mock("@/lib/connect/client", () => ({
   userSettingsClient: { getMine: h.getMine, updateMine: h.updateMine },
 }));
@@ -46,6 +57,7 @@ const SAVED = {
 };
 
 beforeEach(() => {
+  h.sameZone = undefined;
   h.getMine.mockReset().mockResolvedValue(SAVED);
   h.updateMine.mockReset().mockResolvedValue({});
   h.user.roles = ["platform.admin"];
@@ -152,6 +164,19 @@ describe("ProfilePage preferences", () => {
       screen.getByRole("button", { name: `Use this browser's (${detected})` }),
     );
     expect(tz).toHaveValue(detected);
+  });
+
+  // Europe/Kyiv saved, Europe/Kiev detected: one zone under two names.
+  it("offers no browser value that is already the one set", async () => {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    h.sameZone = true;
+    render(<ProfilePage />);
+    await screen.findByLabelText("Timezone");
+    expect(
+      screen.queryByRole("button", {
+        name: `Use this browser's (${detected})`,
+      }),
+    ).toBeNull();
   });
 
   it("saves a theme picked from the swatches", async () => {

@@ -41,6 +41,8 @@ import {
 } from "@/lib/theme";
 import { COMMON_LOCALES, timeZoneOptions } from "@/lib/userPrefs";
 import {
+  isSameLocale,
+  isSameTimeZone,
   isValidLocale,
   isValidTimeZone,
   localePreview,
@@ -166,8 +168,8 @@ function AccountCard() {
             </dd>
           </div>
           {user?.userId ? (
-            <div className="space-y-1">
-              <dt className={T.label}>User ID</dt>
+            <div>
+              <dt className="sr-only">User ID</dt>
               <dd>
                 <IdentifierCopy value={user.userId} label="User ID" />
               </dd>
@@ -336,6 +338,7 @@ function PreferencesCard() {
                 `Now there: ${timeZonePreview(timezone, now)}`
               }
               detected={detectedTz}
+              sameAsDetected={isSameTimeZone(timezone, detectedTz)}
               hint="Dates and times in the console are shown in this zone."
             />
 
@@ -355,6 +358,7 @@ function PreferencesCard() {
                 `Writes ${localePreview(locale, now)}`
               }
               detected={detectedLocale}
+              sameAsDetected={isSameLocale(locale, detectedLocale)}
               hint={LOCALE_NOT_APPLIED_NOTE}
             />
 
@@ -403,6 +407,7 @@ function PreferenceField({
   invalidText,
   preview,
   detected,
+  sameAsDetected,
   hint,
 }: {
   id: string;
@@ -415,6 +420,8 @@ function PreferenceField({
   invalidText: string;
   preview: string | null;
   detected: string;
+  /** Whether the value is already this browser's, if under another name. */
+  sameAsDetected: boolean;
   hint: string;
 }) {
   const statusId = `${id}-status`;
@@ -435,7 +442,7 @@ function PreferenceField({
             aria-describedby={statusId}
             className={cn(FIELD_WIDTH, "font-mono text-xs")}
           />
-          {detected && detected !== value ? (
+          {detected && !sameAsDetected ? (
             <Button
               type="button"
               variant="ghost"

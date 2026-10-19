@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { NEW_PASSWORD_MIN_LENGTH, timeZoneOptions } from "./userPrefs";
 import {
+  isSameLocale,
+  isSameTimeZone,
   isValidLocale,
   isValidTimeZone,
   localePreview,
@@ -74,5 +76,27 @@ describe("NEW_PASSWORD_MIN_LENGTH", () => {
   it("is the floor the contract declares", () => {
     // auth_service.proto: new_password min_len = 12.
     expect(NEW_PASSWORD_MIN_LENGTH).toBe(12);
+  });
+});
+
+describe("isSameTimeZone", () => {
+  it.each([
+    ["Europe/Kyiv", "Europe/Kiev", true],
+    ["Etc/UTC", "UTC", true],
+    ["Europe/Kyiv", "Europe/London", false],
+    ["", "UTC", false],
+    ["Mars/Olympus", "Mars/Olympus", true],
+  ])("%j and %j → %s", (a, b, want) => {
+    expect(isSameTimeZone(a, b)).toBe(want);
+  });
+});
+
+describe("isSameLocale", () => {
+  it.each([
+    ["en-us", "en-US", true],
+    ["en-US", "en-GB", false],
+    ["", "en-US", false],
+  ])("%j and %j → %s", (a, b, want) => {
+    expect(isSameLocale(a, b)).toBe(want);
   });
 });

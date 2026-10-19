@@ -60,7 +60,8 @@ export function TableToolbar<V extends string>({
           placeholder={placeholder}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          className="pl-9 pr-8"
+          // The browser's own clear button would sit beside the one below.
+          className="pl-9 pr-8 [&::-webkit-search-cancel-button]:appearance-none"
         />
         {query ? (
           <button
