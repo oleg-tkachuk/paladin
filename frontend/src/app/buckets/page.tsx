@@ -4,7 +4,7 @@ import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -68,14 +68,22 @@ const LIFECYCLE_TAB = "lifecycle";
 const ALL_BACKENDS = "__all__";
 
 export default function BucketsPage() {
+  // Search and the backend picker are server-side: see below.
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  // Trails `search` by 300ms so a read does not fire per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
   const {
     buckets,
     loading,
     error: listError,
-    fetchBuckets,
+    refetch,
     createBucket,
     deleteBucket,
-  } = useBuckets();
+  } = useBuckets({
+    backendId: filterBackend === ALL_BACKENDS ? undefined : filterBackend,
+    filter: searchFilter(debouncedSearch),
+  });
   const {
     backends: backendRows,
     error: backendsError,
@@ -102,11 +110,6 @@ export default function BucketsPage() {
   // query. The filter goes to the API instead, as one conjunct over the derived
   // `search` field so it pushes down to SQL (see src/lib/cel.ts for why it must
   // not be a disjunction).
-  const [search, setSearch] = useTableQuery(PAGE_TABLE);
-  // Trails `search` by 300ms so a refetch does not fire per keystroke — the
-  // same shape the objects page uses.
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
   const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>(
     undefined,
     {
@@ -135,21 +138,6 @@ export default function BucketsPage() {
 
   // ─── delete ───────────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
-
-  // One place that knows how to ask, so the Refresh button and the error
-  // retry cannot drift into fetching something other than what is on screen.
-  const refetch = useCallback(
-    () =>
-      fetchBuckets(
-        filterBackend === ALL_BACKENDS ? undefined : filterBackend,
-        searchFilter(debouncedSearch),
-      ),
-    [fetchBuckets, filterBackend, debouncedSearch],
-  );
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
 
   // A created or deleted bucket settles in the reconciler, not in the RPC
   // that started it; without this it read "provisioning…" until a reload.

@@ -4,7 +4,7 @@ import { queryOptions } from "@tanstack/react-query";
 
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { API_PAGE_SIZE_MAX } from "@/constants";
-import { MAX_LIST_PAGES } from "@/hooks/useBuckets";
+import { MAX_LIST_PAGES } from "./paging";
 import { tenantClient } from "@/lib/connect/client";
 
 /**

@@ -15,7 +15,7 @@ import { CopyableId } from "@/components/ui/CopyableId";
 import { HelpTip } from "@/components/ui/HelpTip";
 import { useTenantChangesBlocked } from "../../tenant-context";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { LinkIcon } from "@heroicons/react/24/outline";
 
@@ -65,11 +65,11 @@ export default function CollectionOverviewPage() {
   const { showNotification } = useNotification();
   // Only the buckets this collection's tenant may bind to (ADR-0032): one it
   // neither owns nor was granted is refused on Bind, so it is not offered.
-  const { buckets, error: bucketsError, fetchAccessibleBuckets } = useBuckets();
-  const fetchBuckets = useCallback(
-    () => fetchAccessibleBuckets(`tenants/${collection.tenantId}`),
-    [fetchAccessibleBuckets, collection.tenantId],
-  );
+  const {
+    buckets,
+    error: bucketsError,
+    refetch: fetchBuckets,
+  } = useBuckets({ accessibleTo: `tenants/${collection.tenantId}` });
 
   const [displayName, setDisplayName] = useState(collection.displayName);
   const [savingMeta, setSavingMeta] = useState(false);
@@ -87,10 +87,6 @@ export default function CollectionOverviewPage() {
     setDisplayName(collection.displayName);
     setBucketSelection(collection.bucket);
   }
-
-  useEffect(() => {
-    void fetchBuckets();
-  }, [fetchBuckets]);
 
   const handleSaveDisplayName = useCallback(async () => {
     setSavingMeta(true);

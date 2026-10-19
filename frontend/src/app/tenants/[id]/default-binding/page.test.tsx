@@ -11,7 +11,9 @@ const h = vi.hoisted(() => ({
   get: vi.fn(),
   set: vi.fn(),
   clear: vi.fn(),
-  fetchAccessibleBuckets: vi.fn(),
+  // Every read the page handed useBuckets.
+  reads: [] as unknown[],
+  refetchBuckets: vi.fn(),
   showNotification: vi.fn(),
   buckets: [] as Array<{ backendId: string; bucketId: string }>,
   bucketsError: null as string | null,
@@ -29,11 +31,18 @@ vi.mock("../tenant-context", () => ({
   useTenant: () => ({ tenantId: "t-1", slug: "acme", displayName: "Acme" }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
-  useBuckets: () => ({
-    buckets: h.buckets,
-    error: h.bucketsError,
-    fetchAccessibleBuckets: h.fetchAccessibleBuckets,
-  }),
+  useBuckets: (read: unknown) => {
+    h.reads.push(read);
+    return {
+      buckets: h.buckets,
+      error: h.bucketsError,
+      loading: false,
+      refetch: h.refetchBuckets,
+      fetched: true,
+      createBucket: vi.fn(),
+      deleteBucket: vi.fn(),
+    };
+  },
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -47,7 +56,8 @@ beforeEach(() => {
   h.get.mockReset();
   h.set.mockReset();
   h.clear.mockReset();
-  h.fetchAccessibleBuckets.mockReset();
+  h.reads = [];
+  h.refetchBuckets.mockReset();
   h.bucketsError = null;
   h.showNotification.mockReset();
   h.buckets = [
@@ -70,7 +80,10 @@ describe("DefaultBindingPage", () => {
       { name: "tenants/acme" },
       expect.objectContaining({ signal: expect.anything() }),
     );
-    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith("tenants/acme");
+    expect(h.reads.length).toBeGreaterThan(0);
+    for (const read of h.reads) {
+      expect(read).toEqual({ accessibleTo: "tenants/acme" });
+    }
   });
 
   it("renders the current binding when one exists", async () => {
@@ -148,8 +161,10 @@ describe("DefaultBindingPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Buckets could not be loaded/,
     );
-    h.fetchAccessibleBuckets.mockClear();
+    expect(h.refetchBuckets).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith("tenants/acme");
+    // refetch re-reads the page's own read, the tenant's bindable list.
+    expect(h.refetchBuckets).toHaveBeenCalledOnce();
+    expect(h.reads.at(-1)).toEqual({ accessibleTo: "tenants/acme" });
   });
 });

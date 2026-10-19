@@ -10,7 +10,9 @@ import userEvent from "@testing-library/user-event";
 const h = vi.hoisted(() => ({
   buckets: [] as Array<Record<string, unknown>>,
   bucketsError: null as string | null,
-  fetchAccessibleBuckets: vi.fn(),
+  // Every read the page handed useBuckets.
+  reads: [] as unknown[],
+  refetch: vi.fn(),
   createBucket: vi.fn(() => Promise.resolve()),
   deleteBucket: vi.fn(() => Promise.resolve()),
   showNotification: vi.fn(),
@@ -18,14 +20,18 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useBuckets", () => ({
-  useBuckets: () => ({
-    buckets: h.buckets,
-    loading: false,
-    error: h.bucketsError,
-    fetchAccessibleBuckets: h.fetchAccessibleBuckets,
-    createBucket: h.createBucket,
-    deleteBucket: h.deleteBucket,
-  }),
+  useBuckets: (read: unknown) => {
+    h.reads.push(read);
+    return {
+      buckets: h.buckets,
+      loading: false,
+      error: h.bucketsError,
+      refetch: h.refetch,
+      fetched: true,
+      createBucket: h.createBucket,
+      deleteBucket: h.deleteBucket,
+    };
+  },
 }));
 vi.mock("@/hooks/useTenants", () => ({
   useTenants: () => ({ tenants: [], fetchTenants: vi.fn() }),
@@ -83,7 +89,8 @@ beforeEach(() => {
   h.buckets = [];
   h.bucketsError = null;
   h.storageLayout = STORAGE_LAYOUT_DEDICATED;
-  h.fetchAccessibleBuckets.mockClear();
+  h.reads = [];
+  h.refetch.mockClear();
   h.createBucket.mockClear();
   h.deleteBucket.mockClear();
   h.showNotification.mockClear();
@@ -102,17 +109,21 @@ describe("TenantBucketsPage", () => {
 
   // A shared-layout tenant owns no bucket: asking by owner listed nothing for
   // a tenant whose every collection sits in a bucket granted to it.
-  it("fetches the buckets this tenant may bind to on mount", () => {
+  it("reads the buckets this tenant may bind to", () => {
     render(<TenantBucketsPage />);
-    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
+    expect(h.reads.length).toBeGreaterThan(0);
+    for (const read of h.reads) {
+      expect(read).toEqual({ accessibleTo: TENANT_NAME });
+    }
   });
 
   // Refresh called fetchBuckets() bare, which lists every tenant's buckets.
   it("refreshes this tenant's buckets, not everyone's", () => {
     render(<TenantBucketsPage />);
-    h.fetchAccessibleBuckets.mockClear();
     fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
-    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
+    // refetch re-reads the page's own read, which is this tenant's.
+    expect(h.refetch).toHaveBeenCalledTimes(1);
+    expect(h.reads.at(-1)).toEqual({ accessibleTo: TENANT_NAME });
   });
 
   // A bucket settles in the reconciler; the list asks again until it has.
@@ -121,9 +132,9 @@ describe("TenantBucketsPage", () => {
     try {
       h.buckets = [{ ...makeBucket("fresh"), provisionState: "pending" }];
       render(<TenantBucketsPage />);
-      h.fetchAccessibleBuckets.mockClear();
+      expect(h.refetch).not.toHaveBeenCalled();
       vi.advanceTimersByTime(PROVISION_POLL_MS);
-      expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
+      expect(h.refetch).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -134,9 +145,8 @@ describe("TenantBucketsPage", () => {
     try {
       h.buckets = [{ ...makeBucket("done"), provisionState: "ready" }];
       render(<TenantBucketsPage />);
-      h.fetchAccessibleBuckets.mockClear();
       vi.advanceTimersByTime(PROVISION_POLL_MS * 2);
-      expect(h.fetchAccessibleBuckets).not.toHaveBeenCalled();
+      expect(h.refetch).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -326,9 +336,9 @@ describe("TenantBucketsPage", () => {
     expect(
       screen.queryByText(/may bind to no bucket yet/),
     ).not.toBeInTheDocument();
-    h.fetchAccessibleBuckets.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    // Retry asks for the same tenant-scoped list the page loaded.
-    expect(h.fetchAccessibleBuckets).toHaveBeenCalledWith(TENANT_NAME);
+    // Retry re-reads the same tenant-scoped list the page loaded.
+    expect(h.refetch).toHaveBeenCalledTimes(1);
+    expect(h.reads.at(-1)).toEqual({ accessibleTo: TENANT_NAME });
   });
 });

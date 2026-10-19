@@ -1,7 +1,7 @@
 "use client";
 
 import { HelpTip } from "@/components/ui/HelpTip";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { SparklesIcon } from "@heroicons/react/24/outline";
 
@@ -103,14 +103,15 @@ export function TenantCreateDialog({
   const dedicated = layout === "dedicated";
 
   const { backends, error: backendsError, fetchBackends } = useBackends(open);
-  const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
+  const {
+    buckets,
+    error: bucketsError,
+    refetch: refetchBuckets,
+  } = useBuckets(open ? {} : null);
   // A failed read leaves its list empty, which every check below would read as
   // "none registered" and answer by sending the operator off to create one.
   const backendsFailed = failedRead(backendsError, fetchBackends);
-  const bucketsFailed = failedRead(bucketsError, fetchBuckets);
-  useEffect(() => {
-    if (open) void fetchBuckets();
-  }, [open, fetchBuckets]);
+  const bucketsFailed = failedRead(bucketsError, refetchBuckets);
   const bucketsForBackend = useMemo(
     () => (backendId ? buckets.filter((b) => b.backendId === backendId) : []),
     [buckets, backendId],

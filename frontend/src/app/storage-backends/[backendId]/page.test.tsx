@@ -5,6 +5,8 @@ import { render, screen } from "@testing-library/react";
 // "Backend not found." for a backend that may exist, and "No buckets on this
 // backend yet." with a count of 0 and an offer to create one.
 const h = vi.hoisted(() => ({
+  // Every read the page handed useBuckets.
+  reads: [] as unknown[],
   backends: {
     backends: [] as Array<Record<string, unknown>>,
     loading: false,
@@ -15,7 +17,10 @@ const h = vi.hoisted(() => ({
     buckets: [] as Array<Record<string, unknown>>,
     loading: false,
     error: null as string | null,
-    fetchBuckets: vi.fn(),
+    refetch: vi.fn(),
+    fetched: true,
+    createBucket: vi.fn(),
+    deleteBucket: vi.fn(),
   },
   tenants: {
     tenants: [] as Array<Record<string, unknown>>,
@@ -31,7 +36,12 @@ vi.mock("next/navigation", async (importOriginal) => ({
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
 vi.mock("./BackendActions", () => ({ BackendActions: () => null }));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
-vi.mock("@/hooks/useBuckets", () => ({ useBuckets: () => h.buckets }));
+vi.mock("@/hooks/useBuckets", () => ({
+  useBuckets: (read: unknown) => {
+    h.reads.push(read);
+    return h.buckets;
+  },
+}));
 vi.mock("@/hooks/useTenants", () => ({ useTenants: () => h.tenants }));
 
 import StorageBackendDetailPage from "./page";
@@ -46,6 +56,7 @@ const PRIMARY = {
 };
 
 beforeEach(() => {
+  h.reads = [];
   h.backends.backends = [PRIMARY];
   h.backends.error = null;
   h.buckets.buckets = [];
@@ -116,9 +127,9 @@ describe("StorageBackendDetailPage bucket read", () => {
   // The backend's buckets, asked of the server by backend — not every
   // bucket on every backend, filtered here.
   it("asks the server for this backend's buckets only", () => {
-    h.buckets.fetchBuckets.mockClear();
     render(<StorageBackendDetailPage />);
-    expect(h.buckets.fetchBuckets).toHaveBeenCalledWith("primary");
+    expect(h.reads.length).toBeGreaterThan(0);
+    for (const read of h.reads) expect(read).toEqual({ backendId: "primary" });
   });
 });
 

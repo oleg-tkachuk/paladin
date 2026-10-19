@@ -7,10 +7,14 @@ import userEvent from "@testing-library/user-event";
 // loading, empty, and a populated row. This is the regression net that
 // guards decomposing this page later.
 const h = vi.hoisted(() => ({
+  // Every read the page handed useBuckets, in render order.
+  reads: [] as unknown[],
   buckets: {
     buckets: [] as Array<Record<string, unknown>>,
     loading: false,
-    fetchBuckets: vi.fn(),
+    error: null as string | null,
+    refetch: vi.fn(),
+    fetched: true,
     createBucket: vi.fn(),
     deleteBucket: vi.fn(),
   },
@@ -31,16 +35,31 @@ vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: vi.fn() }),
 }));
-vi.mock("@/hooks/useBuckets", () => ({ useBuckets: () => h.buckets }));
+vi.mock("@/hooks/useBuckets", () => ({
+  useBuckets: (read: unknown) => {
+    h.reads.push(read);
+    return h.buckets;
+  },
+}));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
 vi.mock("@/hooks/useTenants", () => ({ useTenants: () => h.tenants }));
 
 import BucketsPage from "./page";
 import { PROVISION_POLL_MS, PROVISION_STATE } from "@/lib/bucketProvision";
 
+type ListRead = { backendId?: string; filter?: string };
+
+/** The distinct filters the page read, in order. */
+const filtersRead = () =>
+  (h.reads as ListRead[])
+    .map((r) => r.filter ?? "")
+    .filter((f, i, all) => i === 0 || f !== all[i - 1]);
+
 beforeEach(() => {
+  h.reads = [];
   h.buckets.buckets = [];
   h.buckets.loading = false;
+  h.buckets.refetch.mockClear();
   h.backends.backends = [];
 });
 
@@ -132,14 +151,11 @@ describe("BucketsPage search", () => {
 
   it("sends the query to the API as one CEL conjunct", () => {
     render(<BucketsPage />);
-    h.buckets.fetchBuckets.mockClear();
 
     typeInSearch("Prod");
     tick(400);
 
-    const calls = h.buckets.fetchBuckets.mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    const [backendId, filter] = calls[calls.length - 1];
+    const { backendId, filter } = h.reads.at(-1) as ListRead;
     expect(backendId).toBeUndefined();
     // Lowercased on the client to match the server's ASCII folding, and a
     // single conjunct — a disjunction would not push down to SQL, so matches
@@ -150,7 +166,6 @@ describe("BucketsPage search", () => {
 
   it("debounces, so three keystrokes are not three requests", () => {
     render(<BucketsPage />);
-    h.buckets.fetchBuckets.mockClear();
 
     // The clock MUST move between keystrokes. Typing three times and then
     // advancing once cannot tell a 300ms debounce from a 0ms one — nothing
@@ -162,17 +177,14 @@ describe("BucketsPage search", () => {
     tick(100);
     typeInSearch("log");
     tick(100);
-    expect(h.buckets.fetchBuckets.mock.calls.filter((c) => c[1])).toHaveLength(
-      0,
-    );
+    expect(filtersRead().filter((f) => f !== "")).toHaveLength(0);
 
     tick(400);
 
-    const filtered = h.buckets.fetchBuckets.mock.calls.filter(
-      (c) => typeof c[1] === "string" && c[1] !== "",
-    );
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0][1]).toBe('search.contains("log")');
+    // Only the final query reached the hook; "l" and "lo" never did.
+    expect(filtersRead().filter((f) => f !== "")).toEqual([
+      'search.contains("log")',
+    ]);
   });
 
   it("says it is still searching rather than that nothing matched", () => {
@@ -254,11 +266,11 @@ describe("BucketsPage provisioning", () => {
         },
       ];
       render(<BucketsPage />);
-      h.buckets.fetchBuckets.mockClear();
+      expect(h.buckets.refetch).not.toHaveBeenCalled();
       act(() => {
         vi.advanceTimersByTime(PROVISION_POLL_MS);
       });
-      expect(h.buckets.fetchBuckets).toHaveBeenCalled();
+      expect(h.buckets.refetch).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

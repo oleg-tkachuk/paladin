@@ -108,10 +108,11 @@ export default function PoliciesPage() {
   } = useTenants();
   const {
     buckets,
-    fetchBuckets,
+    refetch: refetchBuckets,
     loading: bucketsLoading,
     error: bucketsError,
-  } = useBuckets();
+    // The target picker chooses from a set; read only while the scope does.
+  } = useBuckets(scope === "bucket" ? {} : null);
   const {
     collections,
     fetchAllCollections,
@@ -121,10 +122,9 @@ export default function PoliciesPage() {
   } = useCollections({ catalogue: true });
 
   useEffect(() => {
-    if (scope === "bucket") void fetchBuckets();
     // The target picker chooses from a set; one page hides the rest.
     if (scope === "collection") void fetchAllCollections();
-  }, [scope, fetchBuckets, fetchAllCollections]);
+  }, [scope, fetchAllCollections]);
 
   // Reset the selected target whenever the scope changes — render-phase
   // adjust-on-change (not set-state-in-effect).
@@ -388,7 +388,7 @@ export default function PoliciesPage() {
     scope === "tenant"
       ? failedRead(tenantsError, refetchTenants)
       : scope === "bucket"
-        ? failedRead(bucketsError, fetchBuckets)
+        ? failedRead(bucketsError, refetchBuckets)
         : failedRead(collectionsError, fetchAllCollections);
   const targetLabel = SCOPES.find((s) => s.value === scope)?.label ?? scope;
 

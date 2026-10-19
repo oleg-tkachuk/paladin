@@ -20,7 +20,7 @@
 import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { useTenantChangesBlocked } from "../tenant-context";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
@@ -92,10 +92,11 @@ export default function TenantBucketsPage() {
     buckets,
     loading,
     error: bucketsError,
-    fetchAccessibleBuckets,
+    refetch,
     createBucket,
     deleteBucket,
-  } = useBuckets();
+    // Owned plus granted, across backends.
+  } = useBuckets({ accessibleTo: tenantResourceName(tenant.tenantId) });
   const {
     backends: backendRows,
     error: backendsError,
@@ -121,12 +122,6 @@ export default function TenantBucketsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Bucket | null>(null);
 
-  // Owned plus granted, across backends. One place, so Refresh asks for the
-  // same.
-  const refetch = useCallback(
-    () => fetchAccessibleBuckets(tenantResourceName(tenant.tenantId)),
-    [fetchAccessibleBuckets, tenant.tenantId],
-  );
   const ownedByTenant = (b: Bucket) => b.ownerTenantId === tenant.tenantId;
   const dedicated = isDedicatedLayout(tenant.storageLayout);
   // The palette offers the create while this page does.
@@ -142,10 +137,6 @@ export default function TenantBucketsPage() {
         }
       : null,
   );
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
 
   // A created or deleted bucket settles in the reconciler, not in the RPC
   // that started it; without this it read "provisioning…" until a reload.
