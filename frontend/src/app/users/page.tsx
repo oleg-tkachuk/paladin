@@ -6,7 +6,7 @@
 // opens on a page of their own, where roles and scopes are edited.
 
 import { IntentTableRow } from "@/components/ui/IntentTableRow";
-import { userDetailQuery } from "@/lib/queries/details";
+import { USERS_LIST_QUERY_KEY, userDetailQuery } from "@/lib/queries/details";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
@@ -85,7 +85,7 @@ export default function UsersPage() {
   const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
 
   const usersQuery = useQuery({
-    queryKey: ["users"],
+    queryKey: USERS_LIST_QUERY_KEY,
     // Every page: the search below runs over these rows.
     queryFn: ({ signal }) =>
       listAllPages((pageToken) =>

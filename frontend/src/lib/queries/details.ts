@@ -27,3 +27,6 @@ export function userDetailQuery(name: string) {
     queryFn: ({ signal }) => userClient.getUser({ name }, { signal }),
   });
 }
+
+/** Every user, as the users page lists them. */
+export const USERS_LIST_QUERY_KEY = ["users"] as const;
