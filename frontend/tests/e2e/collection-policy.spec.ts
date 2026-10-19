@@ -45,9 +45,10 @@ test.describe("Collection policy editor", () => {
 
     await editor.fill(VALID_POLICY);
     await page.getByRole("button", { name: /^Save$/ }).click();
-    await expect(page.getByText(/Policy saved/i)).toBeVisible({
-      timeout: 15_000,
-    });
+    // Confirmed beside the Save button, not in a toast.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Saved" }),
+    ).toBeVisible({ timeout: 15_000 });
 
     // The assertion that matters: the server holds the new text, and the
     // write advanced the version — a save that returned the row unchanged
