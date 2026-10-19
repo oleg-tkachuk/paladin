@@ -43,7 +43,7 @@ export default function StorageBackendDetailPage() {
     backends,
     loading: loadingBackends,
     error: backendsError,
-    fetchBackends,
+    refetch: refetchBackends,
   } = useBackends();
   const {
     buckets,
@@ -114,7 +114,7 @@ export default function StorageBackendDetailPage() {
             <div className="border-t border-border pt-3">
               <BackendActions
                 backend={backend}
-                onTested={() => void fetchBackends()}
+                onTested={() => void refetchBackends()}
               />
             </div>
           </CardContent>
@@ -127,7 +127,7 @@ export default function StorageBackendDetailPage() {
             <ListLoadError
               what="Backends"
               reason={backendsError}
-              onRetry={() => void fetchBackends()}
+              onRetry={() => void refetchBackends()}
             />
           </CardContent>
         </Card>

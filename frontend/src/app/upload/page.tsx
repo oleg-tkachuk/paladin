@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpTrayIcon,
@@ -68,13 +68,17 @@ function TagPill({
 export default function UploadPage() {
   const { queue, uploadFile, clearQueue } = useUpload();
   const router = useRouter();
-  // The picker wants the whole set, not page one — see fetchAllCollections.
+  // The picker wants the whole set, not page one: the hook reads every page.
   const {
     collections,
     error: collectionsError,
-    fetchAllCollections,
+    refetch: refetchCollections,
   } = useCollections();
-  const [selectedCollection, setSelectedCollection] = useState<string>("");
+  // The one picked, or the first until one is: a page opened to upload has
+  // somewhere to put the files.
+  const [pickedCollection, setSelectedCollection] = useState<string>("");
+  const selectedCollection =
+    pickedCollection || collections[0]?.collection || "";
   // Sentinel routed through SelectRoot.onValueChange to mean "the user
   // clicked the footer affordance, not an actual Collection row". We
   // can't bind an onClick to a SelectItem because Radix swallows it
@@ -92,22 +96,6 @@ export default function UploadPage() {
 
   const [globalTags, setGlobalTags] = useState<Record<string, string>>({});
   const [tagInput, setTagInput] = useState("");
-
-  useEffect(() => {
-    void fetchAllCollections().then((res) => {
-      if (
-        res?.collections &&
-        res.collections.length > 0 &&
-        !selectedCollection
-      ) {
-        setSelectedCollection(res.collections[0].collection);
-      }
-    });
-    // Intent: fetch once on mount, auto-select if nothing is chosen.
-    // selectedCollection is read inside only as a guard — keeping it in
-    // the deps re-fired this fetch on every dropdown selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchAllCollections]);
 
   const handleAddTag = useCallback(() => {
     if (!tagInput.includes(":")) return;
@@ -181,7 +169,7 @@ export default function UploadPage() {
                   variant="inline"
                   what="Collections"
                   reason={collectionsError}
-                  onRetry={() => void fetchAllCollections()}
+                  onRetry={refetchCollections}
                 />
               ) : null}
               <SelectRoot

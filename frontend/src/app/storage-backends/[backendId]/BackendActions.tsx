@@ -65,7 +65,7 @@ export function BackendActions({
   // autoFetch=false: this component only needs the mutations, not the list —
   // fetching it here would fire a redundant ListBackends on every mount.
   const { updateBackend, rotateCredentials, testBackend, deleteBackend } =
-    useBackends(false);
+    useBackends({ enabled: false });
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestBackendResponse | null>(

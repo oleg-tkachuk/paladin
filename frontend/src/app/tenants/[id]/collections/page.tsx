@@ -20,7 +20,6 @@ import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
-import { useQuery } from "@tanstack/react-query";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
@@ -39,7 +38,6 @@ import { collectionDeleteFailure } from "@/lib/collectionDeleteFailure";
 import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 
-import { listAllCollections } from "@/lib/listAllCollections";
 import { searchFilter } from "@/lib/cel";
 
 import { Button } from "@/components/ui/button";
@@ -58,7 +56,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
@@ -74,9 +71,6 @@ const TABLE_ID = "tenantCollections";
 const SORT_COLUMNS = ["name", "displayName", "bucket"] as const;
 type SortColumn = (typeof SORT_COLUMNS)[number];
 
-// Position of the tenant id in the list query's key.
-const TENANT_KEY_INDEX = 1;
-
 export default function TenantCollectionsPage() {
   const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
@@ -84,7 +78,7 @@ export default function TenantCollectionsPage() {
   const {
     backends: backendRows,
     error: backendsError,
-    fetchBackends,
+    refetch: refetchBackends,
   } = useBackends();
   const { showNotification } = useNotification();
   const router = useRouter();
@@ -136,41 +130,16 @@ export default function TenantCollectionsPage() {
     columns: SORT_COLUMNS,
   });
 
-  const listQuery = useQuery({
-    queryKey: ["tenantCollections", tenant.tenantId, celFilter],
-    retry: false, // queryFn toasts real failures.
-    // While a new search loads, keep showing the last result for this tenant.
-    // Without it every keystroke emptied the table for a round trip, which
-    // also unmounted an open row menu under the cursor. Never across tenants:
-    // another tenant's rows must not stand in for this one's, even briefly.
-    placeholderData: (previous: Collection[] | undefined, previousQuery) =>
-      previousQuery?.queryKey[TENANT_KEY_INDEX] === tenant.tenantId
-        ? previous
-        : undefined,
-    queryFn: async ({ signal }) => {
-      try {
-        return await listAllCollections(
-          { parent: `tenants/${tenant.tenantId}`, filter: celFilter },
-          signal,
-        );
-      } catch (err) {
-        // An aborted query is not a failure the operator needs to see:
-        // TanStack cancels in-flight reads on unmount and on supersede.
-        if (isAbortError(err)) throw err;
-        showNotification({
-          type: "error",
-          title: "Load failed",
-          message: errorMessage(err, "Failed to fetch collections"),
-        });
-        throw err;
-      }
-    },
-  });
-  const list = useMemo(() => listQuery.data ?? [], [listQuery.data]);
-  const loading = listQuery.isFetching;
-  // Call sites pass the current search; it's already in the queryKey, so a
-  // bare refetch suffices.
-  const fetchList = (_filter?: string) => listQuery.refetch();
+  // This tenant's collections the search admits, from the shared cache: a
+  // delete made here or anywhere else shows at once. The hook keeps the last
+  // result of this tenant on screen while a new search loads.
+  const {
+    collections: list,
+    loading,
+    error: listError,
+    refetch: refetchList,
+  } = useCollections({ filter: celFilter });
+  const fetchList = (_filter?: string) => refetchList();
 
   // ── create dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -324,11 +293,11 @@ export default function TenantCollectionsPage() {
             loading={loading && list.length === 0}
             // "No Collections yet" for a failed list invites a duplicate.
             error={
-              listQuery.isError && !listQuery.data
+              listError && list.length === 0
                 ? {
                     what: "Collections",
-                    reason: errorMessage(listQuery.error),
-                    onRetry: () => void listQuery.refetch(),
+                    reason: listError,
+                    onRetry: refetchList,
                   }
                 : null
             }
@@ -420,7 +389,7 @@ export default function TenantCollectionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
-        backendsFailed={failedRead(backendsError, fetchBackends)}
+        backendsFailed={failedRead(backendsError, refetchBackends)}
         bucketsHref={`/tenants/${tenant.slug}/buckets`}
         createCollection={createCollection}
         onCreated={() => void fetchList(search)}

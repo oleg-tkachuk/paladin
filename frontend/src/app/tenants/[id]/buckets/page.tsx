@@ -100,7 +100,7 @@ export default function TenantBucketsPage() {
   const {
     backends: backendRows,
     error: backendsError,
-    fetchBackends,
+    refetch: refetchBackends,
   } = useBackends();
 
   const backends = useMemo(
@@ -353,7 +353,7 @@ export default function TenantBucketsPage() {
           open={createOpen}
           onOpenChange={setCreateOpen}
           backends={backendRows}
-          backendsFailed={failedRead(backendsError, fetchBackends)}
+          backendsFailed={failedRead(backendsError, refetchBackends)}
           description={`Created on the backend and owned by ${tenant.displayName || tenant.slug}. Other tenants bind to it only once granted.`}
           fixedOwnerTenantId={tenant.tenantId}
           createBucket={createBucket}
