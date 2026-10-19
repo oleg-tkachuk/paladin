@@ -1,6 +1,8 @@
 "use client";
 
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { PRESSED } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 export default function GlobalError({
   error,
@@ -27,7 +29,10 @@ export default function GlobalError({
       )}
       <button
         onClick={reset}
-        className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary text-primary-foreground text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95"
+        className={cn(
+          "px-6 py-3 rounded-2xl bg-primary hover:bg-primary text-primary-foreground text-sm font-bold transition-all shadow-raised",
+          PRESSED,
+        )}
       >
         Try Again
       </button>

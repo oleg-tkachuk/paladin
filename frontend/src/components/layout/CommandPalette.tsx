@@ -597,7 +597,7 @@ export function CommandPalette() {
       />
 
       {/* Palette Container */}
-      <div className="relative w-full max-w-2xl bg-background/95 rounded-4xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-border animate-bounce-in">
+      <div className="relative w-full max-w-2xl bg-background/95 rounded-4xl overflow-hidden shadow-overlay border border-border animate-bounce-in">
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
         <div className="p-6 border-b border-border flex items-center gap-4">
@@ -652,7 +652,7 @@ export function CommandPalette() {
                 }}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative ${
                   index === selectedIndex
-                    ? "bg-primary/10 border-primary/30 shadow-lg"
+                    ? "bg-primary/10 border-primary/30 shadow-raised"
                     : "bg-transparent border-transparent hover:bg-foreground/[0.02]"
                 }`}
                 onMouseEnter={() => setSelectedIndex(index)}

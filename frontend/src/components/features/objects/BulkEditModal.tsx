@@ -6,6 +6,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PRESSED } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 interface BulkEditModalProps {
   isOpen: boolean;
@@ -33,7 +35,7 @@ export function BulkEditModal({
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="sm:max-w-lg bg-background rounded-4xl border border-border shadow-2xl p-8 gap-6 overflow-hidden"
+        className="sm:max-w-lg bg-background rounded-4xl border border-border shadow-overlay p-8 gap-6 overflow-hidden"
       >
         <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">
@@ -65,7 +67,10 @@ export function BulkEditModal({
           <button
             onClick={onSubmit}
             disabled={isProcessing}
-            className="flex-1 py-4 rounded-2xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-primary transition-all shadow-xl shadow-primary/20 active:scale-95"
+            className={cn(
+              "flex-1 py-4 rounded-2xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-primary transition-all shadow-raised",
+              PRESSED,
+            )}
           >
             {isProcessing ? "Syncing..." : "Update Tags"}
           </button>

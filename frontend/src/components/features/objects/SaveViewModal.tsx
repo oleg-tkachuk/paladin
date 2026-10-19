@@ -1,5 +1,8 @@
 "use client";
 
+import { PRESSED } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
+
 interface SaveViewModalProps {
   isOpen: boolean;
   viewName: string;
@@ -23,7 +26,7 @@ export function SaveViewModal({
         className="fixed inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-sm bg-background rounded-4xl border border-border shadow-2xl p-8 space-y-6 overflow-hidden">
+      <div className="relative w-full max-w-sm bg-background rounded-4xl border border-border shadow-overlay p-8 space-y-6 overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
         <div className="space-y-2">
           <h3 className="text-xl font-bold text-foreground uppercase tracking-tight">
@@ -52,7 +55,10 @@ export function SaveViewModal({
         <div className="flex gap-4 pt-2">
           <button
             onClick={onSave}
-            className="flex-1 py-3.5 rounded-2xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-primary transition-all active:scale-95"
+            className={cn(
+              "flex-1 py-3.5 rounded-2xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-primary transition-all",
+              PRESSED,
+            )}
           >
             Save View
           </button>

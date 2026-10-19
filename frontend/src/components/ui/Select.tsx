@@ -17,6 +17,7 @@ import { Select as SelectPrimitive } from "radix-ui";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 // ─── shadcn primitives ─────────────────────────────────────────────────────
 
@@ -49,7 +50,8 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-3 text-sm whitespace-nowrap transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8",
+        "flex w-fit items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-3 text-sm whitespace-nowrap transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8",
+        FOCUS_RING,
         className,
       )}
       {...props}
@@ -76,7 +78,7 @@ function SelectContent({
         position={position}
         align={align}
         className={cn(
-          "z-50 max-h-[var(--radix-select-content-available-height)] min-w-[10rem] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+          "z-50 max-h-[var(--radix-select-content-available-height)] min-w-[10rem] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-floating",
           className,
         )}
         {...props}

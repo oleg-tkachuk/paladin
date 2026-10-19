@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { PRESSED } from "@/lib/ui/states";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -79,7 +80,7 @@ export function ConfirmModal({
           question it raised. */}
       <AlertDialogContent
         overlayClassName="z-100"
-        className="z-100 max-w-sm rounded-[2rem] border border-border bg-popover shadow-2xl p-8 gap-6"
+        className="z-100 max-w-sm rounded-[2rem] border border-border bg-popover shadow-overlay p-8 gap-6"
       >
         <div className="flex flex-col items-center text-center space-y-4">
           <div
@@ -134,7 +135,8 @@ export function ConfirmModal({
             onClick={handleConfirm}
             disabled={busy || confirmDisabled}
             className={cn(
-              "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50",
+              "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50",
+              PRESSED,
               isDanger
                 ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 : "bg-warning text-warning-foreground hover:bg-warning/90",

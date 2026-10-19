@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { RenamedSlugHint } from "@/components/features/tenants/RenamedSlugHint";
+import { PRESSED } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 // Rendered when the tenant layout calls notFound() — i.e. the slug (or UUID)
 // in the URL matches no visible tenant. Beyond the standard 404 chrome it
@@ -20,7 +22,10 @@ export default function TenantNotFound() {
       </p>
       <Link
         href="/"
-        className="rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary active:scale-95"
+        className={cn(
+          "rounded-2xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-raised transition-all hover:bg-primary",
+          PRESSED,
+        )}
       >
         Return to Dashboard
       </Link>
