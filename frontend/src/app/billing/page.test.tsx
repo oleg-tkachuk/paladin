@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { fireEvent, render, screen, within } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
   tenantsError: null as string | null,
@@ -14,6 +15,7 @@ vi.mock("@/lib/connect/client", () => ({
   billingClient: {
     getTenantSummary: h.summary,
     getTenantTimeSeries: h.series,
+    getBillingSettings: () => Promise.resolve({ currencyCode: "EUR" }),
   },
 }));
 vi.mock("@/context/ScopeContext", () => ({
@@ -22,7 +24,14 @@ vi.mock("@/context/ScopeContext", () => ({
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
-vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
+vi.mock("@/components/layout/PageHeader", () => ({
+  PageHeader: ({ actions }: { actions?: React.ReactNode }) => (
+    <div>{actions}</div>
+  ),
+}));
+vi.mock("@/components/features/audit/ActorName", () => ({
+  ActorName: ({ subject }: { subject: string }) => subject,
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: h.replace }),
   useSearchParams: () => new URLSearchParams(h.search),
@@ -92,7 +101,7 @@ describe("BillingPage", () => {
     // The card shows before the summary does: wait for its rows.
     await screen.findByText("list");
     const card = screen
-      .getByText("Top ops")
+      .getByText("Top operations")
       .closest("[data-slot=card]") as HTMLElement;
     const labels = () =>
       within(card)
@@ -116,9 +125,11 @@ describe("BillingPage", () => {
     await screen.findByText("No charges in this period");
     expect(h.summary).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "t-2" }),
+      expect.anything(),
     );
     expect(h.series).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "t-2" }),
+      expect.anything(),
     );
     expect(
       await screen.findByText(/Globex was not billed/),
@@ -143,6 +154,7 @@ describe("BillingPage", () => {
     await screen.findByText("No charges in this period");
     expect(h.summary).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "t-1" }),
+      expect.anything(),
     );
   });
 
@@ -258,5 +270,88 @@ describe("BillingPage", () => {
     render(<BillingPage />);
 
     expect(await screen.findByText(helper)).toBeInTheDocument();
+  });
+
+  it("links to the tenant's budget, to set one or change it", async () => {
+    h.search = "tenant=t-2";
+    h.summary.mockResolvedValue({ ...emptySummary, chargeCount: 1n });
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    expect(
+      await screen.findByRole("link", { name: "Set a budget" }),
+    ).toHaveAttribute("href", "/tenants/globex/budget");
+  });
+
+  it("names the actors, not their subjects only", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      chargeCount: 1n,
+      topActors: [{ label: "0199-user", spent: usd(1n), chargeCount: 1n }],
+    });
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    const name = await screen.findByText("0199-user");
+    expect(name.closest("[data-slot=card]")).toHaveTextContent("Top actors");
+  });
+
+  it("says what is wrong with a custom range, and asks for nothing", async () => {
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    await screen.findByText("No charges in this period");
+    h.summary.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Custom" }));
+    expect(screen.getByText("Choose both dates.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Period start"), {
+      target: { value: "2026-10-05" },
+    });
+    fireEvent.change(screen.getByLabelText("Period end"), {
+      target: { value: "2026-10-01" },
+    });
+    expect(screen.getByText("The start is after the end.")).toBeInTheDocument();
+    expect(h.summary).not.toHaveBeenCalled();
+  });
+
+  it("offers no hourly chart of 30 days, and draws it daily", async () => {
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    const group = await screen.findByRole("group", { name: "Granularity" });
+    expect(
+      within(group).getByRole("button", { name: "Hourly" }),
+    ).toBeDisabled();
+    expect(
+      within(group).getByRole("button", { name: "Daily" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() =>
+      expect(h.series).toHaveBeenCalledWith(
+        expect.objectContaining({ granularity: "day" }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("offers a longer period from an empty one", async () => {
+    h.summary.mockResolvedValue(emptySummary);
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Look at the last 90 days" }),
+    );
+    expect(screen.getByRole("button", { name: "90 days" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("writes amounts in the platform's currency when the ledger names none", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      total: { currencyCode: "", units: 2n, nanos: 0 },
+      chargeCount: 1n,
+    });
+    h.series.mockResolvedValue({ buckets: [] });
+    render(<BillingPage />);
+    expect(await screen.findByText("€2.0000")).toBeInTheDocument();
   });
 });

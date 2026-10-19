@@ -46,3 +46,8 @@ export function collectionTrashHref(
 ): string {
   return `${collectionHref(tenant, collection)}/trash`;
 }
+
+/** A tenant's budget, where its spending cap is set. */
+export function tenantBudgetHref(tenant: string): string {
+  return `${tenantHref(tenant)}/budget`;
+}

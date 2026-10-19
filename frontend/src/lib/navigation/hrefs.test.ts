@@ -6,6 +6,7 @@ import {
   collectionHref,
   collectionTrashHref,
   parseBucketName,
+  tenantBudgetHref,
   tenantHref,
 } from "./hrefs";
 
@@ -25,6 +26,7 @@ describe("hrefs", () => {
     expect(collectionTrashHref("acme", "docs")).toBe(
       "/tenants/acme/collections/docs/trash",
     );
+    expect(tenantBudgetHref("acme")).toBe("/tenants/acme/budget");
   });
 
   it("encodes what a path segment cannot hold", () => {
