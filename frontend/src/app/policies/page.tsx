@@ -102,7 +102,7 @@ export default function PoliciesPage() {
 
   const {
     tenants,
-    fetchTenants,
+    refetch: refetchTenants,
     loading: tenantsLoading,
     error: tenantsError,
   } = useTenants();
@@ -120,9 +120,6 @@ export default function PoliciesPage() {
     // The system-wide editor targets any tenant's Collection.
   } = useCollections({ catalogue: true });
 
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
   useEffect(() => {
     if (scope === "bucket") void fetchBuckets();
     // The target picker chooses from a set; one page hides the rest.
@@ -389,7 +386,7 @@ export default function PoliciesPage() {
   // and stayed disabled, which reads as nothing to attach a policy to.
   const targetFailed =
     scope === "tenant"
-      ? failedRead(tenantsError, fetchTenants)
+      ? failedRead(tenantsError, refetchTenants)
       : scope === "bucket"
         ? failedRead(bucketsError, fetchBuckets)
         : failedRead(collectionsError, fetchAllCollections);

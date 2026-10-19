@@ -77,10 +77,7 @@ export default function CollectionsPage() {
     deleteCollection,
   } = useCollections({ catalogue: true });
   // The rows span tenants; each names its own.
-  const { tenants, fetchTenants } = useTenants();
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
+  const { tenants } = useTenants();
   const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
   const {
     backends: backendRows,

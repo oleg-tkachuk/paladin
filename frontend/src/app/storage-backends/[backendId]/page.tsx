@@ -63,10 +63,7 @@ export default function StorageBackendDetailPage() {
     [backends, backendId],
   );
   // The rows name owners and grantees; an unknown tenant shows its id.
-  const { tenants, fetchTenants } = useTenants();
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
+  const { tenants } = useTenants();
   const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
   const bucketsHere = useMemo(
     () => buckets.filter((b) => b.backendId === backendId),

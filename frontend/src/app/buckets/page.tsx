@@ -83,10 +83,11 @@ export default function BucketsPage() {
   } = useBackends();
 
   // The create dialog's owner picker (ADR-0032: every bucket has one).
-  const { tenants, error: tenantsError, fetchTenants } = useTenants();
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
+  const {
+    tenants,
+    error: tenantsError,
+    refetch: refetchTenants,
+  } = useTenants();
 
   const backends = useMemo(
     () => backendRows.map((b) => b.backendId),
@@ -315,7 +316,7 @@ export default function BucketsPage() {
           backends={backendRows}
           backendsFailed={failedRead(backendsError, fetchBackends)}
           tenants={tenants}
-          tenantsFailed={failedRead(tenantsError, fetchTenants)}
+          tenantsFailed={failedRead(tenantsError, refetchTenants)}
           createBucket={createBucket}
         />
 

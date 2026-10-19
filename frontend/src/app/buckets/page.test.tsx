@@ -18,7 +18,7 @@ const h = vi.hoisted(() => ({
   tenants: {
     tenants: [] as Array<Record<string, unknown>>,
     error: null as string | null,
-    fetchTenants: vi.fn(),
+    refetch: vi.fn(),
   },
 }));
 
@@ -235,7 +235,6 @@ describe("BucketsPage create dialog", () => {
     expect(
       screen.getByRole("combobox", { name: /Owner tenant/ }),
     ).toBeInTheDocument();
-    expect(h.tenants.fetchTenants).toHaveBeenCalled();
   });
 });
 

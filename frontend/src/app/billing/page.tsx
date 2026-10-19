@@ -102,14 +102,15 @@ function BillingView() {
   const platformCurrency = usePlatformCurrency();
 
   // ── tenants ─────────────────────────────────────────────────────────
-  const { fetchTenants, error: tenantsError } = useTenants();
+  const {
+    tenants: allTenants,
+    error: tenantsError,
+    refetch: refetchTenants,
+    fetchedAt: tenantsFetchedAt,
+  } = useTenants("all");
   // Trashed tenants too: their charges stay on the ledger.
-  const tenantsQuery = useQuery({
-    queryKey: ["billingTenants"],
-    queryFn: () =>
-      fetchTenants("", "", { includeTrashed: true }).then((r) => r.tenants),
-  });
-  const tenants = tenantsQuery.data;
+  // Undefined until the first read, as the picker below distinguishes.
+  const tenants = tenantsFetchedAt ? allTenants : undefined;
   const tenantOptions = useMemo(
     () =>
       (tenants ?? [])
@@ -333,7 +334,7 @@ function BillingView() {
           variant="inline"
           what="Tenants"
           reason={tenantsError}
-          onRetry={() => void tenantsQuery.refetch()}
+          onRetry={refetchTenants}
         />
       )}
 

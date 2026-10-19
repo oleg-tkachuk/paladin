@@ -11,7 +11,7 @@ import { IntentTableRow } from "@/components/ui/IntentTableRow";
 import { USERS_LIST_QUERY_KEY, userDetailQuery } from "@/lib/queries/details";
 import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -80,7 +80,11 @@ const DEFAULT_STANDING_FILTER: StandingFilter = "all";
 type UserColumn = "user" | "tenant" | "login" | "state";
 
 export default function UsersPage() {
-  const { tenants, error: tenantsError, fetchTenants } = useTenants();
+  const {
+    tenants,
+    error: tenantsError,
+    refetch: refetchTenants,
+  } = useTenants();
   const [createOpen, setCreateOpen] = useState(false);
   // The palette offers the create while this page is on screen.
   usePageAction({
@@ -119,12 +123,6 @@ export default function UsersPage() {
     ? normalizeError(usersQuery.error).message
     : null;
   const refreshUsers = () => void usersQuery.refetch();
-
-  // useTenants has no auto-fetch (caller-triggered); kick it on mount. Not a
-  // set-state-in-effect hit — fetchTenants is a cross-module useCallback.
-  useEffect(() => {
-    void fetchTenants();
-  }, [fetchTenants]);
 
   const tenantByID = useMemo(
     () => new Map(tenants.map((t) => [t.tenantId, t])),
@@ -362,7 +360,7 @@ export default function UsersPage() {
           slug: t.slug,
           displayName: t.displayName,
         }))}
-        tenantsFailed={failedRead(tenantsError, fetchTenants)}
+        tenantsFailed={failedRead(tenantsError, refetchTenants)}
       />
       <PasswordResetResult
         target={resetTarget}

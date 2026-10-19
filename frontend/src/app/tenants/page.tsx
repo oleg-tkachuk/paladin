@@ -4,7 +4,7 @@ import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
@@ -65,7 +65,7 @@ export default function TenantsPage() {
     tenants,
     loading,
     error: listError,
-    fetchTenants,
+    refetch: refetchTenants,
     createTenant,
     updateTenantMetadata,
     deleteTenant,
@@ -94,10 +94,6 @@ export default function TenantsPage() {
   });
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
-
-  useEffect(() => {
-    fetchTenants();
-  }, [fetchTenants]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -157,7 +153,7 @@ export default function TenantsPage() {
                   variant="outline"
                   size="icon"
                   onClick={() => {
-                    void fetchTenants();
+                    void refetchTenants();
                   }}
                   aria-label="Refresh"
                 >
@@ -206,7 +202,7 @@ export default function TenantsPage() {
                 ? {
                     what: "Tenants",
                     reason: listError,
-                    onRetry: () => void fetchTenants(),
+                    onRetry: () => void refetchTenants(),
                   }
                 : null
             }

@@ -33,7 +33,10 @@ const h = vi.hoisted(() => ({
 
 vi.mock("@/hooks/useTenants", () => ({
   useTenants: () => ({
-    fetchTenants: () => Promise.resolve({ tenants: h.tenants }),
+    tenants: h.tenants,
+    loading: false,
+    refetch: vi.fn(),
+    fetchedAt: Date.now(),
     restoreTenant: h.restoreTenant,
     purgeTenant: h.purgeTenant,
     error: null,
