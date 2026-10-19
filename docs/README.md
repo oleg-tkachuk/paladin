@@ -23,6 +23,7 @@ and where its boundaries are. This directory holds the detail.
 - [`../backend/README.md`](../backend/README.md) — roles, ports, package
   layout, wire contracts, database.
 - [`../frontend/README.md`](../frontend/README.md) — console and BFF.
+- [console-voice.md](console-voice.md) — how the console's messages read.
 - [limes](https://github.com/oleg-tkachuk/limes) — the capability
   primitive, a library of its own, usable without the rest of Paladin; its
   diagrams are in its `docs/diagrams.md`.

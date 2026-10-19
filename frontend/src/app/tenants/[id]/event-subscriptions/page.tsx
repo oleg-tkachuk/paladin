@@ -246,8 +246,8 @@ export default function EventsPage() {
       if (err instanceof ConnectError && err.code === Code.Aborted) {
         showNotification({
           type: "warning",
-          title: "Stale, please retry",
-          message: "Subscription was modified concurrently — refetching.",
+          title: "Subscription changed elsewhere",
+          message: "The list is read again; make the change once more.",
         });
         await fetchList();
         return;
@@ -282,8 +282,8 @@ export default function EventsPage() {
       if (err instanceof ConnectError && err.code === Code.Aborted) {
         showNotification({
           type: "warning",
-          title: "Stale, please retry",
-          message: "Subscription was modified concurrently — refetching.",
+          title: "Subscription changed elsewhere",
+          message: "The list is read again; make the change once more.",
         });
         await fetchList();
         setDeleteTarget(null);
