@@ -8,6 +8,9 @@ import { cleanup } from "@testing-library/react";
 
 afterEach(() => {
   cleanup();
+  // Lists keep their search and sort in the URL; one test's must not open the
+  // next test's list.
+  window.history.replaceState(null, "", "/");
 });
 
 // jsdom lacks a few browser APIs that Radix UI primitives (Select, dropdowns,

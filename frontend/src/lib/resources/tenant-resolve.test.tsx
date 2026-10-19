@@ -14,7 +14,8 @@ const replace = vi.fn();
 // One object, as Next's router is: the hook's effect depends on it, and a
 // fresh object per render would re-run the effect forever.
 const router = { replace };
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => router,
 }));
 

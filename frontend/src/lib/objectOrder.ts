@@ -12,9 +12,11 @@ export const OBJECT_ORDER = {
 
 export type ObjectOrderField = (typeof OBJECT_ORDER)[keyof typeof OBJECT_ORDER];
 
-const FIELDS: readonly string[] = Object.values(OBJECT_ORDER);
+/** Every field a list sorts objects by, for reading a sort back from a URL. */
+export const OBJECT_ORDER_FIELDS: readonly ObjectOrderField[] =
+  Object.values(OBJECT_ORDER);
 
 /** Whether a sort read from somewhere untrusted — a URL — is one to send. */
 export function isObjectOrderField(v: string): v is ObjectOrderField {
-  return FIELDS.includes(v);
+  return (OBJECT_ORDER_FIELDS as readonly string[]).includes(v);
 }

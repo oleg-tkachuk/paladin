@@ -19,6 +19,8 @@ import {
   type ToolbarFilterOption,
 } from "@/components/ui/TableToolbar";
 import { useTableView } from "@/hooks/useTableView";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import { useTableFilter } from "@/hooks/useTableUrl";
 import type { SortAccessors } from "@/lib/table/view";
 import { cn } from "@/lib/utils";
 
@@ -134,13 +136,17 @@ const CLIENT_SEARCH = (c: MCPOAuthClient) => [
 export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
   const oauth = inspect.oauth;
   const exchanging = !!oauth?.edgeAudience;
-  const [source, setSource] = useState<SourceFilter>(DEFAULT_SOURCE_FILTER);
+  const [source, setSource] = useTableFilter(
+    SOURCE_FILTERS,
+    DEFAULT_SOURCE_FILTER,
+    PAGE_TABLE,
+  );
   const all = shownClients(oauth);
   const view = useTableView(
     source === DEFAULT_SOURCE_FILTER
       ? all
       : all.filter((c) => clientSource(c) === source),
-    { text: CLIENT_SEARCH, accessors: CLIENT_SORT },
+    { text: CLIENT_SEARCH, accessors: CLIENT_SORT, url: PAGE_TABLE },
   );
   const clients = view.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };

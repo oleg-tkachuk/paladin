@@ -7,6 +7,8 @@ import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -54,7 +56,8 @@ import { CollectionCreateDialog } from "@/components/features/collections/Collec
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
 
-type SortColumn = "name" | "displayName" | "bucket";
+const SORT_COLUMNS = ["name", "displayName", "bucket"] as const;
+type SortColumn = (typeof SORT_COLUMNS)[number];
 
 /** Collection, tenant, display name, bucket, actions. */
 const COLUMNS = 5;
@@ -93,9 +96,12 @@ export default function CollectionsPage() {
   );
 
   // ── search + sort
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>(undefined, {
+    url: PAGE_TABLE,
+    columns: SORT_COLUMNS,
+  });
 
   // ── create
   const [createOpen, setCreateOpen] = useState(false);

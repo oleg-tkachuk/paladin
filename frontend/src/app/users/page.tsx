@@ -33,6 +33,8 @@ import { SortableHead } from "@/components/ui/SortHeader";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { User } from "@/gen/paladin/iam/v1/types_pb";
 import { useTableView } from "@/hooks/useTableView";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import { useTableFilter } from "@/hooks/useTableUrl";
 import type { SearchText, SortAccessors } from "@/lib/table/view";
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { Card } from "@/components/ui/Card";
@@ -109,8 +111,10 @@ export default function UsersPage() {
     [tenants],
   );
 
-  const [standingFilter, setStandingFilter] = useState<StandingFilter>(
+  const [standingFilter, setStandingFilter] = useTableFilter(
+    STANDING_FILTERS,
     DEFAULT_STANDING_FILTER,
+    PAGE_TABLE,
   );
   const inStanding = useMemo(
     () =>
@@ -139,7 +143,11 @@ export default function UsersPage() {
     ],
     [tenantByID],
   );
-  const view = useTableView(inStanding, { text: searchIn, accessors: sortBy });
+  const view = useTableView(inStanding, {
+    text: searchIn,
+    accessors: sortBy,
+    url: PAGE_TABLE,
+  });
   const filtered = view.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 

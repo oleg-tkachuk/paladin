@@ -16,7 +16,13 @@ import {
 
 import { useObjects } from "@/hooks/useObjects";
 import { useTableSort } from "@/hooks/useTableSort";
-import { OBJECT_ORDER, type ObjectOrderField } from "@/lib/objectOrder";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import {
+  OBJECT_ORDER,
+  OBJECT_ORDER_FIELDS,
+  type ObjectOrderField,
+} from "@/lib/objectOrder";
 import { SortableHead } from "@/components/ui/SortHeader";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { buildObjectFilter } from "@/lib/objectFilter";
@@ -69,8 +75,8 @@ export default function CollectionTrashPage() {
   // The search is the server's, over every trashed object, and the list
   // pages on: a search over the first fifty rows missed the rest, and the
   // rest were not listed at all.
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
@@ -78,7 +84,10 @@ export default function CollectionTrashPage() {
 
   // Sorted on the server: the trash loads a page at a time, so a sort in the
   // browser would order only what has loaded. A new sort starts the list over.
-  const { sort, toggleSort } = useTableSort<ObjectOrderField>();
+  const { sort, toggleSort } = useTableSort<ObjectOrderField>(undefined, {
+    url: PAGE_TABLE,
+    columns: OBJECT_ORDER_FIELDS,
+  });
   const sortProps = { current: sort, onSort: toggleSort };
 
   const {

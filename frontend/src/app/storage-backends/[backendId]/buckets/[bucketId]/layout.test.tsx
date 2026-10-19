@@ -5,7 +5,8 @@ const h = vi.hoisted(() => ({
   getBucket: vi.fn(),
   getTenant: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useParams: () => ({ backendId: "primary", bucketId: "pool" }),
   usePathname: () => "/storage-backends/primary/buckets/pool",
   notFound: vi.fn(),

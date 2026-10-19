@@ -30,10 +30,15 @@ import { ErrorReason } from "@/gen/paladin/common/v1/error_reason_pb";
 import { errorMessage, errorReason } from "@/hooks/errorContract";
 import { useBucketGrants } from "@/hooks/useBucketGrants";
 import { useTableView } from "@/hooks/useTableView";
+import type { TableUrl } from "@/lib/table/urlState";
 import type { SearchText, SortAccessors } from "@/lib/table/view";
 import { formatDateTime } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
 import { timestampToDate } from "@/lib/utils";
+
+// The grant list keeps its search and sort in the URL under its own names, beside the
+// page's other tables.
+const GRANTS_TABLE: TableUrl = { namespace: "grants" };
 
 type GrantColumn = "tenant" | "by" | "at";
 
@@ -129,7 +134,11 @@ export function BucketGrantsCard({
     ],
     [grantee, tenantByID],
   );
-  const view = useTableView(grants, { text: searchIn, accessors: sortBy });
+  const view = useTableView(grants, {
+    text: searchIn,
+    accessors: sortBy,
+    url: GRANTS_TABLE,
+  });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   // Neither the owner nor a tenant already granted can be granted again.

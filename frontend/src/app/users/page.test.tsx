@@ -81,6 +81,43 @@ describe("UsersPage", () => {
     expect(names()).toEqual(["Alice", "Bob", "Carol"]);
   });
 
+  // The list's view lives in the URL: a reload or a shared link opens it as
+  // it was left, and changing it writes it back.
+  it("opens with the filter, search and sort a link names", async () => {
+    h.listUsers.mockResolvedValue({
+      users: [
+        user("u-2", "Carol"),
+        { ...user("u-4", "Bert"), disabled: true },
+        { ...user("u-5", "Dana"), disabled: true },
+        { ...user("u-3", "Bob"), disabled: true },
+        user("u-1", "Alice"),
+      ],
+      page: {},
+    });
+    window.history.replaceState(
+      null,
+      "",
+      "/users?filter=disabled&q=b&sort=user&dir=desc",
+    );
+    render(<UsersPage />);
+    await screen.findByRole("link", { name: "Bob" });
+    expect(
+      screen
+        .getAllByRole("link")
+        .map((l) => l.textContent)
+        .filter((t) =>
+          ["Alice", "Bert", "Bob", "Carol", "Dana"].includes(t ?? ""),
+        ),
+    ).toEqual(["Bob", "Bert"]);
+    expect(screen.getByRole("button", { name: "Disabled" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(window.location.search).toBe("?q=b&sort=user&dir=desc");
+  });
+
   it("opens each user on a page of their own", async () => {
     render(<UsersPage />);
     expect(await screen.findByRole("link", { name: "Alice" })).toHaveAttribute(

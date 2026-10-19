@@ -16,6 +16,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { useQuery } from "@tanstack/react-query";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -62,7 +64,8 @@ import { CollectionDeleteDialog } from "@/components/features/collections/Collec
 import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 
-type SortColumn = "name" | "displayName" | "bucket";
+const SORT_COLUMNS = ["name", "displayName", "bucket"] as const;
+type SortColumn = (typeof SORT_COLUMNS)[number];
 
 // Position of the tenant id in the list query's key.
 const TENANT_KEY_INDEX = 1;
@@ -95,10 +98,10 @@ export default function TenantCollectionsPage() {
     [usableBackends],
   );
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // Trails `search` by 300ms; celFilter is in the react-query key, so without
   // this every keystroke was its own list request.
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   // The server takes a CEL expression, not a search string. Sending the raw
   // box contents means "e2e/inv" reaches the plane as an expression and fails
@@ -120,7 +123,10 @@ export default function TenantCollectionsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
+  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>(undefined, {
+    url: PAGE_TABLE,
+    columns: SORT_COLUMNS,
+  });
 
   const listQuery = useQuery({
     queryKey: ["tenantCollections", tenant.tenantId, celFilter],

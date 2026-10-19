@@ -20,6 +20,8 @@
 import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import Link from "next/link";
 
 import {
@@ -64,6 +66,7 @@ import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDi
 import {
   BucketTable,
   tenantLabelMap,
+  BUCKET_SORT_COLUMNS,
   type BucketSortColumn,
 } from "@/components/features/buckets/BucketTable";
 import { useTenants } from "@/hooks/useTenants";
@@ -102,9 +105,15 @@ export default function TenantBucketsPage() {
     [backendRows],
   );
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
   const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
-  const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>();
+  const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>(
+    undefined,
+    {
+      url: PAGE_TABLE,
+      columns: BUCKET_SORT_COLUMNS,
+    },
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
 
