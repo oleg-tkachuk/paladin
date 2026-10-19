@@ -6,6 +6,10 @@ const h = vi.hoisted(() => ({
   roles: ["platform.admin"] as string[],
   signedIn: true,
 }));
+// The hidden-tab watch reads one preference; off here.
+vi.mock("@/hooks/usePreference", () => ({
+  usePreference: () => [false, vi.fn()],
+}));
 vi.mock("@/lib/auth/tokenStore", () => ({ getAccessToken: h.token }));
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: h.signedIn ? { roles: h.roles } : null }),

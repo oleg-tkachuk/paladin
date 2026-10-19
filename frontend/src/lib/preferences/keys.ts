@@ -7,6 +7,7 @@ import { z } from "zod";
 export const PREFERENCE_KEYS = {
   recent: "console.recent",
   pinned: "console.pinned",
+  notifyOperations: "console.notifyOperations",
 } as const;
 
 export type PreferenceKey =
@@ -29,3 +30,8 @@ export const ResourceLinkSchema = z.object({
 export type ResourceLink = z.infer<typeof ResourceLinkSchema>;
 
 export const ResourceLinksSchema = z.array(ResourceLinkSchema);
+
+/** An on/off preference: anything but true is off. */
+export function readFlag(value: unknown): boolean {
+  return value === true;
+}

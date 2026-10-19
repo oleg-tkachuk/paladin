@@ -33,4 +33,23 @@ describe("useVisiblePolling enabled", () => {
     vi.advanceTimersByTime(INTERVAL_MS * 3);
     expect(fn).not.toHaveBeenCalled();
   });
+
+  it("keeps polling in a hidden tab only when asked to", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => true,
+    });
+    const quiet = vi.fn();
+    const watched = vi.fn();
+    renderHook(() => useVisiblePolling(quiet, INTERVAL_MS));
+    renderHook(() => useVisiblePolling(watched, INTERVAL_MS, true, true));
+    vi.advanceTimersByTime(INTERVAL_MS * 2);
+    expect(quiet).not.toHaveBeenCalled();
+    expect(watched).toHaveBeenCalledTimes(3);
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => false,
+    });
+  });
 });
