@@ -7,7 +7,18 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClockIcon, StarIcon } from "@heroicons/react/24/outline";
+import {
+  ClockIcon,
+  EllipsisHorizontalIcon,
+  StarIcon,
+} from "@heroicons/react/24/outline";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StarIcon as StarSolidIcon } from "@heroicons/react/24/solid";
 
 import { Button } from "@/components/ui/button";
@@ -68,12 +79,46 @@ export function SidebarResourceLinks({
   onNavigate?: () => void;
   groupLabelClass: string;
 }) {
-  const { pinned, recent } = useResourceLinks();
+  const links = useResourceLinks();
+  const { pinned, recent } = links;
   const entries = groupedLinks(pinned, recent).slice(0, SIDEBAR_LINKS_SHOWN);
-  if (entries.length === 0) return null;
+  if (!links.shown || entries.length === 0) return null;
   return (
     <div className="mb-7 space-y-0.5" data-testid="resource-links">
-      <div className={groupLabelClass}>Pinned &amp; recent</div>
+      <div className="flex items-center justify-between pr-1">
+        <div className={groupLabelClass}>Pinned &amp; recent</div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Pinned and recent options"
+              className="rounded p-1 text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground"
+            >
+              <EllipsisHorizontalIcon className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              disabled={recent.length === 0}
+              onSelect={() => void links.clearRecent().catch(() => undefined)}
+            >
+              Clear recent
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={pinned.length === 0}
+              onSelect={() => void links.unpinAll().catch(() => undefined)}
+            >
+              Unpin all
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => void links.setShown(false).catch(() => undefined)}
+            >
+              Hide this section
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       {entries.map(({ link, group }) => {
         const Icon = group === "pinned" ? StarSolidIcon : ClockIcon;
         return (

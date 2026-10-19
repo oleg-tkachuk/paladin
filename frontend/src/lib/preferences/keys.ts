@@ -8,6 +8,7 @@ export const PREFERENCE_KEYS = {
   recent: "console.recent",
   pinned: "console.pinned",
   notifyOperations: "console.notifyOperations",
+  hideResourceLinks: "console.hideResourceLinks",
   tables: "console.tables",
 } as const;
 
