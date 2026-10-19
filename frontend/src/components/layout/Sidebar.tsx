@@ -57,7 +57,7 @@ import {
 } from "@/components/ui/Tooltip";
 import {
   FOCUS_RING,
-  SELECTED_SURFACE,
+  SIDEBAR_SELECTED_SURFACE,
   SIDEBAR_HOVER_SURFACE,
 } from "@/lib/ui/states";
 
@@ -505,9 +505,12 @@ function SidebarBody({
                       "group relative flex h-9 items-center gap-3 rounded-md pr-2 text-sm transition-colors",
                       collapsed ? "justify-center pl-0" : "pl-3",
                       FOCUS_RING,
-                      // Active = brighter sidebar-accent + primary-tinted bg
+                      // Active = the accent's tint filled in, and the rail
                       active
-                        ? cn(SELECTED_SURFACE, "text-foreground font-medium")
+                        ? cn(
+                            SIDEBAR_SELECTED_SURFACE,
+                            "text-foreground font-medium",
+                          )
                         : cn(
                             SIDEBAR_HOVER_SURFACE,
                             "text-muted-foreground hover:text-foreground",

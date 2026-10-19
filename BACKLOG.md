@@ -789,6 +789,17 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
+### Card titles' icons on tinted chips
+
+- **Status:** Deferred.
+- **Reason:** The planes, edges, header bands and the sidebar's filled
+  active item landed as tokens and shared components; a card title's icon is
+  placed by each page, so a chip there is a per-page change.
+- **Definition of Done:** CardTitle takes an icon and draws it on a chip
+  tinted with the accent or a status colour, every card title with an icon
+  passes it that way, and a test holds the chip's contrast.
+- **Blockers:** none.
+
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console

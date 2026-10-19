@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { Card, CardHeader, CardTitle } from "./Card";
+import {
+  CARD_HEADER_BAND,
+  CARD_PLANE,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "./Card";
 
 // A card title is how the console names a section, so it has to be a heading:
 // heading navigation is the primary way a screen-reader user moves through a
@@ -37,5 +44,38 @@ describe("CardTitle", () => {
     const heading = screen.getByRole("heading", { name: "Password" });
     expect(heading).toHaveAttribute("data-slot", "card-title");
     expect(heading).toHaveClass("text-sm", "font-heading");
+  });
+});
+
+// A card is a plane above the page: without its edge and shadow the console
+// read as one flat sheet. The flat variants are the exception, by name.
+describe("Card", () => {
+  const classes = (list: string) => list.split(" ");
+
+  it("stands off the page with an edge and a raised shadow", () => {
+    render(<Card data-testid="card" />);
+    expect(screen.getByTestId("card")).toHaveClass(...classes(CARD_PLANE));
+  });
+
+  it.each(["outline", "subtle", "glass"] as const)(
+    "lies flat as the %s variant",
+    (variant) => {
+      render(<Card data-testid="card" variant={variant} />);
+      expect(screen.getByTestId("card")).not.toHaveClass("shadow-raised");
+    },
+  );
+
+  it("puts the header that opens it on a band of its own", () => {
+    render(
+      <Card>
+        <CardHeader data-testid="header">
+          <CardTitle>Recent activity</CardTitle>
+        </CardHeader>
+        <CardContent>rows</CardContent>
+      </Card>,
+    );
+    expect(screen.getByTestId("header")).toHaveClass(
+      ...classes(CARD_HEADER_BAND),
+    );
   });
 });

@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { blend, formatHex, parse, wcagContrast, type Color } from "culori";
+import {
+  blend,
+  converter,
+  formatHex,
+  parse,
+  wcagContrast,
+  type Color,
+} from "culori";
 import { describe, expect, it } from "vitest";
 
 import { PALETTES } from "@/lib/theme";
@@ -9,6 +16,7 @@ import {
   HOVER_SURFACE,
   SELECTED_SURFACE,
   SIDEBAR_HOVER_SURFACE,
+  SIDEBAR_SELECTED_SURFACE,
 } from "@/lib/ui/states";
 
 // Text has to be readable at body size in every palette, and the states a
@@ -76,7 +84,7 @@ const solid = (token: string): Paint => ({ token });
 
 // [text, surface]: coloured text on the ground and the cards, and the
 // foreground token on each solid fill.
-const SURFACES = ["--background", "--card", "--muted", "--popover"];
+const SURFACES = ["--background", "--card", "--band", "--muted", "--popover"];
 const TEXT_ON_SURFACES = [
   "--foreground",
   "--muted-foreground",
@@ -118,7 +126,9 @@ const STATE_PAIRS: [string, Paint][] = [
     ["--foreground", stateSurface(SELECTED_SURFACE, ground)],
   ]),
   ["--sidebar-foreground", stateSurface(SIDEBAR_HOVER_SURFACE, "--sidebar")],
-  ["--sidebar-foreground", stateSurface(SELECTED_SURFACE, "--sidebar")],
+  ["--sidebar-foreground", stateSurface(SIDEBAR_SELECTED_SURFACE, "--sidebar")],
+  // The section labels and resting items on the sidebar's own ground.
+  ["--muted-foreground", solid("--sidebar")],
   // The buttons' own hover fills.
   ["--foreground", solid("--muted")],
   ["--accent-foreground", solid("--accent")],
@@ -151,5 +161,56 @@ describe.each(PALETTES)("the %s palette", (theme) => {
         colour(p, surface),
       ),
     ).toBeGreaterThanOrEqual(MIN_NONTEXT_CONTRAST);
+  });
+});
+
+// Depth: the console reads as layers only when each one is a visible step
+// from the next. The sidebar sat on the card's own colour in two palettes,
+// and a card stood 1.1:1 off the ground, which read as one flat sheet.
+const toOklch = converter("oklch");
+const lightness = (c: Color) => toOklch(c)?.l ?? 0;
+
+// The least OKLCH lightness between two planes that the eye takes for one.
+const MIN_PLANE_STEP = 0.02;
+// The least contrast an edge needs to show from across a desk.
+const MIN_EDGE_CONTRAST = 1.3;
+// The least step between a card and its header band: a strip, not a plane.
+const MIN_BAND_STEP = 0.01;
+
+describe.each(PALETTES)("the %s palette's planes", (theme) => {
+  const p = palette(theme);
+  const l = (token: string) => lightness(colour(p, token));
+
+  it("sets the sidebar a plane away from the ground", () => {
+    expect(Math.abs(l("--sidebar") - l("--background"))).toBeGreaterThanOrEqual(
+      MIN_PLANE_STEP,
+    );
+  });
+
+  // What floats over a card is told apart by its shadow, not by this step:
+  // a light card is already near white.
+  it("lifts the cards a plane off the ground", () => {
+    expect(l("--card") - l("--background")).toBeGreaterThanOrEqual(
+      MIN_PLANE_STEP,
+    );
+  });
+
+  it("rules the card's header band off the card", () => {
+    expect(Math.abs(l("--band") - l("--card"))).toBeGreaterThanOrEqual(
+      MIN_BAND_STEP,
+    );
+  });
+
+  it.each([
+    ["--border", "--card"],
+    ["--border", "--background"],
+    ["--sidebar-border", "--sidebar"],
+  ])("draws %s visibly on %s", (edge, surface) => {
+    expect(
+      wcagContrast(
+        painted(p, { token: edge, over: surface }),
+        colour(p, surface),
+      ),
+    ).toBeGreaterThanOrEqual(MIN_EDGE_CONTRAST);
   });
 });

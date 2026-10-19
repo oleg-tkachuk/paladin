@@ -12,6 +12,19 @@ import { cn } from "@/lib/utils";
  * but -hidden makes the card a scroll container, and a sticky header inside
  * one sticks to the card, which never scrolls, instead of to the page.
  */
+/**
+ * A card is a plane above the page: an edge that shows against the ground
+ * and a raised shadow. The flat variants below lie on the page instead.
+ */
+export const CARD_PLANE = "ring-1 ring-border shadow-raised";
+
+/**
+ * The header that opens a card sits on a band of its own, ruled off from the
+ * body: it pulls up over the card's top padding to reach the edge.
+ */
+export const CARD_HEADER_BAND =
+  "first:-mt-4 first:border-b first:border-border first:bg-band first:py-3 group-data-[size=sm]/card:first:-mt-3 group-data-[size=sm]/card:first:py-2";
+
 function Card({
   className,
   size = "default",
@@ -23,19 +36,22 @@ function Card({
   variant?: "default" | "subtle" | "outline" | "elevated" | "glass";
 }) {
   const variantClass: Record<NonNullable<typeof variant>, string> = {
-    default: "",
-    subtle: "bg-muted/30 ring-foreground/5",
-    outline: "bg-transparent ring-border",
-    elevated: "shadow-raised ring-foreground/5",
-    glass: "bg-card/60 backdrop-blur-md ring-foreground/10",
+    default: CARD_PLANE,
+    subtle: "bg-muted/30 ring-1 ring-foreground/5",
+    outline: "bg-transparent ring-1 ring-border",
+    elevated: CARD_PLANE,
+    glass: "bg-card/60 backdrop-blur-md ring-1 ring-foreground/10",
   };
   return (
     <div
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-clip rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
-        variant && variantClass[variant],
+        "group/card flex flex-col gap-4 overflow-clip rounded-xl bg-card py-4 text-sm text-card-foreground has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        // The flat variants replace the plane rather than undo it: the
+        // class merge does not know shadow-raised for a shadow, so a
+        // shadow-none beside it would not win.
+        variantClass[variant ?? "default"],
         className,
       )}
       {...props}
@@ -49,6 +65,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-header"
       className={cn(
         "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-4 group-data-[size=sm]/card:px-3 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3",
+        CARD_HEADER_BAND,
         className,
       )}
       {...props}

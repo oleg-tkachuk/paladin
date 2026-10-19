@@ -72,7 +72,9 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      // On the band a card's header sits on, so a table's head reads as
+      // the same strip.
+      className={cn("bg-band [&_tr]:border-b", className)}
       {...props}
     />
   );

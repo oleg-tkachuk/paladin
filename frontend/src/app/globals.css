@@ -14,6 +14,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-band: var(--band);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -63,9 +64,12 @@
   /* Elevation: three levels, each a shadow-* utility. Raised sits on the
      page (a card, the active tab); floating hovers over it (a menu, a
      tooltip); overlay takes the screen (a dialog, a sheet). The shadow's
-     colour is the palette's, so a dark ground gets a deeper one. */
+     colour is the palette's, so a dark ground gets a deeper one. Raised has
+     a contact edge and a soft fall below it: one hairline alone read as no
+     depth at all. */
   --shadow-raised:
     0 1px 2px 0 var(--elevation-shadow),
+    0 4px 14px -6px var(--elevation-shadow-soft),
     inset 0 1px 0 0 var(--elevation-highlight);
   --shadow-floating:
     0 4px 12px -2px var(--elevation-shadow),
@@ -94,11 +98,16 @@
    * so that as text on the ground and the cards, and under white text, they
    * reach 4.5:1 (themeContrast.test.ts); the scheme's values sat at 3.2–3.7.
    * Text on a warning fill is white for the same reason. */
+  /* Three planes: the sidebar a step below the ground, the cards a step
+   * above it, what floats above the cards (depthPlanes in
+   * themeContrast.test.ts). */
   --background: #f2ede6;
   --foreground: #1d1720;
-  --card: #fbf9f5;
+  --card: #fefdfb;
   --card-foreground: #1d1720;
-  --popover: #fbf9f5;
+  /* A card's header strip, between the card and the ground. */
+  --band: #f7f3ee;
+  --popover: #ffffff;
   --popover-foreground: #1d1720;
   --primary: #b74616;
   --primary-foreground: #ffffff;
@@ -114,24 +123,25 @@
   --warning: #93600c;
   --warning-foreground: #ffffff;
   --info: #1f6db3;
-  --border: #e2d9cd;
-  --input: #e2d9cd;
+  --border: #d9cfc2;
+  --input: #d3c8ba;
   --ring: #b74616;
   --chart-1: #ff7a3d;
   --chart-2: #34d399;
   --chart-3: #f5b14c;
   --chart-4: #ff5d6c;
   --chart-5: #59b6ea;
-  --sidebar: #fbf9f5;
+  --sidebar: #e8e0d5;
   --sidebar-foreground: #1d1720;
   --sidebar-primary: #b74616;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4efe8;
+  --sidebar-accent: #ddd3c7;
   --sidebar-accent-foreground: #1d1720;
-  --sidebar-border: #e2d9cd;
+  --sidebar-border: #c9bcab;
   --sidebar-ring: #b74616;
 
-  --elevation-shadow: rgb(29 23 32 / 8%);
+  --elevation-shadow: rgb(29 23 32 / 7%);
+  --elevation-shadow-soft: rgb(29 23 32 / 14%);
   --elevation-shadow-strong: rgb(29 23 32 / 22%);
   --elevation-highlight: transparent;
 }
@@ -152,10 +162,11 @@
 
   --background: oklch(0.17 0.014 232);
   --foreground: oklch(0.955 0.006 230);
-  --card: oklch(0.213 0.015 232);
+  --card: oklch(0.225 0.016 232);
   --card-foreground: oklch(0.955 0.006 230);
+  --band: oklch(0.25 0.016 232);
   /* A step above the card: what floats reads as nearer (see elevation). */
-  --popover: oklch(0.25 0.016 232);
+  --popover: oklch(0.262 0.017 232);
   --popover-foreground: oklch(0.955 0.006 230);
 
   /* Brand: calm teal. Foreground is dark — teal is light enough to carry it. */
@@ -180,8 +191,8 @@
   --warning-foreground: oklch(0.19 0.02 232);
   --info: oklch(0.72 0.09 232);
 
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 12%);
+  --border: oklch(1 0 0 / 13%);
+  --input: oklch(1 0 0 / 14%);
   --ring: oklch(0.74 0.1 194 / 55%);
 
   /* Harmonised chart ramp: teal → green → amber → soft indigo → muted magenta. */
@@ -191,20 +202,21 @@
   --chart-4: oklch(0.7 0.09 252);
   --chart-5: oklch(0.68 0.11 322);
 
-  /* Sidebar sits a touch deeper than the ground so the shell reads as a
+  /* Sidebar sits a plane deeper than the ground so the shell reads as a
    * separate plane, with the brand accent marking the active item. */
-  --sidebar: oklch(0.155 0.014 233);
+  --sidebar: oklch(0.135 0.013 233);
   --sidebar-foreground: oklch(0.955 0.006 230);
   --sidebar-primary: oklch(0.74 0.1 194);
   --sidebar-primary-foreground: oklch(0.19 0.02 232);
-  --sidebar-accent: oklch(0.268 0.014 232);
+  --sidebar-accent: oklch(0.23 0.015 232);
   --sidebar-accent-foreground: oklch(0.955 0.006 230);
-  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-border: oklch(1 0 0 / 13%);
   --sidebar-ring: oklch(0.74 0.1 194 / 55%);
 
-  --elevation-shadow: rgb(0 0 0 / 20%);
+  --elevation-shadow: rgb(0 0 0 / 25%);
+  --elevation-shadow-soft: rgb(0 0 0 / 50%);
   --elevation-shadow-strong: rgb(0 0 0 / 45%);
-  --elevation-highlight: rgb(255 255 255 / 6%);
+  --elevation-highlight: rgb(255 255 255 / 7%);
 }
 
 .ember {
@@ -216,10 +228,11 @@
 
   --background: #17141c;
   --foreground: #ece7f1;
-  --card: #1e1a24;
+  --card: #221d29;
   --card-foreground: #ece7f1;
+  --band: #282230;
   /* A step above the card: what floats reads as nearer (see elevation). */
-  --popover: #26212e;
+  --popover: #2a2433;
   --popover-foreground: #ece7f1;
 
   --primary: #ff7a3d;
@@ -239,8 +252,8 @@
   --warning-foreground: #160f09;
   --info: #59b6ea;
 
-  --border: #322c3c;
-  --input: #322c3c;
+  --border: #3a3345;
+  --input: #3d3648;
   --ring: #ff7a3d;
 
   --chart-1: #ff7a3d;
@@ -249,18 +262,19 @@
   --chart-4: #ff5d6c;
   --chart-5: #59b6ea;
 
-  --sidebar: #1e1a24;
+  --sidebar: #110f15;
   --sidebar-foreground: #ece7f1;
   --sidebar-primary: #ff7a3d;
   --sidebar-primary-foreground: #160f09;
-  --sidebar-accent: #262230;
+  --sidebar-accent: #221d29;
   --sidebar-accent-foreground: #ece7f1;
-  --sidebar-border: #322c3c;
+  --sidebar-border: #2f2938;
   --sidebar-ring: #ff7a3d;
 
-  --elevation-shadow: rgb(0 0 0 / 20%);
+  --elevation-shadow: rgb(0 0 0 / 25%);
+  --elevation-shadow-soft: rgb(0 0 0 / 50%);
   --elevation-shadow-strong: rgb(0 0 0 / 45%);
-  --elevation-highlight: rgb(255 255 255 / 6%);
+  --elevation-highlight: rgb(255 255 255 / 7%);
 }
 
 @layer base {
