@@ -5,6 +5,8 @@
 // Operators can see who has which roles across all tenants; each user
 // opens on a page of their own, where roles and scopes are edited.
 
+import { IntentTableRow } from "@/components/ui/IntentTableRow";
+import { userDetailQuery } from "@/lib/queries/details";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
@@ -270,7 +272,11 @@ export default function UsersPage() {
                 filtered.map((u) => {
                   const tenant = tenantByID.get(u.tenantId);
                   return (
-                    <TableRow key={u.userId} className="group">
+                    <IntentTableRow
+                      key={u.userId}
+                      className="group"
+                      query={userDetailQuery(u.name)}
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
@@ -345,7 +351,7 @@ export default function UsersPage() {
                           onResetPassword={setResetTarget}
                         />
                       </TableCell>
-                    </TableRow>
+                    </IntentTableRow>
                   );
                 })
               )}
