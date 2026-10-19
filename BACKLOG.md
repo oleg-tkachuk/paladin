@@ -805,20 +805,18 @@ order they are being taken up.
 - **Blockers:** the cross-tenant read limes is growing — see "Billing has no
   view across tenants".
 
-#### Optimistic updates for changes whose answer is known
+#### Detail pages read through shared query options
 
 - **Status:** Aspirational.
-- **Reason:** the users' disable, rename, role change and delete and the
-  event subscriptions' toggle and delete show at once and roll back on a
-  refusal, through `optimistically` in `lib/optimistic`, and so do the
-  tenants' rename, trash, restore and purge, and the collections' rename and
-  delete, read through the query cache (`lib/queries/tenants`,
-  `lib/queries/collections`). The buckets and storage backends lists are
-  still held in `useState` by their hooks, so their changes wait.
-- **Definition of Done:** those two lists read through the query cache, and
-  their predictable changes (a bucket's delete, a backend's drain)
-  take `optimistically` with a test of the rollback; more detail pages read
-  through `lib/queries/details` so their rows can warm them.
+- **Reason:** every list reads through the query cache now, and the changes
+  whose answer is known show at once and roll back on a refusal
+  (`lib/optimistic`); a bucket's create and delete settle in the reconciler,
+  so they read again instead. The detail pages of a tenant, a bucket and a
+  backend still read with their own queries, so a row cannot warm its page's
+  read on hover the way the users and collections rows do.
+- **Definition of Done:** those detail pages read through query options in
+  `lib/queries/details`, their rows take `IntentTableRow`, and a test shows a
+  hover warming the page's query.
 - **Blockers:** none.
 
 #### Motion: view transitions and micro-animations

@@ -2,7 +2,7 @@
 
 import { Confirmation } from "@/components/ui/Confirmation";
 import { useConfirmation } from "@/hooks/useConfirmation";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
@@ -108,10 +108,11 @@ export default function PoliciesPage() {
   } = useTenants();
   const {
     buckets,
-    fetchBuckets,
+    refetch: refetchBuckets,
     loading: bucketsLoading,
     error: bucketsError,
-  } = useBuckets();
+    // The target picker chooses from a set; read only while the scope does.
+  } = useBuckets(scope === "bucket" ? {} : null);
   const {
     collections,
     refetch: refetchCollections,
@@ -120,10 +121,6 @@ export default function PoliciesPage() {
     // The system-wide editor targets any tenant's Collection; read only
     // while the scope picks one.
   } = useCollections({ catalogue: true, enabled: scope === "collection" });
-
-  useEffect(() => {
-    if (scope === "bucket") void fetchBuckets();
-  }, [scope, fetchBuckets]);
 
   // Reset the selected target whenever the scope changes — render-phase
   // adjust-on-change (not set-state-in-effect).
@@ -387,7 +384,7 @@ export default function PoliciesPage() {
     scope === "tenant"
       ? failedRead(tenantsError, refetchTenants)
       : scope === "bucket"
-        ? failedRead(bucketsError, fetchBuckets)
+        ? failedRead(bucketsError, refetchBuckets)
         : failedRead(collectionsError, refetchCollections);
   const targetLabel = SCOPES.find((s) => s.value === scope)?.label ?? scope;
 

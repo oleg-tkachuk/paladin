@@ -9,7 +9,9 @@ const h = vi.hoisted(() => ({
   access: 0,
   buckets: [] as Array<Record<string, unknown>>,
   bucketsError: null as string | null,
-  fetchBuckets: vi.fn(),
+  // Every read the page handed useBuckets.
+  reads: [] as unknown[],
+  refetch: vi.fn(),
 }));
 
 vi.mock("@/lib/connect/client", () => ({ collectionClient: {} }));
@@ -17,11 +19,18 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: vi.fn() }),
 }));
 vi.mock("@/hooks/useBuckets", () => ({
-  useBuckets: () => ({
-    buckets: h.buckets,
-    error: h.bucketsError,
-    fetchAccessibleBuckets: h.fetchBuckets,
-  }),
+  useBuckets: (read: unknown) => {
+    h.reads.push(read);
+    return {
+      buckets: h.buckets,
+      error: h.bucketsError,
+      loading: false,
+      refetch: h.refetch,
+      fetched: true,
+      createBucket: vi.fn(),
+      deleteBucket: vi.fn(),
+    };
+  },
 }));
 vi.mock("./collection-context", () => ({
   useCollection: () => ({
@@ -46,7 +55,8 @@ beforeEach(() => {
   h.access = 0;
   h.buckets = [];
   h.bucketsError = null;
-  h.fetchBuckets.mockReset();
+  h.reads = [];
+  h.refetch.mockReset();
 });
 
 describe("CollectionOverviewPage binding", () => {
@@ -56,16 +66,19 @@ describe("CollectionOverviewPage binding", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       /Buckets could not be loaded/,
     );
-    h.fetchBuckets.mockClear();
+    expect(h.refetch).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(h.fetchBuckets).toHaveBeenCalledOnce();
+    expect(h.refetch).toHaveBeenCalledOnce();
   });
 
   // ADR-0032: Bind is refused for a bucket the tenant neither owns nor was
   // granted, so the list offers only the ones it may bind to.
   it("offers the buckets the collection's tenant may bind to", () => {
     render(<CollectionOverviewPage />);
-    expect(h.fetchBuckets).toHaveBeenCalledWith("tenants/t-1");
+    expect(h.reads.length).toBeGreaterThan(0);
+    for (const read of h.reads) {
+      expect(read).toEqual({ accessibleTo: "tenants/t-1" });
+    }
   });
 
   it("raises nothing when the list loaded", () => {

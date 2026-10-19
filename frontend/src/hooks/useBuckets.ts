@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 
 import { bucketClient } from "@/lib/connect/client";
@@ -10,13 +11,18 @@ import {
   BucketSchema,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
-import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import {
+  BUCKETS_QUERY_KEY,
+  bucketsQuery,
+  type BucketRead,
+} from "@/lib/queries/buckets";
 
 // Ceiling on how many pages one fetchBuckets call will follow. At the maximum
 // page size this is 10k buckets — far past any console list that stays usable,
 // and a backstop against paging forever if a token ever fails to terminate.
-export const MAX_LIST_PAGES = 20;
+export { MAX_LIST_PAGES } from "@/lib/queries/paging";
+export type { BucketRead, BucketTenantScope } from "@/lib/queries/buckets";
 
 /**
  * useBuckets — wrapper around admin/v1.BucketService.
@@ -39,21 +45,6 @@ const bucketResourceName = (backendId: string, bucketId: string) =>
  * What makes a bucket public (ADR-0027): anyone reads its objects by URL.
  * Only on a backend whose probe found anonymous reads enforced.
  */
-/**
- * Narrows a bucket listing to one tenant, on the server. Both fields are
- * tenant UUIDs and combine by AND; leave both unset for the cross-tenant
- * listing.
- */
-export interface BucketTenantScope {
-  /** Buckets the tenant owns — a dedicated-layout tenant's own bucket. */
-  ownerTenantId?: string;
-  /**
-   * Buckets the tenant stores in: owned, bound by default, or holding one of
-   * its collections.
-   */
-  usedByTenantId?: string;
-}
-
 export interface PublicReadSettings {
   /** The content types the bucket serves; none a browser would execute. */
   allowedContentTypes: string[];
@@ -61,142 +52,32 @@ export interface PublicReadSettings {
   baseUrl: string;
 }
 
-export function useBuckets() {
+/**
+ * The buckets a page reads, through the query cache (lib/queries/buckets),
+ * and the changes to them. null holds the read, as a dialog does until it
+ * opens. A create or a delete settles in the reconciler, not in the RPC, so
+ * neither is predicted: every buckets list reads again after one.
+ */
+export function useBuckets(read: BucketRead | null = {}) {
   const bumpRefresh = useBumpRefresh();
-  const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Sequence number of the most recent fetch. Only that fetch may write the
-  // list: callers commonly fire two in a row — the collection dialog opens
-  // with no backend chosen and refetches the moment one is defaulted in — and
-  // the results are not interchangeable. Without this the slower request wins
-  // whenever it happens to finish last, which left the dialog holding the
-  // buckets of a backend the operator was no longer looking at, or an empty
-  // list that disabled its bucket picker outright.
-  const seq = useRef(0);
+  const qc = useQueryClient();
+  const query = useQuery({
+    ...bucketsQuery(read ?? {}),
+    enabled: read !== null,
+    // A new search keeps the last result on screen until it answers.
+    placeholderData: (previous) => previous,
+  });
+  const buckets = useMemo(() => query.data ?? [], [query.data]);
+  const error = query.error
+    ? errorMessage(query.error, "Failed to fetch buckets")
+    : null;
+  const { refetch: refetchQuery } = query;
+  const refetch = useCallback(() => void refetchQuery(), [refetchQuery]);
 
-  const fetchBuckets = useCallback(
-    async (
-      backendId?: string,
-      filter: string = "",
-      pageToken: string = "",
-      tenantScope: BucketTenantScope = {},
-    ) => {
-      const mine = ++seq.current;
-      setLoading(true);
-      setError(null);
-      try {
-        // Follows nextPageToken to the end rather than returning one page.
-        //
-        // Every caller — the scope picker, the bucket selectors in the
-        // collection and tenant dialogs, the /buckets tables — asks for "the
-        // buckets" and got the first API_PAGE_SIZE_MAX of them, ordered by
-        // backend then name. Past that ceiling a bucket was invisible and
-        // unselectable everywhere in the console, with nothing on screen
-        // saying so; the deployment that crossed 500 buckets started losing
-        // whichever names sorted last.
-        //
-        // The loop STAYS now that callers send a `filter`, and that is the
-        // point. ListBuckets pushes the SQL-expressible part of a filter into
-        // the query and then re-evaluates the whole expression over the page it
-        // read, so a filter the pushdown cannot express returns a legitimately
-        // sparse page with a next token rather than an error. Paging to the end
-        // is therefore correct for every filter, and the pushdown only decides
-        // how FEW pages that takes — one for a search that narrows in SQL,
-        // as many as today for one that does not. Rendering the first page
-        // instead would make correctness depend on the pushdown recognising the
-        // expression, which is a promise no caller can check.
-        //
-        // (An earlier version of this comment said the filter "is no escape
-        // hatch" because CEL only saw the page. That was true when it was
-        // written and stopped being true when the pushdown landed.)
-        //
-        // MAX_PAGES bounds a pathological account rather than the normal one;
-        // the residual token is still returned so a caller can continue.
-        let token = pageToken;
-        let pages = 0;
-        const acc: Bucket[] = [];
-        do {
-          // The tenant scope narrows on the server; empty preserves the
-          // cross-tenant listing for platform-admin views.
-          const res = await bucketClient.listBuckets({
-            parent: backendId ? backendParent(backendId) : "",
-            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-            filter,
-            ownerTenantId: tenantScope.ownerTenantId ?? "",
-            usedByTenantId: tenantScope.usedByTenantId ?? "",
-          });
-          acc.push(...res.buckets);
-          token = res.page?.nextPageToken ?? "";
-          pages += 1;
-        } while (token && pages < MAX_LIST_PAGES);
-        if (mine === seq.current) {
-          setBuckets(acc);
-        }
-        // The caller still gets what it asked for either way — only the
-        // shared list is guarded.
-        return {
-          buckets: acc,
-          nextPageToken: token,
-        };
-      } catch (err) {
-        // Query contract (state-only): surface via `error`, never throw.
-        if (mine === seq.current) {
-          setError(errorMessage(err, "Failed to fetch buckets"));
-        }
-        return { buckets: [], nextPageToken: "" };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
-
-  /**
-   * The buckets a tenant may bind Collections to: the ones it owns plus the
-   * ones their owners granted it (BucketService.ListAccessibleBuckets,
-   * ADR-0032). Not the same set as fetchBuckets with an owner filter — a
-   * shared-layout tenant (ADR-0015) owns no bucket and binds only granted
-   * ones, so that filter answers "none" for exactly those tenants.
-   *
-   * Same paging and state contract as fetchBuckets: follows nextPageToken to
-   * the end under MAX_LIST_PAGES, and shares its sequence number, because
-   * both write the one `buckets` list.
-   */
-  const fetchAccessibleBuckets = useCallback(
-    async (tenant: string, pageToken: string = "") => {
-      const mine = ++seq.current;
-      setLoading(true);
-      setError(null);
-      try {
-        let token = pageToken;
-        let pages = 0;
-        const acc: Bucket[] = [];
-        do {
-          const res = await bucketClient.listAccessibleBuckets({
-            tenant,
-            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-          });
-          acc.push(...res.buckets);
-          token = res.page?.nextPageToken ?? "";
-          pages += 1;
-        } while (token && pages < MAX_LIST_PAGES);
-        if (mine === seq.current) {
-          setBuckets(acc);
-        }
-        return { buckets: acc, nextPageToken: token };
-      } catch (err) {
-        // Query contract (state-only): surface via `error`, never throw.
-        if (mine === seq.current) {
-          setError(errorMessage(err, "Failed to fetch buckets"));
-        }
-        return { buckets: [], nextPageToken: "" };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const settle = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: BUCKETS_QUERY_KEY });
+    bumpRefresh("buckets");
+  }, [qc, bumpRefresh]);
 
   const createBucket = useCallback(
     async (
@@ -211,7 +92,6 @@ export function useBuckets() {
       ownerTenantId: string,
     ): Promise<Bucket> => {
       try {
-        setError(null);
         const bucket = create(BucketSchema, {
           name: bucketResourceName(backendId, bucketId),
           backendId,
@@ -239,15 +119,14 @@ export function useBuckets() {
           bucket,
           provisionOnBackend,
         });
-        setBuckets((prev) => [...prev, created]);
-        bumpRefresh("buckets");
+        settle();
         return created;
       } catch (err) {
         // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
-    [bumpRefresh],
+    [settle],
   );
 
   const deleteBucket = useCallback(
@@ -258,24 +137,18 @@ export function useBuckets() {
       deleteOnBackend: boolean = false,
     ): Promise<void> => {
       try {
-        setError(null);
         await bucketClient.deleteBucket({
           name: bucketResourceName(backendId, bucketId),
           resourceVersion,
           deleteOnBackend,
         });
-        setBuckets((prev) =>
-          prev.filter(
-            (b) => !(b.backendId === backendId && b.bucketId === bucketId),
-          ),
-        );
-        bumpRefresh("buckets");
+        settle();
       } catch (err) {
         // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
-    [bumpRefresh],
+    [settle],
   );
 
   // Update + lifecycle/policy/lock/replication setters are out of scope for
@@ -289,10 +162,11 @@ export function useBuckets() {
 
   return {
     buckets,
-    loading,
+    loading: query.isFetching,
     error,
-    fetchBuckets,
-    fetchAccessibleBuckets,
+    refetch,
+    /** The read has answered at least once, for a default chosen from it. */
+    fetched: query.isFetched,
     createBucket,
     updateBucket,
     deleteBucket,

@@ -1,21 +1,20 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, act } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({
   listBuckets: vi.fn(),
   listAccessibleBuckets: vi.fn(),
   createBucket: vi.fn(),
+  deleteBucket: vi.fn(),
 }));
-vi.mock("@/lib/connect/client", () => ({
-  bucketClient: {
-    listBuckets: h.listBuckets,
-    listAccessibleBuckets: h.listAccessibleBuckets,
-    createBucket: h.createBucket,
-  },
-}));
+vi.mock("@/lib/connect/client", () => ({ bucketClient: h }));
 vi.mock("@/context/RefreshContext", () => ({
   useBumpRefresh: () => vi.fn(),
 }));
+
+import type { BucketRead } from "@/lib/queries/buckets";
 
 import { MAX_LIST_PAGES, useBuckets } from "./useBuckets";
 
@@ -26,224 +25,168 @@ function page(ids: string[], nextPageToken = "") {
   };
 }
 
-describe("useBuckets pagination", () => {
-  beforeEach(() => {
-    h.listBuckets.mockReset();
-  });
+function client() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+function wrap(qc: QueryClient = client()) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
+}
+const ids = (r: { current: ReturnType<typeof useBuckets> }) =>
+  r.current.buckets.map((b) => b.bucketId);
 
-  // A bucket past the first page used to be invisible everywhere in the
-  // console — the scope picker, the collection dialog's selector, the tables —
-  // because every caller read one page and nothing said the list was cut.
+beforeEach(() => {
+  for (const fn of Object.values(h)) fn.mockReset();
+});
+
+describe("useBuckets pagination", () => {
+  // Past the first page a bucket was invisible and unselectable everywhere in
+  // the console, with nothing on screen saying so.
   it("follows nextPageToken so buckets past the first page are reachable", async () => {
     h.listBuckets
       .mockResolvedValueOnce(page(["a", "b"], "tok-2"))
-      .mockResolvedValueOnce(page(["y", "z"]));
-
-    const { result } = renderHook(() => useBuckets());
-    await act(async () => {
-      await result.current.fetchBuckets();
-    });
-
-    expect(h.listBuckets).toHaveBeenCalledTimes(2);
+      .mockResolvedValueOnce(page(["z"]));
+    const { result } = renderHook(() => useBuckets(), { wrapper: wrap() });
+    await waitFor(() => expect(ids(result)).toEqual(["a", "b", "z"]));
     expect(h.listBuckets.mock.calls[1][0].page.pageToken).toBe("tok-2");
-    expect(result.current.buckets.map((b) => b.bucketId)).toEqual([
-      "a",
-      "b",
-      "y",
-      "z",
-    ]);
-  });
-
-  // Two overlapping fetches are the norm — the collection dialog opens with no
-  // backend chosen and refetches the moment one is defaulted in. Their results
-  // are not interchangeable, so the newest request must win regardless of
-  // which response arrives last.
-  it("ignores a slow earlier fetch that finishes after a newer one", async () => {
-    let releaseFirst: (v: unknown) => void = () => {};
-    h.listBuckets
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            releaseFirst = () => resolve(page(["stale-a", "stale-b"]));
-          }),
-      )
-      .mockResolvedValueOnce(page(["fresh"]));
-
-    const { result } = renderHook(() => useBuckets());
-
-    let firstDone: Promise<unknown> = Promise.resolve();
-    await act(async () => {
-      firstDone = result.current.fetchBuckets(); // slow, started first
-      await result.current.fetchBuckets("backend-b"); // fast, started second
-    });
-    expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
-
-    await act(async () => {
-      releaseFirst(null);
-      await firstDone;
-    });
-    expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
   });
 
   it("stops at the page ceiling instead of following a token forever", async () => {
-    // A token that never clears would otherwise page until the tab dies.
     h.listBuckets.mockResolvedValue(page(["x"], "always-more"));
-
-    const { result } = renderHook(() => useBuckets());
-    let out: { nextPageToken: string } | undefined;
-    await act(async () => {
-      out = await result.current.fetchBuckets();
-    });
-
-    expect(h.listBuckets).toHaveBeenCalledTimes(20);
-    // The residual token comes back, so a caller can decide to continue.
-    expect(out?.nextPageToken).toBe("always-more");
-  });
-});
-
-// The default-binding picker reads this list. A shared-layout tenant owns no
-// bucket, so the owner-filtered list it used to read was always empty.
-describe("useBuckets accessible list", () => {
-  const tenant = "tenants/acme";
-
-  beforeEach(() => {
-    h.listBuckets.mockReset();
-    h.listAccessibleBuckets.mockReset();
+    const { result } = renderHook(() => useBuckets(), { wrapper: wrap() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(h.listBuckets).toHaveBeenCalledTimes(MAX_LIST_PAGES);
   });
 
-  it("asks for the tenant's bindable buckets and follows nextPageToken", async () => {
-    h.listAccessibleBuckets
-      .mockResolvedValueOnce(page(["shared-a", "own-b"], "tok-2"))
-      .mockResolvedValueOnce(page(["shared-z"]));
-
-    const { result } = renderHook(() => useBuckets());
-    await act(async () => {
-      await result.current.fetchAccessibleBuckets(tenant);
-    });
-
-    expect(h.listBuckets).not.toHaveBeenCalled();
-    expect(h.listAccessibleBuckets).toHaveBeenCalledTimes(2);
-    expect(h.listAccessibleBuckets.mock.calls[0][0]).toMatchObject({
-      tenant,
-      page: { pageToken: "" },
-    });
-    expect(h.listAccessibleBuckets.mock.calls[1][0]).toMatchObject({
-      tenant,
-      page: { pageToken: "tok-2" },
-    });
-    expect(result.current.buckets.map((b) => b.bucketId)).toEqual([
-      "shared-a",
-      "own-b",
-      "shared-z",
-    ]);
-    expect(result.current.error).toBeNull();
-  });
-
-  it("stops at the page ceiling and returns the residual token", async () => {
-    h.listAccessibleBuckets.mockResolvedValue(page(["x"], "always-more"));
-
-    const { result } = renderHook(() => useBuckets());
-    let out: { nextPageToken: string } | undefined;
-    await act(async () => {
-      out = await result.current.fetchAccessibleBuckets(tenant);
-    });
-
-    expect(h.listAccessibleBuckets).toHaveBeenCalledTimes(MAX_LIST_PAGES);
-    expect(out?.nextPageToken).toBe("always-more");
-  });
-
-  it("surfaces a failure through error instead of throwing", async () => {
-    h.listAccessibleBuckets.mockRejectedValue(new Error("denied by policy"));
-
-    const { result } = renderHook(() => useBuckets());
-    let out: { buckets: unknown[] } | undefined;
-    await act(async () => {
-      out = await result.current.fetchAccessibleBuckets(tenant);
-    });
-
-    expect(out?.buckets).toEqual([]);
-    expect(result.current.error).toMatch(/denied by policy/);
-  });
-
-  // Both fetches write the one `buckets` list, so they share the sequence
-  // guard: a slow accessible-list read must not overwrite a newer listing.
-  it("loses to a newer fetchBuckets that finishes first", async () => {
-    let releaseFirst: (v: unknown) => void = () => {};
-    h.listAccessibleBuckets.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          releaseFirst = () => resolve(page(["stale"]));
-        }),
+  // The collection dialog read one backend's buckets and then another's at
+  // once; the slower answer used to win and leave the wrong list on screen.
+  it("shows the read asked for last, whichever answer comes in last", async () => {
+    let answerFirst!: (v: unknown) => void;
+    h.listBuckets
+      .mockImplementationOnce(() => new Promise((r) => (answerFirst = r)))
+      .mockResolvedValueOnce(page(["second"]));
+    const { result, rerender } = renderHook(
+      ({ read }: { read: BucketRead }) => useBuckets(read),
+      { wrapper: wrap(), initialProps: { read: { backendId: "one" } } },
     );
-    h.listBuckets.mockResolvedValueOnce(page(["fresh"]));
-
-    const { result } = renderHook(() => useBuckets());
-    let firstDone: Promise<unknown> = Promise.resolve();
-    await act(async () => {
-      firstDone = result.current.fetchAccessibleBuckets(tenant);
-      await result.current.fetchBuckets();
-    });
-    await act(async () => {
-      releaseFirst(null);
-      await firstDone;
-    });
-    expect(result.current.buckets.map((b) => b.bucketId)).toEqual(["fresh"]);
+    rerender({ read: { backendId: "two" } });
+    await waitFor(() => expect(ids(result)).toEqual(["second"]));
+    await act(async () => answerFirst(page(["first"])));
+    expect(ids(result)).toEqual(["second"]);
   });
 });
 
-describe("useBuckets tenant scope", () => {
-  beforeEach(() => {
-    h.listBuckets.mockReset();
+describe("useBuckets reads", () => {
+  it("asks for a backend's buckets, by the filter", async () => {
     h.listBuckets.mockResolvedValue(page([]));
+    renderHook(
+      () => useBuckets({ backendId: "minio", filter: "search == 1" }),
+      {
+        wrapper: wrap(),
+      },
+    );
+    await waitFor(() => expect(h.listBuckets).toHaveBeenCalled());
+    expect(h.listBuckets.mock.calls[0][0]).toMatchObject({
+      parent: "storageBackends/minio",
+      filter: "search == 1",
+    });
   });
 
   it.each([
-    {
-      name: "no scope lists across tenants",
-      scope: undefined,
-      want: { ownerTenantId: "", usedByTenantId: "" },
-    },
-    {
-      name: "owner scope narrows by ownership",
-      scope: { ownerTenantId: "t-1" },
-      want: { ownerTenantId: "t-1", usedByTenantId: "" },
-    },
-    {
-      name: "used-by scope narrows to the buckets the tenant stores in",
-      scope: { usedByTenantId: "t-1" },
-      want: { ownerTenantId: "", usedByTenantId: "t-1" },
-    },
-  ])("$name", async ({ scope, want }) => {
-    const { result } = renderHook(() => useBuckets());
-    await act(async () => {
-      await result.current.fetchBuckets(undefined, "", "", scope);
-    });
-    expect(h.listBuckets).toHaveBeenCalledWith(expect.objectContaining(want));
+    [
+      "no scope lists across tenants",
+      undefined,
+      { ownerTenantId: "", usedByTenantId: "" },
+    ],
+    [
+      "owner scope narrows by ownership",
+      { ownerTenantId: "t-1" },
+      { ownerTenantId: "t-1", usedByTenantId: "" },
+    ],
+    [
+      "used-by scope narrows to the buckets the tenant stores in",
+      { usedByTenantId: "t-1" },
+      { ownerTenantId: "", usedByTenantId: "t-1" },
+    ],
+  ])("%s", async (_, tenantScope, want) => {
+    h.listBuckets.mockResolvedValue(page([]));
+    renderHook(() => useBuckets({ tenantScope }), { wrapper: wrap() });
+    await waitFor(() => expect(h.listBuckets).toHaveBeenCalled());
+    expect(h.listBuckets).toHaveBeenCalledWith(
+      expect.objectContaining(want),
+      expect.anything(),
+    );
+  });
+
+  // ADR-0032: owned plus granted, which an owner filter is not.
+  it("asks for the tenant's bindable buckets, every page", async () => {
+    h.listAccessibleBuckets
+      .mockResolvedValueOnce(page(["own"], "next"))
+      .mockResolvedValueOnce(page(["granted"]));
+    const { result } = renderHook(
+      () => useBuckets({ accessibleTo: "tenants/t-1" }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(ids(result)).toEqual(["own", "granted"]));
+    expect(h.listAccessibleBuckets.mock.calls[0][0].tenant).toBe("tenants/t-1");
+    expect(h.listBuckets).not.toHaveBeenCalled();
+  });
+
+  it("reads nothing while held", () => {
+    renderHook(() => useBuckets(null), { wrapper: wrap() });
+    expect(h.listBuckets).not.toHaveBeenCalled();
+    expect(h.listAccessibleBuckets).not.toHaveBeenCalled();
+  });
+
+  it("says why the list could not be read, and when it has answered", async () => {
+    h.listBuckets.mockRejectedValue(new Error("unavailable"));
+    const { result } = renderHook(() => useBuckets(), { wrapper: wrap() });
+    expect(result.current.fetched).toBe(false);
+    await waitFor(() => expect(result.current.error).toMatch(/unavailable/));
+    expect(result.current.fetched).toBe(true);
   });
 });
 
-describe("useBuckets createBucket owner", () => {
-  beforeEach(() => {
-    h.createBucket.mockReset();
-    h.createBucket.mockImplementation(({ bucket }) => Promise.resolve(bucket));
-  });
-
-  // ADR-0032: every bucket has an owner tenant. The hook used to default it to
-  // "", which created a bucket any tenant could bind to; the server now refuses
-  // that, so the owner is sent as given.
+describe("useBuckets changes", () => {
+  // ADR-0032: every bucket has an owner tenant; the server refuses none.
   it("sends the owner tenant it is given", async () => {
-    const { result } = renderHook(() => useBuckets());
-    await act(async () => {
-      await result.current.createBucket(
-        "b1",
-        "logs",
-        "",
-        "",
-        true,
-        null,
-        "t-1",
-      );
-    });
+    h.createBucket.mockImplementation(({ bucket }) => Promise.resolve(bucket));
+    const { result } = renderHook(() => useBuckets(null), { wrapper: wrap() });
+    await act(() =>
+      result.current.createBucket("b1", "logs", "", "", true, null, "t-1"),
+    );
     expect(h.createBucket.mock.calls[0][0].bucket.ownerTenantId).toBe("t-1");
   });
+
+  // A create or a delete settles in the reconciler: nothing is predicted,
+  // and every list reads again.
+  it.each(["create", "delete"] as const)(
+    "reads every buckets list again after a %s",
+    async (change) => {
+      h.createBucket.mockResolvedValue({});
+      h.deleteBucket.mockResolvedValue({});
+      const qc = client();
+      const invalidate = vi.spyOn(qc, "invalidateQueries");
+      const { result } = renderHook(() => useBuckets(null), {
+        wrapper: wrap(qc),
+      });
+      await act(async () => {
+        if (change === "create") {
+          await result.current.createBucket(
+            "b1",
+            "logs",
+            "",
+            "",
+            true,
+            null,
+            "t-1",
+          );
+        } else {
+          await result.current.deleteBucket("b1", "logs", "v1");
+        }
+      });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["buckets"] });
+    },
+  );
 });

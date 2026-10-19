@@ -6,7 +6,7 @@
 // TenantDefaultBinding.
 
 import { useTenantChangesBlocked } from "../tenant-context";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   bucketResourceName,
   parseBucketResourceName,
@@ -46,7 +46,15 @@ export default function DefaultBindingPage() {
   const { tenantId, slug } = useTenant();
   const name = `tenants/${slug}`;
   const { showNotification } = useNotification();
-  const { buckets, error: bucketsError, fetchAccessibleBuckets } = useBuckets();
+  // The buckets this tenant may bind: its own plus the ones granted to it
+  // (ADR-0032); the server refuses a route to any other. An owner filter
+  // answered "none" for every shared-layout tenant (ADR-0015), which owns no
+  // bucket, and left the route impossible to set from here.
+  const {
+    buckets,
+    error: bucketsError,
+    refetch: loadBuckets,
+  } = useBuckets({ accessibleTo: name });
 
   const [selected, setSelected] = useState(-1); // index into buckets, -1 = none
   const [busy, setBusy] = useState(false);
@@ -85,19 +93,6 @@ export default function DefaultBindingPage() {
     },
   });
   const binding = bindingQuery.data ?? null;
-
-  // The buckets this tenant may bind: its own plus the ones granted to it
-  // (ADR-0032); the server refuses a route to any other. An owner filter
-  // answered "none" for every shared-layout tenant (ADR-0015), which owns no
-  // bucket, and left the route impossible to set from here. One place, so
-  // Retry asks for the same list.
-  const loadBuckets = useCallback(
-    () => fetchAccessibleBuckets(name),
-    [fetchAccessibleBuckets, name],
-  );
-  useEffect(() => {
-    void loadBuckets();
-  }, [loadBuckets]);
 
   const handleSet = async () => {
     const b = buckets[selected];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { Input } from "@/components/ui/input";
@@ -74,18 +74,21 @@ export function CollectionCreateDialog({
 }: CollectionCreateDialogProps) {
   const { showNotification } = useNotification();
   const actingTenantId = useActingTenantId();
+  // Read once the dialog opens: the ones the tenant may bind, or every bucket
+  // when no tenant is acting.
   const {
     buckets,
     error: bucketsError,
-    fetchBuckets,
-    fetchAccessibleBuckets,
-  } = useBuckets();
-  const readBuckets = useCallback(
-    () =>
-      actingTenantId
-        ? fetchAccessibleBuckets(`tenants/${actingTenantId}`)
-        : fetchBuckets(),
-    [actingTenantId, fetchAccessibleBuckets, fetchBuckets],
+    refetch: readBuckets,
+    // The default backend waits for the buckets: chosen before they arrive,
+    // it was the first backend whatever it held, often one with no bucket.
+    fetched: bucketsRead,
+  } = useBuckets(
+    open
+      ? actingTenantId
+        ? { accessibleTo: `tenants/${actingTenantId}` }
+        : {}
+      : null,
   );
   const bucketsFailed = failedRead(bucketsError, readBuckets);
   const [backendId, setBackendId] = useState("");
@@ -95,13 +98,6 @@ export function CollectionCreateDialog({
   const [cacheControl, setCacheControl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // The default backend waits for the buckets: chosen before they arrive, it
-  // was the first backend whatever it held, often one with no bucket at all.
-  const [bucketsRead, setBucketsRead] = useState(false);
-  useEffect(() => {
-    if (open) void readBuckets().finally(() => setBucketsRead(true));
-  }, [open, readBuckets]);
 
   // Default to a backend that has buckets when one exists — a Collection binds
   // to a bucket, so an empty backend is a dialog that cannot be submitted
