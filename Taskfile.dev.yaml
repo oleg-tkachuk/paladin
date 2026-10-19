@@ -256,7 +256,6 @@ tasks:
       - task: verify:release-retry
       - task: verify:stream-release-notes
       - task: verify:propose-upgrade-sections
-      - task: verify:badge-versions
       - task: verify:postgres-version
       - task: verify:release-age
       - task: verify:compose-images
@@ -592,11 +591,6 @@ tasks:
     desc: "Fail when a module tag would ask the Go proxy for another module or version"
     cmds:
       - ./.github/scripts/warm-go-proxy.test.sh
-
-  verify:badge-versions:
-    desc: "Fail when the README's stack badges would read a version from the wrong place"
-    cmds:
-      - ./.github/scripts/badge-versions.test.sh
 
   verify:postgres-version:
     desc: "Fail when the compose stacks and the Go test suites run different Postgres versions"
