@@ -224,6 +224,17 @@ check "console: data URL from the default release" "$(console_env defaults PALAD
     "http://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
 check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,admin,worker,mcp,dispatcher"
 
+# The CSP allows the storage origins this names and no other; none by default.
+readonly STORAGE_A=https://s3.example.com
+readonly STORAGE_B=http://localhost:9000
+check "console: no storage origin by default" "$(console_env defaults PALADIN_STORAGE_ORIGINS)" ""
+console storage --set "storageOrigins={$STORAGE_A,$STORAGE_B}"
+check "console: storage origins reach the CSP" "$(console_env storage PALADIN_STORAGE_ORIGINS)" "$STORAGE_A,$STORAGE_B"
+cases=$((cases + 1))
+if helm template paladin-console "$CONSOLE_CHART" --set "storageOrigins={$STORAGE_A/bucket}" >/dev/null 2>&1; then
+    bad "console: a storage origin with a path was not refused"
+fi
+
 # Readiness asks the console process, not the role fan-out. /api/health/all
 # feeds the /health page and answers 200 whatever the roles say, so as a probe
 # it never measured the upstreams — only whether six fetches fit the kubelet's

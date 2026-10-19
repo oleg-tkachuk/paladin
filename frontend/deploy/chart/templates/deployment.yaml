@@ -94,6 +94,9 @@ spec:
             */}}
             - name: PALADIN_HEALTH_ROLES
               value: {{ join "," .Values.backend.healthRoles | quote }}
+            # Read by src/proxy.ts into the CSP (src/lib/security/storageOrigins.ts).
+            - name: PALADIN_STORAGE_ORIGINS
+              value: {{ join "," .Values.storageOrigins | quote }}
             {{- if .Values.backend.tls }}
             - name: NODE_EXTRA_CA_CERTS
               value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}

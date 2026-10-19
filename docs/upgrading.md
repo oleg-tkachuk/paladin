@@ -44,6 +44,25 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the console names the storage origins it uploads to
+
+The console's Content-Security-Policy allowed only its own origin, so the
+browser refused every upload PUT and image preview on a presigned URL, which
+points at a storage backend's `public_endpoint`. An upload still created its
+record and then never finished.
+
+Set the console chart's `storageOrigins` to those endpoints, as origins:
+
+```yaml
+# paladin-console.yaml
+storageOrigins:
+  - https://s3.example.com
+```
+
+The policy is now set at request time by the console's proxy rather than
+baked into the image, so a change takes a rollout, not a rebuild. An entry
+that is not a bare `http(s)` origin is refused by the chart.
+
 ## v38.1.0 — the OAuth endpoints answer an outage as a server error
 
 - `/oauth/authorize`, `/oauth/token` and the token exchange answer

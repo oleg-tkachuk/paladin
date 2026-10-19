@@ -2,8 +2,14 @@
  * The console's Content-Security-Policy. It starts strict (default-src
  * 'self') and only opens what the app needs: Next.js injects inline styles
  * and (in dev) inline/eval scripts, and the BFF talks to same-origin
- * /api/rpc so connect-src 'self' suffices. 'unsafe-eval' is dev-only.
+ * /api/rpc. The one other place the browser goes is a storage backend, on a
+ * presigned URL: the deployment names those origins (storageOrigins.ts), and
+ * they are added to connect-src for uploads and img-src for previews.
+ * 'unsafe-eval' is dev-only.
  */
+
+/** The response header the policy travels in. */
+export const CSP_HEADER = "Content-Security-Policy";
 
 /** The page whose form must be allowed to end anywhere. */
 export const OAUTH_CONSENT_PATH = "/oauth/consent";
@@ -13,7 +19,6 @@ const BASE_DIRECTIVES = [
   "base-uri 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
 ];
@@ -33,11 +38,15 @@ const FORM_ACTION_SELF = "form-action 'self'";
 export function contentSecurityPolicy(opts: {
   isDev: boolean;
   consent?: boolean;
+  /** Storage origins presigned URLs point at; bare origins only. */
+  storageOrigins?: readonly string[];
 }): string {
+  const storage = (opts.storageOrigins ?? []).map((o) => ` ${o}`).join("");
   const directives = [
     ...BASE_DIRECTIVES,
+    `img-src 'self' data: blob:${storage}`,
     `script-src 'self' 'unsafe-inline'${opts.isDev ? " 'unsafe-eval'" : ""}`,
-    "connect-src 'self'",
+    `connect-src 'self'${storage}`,
     ...(opts.consent ? [] : [FORM_ACTION_SELF]),
   ];
   return directives

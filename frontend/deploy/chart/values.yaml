@@ -14,6 +14,12 @@ metadata:
   commit: "unknown"
   buildTime: "unknown"
 
+# The storage origins presigned URLs point at: each backend's public_endpoint,
+# as an origin (`https://s3.example.com`). The browser uploads to them and
+# shows previews from them, and the console's CSP allows exactly these; one
+# left out makes every upload through the console fail in the browser.
+storageOrigins: []
+
 # Where the backend chart's planes are. The BFF (src/app/api/rpc and
 # src/lib/auth/bff.ts) reaches them through the PALADIN_<PLANE>_URL env vars;
 # the browser never sees them.

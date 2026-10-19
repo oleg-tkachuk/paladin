@@ -24,4 +24,24 @@ describe("contentSecurityPolicy", () => {
       "upgrade-insecure-requests",
     );
   });
+
+  it("lets the browser reach the storage origins it is given, and no other", () => {
+    const strict = contentSecurityPolicy({ isDev: false });
+    expect(strict).toContain("connect-src 'self';");
+    expect(strict).toContain("img-src 'self' data: blob:;");
+
+    const csp = contentSecurityPolicy({
+      isDev: false,
+      storageOrigins: ["https://s3.example.com", "http://localhost:9000"],
+    });
+    expect(csp).toContain(
+      "connect-src 'self' https://s3.example.com http://localhost:9000;",
+    );
+    expect(csp).toContain(
+      "img-src 'self' data: blob: https://s3.example.com http://localhost:9000;",
+    );
+    // Nothing else opens: scripts and frames stay on this origin.
+    expect(csp).toContain("default-src 'self';");
+    expect(csp).not.toMatch(/script-src[^;]*s3\.example/);
+  });
 });

@@ -2,6 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { AUDIENCES } from "@/constants";
 import { refreshCookieName } from "@/lib/auth/cookies";
+import {
+  CSP_HEADER,
+  OAUTH_CONSENT_PATH,
+  contentSecurityPolicy,
+} from "@/lib/security/csp";
+import {
+  STORAGE_ORIGINS_ENV,
+  parseStorageOrigins,
+} from "@/lib/security/storageOrigins";
 
 /**
  * Proxy — first line of route protection.
@@ -48,7 +57,34 @@ const PUBLIC_PREFIXES = [
 // methods (GET/HEAD/OPTIONS) are exempt.
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// Read once, when the server starts: the origins are the deployment's.
+const STORAGE = parseStorageOrigins(process.env[STORAGE_ORIGINS_ENV]);
+if (STORAGE.invalid.length > 0) {
+  console.warn(
+    `[proxy] ${STORAGE_ORIGINS_ENV}: not bare http(s) origins, left out of the CSP: ${STORAGE.invalid.join(", ")}`,
+  );
+}
+const IS_DEV = process.env.NODE_ENV !== "production";
+
+/**
+ * The CSP is set here rather than in next.config.ts: headers() there is
+ * written into the build, and the storage origins are known only where the
+ * image runs.
+ */
 export function proxy(req: NextRequest) {
+  const res = gate(req);
+  res.headers.set(
+    CSP_HEADER,
+    contentSecurityPolicy({
+      isDev: IS_DEV,
+      consent: req.nextUrl.pathname === OAUTH_CONSENT_PATH,
+      storageOrigins: STORAGE.origins,
+    }),
+  );
+  return res;
+}
+
+function gate(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl;
 
   // CSRF defense: a state-changing request to any API route must come

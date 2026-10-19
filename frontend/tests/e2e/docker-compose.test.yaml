@@ -376,6 +376,10 @@ services:
       PALADIN_DATA_URL: http://api:8080
       PALADIN_IAM_URL: http://api:8085
       PALADIN_ADMIN_URL: http://admin:8090
+      # The storage origin the browser uploads to: the primary backend's
+      # public_endpoint above. The console's CSP allows only the origins
+      # named here, and refused every upload PUT while it named none.
+      PALADIN_STORAGE_ORIGINS: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:${PALADIN_E2E_PORT_S3:-9000}}
       # `next start` (production-mode bundle) per
       # Clarification Q3. NOT `next dev` — HMR is a documented
       # flake source for E2E suites.

@@ -521,6 +521,13 @@
     "volumes": {
       "type": "array"
     },
+    "storageOrigins": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https?://[^/?#*]+/?$"
+      }
+    },
     "revisionHistoryLimit": {
       "type": "integer",
       "minimum": 0
