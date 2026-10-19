@@ -4,6 +4,11 @@ import { useCallback, useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 
 import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
+import {
+  copyKeyTemplate,
+  selectorBatches,
+  type BatchItem,
+} from "@/lib/batchSelector";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { toSortOrder } from "@/lib/table/sortOrder";
@@ -50,17 +55,7 @@ export interface UseObjectsOptions {
 
 const DEFAULT_OBJECT_KEY = "default";
 
-type BulkItem = { name: string; collection: string };
-
-function groupByCollection(items: BulkItem[]): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const it of items) {
-    const arr = out.get(it.collection) ?? [];
-    arr.push(it.name);
-    out.set(it.collection, arr);
-  }
-  return out;
-}
+type BulkItem = BatchItem;
 
 export function useObjects(options: UseObjectsOptions = {}) {
   const tenantId = useActingTenantId();
@@ -205,9 +200,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   const bulkDeleteObjects = useCallback(
     async (items: BulkItem[], opts: { permanent?: boolean } = {}) => {
-      const groups = groupByCollection(items);
       await Promise.all(
-        Array.from(groups.entries()).map(([ok, names]) =>
+        selectorBatches(items).map(({ collection: ok, names }) =>
           batchClient.batchDeleteObjects({
             parent: parentFor(ok),
             selector: { names, filter: "" },
@@ -222,9 +216,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   const bulkRestoreObjects = useCallback(
     async (items: BulkItem[]) => {
-      const groups = groupByCollection(items);
       await Promise.all(
-        Array.from(groups.entries()).map(([ok, names]) =>
+        selectorBatches(items).map(({ collection: ok, names }) =>
           batchClient.batchRestoreObjects({
             parent: parentFor(ok),
             selector: { names, filter: "" },
@@ -241,16 +234,12 @@ export function useObjects(options: UseObjectsOptions = {}) {
       // The page calls this with one tag-map for all items, so we batch them
       // per Collection under the same selector.
       const tags = items[0]?.tags ?? {};
-      const namesByOk = new Map<string, string[]>();
-      for (const it of items) {
+      const named = items.flatMap((it) => {
         const obj = objects.find((o) => o.objectId === it.objectId);
-        if (!obj) continue;
-        const arr = namesByOk.get(obj.collection) ?? [];
-        arr.push(obj.name);
-        namesByOk.set(obj.collection, arr);
-      }
+        return obj ? [{ name: obj.name, collection: obj.collection }] : [];
+      });
       await Promise.all(
-        Array.from(namesByOk.entries()).map(([ok, names]) =>
+        selectorBatches(named).map(({ collection: ok, names }) =>
           batchClient.batchUpdateTags({
             parent: parentFor(ok),
             selector: { names, filter: "" },
@@ -262,6 +251,32 @@ export function useObjects(options: UseObjectsOptions = {}) {
       bumpRefresh("objects");
     },
     [objects, parentFor, bumpRefresh],
+  );
+
+  /**
+   * Copies the items into another collection of this tenant, each under its
+   * own key behind `keyPrefix`. Runs as one operation per batch; the objects
+   * appear in the destination as the operations finish.
+   */
+  const bulkCopyObjects = useCallback(
+    async (
+      items: BulkItem[],
+      destinationCollection: string,
+      keyPrefix: string,
+    ) => {
+      await Promise.all(
+        selectorBatches(items).map(({ collection: ok, names }) =>
+          batchClient.batchCopyObjects({
+            sourceParent: parentFor(ok),
+            selector: { names, filter: "" },
+            destinationCollection: parentFor(destinationCollection),
+            destinationKeyTemplate: copyKeyTemplate(keyPrefix),
+          }),
+        ),
+      );
+      bumpRefresh("objects");
+    },
+    [parentFor, bumpRefresh],
   );
 
   return {
@@ -280,5 +295,6 @@ export function useObjects(options: UseObjectsOptions = {}) {
     bulkDeleteObjects,
     bulkRestoreObjects,
     bulkPatchObjects,
+    bulkCopyObjects,
   };
 }
