@@ -396,6 +396,22 @@ open deliberately — each notes why._
 
 ## Features
 
+### Billing has no view across tenants
+
+- **Status:** Blocked.
+- **Reason:** `/billing` reads one tenant at a time, opening on the console's
+  own tenant, which is usually billed nothing. A summary of every tenant's
+  spend over a period needs the ledger to sum across tenants, and
+  `limes.SumChargesRequest` requires one tenant per request by design; summing
+  tenant by tenant would cost a ledger query per tenant and sort by spend only
+  within a page.
+- **Definition of Done:** a BillingService RPC lists tenants by their spend
+  over a period, from one ledger query, with a test for its ordering and its
+  authorization; `/billing` opens on that list, and choosing a tenant leads to
+  the view it has now.
+- **Blockers:** the cross-tenant sum in the limes ledger API, which is being
+  reworked.
+
 ### Ingest acts on the first record of a batched S3 notification only
 
 - **Status:** Deferred.
