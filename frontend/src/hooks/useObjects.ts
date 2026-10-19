@@ -47,6 +47,10 @@ export interface UseObjectsOptions {
   initialCursor?: string;
   /** Sort direction for the active orderBy column. */
   sortDirection?: "asc" | "desc" | null;
+  /** Keys under this prefix only. */
+  prefix?: string;
+  /** Set, one level under `prefix`, with the folders below it. */
+  delimiter?: string;
 }
 
 const DEFAULT_OBJECT_KEY = "default";
@@ -77,6 +81,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
       options.filter ?? "",
       options.orderBy ?? "",
       options.sortDirection ?? null,
+      options.prefix ?? "",
+      options.delimiter ?? "",
       pageSize,
       refreshSignal,
     ],
@@ -90,6 +96,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
           filter: options.filter ?? "",
           orderBy: options.orderBy ?? "",
           sortOrder: toSortOrder(options.sortDirection),
+          prefix: options.prefix ?? "",
+          delimiter: options.delimiter ?? "",
         });
       } catch (err) {
         throw normalizeError(err);
@@ -102,6 +110,10 @@ export function useObjects(options: UseObjectsOptions = {}) {
     () => query.data?.pages.flatMap((p) => p.objects) ?? [],
     [query.data],
   );
+  // The server answers the folders with the first page only.
+  const firstPage = query.data?.pages[0];
+  const folders = useMemo(() => firstPage?.commonPrefixes ?? [], [firstPage]);
+  const foldersTruncated = firstPage?.commonPrefixesTruncated ?? false;
   const nextCursor = query.hasNextPage
     ? (query.data?.pages.at(-1)?.page?.nextPageToken ?? undefined)
     : undefined;
@@ -277,6 +289,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
 
   return {
     objects,
+    folders,
+    foldersTruncated,
     loading: query.isFetching,
     error: (query.error as Error | null) ?? null,
     nextCursor,

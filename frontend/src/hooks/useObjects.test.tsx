@@ -126,3 +126,26 @@ describe("useObjects bulk actions", () => {
     });
   });
 });
+
+// A folder listing asks one level under its prefix and keeps the folders the
+// first page answers.
+describe("useObjects folders", () => {
+  it("asks for the level and keeps the first page's folders", async () => {
+    h.listObjects.mockClear();
+    h.listObjects.mockResolvedValueOnce({
+      objects: [],
+      page: { nextPageToken: "" },
+      commonPrefixes: ["a/b/"],
+      commonPrefixesTruncated: true,
+    } as never);
+    const { result } = renderHook(
+      () => useObjects({ collection: "docs", prefix: "a/", delimiter: "/" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.folders).toEqual(["a/b/"]));
+    expect(result.current.foldersTruncated).toBe(true);
+    expect(h.listObjects).toHaveBeenCalledWith(
+      expect.objectContaining({ prefix: "a/", delimiter: "/" }),
+    );
+  });
+});

@@ -46,8 +46,20 @@ async function seedScope(makeCollection: MakeCollection) {
   };
 }
 
-function objectsURL(tenantSlug: string, collection: string): string {
-  return `/tenants/${encodeURIComponent(tenantSlug)}/collections/${encodeURIComponent(collection)}/objects`;
+/**
+ * The collection's object list, every key in it. The page opens one folder
+ * level at a time, and the seeded keys sit under `e2e/`; these tests are
+ * about the list, so they ask for all of it. `folder` opens one level.
+ */
+function objectsURL(
+  tenantSlug: string,
+  collection: string,
+  folder?: string,
+): string {
+  const base = `/tenants/${encodeURIComponent(tenantSlug)}/collections/${encodeURIComponent(collection)}/objects`;
+  return folder === undefined
+    ? `${base}?recursive=true`
+    : `${base}?prefix=${encodeURIComponent(folder)}`;
 }
 
 /**
@@ -77,6 +89,29 @@ test.describe("US6 — Object lifecycle", () => {
 
     await gotoSettled(page, objectsURL(tenantSlug, collection));
     await expectKeyVisible(page, obj.key);
+  });
+
+  // One level at a time: a key under a folder is not listed at the root, the
+  // folder is, and opening it lists the key.
+  test("the list opens one folder level at a time", async ({
+    page,
+    makeCollection,
+  }) => {
+    await loginAsAdmin(page);
+    const { tenantId, tenantSlug, collection } =
+      await seedScope(makeCollection);
+    const obj = await seedObject({
+      tenantId,
+      collection,
+      key: "reports/2026/q3.txt",
+    });
+
+    await gotoSettled(page, objectsURL(tenantSlug, collection, ""));
+    await expect(objectRow(page, obj.key)).toHaveCount(0);
+    await page.getByRole("button", { name: "Open folder reports" }).click();
+    await page.getByRole("button", { name: "Open folder 2026" }).click();
+    await expectKeyVisible(page, obj.key);
+    await expect(page).toHaveURL(/prefix=reports%2F2026%2F/);
   });
 
   // The headers sort on the server: seeded b, a, c — so id order is not key

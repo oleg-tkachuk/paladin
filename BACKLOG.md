@@ -798,23 +798,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Object browser: folders
-
-- **Status:** Aspirational.
-- **Reason:** the objects page is a flat list: keys with `/` read as one long
-  name, and the filter bar's Recursive switch is stored in the URL and saved
-  views but changes nothing, since there is no folder level for it to leave.
-  `ListObjects` has no delimiter, so the folders under a prefix cannot be
-  known from a page of objects.
-- **Definition of Done:** `ListObjects` takes a delimiter and answers the
-  common prefixes under the requested prefix (in SQL, not by splitting a page
-  in the browser); the page navigates by prefix with breadcrumbs, and
-  Recursive switches between that level and everything under it;
-  `useObjectListState` moved onto the shared URL-state hooks (`useUrlState`,
-  `TABLE_PARAMS`) that every other list uses, instead of its own
-  `router.replace` and parameter names.
-- **Blockers:** none.
-
 #### Undo after a soft delete
 
 - **Status:** Aspirational.

@@ -182,6 +182,28 @@ describe("uploadSingle", () => {
       expect.objectContaining({ contentType: "application/octet-stream" }),
     );
   });
+
+  // A file dropped in a folder lands in it; without one, at the root.
+  it.each([
+    ["a folder", "reports/2026/", "reports/2026/q3.pdf"],
+    ["the root", undefined, "q3.pdf"],
+  ])("names the object in %s", async (_, keyPrefix, key) => {
+    h.uploadObject.mockResolvedValue({
+      object: { name: "objects/o3" },
+      uploadUrl: { url: "https://s3/x", method: "PUT", requiredHeaders: {} },
+    });
+    await uploadSingle({
+      parent: "p",
+      file: new File(["x"], "q3.pdf"),
+      tags: {},
+      idempotencyKey: "i",
+      onProgress: () => {},
+      keyPrefix,
+    });
+    expect(h.uploadObject).toHaveBeenLastCalledWith(
+      expect.objectContaining({ key }),
+    );
+  });
 });
 
 describe("uploadSingle retries", () => {
