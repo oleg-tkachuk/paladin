@@ -931,13 +931,3 @@ order they are being taken up.
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
 
-#### Row links and shortcut hints
-
-- **Status:** Aspirational.
-- **Reason:** a row cannot be linked to, and the shortcuts are not mentioned
-  where the actions are.
-- **Definition of Done:** `?id=` opening a list scrolled to and highlighting
-  that row, on the URL-state contract; tooltips on actions naming their
-  shortcut from the shortcut registry.
-- **Blockers:** none.
-

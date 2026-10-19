@@ -3,7 +3,11 @@
 // page will then answer from it.
 import { queryOptions } from "@tanstack/react-query";
 
-import { collectionClient, userClient } from "@/lib/connect/client";
+import {
+  capabilityClient,
+  collectionClient,
+  userClient,
+} from "@/lib/connect/client";
 
 /** A collection's resource name, as GetCollection takes it. */
 export const collectionResourceName = (tenantId: string, collection: string) =>
@@ -25,6 +29,14 @@ export function userDetailQuery(name: string) {
   return queryOptions({
     queryKey: ["user", name] as const,
     queryFn: ({ signal }) => userClient.getUser({ name }, { signal }),
+  });
+}
+
+export function capabilityDetailQuery(id: string) {
+  return queryOptions({
+    queryKey: ["capability", id] as const,
+    retry: false, // NotFound: no capability has the id, or it is not visible.
+    queryFn: ({ signal }) => capabilityClient.get({ id }, { signal }),
   });
 }
 

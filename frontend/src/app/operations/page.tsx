@@ -31,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { openableRow } from "@/components/ui/RecordDialog";
+import { useLinkedRow, type LinkedRowProps } from "@/hooks/useLinkedRow";
 import { Timestamp } from "@/components/Timestamp";
 import { ActorName } from "@/components/features/audit/ActorName";
 import {
@@ -85,7 +86,10 @@ export default function OperationsPage() {
   const [includeDismissed, setIncludeDismissed] = useState(false);
   const [live, setLive] = useState(true);
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
-  const [opened, setOpened] = useState<Operation | null>(null);
+  // The open record is in the URL, so an open record's address links to it.
+  // The row clicked stays at hand for one the list no longer holds.
+  const linked = useLinkedRow();
+  const [clicked, setClicked] = useState<Operation | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
 
   const { operations, loading, error, hasMore, refresh, loadMore } =
@@ -262,7 +266,11 @@ export default function OperationsPage() {
                   canDismiss={mine}
                   onCancel={cancel}
                   onDismiss={() => dismiss([op.name])}
-                  onOpen={() => setOpened(op)}
+                  onOpen={() => {
+                    setClicked(op);
+                    linked.open(op.name);
+                  }}
+                  linkedProps={linked.rowProps(op.name)}
                 />
               ))
             )}
@@ -286,11 +294,12 @@ export default function OperationsPage() {
       <OperationRecord
         op={
           // The record follows the live list, so an open one keeps moving.
-          opened
-            ? (operations.find((o) => o.name === opened.name) ?? opened)
+          linked.linkedId
+            ? (operations.find((o) => o.name === linked.linkedId) ??
+              (clicked?.name === linked.linkedId ? clicked : null))
             : null
         }
-        onClose={() => setOpened(null)}
+        onClose={linked.close}
       />
     </div>
   );
@@ -302,12 +311,14 @@ function OperationRow({
   onCancel,
   onDismiss,
   onOpen,
+  linkedProps,
 }: {
   op: Operation;
   canDismiss: boolean;
   onCancel: (name: string) => Promise<void>;
   onDismiss: () => Promise<void>;
   onOpen: () => void;
+  linkedProps: LinkedRowProps;
 }) {
   const status = operationStatus(op);
   const badge = OP_STATUS_BADGE[status];
@@ -323,6 +334,7 @@ function OperationRow({
   return (
     <TableRow
       {...row}
+      {...linkedProps}
       aria-label={`${operationLabel(op)}, ${badge.label}`}
       className={cn(row.className, status === "failed" && "bg-destructive/5")}
     >

@@ -36,7 +36,12 @@ const CAP = {
 
 function open() {
   render(
-    <CapabilityDetailsDialog cap={CAP} usageEntry="never" onClose={vi.fn()} />,
+    <CapabilityDetailsDialog
+      id={CAP.id}
+      cap={CAP}
+      usageEntry="never"
+      onClose={vi.fn()}
+    />,
   );
 }
 
@@ -94,5 +99,47 @@ describe("CapabilityDetailsDialog", () => {
     expect((await screen.findAllByText("unavailable")).length).toBeGreaterThan(
       0,
     );
+  });
+
+  // A link names a capability by id; the list the page browsed may not hold it.
+  describe("by id alone", () => {
+    const openById = () =>
+      render(
+        <CapabilityDetailsDialog
+          id={CAP.id}
+          cap={null}
+          usageEntry={undefined}
+          onClose={vi.fn()}
+        />,
+      );
+
+    it("shows the capability its record holds", async () => {
+      h.get.mockResolvedValue({ capability: CAP });
+      openById();
+      expect(screen.getByText("Reading the capability…")).toBeInTheDocument();
+      expect(await screen.findByText("Copy ID")).toBeInTheDocument();
+      expect(screen.getByText(/agent:1/)).toBeInTheDocument();
+    });
+
+    it("says there is none when the record cannot be read", async () => {
+      h.get.mockRejectedValue(new Error("not found"));
+      openById();
+      expect(
+        await screen.findByText(/No capability cap-1 is on record/),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("stays closed with no id", () => {
+    render(
+      <CapabilityDetailsDialog
+        id={null}
+        cap={CAP}
+        usageEntry="never"
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(h.get).not.toHaveBeenCalled();
   });
 });

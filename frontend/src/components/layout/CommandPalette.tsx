@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyChord } from "@/components/ui/KeyChord";
 import { useResourceLinks } from "@/hooks/useResourceLinks";
 import { groupedLinks } from "@/lib/preferences/resourceLinks";
 import React, {
@@ -688,18 +689,7 @@ export function CommandPalette() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {result.shortcut && (
-                    <div className="flex gap-1">
-                      {result.shortcut.split(" ").map((s) => (
-                        <span
-                          key={s}
-                          className="px-2 py-1 rounded bg-foreground/5 border border-border text-xs font-mono text-muted-foreground"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  {result.shortcut && <KeyChord chord={result.shortcut} />}
                   {index === selectedIndex && (
                     <ArrowRightIcon className="w-4 h-4 text-primary animate-slide-right" />
                   )}

@@ -28,6 +28,16 @@ vi.mock("@/context/AuthContext", () => ({
 vi.mock("@/context/ScopeContext", () => ({
   useScope: () => ({ tenant: { displayName: TENANT_NAME } }),
 }));
+const acting = vi.hoisted(() => ({
+  tenant: null as {
+    tenantId: string;
+    slug: string;
+    displayName: string;
+  } | null,
+}));
+vi.mock("@/hooks/useActingTenant", () => ({
+  useActingTenant: () => acting.tenant,
+}));
 vi.mock("@/components/layout/BuildVersion", () => ({
   BuildVersion: () => null,
 }));
@@ -73,5 +83,39 @@ describe("Sidebar collapse", () => {
     expect(name).toHaveTextContent(TENANT_NAME);
     expect(name).toHaveAttribute("title", TENANT_ID);
     expect(name).toHaveClass("truncate");
+  });
+});
+
+// The g-jump that lands on a row is named beside it, from the same table the
+// handler serves (lib/navShortcuts), so the hint cannot name another place.
+describe("Sidebar shortcut hints", () => {
+  const caps = (name: string) =>
+    [...screen.getByRole("link", { name }).querySelectorAll("kbd")].map(
+      (k) => k.textContent,
+    );
+
+  it("names a row's jump beside it, and none where no jump lands", () => {
+    acting.tenant = null;
+    render(
+      <TooltipProvider>
+        <Sidebar isOpen={false} onClose={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(caps("Audit Logs")).toEqual(["G", "A"]);
+    expect(caps("Users")).toEqual(["G", "U"]);
+    expect(caps("Upload")).toEqual([]);
+  });
+
+  // With a tenant on screen, g b goes to its buckets, not to the list of all.
+  it("names no jump on a row the scoped jump passes by", () => {
+    acting.tenant = { tenantId: TENANT_ID, slug: "acme", displayName: "Acme" };
+    render(
+      <TooltipProvider>
+        <Sidebar isOpen={false} onClose={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(caps("Buckets")).toEqual([]);
+    expect(caps("Audit Logs")).toEqual(["G", "A"]);
+    acting.tenant = null;
   });
 });

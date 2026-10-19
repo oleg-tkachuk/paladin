@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   revoke: vi.fn(),
   revokeBiscuit: vi.fn(),
   getBiscuitUsage: vi.fn(),
+  get: vi.fn(),
   showNotification: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock("@/lib/connect/client", () => ({
     revoke: h.revoke,
     revokeBiscuit: h.revokeBiscuit,
     getBiscuitUsage: h.getBiscuitUsage,
+    get: h.get,
   },
 }));
 vi.mock("../tenant-context", () => ({
@@ -36,6 +38,8 @@ vi.mock("../tenant-context", () => ({
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
+
+import { LINKED_ROW_ATTR } from "@/components/ui/table";
 
 import CapabilitiesPage from "./page";
 
@@ -266,6 +270,58 @@ describe("CapabilitiesPage", () => {
     );
     await userEvent.click(screen.getByText("View details"));
     expect(await screen.findByText("Capability details")).toBeInTheDocument();
+  });
+
+  it("puts the capability open in details in the address", async () => {
+    seedBrowse();
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    render(<CapabilitiesPage />);
+    await userEvent.click(
+      await screen.findByText("Actions for capability cap-1"),
+    );
+    await userEvent.click(screen.getByText("View details"));
+    expect(window.location.search).toBe("?id=cap-1");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(window.location.search).toBe(""));
+  });
+
+  // The audit log links here by ?id=.
+  it("opens the details of the capability a link names, marking its row", async () => {
+    window.history.replaceState(null, "", "/tenants/t-1/capabilities?id=cap-2");
+    seedBrowse();
+    h.list.mockResolvedValue({
+      capabilities: [makeCap("cap-1"), makeCap("cap-2")],
+    });
+    render(<CapabilitiesPage />);
+    expect(await screen.findByText("Capability details")).toBeInTheDocument();
+    await screen.findByText("Actions for capability cap-2");
+    const row = (id: string) =>
+      screen.getByText(`Actions for capability ${id}`).closest("tr");
+    expect(row("cap-2")).toHaveAttribute(LINKED_ROW_ATTR);
+    expect(row("cap-1")).not.toHaveAttribute(LINKED_ROW_ATTR);
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("reads a linked capability the browsed list does not hold", async () => {
+    window.history.replaceState(null, "", "/tenants/t-1/capabilities?id=cap-9");
+    h.get.mockResolvedValue({ capability: makeCap("cap-9") });
+    render(<CapabilitiesPage />);
+    expect(await screen.findByText("Capability details")).toBeInTheDocument();
+    expect(h.get).toHaveBeenCalledWith({ id: "cap-9" }, expect.anything());
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("reads a listed linked capability's record once, page and dialog together", async () => {
+    window.history.replaceState(null, "", "/tenants/t-1/capabilities?id=cap-1");
+    seedBrowse();
+    h.get.mockReset();
+    h.get.mockResolvedValue({ capability: makeCap("cap-1") });
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    render(<CapabilitiesPage />);
+    expect(await screen.findByText("Capability details")).toBeInTheDocument();
+    await waitFor(() => expect(h.get).toHaveBeenCalled());
+    expect(h.get).toHaveBeenCalledTimes(1);
+    window.history.replaceState(null, "", "/");
   });
 
   it("revokes a capability from the row menu", async () => {
