@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { render, screen, waitFor, within } from "@/test/utils";
+import { render, screen, waitFor } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
   getMine: vi.fn(),
@@ -74,10 +74,10 @@ describe("ProfilePage account", () => {
       "href",
       "/tenants/acme",
     );
-    expect(screen.getByText("platform.capability-issuer")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Issues capabilities for any tenant/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("platform.capability-issuer")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Issues capabilities for any tenant/),
+    );
     expect(screen.getByText("0199-user-id")).toBeInTheDocument();
   });
 
@@ -179,14 +179,12 @@ describe("ProfilePage preferences", () => {
     ).toBeNull();
   });
 
-  it("saves a theme picked from the swatches", async () => {
+  it("saves a theme picked from the menu", async () => {
     render(<ProfilePage />);
-    const group = await screen.findByRole("radiogroup", { name: "Theme" });
-    expect(within(group).getByRole("radio", { name: "Dark" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    await userEvent.click(within(group).getByRole("radio", { name: "Ember" }));
+    const trigger = await screen.findByRole("combobox", { name: "Theme" });
+    expect(trigger).toHaveTextContent("Dark");
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole("option", { name: "Ember" }));
     await userEvent.click(save());
     await waitFor(() =>
       expect(h.updateMine).toHaveBeenCalledWith(
