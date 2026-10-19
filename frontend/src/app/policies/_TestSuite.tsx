@@ -32,6 +32,11 @@ import {
 import { z } from "zod";
 
 import { safeParseJson } from "@/lib/parseJson";
+import {
+  DEFAULT_PRINCIPAL_KIND,
+  PRINCIPAL_KINDS,
+  type PrincipalKindName,
+} from "@/lib/principalKind";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +64,8 @@ export interface TestCase {
   principalSubject: string;
   principalTenantId: string;
   rolesText: string; // comma-separated; matches the original SimulatePanel UX
+  /** The credential the principal comes from, as Cedar's principal.kind. */
+  principalKind: PrincipalKindName;
   action: string;
   resourceName: string;
   expected: "allow" | "deny" | "any";
@@ -73,6 +80,15 @@ const TestCaseSchema = z.object({
   principalSubject: z.string(),
   principalTenantId: z.string(),
   rolesText: z.string(),
+  // Suites saved before the kind was asked for simulate a signed-in user.
+  principalKind: z
+    .enum(
+      PRINCIPAL_KINDS.map((k) => k.value) as [
+        PrincipalKindName,
+        ...PrincipalKindName[],
+      ],
+    )
+    .default(DEFAULT_PRINCIPAL_KIND),
   action: z.string(),
   resourceName: z.string(),
   expected: z.enum(["allow", "deny", "any"]),
@@ -103,6 +119,7 @@ function defaultCase(seed?: TestCase, defaultResource?: string): TestCase {
     principalSubject: seed?.principalSubject ?? "",
     principalTenantId: seed?.principalTenantId ?? "",
     rolesText: seed?.rolesText ?? "platform.admin",
+    principalKind: seed?.principalKind ?? DEFAULT_PRINCIPAL_KIND,
     action: seed?.action ?? DEFAULT_ACTION,
     resourceName: seed?.resourceName ?? defaultResource ?? "",
     expected: seed?.expected ?? "any",
@@ -225,6 +242,7 @@ export function TestSuite({
             .filter(Boolean),
           action: tc.action,
           resourceName: tc.resourceName,
+          principalKind: tc.principalKind,
         });
         return {
           allowed: res.allowed,
@@ -476,6 +494,25 @@ function CaseRow({
                 placeholder="019dfeaa-94c3-…"
                 className="font-mono text-xs"
               />
+            </Field>
+            <Field label="Principal kind">
+              <SelectRoot
+                value={tc.principalKind}
+                onValueChange={(v) =>
+                  onUpdate({ principalKind: v as PrincipalKindName })
+                }
+              >
+                <SelectTrigger aria-label="Principal kind" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRINCIPAL_KINDS.map((k) => (
+                    <SelectItem key={k.value} value={k.value}>
+                      {k.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </SelectRoot>
             </Field>
             <Field label="Roles (comma-separated)">
               <Input
