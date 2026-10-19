@@ -15,7 +15,7 @@ import { BackendHeader } from "../BackendHeader";
 export default function BackendFeaturesPage() {
   const params = useParams<{ backendId: string }>();
   const backendId = decodeURIComponent(params.backendId);
-  const { backends, loading, error, fetchBackends } = useBackends();
+  const { backends, loading, error, refetch: refetchBackends } = useBackends();
   const backend = useMemo(
     () => backends.find((b) => b.backendId === backendId),
     [backends, backendId],
@@ -34,7 +34,7 @@ export default function BackendFeaturesPage() {
             <ListLoadError
               what="Backends"
               reason={error}
-              onRetry={() => void fetchBackends()}
+              onRetry={() => void refetchBackends()}
             />
           </CardContent>
         </Card>

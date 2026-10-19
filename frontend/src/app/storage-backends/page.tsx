@@ -15,13 +15,7 @@ import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
-import React, {
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -212,16 +206,23 @@ const BACKEND_SORT: SortAccessors<StorageBackend, BackendColumn> = {
 };
 
 export default function StorageBackendsPage() {
+  // Server-side, like /buckets: the derived `search` field joins id, display
+  // name, region and endpoint, and the state choice is a conjunct beside it.
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [state, setState] = useState<StateFilter>("all");
   const {
     backends,
     loading,
-    fetchBackends,
+    refetch,
     createBackend,
     setBackendEnabled,
     setBackendReadOnly,
     setBackendMaintenance,
     error: listError,
-  } = useBackends();
+  } = useBackends({
+    filter: allOf(searchFilter(debouncedSearch), stateFilter(state)),
+  });
   const { showNotification } = useNotification();
   const { sort, toggleSort } = useTableSort<BackendColumn>(undefined, {
     url: PAGE_TABLE,
@@ -234,11 +235,6 @@ export default function StorageBackendsPage() {
     [backends, sort],
   );
 
-  // Server-side, like /buckets: the derived `search` field joins id, display
-  // name, region and endpoint, and the state choice is a conjunct beside it.
-  const [search, setSearch] = useTableQuery(PAGE_TABLE);
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [state, setState] = useState<StateFilter>("all");
   // The backend a row action is running on; its menu stays disabled meanwhile.
   const [busyId, setBusyId] = useState<string | null>(null);
   // Multi-select for bulk actions (client-side fan-out over the per-backend
@@ -264,18 +260,6 @@ export default function StorageBackendsPage() {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [search]);
-
-  // One place that knows how to ask, so Refresh, the error retry and the
-  // post-action reload cannot drift into fetching something else.
-  const refetch = useCallback(
-    () =>
-      fetchBackends(allOf(searchFilter(debouncedSearch), stateFilter(state))),
-    [fetchBackends, debouncedSearch, state],
-  );
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
 
   const call = (b: StorageBackend, action: Action) => {
     switch (action) {

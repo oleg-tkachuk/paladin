@@ -13,6 +13,8 @@ import userEvent from "@testing-library/user-event";
 // on mount; mock it + notifications and pin the shell + create-dialog open.
 const h = vi.hoisted(() => ({
   fetchBackends: vi.fn(),
+  // Every filter the page asked the hook for, in order.
+  filters: [] as string[],
   createBackend: vi.fn(() => Promise.resolve()),
   setBackendEnabled: vi.fn(() => Promise.resolve({})),
   setBackendReadOnly: vi.fn(() => Promise.resolve({})),
@@ -26,16 +28,21 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useBackends", () => ({
-  useBackends: () => ({
-    backends: h.backends,
-    loading: false,
-    error: h.error,
-    fetchBackends: h.fetchBackends,
-    createBackend: h.createBackend,
-    setBackendEnabled: h.setBackendEnabled,
-    setBackendReadOnly: h.setBackendReadOnly,
-    setBackendMaintenance: h.setBackendMaintenance,
-  }),
+  useBackends: (options: { filter?: string } = {}) => {
+    if (h.filters.at(-1) !== (options.filter ?? "")) {
+      h.filters.push(options.filter ?? "");
+    }
+    return {
+      backends: h.backends,
+      loading: false,
+      error: h.error,
+      refetch: h.fetchBackends,
+      createBackend: h.createBackend,
+      setBackendEnabled: h.setBackendEnabled,
+      setBackendReadOnly: h.setBackendReadOnly,
+      setBackendMaintenance: h.setBackendMaintenance,
+    };
+  },
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -506,14 +513,14 @@ describe("StorageBackendsPage search", () => {
 
   it("sends the query to the API as one CEL conjunct", () => {
     render(<StorageBackendsPage />);
-    h.fetchBackends.mockClear();
+    h.filters = [];
 
     typeInSearch("EU-North");
     act(() => {
       vi.advanceTimersByTime(400);
     });
 
-    const sent = h.fetchBackends.mock.calls.at(-1)?.[0];
+    const sent = h.filters.at(-1);
     // ASCII-folded to match the server's search text, and one conjunct: a
     // disjunction pushes nothing into SQL, so matches past the first page
     // would come back reported as absent.
@@ -523,7 +530,7 @@ describe("StorageBackendsPage search", () => {
 
   it("debounces instead of listing once per keystroke", () => {
     render(<StorageBackendsPage />);
-    h.fetchBackends.mockClear();
+    h.filters = [];
 
     typeInSearch("m");
     act(() => {
@@ -533,12 +540,12 @@ describe("StorageBackendsPage search", () => {
     act(() => {
       vi.advanceTimersByTime(100);
     });
-    expect(h.fetchBackends.mock.calls.filter((c) => c[0])).toHaveLength(0);
+    expect(h.filters.filter(Boolean)).toHaveLength(0);
 
     act(() => {
       vi.advanceTimersByTime(400);
     });
-    expect(h.fetchBackends.mock.calls.filter((c) => c[0])).toHaveLength(1);
+    expect(h.filters.filter(Boolean)).toHaveLength(1);
   });
 });
 
@@ -546,7 +553,7 @@ describe("StorageBackendsPage search", () => {
 describe("StorageBackendsPage state filter", () => {
   it("sends the chosen state as a CEL conjunct", async () => {
     render(<StorageBackendsPage />);
-    h.fetchBackends.mockClear();
+    h.filters = [];
 
     await userEvent.click(
       screen.getByRole("combobox", { name: "Filter by state" }),
@@ -554,9 +561,7 @@ describe("StorageBackendsPage state filter", () => {
     await userEvent.click(screen.getByRole("option", { name: "Draining" }));
 
     await waitFor(() =>
-      expect(h.fetchBackends).toHaveBeenLastCalledWith(
-        "enabled == true && read_only == true",
-      ),
+      expect(h.filters.at(-1)).toBe("enabled == true && read_only == true"),
     );
   });
 
