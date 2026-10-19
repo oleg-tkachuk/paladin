@@ -199,12 +199,12 @@ describe("CollectionsPage load failure", () => {
         /could not be loaded — this list is unknown, not empty/i,
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No Collections yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No collections yet.")).not.toBeInTheDocument();
   });
 
   it("still says 'none yet' when the list really is empty", () => {
     render(<CollectionsPage />);
-    expect(screen.getByText("No Collections yet.")).toBeInTheDocument();
+    expect(screen.getByText("No collections yet.")).toBeInTheDocument();
   });
 });
 

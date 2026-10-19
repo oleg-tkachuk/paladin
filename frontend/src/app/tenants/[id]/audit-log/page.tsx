@@ -9,6 +9,8 @@
 // Free-text search filters client-side over the loaded page, same
 // affordance as /audit.
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import { useMemo } from "react";
 import Link from "next/link";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
@@ -178,18 +180,12 @@ export default function TenantAuditLogPage() {
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-40 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <ClipboardDocumentListIcon className="size-8 opacity-40" />
-                    <p className="text-sm">
-                      {search
-                        ? "No entries match this filter."
-                        : "No audit entries for this tenant yet."}
-                    </p>
-                  </div>
-                </TableCell>
-              </TableRow>
+              <EmptyTableRow
+                colSpan={6}
+                icon={ClipboardDocumentListIcon}
+                what="audit entries"
+                reason={emptyReason({ filtered: !!search })}
+              />
             ) : (
               filtered.map((e) => {
                 const hasError = !!e.errorMessage;

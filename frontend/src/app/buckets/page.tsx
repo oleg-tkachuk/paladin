@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -238,33 +240,24 @@ export default function BucketsPage() {
         sort={sort}
         onSort={handleSort}
         empty={
-          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <ArchiveBoxIcon className="size-10 opacity-40" />
-            <p className="text-sm">
-              {/*
-                Three states, not two. With the filter server-side an empty
-                table means one of: the debounce has not fired yet, the request
-                is in flight, or the server really found nothing. Collapsing
-                the first two into "No buckets match" tells an operator their
-                bucket is gone while they are still typing its name.
-              */}
-              {searchPending
-                ? "Searching…"
-                : hasFilters
-                  ? "No buckets match your filters."
-                  : "No buckets yet."}
-            </p>
-            {!searchPending && !hasFilters && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setCreateOpen(true)}
-              >
-                <PlusIcon className="size-4" />
-                Create the first bucket
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            icon={ArchiveBoxIcon}
+            what="buckets"
+            // Three states, not two. With the filter server-side an empty
+            // table means one of: the debounce has not fired yet, the request
+            // is in flight, or the server really found nothing. Collapsing
+            // the first two into "no match" tells an operator their bucket is
+            // gone while they are still typing its name.
+            reason={emptyReason({
+              pending: searchPending,
+              filtered: hasFilters,
+            })}
+            purpose="A bucket is a store on a backend that collections keep their objects in."
+            action={{
+              label: "Create the first bucket",
+              onClick: () => setCreateOpen(true),
+            }}
+          />
         }
         rowActions={(b) => (
           <DropdownMenu>

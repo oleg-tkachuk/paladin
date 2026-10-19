@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -197,18 +199,12 @@ export default function AuditPage() {
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-40 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <ClipboardDocumentListIcon className="size-8 opacity-40" />
-                    <p className="text-sm">
-                      {search
-                        ? "No entries match this filter."
-                        : "No audit entries yet."}
-                    </p>
-                  </div>
-                </TableCell>
-              </TableRow>
+              <EmptyTableRow
+                colSpan={6}
+                icon={ClipboardDocumentListIcon}
+                what="audit entries"
+                reason={emptyReason({ filtered: !!search })}
+              />
             ) : (
               filtered.map((e) => {
                 const hasError = !!e.errorMessage;
