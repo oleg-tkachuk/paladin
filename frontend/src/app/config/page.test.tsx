@@ -1,75 +1,121 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
-// The snapshot read a failed tenant or backend list as "0" and "no tenants
-// yet" / "none registered" — a claim about the platform it could not make.
+import { render, screen, within } from "@/test/utils";
+
 const h = vi.hoisted(() => ({
-  tenants: {
-    tenants: [] as unknown[],
+  config: {
+    config: "" as string | null,
+    path: "/app/configs/config.yaml" as string | null,
     loading: false,
-    error: null as string | null,
-    fetchTenants: vi.fn(),
+    error: null as Error | null,
+    refresh: vi.fn(),
   },
-  backends: {
-    backends: [] as unknown[],
-    loading: false,
-    error: null as string | null,
-    fetchBackends: vi.fn(),
-  },
+  copy: vi.fn(),
+  notify: vi.fn(),
 }));
 
-vi.mock("@/hooks/useTenants", () => ({ useTenants: () => h.tenants }));
-vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
-vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
-vi.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({
-    user: {
-      roles: ["platform.admin"],
-      tenantId: "01a0f4a9-7600-77a9-862e-11ea31d523ca",
-      subject: "admin",
-    },
-  }),
+vi.mock("@/hooks/useConfig", () => ({ useConfig: () => h.config }));
+vi.mock("@/components/layout/PageHeader", () => ({
+  PageHeader: ({ actions }: { actions?: React.ReactNode }) => (
+    <div>{actions}</div>
+  ),
 }));
 vi.mock("@/components/ui/Notification", () => ({
-  useNotification: () => ({ showNotification: vi.fn() }),
+  useNotification: () => ({ showNotification: h.notify }),
 }));
-vi.mock("@/hooks/useConfig", () => ({
-  useConfig: () => ({ config: "", path: "", loading: false, error: null }),
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  copyToClipboard: h.copy,
 }));
 
 import ConfigPage from "./page";
 
+const YAML = `app:
+  name: paladin-core
+logger:
+  level: info
+  development: false
+datastores:
+  postgres:
+    dsn: postgres://paladin_app@pg/paladin
+    password: '***'
+`;
+
 beforeEach(() => {
-  h.tenants.error = null;
-  h.backends.error = null;
+  h.config.config = YAML;
+  h.config.error = null;
+  h.config.loading = false;
+  h.copy.mockReset().mockResolvedValue(true);
+  h.notify.mockReset();
 });
 
-describe("ConfigPage snapshot", () => {
-  it("shows a failed count as unknown, not as zero", () => {
-    h.tenants.error = "unavailable: upstream";
-    h.backends.error = "unavailable: upstream";
+const section = (key: string) => screen.getByRole("region", { name: key });
+
+describe("ConfigPage", () => {
+  it("lists each section with its settings, and a way to each", () => {
     render(<ConfigPage />);
-    expect(screen.queryByText("no tenants yet")).not.toBeInTheDocument();
-    expect(screen.queryByText("none registered")).not.toBeInTheDocument();
-    expect(screen.getAllByText("could not be loaded")).toHaveLength(2);
+    const nav = screen.getByRole("navigation", { name: "Sections" });
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((a) => a.getAttribute("href")),
+    ).toEqual(["#config-app", "#config-logger", "#config-datastores"]);
+    expect(within(section("logger")).getByText("level")).toBeInTheDocument();
+    expect(within(section("logger")).getByText("info")).toBeInTheDocument();
   });
 
-  it("still says so when there really are none", () => {
-    render(<ConfigPage />);
-    expect(screen.getByText("no tenants yet")).toBeInTheDocument();
-    expect(screen.getByText("none registered")).toBeInTheDocument();
-  });
-});
-
-// The page offered to store a bearer token "sent on every RPC". Nothing read
-// it: the session is a BFF cookie. A field that does nothing while claiming
-// otherwise is worse than none, and it parked a raw token in localStorage.
-describe("ConfigPage token override", () => {
-  it("offers no bearer-token field", () => {
+  it("says a secret was redacted, and counts it", () => {
     render(<ConfigPage />);
     expect(
-      screen.queryByText("Developer bearer token"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Bearer token")).not.toBeInTheDocument();
+      within(section("datastores")).getByText(/secret · redacted/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 secret redacted/)).toBeInTheDocument();
+    expect(screen.getByText(/3 sections, 5 settings/)).toBeInTheDocument();
+  });
+
+  it("narrows to what a search matches", async () => {
+    render(<ConfigPage />);
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Search the configuration" }),
+      "paladin_app",
+    );
+    expect(screen.queryByRole("region", { name: "logger" })).toBeNull();
+    expect(
+      within(section("datastores")).getByText("postgres.dsn"),
+    ).toBeInTheDocument();
+    expect(
+      within(section("datastores")).queryByText("postgres.password"),
+    ).toBeNull();
+  });
+
+  it("copies one section as YAML", async () => {
+    render(<ConfigPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Copy section app" }),
+    );
+    expect(h.copy).toHaveBeenCalledWith("app:\n  name: paladin-core\n");
+  });
+
+  it("shows the YAML as it came, one toggle away", async () => {
+    render(<ConfigPage />);
+    await userEvent.click(screen.getByRole("button", { name: "YAML" }));
+    expect(screen.getByText(/name: paladin-core/)).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Sections" })).toBeNull();
+  });
+
+  it("shows a document that is not YAML as text, and says so", () => {
+    h.config.config = "app: [unclosed";
+    render(<ConfigPage />);
+    expect(screen.getByText(/not YAML/)).toBeInTheDocument();
+    expect(screen.getByText("app: [unclosed")).toBeInTheDocument();
+  });
+
+  it("says why it could not read the configuration", () => {
+    h.config.config = null;
+    h.config.error = new Error("permission denied");
+    render(<ConfigPage />);
+    expect(screen.getByText(/could not be read/)).toBeInTheDocument();
+    expect(screen.getByText(/platform.admin/)).toBeInTheDocument();
   });
 });

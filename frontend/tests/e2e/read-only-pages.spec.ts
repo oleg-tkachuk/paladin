@@ -53,7 +53,7 @@ const PAGES = [
     content: /Streamable HTTP/,
   },
   { path: "/stats", heading: /Platform Statistics/i, content: /By backend/i },
-  { path: "/config", heading: /Configuration/i, content: /Cluster snapshot/i },
+  { path: "/config", heading: /Configuration/i, content: /datastores/ },
   { path: "/billing", heading: /Billing/i, content: /Spend over time/i },
 ] as const;
 
