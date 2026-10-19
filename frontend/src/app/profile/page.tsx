@@ -1,15 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  GlobeAltIcon,
-  PaintBrushIcon,
-  UserCircleIcon,
-} from "@heroicons/react/24/outline";
+import { CheckCircleIcon, KeyIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
@@ -23,75 +17,179 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
-import {
-  SelectContent,
-  SelectItem,
-  SelectRoot,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
+import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import { ListLoadError } from "@/components/ui/ListLoadError";
 import { useNotification } from "@/components/ui/Notification";
 import { ChangePasswordCard } from "@/components/features/ChangePasswordCard";
-import { cn } from "@/lib/utils";
-import { T } from "@/lib/ui/typography";
-import { useAuth } from "@/context/AuthContext";
-import { userSettingsClient } from "@/lib/connect/client";
-import { isAbortError, errorMessage } from "@/hooks/errorContract";
+import { ThemePicker } from "@/components/features/profile/ThemePicker";
 import { Timestamp } from "@/components/Timestamp";
-import { SETTINGS_APPLIED_NOTE } from "./_constants";
+import { useAuth } from "@/context/AuthContext";
+import { useScope } from "@/context/ScopeContext";
+import { canUseAdminPlane, ROLE_DESCRIPTIONS } from "@/constants/roles";
+import { UpdateMineRequestSchema } from "@/gen/paladin/iam/v1/user_settings_service_pb";
+import { isAbortError, errorMessage } from "@/hooks/errorContract";
+import { userSettingsClient } from "@/lib/connect/client";
+import { fieldMask } from "@/lib/connect/fieldMask";
+import { SECTION } from "@/lib/navigation/sections";
+import { tenantHref } from "@/lib/navigation/hrefs";
+import { sessionTenantLabel } from "@/lib/tenant/sessionTenantLabel";
 import {
   fetchMySettings,
-  THEME_OPTIONS,
   THEME_SYSTEM,
   USER_SETTINGS_QUERY_KEY,
 } from "@/lib/theme";
-import { ListLoadError } from "@/components/ui/ListLoadError";
-import { fieldMask } from "@/lib/connect/fieldMask";
-import { UpdateMineRequestSchema } from "@/gen/paladin/iam/v1/user_settings_service_pb";
+import { COMMON_LOCALES, timeZoneOptions } from "@/lib/userPrefs";
+import {
+  isValidLocale,
+  isValidTimeZone,
+  localePreview,
+  timeZonePreview,
+} from "@/lib/format/preferences";
+import { T } from "@/lib/ui/typography";
+import { cn } from "@/lib/utils";
+import { LOCALE_NOT_APPLIED_NOTE } from "./_constants";
 
-// /profile — self-service editor backed by iam/v1.UserSettingsService.
-// Tenant comes from the JWT, so the page always operates on the calling
-// principal's row (GetMine / UpdateMine) — no Cedar round-trip needed.
-//
-// Only the three first-class columns are exposed for now (timezone,
-// locale, theme). The opaque preferences struct is left for the apps
-// that own their own UI state to manage; surfacing it as a JSON editor
-// here would invite blob-shaped corruption from typos.
+// /profile — the signed-in user's account and preferences
+// (iam/v1.UserSettingsService GetMine / UpdateMine, AuthService for the
+// password). Everything here is the caller's own row, so it works for a
+// tenant.user too: nothing on this page reads the admin plane.
 
-// A small, well-known subset of IANA TZ ids, offered as suggestions on the
-// timezone field. Any IANA name can still be typed.
-const COMMON_TIMEZONES = [
-  "UTC",
-  "Europe/Kyiv",
-  "Europe/London",
-  "Europe/Berlin",
-  "America/New_York",
-  "America/Los_Angeles",
-  "Asia/Tokyo",
-  "Asia/Singapore",
-  "Australia/Sydney",
-];
-
-// Same for locales: suggestions, and free-form BCP-47.
-const COMMON_LOCALES = ["en-US", "en-GB", "uk-UA", "de-DE", "fr-FR", "ja-JP"];
-
-// One width for every preference control, sized to its values rather than to
-// the card: the longest common IANA name fits, and the column lines up.
-const FIELD_WIDTH = "w-full sm:w-60";
 const TIMEZONE_SUGGESTIONS = "prof-tz-suggestions";
 const LOCALE_SUGGESTIONS = "prof-locale-suggestions";
+const THEME_LABEL = "prof-theme-label";
+const FIELD_WIDTH = "w-full sm:w-72";
+
+function browserZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "";
+  }
+}
+
+function browserLocale(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale;
+  } catch {
+    return "";
+  }
+}
 
 export default function ProfilePage() {
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Profile"
+        description="Your account, how the console shows things to you, and your password."
+        showDefaultActions={false}
+      />
+      <div className="grid items-start gap-6 xl:grid-cols-[20rem_1fr]">
+        <AccountCard />
+        <div className="min-w-0 space-y-6">
+          <PreferencesCard />
+          <ChangePasswordCard />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountCard() {
   const { user } = useAuth();
+  const { tenant } = useScope();
+  const roles = user?.roles ?? [];
+  const name = user?.displayName || user?.subject || "—";
+  const tenantName = sessionTenantLabel({
+    displayName: tenant?.displayName,
+    slug: user?.tenantSlug,
+    id: user?.tenantId,
+  });
+  const tenantHandle = user?.tenantSlug || user?.tenantId;
+  // A tenant.user has no admin plane, so a link to the workspace would open
+  // on refusals; the name alone says which tenant it is.
+  const linkTenant = tenantHandle && canUseAdminPlane(roles);
+
+  return (
+    <Card>
+      <CardContent className="space-y-5 px-6 py-5">
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="flex size-11 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary ring-1 ring-primary/30"
+          >
+            {name.slice(0, 1).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{name}</p>
+            <p className={cn(T.hint, "truncate")}>
+              signed in as <span className="font-mono">{user?.subject}</span>
+            </p>
+          </div>
+        </div>
+
+        <dl className="space-y-4 text-sm">
+          <div className="space-y-1">
+            <dt className={T.label}>Tenant</dt>
+            <dd>
+              {linkTenant ? (
+                <Link
+                  href={tenantHref(tenantHandle)}
+                  className="hover:text-primary hover:underline"
+                >
+                  {tenantName}
+                </Link>
+              ) : (
+                (tenantName ?? "—")
+              )}
+            </dd>
+          </div>
+          <div className="space-y-1.5">
+            <dt className={T.label}>Roles</dt>
+            <dd>
+              {roles.length === 0 ? (
+                <span className={T.hint}>none</span>
+              ) : (
+                <ul className="space-y-2">
+                  {roles.map((r) => (
+                    <li key={r} className="space-y-0.5">
+                      <Badge variant="outline" className="font-mono">
+                        {r}
+                      </Badge>
+                      {ROLE_DESCRIPTIONS[r] ? (
+                        <p className={T.hint}>{ROLE_DESCRIPTIONS[r]}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
+          {user?.userId ? (
+            <div className="space-y-1">
+              <dt className={T.label}>User ID</dt>
+              <dd>
+                <IdentifierCopy value={user.userId} label="User ID" />
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <Link
+          href={SECTION.applications}
+          className="flex items-center gap-2 text-sm text-primary hover:underline"
+        >
+          <KeyIcon className="size-4" />
+          Connected applications
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PreferencesCard() {
   const { showNotification } = useNotification();
-
   const [saving, setSaving] = useState(false);
-
-  // Form state — held separately from `settings` so the user can edit
-  // freely without round-tripping the server, and we can compute a
-  // "dirty" flag against the last-loaded baseline.
   const [timezone, setTimezone] = useState("");
   const [locale, setLocale] = useState("");
   const [theme, setTheme] = useState<string>(THEME_SYSTEM);
@@ -103,7 +201,6 @@ export default function ProfilePage() {
       try {
         return await fetchMySettings(signal);
       } catch (err) {
-        // An aborted query is not a failure the operator needs to see:
         // TanStack cancels in-flight reads on unmount and on supersede.
         if (isAbortError(err)) throw err;
         showNotification({
@@ -116,20 +213,12 @@ export default function ProfilePage() {
     },
   });
   const settings = settingsQuery.data ?? null;
-  const loading = settingsQuery.isFetching;
-  // refetch is referentially stable across renders (TanStack), so it's safe
-  // to list in the handleSave dependency array below.
   const loadMine = settingsQuery.refetch;
 
-  // Seed the editable form whenever a new snapshot arrives — render-phase
-  // adjust-on-change (not a set-state-in-effect hit). Identity is stable
-  // between fetches via TanStack structural sharing.
-  //
-  // Starts at undefined, which no snapshot is (settings is null at worst), so
-  // the first render seeds too. It started at `settings`, which was fine while
-  // this page did the first read; once the shell read the same query, the
-  // snapshot was already there on mount, nothing seeded, and Save would have
-  // written empty fields over the saved ones.
+  // Seed the form whenever a new snapshot arrives — render-phase
+  // adjust-on-change. Starts at undefined, which no snapshot is, so the first
+  // render seeds too: the shell reads the same query, and the snapshot is
+  // usually cached before this page mounts.
   const [seededFrom, setSeededFrom] = useState<typeof settings | undefined>(
     undefined,
   );
@@ -140,16 +229,21 @@ export default function ProfilePage() {
     setTheme(settings?.theme || THEME_SYSTEM);
   }
 
-  const dirty = useMemo(() => {
-    if (!settings) {
-      return Boolean(timezone || locale || theme !== THEME_SYSTEM);
-    }
-    return (
-      timezone !== (settings.timezone || "") ||
-      locale !== (settings.locale || "") ||
-      theme !== (settings.theme || THEME_SYSTEM)
-    );
-  }, [settings, timezone, locale, theme]);
+  const dirty = useMemo(
+    () =>
+      timezone !== (settings?.timezone || "") ||
+      locale !== (settings?.locale || "") ||
+      theme !== (settings?.theme || THEME_SYSTEM),
+    [settings, timezone, locale, theme],
+  );
+  const tzValid = isValidTimeZone(timezone);
+  const localeValid = isValidLocale(locale);
+  const canSave = dirty && tzValid && localeValid && !saving;
+
+  const zones = useMemo(() => timeZoneOptions(), []);
+  const detectedTz = useMemo(() => browserZone(), []);
+  const detectedLocale = useMemo(() => browserLocale(), []);
+  const now = new Date();
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -170,14 +264,13 @@ export default function ProfilePage() {
       showNotification({
         type: "success",
         title: "Saved",
-        message: "Preferences synchronized to the control plane.",
+        message: "Your preferences are saved.",
       });
     } catch (err) {
-      const msg = errorMessage(err, "Save failed");
       showNotification({
         type: "error",
         title: "Save failed",
-        message: msg,
+        message: errorMessage(err, "Save failed"),
       });
     } finally {
       setSaving(false);
@@ -190,239 +283,186 @@ export default function ProfilePage() {
     setTheme(settings?.theme || THEME_SYSTEM);
   }, [settings]);
 
-  const detectedTz = useMemo(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return "";
-    }
-  }, []);
-
-  const detectedLocale = useMemo(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().locale;
-    } catch {
-      return "";
-    }
-  }, []);
-
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Profile"
-        description="Personal preferences synced to the control plane."
-        showDefaultActions={false}
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void loadMine()}
-            disabled={loading}
-          >
-            <ArrowPathIcon
-              className={loading ? "size-4 animate-spin" : "size-4"}
-            />
-            Refresh
-          </Button>
-        }
-      />
-
-      {/* ─── Identity ────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-3 px-6">
-          <div className="flex size-9 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
-            <UserCircleIcon className="size-5" />
+    <Card>
+      <CardHeader className="px-6">
+        <CardTitle className="text-base">Preferences</CardTitle>
+        <CardDescription>
+          Saved to your account, so every browser you sign in from shows the
+          same.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6 px-6 pb-5">
+        {settingsQuery.isError && !settings ? (
+          // Showing the defaults here would let Save write them over the
+          // real settings.
+          <ListLoadError
+            what="Preferences"
+            reason={errorMessage(settingsQuery.error)}
+            onRetry={() => void settingsQuery.refetch()}
+          />
+        ) : settingsQuery.isFetching && !settings ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-9 w-72" />
+            <Skeleton className="h-9 w-72" />
           </div>
-          <div className="flex-1 min-w-0">
-            <CardTitle className="text-base">
-              {user?.displayName || user?.subject || "—"}
-            </CardTitle>
-            <CardDescription className={T.code}>
-              {user?.subject ? `subject ${user.subject}` : "no session"}
-              {user?.tenantId
-                ? ` · tenant ${user.tenantId.slice(0, 8)}…${user.tenantId.slice(-4)}`
-                : ""}
-            </CardDescription>
-          </div>
-          {user?.roles && user.roles.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {user.roles.map((r) => (
-                <Badge key={r} variant="outline" className="font-mono">
-                  {r}
-                </Badge>
-              ))}
+        ) : (
+          <>
+            <div className="space-y-2">
+              <p id={THEME_LABEL} className="text-sm font-medium">
+                Theme
+              </p>
+              <ThemePicker
+                value={theme}
+                onChange={setTheme}
+                labelledBy={THEME_LABEL}
+              />
             </div>
-          )}
-        </CardHeader>
-      </Card>
 
-      {/* ─── Preferences ─────────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="px-6">
-          <CardTitle className="text-base">Preferences</CardTitle>
-          <CardDescription>
-            {/* Theme and time zone apply (SettingsSync); locale deliberately
-                does not (DISPLAY_LOCALE in lib/format/locale.ts). */}
-            {SETTINGS_APPLIED_NOTE}
-          </CardDescription>
-        </CardHeader>
-        <Separator />
-        <CardContent className="space-y-5 px-6 py-5">
-          {settingsQuery.isError && !settings ? (
-            // The form used to show the defaults and "not saved yet" here,
-            // and Save would have written them over the real settings.
-            <ListLoadError
-              what="Preferences"
-              reason={errorMessage(settingsQuery.error)}
-              onRetry={() => void settingsQuery.refetch()}
+            <PreferenceField
+              id="prof-tz"
+              label="Timezone"
+              listId={TIMEZONE_SUGGESTIONS}
+              suggestions={zones}
+              value={timezone}
+              onChange={setTimezone}
+              valid={tzValid}
+              invalidText={
+                timezone ? "Not a time zone this browser knows." : "Required."
+              }
+              preview={
+                timeZonePreview(timezone, now) &&
+                `Now there: ${timeZonePreview(timezone, now)}`
+              }
+              detected={detectedTz}
+              hint="Dates and times in the console are shown in this zone."
             />
-          ) : loading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-9 w-full" />
+
+            <PreferenceField
+              id="prof-locale"
+              label="Locale"
+              listId={LOCALE_SUGGESTIONS}
+              suggestions={COMMON_LOCALES}
+              value={locale}
+              onChange={setLocale}
+              valid={localeValid}
+              invalidText={
+                locale ? "Not a BCP-47 tag, such as en-US." : "Required."
+              }
+              preview={
+                localePreview(locale, now) &&
+                `Writes ${localePreview(locale, now)}`
+              }
+              detected={detectedLocale}
+              hint={LOCALE_NOT_APPLIED_NOTE}
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+              <p className={T.hint}>
+                {/* GetMine serves defaults to a user who never saved; those
+                    carry no updatedAt. */}
+                {settings?.updatedAt ? (
+                  <>
+                    <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-success" />
+                    Saved <Timestamp ts={settings.updatedAt} />
+                  </>
+                ) : (
+                  "Not saved yet — these are the defaults."
+                )}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleReset}
+                  disabled={!dirty || saving}
+                >
+                  Reset
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={!canSave}>
+                  {saving ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
             </div>
-          ) : (
-            <>
-              {/* Theme */}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_1fr] sm:items-center">
-                <Label
-                  htmlFor="prof-theme"
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <PaintBrushIcon className="size-4 text-muted-foreground" />
-                  Theme
-                </Label>
-                <SelectRoot value={theme} onValueChange={setTheme}>
-                  <SelectTrigger id="prof-theme" className={FIELD_WIDTH}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {THEME_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </SelectRoot>
-              </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
-              {/* Timezone */}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
-                <Label
-                  htmlFor="prof-tz"
-                  className="flex items-center gap-2 pt-2 text-sm"
-                >
-                  <ClockIcon className="size-4 text-muted-foreground" />
-                  Timezone
-                </Label>
-                <div className="space-y-1.5">
-                  <Input
-                    id="prof-tz"
-                    list={TIMEZONE_SUGGESTIONS}
-                    placeholder={detectedTz || "Europe/Kyiv"}
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    className={cn(FIELD_WIDTH, "font-mono text-xs")}
-                  />
-                  <datalist id={TIMEZONE_SUGGESTIONS}>
-                    {COMMON_TIMEZONES.map((tz) => (
-                      <option key={tz} value={tz} />
-                    ))}
-                  </datalist>
-                  <p className={T.hint}>
-                    IANA name. Detected from this browser:{" "}
-                    <button
-                      type="button"
-                      onClick={() => detectedTz && setTimezone(detectedTz)}
-                      className="font-mono text-primary hover:underline"
-                    >
-                      {detectedTz || "(unavailable)"}
-                    </button>
-                  </p>
-                </div>
-              </div>
-
-              {/* Locale */}
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_1fr] sm:items-start">
-                <Label
-                  htmlFor="prof-locale"
-                  className="flex items-center gap-2 pt-2 text-sm"
-                >
-                  <GlobeAltIcon className="size-4 text-muted-foreground" />
-                  Locale
-                </Label>
-                <div className="space-y-1.5">
-                  <Input
-                    id="prof-locale"
-                    list={LOCALE_SUGGESTIONS}
-                    placeholder={detectedLocale || "en-US"}
-                    value={locale}
-                    onChange={(e) => setLocale(e.target.value)}
-                    className={cn(FIELD_WIDTH, "font-mono text-xs")}
-                  />
-                  <datalist id={LOCALE_SUGGESTIONS}>
-                    {COMMON_LOCALES.map((lo) => (
-                      <option key={lo} value={lo} />
-                    ))}
-                  </datalist>
-                  <p className={T.hint}>
-                    BCP-47 tag. Detected from this browser:{" "}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        detectedLocale && setLocale(detectedLocale)
-                      }
-                      className="font-mono text-primary hover:underline"
-                    >
-                      {detectedLocale || "(unavailable)"}
-                    </button>
-                  </p>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between border-t pt-4">
-                <div className={T.hint}>
-                  {/* GetMine serves defaults to a user who never saved;
-                      those carry no updatedAt. */}
-                  {settings?.updatedAt ? (
-                    <>
-                      <CheckCircleIcon className="mr-1 inline-block size-3.5 align-text-bottom text-success" />
-                      Last synced <Timestamp ts={settings.updatedAt} />
-                      {" · resourceVersion "}
-                      <span className="font-mono">
-                        {settings.resourceVersion || "—"}
-                      </span>
-                    </>
-                  ) : (
-                    "Defaults — not saved yet."
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleReset}
-                    disabled={!dirty || saving}
-                  >
-                    Reset
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSave}
-                    disabled={!dirty || saving}
-                  >
-                    {saving ? "Saving…" : "Save changes"}
-                  </Button>
-                </div>
-              </div>
-            </>
+function PreferenceField({
+  id,
+  label,
+  listId,
+  suggestions,
+  value,
+  onChange,
+  valid,
+  invalidText,
+  preview,
+  detected,
+  hint,
+}: {
+  id: string;
+  label: string;
+  listId: string;
+  suggestions: readonly string[];
+  value: string;
+  onChange: (v: string) => void;
+  valid: boolean;
+  invalidText: string;
+  preview: string | null;
+  detected: string;
+  hint: string;
+}) {
+  const statusId = `${id}-status`;
+  return (
+    <div className="grid gap-2 sm:grid-cols-[8rem_1fr] sm:items-start">
+      <Label htmlFor={id} className="pt-2 text-sm">
+        {label}
+      </Label>
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id={id}
+            list={listId}
+            value={value}
+            placeholder={detected}
+            onChange={(e) => onChange(e.target.value.trim())}
+            aria-invalid={!valid || undefined}
+            aria-describedby={statusId}
+            className={cn(FIELD_WIDTH, "font-mono text-xs")}
+          />
+          {detected && detected !== value ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => onChange(detected)}
+            >
+              Use this browser&apos;s ({detected})
+            </Button>
+          ) : null}
+        </div>
+        <datalist id={listId}>
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+        <p
+          id={statusId}
+          className={cn(
+            "text-xs",
+            valid ? "text-foreground" : "text-destructive",
           )}
-        </CardContent>
-      </Card>
-
-      <ChangePasswordCard />
+        >
+          {valid ? preview : invalidText}
+        </p>
+        <p className={T.hint}>{hint}</p>
+      </div>
     </div>
   );
 }
