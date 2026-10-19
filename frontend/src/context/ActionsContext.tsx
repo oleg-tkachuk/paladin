@@ -41,11 +41,15 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
   );
   const { showNotification } = useNotification();
 
+  // A second registration under an id replaces the first, in its place: the
+  // objects page's Undo is registered anew after every bulk trash, and must
+  // restore the batch just trashed.
   const registerAction = useCallback((action: Action) => {
-    setActions((prev) => {
-      if (prev.find((a) => a.id === action.id)) return prev;
-      return [...prev, action];
-    });
+    setActions((prev) =>
+      prev.some((a) => a.id === action.id)
+        ? prev.map((a) => (a.id === action.id ? action : a))
+        : [...prev, action],
+    );
   }, []);
 
   const unregisterAction = useCallback((id: string) => {
