@@ -33,7 +33,7 @@ name: Release
 #                        however many breaking changes it carries make one major.
 #
 # A manual run releases main's head only once CI passed on it
-# (release-ci-check.sh): a click cannot release an untested commit, which is
+# (.github/ci/release-head.ts): a click cannot release an untested commit, which is
 # what dispatching from CI guarantees the other trigger.
 on:
   repository_dispatch:
@@ -86,7 +86,7 @@ jobs:
       # Empty when no release was due; announce keys off it.
       tag: ${{ steps.tag.outputs.tag }}
       # What publish builds: the release at its tag, or a dev build of the
-      # commit CI passed (publish-plan.sh). Empty when it builds nothing.
+      # commit CI passed (.github/ci/publish-plan.ts). Empty when it builds nothing.
       publish_kind: ${{ steps.plan.outputs.kind }}
       publish_ref: ${{ steps.plan.outputs.ref }}
     steps:
@@ -112,48 +112,32 @@ jobs:
           CI_RUN: ${{ github.event.client_payload.ci_run_id }}
         run: printf 'dispatched by CI run %s for commit %s\n' "${CI_RUN:-unknown}" "${SHA:-unknown}"
 
+      # Node, the CI scripts and semantic-release, from their lockfiles.
+      # setup-ci restores no dependency cache: this job holds a write token,
+      # and a cache another run wrote is not something to restore into it.
+      - name: Set up the CI scripts and the release tooling
+        uses: ./.github/actions/setup-ci
+        with:
+          release-tooling: "true"
+
       # The checkout above is main's head. Dispatched by CI, that can be newer
       # than the commit whose CI dispatched this run: only that commit is
-      # released, and a newer head by its own CI run (release-head-check.sh).
-      # Run by hand, it is the head itself, released only once CI passed on
-      # it (release-ci-check.sh).
+      # released, and a newer head by its own CI run. Run by hand, it is the
+      # head itself, released only once CI passed on it. See
+      # .github/ci/release-head.ts.
       - name: Release only a commit CI passed
         id: head
         env:
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.event.client_payload.sha }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT" = workflow_dispatch ]; then
-            ./.github/scripts/release-ci-check.sh "$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
-          else
-            ./.github/scripts/release-head-check.sh "$SHA" >>"$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Node
-        if: steps.head.outputs.release == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          # No dependency cache: this job holds a write token, and a cache
-          # another run wrote is not something to restore into it.
-          package-manager-cache: false
-
-      # .github/release/package-lock.json pins semantic-release and its preset,
-      # so this installs the versions committed here rather than a marketplace
-      # action's own. semantic-release runs there too, beside its config;
-      # git finds the repository from it.
-      - name: Install semantic-release
-        if: steps.head.outputs.release == 'true'
-        working-directory: .github/release
-        run: npm ci
+        run: node .github/ci/release-head.ts
 
       # What HEAD carried before this run, so the step after it can tell a tag
       # it pushed from one an earlier dispatch to the same commit pushed.
       - name: Note the tags already on HEAD
         if: steps.head.outputs.release == 'true'
-        run: git tag --points-at HEAD >"$RUNNER_TEMP/tags-before"
+        run: node .github/ci/release-tags.ts before "$RUNNER_TEMP/tags-before"
 
       # The product releases by hand only: a train of every change since the
       # last release, rather than a release per merge.
@@ -178,73 +162,38 @@ jobs:
           RELEASE_STREAM: sdk
 
       # The upgrade guide's Unreleased sections this run shipped, named with
-      # its tags (.github/release/name-upgrade-sections.mjs). Before the SDK's
-      # notes, which link a section by its tag; the rename reaches main as a
-      # pull request at the end of the job.
+      # its tags (.github/ci/upgrade-sections.ts). Before the SDK's notes,
+      # which link a section by its tag; the rename reaches main as a pull
+      # request at the end of the job.
       - name: Name the upgrade sections this release shipped
         id: sections
         if: steps.head.outputs.release == 'true'
         env:
-          # new-release-tag.sh asks GitHub which tags on HEAD are published.
+          # Which tags on HEAD are published is GitHub's to say.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          tags="$({
-            ./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before"
-            ./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams
-          } | xargs)"
-          if [ -z "$tags" ]; then
-            echo "no tag from this run"
-            exit 0
-          fi
-          # shellcheck disable=SC2086 # one argument per tag
-          node .github/release/name-upgrade-sections.mjs $tags
-          printf 'tags=%s\n' "$tags" >>"$GITHUB_OUTPUT"
+        run: node .github/ci/upgrade-sections.ts name "$RUNNER_TEMP/tags-before"
 
       # A GitHub release beside the SDK tag this run cut, if any, with notes of
-      # the stream's own commits (.github/scripts/stream-release-notes.sh), and the Go
-      # proxy told of the tag. Never the latest release: that stays the
-      # product's.
+      # the stream's own commits, and the Go proxy told of the tag. Never the
+      # latest release: that stays the product's. See .github/ci/sdk-release.ts.
       - name: Publish the SDK release
         if: steps.head.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          for tag in $(./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before" streams); do
-            notes="$(./.github/scripts/stream-release-notes.sh "$tag")"
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false \
-              --title "$(head -1 <<<"$notes")" --notes "$(tail -n +2 <<<"$notes")"
-            # So `go get …@latest`, and the README's SDK badge, see it now
-            # rather than whenever the proxy next refreshes. The release
-            # stands without it.
-            ./.github/scripts/warm-go-proxy.sh "$tag" ||
-              echo "::warning::the Go proxy did not take $tag yet; it will on its own"
-          done
+        run: node .github/ci/sdk-release.ts "$RUNNER_TEMP/tags-before"
 
       # Read from git rather than parsing semantic-release's prose: it tags the
       # commit that was checked out, so no new tag here means no release was
       # due and there is nothing to publish — unless HEAD carries a tag with no
       # release, left by a run that failed after pushing it, which a re-run
-      # publishes. "New" is against the list taken above — see
-      # .github/scripts/new-release-tag.sh for why a tag on HEAD is not enough.
+      # publishes. "New" is against the list taken above; see
+      # .github/ci/release-tags.ts for why a tag on HEAD is not enough.
       - name: Read the tag it just pushed
         id: tag
         if: steps.head.outputs.release == 'true'
         env:
-          # A tag on HEAD without a release is one a failed run left behind;
-          # new-release-tag.sh asks GitHub which, so a re-run publishes it.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          tag="$(./.github/scripts/new-release-tag.sh "$RUNNER_TEMP/tags-before")"
-
-          if [ -z "$tag" ]; then
-            printf '%s\n' "no new tag from this run — no release was due"
-            exit 0
-          fi
-          printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
+        run: node .github/ci/release-tags.ts product "$RUNNER_TEMP/tags-before"
 
       # Every commit that passed CI is published: as the release when this run
       # cut its tag, and otherwise as a dev build the dev cluster follows.
@@ -258,18 +207,17 @@ jobs:
           # its own CI run.
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.event.client_payload.sha }}
-        run: ./.github/scripts/publish-plan.sh "$TAG" "$EVENT" "$SHA" >>"$GITHUB_OUTPUT"
+        run: node .github/ci/publish-plan.ts
 
       # main is protected, so the named sections go in as a pull request,
       # opened with AUTOMERGE_TOKEN: one GITHUB_TOKEN opens starts no CI and
-      # would never merge. See .github/scripts/propose-upgrade-sections.sh.
+      # would never merge. See .github/ci/upgrade-sections.ts.
       - name: Propose the named upgrade sections
         if: steps.sections.outputs.tags != ''
         env:
           GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           TAGS: ${{ steps.sections.outputs.tags }}
-          REPO: ${{ github.repository }}
-        run: ./.github/scripts/propose-upgrade-sections.sh
+        run: node .github/ci/upgrade-sections.ts propose
 
   # One job per component. The chart is gated and pushed through the same task
   # library `task -t Taskfile.local.yaml deploy` uses; the image is built here
@@ -329,38 +277,18 @@ jobs:
           version: ${{ env.TASK_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # The tree is not dirtied: the scripts' node_modules is ignored, so the
+      # version derived below is the commit's.
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       # Everything the image build needs, read from the component's Taskfile
-      # and the task library rather than restated here.
+      # and the task library rather than restated here, and refused when the
+      # version is not one this kind of publish may push. See
+      # .github/ci/publish-target.ts.
       - name: Resolve the version and the image
         id: resolve
-        run: |
-          set -euo pipefail
-
-          # --yes accepts the first-fetch trust prompt for the task library.
-          version="$(task --yes "${COMPONENT}:release:version")"
-          # A release publishes its tag's version, a dev build only a dev one.
-          ./.github/scripts/publish-version-check.sh "$KIND" "$version" "$TAG"
-
-          taskfile="${COMPONENT}/Taskfile.yaml"
-          name="$(yq -r '.vars.PROJECT_NAME' "$taskfile")"
-          # The library names the chart CHART_NAME, else PROJECT_NAME.
-          chart="$(yq -r '.vars.CHART_NAME // .vars.PROJECT_NAME' "$taskfile")"
-          dockerfile="$(yq -r '.vars.DOCKERFILE' "$taskfile")"
-          context="$(yq -r '.vars.DOCKER_CONTEXT' "$taskfile")"
-
-          {
-            printf 'version=%s\n' "$version"
-            printf 'image=%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$name"
-            printf 'chart=%s/%s/%s/%s\n' "$REGISTRY" "$IMAGE_NAMESPACE" "$CHART_PATH" "$chart"
-            # The same two as GHCR package names, which carry no registry or owner.
-            printf 'package=%s\n' "$name"
-            printf 'chart_package=%s/%s\n' "$CHART_PATH" "$chart"
-            printf 'file=%s/%s\n' "$COMPONENT" "$dockerfile"
-            printf 'context=%s/%s\n' "$COMPONENT" "$context"
-            # The same three values the library's image:build passes.
-            printf 'sha=%s\n' "$(git rev-parse --short=8 HEAD)"
-            printf 'build_time=%s\n' "$(TZ=UTC date +%Y-%m-%dT%H:%M:%S%z)"
-          } >>"$GITHUB_OUTPUT"
+        run: node .github/ci/publish-target.ts
 
       # Before anything is pushed: a chart regression must not ship an image
       # it cannot deploy.
@@ -417,11 +345,7 @@ jobs:
           IMAGE: ${{ steps.resolve.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
           SYFT: ${{ steps.syft.outputs.cmd }}
-        run: |
-          set -euo pipefail
-          PATH="$(dirname "$SYFT"):$PATH"
-          export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
-          ./.github/scripts/release-sign.sh "$IMAGE" "$DIGEST" "${RUNNER_TEMP}/sbom"
+        run: node .github/ci/sign.ts image "$IMAGE" "$DIGEST" "${RUNNER_TEMP}/sbom"
 
       # crane reads a pushed chart's digest; `helm push` reports it only as a
       # line of text.
@@ -464,10 +388,7 @@ jobs:
         env:
           CHART: ${{ steps.resolve.outputs.chart }}
           VERSION: ${{ steps.resolve.outputs.version }}
-        run: |
-          set -euo pipefail
-          export CERT_IDENTITY="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yaml@${GITHUB_REF}"
-          ./.github/scripts/release-sign-chart.sh "${CHART}:${VERSION}"
+        run: node .github/ci/sign.ts chart "${CHART}:${VERSION}"
 
       # Last, once the new dev build is pushed and signed: the older dev builds
       # of this component's image and chart go, the newest stays, and a
@@ -478,7 +399,7 @@ jobs:
         env:
           PACKAGE: ${{ steps.resolve.outputs.package }}
           CHART_PACKAGE: ${{ steps.resolve.outputs.chart_package }}
-        run: ./.github/scripts/ghcr-cleanup-plan.sh "$PACKAGE" "$CHART_PACKAGE" >>"$GITHUB_OUTPUT"
+        run: node .github/ci/ghcr-cleanup.ts
 
       # Not actions/delete-package-versions: it counts every package version
       # alike, and a multi-arch image is several — its platform manifests, its
@@ -506,10 +427,22 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
-      contents: write # gh creates the release
+      contents: write # create the release
     env:
       TAG: ${{ needs.release.outputs.tag }}
     steps:
+      # Before the SBOMs: a checkout cleans the workspace.
+      - name: Check out the scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions
+
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       - name: Fetch the SBOMs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -517,11 +450,10 @@ jobs:
           path: sbom
           merge-multiple: true
 
-      # Notes for people, built from merged pull requests and shaped by
-      # .github/release.yml, with each image's per-platform SBOM attached. The
-      # same SBOMs are attested to the images; these copies are for reading.
-      # No checkout: gh works against the repository.
+      # Notes for people, generated from merged pull requests and shaped by
+      # .github/release.yml, with each image's per-platform SBOM attached. See
+      # .github/ci/announce.ts.
       - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag sbom/*.spdx.json
+        run: node .github/ci/announce.ts sbom

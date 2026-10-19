@@ -1,0 +1,114 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, test } from "node:test";
+
+import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
+import { git } from "./lib/git.ts";
+import { streamOf, streams } from "./lib/release-config.ts";
+import { tempRepo } from "./lib/temp-repo.ts";
+import { BRANCH_PREFIX, UPGRADING, nameGuide, nameSections, proposalTitle, propose, splitTags, tagsFor } from "./upgrade-sections.ts";
+
+// A section named with the wrong tag sends the release notes' migration link
+// to the wrong place, or to none: the SDK's Python 3.13 section was cut in the
+// same run as product v26.1.1, and belongs to the SDK alone.
+const all = streams();
+const PRODUCT_TAG = "v27.0.0";
+const SDK_TAG = "sdk/go/v0.60.0";
+const BOTH = [SDK_TAG, PRODUCT_TAG];
+const BACKEND = "backend/internal/api/handler.go";
+const GO_SDK = "sdk/go/paladin/client.go";
+const PYTHON_SDK = "sdk/python/pyproject.toml";
+
+describe("tagsFor", () => {
+  const cases: [string, string[], string[]][] = [
+    ["the Python SDK and its notes", [PYTHON_SDK, UPGRADING], [SDK_TAG]],
+    ["the backend and its notes", [BACKEND, UPGRADING], [PRODUCT_TAG]],
+    ["the Go SDK, which the product compiles in", [GO_SDK, UPGRADING], [PRODUCT_TAG, SDK_TAG]],
+    ["the notes alone read as the product's", [UPGRADING], [PRODUCT_TAG]],
+  ];
+  for (const [name, files, want] of cases) test(name, () => assert.deepEqual(tagsFor(files, BOTH, all), want));
+  test("a run that cut no SDK tag", () => assert.deepEqual(tagsFor([PYTHON_SDK, UPGRADING], [PRODUCT_TAG], all), []));
+  test("not a release tag", () => assert.deepEqual(tagsFor([BACKEND], ["api/v1.2.0"], all), []));
+  test("each tag's stream", () => {
+    assert.equal(streamOf(PRODUCT_TAG, all), "product");
+    assert.equal(streamOf(SDK_TAG, all), "sdk");
+    assert.equal(streamOf("sdk/go/vnext", all), undefined);
+  });
+});
+
+test("nameSections names this run's sections and leaves the rest", () => {
+  const guide = ["# Upgrading", "", "## Unreleased — the SDK drops a call", "", "## Unreleased — the API and the SDK change together", "", "## Unreleased — not this run's", "", "## v26.0.0 — already named", ""].join("\n");
+  const byHeading: Record<string, string[]> = {
+    "## Unreleased — the SDK drops a call": [SDK_TAG],
+    "## Unreleased — the API and the SDK change together": [PRODUCT_TAG, SDK_TAG],
+  };
+  assert.equal(
+    nameSections(guide, (line) => byHeading[line] ?? []),
+    ["# Upgrading", "", `## ${SDK_TAG} — the SDK drops a call`, "", `## ${PRODUCT_TAG}, ${SDK_TAG} — the API and the SDK change together`, "", "## Unreleased — not this run's", "", "## v26.0.0 — already named", ""].join("\n"),
+  );
+  const nothing = "# Upgrading\n\n## v26.0.0 — already named\n";
+  assert.equal(nameSections(nothing, () => BOTH), nothing);
+});
+
+test("nameGuide reads each section's stream from the commit that wrote it", async () => {
+  const repo = await tempRepo();
+  try {
+    repo.write(UPGRADING, "# Upgrading\n\n## Unreleased — python\n");
+    repo.write(PYTHON_SDK, "x");
+    await repo.commit("feat(sdk): python");
+    repo.write(UPGRADING, "# Upgrading\n\n## Unreleased — server\n\n## Unreleased — python\n");
+    repo.write(BACKEND, "x");
+    await repo.commit("feat(api): server");
+    assert.equal(await nameGuide(repo.dir, BOTH), true);
+    assert.equal(await repo.run("diff", "--name-only"), `${UPGRADING}\n`);
+    assert.match(await repo.run("diff"), new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${SDK_TAG.replaceAll("/", "\\/")} — python`));
+    assert.equal(await nameGuide(repo.dir, BOTH), false, "a named guide is left as it is");
+  } finally {
+    repo.cleanup();
+  }
+});
+
+describe("propose", () => {
+  const tags = splitTags(" v2.0.0  sdk/go/v0.3.0 ");
+  const branch = BRANCH_PREFIX + "v2.0.0-sdk/go/v0.3.0";
+
+  test("the tags are read from one line", () => assert.deepEqual(tags, ["v2.0.0", "sdk/go/v0.3.0"]));
+
+  test("pushes the renamed guide alone, opens its pull request once, and nothing when nothing is renamed", async () => {
+    const base = mkdtempSync(join(tmpdir(), "paladin-ci-"));
+    const remote = join(base, "remote.git");
+    const repo = await tempRepo();
+    try {
+      await git(["init", "--quiet", "--bare", remote]);
+      repo.write(UPGRADING, "## Unreleased — a change\n");
+      await repo.commit("one");
+      const data = fakeData();
+      const github = fakeGitHub(data);
+      const pushed = async () => git(["log", "-1", "--format=%s", branch], remote).then((s) => s.trim(), () => "");
+
+      await propose(github, repo.dir, tags, remote);
+      assert.equal(await pushed(), "", "nothing renamed pushes nothing");
+      assert.equal(data.created.length, 0);
+
+      repo.write(UPGRADING, "## v2.0.0, sdk/go/v0.3.0 — a change\n");
+      repo.write("stray.txt", "not the guide");
+      await propose(github, repo.dir, tags, remote);
+      assert.equal(await pushed(), proposalTitle(tags));
+      assert.equal(proposalTitle(tags), "docs(upgrading): name the sections v2.0.0, sdk/go/v0.3.0 shipped");
+      assert.equal((await git(["diff-tree", "--no-commit-id", "--name-only", "-r", branch], remote)).trim(), UPGRADING);
+      assert.deepEqual(data.created.map((c) => [c.head, c.base]), [[branch, "main"]]);
+
+      // A re-run of the release: the pull request is already open.
+      await repo.run("switch", "--quiet", "main");
+      await repo.run("branch", "--quiet", "-D", branch);
+      repo.write(UPGRADING, "## v2.0.0, sdk/go/v0.3.0 — a change\n");
+      await propose(github, repo.dir, tags, remote);
+      assert.equal(data.created.length, 1, "an open pull request is not opened again");
+    } finally {
+      repo.cleanup();
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+});

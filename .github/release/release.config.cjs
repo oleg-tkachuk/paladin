@@ -16,7 +16,7 @@
 // releases from its own repository.
 //
 // The tag IS the release. The GitHub release beside the product's is notes for
-// people, created by the workflow with `gh release create --generate-notes`
+// people, created by the workflow with generated notes (.github/ci/announce.ts)
 // and shaped by .github/release.yml — so no @semantic-release/github here.
 //
 // `conventionalcommits` preset: feat is a minor, fix/perf/revert are a patch,
