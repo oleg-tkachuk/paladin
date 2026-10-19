@@ -101,6 +101,10 @@ import {
   type HealthTone,
   type StateFilter,
 } from "./backendView";
+import { TableScope } from "@/components/ui/TableScope";
+
+/** This list's id in the user's table preferences. */
+const TABLE_ID = "storageBackends";
 
 // Checkbox, backend, storage, region, state, health, menu.
 const COLUMN_COUNT = 7;
@@ -224,6 +228,7 @@ export default function StorageBackendsPage() {
   const { showNotification } = useNotification();
   const { sort, toggleSort } = useTableSort<BackendColumn>(undefined, {
     url: PAGE_TABLE,
+    tableId: TABLE_ID,
     columns: SORT_COLUMNS,
   });
   const sortProps = { current: sort, onSort: toggleSort };
@@ -370,197 +375,202 @@ export default function StorageBackendsPage() {
     backends.length > 0 && backends.every((b) => selected.has(b.backendId));
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Storage Backends"
-        description="Physical S3-compatible targets. Buckets and tenants bind here."
-        showDefaultActions={false}
-        actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            New backend
-          </Button>
-        }
-      />
-
-      <TableToolbar
-        query={search}
-        onQueryChange={setSearch}
-        searchLabel="Search storage backends"
-        placeholder="Search by ID, name, region, endpoint…"
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => void refetch()}
-              aria-label="Refresh"
-            >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
+    <TableScope id={TABLE_ID} sort={sort}>
+      <div className="space-y-4">
+        <PageHeader
+          title="Storage Backends"
+          description="Physical S3-compatible targets. Buckets and tenants bind here."
+          showDefaultActions={false}
+          actions={
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <PlusIcon className="size-4" />
+              New backend
             </Button>
-          </>
-        }
-      >
-        <SelectRoot
-          value={state}
-          onValueChange={(v) => setState(v as StateFilter)}
-        >
-          <SelectTrigger aria-label="Filter by state" className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATE_FILTERS.map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATE_FILTER_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </SelectRoot>
-      </TableToolbar>
+          }
+        />
 
-      <SelectionBar count={selected.size} onClear={clearSelection}>
-        {BULK_GROUPS.map((group, g) => (
-          <Fragment key={group[0]}>
-            {g > 0 && <Separator orientation="vertical" className="my-1" />}
-            {group.map((action) => (
+        <TableToolbar
+          query={search}
+          onQueryChange={setSearch}
+          searchLabel="Search storage backends"
+          placeholder="Search by ID, name, region, endpoint…"
+          actions={
+            <>
               <Button
-                key={action}
-                size="sm"
-                variant="ghost"
-                aria-label={ACTION_TEXT[action].bulkLabel}
-                disabled={bulkBusy}
-                onClick={() => startBulk(action)}
+                variant="outline"
+                size="icon"
+                onClick={() => void refetch()}
+                aria-label="Refresh"
               >
-                {ACTION_TEXT[action].button}
-              </Button>
-            ))}
-          </Fragment>
-        ))}
-      </SelectionBar>
-
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
-                <Checkbox
-                  aria-label="Select all backends"
-                  checked={allSelected}
-                  onCheckedChange={(v) =>
-                    setSelected(
-                      v === true
-                        ? new Set(backends.map((b) => b.backendId))
-                        : new Set(),
-                    )
-                  }
+                <ArrowPathIcon
+                  className={cn("size-4", loading && "animate-spin")}
                 />
-              </TableHead>
-              <SortableHead label="Backend" column="backend" {...sortProps} />
-              <SortableHead
-                label="Storage"
-                column="storage"
-                className="hidden @2xl:table-cell"
-                {...sortProps}
-              />
-              <SortableHead
-                label="Region"
-                column="region"
-                className="hidden @4xl:table-cell"
-                {...sortProps}
-              />
-              <SortableHead label="State" column="state" {...sortProps} />
-              <SortableHead
-                label="Health"
-                column="health"
-                className="hidden @lg:table-cell"
-                {...sortProps}
-              />
-              <TableHead className="w-12">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && backends.length === 0 ? (
-              Array.from({ length: SKELETON_ROWS }, (_, i) => (
-                <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={COLUMN_COUNT} className="py-3">
-                    <Skeleton className="h-7 w-full" />
+              </Button>
+            </>
+          }
+        >
+          <SelectRoot
+            value={state}
+            onValueChange={(v) => setState(v as StateFilter)}
+          >
+            <SelectTrigger aria-label="Filter by state" className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATE_FILTERS.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {STATE_FILTER_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </SelectRoot>
+        </TableToolbar>
+
+        <SelectionBar count={selected.size} onClear={clearSelection}>
+          {BULK_GROUPS.map((group, g) => (
+            <Fragment key={group[0]}>
+              {g > 0 && <Separator orientation="vertical" className="my-1" />}
+              {group.map((action) => (
+                <Button
+                  key={action}
+                  size="sm"
+                  variant="ghost"
+                  aria-label={ACTION_TEXT[action].bulkLabel}
+                  disabled={bulkBusy}
+                  onClick={() => startBulk(action)}
+                >
+                  {ACTION_TEXT[action].button}
+                </Button>
+              ))}
+            </Fragment>
+          ))}
+        </SelectionBar>
+
+        <Card className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    aria-label="Select all backends"
+                    checked={allSelected}
+                    onCheckedChange={(v) =>
+                      setSelected(
+                        v === true
+                          ? new Set(backends.map((b) => b.backendId))
+                          : new Set(),
+                      )
+                    }
+                  />
+                </TableHead>
+                <SortableHead label="Backend" column="backend" {...sortProps} />
+                <SortableHead
+                  label="Storage"
+                  column="storage"
+                  className="hidden @2xl:table-cell"
+                  {...sortProps}
+                />
+                <SortableHead
+                  label="Region"
+                  column="region"
+                  className="hidden @4xl:table-cell"
+                  {...sortProps}
+                />
+                <SortableHead label="State" column="state" {...sortProps} />
+                <SortableHead
+                  label="Health"
+                  column="health"
+                  className="hidden @lg:table-cell"
+                  {...sortProps}
+                />
+                <TableHead className="w-12">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading && backends.length === 0 ? (
+                Array.from({ length: SKELETON_ROWS }, (_, i) => (
+                  <TableRow key={`s-${i}`}>
+                    <TableCell colSpan={COLUMN_COUNT} className="py-3">
+                      <Skeleton className="h-7 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : listError ? (
+                // A list that FAILED is not an empty one: "none registered yet"
+                // would invite registering a second row for the same store.
+                <TableRow>
+                  <TableCell
+                    colSpan={COLUMN_COUNT}
+                    className="h-48 text-center"
+                  >
+                    <ListLoadError
+                      what="Storage backends"
+                      reason={listError}
+                      onRetry={() => void refetch()}
+                    />
                   </TableCell>
                 </TableRow>
-              ))
-            ) : listError ? (
-              // A list that FAILED is not an empty one: "none registered yet"
-              // would invite registering a second row for the same store.
-              <TableRow>
-                <TableCell colSpan={COLUMN_COUNT} className="h-48 text-center">
-                  <ListLoadError
-                    what="Storage backends"
-                    reason={listError}
-                    onRetry={() => void refetch()}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : backends.length === 0 ? (
-              <EmptyTableRow
-                colSpan={COLUMN_COUNT}
-                icon={CloudIcon}
-                what="storage backends"
-                // Three states, not two: the debounce has not fired, the request is in
-                // flight, or the server found nothing. Collapsing the first two into "no
-                // match" tells an operator their backend is gone while they type.
-                reason={emptyReason({
-                  pending: searchPending,
-                  filtered: hasFilters,
-                })}
-                purpose="A storage backend is an S3-compatible store Paladin keeps objects in."
-                action={{
-                  label: "Register the first backend",
-                  onClick: () => setCreateOpen(true),
-                }}
-              />
-            ) : (
-              sorted.map((b) => (
-                <BackendRow
-                  key={b.backendId}
-                  backend={b}
-                  selected={selected.has(b.backendId)}
-                  busy={busyId === b.backendId}
-                  onSelect={(on) => toggleSelect(b.backendId, on)}
-                  onAction={(action) =>
-                    action === "disable"
-                      ? setConfirmDisable(b)
-                      : void runRow(b, action)
-                  }
+              ) : backends.length === 0 ? (
+                <EmptyTableRow
+                  colSpan={COLUMN_COUNT}
+                  icon={CloudIcon}
+                  what="storage backends"
+                  // Three states, not two: the debounce has not fired, the request is in
+                  // flight, or the server found nothing. Collapsing the first two into "no
+                  // match" tells an operator their backend is gone while they type.
+                  reason={emptyReason({
+                    pending: searchPending,
+                    filtered: hasFilters,
+                  })}
+                  purpose="A storage backend is an S3-compatible store Paladin keeps objects in."
+                  action={{
+                    label: "Register the first backend",
+                    onClick: () => setCreateOpen(true),
+                  }}
                 />
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+              ) : (
+                sorted.map((b) => (
+                  <BackendRow
+                    key={b.backendId}
+                    backend={b}
+                    selected={selected.has(b.backendId)}
+                    busy={busyId === b.backendId}
+                    onSelect={(on) => toggleSelect(b.backendId, on)}
+                    onAction={(action) =>
+                      action === "disable"
+                        ? setConfirmDisable(b)
+                        : void runRow(b, action)
+                    }
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
 
-      <ConfirmModal
-        isOpen={confirmDisable !== null}
-        onClose={() => setConfirmDisable(null)}
-        onConfirm={confirmDisableNow}
-        type="warning"
-        title={
-          confirmDisable === "selection"
-            ? `Disable ${selected.size} selected backends?`
-            : `Disable ${confirmDisable?.backendId ?? ""}?`
-        }
-        message={DISABLE_CONSEQUENCE}
-        confirmText="Disable"
-      />
+        <ConfirmModal
+          isOpen={confirmDisable !== null}
+          onClose={() => setConfirmDisable(null)}
+          onConfirm={confirmDisableNow}
+          type="warning"
+          title={
+            confirmDisable === "selection"
+              ? `Disable ${selected.size} selected backends?`
+              : `Disable ${confirmDisable?.backendId ?? ""}?`
+          }
+          message={DISABLE_CONSEQUENCE}
+          confirmText="Disable"
+        />
 
-      <BackendRegisterDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        createBackend={createBackend}
-      />
-    </div>
+        <BackendRegisterDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          createBackend={createBackend}
+        />
+      </div>
+    </TableScope>
   );
 }
 

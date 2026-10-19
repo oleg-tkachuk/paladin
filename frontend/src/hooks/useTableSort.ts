@@ -5,6 +5,9 @@ import { useCallback, useMemo, useState } from "react";
 import { sortCodec } from "@/hooks/useTableUrl";
 import { useUrlState } from "@/hooks/useUrlState";
 import type { TableUrl } from "@/lib/table/urlState";
+import { usePreferenceSnapshot } from "@/hooks/usePreference";
+import { PREFERENCE_KEYS } from "@/lib/preferences/keys";
+import { defaultSortFor, readTablePrefs } from "@/lib/preferences/tablePrefs";
 
 /**
  * Shared table-sort state — the three-state column cycle that every list page
@@ -48,6 +51,11 @@ const NO_SORT = { column: null, direction: null } as const;
 export interface SortInUrl<C extends string> {
   url: TableUrl;
   columns: readonly C[];
+  /**
+   * The table's id in the user's preferences: a URL with no sort opens with
+   * the default sort they saved for it, when it names one of `columns`.
+   */
+  tableId?: string;
 }
 
 /**
@@ -62,8 +70,14 @@ export function useTableSort<C extends string = string>(
 ) {
   const url = inUrl?.url;
   const columns = inUrl?.columns;
-  // Read once, as useState reads an initial value.
-  const [fallback] = useState(initial);
+  const stored = usePreferenceSnapshot(PREFERENCE_KEYS.tables);
+  const saved =
+    inUrl?.tableId && columns
+      ? defaultSortFor(readTablePrefs(stored, inUrl.tableId), columns)
+      : null;
+  // Read once, as useState reads an initial value: the settings are loaded
+  // by the shell on sign-in, so a page usually opens with them in hand.
+  const [fallback] = useState<SortState<C>>(saved ?? initial);
   const codec = useMemo(
     () => (url && columns ? sortCodec(url, columns, fallback) : null),
     [url, columns, fallback],

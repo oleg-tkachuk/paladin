@@ -100,6 +100,10 @@ import { formatDate, formatDateTime } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/hooks/errorContract";
+import { TableScope } from "@/components/ui/TableScope";
+
+/** This list's id in the user's table preferences. */
+const TABLE_ID = "trash";
 
 export default function TrashPage() {
   // `error` is the hook's query-error state (set by fetchTenants on failure);
@@ -170,6 +174,7 @@ export default function TrashPage() {
     text: TRASH_SEARCH,
     accessors: TRASH_SORT,
     url: PAGE_TABLE,
+    tableId: TABLE_ID,
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
   const loading = trashQuery.isFetching;
@@ -221,249 +226,261 @@ export default function TrashPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Trash"
-        description="Deleted tenants wait here until they are restored or purged. Nothing is purged automatically."
-        showDefaultActions={false}
-      />
+    <TableScope id={TABLE_ID} sort={view.sort}>
+      <div className="space-y-6">
+        <PageHeader
+          title="Trash"
+          description="Deleted tenants wait here until they are restored or purged. Nothing is purged automatically."
+          showDefaultActions={false}
+        />
 
-      {error && (
-        <Card>
-          <CardContent className="py-6 text-center text-xs text-destructive">
-            {error}
-          </CardContent>
-        </Card>
-      )}
+        {error && (
+          <Card>
+            <CardContent className="py-6 text-center text-xs text-destructive">
+              {error}
+            </CardContent>
+          </Card>
+        )}
 
-      {loading && (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
-      )}
+        {loading && (
+          <div className="space-y-2">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        )}
 
-      {empty && (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <ArchiveBoxIcon className="mx-auto size-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm">Trash is empty.</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Deleted tenants land here. Restore returns them to active; purge
-              removes physical rows immediately.
+        {empty && (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <ArchiveBoxIcon className="mx-auto size-10 text-muted-foreground/40" />
+              <p className="mt-3 text-sm">Trash is empty.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Deleted tenants land here. Restore returns them to active; purge
+                removes physical rows immediately.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {trashed.length > 0 && (
+          <div className="space-y-3">
+            <p className={cn(T.helper, "tabular-nums")}>
+              {trashed.length} {trashed.length === 1 ? "tenant" : "tenants"}
+              {" · "}
+              <span className={pastRetention > 0 ? "text-chart-3" : undefined}>
+                {pastRetention} past retention
+              </span>
+              {windowDays !== null && <> · {windowDays}-day retention</>}
             </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {trashed.length > 0 && (
-        <div className="space-y-3">
-          <p className={cn(T.helper, "tabular-nums")}>
-            {trashed.length} {trashed.length === 1 ? "tenant" : "tenants"}
-            {" · "}
-            <span className={pastRetention > 0 ? "text-chart-3" : undefined}>
-              {pastRetention} past retention
-            </span>
-            {windowDays !== null && <> · {windowDays}-day retention</>}
-          </p>
-          <TableToolbar
-            query={view.query}
-            onQueryChange={view.setQuery}
-            searchLabel="Search the trash"
-            placeholder="Search by name, slug or id…"
-            filter={{
-              label: "Retention",
-              options: RETENTION_FILTERS,
-              value: retention,
-              onChange: setRetention,
-            }}
-            count={{ shown: view.rows.length, total: trashed.length }}
-          />
-          <Card className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableHead label="Tenant" column="tenant" {...sortProps} />
-                  <SortableHead
-                    label="Deleted"
-                    column="deleted"
-                    className="@md:w-40"
-                    {...sortProps}
-                  />
-                  <SortableHead
-                    label="Retention"
-                    column="retention"
-                    className="@md:w-56"
-                    {...sortProps}
-                  />
-                  <TableHead className="@md:w-44">
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {view.rows.length === 0 ? (
+            <TableToolbar
+              query={view.query}
+              onQueryChange={view.setQuery}
+              searchLabel="Search the trash"
+              placeholder="Search by name, slug or id…"
+              filter={{
+                label: "Retention",
+                options: RETENTION_FILTERS,
+                value: retention,
+                onChange: setRetention,
+              }}
+              count={{ shown: view.rows.length, total: trashed.length }}
+            />
+            <Card className="p-0">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={COLUMN_COUNT}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      No trashed tenant matches.
-                    </TableCell>
+                    <SortableHead
+                      label="Tenant"
+                      column="tenant"
+                      {...sortProps}
+                    />
+                    <SortableHead
+                      label="Deleted"
+                      column="deleted"
+                      className="@md:w-40"
+                      {...sortProps}
+                    />
+                    <SortableHead
+                      label="Retention"
+                      column="retention"
+                      className="@md:w-56"
+                      {...sortProps}
+                    />
+                    <TableHead className="@md:w-44">
+                      <span className="sr-only">Actions</span>
+                    </TableHead>
                   </TableRow>
-                ) : null}
-                {view.rows.map((t) => {
-                  const busy = busyId === t.tenantId;
-                  const info = trashAge(t.deletedAt, t.purgeEligibleAt, now);
-                  const refusal = purgeRefusals[t.tenantId];
-                  const name = t.displayName || t.slug;
-                  return (
-                    <Fragment key={t.tenantId}>
-                      <TableRow className={refusal ? "border-b-0" : undefined}>
-                        <TableCell className="whitespace-normal">
-                          <p className="font-medium">{name}</p>
-                          {t.displayName && (
-                            <div className="mt-0.5 flex items-center gap-1">
-                              <span
-                                className={cn(
-                                  T.codeSmall,
-                                  "text-muted-foreground",
-                                )}
+                </TableHeader>
+                <TableBody>
+                  {view.rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={COLUMN_COUNT}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        No trashed tenant matches.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  {view.rows.map((t) => {
+                    const busy = busyId === t.tenantId;
+                    const info = trashAge(t.deletedAt, t.purgeEligibleAt, now);
+                    const refusal = purgeRefusals[t.tenantId];
+                    const name = t.displayName || t.slug;
+                    return (
+                      <Fragment key={t.tenantId}>
+                        <TableRow
+                          className={refusal ? "border-b-0" : undefined}
+                        >
+                          <TableCell className="whitespace-normal">
+                            <p className="font-medium">{name}</p>
+                            {t.displayName && (
+                              <div className="mt-0.5 flex items-center gap-1">
+                                <span
+                                  className={cn(
+                                    T.codeSmall,
+                                    "text-muted-foreground",
+                                  )}
+                                >
+                                  {t.slug}
+                                </span>
+                                <IdentifierCopy
+                                  iconOnly
+                                  value={t.slug}
+                                  label="Slug"
+                                  className="p-1 [&_svg]:size-3"
+                                />
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {info ? (
+                              <div title={formatDateTime(info.deleted)}>
+                                <p className="text-sm tabular-nums">
+                                  {formatDate(info.deleted)}
+                                </p>
+                                <p className={T.hint}>
+                                  {trashedAgo(info.days)}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className={T.hint}>—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <TrashRetention
+                              deletedAt={t.deletedAt}
+                              purgeEligibleAt={t.purgeEligibleAt}
+                              now={now}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setPending({ kind: "restore", tenant: t })
+                                }
+                                disabled={busy}
                               >
-                                {t.slug}
-                              </span>
-                              <IdentifierCopy
-                                iconOnly
-                                value={t.slug}
-                                label="Slug"
-                                className="p-1 [&_svg]:size-3"
-                              />
+                                <ArrowUturnLeftIcon className="size-3.5" />
+                                {busy ? "Restoring…" : "Restore"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:bg-destructive/10"
+                                onClick={() =>
+                                  setPending({ kind: "purge", tenant: t })
+                                }
+                                disabled={busy}
+                                aria-label={`Purge ${t.slug}`}
+                                title="Purge permanently"
+                              >
+                                <TrashIcon className="size-3.5" />
+                              </Button>
                             </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {info ? (
-                            <div title={formatDateTime(info.deleted)}>
-                              <p className="text-sm tabular-nums">
-                                {formatDate(info.deleted)}
-                              </p>
-                              <p className={T.hint}>{trashedAgo(info.days)}</p>
-                            </div>
-                          ) : (
-                            <span className={T.hint}>—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <TrashRetention
-                            deletedAt={t.deletedAt}
-                            purgeEligibleAt={t.purgeEligibleAt}
-                            now={now}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setPending({ kind: "restore", tenant: t })
-                              }
-                              disabled={busy}
-                            >
-                              <ArrowUturnLeftIcon className="size-3.5" />
-                              {busy ? "Restoring…" : "Restore"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:bg-destructive/10"
-                              onClick={() =>
-                                setPending({ kind: "purge", tenant: t })
-                              }
-                              disabled={busy}
-                              aria-label={`Purge ${t.slug}`}
-                              title="Purge permanently"
-                            >
-                              <TrashIcon className="size-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      {refusal && (
-                        <TableRow className="hover:bg-transparent">
-                          <TableCell
-                            colSpan={COLUMN_COUNT}
-                            className="pt-0 whitespace-normal"
-                          >
-                            <p
-                              role="alert"
-                              className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
-                            >
-                              <ExclamationTriangleIcon className="mt-px size-3.5 shrink-0" />
-                              <span>
-                                <span className="font-medium">
-                                  Purge refused.
-                                </span>{" "}
-                                {refusal}
-                              </span>
-                            </p>
                           </TableCell>
                         </TableRow>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Card>
-        </div>
-      )}
+                        {refusal && (
+                          <TableRow className="hover:bg-transparent">
+                            <TableCell
+                              colSpan={COLUMN_COUNT}
+                              className="pt-0 whitespace-normal"
+                            >
+                              <p
+                                role="alert"
+                                className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                              >
+                                <ExclamationTriangleIcon className="mt-px size-3.5 shrink-0" />
+                                <span>
+                                  <span className="font-medium">
+                                    Purge refused.
+                                  </span>{" "}
+                                  {refusal}
+                                </span>
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          </div>
+        )}
 
-      <ConfirmModal
-        isOpen={pending?.kind === "restore"}
-        onClose={() => setPending(null)}
-        onConfirm={() => (pending ? handleRestore(pending.tenant) : undefined)}
-        loading={busyId !== null}
-        type="warning"
-        title="Restore this tenant?"
-        message={
-          <p>
-            <span className="font-mono text-foreground">
-              {pending?.tenant.slug || pending?.tenant.tenantId}
-            </span>{" "}
-            returns to the active tenants and leaves the trash.
-          </p>
-        }
-        warning="If another tenant has taken this slug since, the restore is refused: rename one of them first."
-        confirmText="Restore tenant"
-      />
+        <ConfirmModal
+          isOpen={pending?.kind === "restore"}
+          onClose={() => setPending(null)}
+          onConfirm={() =>
+            pending ? handleRestore(pending.tenant) : undefined
+          }
+          loading={busyId !== null}
+          type="warning"
+          title="Restore this tenant?"
+          message={
+            <p>
+              <span className="font-mono text-foreground">
+                {pending?.tenant.slug || pending?.tenant.tenantId}
+              </span>{" "}
+              returns to the active tenants and leaves the trash.
+            </p>
+          }
+          warning="If another tenant has taken this slug since, the restore is refused: rename one of them first."
+          confirmText="Restore tenant"
+        />
 
-      <ConfirmModal
-        isOpen={pending?.kind === "purge"}
-        onClose={() => setPending(null)}
-        onConfirm={() => (pending ? handlePurge(pending.tenant) : undefined)}
-        loading={busyId !== null}
-        type="danger"
-        title="Purge this tenant?"
-        message={
-          <p>
-            This permanently deletes{" "}
-            <span className="font-mono text-foreground">
-              {pending?.tenant.slug || pending?.tenant.tenantId}
-            </span>{" "}
-            from the database. The action cannot be undone.
-          </p>
-        }
-        warning={
-          <>
-            Physical S3 objects under{" "}
-            <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span> are not
-            removed — clean them up separately if needed.
-          </>
-        }
-        confirmText="Purge permanently"
-      />
-    </div>
+        <ConfirmModal
+          isOpen={pending?.kind === "purge"}
+          onClose={() => setPending(null)}
+          onConfirm={() => (pending ? handlePurge(pending.tenant) : undefined)}
+          loading={busyId !== null}
+          type="danger"
+          title="Purge this tenant?"
+          message={
+            <p>
+              This permanently deletes{" "}
+              <span className="font-mono text-foreground">
+                {pending?.tenant.slug || pending?.tenant.tenantId}
+              </span>{" "}
+              from the database. The action cannot be undone.
+            </p>
+          }
+          warning={
+            <>
+              Physical S3 objects under{" "}
+              <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span> are not
+              removed — clean them up separately if needed.
+            </>
+          }
+          confirmText="Purge permanently"
+        />
+      </div>
+    </TableScope>
   );
 }

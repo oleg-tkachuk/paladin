@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import {
   act,
   fireEvent,
@@ -32,6 +32,8 @@ const h = vi.hoisted(() => ({
   showNotification: vi.fn(),
   registerAction: vi.fn(),
   uploadFile: vi.fn(() => Promise.resolve()),
+  // The columns the user hid, as their table preferences hold them.
+  hidden: [] as string[],
   // The reason the tenant takes no changes, or null.
   blocked: null as string | null,
   // The collection's access: 2 is COLLECTION_ACCESS_PUBLIC_READ.
@@ -102,6 +104,15 @@ vi.mock("@/hooks/useCollections", () => ({
       { collection: "archive", displayName: "" },
     ],
     fetchAllCollections: vi.fn(() => Promise.resolve()),
+  }),
+}));
+vi.mock("@/hooks/useTablePrefs", () => ({
+  useTablePrefs: () => ({
+    prefs: { hidden: h.hidden },
+    toggleColumn: vi.fn(),
+    setDensity: vi.fn(),
+    saveSort: vi.fn(),
+    clearSort: vi.fn(),
   }),
 }));
 vi.mock("@/hooks/useUpload", () => ({
@@ -617,5 +628,20 @@ describe("CollectionObjectsPage live", () => {
     await waitFor(() =>
       expect(h.lastOpts?.refetchIntervalMs).toBeGreaterThan(0),
     );
+  });
+});
+
+// A column the user hid stays hidden: it is their table preference.
+describe("CollectionObjectsPage columns", () => {
+  afterEach(() => {
+    h.hidden = [];
+  });
+
+  it("leaves out the columns the user hid", () => {
+    h.objects = [makeObj("a.txt")];
+    h.hidden = ["mime"];
+    render(<CollectionObjectsPage />);
+    expect(screen.queryByRole("button", { name: /^MIME/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Size/ })).toBeInTheDocument();
   });
 });

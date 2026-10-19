@@ -1,5 +1,6 @@
 "use client";
 
+import { COLUMN_OPTIONS } from "@/components/features/objects/columns";
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -13,6 +14,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { Select } from "@/components/ui/Select";
+import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { CONTENT_TYPE_OPTIONS } from "@/lib/objectFilter";
 
@@ -58,16 +60,6 @@ interface ObjectsFilterBarProps {
   loading: boolean;
   onRefresh: () => void;
 }
-
-const COLUMN_OPTIONS = [
-  { id: "key", label: "Name / ID" },
-  { id: "object_tag", label: "ObjectTag" },
-  { id: "mime", label: "MIME Type" },
-  { id: "size", label: "Size" },
-  { id: "status", label: "Sync Status" },
-  { id: "created", label: "Initialization" },
-  { id: "actions", label: "Operations" },
-];
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
@@ -267,6 +259,8 @@ export function ObjectsFilterBar({
             ))}
           </Dropdown.Menu>
         </Dropdown>
+
+        <TablePrefsMenu />
       </div>
     </div>
   );

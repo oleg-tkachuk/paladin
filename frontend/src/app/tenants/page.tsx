@@ -49,6 +49,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { SortableHead } from "@/components/ui/SortHeader";
+import { TableScope } from "@/components/ui/TableScope";
+
+/** This list's id in the user's table preferences. */
+const TABLE_ID = "tenants";
 
 const SORT_COLUMNS = ["slug", "displayName"] as const;
 type SortColumn = (typeof SORT_COLUMNS)[number];
@@ -73,6 +77,7 @@ export default function TenantsPage() {
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>(undefined, {
     url: PAGE_TABLE,
+    tableId: TABLE_ID,
     columns: SORT_COLUMNS,
   });
 
@@ -118,256 +123,264 @@ export default function TenantsPage() {
   }, [tenants, search, sort]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Tenants"
-        description="Multi-tenant workspaces and inherited Cedar policy."
-        showDefaultActions={false}
-        actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
-            New tenant
-          </Button>
-        }
-      />
-
-      {/* Filter bar */}
-      <TableToolbar
-        query={search}
-        onQueryChange={setSearch}
-        searchLabel="Search tenants"
-        placeholder="Search tenants by ID or name…"
-        actions={
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                void fetchTenants();
-              }}
-              aria-label="Refresh"
-            >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
+    <TableScope id={TABLE_ID} sort={sort}>
+      <div className="space-y-6">
+        <PageHeader
+          title="Tenants"
+          description="Multi-tenant workspaces and inherited Cedar policy."
+          showDefaultActions={false}
+          actions={
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <PlusIcon className="size-4" />
+              New tenant
             </Button>
-          </>
-        }
-      />
+          }
+        />
 
-      {/* Table */}
-      <Card className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead
-                className="@md:w-55"
-                label="Slug"
-                column="slug"
-                current={sort}
-                onSort={handleSort}
-              />
-              <SortableHead
-                label="Display name"
-                column="displayName"
-                current={sort}
-                onSort={handleSort}
-              />
-              <TableHead className="hidden @2xl:table-cell">
-                Default bucket
-              </TableHead>
-              <TableHead className="hidden @md:table-cell">Labels</TableHead>
-              <TableHead className="hidden @5xl:table-cell w-70">
-                Tenant ID
-              </TableHead>
-              <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && tenants.length === 0 ? (
-              [0, 1, 2].map((i) => (
-                <TableRow key={`s-${i}`}>
-                  <TableCell colSpan={6} className="py-3">
-                    <Skeleton className="h-7 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : listError ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-48 text-center">
-                  <ListLoadError
-                    what="Tenants"
-                    reason={listError}
-                    onRetry={() => void fetchTenants()}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <EmptyTableRow
-                colSpan={6}
-                icon={BuildingOfficeIcon}
-                what="tenants"
-                reason={emptyReason({ filtered: !!search })}
-                purpose="A tenant is one customer kept apart from the rest: its own users, collections, quotas and budget."
-                action={{
-                  label: "Create the first tenant",
-                  onClick: () => setCreateOpen(true),
+        {/* Filter bar */}
+        <TableToolbar
+          query={search}
+          onQueryChange={setSearch}
+          searchLabel="Search tenants"
+          placeholder="Search tenants by ID or name…"
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  void fetchTenants();
                 }}
-              />
-            ) : (
-              filtered.map((tenant) => {
-                const labelEntries = Object.entries(tenant.labels);
-                const db = parseBucketName(tenant.defaultBucket);
-                // Slug is the canonical handle in URLs; UUID is the
-                // safety net when slug is empty (legacy rows). Phase 0
-                // makes slug NOT NULL UNIQUE, so the fallback only
-                // matters during the rolling deploy.
-                const handle = tenant.slug || tenant.tenantId;
-                const detailHref = `/tenants/${encodeURIComponent(handle)}`;
-                return (
-                  <TableRow key={tenant.tenantId} className="group">
-                    <TableCell>
-                      <Link
-                        href={detailHref}
-                        className="flex items-center gap-3 hover:text-primary"
-                      >
-                        <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
-                          <BuildingOfficeIcon className="size-4" />
-                        </div>
-                        <span
-                          title={tenant.slug}
-                          className="max-w-48 truncate whitespace-nowrap font-medium group-hover:underline"
-                        >
-                          {tenant.slug || (
-                            <span className="text-muted-foreground italic">
-                              (no slug)
-                            </span>
-                          )}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    {/* Free text: wraps rather than widening the table. */}
-                    <TableCell className="whitespace-normal break-words">
-                      <Link
-                        href={detailHref}
-                        className="hover:text-primary hover:underline"
-                      >
-                        {tenant.displayName || (
-                          <span className="text-muted-foreground italic">
-                            (unnamed)
-                          </span>
-                        )}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden @2xl:table-cell">
-                      {db ? (
-                        <Link
-                          href={bucketHref(db.backendId, db.bucketId)}
-                          title={tenant.defaultBucket}
-                          className={cn(T.codeSmall, "hover:text-primary")}
-                        >
-                          {db.bucketId}
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      {labelEntries.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {labelEntries.slice(0, 3).map(([k, v]) => (
-                            // Labels are case-sensitive data: shown as stored.
-                            <Badge
-                              key={k}
-                              variant="outline"
-                              className={T.codeSmall}
-                            >
-                              {k}={String(v)}
-                            </Badge>
-                          ))}
-                          {labelEntries.length > 3 && (
-                            <Badge variant="secondary">
-                              +{labelEntries.length - 3}
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden @5xl:table-cell">
-                      <span
-                        className="font-mono text-sm text-muted-foreground"
-                        title={tenant.tenantId}
-                      >
-                        {tenant.tenantId.slice(0, 8)}…
-                        {tenant.tenantId.slice(-4)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 opacity-60 group-hover:opacity-100"
-                            aria-label={`Actions for ${tenant.tenantId}`}
-                          >
-                            <EllipsisHorizontalIcon className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={detailHref}>
-                              <ArrowRightIcon className="size-4" />
-                              Open tenant
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => setEditing(tenant)}>
-                            <PencilSquareIcon className="size-4" />
-                            Edit display name
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteTarget(tenant)}
-                          >
-                            <TrashIcon className="size-4" />
-                            Delete tenant
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                aria-label="Refresh"
+              >
+                <ArrowPathIcon
+                  className={cn("size-4", loading && "animate-spin")}
+                />
+              </Button>
+            </>
+          }
+        />
+
+        {/* Table */}
+        <Card className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableHead
+                  className="@md:w-55"
+                  label="Slug"
+                  column="slug"
+                  current={sort}
+                  onSort={handleSort}
+                />
+                <SortableHead
+                  label="Display name"
+                  column="displayName"
+                  current={sort}
+                  onSort={handleSort}
+                />
+                <TableHead className="hidden @2xl:table-cell">
+                  Default bucket
+                </TableHead>
+                <TableHead className="hidden @md:table-cell">Labels</TableHead>
+                <TableHead className="hidden @5xl:table-cell w-70">
+                  Tenant ID
+                </TableHead>
+                <TableHead className="w-12 text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading && tenants.length === 0 ? (
+                [0, 1, 2].map((i) => (
+                  <TableRow key={`s-${i}`}>
+                    <TableCell colSpan={6} className="py-3">
+                      <Skeleton className="h-7 w-full" />
                     </TableCell>
                   </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                ))
+              ) : listError ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-48 text-center">
+                    <ListLoadError
+                      what="Tenants"
+                      reason={listError}
+                      onRetry={() => void fetchTenants()}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <EmptyTableRow
+                  colSpan={6}
+                  icon={BuildingOfficeIcon}
+                  what="tenants"
+                  reason={emptyReason({ filtered: !!search })}
+                  purpose="A tenant is one customer kept apart from the rest: its own users, collections, quotas and budget."
+                  action={{
+                    label: "Create the first tenant",
+                    onClick: () => setCreateOpen(true),
+                  }}
+                />
+              ) : (
+                filtered.map((tenant) => {
+                  const labelEntries = Object.entries(tenant.labels);
+                  const db = parseBucketName(tenant.defaultBucket);
+                  // Slug is the canonical handle in URLs; UUID is the
+                  // safety net when slug is empty (legacy rows). Phase 0
+                  // makes slug NOT NULL UNIQUE, so the fallback only
+                  // matters during the rolling deploy.
+                  const handle = tenant.slug || tenant.tenantId;
+                  const detailHref = `/tenants/${encodeURIComponent(handle)}`;
+                  return (
+                    <TableRow key={tenant.tenantId} className="group">
+                      <TableCell>
+                        <Link
+                          href={detailHref}
+                          className="flex items-center gap-3 hover:text-primary"
+                        >
+                          <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
+                            <BuildingOfficeIcon className="size-4" />
+                          </div>
+                          <span
+                            title={tenant.slug}
+                            className="max-w-48 truncate whitespace-nowrap font-medium group-hover:underline"
+                          >
+                            {tenant.slug || (
+                              <span className="text-muted-foreground italic">
+                                (no slug)
+                              </span>
+                            )}
+                          </span>
+                        </Link>
+                      </TableCell>
+                      {/* Free text: wraps rather than widening the table. */}
+                      <TableCell className="whitespace-normal break-words">
+                        <Link
+                          href={detailHref}
+                          className="hover:text-primary hover:underline"
+                        >
+                          {tenant.displayName || (
+                            <span className="text-muted-foreground italic">
+                              (unnamed)
+                            </span>
+                          )}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="hidden @2xl:table-cell">
+                        {db ? (
+                          <Link
+                            href={bucketHref(db.backendId, db.bucketId)}
+                            title={tenant.defaultBucket}
+                            className={cn(T.codeSmall, "hover:text-primary")}
+                          >
+                            {db.bucketId}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            —
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden @md:table-cell">
+                        {labelEntries.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            —
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {labelEntries.slice(0, 3).map(([k, v]) => (
+                              // Labels are case-sensitive data: shown as stored.
+                              <Badge
+                                key={k}
+                                variant="outline"
+                                className={T.codeSmall}
+                              >
+                                {k}={String(v)}
+                              </Badge>
+                            ))}
+                            {labelEntries.length > 3 && (
+                              <Badge variant="secondary">
+                                +{labelEntries.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden @5xl:table-cell">
+                        <span
+                          className="font-mono text-sm text-muted-foreground"
+                          title={tenant.tenantId}
+                        >
+                          {tenant.tenantId.slice(0, 8)}…
+                          {tenant.tenantId.slice(-4)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 opacity-60 group-hover:opacity-100"
+                              aria-label={`Actions for ${tenant.tenantId}`}
+                            >
+                              <EllipsisHorizontalIcon className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={detailHref}>
+                                <ArrowRightIcon className="size-4" />
+                                Open tenant
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setEditing(tenant)}
+                            >
+                              <PencilSquareIcon className="size-4" />
+                              Edit display name
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => setDeleteTarget(tenant)}
+                            >
+                              <TrashIcon className="size-4" />
+                              Delete tenant
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </Card>
 
-      {/* ─── Create dialog ───────────────────────────────────────────────── */}
-      <TenantCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        createTenant={createTenant}
-      />
+        {/* ─── Create dialog ───────────────────────────────────────────────── */}
+        <TenantCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          createTenant={createTenant}
+        />
 
-      {/* ─── Edit dialog ─────────────────────────────────────────────────── */}
-      <TenantEditDialog
-        editing={editing}
-        onClose={() => setEditing(null)}
-        updateTenantMetadata={updateTenantMetadata}
-      />
+        {/* ─── Edit dialog ─────────────────────────────────────────────────── */}
+        <TenantEditDialog
+          editing={editing}
+          onClose={() => setEditing(null)}
+          updateTenantMetadata={updateTenantMetadata}
+        />
 
-      {/* ─── Delete confirmation ─────────────────────────────────────────── */}
-      <TenantDeleteDialog
-        deleteTarget={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        deleteTenant={deleteTenant}
-      />
-    </div>
+        {/* ─── Delete confirmation ─────────────────────────────────────────── */}
+        <TenantDeleteDialog
+          deleteTarget={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          deleteTenant={deleteTenant}
+        />
+      </div>
+    </TableScope>
   );
 }

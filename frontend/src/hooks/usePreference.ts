@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useContext, useMemo } from "react";
+import {
+  QueryClientContext,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 
 import type { UserSettings } from "@/gen/paladin/iam/v1/user_settings_service_pb";
@@ -74,4 +78,17 @@ export function usePreference<T>(
   const set = useCallback((next: JsonValue) => update(() => next), [update]);
 
   return [value, set, update] as const;
+}
+
+/**
+ * A key's value as the settings cache holds it now, without asking for it or
+ * following later changes: for a value read once, such as the sort a table
+ * opens with. Undefined outside a query client, or before the settings load.
+ */
+export function usePreferenceSnapshot(key: PreferenceKey): unknown {
+  const qc = useContext(QueryClientContext);
+  const settings = qc?.getQueryData<UserSettings | null>(
+    USER_SETTINGS_QUERY_KEY,
+  );
+  return settings?.preferences?.[key];
 }
