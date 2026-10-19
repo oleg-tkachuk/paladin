@@ -79,7 +79,7 @@ export default function BucketsPage() {
   const {
     backends: backendRows,
     error: backendsError,
-    fetchBackends,
+    refetch: refetchBackends,
   } = useBackends();
 
   // The create dialog's owner picker (ADR-0032: every bucket has one).
@@ -314,7 +314,7 @@ export default function BucketsPage() {
           open={createOpen}
           onOpenChange={setCreateOpen}
           backends={backendRows}
-          backendsFailed={failedRead(backendsError, fetchBackends)}
+          backendsFailed={failedRead(backendsError, refetchBackends)}
           tenants={tenants}
           tenantsFailed={failedRead(tenantsError, refetchTenants)}
           createBucket={createBucket}

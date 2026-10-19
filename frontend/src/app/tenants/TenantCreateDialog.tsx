@@ -102,11 +102,15 @@ export function TenantCreateDialog({
   // (name derived server-side), so only the backend is picked — no bucket.
   const dedicated = layout === "dedicated";
 
-  const { backends, error: backendsError, fetchBackends } = useBackends(open);
+  const {
+    backends,
+    error: backendsError,
+    refetch: refetchBackends,
+  } = useBackends({ enabled: open });
   const { buckets, error: bucketsError, fetchBuckets } = useBuckets();
   // A failed read leaves its list empty, which every check below would read as
   // "none registered" and answer by sending the operator off to create one.
-  const backendsFailed = failedRead(backendsError, fetchBackends);
+  const backendsFailed = failedRead(backendsError, refetchBackends);
   const bucketsFailed = failedRead(bucketsError, fetchBuckets);
   useEffect(() => {
     if (open) void fetchBuckets();

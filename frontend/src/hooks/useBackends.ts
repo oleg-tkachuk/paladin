@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema } from "@bufbuild/protobuf/wkt";
 
@@ -15,14 +16,12 @@ import {
   StorageKind,
 } from "@/gen/paladin/admin/v1/types_pb";
 import type { TestBackendResponse } from "@/gen/paladin/admin/v1/backend_service_pb";
-import { useBumpRefresh, useRefreshSignal } from "@/context/RefreshContext";
-import { API_PAGE_SIZE_MAX } from "@/constants";
+import { useBumpRefresh } from "@/context/RefreshContext";
 import { errorMessage } from "@/hooks/errorContract";
 import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
-
-// Ceiling on how many pages one fetch will follow — a backstop against paging
-// forever if a token ever fails to terminate, not a limit anyone should reach.
-const MAX_LIST_PAGES = 20;
+import { useOptimistic } from "@/hooks/useOptimistic";
+import { edit, type OptimisticEdit } from "@/lib/optimistic";
+import { BACKENDS_QUERY_KEY, backendsQuery } from "@/lib/queries/backends";
 
 // useBackends — list rows from the `backends` table via
 // admin/v1.BackendService.ListBackends. Use this for any UI that needs
@@ -106,51 +105,66 @@ function updateMaskFor(
   return paths;
 }
 
-export function useBackends(autoFetch: boolean = true) {
-  const [backends, setBackends] = useState<StorageBackend[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const bumpRefresh = useBumpRefresh();
+/** How a page reads the backends. */
+export interface UseBackendsOptions {
+  /** CEL over the backends (searchFilter() from @/lib/cel); "" for none. */
+  filter?: string;
+  /** False holds the read: a dialog until it opens, a component that only changes them. */
+  enabled?: boolean;
+}
 
-  // `filter` is a CEL expression, not a search string — build it with
-  // searchFilter() from @/lib/cel. The loop below stays: ListBackends
-  // re-evaluates the whole filter over the page it read, so an expression the
-  // pushdown cannot express returns a sparse page with a next token rather
-  // than an error, and paging to the end is correct for every filter. The
-  // pushdown only decides how few pages that takes.
-  const fetchBackends = useCallback(async (filter: string = "") => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Follows nextPageToken to the end. Every caller here asks for "the
-      // backends" — the scope picker, the create-collection and create-bucket
-      // dialogs, the tables — and a single page silently hid the rest, exactly
-      // as it did for buckets until that bit: a backend past the ceiling was
-      // invisible and unselectable everywhere, with nothing on screen saying
-      // the list was cut. There are few backends today, which is the only
-      // reason this had not surfaced yet.
-      let token = "";
-      let pages = 0;
-      const acc: StorageBackend[] = [];
-      do {
-        const res = await backendClient.listBackends({
-          page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-          filter,
-        });
-        acc.push(...res.backends);
-        token = res.page?.nextPageToken ?? "";
-        pages += 1;
-      } while (token && pages < MAX_LIST_PAGES);
-      setBackends(acc);
-      return acc;
-    } catch (err) {
-      // Query contract (state-only): surface via `error`, never throw.
-      setError(errorMessage(err, "Failed to fetch backends"));
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+/** A backend's fields as a change leaves them, in every list that holds it. */
+function changed(backendId: string, fields: Partial<StorageBackend>) {
+  return edit<StorageBackend[]>(BACKENDS_QUERY_KEY, (list) =>
+    list.map((b) => (b.backendId === backendId ? { ...b, ...fields } : b)),
+  );
+}
+
+/**
+ * The storage backends, read through the query cache (lib/queries/backends),
+ * and the changes to them. A change the console can predict — a switch, an
+ * edit of the plain fields, a delete — shows in every cached list at once and
+ * is put back if the server refuses it (lib/optimistic).
+ */
+export function useBackends({
+  filter = "",
+  enabled = true,
+}: UseBackendsOptions = {}) {
+  const bumpRefresh = useBumpRefresh();
+  const qc = useQueryClient();
+  const optimistic = useOptimistic();
+  const query = useQuery({
+    ...backendsQuery(filter),
+    enabled,
+    // A new search keeps the last result on screen until it answers.
+    placeholderData: (previous) => previous,
+  });
+  const backends = useMemo(() => query.data ?? [], [query.data]);
+  const error = query.error
+    ? errorMessage(query.error, "Failed to fetch backends")
+    : null;
+  const { refetch: refetchQuery } = query;
+  const refetch = useCallback(() => void refetchQuery(), [refetchQuery]);
+
+  // Every backends list reads again after a change: the server's answer may
+  // differ from the prediction (a health check, a bumped version).
+  const settle = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: BACKENDS_QUERY_KEY });
+    bumpRefresh("backends");
+  }, [qc, bumpRefresh]);
+
+  /** Runs a change, shown at once by `edits`, then reads every list again. */
+  const run = useCallback(
+    async <T>(edits: OptimisticEdit[], fn: () => Promise<T>): Promise<T> => {
+      try {
+        // Mutation contract (throw-only): caller surfaces via errorMessage().
+        return await optimistic(edits, fn);
+      } finally {
+        settle();
+      }
+    },
+    [optimistic, settle],
+  );
 
   // createBackend — wraps BackendService.CreateBackend. The proto's
   // Create takes the backend_id at the top level and a nested
@@ -160,31 +174,22 @@ export function useBackends(autoFetch: boolean = true) {
   // later expansion to a new region/cluster.
   const createBackend = useCallback(
     async (input: CreateBackendInput): Promise<StorageBackend> => {
-      try {
-        setError(null);
-        const backend = create(StorageBackendSchema, {
-          backendId: input.backendId,
-          displayName: input.displayName,
-          kind: input.kind,
-          endpoint: input.endpoint,
-          publicEndpoint: input.publicEndpoint || "",
-          region: input.region,
-          forcePathStyle: input.forcePathStyle,
-          credentialsSecretRef: input.credentialsSecretRef,
-        });
-        const created = await backendClient.createBackend({
-          backendId: input.backendId,
-          backend,
-        });
-        setBackends((prev) => [...prev, created]);
-        bumpRefresh("backends");
-        return created;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+      const backend = create(StorageBackendSchema, {
+        backendId: input.backendId,
+        displayName: input.displayName,
+        kind: input.kind,
+        endpoint: input.endpoint,
+        publicEndpoint: input.publicEndpoint || "",
+        region: input.region,
+        forcePathStyle: input.forcePathStyle,
+        credentialsSecretRef: input.credentialsSecretRef,
+      });
+      // The server answers with its health and features: nothing to predict.
+      return run([], () =>
+        backendClient.createBackend({ backendId: input.backendId, backend }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
 
   // setBackendEnabled — flips a backend's enable/disable state via
@@ -198,24 +203,15 @@ export function useBackends(autoFetch: boolean = true) {
       enabled: boolean,
       resourceVersion: string,
     ): Promise<StorageBackend> => {
-      try {
-        setError(null);
-        const updated = await backendClient.setBackendEnabled({
+      return run([changed(backendId, { enabled })], () =>
+        backendClient.setBackendEnabled({
           name: `storageBackends/${backendId}`,
           enabled,
           resourceVersion,
-        });
-        setBackends((prev) =>
-          prev.map((b) => (b.backendId === backendId ? updated : b)),
-        );
-        bumpRefresh("backends");
-        return updated;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+        }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
 
   // setBackendReadOnly — flips a backend's read-only "drain" state via
@@ -229,24 +225,15 @@ export function useBackends(autoFetch: boolean = true) {
       readOnly: boolean,
       resourceVersion: string,
     ): Promise<StorageBackend> => {
-      try {
-        setError(null);
-        const updated = await backendClient.setBackendReadOnly({
+      return run([changed(backendId, { readOnly })], () =>
+        backendClient.setBackendReadOnly({
           name: `storageBackends/${backendId}`,
           readOnly,
           resourceVersion,
-        });
-        setBackends((prev) =>
-          prev.map((b) => (b.backendId === backendId ? updated : b)),
-        );
-        bumpRefresh("backends");
-        return updated;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+        }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
 
   // setBackendMaintenance — raises/clears the operator-set maintenance flag
@@ -258,24 +245,15 @@ export function useBackends(autoFetch: boolean = true) {
       maintenance: boolean,
       resourceVersion: string,
     ): Promise<StorageBackend> => {
-      try {
-        setError(null);
-        const updated = await backendClient.setBackendMaintenance({
+      return run([changed(backendId, { maintenance })], () =>
+        backendClient.setBackendMaintenance({
           name: `storageBackends/${backendId}`,
           maintenance,
           resourceVersion,
-        });
-        setBackends((prev) =>
-          prev.map((b) => (b.backendId === backendId ? updated : b)),
-        );
-        bumpRefresh("backends");
-        return updated;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+        }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
 
   // updateBackend — edits mutable metadata via BackendService.UpdateBackend,
@@ -287,58 +265,58 @@ export function useBackends(autoFetch: boolean = true) {
       resourceVersion: string,
       input: UpdateBackendInput,
     ): Promise<StorageBackend> => {
-      try {
-        setError(null);
-        const backend = create(StorageBackendSchema, {
-          backendId,
-          displayName: input.displayName,
-          endpoint: input.endpoint,
-          publicEndpoint: input.publicEndpoint,
-          region: input.region,
-          forcePathStyle: input.forcePathStyle,
-          // Only built when supplied — an unset sub-message paired with an
-          // unset mask path is what "leave it alone" looks like on the wire.
-          ...(input.sse !== undefined && {
-            sse: create(ServerSideEncryptionSchema, {
-              type: input.sse.type,
-              keyId: input.sse.keyId,
+      const backend = create(StorageBackendSchema, {
+        backendId,
+        displayName: input.displayName,
+        endpoint: input.endpoint,
+        publicEndpoint: input.publicEndpoint,
+        region: input.region,
+        forcePathStyle: input.forcePathStyle,
+        // Only built when supplied — an unset sub-message paired with an
+        // unset mask path is what "leave it alone" looks like on the wire.
+        ...(input.sse !== undefined && {
+          sse: create(ServerSideEncryptionSchema, {
+            type: input.sse.type,
+            keyId: input.sse.keyId,
+          }),
+        }),
+        ...(input.events !== undefined && {
+          events: create(EventSourceConfigSchema, {
+            enabled: input.events.enabled,
+            target: input.events.target,
+            queueUrl: input.events.queueUrl,
+            // Duration is seconds + nanos; the form works in whole
+            // milliseconds, so split rather than truncate to seconds — a
+            // 500ms poll interval must not round to 0.
+            pollInterval: create(DurationSchema, {
+              seconds: BigInt(Math.floor(input.events.pollIntervalMs / 1000)),
+              nanos: (input.events.pollIntervalMs % 1000) * 1_000_000,
             }),
           }),
-          ...(input.events !== undefined && {
-            events: create(EventSourceConfigSchema, {
-              enabled: input.events.enabled,
-              target: input.events.target,
-              queueUrl: input.events.queueUrl,
-              // Duration is seconds + nanos; the form works in whole
-              // milliseconds, so split rather than truncate to seconds — a
-              // 500ms poll interval must not round to 0.
-              pollInterval: create(DurationSchema, {
-                seconds: BigInt(Math.floor(input.events.pollIntervalMs / 1000)),
-                nanos: (input.events.pollIntervalMs % 1000) * 1_000_000,
-              }),
-            }),
-          }),
-          ...(input.cedarPolicy !== undefined && {
-            cedarPolicy: input.cedarPolicy,
-          }),
-        });
-        const updated = await backendClient.updateBackend({
+        }),
+        ...(input.cedarPolicy !== undefined && {
+          cedarPolicy: input.cedarPolicy,
+        }),
+      });
+      // The plain fields are predicted; encryption, events and the policy
+      // show as the server stores them, once it answers.
+      const plain = {
+        displayName: input.displayName,
+        endpoint: input.endpoint,
+        publicEndpoint: input.publicEndpoint,
+        region: input.region,
+        forcePathStyle: input.forcePathStyle,
+      };
+      return run([changed(backendId, plain)], () =>
+        backendClient.updateBackend({
           name: `storageBackends/${backendId}`,
           resourceVersion,
           updateMask: fieldMask(StorageBackendSchema, ...updateMaskFor(input)),
           backend,
-        });
-        setBackends((prev) =>
-          prev.map((b) => (b.backendId === backendId ? updated : b)),
-        );
-        bumpRefresh("backends");
-        return updated;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+        }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
 
   // rotateCredentials — points the backend at a new secret-store ref via
@@ -351,24 +329,17 @@ export function useBackends(autoFetch: boolean = true) {
       newSecretRef: string,
       gracePeriod: string,
     ): Promise<StorageBackend> => {
-      try {
-        setError(null);
-        const updated = await backendClient.rotateCredentials({
-          name: `storageBackends/${backendId}`,
-          newSecretRef,
-          gracePeriod,
-        });
-        setBackends((prev) =>
-          prev.map((b) => (b.backendId === backendId ? updated : b)),
-        );
-        bumpRefresh("backends");
-        return updated;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+      return run(
+        [changed(backendId, { credentialsSecretRef: newSecretRef })],
+        () =>
+          backendClient.rotateCredentials({
+            name: `storageBackends/${backendId}`,
+            newSecretRef,
+            gracePeriod,
+          }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
 
   // testBackend — probes connectivity via BackendService.TestBackend. This is
@@ -391,37 +362,27 @@ export function useBackends(autoFetch: boolean = true) {
   // otherwise. Caller redirects away on success.
   const deleteBackend = useCallback(
     async (backendId: string, resourceVersion: string): Promise<void> => {
-      try {
-        setError(null);
-        await backendClient.deleteBackend({
-          name: `storageBackends/${backendId}`,
-          resourceVersion,
-        });
-        setBackends((prev) => prev.filter((b) => b.backendId !== backendId));
-        bumpRefresh("backends");
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
-      }
+      await run(
+        [
+          edit<StorageBackend[]>(BACKENDS_QUERY_KEY, (list) =>
+            list.filter((b) => b.backendId !== backendId),
+          ),
+        ],
+        () =>
+          backendClient.deleteBackend({
+            name: `storageBackends/${backendId}`,
+            resourceVersion,
+          }),
+      );
     },
-    [bumpRefresh],
+    [run],
   );
-
-  const refreshSignal = useRefreshSignal("backends");
-  useEffect(() => {
-    // Fetch-on-mount / on-refresh: this is a deliberate sync with an
-    // external system (the BackendService list), not derived state.
-    // fetchBackends toggles loading internally; the set-state-in-effect
-    // rule is a false positive for this data-loading pattern.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (autoFetch) void fetchBackends();
-  }, [autoFetch, fetchBackends, refreshSignal]);
 
   return {
     backends,
-    loading,
+    loading: query.isFetching,
     error,
-    fetchBackends,
+    refetch,
     createBackend,
     updateBackend,
     rotateCredentials,

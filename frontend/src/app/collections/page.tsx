@@ -82,7 +82,7 @@ export default function CollectionsPage() {
   const {
     backends: backendRows,
     error: backendsError,
-    fetchBackends,
+    refetch: refetchBackends,
   } = useBackends();
   const { showNotification } = useNotification();
   const router = useRouter();
@@ -369,7 +369,7 @@ export default function CollectionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
-        backendsFailed={failedRead(backendsError, fetchBackends)}
+        backendsFailed={failedRead(backendsError, refetchBackends)}
         bucketsHref="/buckets"
         createCollection={createCollection}
         onCreated={() =>

@@ -84,7 +84,7 @@ export default function TenantCollectionsPage() {
   const {
     backends: backendRows,
     error: backendsError,
-    fetchBackends,
+    refetch: refetchBackends,
   } = useBackends();
   const { showNotification } = useNotification();
   const router = useRouter();
@@ -420,7 +420,7 @@ export default function TenantCollectionsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         backends={backends}
-        backendsFailed={failedRead(backendsError, fetchBackends)}
+        backendsFailed={failedRead(backendsError, refetchBackends)}
         bucketsHref={`/tenants/${tenant.slug}/buckets`}
         createCollection={createCollection}
         onCreated={() => void fetchList(search)}
