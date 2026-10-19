@@ -28,6 +28,7 @@ import {
 } from "@/lib/configView";
 import { T } from "@/lib/ui/typography";
 import { copyToClipboard, cn } from "@/lib/utils";
+import { FROSTED_MUTED, STICKY_BELOW_TOPBAR } from "@/lib/ui/states";
 
 // /config — the running control plane's configuration, as
 // admin/v1.SystemService.GetConfig returns it: the loaded config.yaml with
@@ -239,7 +240,7 @@ export default function ConfigPage() {
                 : "The configuration is empty."}
             </Card>
           ) : (
-            <Card className="gap-0 overflow-hidden p-0">
+            <Card className="gap-0 p-0">
               {shown.map((s) => (
                 <SectionRows
                   key={s.key}
@@ -265,7 +266,13 @@ function SectionRows({
   const titleId = `config-${section.key}-title`;
   return (
     <section aria-labelledby={titleId} className="border-b last:border-b-0">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-muted/60 px-4 py-2 backdrop-blur">
+      <div
+        className={cn(
+          STICKY_BELOW_TOPBAR,
+          FROSTED_MUTED,
+          "flex items-center justify-between gap-3 border-b px-4 py-2",
+        )}
+      >
         <h2 id={titleId} className="font-mono text-sm font-semibold">
           {section.key}
           <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">

@@ -40,6 +40,7 @@ import {
   isValidScope,
 } from "./_constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { ACTIVE_ON_POPOVER, ACTIVE_SURFACE } from "@/lib/ui/states";
 
 /**
  * Create-M2M-token dialog, extracted from the page. Owns the whole create form
@@ -331,7 +332,8 @@ export function CreateTokenDialog({
                 key={aud}
                 className={cn(
                   "flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs",
-                  audience.has(aud) ? "border-primary/60 bg-primary/10" : "",
+                  ACTIVE_ON_POPOVER,
+                  audience.has(aud) && ACTIVE_SURFACE,
                 )}
               >
                 <Checkbox

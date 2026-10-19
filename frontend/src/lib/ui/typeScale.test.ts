@@ -111,3 +111,20 @@ describe("columns of figures", () => {
     expect(unalignedFigures()).toEqual([]);
   });
 });
+
+describe("line heights", () => {
+  const css = readFileSync(join(SRC, "app", "globals.css"), "utf8");
+  const pinned = new Set(
+    [...css.matchAll(/--leading-([a-z]+):/g)].map((m) => m[1]),
+  );
+
+  it("sets lines only at the heights globals.css pins", () => {
+    expect(pinned.size).toBeGreaterThan(0);
+    const off = files.flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(/(?<![\w-])leading-([\w.[\]]+)/g)]
+        .filter(([, h]) => !pinned.has(h))
+        .map(([cls]) => `${relative(SRC, file)}: ${cls}`),
+    );
+    expect(off).toEqual([]);
+  });
+});

@@ -41,6 +41,8 @@ import { useAuth } from "@/context/AuthContext";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
 import { SECTION } from "@/lib/navigation/sections";
 import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
+import { ACTIVE_ON_POPOVER, ACTIVE_SURFACE } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 interface SearchResult {
   id: string;
   type: "action" | "object" | "nav";
@@ -665,11 +667,13 @@ export function CommandPalette() {
                   result.onSelect();
                   setIsOpen(false);
                 }}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative ${
+                className={cn(
+                  "w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative",
+                  ACTIVE_ON_POPOVER,
                   index === selectedIndex
-                    ? "bg-primary/10 border-primary/30 shadow-raised"
-                    : "bg-transparent border-transparent hover:bg-foreground/[0.02]"
-                }`}
+                    ? cn(ACTIVE_SURFACE, "shadow-raised")
+                    : "bg-transparent border-transparent hover:bg-foreground/[0.02]",
+                )}
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 {index === selectedIndex && (

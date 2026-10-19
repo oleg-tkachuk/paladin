@@ -25,6 +25,8 @@ import {
   ROLE_DESCRIPTIONS,
   ROLES,
 } from "@/constants/roles";
+import { ACTIVE_ON_POPOVER, CHECKED_OPTION } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 /** Server floor on initial_password (buf.validate, min_len = 12). */
 const MIN_PASSWORD_LENGTH = 12;
@@ -217,7 +219,11 @@ export function UserCreateDialog({
               <label
                 key={role}
                 htmlFor={id}
-                className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 has-[[data-state=checked]]:border-primary/50"
+                className={cn(
+                  "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2",
+                  CHECKED_OPTION,
+                  ACTIVE_ON_POPOVER,
+                )}
               >
                 <Checkbox
                   id={id}

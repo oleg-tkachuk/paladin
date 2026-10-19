@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { PALETTES } from "@/lib/theme";
 
-import { FOCUS_RING } from "./states";
+import { FOCUS_RING, STICKY_BELOW_TOPBAR } from "./states";
 
 // One focus indicator, one press, three levels of elevation: a component
 // that styles its own drifts from the rest, and the contrast tests measure
@@ -28,7 +28,7 @@ const files = sources(SRC).filter((f) => f !== STATES);
 /** Where a pattern appears, as file:line. */
 function found(pattern: RegExp): string[] {
   return files.flatMap((file) =>
-    readFileSync(file, "utf8")
+    code(readFileSync(file, "utf8"))
       .split("\n")
       .flatMap((line, i) =>
         pattern.test(line) ? [`${relative(SRC, file)}:${i + 1}`] : [],
@@ -106,5 +106,31 @@ describe("elevation", () => {
     const body = CSS.slice(start, CSS.indexOf("\n}", start));
     expect(body).toContain("--elevation-shadow:");
     expect(body).toContain("--elevation-shadow-strong:");
+    expect(body).toContain("--elevation-highlight:");
+  });
+});
+
+describe("sticky bars", () => {
+  const topBar = readFileSync(
+    join(SRC, "components", "layout", "TopBar.tsx"),
+    "utf8",
+  );
+
+  // A bar stuck at another offset slides under the top bar or leaves a gap.
+  it("stick just under the top bar, at its height", () => {
+    const height = topBar.match(/\bh-(\d+)\b/)?.[1];
+    expect(height).toBeDefined();
+    expect(STICKY_BELOW_TOPBAR).toContain(`top-${height}`);
+  });
+
+  it("are placed only through STICKY_BELOW_TOPBAR, besides the shell's own", () => {
+    const shell = new Set([
+      "components/layout/TopBar.tsx",
+      "components/layout/Sidebar.tsx",
+    ]);
+    const off = found(/(?<![\w-])sticky(?![\w-])/).filter(
+      (at) => !shell.has(at.split(":")[0]),
+    );
+    expect(off).toEqual([]);
   });
 });

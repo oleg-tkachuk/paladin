@@ -33,3 +33,24 @@ export const PRESSED = "active:not-aria-[haspopup]:translate-y-px";
 export const GROUP_FOCUS_RING =
   "has-[[data-slot=input-group-control]:focus-visible]:outline-2 has-[[data-slot=input-group-control]:focus-visible]:outline-solid has-[[data-slot=input-group-control]:focus-visible]:outline-offset-2 has-[[data-slot=input-group-control]:focus-visible]:outline-ring";
 export const IN_GROUP_CONTROL = "focus-visible:outline-none";
+
+/**
+ * A bar that stays in view as the page scrolls: it sticks just under the
+ * shell's top bar (TopBar is h-14; states.test holds the two together).
+ */
+export const STICKY_BELOW_TOPBAR = "sticky top-14 z-20";
+
+/** Frosted glass for what scrolls over content: the page shows through, blurred. */
+export const FROSTED = "bg-background/80 backdrop-blur-md";
+
+/** The same on a muted band, as a section's own header. */
+export const FROSTED_MUTED = "bg-muted/70 backdrop-blur-md";
+
+/** The chosen option card of a set, the selected entry of a list. */
+export const ACTIVE_SURFACE = "border-active";
+
+/** An option card, active while the checkbox or radio inside it is checked. */
+export const CHECKED_OPTION = "has-[[data-state=checked]]:border-active";
+
+/** border-active over a dialog's surface rather than a card's. */
+export const ACTIVE_ON_POPOVER = "[--active-ground:var(--popover)]";

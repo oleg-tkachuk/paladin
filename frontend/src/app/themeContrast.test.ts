@@ -76,7 +76,7 @@ const solid = (token: string): Paint => ({ token });
 
 // [text, surface]: coloured text on the ground and the cards, and the
 // foreground token on each solid fill.
-const SURFACES = ["--background", "--card", "--muted"];
+const SURFACES = ["--background", "--card", "--muted", "--popover"];
 const TEXT_ON_SURFACES = [
   "--foreground",
   "--muted-foreground",
