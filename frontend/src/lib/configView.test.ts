@@ -5,6 +5,7 @@ import {
   filterConfigSections,
   parseConfigSections,
   redactedCount,
+  withoutUnset,
 } from "./configView";
 
 const YAML = `app:
@@ -125,5 +126,25 @@ describe("filterConfigSections", () => {
 describe("redactedCount", () => {
   it("counts the secrets the server hid", () => {
     expect(redactedCount(parseConfigSections(YAML))).toBe(1);
+  });
+});
+
+describe("withoutUnset", () => {
+  it("leaves out unset entries, and the sections they empty", () => {
+    const sections = withoutUnset(parseConfigSections(YAML));
+    const pg = sections.find((s) => s.key === "datastores")!;
+    expect(pg.entries.map((e) => e.path)).toEqual([
+      "postgres.dsn",
+      "postgres.password",
+    ]);
+    expect(
+      sections.find((s) => s.key === "middleware")!.entries.map((e) => e.path),
+    ).toEqual(["trusted_proxies"]);
+  });
+
+  it("drops a section with nothing set", () => {
+    expect(
+      withoutUnset(parseConfigSections("cors: {}\napp:\n  name: x\n")),
+    ).toEqual([expect.objectContaining({ key: "app" })]);
   });
 });

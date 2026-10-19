@@ -126,3 +126,11 @@ export function redactedCount(sections: ConfigSection[]): number {
     0,
   );
 }
+
+/** The sections with their unset entries left out, and no section emptied. */
+export function withoutUnset(sections: ConfigSection[]): ConfigSection[] {
+  return sections.flatMap((s) => {
+    const entries = s.entries.filter((e) => e.value.kind !== "empty");
+    return entries.length > 0 ? [{ ...s, entries }] : [];
+  });
+}
