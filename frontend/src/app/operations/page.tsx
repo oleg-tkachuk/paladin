@@ -11,6 +11,8 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
+import { LiveToggle } from "@/components/ui/LiveToggle";
+import { liveState } from "@/lib/live";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -74,8 +76,6 @@ const SCOPES: { value: OpScope; label: string }[] = [
 ];
 const COLUMNS = 7;
 const SKELETON_ROWS = [0, 1, 2, 3];
-const MS_PER_SECOND = 1_000;
-const POLL_SECONDS = OPERATIONS_POLL_MS / MS_PER_SECOND;
 
 export default function OperationsPage() {
   const [view, setView] = useTableFilter(OP_VIEWS, DEFAULT_OP_VIEW, PAGE_TABLE);
@@ -128,25 +128,11 @@ export default function OperationsPage() {
         showDefaultActions={false}
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLive((v) => !v)}
-              aria-pressed={live}
-              title={
-                live
-                  ? `Live — refreshes every ${POLL_SECONDS} s while this tab is open`
-                  : "Live updates paused"
-              }
-            >
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  live ? "bg-success animate-pulse" : "bg-muted-foreground/40",
-                )}
-              />
-              Live
-            </Button>
+            <LiveToggle
+              state={liveState({ live })}
+              onToggle={() => setLive((v) => !v)}
+              intervalMs={OPERATIONS_POLL_MS}
+            />
             <Button
               variant="outline"
               size="sm"

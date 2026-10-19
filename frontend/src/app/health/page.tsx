@@ -14,6 +14,9 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useStats } from "@/context/StatsContext";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
+import { LiveToggle } from "@/components/ui/LiveToggle";
+import { liveState } from "@/lib/live";
+
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,9 @@ import {
   type RoleStatus,
   type Snapshot,
 } from "@/lib/health";
+
+/** How often the health page asks again while Live. */
+const HEALTH_POLL_MS = 15_000;
 
 // Role render order. Operators read top-down; api/admin first because
 // they're the request paths. worker/mcp/dispatcher/ingest are
@@ -430,10 +436,11 @@ export default function HealthPage() {
     }
   }, []);
 
-  // Auto-refresh every 15s — short enough that a degrading dep shows
-  // up quickly, long enough that the page isn't a hot loop. Paused
-  // while the tab is hidden.
-  useVisiblePolling(refresh, 15_000);
+  // Auto-refresh every HEALTH_POLL_MS — short enough that a degrading dep
+  // shows up quickly, long enough that the page isn't a hot loop. Paused
+  // while the tab is hidden, or when Live is switched off.
+  const [live, setLive] = useState(true);
+  useVisiblePolling(refresh, HEALTH_POLL_MS, live);
 
   const orderedRoles = useMemo(() => {
     if (!data) return [];
@@ -491,16 +498,23 @@ export default function HealthPage() {
         description="Per-role component status across the control plane."
         showDefaultActions={false}
         actions={
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={refresh}
-            aria-label="Refresh"
-          >
-            <ArrowPathIcon
-              className={cn("size-4", loading && "animate-spin")}
+          <>
+            <LiveToggle
+              state={liveState({ live })}
+              onToggle={() => setLive((v) => !v)}
+              intervalMs={HEALTH_POLL_MS}
             />
-          </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={refresh}
+              aria-label="Refresh"
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
         }
       />
 

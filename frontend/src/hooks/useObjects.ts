@@ -47,6 +47,8 @@ export interface UseObjectsOptions {
   initialCursor?: string;
   /** Sort direction for the active orderBy column. */
   sortDirection?: "asc" | "desc" | null;
+  /** Asks again this often while the tab is visible; unset, it does not. */
+  refetchIntervalMs?: number;
   /** Keys under this prefix only. */
   prefix?: string;
   /** Set, one level under `prefix`, with the folders below it. */
@@ -87,6 +89,7 @@ export function useObjects(options: UseObjectsOptions = {}) {
       refreshSignal,
     ],
     enabled: !!parent,
+    refetchInterval: options.refetchIntervalMs ?? false,
     initialPageParam: "",
     queryFn: async ({ pageParam }) => {
       try {

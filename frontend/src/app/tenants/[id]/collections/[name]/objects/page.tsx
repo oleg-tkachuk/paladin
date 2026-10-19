@@ -42,6 +42,8 @@ import { useObjectListState } from "./useObjectListState";
 import { CopyMoveDialog } from "./CopyMoveDialog";
 import { BulkCopyDialog } from "./BulkCopyDialog";
 import { FolderTrail } from "./FolderTrail";
+import { LiveToggle } from "@/components/ui/LiveToggle";
+import { liveState } from "@/lib/live";
 import { FOLDER_DELIMITER } from "@/lib/objectFolders";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
@@ -51,6 +53,9 @@ import { useUpload } from "@/hooks/useUpload";
 import { useUndoTrash } from "@/hooks/useUndoTrash";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { useTenantChangesBlocked } from "../../../tenant-context";
+
+/** How often the list asks again while Live. */
+const OBJECTS_LIVE_POLL_MS = 15_000;
 
 const STAYS_RESTORABLE =
   "It stays restorable from the Trash tab until it is purged.";
@@ -95,6 +100,9 @@ function CollectionObjectsContent() {
   // One folder level unless Recursive is on, or a search looks for a key
   // anywhere under the folder.
   const delimiter = recursive || search ? "" : FOLDER_DELIMITER;
+  // Off until asked for: a large collection re-read on a timer is load
+  // nobody wanted.
+  const [live, setLive] = useState(false);
 
   // Files dropped on the list, or chosen with Upload, land in this
   // collection; a trashed tenant takes no new objects.
@@ -143,6 +151,7 @@ function CollectionObjectsContent() {
     sortDirection: sort.direction,
     prefix,
     delimiter,
+    refetchIntervalMs: live ? OBJECTS_LIVE_POLL_MS : undefined,
   });
 
   // Authoritative tag-facet options from the server (whole-Collection scope via
@@ -698,6 +707,11 @@ function CollectionObjectsContent() {
               uploadFiles(Array.from(e.target.files ?? []));
               e.target.value = "";
             }}
+          />
+          <LiveToggle
+            state={liveState({ live })}
+            onToggle={() => setLive((v) => !v)}
+            intervalMs={OBJECTS_LIVE_POLL_MS}
           />
           <Button
             size="sm"
