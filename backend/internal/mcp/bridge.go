@@ -376,6 +376,8 @@ type queryObjectsArgs struct {
 	Collection string `json:"collection" jsonschema:"collection (namespace) name"`
 	Filter     string `json:"filter,omitempty" jsonschema:"optional CEL filter, e.g. tags['type']=='invoice'"`
 	PageSize   int32  `json:"page_size,omitempty" jsonschema:"page size; default 100, max 1000"`
+	Prefix     string `json:"prefix,omitempty" jsonschema:"optional key prefix, e.g. invoices/2026/"`
+	Delimiter  string `json:"delimiter,omitempty" jsonschema:"optional one-character delimiter, usually /: lists one folder level, with the folders below it in common_prefixes"`
 }
 type getQuotaArgs struct {
 	Name string `json:"name" jsonschema:"Quota resource name (tenants/{tenant_id_or_slug}/quota | storageBackends/{b}/buckets/{n}/quota)"`
@@ -520,13 +522,15 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_query_objects",
-		Description: "List objects within a collection, optionally filtered by CEL.",
+		Description: "List objects within a collection, optionally filtered by CEL, or one folder level of it with prefix and delimiter.",
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in queryObjectsArgs) (*mcpsdk.CallToolResult, any, error) {
 		parent := fmt.Sprintf("tenants/%s/collections/%s", in.TenantID, in.Collection)
 		return jsonResult(c.Object.ListObjects(ctx, &datav1.ListObjectsRequest{
-			Parent: parent,
-			Filter: in.Filter,
-			Page:   &commonv1.PageRequest{PageSize: in.PageSize},
+			Parent:    parent,
+			Filter:    in.Filter,
+			Page:      &commonv1.PageRequest{PageSize: in.PageSize},
+			Prefix:    in.Prefix,
+			Delimiter: in.Delimiter,
 		}))
 	})
 
