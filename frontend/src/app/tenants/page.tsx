@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
@@ -209,28 +211,17 @@ export default function TenantsPage() {
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center">
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <BuildingOfficeIcon className="size-10 opacity-40" />
-                      <p className="text-sm">
-                        {search
-                          ? "No tenants match your search."
-                          : "No tenants yet."}
-                      </p>
-                      {!search && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setCreateOpen(true)}
-                        >
-                          <PlusIcon className="size-4" />
-                          Create the first tenant
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <EmptyTableRow
+                  colSpan={6}
+                  icon={BuildingOfficeIcon}
+                  what="tenants"
+                  reason={emptyReason({ filtered: !!search })}
+                  purpose="A tenant is one customer kept apart from the rest: its own users, collections, quotas and budget."
+                  action={{
+                    label: "Create the first tenant",
+                    onClick: () => setCreateOpen(true),
+                  }}
+                />
               ) : (
                 filtered.map((tenant) => {
                   const labelEntries = Object.entries(tenant.labels);

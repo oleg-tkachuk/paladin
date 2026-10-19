@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { listAllPages } from "@/lib/listAllPages";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
@@ -388,27 +389,19 @@ export default function M2MTokensPage() {
                   </TableCell>
                 </TableRow>
               ) : visibleTokens.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={TOKEN_COLUMNS}
-                    className="h-40 text-center"
-                  >
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <KeyIcon className="size-8 opacity-40" />
-                      <p className="text-sm">No M2M tokens yet.</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setCreateOpen(true)}
-                        disabled={Boolean(changesBlocked)}
-                        title={changesBlocked ?? undefined}
-                      >
-                        <PlusIcon className="size-4" />
-                        Create the first one
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <EmptyTableRow
+                  colSpan={TOKEN_COLUMNS}
+                  icon={KeyIcon}
+                  what="M2M tokens"
+                  reason="empty"
+                  purpose="An M2M token lets a service call Paladin's APIs as this tenant, with the roles and scopes it was issued."
+                  action={{
+                    label: "Create the first token",
+                    onClick: () => setCreateOpen(true),
+                    disabled: Boolean(changesBlocked),
+                    title: changesBlocked ?? undefined,
+                  }}
+                />
               ) : (
                 visibleTokens.map((t) => {
                   const revoked = isRevoked(t);

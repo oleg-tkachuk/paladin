@@ -5,6 +5,8 @@
 // Operators can see who has which roles across all tenants; each user
 // opens on a page of their own, where roles and scopes are edited.
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -258,21 +260,12 @@ export default function UsersPage() {
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={USER_COLUMNS}
-                    className="h-32 text-center"
-                  >
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <UserCircleIcon className="size-8 opacity-40" />
-                      <p className="text-sm">
-                        {users.length > 0
-                          ? "No users match your search."
-                          : "No users yet."}
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <EmptyTableRow
+                  colSpan={USER_COLUMNS}
+                  icon={UserCircleIcon}
+                  what="users"
+                  reason={emptyReason({ filtered: users.length > 0 })}
+                />
               ) : (
                 filtered.map((u) => {
                   const tenant = tenantByID.get(u.tenantId);

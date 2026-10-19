@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import { useRouter } from "next/navigation";
 
 // /tenants/<id>/collections — tenant-scoped Collection list.
@@ -323,30 +325,19 @@ export default function TenantCollectionsPage() {
                   </TableCell>
                 </TableRow>
               ) : sorted.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-48 text-center">
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <ServerStackIcon className="size-10 opacity-40" />
-                      <p className="text-sm">
-                        {search
-                          ? "No Collections match your search."
-                          : "No Collections yet."}
-                      </p>
-                      {!search && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setCreateOpen(true)}
-                          disabled={Boolean(changesBlocked)}
-                          title={changesBlocked ?? undefined}
-                        >
-                          <PlusIcon className="size-4" />
-                          Provision the first Collection
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <EmptyTableRow
+                  colSpan={4}
+                  icon={ServerStackIcon}
+                  what="collections"
+                  reason={emptyReason({ filtered: !!search })}
+                  purpose="A collection is a tenant's namespace of objects, stored in one bucket."
+                  action={{
+                    label: "Provision the first collection",
+                    onClick: () => setCreateOpen(true),
+                    disabled: Boolean(changesBlocked),
+                    title: changesBlocked ?? undefined,
+                  }}
+                />
               ) : (
                 sorted.map((ok) => (
                   <TableRow key={ok.collection} className="group">

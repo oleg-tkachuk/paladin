@@ -4,12 +4,13 @@
 // toggle), the ObjectTableRow body, the empty/error states, and the load-more
 // footer. Extracted from the page, which keeps the data + selection + dialog
 // state and threads the row callbacks through `rowProps`.
+import { EmptyState } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import type { ComponentProps } from "react";
 import {
   ClockIcon,
   DocumentIcon,
   ExclamationTriangleIcon,
-  MagnifyingGlassIcon,
   FolderIcon,
 } from "@heroicons/react/24/outline";
 
@@ -255,22 +256,13 @@ export function ObjectsTable({
                       Retry
                     </Button>
                   </div>
-                ) : search || status ? (
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <MagnifyingGlassIcon className="size-10 opacity-40" />
-                    <p className="text-sm">No matches found.</p>
-                    <p className="text-xs">
-                      Try adjusting your search or filters.
-                    </p>
-                  </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <DocumentIcon className="size-10 opacity-40" />
-                    <p className="text-sm">No objects yet.</p>
-                    <p className="text-xs">
-                      Upload your first object to get started.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon={DocumentIcon}
+                    what="objects"
+                    reason={emptyReason({ filtered: !!(search || status) })}
+                    purpose="Drop files on the list, or use Upload, to add the first."
+                  />
                 )}
               </TableCell>
             </TableRow>

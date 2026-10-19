@@ -567,7 +567,7 @@ describe("StorageBackendsPage state filter", () => {
     );
     await userEvent.click(screen.getByRole("option", { name: "Disabled" }));
     expect(
-      await screen.findByText("No backends match your filters."),
+      await screen.findByText("No storage backends match your filters."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Register the first backend/ }),
@@ -597,7 +597,7 @@ describe("StorageBackendsPage load failure", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("No storage backends registered yet."),
+      screen.queryByText("No storage backends yet."),
     ).not.toBeInTheDocument();
   });
 
@@ -605,9 +605,7 @@ describe("StorageBackendsPage load failure", () => {
     // The other half: without this, hiding the empty state entirely would
     // pass the assertion above and break the page for a fresh install.
     render(<StorageBackendsPage />);
-    expect(
-      screen.getByText("No storage backends registered yet."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No storage backends yet.")).toBeInTheDocument();
   });
 });
 

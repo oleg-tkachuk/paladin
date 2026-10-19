@@ -11,6 +11,8 @@
 // state it is in, what the last probe found. Every state change sits behind
 // the row's menu or the bulk bar, and disabling asks first.
 
+import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { emptyReason } from "@/lib/emptyState";
 import React, {
   Fragment,
   useCallback,
@@ -511,39 +513,23 @@ export default function StorageBackendsPage() {
                   </TableCell>
                 </TableRow>
               ) : backends.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={COLUMN_COUNT}
-                    className="h-48 text-center"
-                  >
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <CloudIcon className="size-10 opacity-40" />
-                      <p className="text-sm">
-                        {/*
-                        Three states, not two: the debounce has not fired, the
-                        request is in flight, or the server found nothing.
-                        Collapsing the first two into "No backends match" tells
-                        an operator their backend is gone while they type.
-                      */}
-                        {searchPending
-                          ? "Searching…"
-                          : hasFilters
-                            ? "No backends match your filters."
-                            : "No storage backends registered yet."}
-                      </p>
-                      {!searchPending && !hasFilters && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setCreateOpen(true)}
-                        >
-                          <PlusIcon className="size-4" />
-                          Register the first backend
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <EmptyTableRow
+                  colSpan={COLUMN_COUNT}
+                  icon={CloudIcon}
+                  what="storage backends"
+                  // Three states, not two: the debounce has not fired, the request is in
+                  // flight, or the server found nothing. Collapsing the first two into "no
+                  // match" tells an operator their backend is gone while they type.
+                  reason={emptyReason({
+                    pending: searchPending,
+                    filtered: hasFilters,
+                  })}
+                  purpose="A storage backend is an S3-compatible store Paladin keeps objects in."
+                  action={{
+                    label: "Register the first backend",
+                    onClick: () => setCreateOpen(true),
+                  }}
+                />
               ) : (
                 sorted.map((b) => (
                   <BackendRow
