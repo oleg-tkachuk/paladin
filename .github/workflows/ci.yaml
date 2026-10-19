@@ -99,6 +99,9 @@ jobs:
           # The diff below needs both ends of it.
           fetch-depth: 0
 
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       - name: Classify the diff
         id: filter
         env:
@@ -108,44 +111,8 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          if [ -n "${BASE:-}" ]; then
-            from="$BASE"
-            to="$HEAD"
-          else
-            from="${BEFORE:-}"
-            to="$AFTER"
-          fi
-
-          # A push that created the branch reports all zeros, a force-push can
-          # name a commit this clone does not have, and a run by hand has no
-          # diff at all. None of them is a diff, so all mean everything.
-          zero=0000000000000000000000000000000000000000
-          if [ -z "$from" ] || [ "$from" = "$zero" ] || ! git cat-file -e "${from}^{commit}" 2>/dev/null; then
-            printf '%s\n' "no usable base (${from:-none}) — running everything"
-            groups="$(./.github/scripts/ci-groups.sh --all)"
-          else
-            changed="$(git diff --name-only "$from" "$to")"
-            printf '%s\n' "$changed"
-            groups="$(printf '%s\n' "$changed" | ./.github/scripts/ci-groups.sh)"
-          fi
-
-          printf '%s\n' "groups: $groups"
-          printf '%s\n' "groups=$groups" >>"$GITHUB_OUTPUT"
-          e2e="$(printf '%s' "$groups" | ./.github/scripts/ci-groups.sh --needs-e2e)"
-          printf '%s\n' "end-to-end: $e2e"
-          printf '%s\n' "e2e=$e2e" >>"$GITHUB_OUTPUT"
-          deep="$(printf '%s' "$groups" | ./.github/scripts/ci-groups.sh --needs-deep)"
-          printf '%s\n' "deep: $deep"
-          printf '%s\n' "deep=$deep" >>"$GITHUB_OUTPUT"
-          if [ "$groups" = "[]" ]; then
-            printf '%s\n' "relevant=false" >>"$GITHUB_OUTPUT"
-            printf '%s\n' "documentation only — the checks below will report as skipped"
-          else
-            printf '%s\n' "relevant=true" >>"$GITHUB_OUTPUT"
-          fi
+        # Which diff, and which groups it reaches: .github/ci/changes.ts.
+        run: node .github/ci/changes.ts
 
 
   # The repository's own commit gate, `task -t Taskfile.dev.yaml verify-all`,
@@ -281,19 +248,14 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
-      # verify:release-rules runs the pinned commit analyzer against
-      # .github/release/release.config.cjs. Node 24, as release.yaml runs it.
-      - name: Set up Node for the release tooling
+      # verify:ci tests the CI scripts, and verify:release-rules runs the
+      # pinned commit analyzer against .github/release/release.config.cjs:
+      # both on the Node release.yaml runs them with.
+      - name: Set up the CI scripts and the release tooling
         if: matrix.group == 'repo'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        uses: ./.github/actions/setup-ci
         with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Install the release tooling
-        if: matrix.group == 'repo'
-        working-directory: .github/release
-        run: npm ci
+          release-tooling: "true"
 
       # --yes accepts the first-fetch trust prompt for the shared task library
       # include; unattended, that prompt is a hang rather than a question.
@@ -433,7 +395,7 @@ jobs:
   # The Playwright suite against a stack built from this change, through the
   # same task a developer runs: `verify-e2e:run` boots the compose stack from
   # the images above and names any test that passed only on its retry. Only
-  # for a change the console or the backend reaches (ci-groups.sh --needs-e2e).
+  # for a change the console or the backend reaches (E2E_GROUPS in .github/ci/changes.ts).
   e2e:
     name: End-to-end # see Verify on the matrix values in the name
     needs: [changes, e2e-images]
@@ -604,7 +566,7 @@ jobs:
   # conformance, dev-bootstrap twice and the smoke test, against a compose
   # stack built from this change. Neither half needs the other, and run in one
   # job the image build waited on the suites for nothing. Only for a change
-  # the backend reaches (ci-groups.sh --needs-deep).
+  # the backend reaches (DEEP_GROUPS in .github/ci/changes.ts).
   #
   # The stack half runs against the backend image End-to-end images built,
   # when that job ran: building it again here meant restoring, importing and,
@@ -825,23 +787,25 @@ jobs:
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    permissions: {}
+    permissions:
+      contents: read
     steps:
+      - name: Check out the scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions
+
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
+      # See .github/ci/checks.ts.
       - name: Require every job to have passed or been skipped
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
-        run: |
-          set -euo pipefail
-          printf 'results: %s\n' "$RESULTS"
-          for result in $RESULTS; do
-            case "$result" in
-              success | skipped) ;;
-              *)
-                printf '%s\n' "a required job ended as ${result}"
-                exit 1
-                ;;
-            esac
-          done
+          NEEDS: ${{ toJSON(needs) }}
+        run: node .github/ci/checks.ts
 
   dispatch-release:
     name: Dispatch release
@@ -864,22 +828,19 @@ jobs:
     permissions:
       contents: write # POST /repos/{owner}/{repo}/dispatches needs write
     steps:
+      - name: Check out the dispatch script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions
+
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
+      # Both values come from Actions itself. See .github/ci/dispatch-release.ts.
       - name: Dispatch the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # --input rather than -f: client_payload is nested and the form
-          # syntax cannot express that. Both values come from Actions itself
-          # and arrive through env, so nothing here is substituted into the
-          # script before the shell runs.
-          gh api "repos/${GITHUB_REPOSITORY}/dispatches" --input - <<JSON
-          {
-            "event_type": "release",
-            "client_payload": {
-              "sha": "${GITHUB_SHA}",
-              "ci_run_id": "${GITHUB_RUN_ID}"
-            }
-          }
-          JSON
-          printf '%s\n' "dispatched release for ${GITHUB_SHA}"
+        run: node .github/ci/dispatch-release.ts

@@ -112,4 +112,7 @@ lefthook-local.yml
 # Where it lived before; a checkout from then still has one.
 /node_modules/
 
+# ── CI scripts (.github/ci: the TypeScript the workflows run) ──────────────
+/.github/ci/node_modules/
+
 **/CLAUDE.md

@@ -607,6 +607,21 @@ open deliberately — each notes why._
 
 ---
 
+## CI/CD
+
+### release.yaml still runs shell scripts
+
+- **Status:** In-Progress (follow-up pull request).
+- **Reason:** The move to the TypeScript in `.github/ci` lands in two steps:
+  release.yaml is not run by a pull request's CI, so its scripts move in a
+  change of their own, checked against the dev build the merge publishes.
+- **Definition of Done:** every script release.yaml runs from
+  `.github/scripts` — the release and head checks, the tag reading, the
+  publish plan and version check, the GHCR cleanup plan, the SDK notes, the Go
+  proxy warm-up, the upgrade sections, and the image and chart signing — is a
+  `.github/ci` command with `node --test` tests, and their shell tests are gone.
+- **Blockers:** none.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)
