@@ -48,6 +48,7 @@ import { ObjectsTable } from "./ObjectsTable";
 import { Button } from "@/components/ui/button";
 import { UploadQueue } from "@/components/features/upload/UploadQueue";
 import { useUpload } from "@/hooks/useUpload";
+import { useUndoTrash } from "@/hooks/useUndoTrash";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { useTenantChangesBlocked } from "../../../tenant-context";
 
@@ -98,6 +99,7 @@ function CollectionObjectsContent() {
   // Files dropped on the list, or chosen with Upload, land in this
   // collection; a trashed tenant takes no new objects.
   const changesBlocked = useTenantChangesBlocked();
+  const { offerUndo } = useUndoTrash();
   const { queue, uploadFile, clearQueue } = useUpload();
   const uploadFiles = useCallback(
     (files: File[]) => {
@@ -214,7 +216,7 @@ function CollectionObjectsContent() {
       confirmText: "Move to Trash",
       onConfirm: async () => {
         const full = objects.find((o) => o.objectId === obj.objectId);
-        if (full) await softDeleteObject(full);
+        if (full) offerUndo(await softDeleteObject(full));
       },
     });
   };
