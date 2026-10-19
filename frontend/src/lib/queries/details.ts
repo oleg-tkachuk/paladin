@@ -39,3 +39,6 @@ export function capabilityDetailQuery(id: string) {
     queryFn: ({ signal }) => capabilityClient.get({ id }, { signal }),
   });
 }
+
+/** Every user, as the users page lists them. */
+export const USERS_LIST_QUERY_KEY = ["users"] as const;

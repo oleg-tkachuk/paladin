@@ -1,5 +1,7 @@
 "use client";
 
+import { useOptimistic } from "@/hooks/useOptimistic";
+import { edit } from "@/lib/optimistic";
 import { listAllPages } from "@/lib/listAllPages";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
@@ -68,6 +70,7 @@ export default function EventsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const queryClient = useQueryClient();
+  const optimistic = useOptimistic();
   const esKey = ["eventSubscriptions", tenantId] as const;
   const listQuery = useQuery({
     queryKey: esKey,
@@ -219,30 +222,28 @@ export default function EventsPage() {
   const handleToggle = async (sub: EventSubscription) => {
     if (!tenantId) return;
     const target = !sub.disabled;
-    const prevItems = items;
-    setItems((curr) =>
+    // Shown at once; put back if the server refuses it.
+    const toggled = edit<EventSubscription[]>(esKey, (curr) =>
       curr.map((s) => (s.name === sub.name ? { ...s, disabled: target } : s)),
     );
     try {
-      const updated = await eventSubscriptionClient.updateSubscription({
-        name: sub.name,
-        resourceVersion: sub.resourceVersion,
-        updateMask: fieldMask(EventSubscriptionSchema, "disabled"),
-        subscription: {
-          $typeName: "paladin.admin.v1.EventSubscription",
+      await optimistic([toggled], () =>
+        eventSubscriptionClient.updateSubscription({
           name: sub.name,
-          tenantId,
-          filter: sub.filter,
-          sink: sub.sink,
-          disabled: target,
           resourceVersion: sub.resourceVersion,
-        },
-      });
-      setItems((curr) =>
-        curr.map((s) => (s.name === updated.name ? updated : s)),
+          updateMask: fieldMask(EventSubscriptionSchema, "disabled"),
+          subscription: {
+            $typeName: "paladin.admin.v1.EventSubscription",
+            name: sub.name,
+            tenantId,
+            filter: sub.filter,
+            sink: sub.sink,
+            disabled: target,
+            resourceVersion: sub.resourceVersion,
+          },
+        }),
       );
     } catch (err) {
-      setItems(prevItems);
       if (err instanceof ConnectError && err.code === Code.Aborted) {
         showNotification({
           type: "warning",
@@ -261,12 +262,16 @@ export default function EventsPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    const removed = edit<EventSubscription[]>(esKey, (curr) =>
+      curr.filter((s) => s.name !== deleteTarget.name),
+    );
     try {
-      await eventSubscriptionClient.deleteSubscription({
-        name: deleteTarget.name,
-        resourceVersion: deleteTarget.resourceVersion,
-      });
-      setItems((curr) => curr.filter((s) => s.name !== deleteTarget.name));
+      await optimistic([removed], () =>
+        eventSubscriptionClient.deleteSubscription({
+          name: deleteTarget.name,
+          resourceVersion: deleteTarget.resourceVersion,
+        }),
+      );
       setTests((curr) => {
         const next = new Map(curr);
         next.delete(deleteTarget.name);
