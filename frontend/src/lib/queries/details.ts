@@ -4,8 +4,10 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import {
+  bucketClient,
   capabilityClient,
   collectionClient,
+  tenantClient,
   userClient,
 } from "@/lib/connect/client";
 
@@ -42,3 +44,23 @@ export function capabilityDetailQuery(id: string) {
 
 /** Every user, as the users page lists them. */
 export const USERS_LIST_QUERY_KEY = ["users"] as const;
+
+/** A tenant by its id or its slug, as GetTenant takes either. */
+export function tenantDetailQuery(handle: string) {
+  return queryOptions({
+    queryKey: ["tenantDetail", handle] as const,
+    queryFn: ({ signal }) =>
+      tenantClient.getTenant({ name: `tenants/${handle}` }, { signal }),
+  });
+}
+
+export function bucketDetailQuery(backendId: string, bucketId: string) {
+  return queryOptions({
+    queryKey: ["bucketDetail", backendId, bucketId] as const,
+    queryFn: ({ signal }) =>
+      bucketClient.getBucket(
+        { name: `storageBackends/${backendId}/buckets/${bucketId}` },
+        { signal },
+      ),
+  });
+}

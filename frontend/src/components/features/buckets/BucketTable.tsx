@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { BucketTenancyBadge } from "./BucketTenancyBadge";
 import { ProvisionStateBadge } from "./ProvisionStateBadge";
 import { PublicReadBadge } from "./PublicReadBadge";
+import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
 /** The columns a bucket list sorts by. */
 export const BUCKET_SORT_COLUMNS = ["backend", "name"] as const;
@@ -260,13 +261,15 @@ function BucketRow({
           {perspective && (
             <BucketTenancyBadge owned={b.ownerTenantId === perspective} />
           )}
-          <Link
-            href={tenantHref(b.ownerTenantId)}
-            title={b.ownerTenantId}
-            className={cn(NAME_CELL_CLASS, "text-sm hover:text-primary")}
-          >
-            {tenantLabel(tenants, b.ownerTenantId)}
-          </Link>
+          <TenantHoverCard handle={b.ownerTenantId}>
+            <Link
+              href={tenantHref(b.ownerTenantId)}
+              title={b.ownerTenantId}
+              className={cn(NAME_CELL_CLASS, "text-sm hover:text-primary")}
+            >
+              {tenantLabel(tenants, b.ownerTenantId)}
+            </Link>
+          </TenantHoverCard>
         </div>
       </TableCell>
       <TableCell className="hidden @lg:table-cell text-sm">
