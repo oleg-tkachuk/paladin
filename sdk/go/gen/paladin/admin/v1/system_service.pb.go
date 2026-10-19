@@ -322,7 +322,9 @@ func (*GetConfigRequest) Descriptor() ([]byte, []int) {
 type GetConfigResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// YAML-encoded redacted config. Sized in single-digit kilobytes
-	// for any realistic deployment, so a single unary call is fine.
+	// for any realistic deployment, so a single unary call is fine. Every
+	// secret's value is replaced by the string "***", which a reader can match
+	// to tell a redacted secret from a setting left empty.
 	Yaml string `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
 	// Optional: filesystem path the binary loaded the config from
 	// ("/app/configs/config.yaml" in production, "—" otherwise). Helps

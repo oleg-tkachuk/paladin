@@ -163,7 +163,9 @@ export type GetConfigResponse =
   Message<"paladin.admin.v1.GetConfigResponse"> & {
     /**
      * YAML-encoded redacted config. Sized in single-digit kilobytes
-     * for any realistic deployment, so a single unary call is fine.
+     * for any realistic deployment, so a single unary call is fine. Every
+     * secret's value is replaced by the string "***", which a reader can match
+     * to tell a redacted secret from a setting left empty.
      *
      * @generated from field: string yaml = 1;
      */
