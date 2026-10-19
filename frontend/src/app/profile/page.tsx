@@ -1,6 +1,7 @@
 "use client";
 
 import { NotifyOperationsField } from "@/components/features/NotifyOperationsField";
+import { ResourceLinksField } from "@/components/features/ResourceLinksField";
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -393,8 +394,9 @@ function PreferencesCard() {
               />
             </div>
 
-            <div className="border-t pt-4">
+            <div className="space-y-4 border-t pt-4">
               <NotifyOperationsField />
+              <ResourceLinksField />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
               <p className={T.hint}>

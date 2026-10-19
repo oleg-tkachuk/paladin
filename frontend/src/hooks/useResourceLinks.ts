@@ -2,7 +2,11 @@
 
 import { useCallback } from "react";
 
-import { PREFERENCE_KEYS, type ResourceLink } from "@/lib/preferences/keys";
+import {
+  PREFERENCE_KEYS,
+  readFlag,
+  type ResourceLink,
+} from "@/lib/preferences/keys";
 import {
   readLinks,
   sameLinks,
@@ -48,5 +52,24 @@ export function useResourceLinks() {
     [pinned],
   );
 
-  return { recent, pinned, visit, togglePin, isPinned };
+  const clearRecent = useCallback(() => updateRecent(() => []), [updateRecent]);
+  const unpinAll = useCallback(() => updatePinned(() => []), [updatePinned]);
+
+  // Off, the sidebar leaves the section out; the profile turns it back on.
+  const [hidden, setHidden] = usePreference(
+    PREFERENCE_KEYS.hideResourceLinks,
+    readFlag,
+  );
+
+  return {
+    recent,
+    pinned,
+    visit,
+    togglePin,
+    isPinned,
+    clearRecent,
+    unpinAll,
+    shown: !hidden,
+    setShown: (on: boolean) => setHidden(!on),
+  };
 }

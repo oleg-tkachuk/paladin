@@ -10,6 +10,10 @@ const h = vi.hoisted(() => ({
   recent: [] as { href: string; label: string; kind: string }[],
   visit: vi.fn(),
   togglePin: vi.fn(async () => {}),
+  clearRecent: vi.fn(async () => {}),
+  unpinAll: vi.fn(async () => {}),
+  setShown: vi.fn(async () => {}),
+  shown: true,
 }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
@@ -25,6 +29,10 @@ vi.mock("@/hooks/useResourceLinks", () => ({
     visit: h.visit,
     togglePin: h.togglePin,
     isPinned: (href: string) => h.pinned.some((p) => p.href === href),
+    clearRecent: h.clearRecent,
+    unpinAll: h.unpinAll,
+    setShown: h.setShown,
+    shown: h.shown,
   }),
 }));
 
@@ -43,6 +51,10 @@ beforeEach(() => {
   h.pinned = [];
   h.recent = [];
   h.visit.mockReset();
+  h.shown = true;
+  h.clearRecent.mockClear();
+  h.unpinAll.mockClear();
+  h.setShown.mockClear();
   h.togglePin.mockClear();
 });
 
@@ -96,5 +108,47 @@ describe("SidebarResourceLinks", () => {
   it("takes no room when there is nothing to list", () => {
     render(<SidebarResourceLinks groupLabelClass="" />);
     expect(screen.queryByTestId("resource-links")).toBeNull();
+  });
+});
+
+describe("SidebarResourceLinks options", () => {
+  it.each([
+    ["Clear recent", () => h.clearRecent],
+    ["Unpin all", () => h.unpinAll],
+  ])("%s from the section's menu", async (item, fn) => {
+    h.pinned = [docs];
+    h.recent = [acme];
+    render(<SidebarResourceLinks groupLabelClass="" />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pinned and recent options" }),
+    );
+    await userEvent.click(await screen.findByRole("menuitem", { name: item }));
+    expect(fn()).toHaveBeenCalled();
+  });
+
+  it("hides the section from its menu, and is gone while off", async () => {
+    h.recent = [acme];
+    const { rerender } = render(<SidebarResourceLinks groupLabelClass="" />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pinned and recent options" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Hide this section" }),
+    );
+    expect(h.setShown).toHaveBeenCalledWith(false);
+    h.shown = false;
+    rerender(<SidebarResourceLinks groupLabelClass="" />);
+    expect(screen.queryByTestId("resource-links")).toBeNull();
+  });
+
+  it("offers no clear when there is nothing to clear", async () => {
+    h.pinned = [docs];
+    render(<SidebarResourceLinks groupLabelClass="" />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Pinned and recent options" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Clear recent" }),
+    ).toHaveAttribute("aria-disabled", "true");
   });
 });
