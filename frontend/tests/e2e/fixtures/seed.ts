@@ -927,6 +927,25 @@ export async function objectsOf(
   return res.objects.map((o) => o.key);
 }
 
+/**
+ * The keys of a collection's objects whose bytes have landed. An upload makes
+ * its record before the browser sends a byte, so a key in objectsOf proves
+ * only that the upload began.
+ */
+export async function availableKeysOf(
+  tenantId: string,
+  collection: string,
+): Promise<string[]> {
+  const client = createClient(ObjectService, dataTransport());
+  const res = await client.listObjects({
+    parent: `tenants/${tenantId}/collections/${collection}`,
+    page: { pageSize: 200, pageToken: "" },
+  });
+  return res.objects
+    .filter((o) => o.state === ObjectState.AVAILABLE)
+    .map((o) => o.key);
+}
+
 /** An object's state, by its canonical name. */
 export async function objectState(name: string): Promise<ObjectState> {
   const client = createClient(ObjectService, dataTransport());

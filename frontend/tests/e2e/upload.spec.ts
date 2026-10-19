@@ -24,7 +24,7 @@ import { gotoSettled } from "./fixtures/navigate";
 import {
   seedAdminTenantID,
   seedPhysicalBucket,
-  objectsOf,
+  availableKeysOf,
 } from "./fixtures/seed";
 
 test.describe("Upload", () => {
@@ -93,13 +93,13 @@ test.describe("Upload", () => {
       buffer: Buffer.from("uploaded through the console\n"),
     });
 
-    // The page's own progress is not the assertion — the object is. A queue
-    // entry that says "done" while nothing reached the collection is the
-    // failure this test exists to catch.
+    // The page's own progress is not the assertion — the object is, and
+    // AVAILABLE rather than merely listed: the record exists before the
+    // browser's PUT, so a listed key passed while the CSP refused every PUT.
     await expect
       .poll(
         async () =>
-          (await objectsOf(tenantId, collection.collection)).some((k) =>
+          (await availableKeysOf(tenantId, collection.collection)).some((k) =>
             k.endsWith(fileName),
           ),
         { timeout: 30_000 },
