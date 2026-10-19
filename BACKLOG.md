@@ -819,16 +819,6 @@ order they are being taken up.
   text field has focus.
 - **Blockers:** none — taken up when it is asked for.
 
-#### Browser notifications when an operation finishes
-
-- **Status:** Aspirational.
-- **Reason:** a long batch operation finishes while the tab is in the
-  background and nothing says so.
-- **Definition of Done:** opt-in in the profile, stored in the user's
-  settings; a notification for each of the user's own operations that succeeds
-  or fails while the tab is hidden.
-- **Blockers:** none.
-
 #### Dashboard: my operations, tenants near their limits, health, first run
 
 - **Status:** Aspirational.

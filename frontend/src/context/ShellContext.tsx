@@ -37,6 +37,9 @@ import { AUDIENCES } from "@/constants";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
+import { usePreference } from "@/hooks/usePreference";
+import { PREFERENCE_KEYS, readFlag } from "@/lib/preferences/keys";
+import { anyActive } from "@/lib/operationNotices";
 
 export type SectionStatus = "ok" | "unavailable" | "loading";
 
@@ -58,6 +61,7 @@ interface ShellState {
 
 const LOADING: ShellSection<never> = { status: "loading", data: null };
 const POLL_INTERVAL = 10_000;
+const NO_OPERATIONS: Operation[] = [];
 
 const ShellContext = createContext<ShellState | undefined>(undefined);
 
@@ -180,7 +184,15 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     return inFlight.current;
   }, [fetchShell, session]);
 
-  useVisiblePolling(refresh, POLL_INTERVAL);
+  // A user who asked to hear when their operations finish is told even from
+  // a hidden tab, so the list is watched there too — while something runs.
+  const [notifyOperations] = usePreference(
+    PREFERENCE_KEYS.notifyOperations,
+    readFlag,
+  );
+  const watchHidden =
+    notifyOperations && anyActive(operations.data ?? NO_OPERATIONS);
+  useVisiblePolling(refresh, POLL_INTERVAL, true, watchHidden);
 
   // Ask as soon as someone is signed in, not on the next tick.
   useEffect(() => {

@@ -16,6 +16,8 @@ export function useVisiblePolling(
   fn: () => void,
   intervalMs: number,
   enabled = true,
+  /** Keep polling in a hidden tab too, for news the user asked to hear. */
+  whileHidden = false,
 ) {
   const fnRef = useRef(fn);
   // Ref updated in an effect, not during render (react-hooks/refs):
@@ -33,7 +35,7 @@ export function useVisiblePolling(
     // a dead component (wasted work + a brief flash on re-mount).
     let alive = true;
     const run = () => {
-      if (alive && !document.hidden) fnRef.current();
+      if (alive && (whileHidden || !document.hidden)) fnRef.current();
     };
     run(); // initial fetch (skipped if the tab is already hidden)
     const id = setInterval(run, intervalMs);
@@ -43,5 +45,5 @@ export function useVisiblePolling(
       clearInterval(id);
       document.removeEventListener("visibilitychange", run);
     };
-  }, [intervalMs, enabled]);
+  }, [intervalMs, enabled, whileHidden]);
 }
