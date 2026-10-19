@@ -116,12 +116,12 @@ function AccountCard() {
   const linkTenant = tenantHandle && canUseAdminPlane(roles);
 
   return (
-    <Card>
-      <CardContent className="flex flex-wrap items-start gap-x-10 gap-y-5 px-6 py-5">
-        <div className="flex min-w-56 items-center gap-3">
+    <Card className="py-0">
+      <CardContent className="grid items-center gap-x-8 gap-y-5 px-6 py-4 sm:grid-cols-2 lg:grid-cols-[minmax(12rem,auto)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.6fr)_auto]">
+        <div className="flex min-w-0 items-center gap-3">
           <span
             aria-hidden
-            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary ring-1 ring-primary/30"
+            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary ring-1 ring-primary/30"
           >
             {name.slice(0, 1).toUpperCase()}
           </span>
@@ -133,60 +133,81 @@ function AccountCard() {
           </div>
         </div>
 
-        <dl className="flex flex-1 flex-wrap gap-x-10 gap-y-4 text-sm">
-          <div className="space-y-1">
-            <dt className={T.label}>Tenant</dt>
-            <dd>
-              {linkTenant ? (
-                <Link
-                  href={tenantHref(tenantHandle)}
-                  className="hover:text-primary hover:underline"
+        <AccountField label="Tenant">
+          {linkTenant ? (
+            <Link
+              href={tenantHref(tenantHandle)}
+              className="truncate hover:text-primary hover:underline"
+            >
+              {tenantName}
+            </Link>
+          ) : (
+            <span className="truncate">{tenantName ?? "—"}</span>
+          )}
+        </AccountField>
+
+        <AccountField label="Roles">
+          {roles.length === 0 ? (
+            <span className={T.hint}>none</span>
+          ) : (
+            <span className="flex flex-wrap gap-1">
+              {roles.map((r) => (
+                <Badge
+                  key={r}
+                  variant="outline"
+                  className="font-mono"
+                  title={ROLE_DESCRIPTIONS[r]}
                 >
-                  {tenantName}
-                </Link>
-              ) : (
-                (tenantName ?? "—")
-              )}
-            </dd>
-          </div>
-          <div className="min-w-48 space-y-1">
-            <dt className={T.label}>Roles</dt>
-            <dd className="flex flex-wrap gap-1.5">
-              {roles.length === 0 ? (
-                <span className={T.hint}>none</span>
-              ) : (
-                roles.map((r) => (
-                  <Badge
-                    key={r}
-                    variant="outline"
-                    className="font-mono"
-                    title={ROLE_DESCRIPTIONS[r]}
-                  >
-                    {r}
-                  </Badge>
-                ))
-              )}
-            </dd>
-          </div>
-          {user?.userId ? (
-            <div className="min-w-64 flex-1">
-              <dt className="sr-only">User ID</dt>
-              <dd>
-                <IdentifierCopy value={user.userId} label="User ID" />
-              </dd>
-            </div>
-          ) : null}
-        </dl>
+                  {r}
+                </Badge>
+              ))}
+            </span>
+          )}
+        </AccountField>
+
+        {user?.userId ? (
+          <AccountField label="User ID">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className={cn(T.codeSmall, "truncate")} title={user.userId}>
+                {user.userId}
+              </span>
+              <IdentifierCopy
+                value={user.userId}
+                label="User ID"
+                iconOnly
+                className="shrink-0 p-1"
+              />
+            </span>
+          </AccountField>
+        ) : (
+          <span />
+        )}
 
         <Link
           href={SECTION.applications}
-          className="flex items-center gap-2 self-center text-sm text-primary hover:underline"
+          className="flex items-center gap-1.5 text-sm text-primary hover:underline lg:justify-self-end"
         >
           <KeyIcon className="size-4" />
           Connected applications
         </Link>
       </CardContent>
     </Card>
+  );
+}
+
+/** One fact of the account bar: a label over its value. */
+function AccountField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <p className={T.label}>{label}</p>
+      <div className="flex min-w-0 text-sm">{children}</div>
+    </div>
   );
 }
 
