@@ -13,7 +13,7 @@ Python SDK's wheel beside each protobuf major and Python it supports, every
 cell of [`sdk/python/compat.json`](../sdk/python/compat.json) side by side in
 one job (`verify-py-sdk-compat` locally), and runs the client lifecycle stress in
 `sdk/python/tests/test_lifecycle.py` at a count high enough to catch an
-intermittent abort at exit. [`.github/scripts/ci-groups.sh`](../.github/scripts/ci-groups.sh)
+intermittent abort at exit. [`.github/ci/changes.ts`](../.github/ci/changes.ts)
 decides which groups a set of paths reaches; a console-only change does not
 run the backend's tests. Run by hand, it runs every group. A final `All checks
 passed` job is the one check branch protection requires, so a group that was
@@ -45,7 +45,7 @@ the GitHub release with generated notes is created once all of them are. The
 
 ```mermaid
 flowchart LR
-    chg["<b>Changed paths</b><br/>ci-groups.sh"]
+    chg["<b>Changed paths</b><br/>changes.ts"]
     v["<b>Verify</b><br/>one job per group"]
     py["<b>Python SDK</b><br/>wheel × Python × protobuf<br/>lifecycle stress"]
     img["<b>End-to-end images</b>"]
@@ -108,5 +108,5 @@ own analysis and reports to the repository's code-scanning alerts; the
 publishing workflow, [`release.yaml`](../.github/workflows/release.yaml), which
 pushes images, charts and the release tags and runs only from `main`; and
 [`badges.yaml`](../.github/workflows/badges.yaml), which pushes the stack
-versions the README's badges read to the `badges` branch — the script that
-reads them is `verify:badge-versions`.
+versions the README's badges read to the `badges` branch — its script,
+[`badges.ts`](../.github/ci/badges.ts), is tested by `verify:ci`.

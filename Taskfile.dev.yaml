@@ -236,7 +236,7 @@ tasks:
     desc: "What spans components: the contract, charts, images, Taskfiles, the repository itself"
     cmds:
       - task: verify:proto-breaking
-      - task: verify:ci-groups
+      - task: verify:ci
       - task: verify:stack-ports
       - task: verify:e2e-cluster
       - task: verify:stack-disk
@@ -256,7 +256,6 @@ tasks:
       - task: verify:release-retry
       - task: verify:stream-release-notes
       - task: verify:propose-upgrade-sections
-      - task: verify:badge-versions
       - task: verify:postgres-version
       - task: verify:release-age
       - task: verify:compose-images
@@ -380,10 +379,25 @@ tasks:
     cmds:
       - ./backend/scripts/proto-breaking.sh
 
-  verify:ci-groups:
-    desc: "CI runs every Verify group a change can reach, and no fewer"
+  verify:ci:
+    desc: "Type-check and test the TypeScript the workflows run (.github/ci); one file alone: task -t Taskfile.dev.yaml verify:ci -- changes.test.ts"
+    dir: .github/ci
+    deps: [ci:deps]
+    # The tests drive commands through refusals on purpose: those print as
+    # plain lines, not as annotations of the run (lib/actions.ts).
+    env:
+      PALADIN_CI_ANNOTATIONS: "off"
     cmds:
-      - ./.github/scripts/ci-groups.test.sh
+      - node_modules/.bin/tsc -p .
+      - node --test {{.CLI_ARGS}}
+
+  ci:deps:
+    desc: "Install the CI scripts' locked dependencies, no install script run"
+    dir: .github/ci
+    status:
+      - test -d node_modules/typescript
+    cmds:
+      - node install.ts .
 
   verify:workflows:
     desc: "actionlint and zizmor over the workflows, at the versions CI pins"
@@ -577,11 +591,6 @@ tasks:
     desc: "Fail when a module tag would ask the Go proxy for another module or version"
     cmds:
       - ./.github/scripts/warm-go-proxy.test.sh
-
-  verify:badge-versions:
-    desc: "Fail when the README's stack badges would read a version from the wrong place"
-    cmds:
-      - ./.github/scripts/badge-versions.test.sh
 
   verify:postgres-version:
     desc: "Fail when the compose stacks and the Go test suites run different Postgres versions"

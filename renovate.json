@@ -10,7 +10,7 @@
     "ignorePaths is config:recommended's list without `**/tests/**`: the end-to-end compose stack lives under frontend/tests/e2e and must move with the backend's stack, which `task verify:compose-images` enforces."
   ],
   "ignorePaths": ["**/node_modules/**", "**/bower_components/**", "**/vendor/**", "**/examples/**", "**/__tests__/**", "**/test/**", "**/__fixtures__/**"],
-  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "npm", "pep621", "custom.regex"],
+  "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "nodenv", "npm", "pep621", "custom.regex"],
   "customManagers": [
     {
       "customType": "regex",

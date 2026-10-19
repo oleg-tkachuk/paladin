@@ -5,20 +5,20 @@ name: Auto-merge
 #   - auto-merge: each pull request is queued to merge (a merge commit, as
 #     every merge into main has been) the moment its required checks and
 #     reviews pass;
-#   - auto-rebase: on each push to main, every open pull request that has
-#     fallen behind is rebased onto the new head, so it is tested against
+#   - auto-update: on each push to main, every open pull request that has
+#     fallen behind gets the new head merged in, so it is tested against
 #     what it would actually merge into.
 #
 # Both act through AUTOMERGE_TOKEN — a fine-grained token or GitHub App token
 # with Contents and Pull requests write on this repository — and never through
 # GITHUB_TOKEN. That is not a style choice. A push or merge made with
-# GITHUB_TOKEN starts no workflow: a rebased branch would get no CI and wait
+# GITHUB_TOKEN starts no workflow: an updated branch would get no CI and wait
 # forever on its required check, and a merge would land on main with no CI
 # run, so ci.yaml would never dispatch the release. Without the secret both
 # jobs warn and do nothing.
 #
 # Same-repository pull requests only. A fork's branch belongs to its author:
-# rewriting it is not ours to do, and merging it stays a person's decision.
+# pushing to it is not ours to do, and merging it stays a person's decision.
 # A draft is left alone until it is marked ready.
 #
 # Repository settings this relies on (Settings → General → Pull Requests):
@@ -48,51 +48,48 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    permissions: {}
+    permissions:
+      contents: read
     steps:
+      - name: Check out the scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions
+
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       - name: Queue the pull request to merge when it is green
         env:
           GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "::warning::AUTOMERGE_TOKEN is not set; auto-merge left off (see auto-merge.yaml)"
-            exit 0
-          fi
-          gh pr merge "$PR" --repo "$REPO" --auto --merge
+        run: node .github/ci/auto-merge.ts enable
 
   rebase:
-    name: Rebase open pull requests onto main
+    name: Update open pull requests from main
     if: github.event_name == 'push'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
-    permissions: {}
+    permissions:
+      contents: read
     steps:
-      - name: Rebase every pull request that is behind main
+      - name: Check out the scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/ci
+            .github/actions
+
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
+      # Only a pull request that is BEHIND: a conflict needs a person. See
+      # .github/ci/auto-merge.ts.
+      - name: Update every pull request that is behind main
         env:
           GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "::warning::AUTOMERGE_TOKEN is not set; pull requests not rebased (see auto-merge.yaml)"
-            exit 0
-          fi
-          # mergeStateStatus is computed lazily; BEHIND is the only state a
-          # rebase can fix. A conflict (DIRTY) needs a person.
-          gh pr list --repo "$REPO" --base main --state open --limit 200 \
-              --json number,isDraft,isCrossRepository,mergeStateStatus \
-              --jq '.[] | select(.isDraft | not) | select(.isCrossRepository | not)
-                        | select(.mergeStateStatus == "BEHIND") | .number' |
-          while read -r pr; do
-            # One pull request that cannot be rebased (a conflict GitHub only
-            # finds while rebasing) must not stop the rest.
-            if gh api --method PUT "repos/${REPO}/pulls/${pr}/update-branch" \
-                -f update_method=rebase >/dev/null; then
-              echo "rebased #${pr}"
-            else
-              echo "::warning::could not rebase #${pr}; it needs a manual update"
-            fi
-          done
+        run: node .github/ci/auto-merge.ts update
