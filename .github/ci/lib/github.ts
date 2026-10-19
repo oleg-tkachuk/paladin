@@ -53,8 +53,8 @@ const MERGE_METHOD = "MERGE";
 export const PAGE_SIZE = 100;
 
 const ENABLE_AUTO_MERGE = `
-  mutation($id: ID!, $method: PullRequestMergeMethod!) {
-    enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $method }) { clientMutationId }
+  mutation($id: ID!, $mergeMethod: PullRequestMergeMethod!) {
+    enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $mergeMethod }) { clientMutationId }
   }`;
 
 // mergeStateStatus is in GraphQL alone; the REST list leaves it out.
@@ -82,7 +82,7 @@ export function gitHubOver(octokit: Octokit, repo: Repo): GitHub {
     },
     async enableAutoMerge(number) {
       const { data } = await octokit.rest.pulls.get({ ...repo, pull_number: number });
-      await octokit.graphql(ENABLE_AUTO_MERGE, { id: data.node_id, method: MERGE_METHOD });
+      await octokit.graphql(ENABLE_AUTO_MERGE, { id: data.node_id, mergeMethod: MERGE_METHOD });
     },
     async openPullRequestsInto(base) {
       const page = await octokit.graphql.paginate<OpenPullRequestsPage>(OPEN_PULL_REQUESTS, { ...repo, base });
