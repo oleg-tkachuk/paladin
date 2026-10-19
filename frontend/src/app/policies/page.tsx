@@ -1,5 +1,7 @@
 "use client";
 
+import { Confirmation } from "@/components/ui/Confirmation";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -334,6 +336,8 @@ export default function PoliciesPage() {
     [pendingTemplateId],
   );
 
+  // Confirmed beside the Save button, where it was pressed.
+  const { shown: saved, confirm: confirmSaved } = useConfirmation();
   const handleSave = useCallback(async () => {
     if (!target) return;
     setSaving(true);
@@ -361,11 +365,7 @@ export default function PoliciesPage() {
         setResourceVersion(updated.resourceVersion);
       }
       setServerSnapshot(policyText);
-      showNotification({
-        type: "success",
-        title: "Policy saved",
-        message: target,
-      });
+      confirmSaved();
     } catch (err) {
       const msg = errorMessage(err, "Save failed");
       showNotification({
@@ -376,7 +376,14 @@ export default function PoliciesPage() {
     } finally {
       setSaving(false);
     }
-  }, [scope, target, resourceVersion, policyText, showNotification]);
+  }, [
+    scope,
+    target,
+    resourceVersion,
+    policyText,
+    showNotification,
+    confirmSaved,
+  ]);
 
   // The scope's list failed to load. Its select said "No buckets available"
   // and stayed disabled, which reads as nothing to attach a policy to.
@@ -523,6 +530,7 @@ export default function PoliciesPage() {
                 )}
               </div>
               <div className="flex items-end gap-2">
+                <Confirmation shown={saved}>Saved</Confirmation>
                 <Button
                   variant="outline"
                   size="sm"

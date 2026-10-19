@@ -7,7 +7,9 @@
 // summaries. Centralising the affordance set means lock semantics
 // and copy UX stay consistent across the app.
 
-import React, { useState } from "react";
+import React from "react";
+
+import { useConfirmation } from "@/hooks/useConfirmation";
 import {
   CheckIcon,
   ClipboardIcon,
@@ -48,12 +50,11 @@ export function IdentityField({
   id,
   className,
 }: IdentityFieldProps) {
-  const [copied, setCopied] = useState(false);
+  const { shown: copied, confirm } = useConfirmation();
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      confirm();
     } catch {
       // Clipboard API unavailable (e.g. http context) — silent.
     }

@@ -3,12 +3,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { ROLES } from "@/constants/roles";
 
-const h = vi.hoisted(() => ({ updateUser: vi.fn(), onChanged: vi.fn() }));
+const h = vi.hoisted(() => ({
+  updateUser: vi.fn(),
+  onChanged: vi.fn(),
+  showNotification: vi.fn(),
+}));
 vi.mock("@/hooks/useUserAdmin", () => ({
   useUserAdmin: () => ({ busy: false, updateUser: h.updateUser }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
-  useNotification: () => ({ showNotification: vi.fn() }),
+  useNotification: () => ({ showNotification: h.showNotification }),
 }));
 
 import { UserRolesCard } from "./UserRolesCard";
@@ -24,6 +28,7 @@ const save = () => screen.getByRole("button", { name: "Save roles" });
 beforeEach(() => {
   h.updateUser.mockReset().mockResolvedValue({ ok: true });
   h.onChanged.mockReset();
+  h.showNotification.mockReset();
 });
 
 describe("UserRolesCard", () => {
@@ -57,5 +62,30 @@ describe("UserRolesCard", () => {
         expect.objectContaining({ roles: [ROLES.platformAdmin] }),
       ),
     );
+  });
+
+  // Confirmed beside the button that saved, not by a toast.
+  it("says Saved beside the button once the roles are saved", async () => {
+    render(<UserRolesCard user={USER} onChanged={h.onChanged} />);
+    expect(screen.getByRole("status")).toHaveTextContent("");
+    fireEvent.click(screen.getByLabelText(new RegExp(ROLES.bucketAdmin)));
+    fireEvent.click(save());
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("Saved"),
+    );
+    expect(h.showNotification).not.toHaveBeenCalled();
+  });
+
+  it("says nothing saved when the save is refused", async () => {
+    h.updateUser.mockResolvedValue({ ok: false, error: "stale" });
+    render(<UserRolesCard user={USER} onChanged={h.onChanged} />);
+    fireEvent.click(screen.getByLabelText(new RegExp(ROLES.bucketAdmin)));
+    fireEvent.click(save());
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "error" }),
+      ),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 });
