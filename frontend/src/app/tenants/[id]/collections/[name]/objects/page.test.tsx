@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the Collection objects page. The page is
@@ -22,6 +29,9 @@ const h = vi.hoisted(() => ({
   replace: vi.fn(),
   showNotification: vi.fn(),
   registerAction: vi.fn(),
+  uploadFile: vi.fn(() => Promise.resolve()),
+  // The reason the tenant takes no changes, or null.
+  blocked: null as string | null,
   // The collection's access: 2 is COLLECTION_ACCESS_PUBLIC_READ.
   access: 0,
   objects: [] as Array<Record<string, unknown>>,
@@ -70,6 +80,16 @@ vi.mock("@/context/ActionsContext", () => ({
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
+}));
+vi.mock("@/hooks/useUpload", () => ({
+  useUpload: () => ({
+    queue: [],
+    uploadFile: h.uploadFile,
+    clearQueue: vi.fn(),
+  }),
+}));
+vi.mock("../../../tenant-context", () => ({
+  useTenantChangesBlocked: () => h.blocked,
 }));
 vi.mock("../collection-context", () => ({
   useCollection: () => ({
@@ -421,5 +441,35 @@ describe("CollectionObjectsPage in a public collection", () => {
     await waitFor(() =>
       expect(h.bulkDelete).toHaveBeenCalledWith([], { permanent: true }),
     );
+  });
+});
+
+// Files dropped on the list land in the collection the page shows.
+describe("CollectionObjectsPage upload", () => {
+  beforeEach(() => {
+    h.access = 0;
+    h.blocked = null;
+    h.uploadFile.mockClear();
+  });
+
+  const file = new File(["x"], "a.txt", { type: "text/plain" });
+  const drag = { dataTransfer: { types: ["Files"], files: [file] } };
+
+  it("uploads dropped files to this collection", () => {
+    render(<CollectionObjectsPage />);
+    const zone = document.querySelector("[data-drop-zone]") as HTMLElement;
+    fireEvent.dragEnter(zone, drag);
+    expect(screen.getByText(/Drop to upload to ok-1/)).toBeInTheDocument();
+    fireEvent.drop(zone, drag);
+    expect(h.uploadFile).toHaveBeenCalledWith(file, "ok-1");
+  });
+
+  it("takes no files while the tenant takes no changes", () => {
+    h.blocked = "The tenant is in the trash.";
+    render(<CollectionObjectsPage />);
+    expect(screen.getByRole("button", { name: /^Upload$/ })).toBeDisabled();
+    const zone = document.querySelector("[data-drop-zone]") as HTMLElement;
+    fireEvent.drop(zone, drag);
+    expect(h.uploadFile).not.toHaveBeenCalled();
   });
 });
