@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — BatchCopyObjects takes a key prefix, as it always ran
+## sdk/go/v0.92.0 — BatchCopyObjects takes a key prefix, as it always ran
 
 `BatchCopyObjectsRequest.destination_key_template` is now
 `destination_key_prefix` (field 4). The field was documented as a CEL
