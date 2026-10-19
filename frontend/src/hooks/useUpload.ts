@@ -61,6 +61,7 @@ export function useUpload() {
       file: File,
       parentCollection: string,
       tags: Record<string, string> = {},
+      keyPrefix = "",
     ): Promise<void> => {
       const id = `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const initial: UploadQueueItem = {
@@ -91,6 +92,7 @@ export function useUpload() {
             parent,
             file,
             tags,
+            keyPrefix,
             onProgress: (pct) => update(id, { progress: pct }),
           });
           update(id, { status: "completed", progress: 100, objectName });
@@ -107,6 +109,7 @@ export function useUpload() {
           parent,
           file,
           tags,
+          keyPrefix,
           idempotencyKey: id,
           onProgress: (pct) => update(id, { progress: pct }),
         });

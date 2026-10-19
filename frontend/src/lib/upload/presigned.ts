@@ -122,12 +122,14 @@ export async function uploadSingle(args: {
   tags: Record<string, string>;
   idempotencyKey: string;
   onProgress: Progress;
+  /** The folder the object lands in, ending in its delimiter; none is the root. */
+  keyPrefix?: string;
 }): Promise<string> {
   const { parent, file } = args;
   const checksum = await sha256Base64(file);
   const allocated = await objectClient.uploadObject({
     parent,
-    key: file.name,
+    key: `${args.keyPrefix ?? ""}${file.name}`,
     contentType: file.type || DEFAULT_CONTENT_TYPE,
     sizeHintBytes: BigInt(file.size),
     checksumAlgorithm: ChecksumAlgorithm.SHA256,
@@ -224,11 +226,13 @@ export async function uploadMultipart(args: {
   file: File;
   tags: Record<string, string>;
   onProgress: Progress;
+  /** The folder the object lands in, ending in its delimiter; none is the root. */
+  keyPrefix?: string;
 }): Promise<string> {
   const { parent, file } = args;
   const init = await multipartClient.initiateMultipartUpload({
     parent,
-    key: file.name,
+    key: `${args.keyPrefix ?? ""}${file.name}`,
     contentType: file.type || DEFAULT_CONTENT_TYPE,
     sizeBytes: BigInt(file.size),
     tags: args.tags,

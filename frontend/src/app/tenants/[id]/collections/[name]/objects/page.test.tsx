@@ -37,10 +37,18 @@ const h = vi.hoisted(() => ({
   // The collection's access: 2 is COLLECTION_ACCESS_PUBLIC_READ.
   access: 0,
   objects: [] as Array<Record<string, unknown>>,
+  folders: [] as string[],
   // Last options useObjects was called with — lets the filter-wiring tests
   // assert the CEL filter + sort the page derives and feeds the data hook.
   lastOpts: undefined as
-    { filter: string; orderBy?: string; sortDirection: unknown } | undefined,
+    | {
+        filter: string;
+        orderBy?: string;
+        sortDirection: unknown;
+        prefix?: string;
+        delimiter?: string;
+      }
+    | undefined,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -57,6 +65,8 @@ vi.mock("@/hooks/useObjects", () => ({
     h.lastOpts = opts;
     return {
       objects: h.objects,
+      folders: h.folders,
+      foldersTruncated: false,
       loading: false,
       error: null,
       refresh: h.refresh,
@@ -278,7 +288,7 @@ beforeEach(() => {
 describe("CollectionObjectsPage", () => {
   it("renders the Collection scope and the object count", () => {
     render(<CollectionObjectsPage />);
-    expect(screen.getByText("ok-1")).toBeInTheDocument();
+    expect(screen.getAllByText("ok-1").length).toBeGreaterThan(0);
     expect(screen.getByText("1 objects")).toBeInTheDocument();
   });
 
@@ -339,15 +349,15 @@ describe("CollectionObjectsPage", () => {
   it("syncs the URL and feeds the sort column to the data hook", async () => {
     render(<CollectionObjectsPage />);
     await userEvent.click(screen.getByRole("button", { name: /Name \/ ID/i }));
-    await waitFor(() => expect(h.replace).toHaveBeenCalled());
     await waitFor(() => expect(h.lastOpts?.orderBy).toBe("key"));
+    expect(window.location.search).toContain("sort=key&dir=asc");
   });
 
   it("applies a status filter to the CEL filter", async () => {
     render(<CollectionObjectsPage />);
     await userEvent.click(screen.getByText("set status"));
     await waitFor(() => expect(h.lastOpts?.filter).toBe('state == "active"'));
-    expect(h.replace).toHaveBeenCalled();
+    expect(window.location.search).toContain("status=active");
   });
 
   it("applies a tag facet to the CEL filter", async () => {
@@ -367,7 +377,7 @@ describe("CollectionObjectsPage", () => {
         'content_type == "application/pdf" && metadata["owner"] == "ops"',
       ),
     );
-    expect(h.replace).toHaveBeenCalled();
+    expect(window.location.search).toContain("meta=owner%3Dops");
   });
 
   it("debounces search into the CEL filter", async () => {
@@ -479,7 +489,7 @@ describe("CollectionObjectsPage upload", () => {
     fireEvent.dragEnter(zone, drag);
     expect(screen.getByText(/Drop to upload to ok-1/)).toBeInTheDocument();
     fireEvent.drop(zone, drag);
-    expect(h.uploadFile).toHaveBeenCalledWith(file, "ok-1");
+    expect(h.uploadFile).toHaveBeenCalledWith(file, "ok-1", {}, "");
   });
 
   it("takes no files while the tenant takes no changes", () => {
@@ -542,5 +552,55 @@ describe("CollectionObjectsPage bulk restore and copy", () => {
         "v2/",
       ),
     );
+  });
+});
+
+// One folder level at a time: the folders show above the objects, open on a
+// click, and the trail leads back; Recursive lists everything under it.
+describe("CollectionObjectsPage folders", () => {
+  beforeEach(() => {
+    h.access = 0;
+    h.blocked = null;
+    h.folders = [];
+    h.uploadFile.mockClear();
+  });
+
+  it("lists one level, opens a folder, and goes back by the trail", async () => {
+    h.folders = ["reports/"];
+    render(<CollectionObjectsPage />);
+    expect(h.lastOpts).toMatchObject({ prefix: "", delimiter: "/" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open folder reports" }),
+    );
+    await waitFor(() => expect(h.lastOpts?.prefix).toBe("reports/"));
+    expect(window.location.search).toContain("prefix=reports%2F");
+
+    // A file dropped here lands in the folder on screen.
+    const file = new File(["x"], "q3.pdf");
+    fireEvent.drop(document.querySelector("[data-drop-zone]") as HTMLElement, {
+      dataTransfer: { types: ["Files"], files: [file] },
+    });
+    expect(h.uploadFile).toHaveBeenCalledWith(file, "ok-1", {}, "reports/");
+
+    await userEvent.click(
+      within(screen.getByRole("navigation", { name: "Folder" })).getByRole(
+        "button",
+        {
+          name: "ok-1",
+        },
+      ),
+    );
+    await waitFor(() => expect(h.lastOpts?.prefix).toBe(""));
+  });
+
+  it("lists every level under the folder when Recursive is on", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/x?prefix=reports%2F&recursive=true",
+    );
+    render(<CollectionObjectsPage />);
+    expect(h.lastOpts).toMatchObject({ prefix: "reports/", delimiter: "" });
+    expect(screen.queryByRole("button", { name: /Open folder/ })).toBeNull();
   });
 });

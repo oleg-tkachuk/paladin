@@ -10,6 +10,7 @@ import {
   DocumentIcon,
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
+  FolderIcon,
 } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,21 @@ import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { OBJECT_ORDER } from "@/lib/objectOrder";
 import type { SortState } from "./_view";
+import { folderName } from "@/lib/objectFolders";
+
+/** The folders a level of the list shows above its objects. */
+export interface FolderRows {
+  /** The level listed; folder names are read relative to it. */
+  prefix: string;
+  /** Each folder's full prefix, as the server answers it. */
+  list: readonly string[];
+  /** More folders exist than the server returned. */
+  truncated: boolean;
+  onOpen: (prefix: string) => void;
+}
+
+/** Spans the columns after the checkbox, whichever are shown. */
+const FOLDER_ROW_SPAN = 8;
 
 // Per-row callbacks forwarded verbatim to ObjectTableRow. Derived from its own
 // prop type so the contract can't drift — the page supplies the closures (they
@@ -74,6 +90,7 @@ export function ObjectsTable({
   search,
   status,
   rowProps,
+  folders,
 }: {
   objects: Object$[];
   loading: boolean;
@@ -96,7 +113,9 @@ export function ObjectsTable({
   search: string;
   status: string | undefined;
   rowProps: ObjectRowCallbacks;
+  folders?: FolderRows;
 }) {
+  const folderList = folders?.list ?? [];
   return (
     <Card className="p-0">
       <Table>
@@ -177,6 +196,37 @@ export function ObjectsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
+          {folders &&
+            folderList.map((f) => {
+              const name = folderName(f, folders.prefix);
+              return (
+                <TableRow key={f}>
+                  <TableCell />
+                  <TableCell colSpan={FOLDER_ROW_SPAN}>
+                    <button
+                      type="button"
+                      onClick={() => folders.onOpen(f)}
+                      aria-label={`Open folder ${name}`}
+                      className="flex items-center gap-2 font-medium hover:text-primary"
+                    >
+                      <FolderIcon className="size-5 text-muted-foreground" />
+                      {name}/
+                    </button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          {folders?.truncated ? (
+            <TableRow>
+              <TableCell />
+              <TableCell
+                colSpan={FOLDER_ROW_SPAN}
+                className="text-xs text-muted-foreground"
+              >
+                More folders exist than are shown; search to narrow them.
+              </TableCell>
+            </TableRow>
+          ) : null}
           {objects.map((obj) => (
             <ObjectTableRow
               key={obj.objectId}
@@ -191,7 +241,7 @@ export function ObjectsTable({
             />
           ))}
 
-          {objects.length === 0 && !loading && (
+          {objects.length === 0 && folderList.length === 0 && !loading && (
             <TableRow>
               <TableCell colSpan={9} className="h-56 text-center">
                 {error ? (

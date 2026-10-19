@@ -41,6 +41,8 @@ import { SavedViewSchema, type SavedView } from "./_view";
 import { useObjectListState } from "./useObjectListState";
 import { CopyMoveDialog } from "./CopyMoveDialog";
 import { BulkCopyDialog } from "./BulkCopyDialog";
+import { FolderTrail } from "./FolderTrail";
+import { FOLDER_DELIMITER } from "@/lib/objectFolders";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
 import { Button } from "@/components/ui/button";
@@ -86,7 +88,12 @@ function CollectionObjectsContent() {
     handleMetaChange,
     handleSearchChange,
     handleRecursiveChange,
+    prefix,
+    handlePrefixChange,
   } = useObjectListState();
+  // One folder level unless Recursive is on, or a search looks for a key
+  // anywhere under the folder.
+  const delimiter = recursive || search ? "" : FOLDER_DELIMITER;
 
   // Files dropped on the list, or chosen with Upload, land in this
   // collection; a trashed tenant takes no new objects.
@@ -94,9 +101,10 @@ function CollectionObjectsContent() {
   const { queue, uploadFile, clearQueue } = useUpload();
   const uploadFiles = useCallback(
     (files: File[]) => {
-      for (const file of files) void uploadFile(file, collection);
+      // Into the folder on screen, as a file manager would.
+      for (const file of files) void uploadFile(file, collection, {}, prefix);
     },
-    [uploadFile, collection],
+    [uploadFile, collection, prefix],
   );
   const { dragging, dropProps } = useFileDrop({
     disabled: !!changesBlocked,
@@ -111,6 +119,8 @@ function CollectionObjectsContent() {
 
   const {
     objects,
+    folders,
+    foldersTruncated,
     loading,
     error,
     refresh,
@@ -129,6 +139,8 @@ function CollectionObjectsContent() {
     filter,
     orderBy: sort.column || undefined,
     sortDirection: sort.direction,
+    prefix,
+    delimiter,
   });
 
   // Authoritative tag-facet options from the server (whole-Collection scope via
@@ -738,7 +750,22 @@ function CollectionObjectsContent() {
           onRefresh={refresh}
         />
 
+        <FolderTrail
+          collection={collection}
+          prefix={prefix}
+          onOpen={handlePrefixChange}
+        />
         <ObjectsTable
+          folders={
+            delimiter
+              ? {
+                  prefix,
+                  list: folders,
+                  truncated: foldersTruncated,
+                  onOpen: handlePrefixChange,
+                }
+              : undefined
+          }
           objects={objects}
           loading={loading}
           error={error}
