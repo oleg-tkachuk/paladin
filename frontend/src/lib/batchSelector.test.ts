@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   SELECTOR_MAX_NAMES,
-  copyKeyTemplate,
   copyTargetProblem,
   selectorBatches,
 } from "./batchSelector";
@@ -47,16 +46,6 @@ describe("selectorBatches", () => {
 
   it("makes no batch of nothing", () => {
     expect(selectorBatches([])).toEqual([]);
-  });
-});
-
-describe("copyKeyTemplate", () => {
-  it.each([
-    ["no prefix", "", "key"],
-    ["a prefix", "backup/", '"backup/" + key'],
-    ["a prefix that tries to escape", 'x" + "y', '"x\\" + \\"y" + key'],
-  ])("%s", (_, prefix, want) => {
-    expect(copyKeyTemplate(prefix)).toBe(want);
   });
 });
 

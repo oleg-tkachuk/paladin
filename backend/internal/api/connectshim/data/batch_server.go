@@ -63,7 +63,7 @@ func (s *BatchServer) BatchCopyObjects(ctx context.Context, req *pb.BatchCopyObj
 		SrcCollection: srcOK,
 		DstCollection: dstOK,
 		ObjectIDs:     ids,
-		KeyPrefix:     m.GetDestinationKeyTemplate(),
+		KeyPrefix:     m.GetDestinationKeyPrefix(),
 	})
 	if err != nil {
 		return nil, err

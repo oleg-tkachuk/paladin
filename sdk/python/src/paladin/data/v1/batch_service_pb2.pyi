@@ -65,16 +65,16 @@ class BatchDeleteObjectsRequest(_message.Message):
     def __init__(self, parent: _Optional[str] = ..., selector: _Optional[_Union[ObjectSelector, _Mapping]] = ..., permanent: _Optional[bool] = ...) -> None: ...
 
 class BatchCopyObjectsRequest(_message.Message):
-    __slots__ = ("source_parent", "selector", "destination_collection", "destination_key_template")
+    __slots__ = ("source_parent", "selector", "destination_collection", "destination_key_prefix")
     SOURCE_PARENT_FIELD_NUMBER: _ClassVar[int]
     SELECTOR_FIELD_NUMBER: _ClassVar[int]
     DESTINATION_COLLECTION_FIELD_NUMBER: _ClassVar[int]
-    DESTINATION_KEY_TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    DESTINATION_KEY_PREFIX_FIELD_NUMBER: _ClassVar[int]
     source_parent: str
     selector: ObjectSelector
     destination_collection: str
-    destination_key_template: str
-    def __init__(self, source_parent: _Optional[str] = ..., selector: _Optional[_Union[ObjectSelector, _Mapping]] = ..., destination_collection: _Optional[str] = ..., destination_key_template: _Optional[str] = ...) -> None: ...
+    destination_key_prefix: str
+    def __init__(self, source_parent: _Optional[str] = ..., selector: _Optional[_Union[ObjectSelector, _Mapping]] = ..., destination_collection: _Optional[str] = ..., destination_key_prefix: _Optional[str] = ...) -> None: ...
 
 class BatchRestoreObjectsRequest(_message.Message):
     __slots__ = ("parent", "selector")
