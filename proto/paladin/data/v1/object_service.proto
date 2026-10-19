@@ -391,11 +391,26 @@ message ListObjectsRequest {
   string order_by = 4;
   // sort_order is the direction; unspecified is ascending.
   paladin.common.v1.SortOrder sort_order = 5;
+  // prefix keeps the keys that start with it, as a conjunct of filter. No
+  // longer than S3 allows a key to be.
+  string prefix = 6 [(buf.validate.field).string.max_bytes = 1024];
+  // delimiter lists one level under prefix, as S3 does: the objects whose key
+  // holds no delimiter past the prefix, and in common_prefixes the rest
+  // folded into prefix + segment + delimiter. Empty lists every key under the
+  // prefix. One character, usually "/".
+  string delimiter = 7 [(buf.validate.field).string.max_len = 1];
 }
 
 message ListObjectsResponse {
   repeated Object objects = 1;
   paladin.common.v1.PageResponse page = 2;
+  // The folders one level under the request's prefix, when it named a
+  // delimiter: on the first page only, sorted bytewise, at most 1000. They
+  // hold the objects in the state the filter names, or the live ones when it
+  // names none; the filter's other terms do not narrow them, as in S3.
+  repeated string common_prefixes = 3;
+  // More folders exist than common_prefixes holds.
+  bool common_prefixes_truncated = 4;
 }
 
 message CountObjectsRequest {

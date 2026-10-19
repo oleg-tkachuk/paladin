@@ -377,6 +377,23 @@ open deliberately — each notes why._
 
 ## Performance / Scale
 
+### Folder listings read every key under the prefix
+
+- **Status:** Deferred (correct at current scale; measure before changing).
+- **Reason:** `list_object_prefixes` (migration 089) folds every key under the
+  requested prefix to its first segment with a DISTINCT, so the folders at a
+  collection's root cost a read of the whole collection. A skip-scan — jump
+  from one folder to the next — needs an index that orders keys bytewise,
+  and the only B-tree on `objects.path` is `UNIQUE (collection_id, path)` in
+  the database's collation, while keys sort under `COLLATE "C"` everywhere
+  else (085), so it cannot serve that walk.
+- **Definition of Done:** measured at 1M and 10M objects in one collection
+  (root folders, a deep prefix); if the root listing is too slow, an index on
+  `(collection_id, path COLLATE "C")` and a recursive skip-scan in
+  `list_object_prefixes`, with the same tenant gate and results, and the
+  index's cost to writes measured too.
+- **Blockers:** none — gated on a collection large enough to feel it.
+
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked

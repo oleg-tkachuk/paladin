@@ -266,18 +266,28 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *pb.ListObjectsReque
 	if err != nil {
 		return nil, badName(err)
 	}
-	objs, next, err := s.H.ListObjects(ctx, objecth.ListObjectsInput{
+	in := objecth.ListObjectsInput{
 		Collection: collection,
 		PageSize:   m.GetPage().GetPageSize(),
 		PageToken:  m.GetPage().GetPageToken(),
 		Filter:     m.GetFilter(),
 		OrderBy:    m.GetOrderBy(),
 		SortDesc:   m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC,
-	})
+		Prefix:     m.GetPrefix(),
+		Delimiter:  m.GetDelimiter(),
+	}
+	objs, next, err := s.H.ListObjects(ctx, in)
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.ListObjectsResponse{Page: convx.PageResponseProto(next)}
+	// The folders come with the first page only; a later one carries objects.
+	if in.PageToken == "" {
+		out.CommonPrefixes, out.CommonPrefixesTruncated, err = s.H.ListCommonPrefixes(ctx, in)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for i := range objs {
 		out.Objects = append(out.Objects, objectToProto(&objs[i]))
 	}

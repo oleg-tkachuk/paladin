@@ -245,14 +245,19 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 		after = &c
 	}
 
+	branches := withLevel(narrowToPrefix(objectBranchHints(args.Filter), args.Prefix), args.Prefix, args.Delimiter)
 	rows, nextCursor, more, err := r.candidates(ctx, args.TenantID, args.Collection,
-		objectBranchHints(args.Filter), liveObjectsOnly(args.Filter), args.Order, after, pageSize)
+		branches, liveObjectsOnly(args.Filter), args.Order, after, pageSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("list objects: %w", err)
 	}
 	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
 		o := objectFromSQLC(row.Object, row.CollectionName)
+		// The SQL hints narrow; this decides, as the CEL pass does.
+		if !atLevel(o.Key, args.Prefix, args.Delimiter) {
+			continue
+		}
 		if args.CompiledCEL != nil && !rowMatches(args.CompiledCEL, o) {
 			continue
 		}
@@ -268,6 +273,45 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 		next = keyset.Encode(nextCursor)
 	}
 	return out, next, nil
+}
+
+// ListCommonPrefixes returns the folders one level under args.Prefix. They
+// hold objects in the state the filter names, or live ones when it names
+// none; one more than MaxCommonPrefixes is asked for, to learn that the list
+// was cut.
+func (r *ObjectRepo) ListCommonPrefixes(ctx context.Context, args objecth.ListPrefixesArgs) ([]string, bool, error) {
+	var folders []string
+	err := r.read(ctx, func(q sqlc.Querier, _ sqlc.DBTX) error {
+		var err error
+		folders, err = q.ListObjectPrefixes(ctx, pgUUID(args.TenantID), args.Collection,
+			args.Prefix, args.Delimiter, filterState(args.Filter), liveObjectsOnly(args.Filter),
+			objecth.MaxCommonPrefixes+1)
+		return err
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("list common prefixes: %w", err)
+	}
+	if len(folders) > objecth.MaxCommonPrefixes {
+		return folders[:objecth.MaxCommonPrefixes], true, nil
+	}
+	return folders, false, nil
+}
+
+// filterState is the one state every branch of filter names, or nil when
+// the branches name none or differ.
+func filterState(filter string) *string {
+	var state *string
+	for i, h := range objectBranchHints(filter) {
+		switch {
+		case h.state == nil:
+			return nil
+		case i == 0:
+			state = h.state
+		case *h.state != *state:
+			return nil
+		}
+	}
+	return state
 }
 
 // countScanCap bounds how many rows CountObjects will scan when a CEL
@@ -365,7 +409,8 @@ func (r *ObjectRepo) candidates(
 				h.contentType, h.contentTypePrefix,
 				h.tags, h.metadata,
 				afterID, pageSize, liveOnly,
-				order.Field, order.Desc, afterValue)
+				order.Field, order.Desc, afterValue,
+				h.level, h.delimiter)
 			if err != nil {
 				return err
 			}
@@ -852,6 +897,7 @@ func hintsFrom(pd cel.ObjectPushdown) objectHints {
 	}
 	if p, ok := likeEscape(pd.KeyPrefix); ok {
 		h.prefix = &p
+		h.rawPrefix = pd.KeyPrefix
 	}
 	if p, ok := likeEscape(pd.KeyContains); ok {
 		h.substr = &p
@@ -882,6 +928,70 @@ type objectHints struct {
 	contentTypePrefix *string
 	tags              []byte // jsonb object for `tags @>`; nil = no predicate
 	metadata          []byte // jsonb object for `metadata @>`
+	// rawPrefix is prefix before escaping, kept to narrow it further.
+	rawPrefix string
+	// level and delimiter cut a folder listing to one level (089); raw, not
+	// escaped, since the level is measured.
+	level     *string
+	delimiter *string
+}
+
+// narrowToPrefix adds the request's prefix to every branch. A branch whose
+// own key prefix extends it keeps its own; one that contradicts it — neither
+// extends the other — can match nothing and is dropped, which leaves no
+// branch, and so no rows, when every one contradicts it.
+func narrowToPrefix(branches []objectHints, prefix string) []objectHints {
+	if prefix == "" {
+		return branches
+	}
+	out := branches[:0:0]
+	for _, h := range branches {
+		narrowed, ok := longerPrefix(h.rawPrefix, prefix)
+		if !ok {
+			continue
+		}
+		h.rawPrefix = narrowed
+		escaped, _ := likeEscape(narrowed)
+		h.prefix = &escaped
+		out = append(out, h)
+	}
+	return out
+}
+
+// longerPrefix is the prefix both a and b demand: the longer, when it starts
+// with the shorter. ok is false when they contradict.
+func longerPrefix(a, b string) (string, bool) {
+	switch {
+	case strings.HasPrefix(a, b):
+		return a, true
+	case strings.HasPrefix(b, a):
+		return b, true
+	default:
+		return "", false
+	}
+}
+
+// withLevel sets a folder listing's level on every branch; no delimiter
+// leaves them listing every level.
+func withLevel(branches []objectHints, prefix, delimiter string) []objectHints {
+	if delimiter == "" {
+		return branches
+	}
+	for i := range branches {
+		branches[i].level = &prefix
+		branches[i].delimiter = &delimiter
+	}
+	return branches
+}
+
+// atLevel reports whether key is listed at the level prefix and delimiter
+// name: under the prefix and, with a delimiter, holding none past it.
+func atLevel(key, prefix, delimiter string) bool {
+	rest, ok := strings.CutPrefix(key, prefix)
+	if !ok {
+		return false
+	}
+	return delimiter == "" || !strings.Contains(rest, delimiter)
 }
 
 // celVars is the object as a filter sees it — cel.ObjectVars, shared with the

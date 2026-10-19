@@ -31,8 +31,8 @@ import (
 func searchIDs(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant uuid.UUID, collection, tags string) ([]uuid.UUID, error) {
 	t.Helper()
 	rows, err := pool.Query(ctx,
-		`SELECT search_object_ids($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, 1000, false, 'id', false, NULL)`,
-		tenant, collection, nil, nil, nil, nil, nil, tags, nil, nil)
+		`SELECT search_object_ids($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, 1000, false, 'id', false, $11, $12, $13)`,
+		tenant, collection, nil, nil, nil, nil, nil, tags, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

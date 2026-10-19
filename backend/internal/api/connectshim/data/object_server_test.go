@@ -27,6 +27,10 @@ func (f failingHandler) CompleteObject(context.Context, objecth.CompleteObjectIn
 func (f failingHandler) ListObjects(context.Context, objecth.ListObjectsInput) ([]objecth.Object, string, error) {
 	return nil, "", f.err
 }
+
+func (f failingHandler) ListCommonPrefixes(context.Context, objecth.ListObjectsInput) ([]string, bool, error) {
+	return nil, false, nil
+}
 func (f failingHandler) CountObjects(context.Context, objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error) {
 	return nil, f.err
 }
@@ -350,6 +354,10 @@ func (c *countingHandler) CompleteObject(context.Context, objecth.CompleteObject
 func (c *countingHandler) ListObjects(context.Context, objecth.ListObjectsInput) ([]objecth.Object, string, error) {
 	c.n++
 	return nil, "", nil
+}
+
+func (c *countingHandler) ListCommonPrefixes(context.Context, objecth.ListObjectsInput) ([]string, bool, error) {
+	return nil, false, nil
 }
 func (c *countingHandler) CountObjects(context.Context, objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error) {
 	c.n++

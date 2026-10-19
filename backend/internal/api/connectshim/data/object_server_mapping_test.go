@@ -37,6 +37,10 @@ func (r *recordingHandler) ListObjects(ctx context.Context, in objecth.ListObjec
 	return r.failingHandler.ListObjects(ctx, in)
 }
 
+func (r *recordingHandler) ListCommonPrefixes(context.Context, objecth.ListObjectsInput) ([]string, bool, error) {
+	return nil, false, nil
+}
+
 // The request fields that change what the handler does reach it as the
 // client set them, and stay off when the client did not set them.
 func TestObjectRequestsMapOntoTheHandler(t *testing.T) {

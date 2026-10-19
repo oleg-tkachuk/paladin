@@ -437,6 +437,49 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 	return items, nil
 }
 
+const listObjectPrefixes = `-- name: ListObjectPrefixes :many
+SELECT folder::text
+FROM list_object_prefixes(
+        $1::uuid,
+        $2::text,
+        $3::text,
+        $4::text,
+        $5::text,
+        $6::boolean,
+        $7::integer) AS folder
+`
+
+// The folders one level under a prefix (089): prefix + segment + delimiter,
+// bytewise, at most the limit. The caller asks for one more than it shows to
+// learn that the list was cut.
+func (q *Queries) ListObjectPrefixes(ctx context.Context, tenantID pgtype.UUID, collection string, prefix string, delimiter string, state *string, liveOnly bool, maxFolders int32) ([]string, error) {
+	rows, err := q.db.Query(ctx, listObjectPrefixes,
+		tenantID,
+		collection,
+		prefix,
+		delimiter,
+		state,
+		liveOnly,
+		maxFolders,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var folder string
+		if err := rows.Scan(&folder); err != nil {
+			return nil, err
+		}
+		items = append(items, folder)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listObjectVersionLocks = `-- name: ListObjectVersionLocks :many
 SELECT l.mode AS lock_mode, l.retain_until AS lock_retain_until, l.legal_hold
 FROM object_locks l
@@ -495,7 +538,9 @@ WHERE o.id = ANY (ARRAY(
             $12::boolean,
             $13::text,
             $14::boolean,
-            $15::text)))
+            $15::text,
+            $16::text,
+            $17::text)))
   AND o.tenant_id = $2::uuid
   AND o.collection_id = (
         SELECT c.id FROM collections c
@@ -529,7 +574,7 @@ type ListObjectsRow struct {
 // collections scan per returned row (the planner cannot size the id array).
 // The collection is resolved once, by its unique (tenant_id, name), and
 // still checked against every row.
-func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string) ([]ListObjectsRow, error) {
+func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		collection,
 		tenantID,
@@ -546,6 +591,8 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 		orderBy,
 		sortDesc,
 		afterValue,
+		level,
+		delimiter,
 	)
 	if err != nil {
 		return nil, err

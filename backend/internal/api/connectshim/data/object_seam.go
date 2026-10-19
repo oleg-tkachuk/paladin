@@ -25,6 +25,7 @@ type objectHandler interface {
 	UploadObject(ctx context.Context, in objecth.UploadObjectInput) (*objecth.UploadObjectOutput, error)
 	CompleteObject(ctx context.Context, in objecth.CompleteObjectInput) (*objecth.Object, error)
 	ListObjects(ctx context.Context, in objecth.ListObjectsInput) ([]objecth.Object, string, error)
+	ListCommonPrefixes(ctx context.Context, in objecth.ListObjectsInput) ([]string, bool, error)
 	CountObjects(ctx context.Context, in objecth.CountObjectsInput) (*objecth.CountObjectsOutput, error)
 	GetObject(ctx context.Context, collection, objectID string) (*objecth.Object, error)
 	LookupObject(ctx context.Context, collection, key string) (*objecth.Object, error)
