@@ -62,6 +62,7 @@ import { errorMessage } from "@/hooks/errorContract";
 import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
 import { SignalTenantsSheet } from "./SignalTenantsSheet";
 import { OWNER_ONLY_BUCKETS_LABEL, SHARED_BUCKETS_LABEL } from "./bucketLabels";
+import { Bytes } from "@/components/ui/Bytes";
 
 // Poll cadence. Slower than /health's 15s: this is inventory, which moves
 // on operator actions and bulk uploads rather than second-to-second, and
@@ -348,8 +349,9 @@ function StateCell({ stat }: { stat?: ObjectStateStat }) {
   const count = stat?.count ?? 0n;
   return (
     <TableCell
+      numeric
       className={cn(
-        "text-right font-mono tabular-nums",
+        "font-mono",
         count === 0n
           ? "text-muted-foreground/50"
           : STATE_ACCENT[stat?.state ?? ""],
@@ -383,11 +385,11 @@ function TenantRow({
       {columns.map((s) => (
         <StateCell key={s} stat={states[s]} />
       ))}
-      <TableCell className="text-right font-mono tabular-nums font-medium">
+      <TableCell numeric className="font-mono font-medium">
         {num(tenant.totalCount)}
       </TableCell>
-      <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-        {formatBytes(tenant.totalBytes)}
+      <TableCell numeric className="font-mono">
+        <Bytes value={tenant.totalBytes} />
       </TableCell>
     </TableRow>
   );
@@ -894,12 +896,12 @@ export default function StatsPage() {
                       <TableRow>
                         <TableHead>Tenant</TableHead>
                         {stateColumns.map((s) => (
-                          <TableHead key={s} className="text-right">
+                          <TableHead key={s} numeric>
                             {s.toLowerCase()}
                           </TableHead>
                         ))}
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="text-right">Size</TableHead>
+                        <TableHead numeric>Total</TableHead>
+                        <TableHead numeric>Size</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -918,11 +920,11 @@ export default function StatsPage() {
                         {stateColumns.map((s) => (
                           <StateCell key={s} stat={globalStates[s]} />
                         ))}
-                        <TableCell className="text-right font-mono tabular-nums">
+                        <TableCell numeric className="font-mono">
                           {num(objects.totalCount)}
                         </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
-                          {formatBytes(objects.totalBytes)}
+                        <TableCell numeric className="font-mono">
+                          <Bytes value={objects.totalBytes} />
                         </TableCell>
                       </TableRow>
                     </TableBody>

@@ -774,22 +774,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### Option: Inter and IBM Plex Mono as the console's typefaces
-
-- **Status:** Deferred (an option, decided against for now — Geist stays).
-- **Reason:** the ember palette was designed alongside Inter for text and IBM
-  Plex Mono for identifiers and figures; the console sets both in Geist and
-  Geist Mono. The colours carried over without the type, which is a choice,
-  not an oversight. Recorded so the option is not re-discovered as a gap.
-- **Definition of Done (if taken up):** both faces self-hosted from npm
-  packages (`@fontsource-variable/inter`, `@fontsource/ibm-plex-mono`) rather
-  than `next/font/google`, which fetches at build time and would break the
-  air-gapped build `src/app/layout.tsx` is written to keep; exposed under the
-  existing `--font-sans` / `--font-mono` variables so no component changes;
-  tabular figures checked in the tables that align counts; per theme or for
-  all, decided when it is taken up.
-- **Blockers:** none — a product decision.
-
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console
@@ -855,17 +839,6 @@ order they are being taken up.
   transitions on the state changes that carry meaning, all off under
   `prefers-reduced-motion`.
 - **Blockers:** none — taken up only if asked for.
-
-#### Typography and spacing scale
-
-- **Status:** Aspirational.
-- **Reason:** sizes and spacing are chosen per component; figures align only
-  where a table remembered `tabular-nums`.
-- **Definition of Done:** type and spacing scales as tokens in `globals.css`;
-  tabular figures in every number column; units muted beside their values,
-  with the exact value in a tooltip; the typeface option above decided either
-  way.
-- **Blockers:** none.
 
 #### Hover cards for tenants, buckets, users and capabilities
 

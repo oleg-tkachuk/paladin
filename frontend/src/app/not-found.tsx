@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export default function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in px-6">
-      <div className="text-8xl font-bold text-foreground/5 mb-4 select-none tracking-tighter">
+      <div className="text-display font-bold text-foreground/5 mb-4 select-none tracking-tighter">
         404
       </div>
       <h1 className="text-2xl font-bold text-foreground mb-3 tracking-tight">

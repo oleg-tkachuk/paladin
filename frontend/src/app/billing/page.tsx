@@ -668,13 +668,13 @@ function BreakdownCard({
                 <TableCell className="max-w-48 truncate">
                   {renderLabel(e.label)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell numeric>
                   {formatMoney(e.spent, {
                     fallbackUnit,
                     fractionDigits: SPEND_DIGITS,
                   })}
                 </TableCell>
-                <TableCell className="text-right font-mono text-sm tabular-nums">
+                <TableCell numeric className="font-mono text-sm">
                   {formatCompactCount(e.chargeCount)}
                 </TableCell>
               </TableRow>

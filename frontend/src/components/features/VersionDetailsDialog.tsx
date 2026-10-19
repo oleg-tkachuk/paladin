@@ -2,9 +2,9 @@ import type { ObjectVersion } from "@/gen/paladin/data/v1/object_service_pb";
 import { Badge } from "@/components/ui/badge";
 import { RecordDialog, RecordField } from "@/components/ui/RecordDialog";
 import { T } from "@/lib/ui/typography";
-import { formatBytes } from "@/lib/utils";
 
 import { formatTimestampSeconds, checksumDisplay } from "./_versions";
+import { Bytes } from "@/components/ui/Bytes";
 
 /** A map's entries one per line, or a dash when it has none. */
 function Pairs({ pairs }: { pairs: Record<string, string> | undefined }) {
@@ -61,7 +61,7 @@ export function VersionDetailsDialog({
             {formatTimestampSeconds(version.createdAt?.seconds)}
           </RecordField>
           <RecordField label="Size" mono>
-            {formatBytes(version.sizeBytes)}
+            <Bytes value={version.sizeBytes} />
           </RecordField>
           <RecordField label="Content type" mono>
             {version.contentType || "—"}

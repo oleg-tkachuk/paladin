@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, waitFor } from "@/test/utils";
 import {
   LINKED_ROW_ATTR,
+  NUMERIC_ATTR,
   Table,
   TableBody,
   TableCell,
@@ -65,5 +66,39 @@ describe("TableRow linked", () => {
     const row = screen.getByRole("row");
     expect(row).toHaveAttribute(LINKED_ROW_ATTR);
     expect(row.className).toContain(`${LINKED_ROW_ATTR}:bg-primary`);
+  });
+});
+
+describe("numeric cells", () => {
+  it("aligns a column of figures, head and cells alike", () => {
+    render(
+      <table>
+        <thead>
+          <tr>
+            <TableHead numeric>Size</TableHead>
+            <TableHead>Name</TableHead>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <TableCell numeric>12</TableCell>
+            <TableCell>a</TableCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    for (const el of [
+      screen.getByRole("columnheader", { name: "Size" }),
+      screen.getByRole("cell", { name: "12" }),
+    ]) {
+      expect(el).toHaveClass("text-right", "tabular-nums");
+      expect(el).toHaveAttribute(NUMERIC_ATTR);
+    }
+    expect(screen.getByRole("cell", { name: "a" })).not.toHaveClass(
+      "text-right",
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "Name" }),
+    ).not.toHaveAttribute(NUMERIC_ATTR);
   });
 });

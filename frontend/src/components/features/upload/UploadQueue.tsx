@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Separator } from "@/components/ui/separator";
 import type { UploadTask } from "@/hooks/useUpload";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { Bytes } from "@/components/ui/Bytes";
 
 /** How many uploads in a queue are in each phase. */
 export function queueCounts(queue: readonly UploadTask[]) {
@@ -138,7 +139,7 @@ function QueueRow({ item }: { item: UploadTask }) {
           <div className="truncate text-sm font-medium">{item.file.name}</div>
           <div className="mt-0.5 flex items-center gap-3 text-xs">
             <span className="font-mono text-muted-foreground tabular-nums">
-              {formatBytes(item.file.size)}
+              <Bytes value={item.file.size} />
             </span>
             <span className={cn("font-medium", m.color)}>{m.label}</span>
             {item.error && (

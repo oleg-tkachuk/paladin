@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 import { Badge } from "@/components/ui/badge";
 import { T } from "@/lib/ui/typography";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 import { formatTimestampSeconds, shortId, checksumDisplay } from "./_versions";
+import { Bytes } from "@/components/ui/Bytes";
 
 /**
  * One timeline row in the object version history, extracted from
@@ -50,7 +51,7 @@ export function VersionRow({
               </span>
               <span className={T.codeSmall}>
                 <span className={T.label}>size </span>
-                {formatBytes(version.sizeBytes)}
+                <Bytes value={version.sizeBytes} />
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
