@@ -50,19 +50,41 @@ beforeEach(() => {
   h.notify.mockReset();
 });
 
-const section = (key: string) => screen.getByRole("region", { name: key });
+const section = (key: string) =>
+  screen.getByRole("region", { name: new RegExp(`^${key}`) });
 
 describe("ConfigPage", () => {
-  it("lists each section with its settings, and a way to each", () => {
+  it("lists each section with its settings", () => {
     render(<ConfigPage />);
-    const nav = screen.getByRole("navigation", { name: "Sections" });
     expect(
-      within(nav)
-        .getAllByRole("link")
-        .map((a) => a.getAttribute("href")),
-    ).toEqual(["#config-app", "#config-logger", "#config-datastores"]);
+      screen
+        .getAllByRole("region")
+        .map((r) => r.getAttribute("aria-labelledby")),
+    ).toEqual([
+      "config-app-title",
+      "config-logger-title",
+      "config-datastores-title",
+    ]);
     expect(within(section("logger")).getByText("level")).toBeInTheDocument();
     expect(within(section("logger")).getByText("info")).toBeInTheDocument();
+  });
+
+  it("narrows to one section", async () => {
+    render(<ConfigPage />);
+    await userEvent.click(screen.getByRole("combobox", { name: "Section" }));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "logger (2)" }),
+    );
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+    expect(section("logger")).toBeInTheDocument();
+  });
+
+  it("hides settings left unset, on request", async () => {
+    h.config.config = YAML + "auth:\n  signing_key_secret: null\n";
+    render(<ConfigPage />);
+    expect(screen.getByRole("region", { name: /auth/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("switch", { name: "Hide unset" }));
+    expect(screen.queryByRole("region", { name: /auth/ })).toBeNull();
   });
 
   it("says a secret was redacted, and counts it", () => {
@@ -80,7 +102,7 @@ describe("ConfigPage", () => {
       screen.getByRole("searchbox", { name: "Search the configuration" }),
       "paladin_app",
     );
-    expect(screen.queryByRole("region", { name: "logger" })).toBeNull();
+    expect(screen.queryByRole("region", { name: /^logger/ })).toBeNull();
     expect(
       within(section("datastores")).getByText("postgres.dsn"),
     ).toBeInTheDocument();
@@ -101,7 +123,7 @@ describe("ConfigPage", () => {
     render(<ConfigPage />);
     await userEvent.click(screen.getByRole("button", { name: "YAML" }));
     expect(screen.getByText(/name: paladin-core/)).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Sections" })).toBeNull();
+    expect(screen.queryAllByRole("region")).toHaveLength(0);
   });
 
   it("shows a document that is not YAML as text, and says so", () => {

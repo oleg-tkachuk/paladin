@@ -81,7 +81,7 @@ export function ChangePasswordCard() {
   }
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="px-6">
         <CardTitle className="text-base">Password</CardTitle>
         <CardDescription>
@@ -90,12 +90,9 @@ export function ChangePasswordCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="px-6">
-        <form
-          onSubmit={submit}
-          className="grid gap-x-8 gap-y-4 md:grid-cols-[minmax(0,22rem)_1fr]"
-        >
+        <form onSubmit={submit} className="space-y-4">
           <div className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="current-password">Current password</Label>
               <PasswordInput
                 id="current-password"
@@ -104,7 +101,7 @@ export function ChangePasswordCard() {
                 onChange={(e) => setOldPassword(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="new-password">New password</Label>
               <PasswordInput
                 id="new-password"
@@ -114,7 +111,7 @@ export function ChangePasswordCard() {
                 aria-describedby="new-password-rules"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="confirm-password">Confirm new password</Label>
               <PasswordInput
                 id="confirm-password"
@@ -130,35 +127,39 @@ export function ChangePasswordCard() {
                 </p>
               )}
             </div>
-            <Button type="submit" disabled={!canSubmit}>
+          </div>
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t pt-4">
+            <ul
+              id="new-password-rules"
+              aria-label="Password requirements"
+              className="space-y-1.5 text-sm"
+            >
+              {rules.map((r) => (
+                <li
+                  key={r.label}
+                  className={cn(
+                    "flex items-center gap-1.5",
+                    r.met ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  <CheckCircleIcon
+                    className={cn(
+                      "size-4 shrink-0",
+                      r.met ? "text-success" : "text-muted-foreground/40",
+                    )}
+                    aria-hidden
+                  />
+                  {r.label}
+                  <span className="sr-only">
+                    {r.met ? "(met)" : "(not yet)"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Button type="submit" size="sm" disabled={!canSubmit}>
               {busy ? "Changing…" : "Change password"}
             </Button>
           </div>
-          <ul
-            id="new-password-rules"
-            aria-label="Password requirements"
-            className="space-y-1.5 self-start text-sm md:pt-7"
-          >
-            {rules.map((r) => (
-              <li
-                key={r.label}
-                className={cn(
-                  "flex items-center gap-2",
-                  r.met ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                <CheckCircleIcon
-                  className={cn(
-                    "size-4 shrink-0",
-                    r.met ? "text-success" : "text-muted-foreground/40",
-                  )}
-                  aria-hidden
-                />
-                {r.label}
-                <span className="sr-only">{r.met ? "(met)" : "(not yet)"}</span>
-              </li>
-            ))}
-          </ul>
         </form>
       </CardContent>
     </Card>

@@ -277,7 +277,7 @@ function BillingView() {
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
-          <span className={T.label}>Tenant</span>
+          <span className={cn(T.label, "block")}>Tenant</span>
           <Select
             aria-label="Tenant"
             value={tenantId}
@@ -288,7 +288,7 @@ function BillingView() {
           />
         </div>
         <div className="space-y-1">
-          <span className={T.label}>Period</span>
+          <span className={cn(T.label, "block")}>Period</span>
           <Segmented
             label="Period"
             options={PRESETS.map((p) => ({ value: p.key, label: p.label }))}
@@ -481,13 +481,15 @@ function BillingView() {
                 and the like.
               </p>
               {preset !== "90d" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPreset("90d")}
-                >
-                  Look at the last 90 days
-                </Button>
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPreset("90d")}
+                  >
+                    Look at the last 90 days
+                  </Button>
+                </div>
               ) : null}
             </Card>
           ) : (

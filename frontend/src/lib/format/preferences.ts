@@ -59,3 +59,21 @@ export function localePreview(tag: string, now: Date): string | null {
   }).format(now);
   return `${number} · ${date}`;
 }
+
+/**
+ * Whether two zone names are one zone: an alias and its canonical name
+ * (Europe/Kyiv and Europe/Kiev) are, as the runtime resolves them.
+ */
+export function isSameTimeZone(a: string, b: string): boolean {
+  if (!isValidTimeZone(a) || !isValidTimeZone(b)) return a === b;
+  const canonical = (tz: string) =>
+    new Intl.DateTimeFormat(DISPLAY_LOCALE, { timeZone: tz }).resolvedOptions()
+      .timeZone;
+  return canonical(a) === canonical(b);
+}
+
+/** Whether two locale tags are one locale once canonicalised (en-us, en-US). */
+export function isSameLocale(a: string, b: string): boolean {
+  if (!isValidLocale(a) || !isValidLocale(b)) return a === b;
+  return Intl.getCanonicalLocales(a)[0] === Intl.getCanonicalLocales(b)[0];
+}

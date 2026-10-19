@@ -19,10 +19,16 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import {
+  SelectContent,
+  SelectItem,
+  SelectRoot,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { useNotification } from "@/components/ui/Notification";
 import { ChangePasswordCard } from "@/components/features/ChangePasswordCard";
-import { ThemePicker } from "@/components/features/profile/ThemePicker";
 import { Timestamp } from "@/components/Timestamp";
 import { useAuth } from "@/context/AuthContext";
 import { useScope } from "@/context/ScopeContext";
@@ -36,11 +42,14 @@ import { tenantHref } from "@/lib/navigation/hrefs";
 import { sessionTenantLabel } from "@/lib/tenant/sessionTenantLabel";
 import {
   fetchMySettings,
+  THEME_OPTIONS,
   THEME_SYSTEM,
   USER_SETTINGS_QUERY_KEY,
 } from "@/lib/theme";
 import { COMMON_LOCALES, timeZoneOptions } from "@/lib/userPrefs";
 import {
+  isSameLocale,
+  isSameTimeZone,
   isValidLocale,
   isValidTimeZone,
   localePreview,
@@ -57,8 +66,6 @@ import { LOCALE_NOT_APPLIED_NOTE } from "./_constants";
 
 const TIMEZONE_SUGGESTIONS = "prof-tz-suggestions";
 const LOCALE_SUGGESTIONS = "prof-locale-suggestions";
-const THEME_LABEL = "prof-theme-label";
-const FIELD_WIDTH = "w-full sm:w-72";
 
 function browserZone(): string {
   try {
@@ -84,12 +91,10 @@ export default function ProfilePage() {
         description="Your account, how the console shows things to you, and your password."
         showDefaultActions={false}
       />
-      <div className="grid items-start gap-6 xl:grid-cols-[20rem_1fr]">
-        <AccountCard />
-        <div className="min-w-0 space-y-6">
-          <PreferencesCard />
-          <ChangePasswordCard />
-        </div>
+      <AccountCard />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PreferencesCard />
+        <ChangePasswordCard />
       </div>
     </div>
   );
@@ -112,11 +117,11 @@ function AccountCard() {
 
   return (
     <Card>
-      <CardContent className="space-y-5 px-6 py-5">
-        <div className="flex items-center gap-3">
+      <CardContent className="flex flex-wrap items-start gap-x-10 gap-y-5 px-6 py-5">
+        <div className="flex min-w-56 items-center gap-3">
           <span
             aria-hidden
-            className="flex size-11 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary ring-1 ring-primary/30"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-lg font-semibold text-primary ring-1 ring-primary/30"
           >
             {name.slice(0, 1).toUpperCase()}
           </span>
@@ -128,7 +133,7 @@ function AccountCard() {
           </div>
         </div>
 
-        <dl className="space-y-4 text-sm">
+        <dl className="flex flex-1 flex-wrap gap-x-10 gap-y-4 text-sm">
           <div className="space-y-1">
             <dt className={T.label}>Tenant</dt>
             <dd>
@@ -144,30 +149,28 @@ function AccountCard() {
               )}
             </dd>
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-48 space-y-1">
             <dt className={T.label}>Roles</dt>
-            <dd>
+            <dd className="flex flex-wrap gap-1.5">
               {roles.length === 0 ? (
                 <span className={T.hint}>none</span>
               ) : (
-                <ul className="space-y-2">
-                  {roles.map((r) => (
-                    <li key={r} className="space-y-0.5">
-                      <Badge variant="outline" className="font-mono">
-                        {r}
-                      </Badge>
-                      {ROLE_DESCRIPTIONS[r] ? (
-                        <p className={T.hint}>{ROLE_DESCRIPTIONS[r]}</p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                roles.map((r) => (
+                  <Badge
+                    key={r}
+                    variant="outline"
+                    className="font-mono"
+                    title={ROLE_DESCRIPTIONS[r]}
+                  >
+                    {r}
+                  </Badge>
+                ))
               )}
             </dd>
           </div>
           {user?.userId ? (
-            <div className="space-y-1">
-              <dt className={T.label}>User ID</dt>
+            <div className="min-w-64 flex-1">
+              <dt className="sr-only">User ID</dt>
               <dd>
                 <IdentifierCopy value={user.userId} label="User ID" />
               </dd>
@@ -177,7 +180,7 @@ function AccountCard() {
 
         <Link
           href={SECTION.applications}
-          className="flex items-center gap-2 text-sm text-primary hover:underline"
+          className="flex items-center gap-2 self-center text-sm text-primary hover:underline"
         >
           <KeyIcon className="size-4" />
           Connected applications
@@ -284,7 +287,7 @@ function PreferencesCard() {
   }, [settings]);
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="px-6">
         <CardTitle className="text-base">Preferences</CardTitle>
         <CardDescription>
@@ -309,54 +312,64 @@ function PreferencesCard() {
           </div>
         ) : (
           <>
-            <div className="space-y-2">
-              <p id={THEME_LABEL} className="text-sm font-medium">
-                Theme
-              </p>
-              <ThemePicker
-                value={theme}
-                onChange={setTheme}
-                labelledBy={THEME_LABEL}
+            <div className="space-y-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="prof-theme">Theme</Label>
+                <SelectRoot value={theme} onValueChange={setTheme}>
+                  <SelectTrigger id="prof-theme" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {THEME_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </SelectRoot>
+                <p className={T.hint}>Applies as soon as it is saved.</p>
+              </div>
+
+              <PreferenceField
+                id="prof-tz"
+                label="Timezone"
+                listId={TIMEZONE_SUGGESTIONS}
+                suggestions={zones}
+                value={timezone}
+                onChange={setTimezone}
+                valid={tzValid}
+                invalidText={
+                  timezone ? "Not a time zone this browser knows." : "Required."
+                }
+                preview={
+                  timeZonePreview(timezone, now) &&
+                  `Now there: ${timeZonePreview(timezone, now)}`
+                }
+                detected={detectedTz}
+                sameAsDetected={isSameTimeZone(timezone, detectedTz)}
+                hint="Dates and times in the console are shown in this zone."
+              />
+
+              <PreferenceField
+                id="prof-locale"
+                label="Locale"
+                listId={LOCALE_SUGGESTIONS}
+                suggestions={COMMON_LOCALES}
+                value={locale}
+                onChange={setLocale}
+                valid={localeValid}
+                invalidText={
+                  locale ? "Not a BCP-47 tag, such as en-US." : "Required."
+                }
+                preview={
+                  localePreview(locale, now) &&
+                  `Writes ${localePreview(locale, now)}`
+                }
+                detected={detectedLocale}
+                sameAsDetected={isSameLocale(locale, detectedLocale)}
+                hint={LOCALE_NOT_APPLIED_NOTE}
               />
             </div>
-
-            <PreferenceField
-              id="prof-tz"
-              label="Timezone"
-              listId={TIMEZONE_SUGGESTIONS}
-              suggestions={zones}
-              value={timezone}
-              onChange={setTimezone}
-              valid={tzValid}
-              invalidText={
-                timezone ? "Not a time zone this browser knows." : "Required."
-              }
-              preview={
-                timeZonePreview(timezone, now) &&
-                `Now there: ${timeZonePreview(timezone, now)}`
-              }
-              detected={detectedTz}
-              hint="Dates and times in the console are shown in this zone."
-            />
-
-            <PreferenceField
-              id="prof-locale"
-              label="Locale"
-              listId={LOCALE_SUGGESTIONS}
-              suggestions={COMMON_LOCALES}
-              value={locale}
-              onChange={setLocale}
-              valid={localeValid}
-              invalidText={
-                locale ? "Not a BCP-47 tag, such as en-US." : "Required."
-              }
-              preview={
-                localePreview(locale, now) &&
-                `Writes ${localePreview(locale, now)}`
-              }
-              detected={detectedLocale}
-              hint={LOCALE_NOT_APPLIED_NOTE}
-            />
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
               <p className={T.hint}>
@@ -403,6 +416,7 @@ function PreferenceField({
   invalidText,
   preview,
   detected,
+  sameAsDetected,
   hint,
 }: {
   id: string;
@@ -415,54 +429,51 @@ function PreferenceField({
   invalidText: string;
   preview: string | null;
   detected: string;
+  /** Whether the value is already this browser's, if under another name. */
+  sameAsDetected: boolean;
   hint: string;
 }) {
   const statusId = `${id}-status`;
   return (
-    <div className="grid gap-2 sm:grid-cols-[8rem_1fr] sm:items-start">
-      <Label htmlFor={id} className="pt-2 text-sm">
-        {label}
-      </Label>
-      <div className="space-y-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            id={id}
-            list={listId}
-            value={value}
-            placeholder={detected}
-            onChange={(e) => onChange(e.target.value.trim())}
-            aria-invalid={!valid || undefined}
-            aria-describedby={statusId}
-            className={cn(FIELD_WIDTH, "font-mono text-xs")}
-          />
-          {detected && detected !== value ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => onChange(detected)}
-            >
-              Use this browser&apos;s ({detected})
-            </Button>
-          ) : null}
-        </div>
-        <datalist id={listId}>
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <p
-          id={statusId}
-          className={cn(
-            "text-xs",
-            valid ? "text-foreground" : "text-destructive",
-          )}
-        >
-          {valid ? preview : invalidText}
-        </p>
-        <p className={T.hint}>{hint}</p>
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <Label htmlFor={id}>{label}</Label>
+        {detected && !sameAsDetected ? (
+          <button
+            type="button"
+            onClick={() => onChange(detected)}
+            className="truncate text-xs text-primary hover:underline"
+            aria-label={`Use this browser's (${detected})`}
+          >
+            Use {detected}
+          </button>
+        ) : null}
       </div>
+      <Input
+        id={id}
+        list={listId}
+        value={value}
+        placeholder={detected}
+        onChange={(e) => onChange(e.target.value.trim())}
+        aria-invalid={!valid || undefined}
+        aria-describedby={statusId}
+        className="font-mono text-xs"
+      />
+      <datalist id={listId}>
+        {suggestions.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+      <p
+        id={statusId}
+        className={cn(
+          "text-xs",
+          valid ? "text-foreground" : "text-destructive",
+        )}
+      >
+        {valid ? preview : invalidText}
+      </p>
+      <p className={T.hint}>{hint}</p>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { render, screen, waitFor, within } from "@/test/utils";
+import { render, screen, waitFor } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
   getMine: vi.fn(),
@@ -15,7 +15,18 @@ const h = vi.hoisted(() => ({
     tenantSlug: "acme",
     roles: ["platform.admin"] as string[],
   },
+  // Set to make two different zone names one zone, as an alias is.
+  sameZone: undefined as boolean | undefined,
 }));
+vi.mock("@/lib/format/preferences", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("@/lib/format/preferences")>();
+  return {
+    ...real,
+    isSameTimeZone: (a: string, b: string) =>
+      h.sameZone ?? real.isSameTimeZone(a, b),
+  };
+});
 vi.mock("@/lib/connect/client", () => ({
   userSettingsClient: { getMine: h.getMine, updateMine: h.updateMine },
 }));
@@ -46,6 +57,7 @@ const SAVED = {
 };
 
 beforeEach(() => {
+  h.sameZone = undefined;
   h.getMine.mockReset().mockResolvedValue(SAVED);
   h.updateMine.mockReset().mockResolvedValue({});
   h.user.roles = ["platform.admin"];
@@ -62,10 +74,10 @@ describe("ProfilePage account", () => {
       "href",
       "/tenants/acme",
     );
-    expect(screen.getByText("platform.capability-issuer")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Issues capabilities for any tenant/),
-    ).toBeInTheDocument();
+    expect(screen.getByText("platform.capability-issuer")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Issues capabilities for any tenant/),
+    );
     expect(screen.getByText("0199-user-id")).toBeInTheDocument();
   });
 
@@ -154,14 +166,25 @@ describe("ProfilePage preferences", () => {
     expect(tz).toHaveValue(detected);
   });
 
-  it("saves a theme picked from the swatches", async () => {
+  // Europe/Kyiv saved, Europe/Kiev detected: one zone under two names.
+  it("offers no browser value that is already the one set", async () => {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    h.sameZone = true;
     render(<ProfilePage />);
-    const group = await screen.findByRole("radiogroup", { name: "Theme" });
-    expect(within(group).getByRole("radio", { name: "Dark" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    await userEvent.click(within(group).getByRole("radio", { name: "Ember" }));
+    await screen.findByLabelText("Timezone");
+    expect(
+      screen.queryByRole("button", {
+        name: `Use this browser's (${detected})`,
+      }),
+    ).toBeNull();
+  });
+
+  it("saves a theme picked from the menu", async () => {
+    render(<ProfilePage />);
+    const trigger = await screen.findByRole("combobox", { name: "Theme" });
+    expect(trigger).toHaveTextContent("Dark");
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole("option", { name: "Ember" }));
     await userEvent.click(save());
     await waitFor(() =>
       expect(h.updateMine).toHaveBeenCalledWith(

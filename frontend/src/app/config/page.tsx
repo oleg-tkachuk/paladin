@@ -14,12 +14,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select } from "@/components/ui/Select";
+import { Switch } from "@/components/ui/switch";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { useConfig } from "@/hooks/useConfig";
 import {
   filterConfigSections,
   parseConfigSections,
   redactedCount,
+  withoutUnset,
   type ConfigSection,
   type ConfigValue,
 } from "@/lib/configView";
@@ -38,8 +41,11 @@ const VIEWS: { value: View; label: string }[] = [
   { value: "yaml", label: "YAML" },
 ];
 
-/** The anchor a section is reached at from the section list. */
-const sectionAnchor = (key: string) => `config-${key}`;
+/**
+ * The section picker's "every section". Not a key a config section can have:
+ * the YAML top level is the config schema's, and none starts with "__".
+ */
+const ALL_SECTIONS = "__all__";
 
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
@@ -49,6 +55,8 @@ export default function ConfigPage() {
   const { showNotification } = useNotification();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("sections");
+  const [section, setSection] = useState(ALL_SECTIONS);
+  const [hideUnset, setHideUnset] = useState(false);
 
   // A document that is not YAML is shown as text, not as nothing.
   const parsed = useMemo(() => {
@@ -58,9 +66,23 @@ export default function ConfigPage() {
       return { sections: [] as ConfigSection[], invalid: true };
     }
   }, [config]);
-  const shown = useMemo(
-    () => filterConfigSections(parsed.sections, query),
-    [parsed.sections, query],
+  const shown = useMemo(() => {
+    const picked =
+      section === ALL_SECTIONS
+        ? parsed.sections
+        : parsed.sections.filter((s) => s.key === section);
+    const matched = filterConfigSections(picked, query);
+    return hideUnset ? withoutUnset(matched) : matched;
+  }, [parsed.sections, section, query, hideUnset]);
+  const sectionOptions = useMemo(
+    () => [
+      { value: ALL_SECTIONS, label: "All sections" },
+      ...parsed.sections.map((s) => ({
+        value: s.key,
+        label: `${s.key} (${s.entries.length})`,
+      })),
+    ],
+    [parsed.sections],
   );
   const total = parsed.sections.reduce((n, s) => n + s.entries.length, 0);
   const matching = shown.reduce((n, s) => n + s.entries.length, 0);
@@ -174,7 +196,27 @@ export default function ConfigPage() {
                 ? { shown: matching, total }
                 : undefined
             }
-          />
+          >
+            {effectiveView === "sections" ? (
+              <>
+                <Select
+                  aria-label="Section"
+                  value={section}
+                  onChange={setSection}
+                  options={sectionOptions}
+                  className="w-48"
+                />
+                <label className={cn(T.hint, "flex items-center gap-2")}>
+                  <Switch
+                    checked={hideUnset}
+                    onCheckedChange={setHideUnset}
+                    aria-label="Hide unset"
+                  />
+                  Hide unset
+                </label>
+              </>
+            ) : null}
+          </TableToolbar>
 
           {parsed.invalid ? (
             <p className="flex items-center gap-2 text-sm text-warning">
@@ -197,34 +239,15 @@ export default function ConfigPage() {
                 : "The configuration is empty."}
             </Card>
           ) : (
-            <div className="grid gap-6 lg:grid-cols-[12rem_1fr]">
-              <nav aria-label="Sections" className="hidden lg:block">
-                <ul className="sticky top-4 space-y-0.5">
-                  {shown.map((s) => (
-                    <li key={s.key}>
-                      <a
-                        href={`#${sectionAnchor(s.key)}`}
-                        className="flex items-center justify-between rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <span className={T.codeSmall}>{s.key}</span>
-                        <span className="tabular-nums text-xs">
-                          {s.entries.length}
-                        </span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-              <div className="min-w-0 space-y-4">
-                {shown.map((s) => (
-                  <SectionCard
-                    key={s.key}
-                    section={s}
-                    onCopy={() => void copy(s.yaml, `Section ${s.key}`)}
-                  />
-                ))}
-              </div>
-            </div>
+            <Card className="gap-0 overflow-hidden p-0">
+              {shown.map((s) => (
+                <SectionRows
+                  key={s.key}
+                  section={s}
+                  onCopy={() => void copy(s.yaml, `Section ${s.key}`)}
+                />
+              ))}
+            </Card>
           )}
         </>
       )}
@@ -232,56 +255,49 @@ export default function ConfigPage() {
   );
 }
 
-function SectionCard({
+function SectionRows({
   section,
   onCopy,
 }: {
   section: ConfigSection;
   onCopy: () => void;
 }) {
+  const titleId = `config-${section.key}-title`;
   return (
-    <section
-      id={sectionAnchor(section.key)}
-      aria-labelledby={`${sectionAnchor(section.key)}-title`}
-      className="scroll-mt-4"
-    >
-      <Card className="p-0">
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5">
-          <h2
-            id={`${sectionAnchor(section.key)}-title`}
-            className="font-mono text-sm font-semibold"
+    <section aria-labelledby={titleId} className="border-b last:border-b-0">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-muted/60 px-4 py-2 backdrop-blur">
+        <h2 id={titleId} className="font-mono text-sm font-semibold">
+          {section.key}
+          <span className="ml-2 font-sans text-xs font-normal text-muted-foreground">
+            {section.entries.length}
+          </span>
+        </h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={onCopy}
+          aria-label={`Copy section ${section.key}`}
+        >
+          <ClipboardDocumentIcon className="size-3.5" />
+          Copy
+        </Button>
+      </div>
+      <dl>
+        {section.entries.map((e) => (
+          <div
+            key={e.path || section.key}
+            className="grid gap-1 px-4 py-1.5 hover:bg-muted/30 sm:grid-cols-[minmax(12rem,20rem)_1fr] sm:gap-6"
           >
-            {section.key}
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={onCopy}
-            aria-label={`Copy section ${section.key}`}
-          >
-            <ClipboardDocumentIcon className="size-3.5" />
-            Copy
-          </Button>
-        </div>
-        <dl className="divide-y">
-          {section.entries.map((e) => (
-            <div
-              key={e.path || section.key}
-              className="grid gap-1 px-4 py-2 sm:grid-cols-[minmax(12rem,2fr)_3fr] sm:gap-4"
-            >
-              <dt
-                className={cn(T.codeSmall, "break-all text-muted-foreground")}
-              >
-                {e.path || section.key}
-              </dt>
-              <dd className="min-w-0">
-                <ValueView value={e.value} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
+            <dt className={cn(T.codeSmall, "break-all text-muted-foreground")}>
+              {e.path || section.key}
+            </dt>
+            <dd className="min-w-0">
+              <ValueView value={e.value} />
+            </dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
@@ -299,9 +315,14 @@ function ValueView({ value }: { value: ConfigValue }) {
       return <span className={cn(T.hint, "italic")}>not set</span>;
     case "bool":
       return (
-        <Badge variant={value.value ? "success" : "secondary"}>
+        <span
+          className={cn(
+            T.codeSmall,
+            value.value ? "text-success" : "text-muted-foreground",
+          )}
+        >
           {String(value.value)}
-        </Badge>
+        </span>
       );
     case "list":
       return (
