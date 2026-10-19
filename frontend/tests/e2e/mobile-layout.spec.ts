@@ -53,4 +53,18 @@ test.describe("Phone-width layout", () => {
       expect.soft(await horizontalOverflow(page), path).toBeLessThanOrEqual(0);
     }
   });
+
+  // A table wider than the phone scrolled inside its box, so a row's last
+  // columns were out of sight; at this width a row is a card instead.
+  test("a list's rows are cards, each value named by its column", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await gotoSettled(page, "/users");
+    const table = page.getByRole("table");
+    await expect(table.locator("thead")).toBeHidden();
+    const firstCell = table.locator("tbody tr").first().locator("td").first();
+    await expect(firstCell).toHaveAttribute("data-label", /User/);
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+  });
 });
