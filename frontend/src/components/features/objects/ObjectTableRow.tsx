@@ -28,6 +28,7 @@ import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatDateTime } from "@/lib/format/locale";
 import { OBJECT_COLUMN_CLASS } from "./columns";
+import { PRESSED, SELECTED_SURFACE } from "@/lib/ui/states";
 
 interface ObjectTableRowProps {
   obj: Object$;
@@ -121,7 +122,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
       className={cn(
         "hover:bg-primary/[0.03] transition-colors group cursor-pointer relative",
         isSelected && "bg-primary/[0.05]",
-        isInspected && "bg-primary/[0.08] shadow-inner",
+        isInspected && SELECTED_SURFACE,
       )}
       onClick={(e) => onToggleSelect(obj.objectId, e, obj.key)}
     >
@@ -144,7 +145,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
           <div className="flex items-center gap-3">
             <div
               className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-inner relative",
+                "w-8 h-8 rounded-lg flex items-center justify-center transition-all relative",
                 isSelected || isInspected
                   ? "bg-primary text-primary-foreground"
                   : "bg-primary/10 text-primary group-hover:scale-110",
@@ -152,7 +153,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
             >
               <DocumentIcon className="w-4 h-4" />
               {obj.contentType?.startsWith("image/") && (
-                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-background shadow-[0_0_8px_color-mix(in_oklab,var(--color-success)_50%,transparent)]" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-success border border-background" />
               )}
             </div>
             <Tooltip
@@ -227,14 +228,20 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
               <div className="flex items-center gap-1 border-l border-border pl-2 ml-1">
                 <button
                   onClick={() => onSaveInlineLabels(obj.objectId)}
-                  className="p-1 px-1.5 rounded-lg bg-success/15 text-success hover:bg-success/25 transition-all active:scale-90"
+                  className={cn(
+                    "p-1 px-1.5 rounded-lg bg-success/15 text-success hover:bg-success/25 transition-all",
+                    PRESSED,
+                  )}
                   title="Synchronize"
                 >
                   <CheckIcon className="w-3 h-3" />
                 </button>
                 <button
                   onClick={() => onCancelInlineEdit()}
-                  className="p-1 px-1.5 rounded-lg bg-foreground/5 text-muted-foreground hover:text-foreground transition-all active:scale-90"
+                  className={cn(
+                    "p-1 px-1.5 rounded-lg bg-foreground/5 text-muted-foreground hover:text-foreground transition-all",
+                    PRESSED,
+                  )}
                   title="Abort"
                 >
                   <XMarkIcon className="w-3 h-3" />
@@ -356,7 +363,7 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
                 className={cn(
                   "p-1.5 rounded-lg transition-all flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent",
                 )}
-                activeClassName="bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                activeClassName="bg-primary text-primary-foreground shadow-raised"
               >
                 <EllipsisVerticalIcon className="w-5 h-5" />
               </Dropdown.Trigger>

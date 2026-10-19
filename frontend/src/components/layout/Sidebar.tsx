@@ -55,6 +55,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
+import {
+  FOCUS_RING,
+  SELECTED_SURFACE,
+  SIDEBAR_HOVER_SURFACE,
+} from "@/lib/ui/states";
 
 /**
  * Icons stay neutral (muted-foreground) at rest and brighten to the
@@ -499,11 +504,14 @@ function SidebarBody({
                       // Layout — left rail consumes 2px on the inside
                       "group relative flex h-9 items-center gap-3 rounded-md pr-2 text-sm transition-colors",
                       collapsed ? "justify-center pl-0" : "pl-3",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      FOCUS_RING,
                       // Active = brighter sidebar-accent + primary-tinted bg
                       active
-                        ? "bg-primary/10 text-foreground font-medium"
-                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                        ? cn(SELECTED_SURFACE, "text-foreground font-medium")
+                        : cn(
+                            SIDEBAR_HOVER_SURFACE,
+                            "text-muted-foreground hover:text-foreground",
+                          ),
                     )}
                     aria-current={active ? "page" : undefined}
                   >

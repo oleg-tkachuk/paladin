@@ -35,7 +35,7 @@ export function SelectionBar({ count, onClear, children }: SelectionBarProps) {
       <div
         role="toolbar"
         aria-label="Selection actions"
-        className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-floating"
       >
         <span className="px-2 text-sm font-medium whitespace-nowrap tabular-nums">
           {count} selected

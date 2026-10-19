@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { labelCells } from "@/lib/table/cellLabels";
 import { useTableDensity } from "@/components/ui/TableScope";
 import type { Density } from "@/lib/preferences/tablePrefs";
+import { HOVER_SURFACE } from "@/lib/ui/states";
 
 /** How rows are set, by the density the user chose for the table. */
 const DENSITY_CLASS: Record<Density, string> = {
@@ -112,7 +113,8 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-linked:bg-primary/10 data-linked:shadow-[inset_2px_0_0_var(--primary)]",
+        "border-b transition-colors has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-linked:bg-primary/10 data-linked:shadow-[inset_2px_0_0_var(--primary)]",
+        HOVER_SURFACE,
         className,
       )}
       {...props}

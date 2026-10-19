@@ -867,16 +867,6 @@ order they are being taken up.
   way.
 - **Blockers:** none.
 
-#### Elevation and interaction states
-
-- **Status:** Aspirational.
-- **Reason:** shadows, borders and the focus, hover and pressed states differ
-  from one component to the next.
-- **Definition of Done:** an elevation scale as tokens; one set of focus,
-  hover and pressed states every interactive component takes; the contrast
-  tests extended to those states in every theme.
-- **Blockers:** none.
-
 #### Hover cards for tenants, buckets, users and capabilities
 
 - **Status:** Deferred (owner decision 2026-10-19: not now).

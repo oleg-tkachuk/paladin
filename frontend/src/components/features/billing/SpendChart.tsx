@@ -178,7 +178,7 @@ export function SpendChart({
 
       {shown && (
         <div
-          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-md border bg-popover px-3 py-2 text-xs shadow-md"
+          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-md border bg-popover px-3 py-2 text-xs shadow-floating"
           style={{
             left: `${((AXIS_GUTTER + (active! + 0.5) * slot) / WIDTH) * 100}%`,
           }}

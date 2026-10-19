@@ -27,6 +27,8 @@ import { RealTimeStatus } from "@/components/features/RealTimeStatus";
 import { BackgroundOpsDrawer } from "@/components/BackgroundOpsDrawer";
 import { useAuth } from "@/context/AuthContext";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
+import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 interface TopBarProps {
   onMenuToggle: () => void;
@@ -90,7 +92,10 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
       <button
         type="button"
         onClick={openCommand}
-        className="group inline-flex h-9 min-w-0 flex-1 max-w-md items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 focus-visible:outline-none"
+        className={cn(
+          "group inline-flex h-9 min-w-0 flex-1 max-w-md items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+          FOCUS_RING,
+        )}
       >
         <MagnifyingGlassIcon className="size-4 shrink-0" />
         {/* Below sm the trigger shrinks to its icon; the label stays as its
@@ -116,7 +121,7 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
             <button
               type="button"
               aria-label="Open user menu"
-              className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn("rounded-full", FOCUS_RING)}
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-xs">
