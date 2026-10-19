@@ -37,6 +37,8 @@ import { failedRead } from "@/components/ui/ListLoadError";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import { BucketCreateDialog } from "@/components/features/buckets/BucketCreateDialog";
 import { isProvisionInFlight, PROVISION_POLL_MS } from "@/lib/bucketProvision";
 import { useRefetchWhile } from "@/hooks/useRefetchWhile";
@@ -46,6 +48,7 @@ import {
   SHARING,
   bySharing,
   tenantLabelMap,
+  BUCKET_SORT_COLUMNS,
   type BucketSortColumn,
   type Sharing,
 } from "@/components/features/buckets/BucketTable";
@@ -90,12 +93,18 @@ export default function BucketsPage() {
   // query. The filter goes to the API instead, as one conjunct over the derived
   // `search` field so it pushes down to SQL (see src/lib/cel.ts for why it must
   // not be a disjunction).
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // Trails `search` by 300ms so a refetch does not fire per keystroke — the
   // same shape the objects page uses.
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
-  const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>();
+  const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>(
+    undefined,
+    {
+      url: PAGE_TABLE,
+      columns: BUCKET_SORT_COLUMNS,
+    },
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);

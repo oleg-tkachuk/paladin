@@ -36,6 +36,8 @@ import {
 } from "@/gen/paladin/iam/v1/user_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import { useTableView } from "@/hooks/useTableView";
+import type { TableUrl } from "@/lib/table/urlState";
+import { useTableFilter } from "@/hooks/useTableUrl";
 import {
   DEFAULT_LIFECYCLE_FILTER,
   LIFECYCLE_BADGE,
@@ -43,12 +45,15 @@ import {
   LIFECYCLE_FILTER_LABEL,
   keepsLifecycle,
   type Lifecycle,
-  type LifecycleFilter,
 } from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
 import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
+
+// The list of applications keeps its search and sort in the URL under its own names, beside the
+// page's other tables.
+const APPS_TABLE: TableUrl = { namespace: "apps" };
 
 /**
  * The query key of a user's grants: the live ones, or with inactive every one
@@ -122,8 +127,10 @@ export function ConnectedApplications({
   const { showNotification } = useNotification();
   const [opened, setOpened] = useState<OAuthGrant | null>(null);
   const [target, setTarget] = useState<OAuthGrant | null>(null);
-  const [stateFilter, setStateFilter] = useState<LifecycleFilter>(
+  const [stateFilter, setStateFilter] = useTableFilter(
+    LIFECYCLE_FILTERS,
     DEFAULT_LIFECYCLE_FILTER,
+    APPS_TABLE,
   );
   // Only the live grants come by default; any other state asks for them all.
   const includeInactive = stateFilter !== DEFAULT_LIFECYCLE_FILTER;
@@ -140,7 +147,11 @@ export function ConnectedApplications({
   const inState = (query.data?.grants ?? []).filter((g) =>
     keepsLifecycle(stateFilter, lifecycle(g)),
   );
-  const view = useTableView(inState, { text: SEARCH_IN, accessors: SORT_BY });
+  const view = useTableView(inState, {
+    text: SEARCH_IN,
+    accessors: SORT_BY,
+    url: APPS_TABLE,
+  });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   const revoke = async () => {

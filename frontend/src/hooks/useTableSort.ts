@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+
+import { sortCodec } from "@/hooks/useTableUrl";
+import { useUrlState } from "@/hooks/useUrlState";
+import type { TableUrl } from "@/lib/table/urlState";
 
 /**
  * Shared table-sort state — the three-state column cycle that every list page
@@ -38,18 +42,36 @@ export function nextSort<C extends string>(
   return { column, direction: "asc" };
 }
 
+const NO_SORT = { column: null, direction: null } as const;
+
+/** Keeps a table's sort in the URL, among the columns it sorts by. */
+export interface SortInUrl<C extends string> {
+  url: TableUrl;
+  columns: readonly C[];
+}
+
 /**
  * useTableSort wires nextSort into component state. `toggleSort(column)`
  * advances the cycle; `setSort` is exposed for the rare caller that needs to
- * set state directly (e.g. restoring from a URL param).
+ * set state directly. With `inUrl` the sort is kept in the query string, and a
+ * URL naming a column the table does not sort by reads as the default.
  */
 export function useTableSort<C extends string = string>(
-  initial: SortState<C> = { column: null, direction: null },
+  initial: SortState<C> = NO_SORT,
+  inUrl?: SortInUrl<C>,
 ) {
-  const [sort, setSort] = useState<SortState<C>>(initial);
+  const url = inUrl?.url;
+  const columns = inUrl?.columns;
+  // Read once, as useState reads an initial value.
+  const [fallback] = useState(initial);
+  const codec = useMemo(
+    () => (url && columns ? sortCodec(url, columns, fallback) : null),
+    [url, columns, fallback],
+  );
+  const [sort, setSort] = useUrlState<SortState<C>>(codec, initial);
   const toggleSort = useCallback(
     (column: C) => setSort((prev) => nextSort(prev, column)),
-    [],
+    [setSort],
   );
   return { sort, toggleSort, setSort };
 }

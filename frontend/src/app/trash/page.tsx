@@ -85,6 +85,8 @@ import {
   type ToolbarFilterOption,
 } from "@/components/ui/TableToolbar";
 import { useTableView } from "@/hooks/useTableView";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import { useTableFilter } from "@/hooks/useTableUrl";
 import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
 import {
@@ -148,8 +150,10 @@ export default function TrashPage() {
     const info = first && trashAge(first.deletedAt, first.purgeEligibleAt, now);
     return info ? retentionDays(info) : null;
   }, [trashed, now]);
-  const [retention, setRetention] = useState<RetentionFilter>(
+  const [retention, setRetention] = useTableFilter(
+    RETENTION_FILTERS,
     DEFAULT_RETENTION_FILTER,
+    PAGE_TABLE,
   );
   const inWindow = useMemo(
     () =>
@@ -165,6 +169,7 @@ export default function TrashPage() {
   const view = useTableView(inWindow, {
     text: TRASH_SEARCH,
     accessors: TRASH_SORT,
+    url: PAGE_TABLE,
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
   const loading = trashQuery.isFetching;

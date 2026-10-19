@@ -15,7 +15,8 @@ vi.mock("@/lib/connect/client", () => ({
   userClient: { getUser: h.getUser },
   tenantClient: { getTenant: h.getTenant },
 }));
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useParams: () => ({ tenant: "t-1", user: "u-1" }),
   useRouter: () => ({ push: h.push }),
   usePathname: () => "/users/t-1/u-1",

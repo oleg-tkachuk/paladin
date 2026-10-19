@@ -27,7 +27,8 @@ vi.mock("@/hooks/useObject", () => ({
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: vi.fn() }),
 }));
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: h.push }),
 }));
 // The scope picker sits on the platform tenant, as it does for an operator

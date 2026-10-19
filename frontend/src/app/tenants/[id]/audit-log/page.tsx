@@ -9,12 +9,18 @@
 // Free-text search filters client-side over the loaded page, same
 // affordance as /audit.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { useTableSort } from "@/hooks/useTableSort";
-import { AUDIT_ORDER, type AuditOrderField } from "@/lib/auditOrder";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import {
+  AUDIT_ORDER,
+  AUDIT_ORDER_FIELDS,
+  type AuditOrderField,
+} from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   ArrowPathIcon,
@@ -52,12 +58,15 @@ export default function TenantAuditLogPage() {
 
   // Sorted on the server: the log loads a page at a time, so a sort in the
   // browser would order only what has loaded. A new sort starts over.
-  const { sort, toggleSort } = useTableSort<AuditOrderField>();
+  const { sort, toggleSort } = useTableSort<AuditOrderField>(undefined, {
+    url: PAGE_TABLE,
+    columns: AUDIT_ORDER_FIELDS,
+  });
   const sortProps = { current: sort, onSort: toggleSort };
   const { entries, loading, error, nextCursor, refresh, loadMore } =
     useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId, sort);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

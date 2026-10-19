@@ -27,7 +27,8 @@ import { ProvisionStateBadge } from "./ProvisionStateBadge";
 import { PublicReadBadge } from "./PublicReadBadge";
 
 /** The columns a bucket list sorts by. */
-export type BucketSortColumn = "backend" | "name";
+export const BUCKET_SORT_COLUMNS = ["backend", "name"] as const;
+export type BucketSortColumn = (typeof BUCKET_SORT_COLUMNS)[number];
 
 /** How many grantees a row names before it counts the rest. */
 export const GRANTEES_NAMED = 2;
