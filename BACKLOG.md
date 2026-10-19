@@ -909,18 +909,6 @@ order they are being taken up.
   than only in a toast.
 - **Blockers:** none.
 
-#### A favicon that shows the user's operations
-
-- **Status:** Aspirational.
-- **Reason:** a background tab's title now counts the user's running
-  operations and marks a failed one, but the tab's icon, which is all a
-  crowded tab bar shows, does not.
-- **Definition of Done:** the favicon carries the same signal (a dot for
-  running, another for failed), drawn from the same `titleWithActivity`
-  inputs. A page's last tab already returns, being in its URL; scroll
-  position is the browser's own on back and forward, and is left to it.
-- **Blockers:** none.
-
 #### CSV export of a list
 
 - **Status:** Deferred (owner decision 2026-10-19: not now).
