@@ -9,6 +9,7 @@
 // dialog, saved views) carries over verbatim.
 
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
+import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import React, {
   useCallback,
   useEffect,
@@ -39,6 +40,7 @@ import { useCollection } from "../collection-context";
 import { SavedViewSchema, type SavedView } from "./_view";
 import { useObjectListState } from "./useObjectListState";
 import { CopyMoveDialog } from "./CopyMoveDialog";
+import { BulkCopyDialog } from "./BulkCopyDialog";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
 import { Button } from "@/components/ui/button";
@@ -118,6 +120,7 @@ function CollectionObjectsContent() {
     purgeObject,
     bulkDeleteObjects,
     bulkRestoreObjects,
+    bulkCopyObjects,
     bulkPatchObjects,
     copyObject,
     generateDownloadUrl,
@@ -401,6 +404,28 @@ function CollectionObjectsContent() {
     });
   };
 
+  // The selection, as the objects it names; a restore is offered when every
+  // one of them is in the trash.
+  const selectedObjects = objects.filter((o) => selectedIds.has(o.objectId));
+  const selectionTrashed =
+    selectedObjects.length > 0 &&
+    selectedObjects.every((o) => o.state === ObjectState.DELETED);
+  const selectionItems = selectedObjects.map((o) => ({
+    name: o.name,
+    collection: o.collection,
+  }));
+  const [bulkCopyOpen, setBulkCopyOpen] = useState(false);
+  const handleBulkCopy = async (destination: string, prefix: string) => {
+    await bulkCopyObjects(selectionItems, destination, prefix);
+    setBulkCopyOpen(false);
+    setSelectedIds(new Set());
+    showNotification({
+      type: "success",
+      title: "Copy started",
+      message: `${selectionItems.length} objects are being copied to ${destination}; the operation shows its progress.`,
+    });
+  };
+
   const confirmBulkRestore = (items: { name: string; collection: string }[]) =>
     setConfirm({
       open: true,
@@ -413,6 +438,7 @@ function CollectionObjectsContent() {
       confirmText: `Restore ${items.length} objects`,
       onConfirm: async () => {
         await bulkRestoreObjects(items);
+        setSelectedIds(new Set());
         await refresh();
       },
     });
@@ -599,6 +625,12 @@ function CollectionObjectsContent() {
         selectedCount={selectedIds.size}
         onEditLabels={() => setIsBulkEditing(true)}
         onBulkDelete={handleBulkDelete}
+        onBulkRestore={
+          selectionTrashed
+            ? () => confirmBulkRestore(selectionItems)
+            : undefined
+        }
+        onBulkCopy={publicCollection ? undefined : () => setBulkCopyOpen(true)}
         onClearSelection={() => setSelectedIds(new Set())}
         isProcessing={isBulkDeleting}
       />
@@ -772,6 +804,14 @@ function CollectionObjectsContent() {
           {objects.length} objects
         </Badge>
       </div>
+
+      <BulkCopyDialog
+        open={bulkCopyOpen}
+        count={selectionItems.length}
+        sourceCollection={collection}
+        onConfirm={handleBulkCopy}
+        onClose={() => setBulkCopyOpen(false)}
+      />
 
       {/* ─── Copy / Move dialog ───────────────────────────────────────── */}
       <CopyMoveDialog

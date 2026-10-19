@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 
 // Protective net for decomposing the Collection objects page. The page is
 // orchestration over many hooks + extracted feature components, so mock the
@@ -24,6 +25,7 @@ const h = vi.hoisted(() => ({
   bulkDelete: vi.fn(() => Promise.resolve()),
   bulkRestore: vi.fn(() => Promise.resolve()),
   bulkPatch: vi.fn(() => Promise.resolve()),
+  bulkCopy: vi.fn(() => Promise.resolve()),
   copy: vi.fn(() => Promise.resolve()),
   genUrl: vi.fn(() => Promise.resolve(undefined)),
   replace: vi.fn(),
@@ -65,6 +67,7 @@ vi.mock("@/hooks/useObjects", () => ({
       bulkDeleteObjects: h.bulkDelete,
       bulkRestoreObjects: h.bulkRestore,
       bulkPatchObjects: h.bulkPatch,
+      bulkCopyObjects: h.bulkCopy,
       copyObject: h.copy,
       generateDownloadUrl: h.genUrl,
     };
@@ -80,6 +83,15 @@ vi.mock("@/context/ActionsContext", () => ({
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
+}));
+vi.mock("@/hooks/useCollections", () => ({
+  useCollections: () => ({
+    collections: [
+      { collection: "ok-1", displayName: "" },
+      { collection: "archive", displayName: "" },
+    ],
+    fetchAllCollections: vi.fn(() => Promise.resolve()),
+  }),
 }));
 vi.mock("@/hooks/useUpload", () => ({
   useUpload: () => ({
@@ -139,13 +151,19 @@ vi.mock("@/components/features/objects/BulkActionsToolbar", () => ({
   BulkActionsToolbar: ({
     selectedCount,
     onBulkDelete,
+    onBulkRestore,
+    onBulkCopy,
   }: {
     selectedCount: number;
     onBulkDelete: () => void;
+    onBulkRestore?: () => void;
+    onBulkCopy?: () => void;
   }) => (
     <div data-testid="bulk-toolbar">
       selected:{selectedCount}
       <button onClick={onBulkDelete}>bulk delete</button>
+      {onBulkRestore && <button onClick={onBulkRestore}>bulk restore</button>}
+      {onBulkCopy && <button onClick={onBulkCopy}>bulk copy</button>}
     </div>
   ),
 }));
@@ -471,5 +489,58 @@ describe("CollectionObjectsPage upload", () => {
     const zone = document.querySelector("[data-drop-zone]") as HTMLElement;
     fireEvent.drop(zone, drag);
     expect(h.uploadFile).not.toHaveBeenCalled();
+  });
+});
+
+// Restore is offered for a selection that is all in the trash, and goes
+// through the confirm every restore takes; copy asks where, then runs.
+describe("CollectionObjectsPage bulk restore and copy", () => {
+  beforeEach(() => {
+    h.access = 0;
+    h.bulkCopy.mockClear();
+  });
+
+  const select = async () =>
+    userEvent.click(screen.getByRole("checkbox", { name: "Select all rows" }));
+
+  it("offers restore only when every selected object is trashed", async () => {
+    h.objects = [{ ...makeObj("live.txt"), state: ObjectState.AVAILABLE }];
+    const { unmount } = render(<CollectionObjectsPage />);
+    await select();
+    expect(screen.queryByText("bulk restore")).toBeNull();
+    unmount();
+
+    h.objects = [{ ...makeObj("gone.txt"), state: ObjectState.DELETED }];
+    render(<CollectionObjectsPage />);
+    await select();
+    await userEvent.click(screen.getByText("bulk restore"));
+    expect(h.bulkRestore).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Restore 1 objects$/ }),
+    );
+    await waitFor(() =>
+      expect(h.bulkRestore).toHaveBeenCalledWith([
+        { name: "objects/o1", collection: "ok-1" },
+      ]),
+    );
+  });
+
+  it("copies the selection into the chosen collection under a prefix", async () => {
+    h.objects = [{ ...makeObj("a.txt"), state: ObjectState.AVAILABLE }];
+    render(<CollectionObjectsPage />);
+    await select();
+    await userEvent.click(screen.getByText("bulk copy"));
+    const confirm = screen.getByRole("button", { name: "Copy 1 objects" });
+    // Into its own collection with no prefix, each copy would be its source.
+    expect(confirm).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Key prefix"), "v2/");
+    await userEvent.click(confirm);
+    await waitFor(() =>
+      expect(h.bulkCopy).toHaveBeenCalledWith(
+        [{ name: "objects/o1", collection: "ok-1" }],
+        "ok-1",
+        "v2/",
+      ),
+    );
   });
 });
