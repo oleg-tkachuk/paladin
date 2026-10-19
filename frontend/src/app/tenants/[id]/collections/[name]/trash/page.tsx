@@ -6,6 +6,7 @@
 // else (search, bulk restore, bulk purge, single purge) carries
 // over verbatim. Every restore and purge is confirmed first.
 
+import { CopyableId } from "@/components/ui/CopyableId";
 import React, { useEffect, useState } from "react";
 import {
   ArrowUturnLeftIcon,
@@ -327,14 +328,11 @@ export default function CollectionTrashPage() {
                           <div className="truncate font-medium">
                             {obj.key.split("/").pop()}
                           </div>
-                          <div
-                            className={cn(
-                              T.codeSmall,
-                              "truncate text-muted-foreground",
-                            )}
-                          >
-                            {obj.objectId}
-                          </div>
+                          <CopyableId
+                            value={obj.objectId}
+                            label="object ID"
+                            className="text-muted-foreground"
+                          />
                         </div>
                       </div>
                     </TableCell>

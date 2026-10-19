@@ -77,3 +77,27 @@ describe("useResourceLinks", () => {
     expect(h.stored[PREFERENCE_KEYS.pinned]).toEqual([]);
   });
 });
+
+describe("useResourceLinks clearing and hiding", () => {
+  it("clears the recent list and unpins all, against what is stored", async () => {
+    h.stored = {
+      [PREFERENCE_KEYS.recent]: [link(1)],
+      [PREFERENCE_KEYS.pinned]: [link(2)],
+    };
+    const { result } = renderHook(() => useResourceLinks(), { wrapper });
+    await act(() => result.current.clearRecent());
+    expect(h.stored[PREFERENCE_KEYS.recent]).toEqual([]);
+    expect(h.stored[PREFERENCE_KEYS.pinned]).toEqual([link(2)]);
+    await act(() => result.current.unpinAll());
+    expect(h.stored[PREFERENCE_KEYS.pinned]).toEqual([]);
+  });
+
+  it("is shown until turned off, and keeps the lists while off", async () => {
+    const { result } = renderHook(() => useResourceLinks(), { wrapper });
+    await waitFor(() => expect(result.current.recent).toHaveLength(2));
+    expect(result.current.shown).toBe(true);
+    await act(() => result.current.setShown(false));
+    await waitFor(() => expect(result.current.shown).toBe(false));
+    expect(h.stored[PREFERENCE_KEYS.recent]).toHaveLength(2);
+  });
+});

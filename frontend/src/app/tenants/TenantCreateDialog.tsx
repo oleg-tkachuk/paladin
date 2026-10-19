@@ -1,5 +1,6 @@
 "use client";
 
+import { HelpTip } from "@/components/ui/HelpTip";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SparklesIcon } from "@heroicons/react/24/outline";
@@ -253,6 +254,7 @@ export function TenantCreateDialog({
         ) : null}
         <FormField
           label="Layout"
+          aside={<HelpTip topic="bucketLayout" />}
           hint={
             dedicated
               ? "A private bucket is provisioned on the backend, named from the tenant ID."

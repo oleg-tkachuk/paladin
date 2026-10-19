@@ -5,6 +5,7 @@
 // path mirrors the resource name, tenants/<tenant>/users/<user>.
 
 import { userDetailQuery } from "@/lib/queries/details";
+import { CopyableId } from "@/components/ui/CopyableId";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -129,7 +130,7 @@ export default function UserDetailPage() {
                 <span className="font-mono text-xs">{user.subject}</span>
               </Fact>
               <Fact label="User ID">
-                <span className="font-mono text-xs">{user.userId}</span>
+                <CopyableId value={user.userId} label="user ID" />
               </Fact>
               <Fact label="Tenant">
                 <Link

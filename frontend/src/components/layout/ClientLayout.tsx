@@ -23,6 +23,7 @@ import { UndoTrashProvider } from "@/hooks/useUndoTrash";
 import { CrumbNamesProvider, useCrumbNames } from "@/context/CrumbNamesContext";
 
 import { pageTitle } from "./crumbs";
+import { ShellPageTitle } from "./ShellPageTitle";
 
 // Routes that DON'T require an authenticated session — these render
 // without the shell and bypass the AuthGate. Login is the canonical
@@ -95,11 +96,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   // mounted page tree gets the contexts it needs the moment auth lands.
   return (
     <>
-      {title}
       <RefreshProvider>
         <ActionsProvider>
           <ScopeProvider>
             <ShellProvider>
+              <ShellPageTitle pathname={pathname} />
               <StatsProvider>
                 <UndoTrashProvider>
                   <AuthGate publicRoutes={STANDALONE_ROUTES}>

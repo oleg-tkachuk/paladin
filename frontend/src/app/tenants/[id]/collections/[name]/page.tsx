@@ -11,6 +11,8 @@
 // tab: on success, push the returned resource into context so
 // sibling tabs see fresh data without a refetch.
 
+import { CopyableId } from "@/components/ui/CopyableId";
+import { HelpTip } from "@/components/ui/HelpTip";
 import { useTenantChangesBlocked } from "../../tenant-context";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { useCallback, useEffect, useState } from "react";
@@ -155,10 +157,14 @@ export default function CollectionOverviewPage() {
         <h2 className="text-sm font-semibold">Identity</h2>
         <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-muted-foreground">Resource name</dt>
-          <dd className="break-all font-mono text-xs">{collection.name}</dd>
+          <dd>
+            <CopyableId value={collection.name} label="resource name" />
+          </dd>
 
           <dt className="text-muted-foreground">Tenant ID</dt>
-          <dd className="break-all font-mono text-xs">{collection.tenantId}</dd>
+          <dd>
+            <CopyableId value={collection.tenantId} label="tenant ID" />
+          </dd>
 
           <dt className="text-muted-foreground">Collection</dt>
           <dd className="font-mono text-xs">{collection.collection}</dd>
@@ -171,12 +177,13 @@ export default function CollectionOverviewPage() {
           </dd>
 
           <dt className="text-muted-foreground">Access</dt>
-          <dd>
+          <dd className="flex items-center gap-2">
             {isPublic ? (
               <PublicReadBadge />
             ) : (
               <span className="text-xs text-muted-foreground">private</span>
             )}
+            <HelpTip topic="publicRead" />
           </dd>
 
           {isPublic && (

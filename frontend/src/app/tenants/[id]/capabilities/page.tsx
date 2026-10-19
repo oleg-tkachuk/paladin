@@ -1,5 +1,6 @@
 "use client";
 
+import { HelpTip } from "@/components/ui/HelpTip";
 import { listAllPages } from "@/lib/listAllPages";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
@@ -311,7 +312,9 @@ export default function CapabilitiesPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Capabilities</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            Capabilities <HelpTip topic="capability" />
+          </h2>
           <p className={cn(T.helper, "max-w-prose")}>
             Short-lived, signed authorisation tokens for agent / service
             runtimes acting on behalf of{" "}
