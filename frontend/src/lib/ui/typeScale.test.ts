@@ -35,6 +35,7 @@ const FIGURES = new Set([
   "formatCompactCount",
   "formatMoney",
   "Bytes",
+  "Count",
   // stats/page's count, through formatCount.
   "num",
 ]);

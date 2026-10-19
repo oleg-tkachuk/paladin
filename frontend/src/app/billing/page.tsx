@@ -60,10 +60,11 @@ import {
   budgetUnit,
   budgetUnlimited,
 } from "@/lib/format/budgetCeiling";
-import { formatCompactCount, formatDate } from "@/lib/format/locale";
+import { formatDate } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 import type { TopEntry } from "@/gen/paladin/admin/v1/billing_service_pb";
+import { Count } from "@/components/ui/Count";
 
 // /billing — one tenant's capability spend over a period, from the charges
 // ledger (BillingService): what it came to against its budget, how it moved
@@ -368,7 +369,7 @@ function BillingView() {
               />
               <KPITile
                 label="Charges"
-                value={formatCompactCount(chargeCount)}
+                value={<Count value={chargeCount} />}
                 helper={`average ${money(moneyFromNanos(avgNanos, seriesUnit), seriesUnit)} per ${granularity}`}
               />
               <KPITile
@@ -676,7 +677,7 @@ function BreakdownCard({
                   })}
                 </TableCell>
                 <TableCell numeric className="font-mono text-sm">
-                  {formatCompactCount(e.chargeCount)}
+                  <Count value={e.chargeCount} />
                 </TableCell>
               </TableRow>
             ))}
