@@ -47,6 +47,7 @@ const h = vi.hoisted(() => ({
         sortDirection: unknown;
         prefix?: string;
         delimiter?: string;
+        refetchIntervalMs?: number;
       }
     | undefined,
 }));
@@ -602,5 +603,19 @@ describe("CollectionObjectsPage folders", () => {
     render(<CollectionObjectsPage />);
     expect(h.lastOpts).toMatchObject({ prefix: "reports/", delimiter: "" });
     expect(screen.queryByRole("button", { name: /Open folder/ })).toBeNull();
+  });
+});
+
+// The list holds still until Live is switched on, then asks again on a timer.
+describe("CollectionObjectsPage live", () => {
+  it("is paused until switched on", async () => {
+    render(<CollectionObjectsPage />);
+    const live = screen.getByRole("button", { name: "Live" });
+    expect(live).toHaveAttribute("aria-pressed", "false");
+    expect(h.lastOpts?.refetchIntervalMs).toBeUndefined();
+    await userEvent.click(live);
+    await waitFor(() =>
+      expect(h.lastOpts?.refetchIntervalMs).toBeGreaterThan(0),
+    );
   });
 });

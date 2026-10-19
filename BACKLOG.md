@@ -827,17 +827,6 @@ order they are being taken up.
   text field has focus.
 - **Blockers:** none.
 
-#### One Live toggle for every refreshing view
-
-- **Status:** Aspirational.
-- **Reason:** audit streams over SSE, operations poll every two seconds,
-  health and objects refresh on their own schedules; each page wires and
-  labels its own.
-- **Definition of Done:** a shared Live control and hook (on, paused, the
-  interval or the stream it uses) adopted by audit, operations, objects and
-  health; a paused view says so.
-- **Blockers:** none.
-
 #### Browser notifications when an operation finishes
 
 - **Status:** Aspirational.
