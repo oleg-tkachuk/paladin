@@ -15,8 +15,8 @@
     {
       "customType": "regex",
       "description": "The Postgres the Go test suites start, which no built-in manager reads.",
-      "managerFilePatterns": ["/^backend/internal/pgtest/image\\.go$/"],
-      "matchStrings": ["const Image = \"(?<depName>postgres):(?<currentValue>[^\"@]+)(@(?<currentDigest>sha256:[a-f0-9]+))?\""],
+      "managerFilePatterns": ["/^backend/tests/testimage/postgres\\.go$/"],
+      "matchStrings": ["const Postgres = \"(?<depName>postgres):(?<currentValue>[^\"@]+)(@(?<currentDigest>sha256:[a-f0-9]+))?\""],
       "datasourceTemplate": "docker"
     }
   ],

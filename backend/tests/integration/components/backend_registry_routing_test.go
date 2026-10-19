@@ -15,7 +15,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
-	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
+	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 )
 
 // seaweedImage pins the SeaweedFS release the e2e compose stack uses, for a

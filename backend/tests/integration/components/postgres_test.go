@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,7 +22,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -43,7 +42,7 @@ import (
 //   - a test that ALTERs a shared role, sets goose's globals or calls
 //     t.Setenv stays serial, and says so on its first line.
 const (
-	postgresImage = pgtest.Image
+	postgresImage = testimage.Postgres
 	postgresUser  = "paladin"
 	// The database tests are cloned from. Nothing stays connected to it:
 	// CREATE DATABASE ... TEMPLATE refuses a template that has a session.

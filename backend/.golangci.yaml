@@ -51,6 +51,7 @@ linters:
     - testifylint # testify usage correctness
     - thelper # test helpers call t.Helper()
     - whitespace # leading/trailing newlines in blocks
+    - depguard # test infrastructure stays out of what ships (rule below)
 
   # Explicitly off — high-churn complexity/style metrics we don't gate on.
   # NB: `unused` (a standard linter) is now ON — the dead-code pass it gated
@@ -59,7 +60,6 @@ linters:
   # landed 2026-06-26.
   disable:
     - cyclop
-    - depguard
     - exhaustruct
     - funlen
     - gocognit
@@ -73,6 +73,19 @@ linters:
   # v2 nests linter settings under linters.settings (the old top-level
   # `linters-settings` key is silently ignored on v2).
   settings:
+    depguard:
+      rules:
+        # backend/tests holds test infrastructure — container images, the
+        # Postgres harness. Code that ships in the binary must not import it;
+        # tests anywhere may.
+        test-infrastructure:
+          files:
+            - "**/internal/**"
+            - "**/cmd/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/oleg-tkachuk/paladin/backend/tests"
+              desc: test infrastructure; import it from tests only
     errcheck:
       # Non-actionable errors: writes to buffers/stderr, and Close() on the
       # cleanup path (a Close error is rarely recoverable; resource *leaks* are
