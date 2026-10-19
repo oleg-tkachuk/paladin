@@ -261,7 +261,7 @@ describe("M2MTokensPage state and search", () => {
       },
     );
     expect(
-      screen.getByText("No token matches the search."),
+      screen.getByText("No M2M tokens match your filters."),
     ).toBeInTheDocument();
   });
 });

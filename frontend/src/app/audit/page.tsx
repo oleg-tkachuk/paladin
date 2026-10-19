@@ -1,6 +1,6 @@
 "use client";
 
-import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { useLinkedRow } from "@/hooks/useLinkedRow";
 import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -32,16 +32,13 @@ import {
   type AuditOrderField,
 } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
-import { Card } from "@/components/ui/Card";
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -110,259 +107,249 @@ export default function AuditPage() {
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
-      <div className="space-y-6">
-        <PageHeader
-          title="Audit Logs"
-          description="Append-only log of every mutation served by the control plane."
-          showDefaultActions={false}
-          actions={
-            <>
-              <LiveToggle
-                state={liveState({ live, connected })}
-                onToggle={() => setLive((v) => !v)}
-              />
+      <ListPage
+        header={
+          <PageHeader
+            title="Audit Logs"
+            description="Append-only log of every mutation served by the control plane."
+            showDefaultActions={false}
+            actions={
+              <>
+                <LiveToggle
+                  state={liveState({ live, connected })}
+                  onToggle={() => setLive((v) => !v)}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refresh()}
+                  disabled={loading}
+                >
+                  <ArrowPathIcon
+                    className={cn("size-4", loading && "animate-spin")}
+                  />
+                  Refresh
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExportOpen(true)}
+                >
+                  <ArrowDownTrayIcon className="size-4" />
+                  Export
+                </Button>
+              </>
+            }
+          />
+        }
+        toolbar={
+          <>
+            <TableToolbar
+              query={search}
+              onQueryChange={setSearch}
+              searchLabel="Filter the audit log"
+              placeholder="Filter by action, actor, resource, request id…"
+            >
+              <span className={T.hint}>
+                {entries.length} loaded
+                {nextCursor ? " · more available" : ""}
+              </span>
+            </TableToolbar>
+
+            {error && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+          </>
+        }
+        footer={
+          nextCursor && (
+            <div className="flex justify-center">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void refresh()}
+                onClick={() => void loadMore()}
                 disabled={loading}
               >
-                <ArrowPathIcon
-                  className={cn("size-4", loading && "animate-spin")}
-                />
-                Refresh
+                Load more
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setExportOpen(true)}
-              >
-                <ArrowDownTrayIcon className="size-4" />
-                Export
-              </Button>
-            </>
-          }
-        />
-
-        <TableToolbar
-          query={search}
-          onQueryChange={setSearch}
-          searchLabel="Filter the audit log"
-          placeholder="Filter by action, actor, resource, request id…"
-        >
-          <span className={T.hint}>
-            {entries.length} loaded
-            {nextCursor ? " · more available" : ""}
-          </span>
-        </TableToolbar>
-
-        {error && (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHead
-                  label="When"
-                  column={AUDIT_ORDER.at}
-                  className="@md:w-45"
-                  {...sortProps}
-                />
-                <SortableHead
-                  label="Action"
-                  column={AUDIT_ORDER.action}
-                  {...sortProps}
-                />
-                <SortableHead
-                  label="Actor"
-                  column={AUDIT_ORDER.actor}
-                  {...sortProps}
-                />
-                <SortableHead
-                  label="Resource"
-                  column={AUDIT_ORDER.resource}
-                  className="hidden @2xl:table-cell"
-                  {...sortProps}
-                />
-                <TableHead className="hidden @4xl:table-cell w-45">
-                  Request
-                </TableHead>
-                <TableHead className="hidden @6xl:table-cell w-35">
-                  Capability
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && entries.length === 0 ? (
-                [0, 1, 2, 3].map((i) => (
-                  <TableRow key={`s-${i}`}>
-                    <TableCell colSpan={6} className="py-3">
-                      <Skeleton className="h-7 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : filtered.length === 0 ? (
-                <EmptyTableRow
-                  colSpan={6}
-                  icon={ClipboardDocumentListIcon}
-                  what="audit entries"
-                  reason={emptyReason({ filtered: !!search })}
-                />
-              ) : (
-                filtered.map((e) => {
-                  const hasError = !!e.errorMessage;
-                  const row = openableRow(() => detail.open(e.entryId));
-                  return (
-                    <TableRow
-                      key={e.entryId}
-                      {...row}
-                      {...detail.rowProps(e.entryId)}
-                      className={cn(
-                        row.className,
-                        hasError && "bg-destructive/5",
-                      )}
-                    >
-                      <TableCell
-                        className={cn(
-                          T.codeSmall,
-                          "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
-                        )}
-                      >
-                        <Timestamp ts={e.at} />
-                      </TableCell>
-                      {/* Actor and resource are long unbroken identifiers
+            </div>
+          )
+        }
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableHead
+                label="When"
+                column={AUDIT_ORDER.at}
+                className="@md:w-45"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Action"
+                column={AUDIT_ORDER.action}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Actor"
+                column={AUDIT_ORDER.actor}
+                {...sortProps}
+              />
+              <SortableHead
+                label="Resource"
+                column={AUDIT_ORDER.resource}
+                className="hidden @2xl:table-cell"
+                {...sortProps}
+              />
+              <TableHead className="hidden @4xl:table-cell w-45">
+                Request
+              </TableHead>
+              <TableHead className="hidden @6xl:table-cell w-35">
+                Capability
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <ListBody
+            colSpan={6}
+            loading={loading && entries.length === 0}
+            // A failed read is the banner above the table.
+            error={null}
+            empty={
+              filtered.length === 0
+                ? {
+                    icon: ClipboardDocumentListIcon,
+                    what: "audit entries",
+                    reason: emptyReason({ filtered: !!search }),
+                  }
+                : null
+            }
+          >
+            {filtered.map((e) => {
+              const hasError = !!e.errorMessage;
+              const row = openableRow(() => detail.open(e.entryId));
+              return (
+                <TableRow
+                  key={e.entryId}
+                  {...row}
+                  {...detail.rowProps(e.entryId)}
+                  className={cn(row.className, hasError && "bg-destructive/5")}
+                >
+                  <TableCell
+                    className={cn(
+                      T.codeSmall,
+                      "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
+                    )}
+                  >
+                    <Timestamp ts={e.at} />
+                  </TableCell>
+                  {/* Actor and resource are long unbroken identifiers
                         (`apikey:<uuid>`, resource names): they wrap, or one
                         row widens the table past its card. */}
-                      <TableCell className="max-w-80 whitespace-normal">
-                        <AuditActionCell
-                          action={e.action}
-                          errorMessage={e.errorMessage}
-                        />
-                      </TableCell>
-                      <TableCell className="whitespace-normal break-all">
-                        <div className="space-y-0.5">
-                          <span className={T.body}>
-                            {e.actorSubject ? (
-                              <ActorName
-                                subject={e.actorSubject}
-                                tenantId={e.actorTenantId}
-                              />
-                            ) : (
-                              <span className="italic text-muted-foreground">
-                                system
-                              </span>
-                            )}
+                  <TableCell className="max-w-80 whitespace-normal">
+                    <AuditActionCell
+                      action={e.action}
+                      errorMessage={e.errorMessage}
+                    />
+                  </TableCell>
+                  <TableCell className="whitespace-normal break-all">
+                    <div className="space-y-0.5">
+                      <span className={T.body}>
+                        {e.actorSubject ? (
+                          <ActorName
+                            subject={e.actorSubject}
+                            tenantId={e.actorTenantId}
+                          />
+                        ) : (
+                          <span className="italic text-muted-foreground">
+                            system
                           </span>
-                          {e.actorAudience && (
-                            <div
-                              className={cn(
-                                T.codeSmall,
-                                "text-muted-foreground",
-                              )}
-                            >
-                              aud {e.actorAudience}
-                            </div>
-                          )}
-                          <RelayedBy client={e.relayedBy} />
+                        )}
+                      </span>
+                      {e.actorAudience && (
+                        <div
+                          className={cn(T.codeSmall, "text-muted-foreground")}
+                        >
+                          aud {e.actorAudience}
                         </div>
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "hidden @2xl:table-cell whitespace-normal break-all",
-                          T.code,
-                          "text-muted-foreground",
-                        )}
+                      )}
+                      <RelayedBy client={e.relayedBy} />
+                    </div>
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "hidden @2xl:table-cell whitespace-normal break-all",
+                      T.code,
+                      "text-muted-foreground",
+                    )}
+                  >
+                    {e.resourceName || "—"}
+                  </TableCell>
+                  <TableCell className="hidden @4xl:table-cell">
+                    {e.requestId ? (
+                      <span
+                        className={cn(T.code, "text-muted-foreground")}
+                        title={e.requestId}
                       >
-                        {e.resourceName || "—"}
-                      </TableCell>
-                      <TableCell className="hidden @4xl:table-cell">
-                        {e.requestId ? (
-                          <span
-                            className={cn(T.code, "text-muted-foreground")}
-                            title={e.requestId}
-                          >
-                            {e.requestId.slice(0, 12)}
-                            {e.requestId.length > 12 ? "…" : ""}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                        {e.sourceIp && (
-                          <div
-                            className={cn(T.codeSmall, "text-muted-foreground")}
-                          >
-                            {e.sourceIp}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden @6xl:table-cell">
-                        {e.capabilityId ? (
-                          // Capabilities are tenant-scoped now (the
-                          // page lives under /tenants/<id>/capabilities).
-                          // Use the audit row's actor_tenant_id to
-                          // route — TenantLayout's resolver canonicalises
-                          // UUID→slug on landing.
-                          e.actorTenantId ? (
-                            <Link
-                              href={`/tenants/${encodeURIComponent(e.actorTenantId)}/capabilities?id=${e.capabilityId}`}
-                              className={cn(
-                                T.code,
-                                "text-primary hover:underline",
-                              )}
-                              title={e.capabilityId}
-                              onClick={(ev) => ev.stopPropagation()}
-                            >
-                              {e.capabilityId.slice(0, 8)}…
-                            </Link>
-                          ) : (
-                            // No actor_tenant_id (system action): show
-                            // the id as text so the column still
-                            // carries the data, just not the navigation.
-                            <span
-                              className={cn(T.code, "text-muted-foreground")}
-                              title={e.capabilityId}
-                            >
-                              {e.capabilityId.slice(0, 8)}…
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                        {e.requestId.slice(0, 12)}
+                        {e.requestId.length > 12 ? "…" : ""}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                    {e.sourceIp && (
+                      <div className={cn(T.codeSmall, "text-muted-foreground")}>
+                        {e.sourceIp}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden @6xl:table-cell">
+                    {e.capabilityId ? (
+                      // Capabilities are tenant-scoped now (the
+                      // page lives under /tenants/<id>/capabilities).
+                      // Use the audit row's actor_tenant_id to
+                      // route — TenantLayout's resolver canonicalises
+                      // UUID→slug on landing.
+                      e.actorTenantId ? (
+                        <Link
+                          href={`/tenants/${encodeURIComponent(e.actorTenantId)}/capabilities?id=${e.capabilityId}`}
+                          className={cn(T.code, "text-primary hover:underline")}
+                          title={e.capabilityId}
+                          onClick={(ev) => ev.stopPropagation()}
+                        >
+                          {e.capabilityId.slice(0, 8)}…
+                        </Link>
+                      ) : (
+                        // No actor_tenant_id (system action): show
+                        // the id as text so the column still
+                        // carries the data, just not the navigation.
+                        <span
+                          className={cn(T.code, "text-muted-foreground")}
+                          title={e.capabilityId}
+                        >
+                          {e.capabilityId.slice(0, 8)}…
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </ListBody>
+        </Table>
+      </ListPage>
 
-        {nextCursor && (
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void loadMore()}
-              disabled={loading}
-            >
-              Load more
-            </Button>
-          </div>
-        )}
-
-        <AuditEntryDetailDialog
-          entryId={detail.linkedId}
-          onOpenChange={(o) => {
-            if (!o) detail.close();
-          }}
-        />
-        <ExportAuditLogDialog open={exportOpen} onOpenChange={setExportOpen} />
-      </div>
+      <AuditEntryDetailDialog
+        entryId={detail.linkedId}
+        onOpenChange={(o) => {
+          if (!o) detail.close();
+        }}
+      />
+      <ExportAuditLogDialog open={exportOpen} onOpenChange={setExportOpen} />
     </TableScope>
   );
 }

@@ -9,7 +9,7 @@ import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { IntentTableRow } from "@/components/ui/IntentTableRow";
 import { USERS_LIST_QUERY_KEY, userDetailQuery } from "@/lib/queries/details";
-import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -46,13 +46,10 @@ import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { useTableFilter } from "@/hooks/useTableUrl";
 import type { SearchText, SortAccessors } from "@/lib/table/view";
-import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
-import { Card } from "@/components/ui/Card";
+import { failedRead } from "@/components/ui/ListLoadError";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -177,219 +174,200 @@ export default function UsersPage() {
 
   return (
     <TableScope id={TABLE_ID} sort={view.sort}>
-      <div className="space-y-6">
-        <PageHeader
-          title="Users"
-          description="Cross-tenant view of IAM principals and their roles."
-          showDefaultActions={false}
-        />
-
-        <TableToolbar
-          query={view.query}
-          onQueryChange={view.setQuery}
-          searchLabel="Search users"
-          placeholder="Search subject, display name, role, tenant slug…"
-          filter={{
-            label: "Standing",
-            options: STANDING_FILTERS,
-            value: standingFilter,
-            onChange: setStandingFilter,
-          }}
-          count={
-            usersQuery.data
-              ? { shown: filtered.length, total: users.length }
-              : undefined
-          }
-          actions={
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={refreshUsers}
-                aria-label="Refresh"
-              >
-                <ArrowPathIcon
-                  className={cn("size-4", loading && "animate-spin")}
-                />
-              </Button>
-              <Button onClick={() => setCreateOpen(true)}>New user</Button>
-            </>
-          }
-        />
-
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHead
-                  label="User"
-                  column="user"
-                  className="@md:w-65"
-                  {...sortProps}
-                />
-                <SortableHead
-                  label="Tenant"
-                  column="tenant"
-                  className="hidden @lg:table-cell"
-                  {...sortProps}
-                />
-                <TableHead className="hidden @md:table-cell">Roles</TableHead>
-                <SortableHead
-                  label="Last login"
-                  column="login"
-                  className="hidden @md:table-cell"
-                  {...sortProps}
-                />
-                <SortableHead
-                  label="State"
-                  column="state"
-                  className="w-20"
-                  {...sortProps}
-                />
-                <TableHead className="text-right @md:w-30">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && users.length === 0 ? (
-                [0, 1, 2].map((i) => (
-                  <TableRow key={`s-${i}`}>
-                    <TableCell colSpan={USER_COLUMNS} className="py-3">
-                      <Skeleton className="h-7 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : error ? (
-                // The error used to be a banner ABOVE this table while the table
-                // itself still said "No users yet". Both were on screen at once,
-                // and the eye goes to the table — which was asserting the list is
-                // empty when it is unknown. One statement, in the place the rows
-                // would have been, matching /buckets and /tenants.
-                <TableRow>
-                  <TableCell
-                    colSpan={USER_COLUMNS}
-                    className="h-32 text-center"
-                  >
-                    <ListLoadError
-                      what="Users"
-                      reason={error}
-                      onRetry={refreshUsers}
+      <ListPage
+        header={
+          <PageHeader
+            title="Users"
+            description="Cross-tenant view of IAM principals and their roles."
+            showDefaultActions={false}
+          />
+        }
+        toolbar={
+          <TableToolbar
+            query={view.query}
+            onQueryChange={view.setQuery}
+            searchLabel="Search users"
+            placeholder="Search subject, display name, role, tenant slug…"
+            filter={{
+              label: "Standing",
+              options: STANDING_FILTERS,
+              value: standingFilter,
+              onChange: setStandingFilter,
+            }}
+            count={
+              usersQuery.data
+                ? { shown: filtered.length, total: users.length }
+                : undefined
+            }
+            actions={
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={refreshUsers}
+                  aria-label="Refresh"
+                >
+                  <ArrowPathIcon
+                    className={cn("size-4", loading && "animate-spin")}
+                  />
+                </Button>
+                <Button onClick={() => setCreateOpen(true)}>New user</Button>
+              </>
+            }
+          />
+        }
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableHead
+                label="User"
+                column="user"
+                className="@md:w-65"
+                {...sortProps}
+              />
+              <SortableHead
+                label="Tenant"
+                column="tenant"
+                className="hidden @lg:table-cell"
+                {...sortProps}
+              />
+              <TableHead className="hidden @md:table-cell">Roles</TableHead>
+              <SortableHead
+                label="Last login"
+                column="login"
+                className="hidden @md:table-cell"
+                {...sortProps}
+              />
+              <SortableHead
+                label="State"
+                column="state"
+                className="w-20"
+                {...sortProps}
+              />
+              <TableHead className="text-right @md:w-30">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <ListBody
+            colSpan={USER_COLUMNS}
+            loading={loading && users.length === 0}
+            error={
+              error
+                ? { what: "Users", reason: error, onRetry: refreshUsers }
+                : null
+            }
+            empty={
+              filtered.length === 0
+                ? {
+                    icon: UserCircleIcon,
+                    what: "users",
+                    reason: emptyReason({ filtered: users.length > 0 }),
+                  }
+                : null
+            }
+          >
+            {filtered.map((u) => {
+              const tenant = tenantByID.get(u.tenantId);
+              return (
+                <IntentTableRow
+                  key={u.userId}
+                  className="group"
+                  query={userDetailQuery(u.name)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+                        {(u.displayName || u.subject || "—")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <Link
+                          href={userHref(u.name)}
+                          className="block truncate font-medium hover:text-primary hover:underline"
+                        >
+                          {u.displayName || (
+                            <span className="text-muted-foreground italic">
+                              (no name)
+                            </span>
+                          )}
+                        </Link>
+                        <p className="truncate font-mono text-sm text-muted-foreground">
+                          {u.subject}
+                        </p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden @lg:table-cell">
+                    {tenant ? (
+                      <Link
+                        href={`/tenants/${encodeURIComponent(tenant.slug)}`}
+                        className="text-xs hover:text-primary hover:underline"
+                      >
+                        {tenant.slug}
+                      </Link>
+                    ) : (
+                      <span className="font-mono text-sm text-muted-foreground">
+                        {u.tenantId.slice(0, 8)}…
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="hidden @md:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                      {u.roles.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        u.roles.map((r) => (
+                          <Badge
+                            key={r}
+                            variant="outline"
+                            className="font-mono"
+                          >
+                            {r}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden @md:table-cell">
+                    <RelativeTime ts={u.lastLoginAt} />
+                  </TableCell>
+                  <TableCell>
+                    {u.disabled ? (
+                      <Badge variant="destructive">disabled</Badge>
+                    ) : (
+                      <Badge variant="outline">active</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <UserRowActions
+                      user={u}
+                      onChanged={refreshUsers}
+                      onResetPassword={setResetTarget}
                     />
                   </TableCell>
-                </TableRow>
-              ) : filtered.length === 0 ? (
-                <EmptyTableRow
-                  colSpan={USER_COLUMNS}
-                  icon={UserCircleIcon}
-                  what="users"
-                  reason={emptyReason({ filtered: users.length > 0 })}
-                />
-              ) : (
-                filtered.map((u) => {
-                  const tenant = tenantByID.get(u.tenantId);
-                  return (
-                    <IntentTableRow
-                      key={u.userId}
-                      className="group"
-                      query={userDetailQuery(u.name)}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
-                            {(u.displayName || u.subject || "—")
-                              .slice(0, 2)
-                              .toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <Link
-                              href={userHref(u.name)}
-                              className="block truncate font-medium hover:text-primary hover:underline"
-                            >
-                              {u.displayName || (
-                                <span className="text-muted-foreground italic">
-                                  (no name)
-                                </span>
-                              )}
-                            </Link>
-                            <p className="truncate font-mono text-sm text-muted-foreground">
-                              {u.subject}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden @lg:table-cell">
-                        {tenant ? (
-                          <Link
-                            href={`/tenants/${encodeURIComponent(tenant.slug)}`}
-                            className="text-xs hover:text-primary hover:underline"
-                          >
-                            {tenant.slug}
-                          </Link>
-                        ) : (
-                          <span className="font-mono text-sm text-muted-foreground">
-                            {u.tenantId.slice(0, 8)}…
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden @md:table-cell">
-                        <div className="flex flex-wrap gap-1">
-                          {u.roles.length === 0 ? (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          ) : (
-                            u.roles.map((r) => (
-                              <Badge
-                                key={r}
-                                variant="outline"
-                                className="font-mono"
-                              >
-                                {r}
-                              </Badge>
-                            ))
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden @md:table-cell">
-                        <RelativeTime ts={u.lastLoginAt} />
-                      </TableCell>
-                      <TableCell>
-                        {u.disabled ? (
-                          <Badge variant="destructive">disabled</Badge>
-                        ) : (
-                          <Badge variant="outline">active</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <UserRowActions
-                          user={u}
-                          onChanged={refreshUsers}
-                          onResetPassword={setResetTarget}
-                        />
-                      </TableCell>
-                    </IntentTableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                </IntentTableRow>
+              );
+            })}
+          </ListBody>
+        </Table>
+      </ListPage>
 
-        <UserCreateDialog
-          isOpen={createOpen}
-          onClose={() => setCreateOpen(false)}
-          onCreated={refreshUsers}
-          tenants={tenants.map((t) => ({
-            tenantId: t.tenantId,
-            slug: t.slug,
-            displayName: t.displayName,
-          }))}
-          tenantsFailed={failedRead(tenantsError, fetchTenants)}
-        />
-        <PasswordResetResult
-          target={resetTarget}
-          onClose={() => setResetTarget(null)}
-        />
-      </div>
+      <UserCreateDialog
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={refreshUsers}
+        tenants={tenants.map((t) => ({
+          tenantId: t.tenantId,
+          slug: t.slug,
+          displayName: t.displayName,
+        }))}
+        tenantsFailed={failedRead(tenantsError, fetchTenants)}
+      />
+      <PasswordResetResult
+        target={resetTarget}
+        onClose={() => setResetTarget(null)}
+      />
     </TableScope>
   );
 }

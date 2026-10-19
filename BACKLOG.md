@@ -805,17 +805,6 @@ order they are being taken up.
 - **Blockers:** the cross-tenant read limes is growing — see "Billing has no
   view across tenants".
 
-#### Page templates: list, detail, settings
-
-- **Status:** Aspirational.
-- **Reason:** each page arranges its header, toolbar, table and load error by
-  hand, and they drift. The empty state is shared now (`EmptyState`), so a
-  list's "nothing here" reads alike; the rest of the page is not.
-- **Definition of Done:** `ListPage`, `DetailPage` and `SettingsPage` layouts
-  that pages fill, with the list template taking the toolbar, the load error
-  and the `EmptyState` as slots.
-- **Blockers:** none.
-
 #### Optimistic updates for changes whose answer is known
 
 - **Status:** Aspirational.

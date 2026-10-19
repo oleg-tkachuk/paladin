@@ -2,7 +2,7 @@
 
 import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
-import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
 import { useRouter } from "next/navigation";
 
@@ -37,10 +37,8 @@ import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/Card";
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -52,8 +50,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { failedRead } from "@/components/ui/ListLoadError";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
@@ -200,203 +197,194 @@ export default function CollectionsPage() {
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
-      <div className="space-y-6">
-        <PageHeader
-          title="Collections"
-          description="Every tenant's Collections, each routed to a bucket. A new one is created in your tenant."
-          showDefaultActions={false}
-          actions={
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <PlusIcon className="size-4" />
-              New Collection
-            </Button>
-          }
-        />
-
-        {/* Filter bar */}
-        <TableToolbar
-          query={search}
-          onQueryChange={setSearch}
-          searchLabel="Search collections"
-          placeholder="Search by name or display label…"
-          actions={
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() =>
-                  void fetchAllCollections(searchFilter(debouncedSearch))
-                }
-                aria-label="Refresh"
-              >
-                <ArrowPathIcon
-                  className={cn("size-4", loading && "animate-spin")}
-                />
+      <ListPage
+        header={
+          <PageHeader
+            title="Collections"
+            description="Every tenant's Collections, each routed to a bucket. A new one is created in your tenant."
+            showDefaultActions={false}
+            actions={
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <PlusIcon className="size-4" />
+                New Collection
               </Button>
-            </>
-          }
-        />
-
-        {/* Table */}
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHead
-                  label="Collection"
-                  column="name"
-                  current={sort}
-                  onSort={handleSort}
-                />
-                <TableHead>Tenant</TableHead>
-                <SortableHead
-                  className="hidden @xs:table-cell"
-                  label="Display name"
-                  column="displayName"
-                  current={sort}
-                  onSort={handleSort}
-                />
-                <SortableHead
-                  className="hidden @md:table-cell"
-                  label="Bucket"
-                  column="bucket"
-                  current={sort}
-                  onSort={handleSort}
-                />
-                <TableHead className="w-12 text-right">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && collections.length === 0 ? (
-                [0, 1, 2].map((i) => (
-                  <TableRow key={`s-${i}`}>
-                    <TableCell colSpan={COLUMNS} className="py-3">
-                      <Skeleton className="h-7 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : listError ? (
-                <TableRow>
-                  <TableCell colSpan={COLUMNS} className="h-48 text-center">
-                    <ListLoadError
-                      what="Collections"
-                      reason={listError}
-                      onRetry={() =>
-                        void fetchAllCollections(searchFilter(debouncedSearch))
-                      }
-                    />
-                  </TableCell>
-                </TableRow>
-              ) : sorted.length === 0 ? (
-                <EmptyTableRow
-                  colSpan={COLUMNS}
-                  icon={ServerStackIcon}
-                  what="collections"
-                  reason={emptyReason({ filtered: !!search })}
-                  purpose="A collection is a tenant's namespace of objects, stored in one bucket."
-                  action={{
-                    label: "Provision the first collection",
-                    onClick: () => setCreateOpen(true),
-                  }}
-                />
-              ) : (
-                sorted.map((ok) => (
-                  <TableRow
-                    key={`${ok.tenantId}/${ok.collection}`}
-                    className="group"
+            }
+          />
+        }
+        toolbar={
+          <TableToolbar
+            query={search}
+            onQueryChange={setSearch}
+            searchLabel="Search collections"
+            placeholder="Search by name or display label…"
+            actions={
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() =>
+                    void fetchAllCollections(searchFilter(debouncedSearch))
+                  }
+                  aria-label="Refresh"
+                >
+                  <ArrowPathIcon
+                    className={cn("size-4", loading && "animate-spin")}
+                  />
+                </Button>
+              </>
+            }
+          />
+        }
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableHead
+                label="Collection"
+                column="name"
+                current={sort}
+                onSort={handleSort}
+              />
+              <TableHead>Tenant</TableHead>
+              <SortableHead
+                className="hidden @xs:table-cell"
+                label="Display name"
+                column="displayName"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden @md:table-cell"
+                label="Bucket"
+                column="bucket"
+                current={sort}
+                onSort={handleSort}
+              />
+              <TableHead className="w-12 text-right">
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <ListBody
+            colSpan={COLUMNS}
+            loading={loading && collections.length === 0}
+            error={
+              listError
+                ? {
+                    what: "Collections",
+                    reason: listError,
+                    onRetry: () =>
+                      void fetchAllCollections(searchFilter(debouncedSearch)),
+                  }
+                : null
+            }
+            empty={
+              sorted.length === 0
+                ? {
+                    icon: ServerStackIcon,
+                    what: "collections",
+                    reason: emptyReason({ filtered: !!search }),
+                    purpose:
+                      "A collection is a tenant's namespace of objects, stored in one bucket.",
+                    action: {
+                      label: "Provision the first collection",
+                      onClick: () => setCreateOpen(true),
+                    },
+                  }
+                : null
+            }
+          >
+            {sorted.map((ok) => (
+              <TableRow
+                key={`${ok.tenantId}/${ok.collection}`}
+                className="group"
+              >
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
+                      <ServerStackIcon className="size-4" />
+                    </div>
+                    <Link
+                      href={collectionHref(ok.tenantId, ok.collection)}
+                      className="font-mono text-xs hover:text-primary hover:underline"
+                      title={ok.collection}
+                    >
+                      {ok.collection}
+                    </Link>
+                    {ok.access === CollectionAccess.PUBLIC_READ && (
+                      <PublicReadBadge />
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Link
+                    href={tenantHref(ok.tenantId)}
+                    title={ok.tenantId}
+                    className="block max-w-48 truncate text-sm hover:text-primary"
                   >
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                          <ServerStackIcon className="size-4" />
-                        </div>
-                        <Link
-                          href={collectionHref(ok.tenantId, ok.collection)}
-                          className="font-mono text-xs hover:text-primary hover:underline"
-                          title={ok.collection}
-                        >
-                          {ok.collection}
-                        </Link>
-                        {ok.access === CollectionAccess.PUBLIC_READ && (
-                          <PublicReadBadge />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={tenantHref(ok.tenantId)}
-                        title={ok.tenantId}
-                        className="block max-w-48 truncate text-sm hover:text-primary"
+                    {tenantLabel(tenantNames, ok.tenantId)}
+                  </Link>
+                </TableCell>
+                <TableCell className="hidden @xs:table-cell">
+                  {ok.displayName || (
+                    <span className="text-muted-foreground italic">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="hidden @md:table-cell">
+                  <BucketNameLink bucket={ok.bucket} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 opacity-60 group-hover:opacity-100"
+                        aria-label={`Actions for ${ok.collection}`}
                       >
-                        {tenantLabel(tenantNames, ok.tenantId)}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden @xs:table-cell">
-                      {ok.displayName || (
-                        <span className="text-muted-foreground italic">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <BucketNameLink bucket={ok.bucket} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 opacity-60 group-hover:opacity-100"
-                            aria-label={`Actions for ${ok.collection}`}
-                          >
-                            <EllipsisHorizontalIcon className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={collectionHref(ok.tenantId, ok.collection)}
-                            >
-                              View details
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteTarget(ok)}
-                          >
-                            <TrashIcon className="size-4" />
-                            Delete Collection
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                        <EllipsisHorizontalIcon className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={collectionHref(ok.tenantId, ok.collection)}>
+                          View details
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setDeleteTarget(ok)}
+                      >
+                        <TrashIcon className="size-4" />
+                        Delete Collection
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+          </ListBody>
+        </Table>
+      </ListPage>
 
-        {/* Create dialog */}
-        <CollectionCreateDialog
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          backends={backends}
-          backendsFailed={failedRead(backendsError, fetchBackends)}
-          bucketsHref="/buckets"
-          createCollection={createCollection}
-          onCreated={() =>
-            void fetchAllCollections(searchFilter(debouncedSearch))
-          }
-        />
+      {/* Create dialog */}
+      <CollectionCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        backends={backends}
+        backendsFailed={failedRead(backendsError, fetchBackends)}
+        bucketsHref="/buckets"
+        createCollection={createCollection}
+        onCreated={() =>
+          void fetchAllCollections(searchFilter(debouncedSearch))
+        }
+      />
 
-        <CollectionDeleteDialog
-          target={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={handleDelete}
-        />
-      </div>
+      <CollectionDeleteDialog
+        target={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
     </TableScope>
   );
 }

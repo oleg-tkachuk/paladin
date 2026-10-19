@@ -18,7 +18,7 @@ import { liveState } from "@/lib/live";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/Card";
+import { ListPage } from "@/components/layout/templates/ListPage";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/switch";
 import { TableToolbar } from "@/components/ui/TableToolbar";
@@ -127,91 +127,110 @@ export default function OperationsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Operations"
-        description="Batch work started from the console — deletes, copies, tag updates, restores — as it runs and how it ended."
-        showDefaultActions={false}
-        actions={
+    <>
+      <ListPage
+        header={
+          <PageHeader
+            title="Operations"
+            description="Batch work started from the console — deletes, copies, tag updates, restores — as it runs and how it ended."
+            showDefaultActions={false}
+            actions={
+              <>
+                <LiveToggle
+                  state={liveState({ live })}
+                  onToggle={() => setLive((v) => !v)}
+                  intervalMs={OPERATIONS_POLL_MS}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refresh()}
+                  disabled={loading}
+                >
+                  <ArrowPathIcon
+                    className={cn("size-4", loading && "animate-spin")}
+                  />
+                  Refresh
+                </Button>
+                {mine ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={finished === 0}
+                    onClick={() => void dismiss([])}
+                  >
+                    <XMarkIcon className="size-4" />
+                    Clear finished
+                  </Button>
+                ) : null}
+              </>
+            }
+          />
+        }
+        toolbar={
           <>
-            <LiveToggle
-              state={liveState({ live })}
-              onToggle={() => setLive((v) => !v)}
-              intervalMs={OPERATIONS_POLL_MS}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void refresh()}
-              disabled={loading}
+            <TableToolbar
+              query={search}
+              onQueryChange={setSearch}
+              searchLabel="Search the operations"
+              placeholder="Search by operation, collection, error…"
+              filter={{
+                label: "Show",
+                options: OP_VIEWS,
+                value: view,
+                onChange: setView,
+              }}
+              count={{ shown: shown.length, total: operations.length }}
             >
-              <ArrowPathIcon
-                className={cn("size-4", loading && "animate-spin")}
-              />
-              Refresh
-            </Button>
-            {mine ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={finished === 0}
-                onClick={() => void dismiss([])}
-              >
-                <XMarkIcon className="size-4" />
-                Clear finished
-              </Button>
+              <div role="group" aria-label="Whose" className="flex gap-1">
+                {SCOPES.map((s) => (
+                  <Button
+                    key={s.value}
+                    type="button"
+                    size="sm"
+                    variant={s.value === scope ? "secondary" : "ghost"}
+                    aria-pressed={s.value === scope}
+                    onClick={() => setScope(s.value)}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
+              </div>
+              {mine ? (
+                <label className={cn(T.hint, "flex items-center gap-2")}>
+                  <Switch
+                    checked={includeDismissed}
+                    onCheckedChange={setIncludeDismissed}
+                    aria-label="Show cleared"
+                  />
+                  Show cleared
+                </label>
+              ) : null}
+            </TableToolbar>
+
+            {error || actionErr ? (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                <span>{error ?? actionErr}</span>
+              </div>
             ) : null}
           </>
         }
-      />
-
-      <TableToolbar
-        query={search}
-        onQueryChange={setSearch}
-        searchLabel="Search the operations"
-        placeholder="Search by operation, collection, error…"
-        filter={{
-          label: "Show",
-          options: OP_VIEWS,
-          value: view,
-          onChange: setView,
-        }}
-        count={{ shown: shown.length, total: operations.length }}
+        footer={
+          hasMore ? (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadMore()}
+                disabled={loading}
+              >
+                Load more
+              </Button>
+            </div>
+          ) : null
+        }
       >
-        <div role="group" aria-label="Whose" className="flex gap-1">
-          {SCOPES.map((s) => (
-            <Button
-              key={s.value}
-              type="button"
-              size="sm"
-              variant={s.value === scope ? "secondary" : "ghost"}
-              aria-pressed={s.value === scope}
-              onClick={() => setScope(s.value)}
-            >
-              {s.label}
-            </Button>
-          ))}
-        </div>
-        {mine ? (
-          <label className={cn(T.hint, "flex items-center gap-2")}>
-            <Switch
-              checked={includeDismissed}
-              onCheckedChange={setIncludeDismissed}
-              aria-label="Show cleared"
-            />
-            Show cleared
-          </label>
-        ) : null}
-      </TableToolbar>
-
-      {error || actionErr ? (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
-          <span>{error ?? actionErr}</span>
-        </div>
-      ) : null}
-
-      <Card className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -276,20 +295,7 @@ export default function OperationsPage() {
             )}
           </TableBody>
         </Table>
-      </Card>
-
-      {hasMore ? (
-        <div className="flex justify-center">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void loadMore()}
-            disabled={loading}
-          >
-            Load more
-          </Button>
-        </div>
-      ) : null}
+      </ListPage>
 
       <OperationRecord
         op={
@@ -301,7 +307,7 @@ export default function OperationsPage() {
         }
         onClose={linked.close}
       />
-    </div>
+    </>
   );
 }
 

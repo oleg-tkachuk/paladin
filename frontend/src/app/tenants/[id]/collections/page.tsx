@@ -4,7 +4,7 @@ import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { IntentTableRow } from "@/components/ui/IntentTableRow";
 import { collectionDetailQuery } from "@/lib/queries/details";
-import { EmptyTableRow } from "@/components/ui/EmptyState";
+import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
 import { useRouter } from "next/navigation";
 
@@ -43,10 +43,8 @@ import { listAllCollections } from "@/lib/listAllCollections";
 import { searchFilter } from "@/lib/cel";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/Card";
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -58,13 +56,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant } from "../tenant-context";
-import { ListLoadError, failedRead } from "@/components/ui/ListLoadError";
+import { failedRead } from "@/components/ui/ListLoadError";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
 import { SortableHead } from "@/components/ui/SortHeader";
@@ -251,197 +248,189 @@ export default function TenantCollectionsPage() {
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold">Collections</h2>
-            <p className={cn(T.helper, "max-w-prose")}>
-              Tenant-scoped namespaces routed to a physical bucket.
-            </p>
+      <ListPage
+        header={
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold">Collections</h2>
+              <p className={cn(T.helper, "max-w-prose")}>
+                Tenant-scoped namespaces routed to a physical bucket.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+              disabled={Boolean(changesBlocked)}
+              title={changesBlocked ?? undefined}
+            >
+              <PlusIcon className="size-4" />
+              New Collection
+            </Button>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-            disabled={Boolean(changesBlocked)}
-            title={changesBlocked ?? undefined}
+        }
+        toolbar={
+          <TableToolbar
+            query={search}
+            onQueryChange={setSearch}
+            searchLabel="Search collections"
+            placeholder="Search by name or display label…"
+            actions={
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => void fetchList(search)}
+                  aria-label="Refresh"
+                >
+                  <ArrowPathIcon
+                    className={cn("size-4", loading && "animate-spin")}
+                  />
+                </Button>
+              </>
+            }
+          />
+        }
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortableHead
+                label="Collection"
+                column="name"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden @xs:table-cell"
+                label="Display name"
+                column="displayName"
+                current={sort}
+                onSort={handleSort}
+              />
+              <SortableHead
+                className="hidden @md:table-cell"
+                label="Bucket"
+                column="bucket"
+                current={sort}
+                onSort={handleSort}
+              />
+              <TableHead className="w-12 text-right">
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <ListBody
+            colSpan={4}
+            loading={loading && list.length === 0}
+            // "No Collections yet" for a failed list invites a duplicate.
+            error={
+              listQuery.isError && !listQuery.data
+                ? {
+                    what: "Collections",
+                    reason: errorMessage(listQuery.error),
+                    onRetry: () => void listQuery.refetch(),
+                  }
+                : null
+            }
+            empty={
+              sorted.length === 0
+                ? {
+                    icon: ServerStackIcon,
+                    what: "collections",
+                    reason: emptyReason({ filtered: !!search }),
+                    purpose:
+                      "A collection is a tenant's namespace of objects, stored in one bucket.",
+                    action: {
+                      label: "Provision the first collection",
+                      onClick: () => setCreateOpen(true),
+                      disabled: Boolean(changesBlocked),
+                      title: changesBlocked ?? undefined,
+                    },
+                  }
+                : null
+            }
           >
-            <PlusIcon className="size-4" />
-            New Collection
-          </Button>
-        </div>
-
-        {/* Filter bar */}
-        <TableToolbar
-          query={search}
-          onQueryChange={setSearch}
-          searchLabel="Search collections"
-          placeholder="Search by name or display label…"
-          actions={
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => void fetchList(search)}
-                aria-label="Refresh"
+            {sorted.map((ok) => (
+              <IntentTableRow
+                key={ok.collection}
+                className="group"
+                query={collectionDetailQuery(tenant.tenantId, ok.collection)}
               >
-                <ArrowPathIcon
-                  className={cn("size-4", loading && "animate-spin")}
-                />
-              </Button>
-            </>
-          }
-        />
-
-        <Card className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHead
-                  label="Collection"
-                  column="name"
-                  current={sort}
-                  onSort={handleSort}
-                />
-                <SortableHead
-                  className="hidden @xs:table-cell"
-                  label="Display name"
-                  column="displayName"
-                  current={sort}
-                  onSort={handleSort}
-                />
-                <SortableHead
-                  className="hidden @md:table-cell"
-                  label="Bucket"
-                  column="bucket"
-                  current={sort}
-                  onSort={handleSort}
-                />
-                <TableHead className="w-12 text-right">
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && list.length === 0 ? (
-                [0, 1, 2].map((i) => (
-                  <TableRow key={`s-${i}`}>
-                    <TableCell colSpan={4} className="py-3">
-                      <Skeleton className="h-7 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : listQuery.isError && !listQuery.data ? (
-                // "No Collections yet" for a failed list invites a duplicate.
-                <TableRow>
-                  <TableCell colSpan={4} className="h-48 text-center">
-                    <ListLoadError
-                      what="Collections"
-                      reason={errorMessage(listQuery.error)}
-                      onRetry={() => void listQuery.refetch()}
-                    />
-                  </TableCell>
-                </TableRow>
-              ) : sorted.length === 0 ? (
-                <EmptyTableRow
-                  colSpan={4}
-                  icon={ServerStackIcon}
-                  what="collections"
-                  reason={emptyReason({ filtered: !!search })}
-                  purpose="A collection is a tenant's namespace of objects, stored in one bucket."
-                  action={{
-                    label: "Provision the first collection",
-                    onClick: () => setCreateOpen(true),
-                    disabled: Boolean(changesBlocked),
-                    title: changesBlocked ?? undefined,
-                  }}
-                />
-              ) : (
-                sorted.map((ok) => (
-                  <IntentTableRow
-                    key={ok.collection}
-                    className="group"
-                    query={collectionDetailQuery(
-                      tenant.tenantId,
-                      ok.collection,
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
+                      <ServerStackIcon className="size-4" />
+                    </div>
+                    <Link
+                      href={detailHref(ok.collection)}
+                      className="font-mono text-xs hover:text-primary hover:underline"
+                      title={ok.collection}
+                    >
+                      {ok.collection}
+                    </Link>
+                    {ok.access === CollectionAccess.PUBLIC_READ && (
+                      <PublicReadBadge />
                     )}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-8 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-                          <ServerStackIcon className="size-4" />
-                        </div>
-                        <Link
-                          href={detailHref(ok.collection)}
-                          className="font-mono text-xs hover:text-primary hover:underline"
-                          title={ok.collection}
-                        >
-                          {ok.collection}
+                  </div>
+                </TableCell>
+                <TableCell className="hidden @xs:table-cell whitespace-normal break-words">
+                  {ok.displayName || (
+                    <span className="text-muted-foreground italic">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="hidden @md:table-cell">
+                  <BucketNameLink bucket={ok.bucket} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 opacity-60 group-hover:opacity-100"
+                        aria-label={`Actions for ${ok.collection}`}
+                      >
+                        <EllipsisHorizontalIcon className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={detailHref(ok.collection)}>
+                          View details
                         </Link>
-                        {ok.access === CollectionAccess.PUBLIC_READ && (
-                          <PublicReadBadge />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden @xs:table-cell whitespace-normal break-words">
-                      {ok.displayName || (
-                        <span className="text-muted-foreground italic">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden @md:table-cell">
-                      <BucketNameLink bucket={ok.bucket} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 opacity-60 group-hover:opacity-100"
-                            aria-label={`Actions for ${ok.collection}`}
-                          >
-                            <EllipsisHorizontalIcon className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={detailHref(ok.collection)}>
-                              View details
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteTarget(ok)}
-                          >
-                            <TrashIcon className="size-4" />
-                            Delete Collection
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </IntentTableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setDeleteTarget(ok)}
+                      >
+                        <TrashIcon className="size-4" />
+                        Delete Collection
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </IntentTableRow>
+            ))}
+          </ListBody>
+        </Table>
+      </ListPage>
 
-        {/* Create dialog */}
-        <CollectionCreateDialog
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          backends={backends}
-          backendsFailed={failedRead(backendsError, fetchBackends)}
-          bucketsHref={`/tenants/${tenant.slug}/buckets`}
-          createCollection={createCollection}
-          onCreated={() => void fetchList(search)}
-        />
+      {/* Create dialog */}
+      <CollectionCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        backends={backends}
+        backendsFailed={failedRead(backendsError, fetchBackends)}
+        bucketsHref={`/tenants/${tenant.slug}/buckets`}
+        createCollection={createCollection}
+        onCreated={() => void fetchList(search)}
+      />
 
-        <CollectionDeleteDialog
-          target={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={handleDelete}
-        />
-      </div>
+      <CollectionDeleteDialog
+        target={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
     </TableScope>
   );
 }
