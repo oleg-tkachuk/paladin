@@ -46,6 +46,9 @@ func (*copyFakeRepo) UpdateMetadata(context.Context, objecth.UpdateMetadataArgs)
 func (*copyFakeRepo) ListObjects(context.Context, objecth.ListObjectsArgs) ([]objecth.Object, string, error) {
 	panic("unused")
 }
+func (*copyFakeRepo) ListCommonPrefixes(context.Context, objecth.ListPrefixesArgs) ([]string, bool, error) {
+	return nil, false, nil
+}
 func (*copyFakeRepo) CountObjects(context.Context, objecth.CountObjectsArgs) (int64, bool, error) {
 	panic("unused")
 }

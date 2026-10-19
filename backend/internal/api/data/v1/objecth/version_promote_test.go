@@ -39,6 +39,9 @@ func (*fakeObjectRepo) UpdateMetadata(context.Context, UpdateMetadataArgs) (Obje
 func (*fakeObjectRepo) ListObjects(context.Context, ListObjectsArgs) ([]Object, string, error) {
 	panic("not used")
 }
+func (*fakeObjectRepo) ListCommonPrefixes(context.Context, ListPrefixesArgs) ([]string, bool, error) {
+	return nil, false, nil
+}
 func (*fakeObjectRepo) CountObjects(context.Context, CountObjectsArgs) (int64, bool, error) {
 	panic("not used")
 }

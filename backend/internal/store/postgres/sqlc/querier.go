@@ -454,6 +454,10 @@ type Querier interface {
 	// Only live grants unless include_inactive. A console login is no grant and
 	// is left out.
 	ListOAuthGrantsForUser(ctx context.Context, includeInactive bool, now pgtype.Timestamptz, userID pgtype.UUID) ([]ListOAuthGrantsForUserRow, error)
+	// The folders one level under a prefix (089): prefix + segment + delimiter,
+	// bytewise, at most the limit. The caller asks for one more than it shows to
+	// learn that the list was cut.
+	ListObjectPrefixes(ctx context.Context, tenantID pgtype.UUID, collection string, prefix string, delimiter string, state *string, liveOnly bool, maxFolders int32) ([]string, error)
 	// Every lock row on any version of one object, for the permanent-delete
 	// pre-check. Deleting the object removes all its versions, so a lock on an
 	// older version blocks the delete as surely as one on the current version;
@@ -483,7 +487,7 @@ type Querier interface {
 	// collections scan per returned row (the planner cannot size the id array).
 	// The collection is resolved once, by its unique (tenant_id, name), and
 	// still checked against every row.
-	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string) ([]ListObjectsRow, error)
+	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query

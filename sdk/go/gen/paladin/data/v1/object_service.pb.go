@@ -1609,7 +1609,15 @@ type ListObjectsRequest struct {
 	// a sorted list resumes only that order and direction.
 	OrderBy string `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
 	// sort_order is the direction; unspecified is ascending.
-	SortOrder     v1.SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	SortOrder v1.SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	// prefix keeps the keys that start with it, as a conjunct of filter. No
+	// longer than S3 allows a key to be.
+	Prefix string `protobuf:"bytes,6,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	// delimiter lists one level under prefix, as S3 does: the objects whose key
+	// holds no delimiter past the prefix, and in common_prefixes the rest
+	// folded into prefix + segment + delimiter. Empty lists every key under the
+	// prefix. One character, usually "/".
+	Delimiter     string `protobuf:"bytes,7,opt,name=delimiter,proto3" json:"delimiter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1679,12 +1687,33 @@ func (x *ListObjectsRequest) GetSortOrder() v1.SortOrder {
 	return v1.SortOrder(0)
 }
 
+func (x *ListObjectsRequest) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *ListObjectsRequest) GetDelimiter() string {
+	if x != nil {
+		return x.Delimiter
+	}
+	return ""
+}
+
 type ListObjectsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Objects       []*Object              `protobuf:"bytes,1,rep,name=objects,proto3" json:"objects,omitempty"`
-	Page          *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Objects []*Object              `protobuf:"bytes,1,rep,name=objects,proto3" json:"objects,omitempty"`
+	Page    *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	// The folders one level under the request's prefix, when it named a
+	// delimiter: on the first page only, sorted bytewise, at most 1000. They
+	// hold the objects in the state the filter names, or the live ones when it
+	// names none; the filter's other terms do not narrow them, as in S3.
+	CommonPrefixes []string `protobuf:"bytes,3,rep,name=common_prefixes,json=commonPrefixes,proto3" json:"common_prefixes,omitempty"`
+	// More folders exist than common_prefixes holds.
+	CommonPrefixesTruncated bool `protobuf:"varint,4,opt,name=common_prefixes_truncated,json=commonPrefixesTruncated,proto3" json:"common_prefixes_truncated,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ListObjectsResponse) Reset() {
@@ -1729,6 +1758,20 @@ func (x *ListObjectsResponse) GetPage() *v1.PageResponse {
 		return x.Page
 	}
 	return nil
+}
+
+func (x *ListObjectsResponse) GetCommonPrefixes() []string {
+	if x != nil {
+		return x.CommonPrefixes
+	}
+	return nil
+}
+
+func (x *ListObjectsResponse) GetCommonPrefixesTruncated() bool {
+	if x != nil {
+		return x.CommonPrefixesTruncated
+	}
+	return false
 }
 
 type CountObjectsRequest struct {
@@ -1977,17 +2020,21 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2'.paladin.data.v1.TagsOverride.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd9\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa2\x02\n" +
 	"\x12ListObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12\x19\n" +
 	"\border_by\x18\x04 \x01(\tR\aorderBy\x12;\n" +
 	"\n" +
-	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"}\n" +
+	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12 \n" +
+	"\x06prefix\x18\x06 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\x06prefix\x12%\n" +
+	"\tdelimiter\x18\a \x01(\tB\a\xbaH\x04r\x02\x18\x01R\tdelimiter\"\xe2\x01\n" +
 	"\x13ListObjectsResponse\x121\n" +
 	"\aobjects\x18\x01 \x03(\v2\x17.paladin.data.v1.ObjectR\aobjects\x123\n" +
-	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"N\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\x12'\n" +
+	"\x0fcommon_prefixes\x18\x03 \x03(\tR\x0ecommonPrefixes\x12:\n" +
+	"\x19common_prefixes_truncated\x18\x04 \x01(\bR\x17commonPrefixesTruncated\"N\n" +
 	"\x13CountObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\"Y\n" +

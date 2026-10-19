@@ -139,7 +139,7 @@ func TestSearchObjectIDs_RefusesAnUnknownOrder(t *testing.T) {
 	seedBucketRow(t, ctx, admin)
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	// Every hint unset; only the order is under test.
-	_, err := admin.Exec(ctx, `SELECT search_object_ids($1, 'docs', $2, $3, $4, $5, $6, $7, $8, $9, 10, false, $10, false, $11)`,
+	_, err := admin.Exec(ctx, `SELECT search_object_ids($1, 'docs', $2, $3, $4, $5, $6, $7, $8, $9, 10, false, $10, false, $11, NULL, NULL)`,
 		tenant, nil, nil, nil, nil, nil, nil, nil, nil, "path; DROP TABLE objects", nil)
 	if err == nil {
 		t.Fatal("an unknown order listed objects")

@@ -329,26 +329,34 @@ class TagsOverride(_message.Message):
     def __init__(self, tags: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class ListObjectsRequest(_message.Message):
-    __slots__ = ("parent", "page", "filter", "order_by", "sort_order")
+    __slots__ = ("parent", "page", "filter", "order_by", "sort_order", "prefix", "delimiter")
     PARENT_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     ORDER_BY_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
+    PREFIX_FIELD_NUMBER: _ClassVar[int]
+    DELIMITER_FIELD_NUMBER: _ClassVar[int]
     parent: str
     page: _pagination_pb2.PageRequest
     filter: str
     order_by: str
     sort_order: _pagination_pb2.SortOrder
-    def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., order_by: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ...) -> None: ...
+    prefix: str
+    delimiter: str
+    def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., order_by: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., prefix: _Optional[str] = ..., delimiter: _Optional[str] = ...) -> None: ...
 
 class ListObjectsResponse(_message.Message):
-    __slots__ = ("objects", "page")
+    __slots__ = ("objects", "page", "common_prefixes", "common_prefixes_truncated")
     OBJECTS_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
+    COMMON_PREFIXES_FIELD_NUMBER: _ClassVar[int]
+    COMMON_PREFIXES_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
     objects: _containers.RepeatedCompositeFieldContainer[_types_pb2.Object]
     page: _pagination_pb2.PageResponse
-    def __init__(self, objects: _Optional[_Iterable[_Union[_types_pb2.Object, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ...) -> None: ...
+    common_prefixes: _containers.RepeatedScalarFieldContainer[str]
+    common_prefixes_truncated: bool
+    def __init__(self, objects: _Optional[_Iterable[_Union[_types_pb2.Object, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., common_prefixes: _Optional[_Iterable[str]] = ..., common_prefixes_truncated: _Optional[bool] = ...) -> None: ...
 
 class CountObjectsRequest(_message.Message):
     __slots__ = ("parent", "filter")

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
@@ -307,6 +308,9 @@ type Repository interface {
 	// (ADR-0003). RunInTx supplies the tx.
 	UpdateMetadataTx(ctx context.Context, tx pgx.Tx, args UpdateMetadataArgs) (Object, error)
 	ListObjects(ctx context.Context, args ListObjectsArgs) ([]Object, string, error)
+	// ListCommonPrefixes returns the folders under args.Prefix, bytewise, at
+	// most MaxCommonPrefixes, and whether more exist.
+	ListCommonPrefixes(ctx context.Context, args ListPrefixesArgs) ([]string, bool, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
 	// ListDistinctTags returns the distinct tag key→values across the
 	// Collection's live (non-DELETED) objects, each value list sorted. Backs
@@ -487,7 +491,27 @@ type ListObjectsArgs struct {
 	// Order is the sort, validated by the handler; its page token was minted
 	// for it.
 	Order keyset.Order
+	// Prefix keeps the keys that start with it; empty keeps every key.
+	Prefix string
+	// Delimiter, when set, keeps only the keys directly under Prefix: none
+	// with the delimiter past it. Empty lists every level.
+	Delimiter string
 }
+
+// ListPrefixesArgs asks for the folders one level under a prefix.
+type ListPrefixesArgs struct {
+	TenantID   uuid.UUID
+	Collection string
+	Prefix     string
+	Delimiter  string
+	// Filter is the list's raw CEL; only the state it names narrows the
+	// folders, as in S3, where the other terms of a listing do not.
+	Filter string
+}
+
+// MaxCommonPrefixes is the most folders one listing returns; more are
+// reported as truncated rather than paged.
+const MaxCommonPrefixes = 1000
 
 // CountObjectsArgs carries the inputs for Repository.CountObjects. When
 // CompiledCEL is nil the adapter can short-circuit to a COUNT(*) query and
@@ -1031,6 +1055,63 @@ type ListObjectsInput struct {
 	Filter     string
 	OrderBy    string
 	SortDesc   bool
+	// Prefix keeps the keys that start with it.
+	Prefix string
+	// Delimiter lists one level under Prefix; empty lists every level.
+	Delimiter string
+}
+
+// maxDelimiterRunes is how long a folder delimiter may be: one character,
+// as the API declares.
+const maxDelimiterRunes = 1
+
+func checkDelimiter(d string) error {
+	if utf8.RuneCountInString(d) > maxDelimiterRunes {
+		return connect.NewError(connect.CodeInvalidArgument, "delimiter: at most one character")
+	}
+	return nil
+}
+
+// ListCommonPrefixes returns the folders one level under in.Prefix when
+// in.Delimiter is set, and nothing otherwise: bytewise, at most
+// MaxCommonPrefixes, and whether more exist. The same gates as ListObjects
+// hold it, and the filter must compile, though only its state narrows them.
+func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) ([]string, bool, error) {
+	if in.Delimiter == "" {
+		return nil, false, nil
+	}
+	if err := checkDelimiter(in.Delimiter); err != nil {
+		return nil, false, err
+	}
+	tenantID, principal, err := apiutil.ActingContext(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	// The gates ListObjects holds a listing to: the folders name keys.
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
+		return nil, false, err
+	}
+	backendID, bucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // list (read)
+	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
+		TenantID: tenantID, Collection: in.Collection,
+		BackendID: backendID, BucketName: bucket,
+	}, cedar.ActionGetObject, 0, ""); err != nil {
+		return nil, false, err
+	}
+	if _, err := h.filter.Compile(cel.ObjectSchema, in.Filter); err != nil {
+		return nil, false, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+	}
+	folders, truncated, err := h.repo.ListCommonPrefixes(ctx, ListPrefixesArgs{
+		TenantID:   tenantID,
+		Collection: in.Collection,
+		Prefix:     in.Prefix,
+		Delimiter:  in.Delimiter,
+		Filter:     in.Filter,
+	})
+	if err != nil {
+		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return folders, truncated, nil
 }
 
 // ListObjects returns a page of objects in the collection, optionally filtered by
@@ -1044,6 +1125,9 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	}
 	order, err := objectOrder(in.OrderBy, in.SortDesc)
 	if err != nil {
+		return nil, "", err
+	}
+	if err := checkDelimiter(in.Delimiter); err != nil {
 		return nil, "", err
 	}
 	// Capability gate: a listing reads the whole collection, so it is
@@ -1082,6 +1166,8 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 		CompiledCEL: prog,
 		Filter:      in.Filter,
 		Order:       order,
+		Prefix:      in.Prefix,
+		Delimiter:   in.Delimiter,
 	})
 	if errors.Is(err, keyset.ErrMalformed) || errors.Is(err, keyset.ErrOrderChanged) {
 		return nil, "", connect.NewError(connect.CodeInvalidArgument, "page_token: "+err.Error()).WithCause(err)

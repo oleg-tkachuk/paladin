@@ -76,8 +76,8 @@ func TestActOnNamedTenant(t *testing.T) {
 var notNameFields = map[protoreflect.Name]bool{
 	"backend_id": true, "bucket": true, "checksum_value": true, "collections": true,
 	"content_disposition": true, "content_type": true, "destination_key": true,
-	"destination_key_template": true, "etag": true, "external_ref": true, "filter": true,
-	"idempotency_key": true, "key": true, "keys": true, "mode": true, "order_by": true,
+	"delimiter": true, "destination_key_template": true, "etag": true, "external_ref": true, "filter": true,
+	"idempotency_key": true, "key": true, "keys": true, "mode": true, "order_by": true, "prefix": true,
 	"resource_version": true, "upload_id": true,
 }
 

@@ -208,6 +208,20 @@ SELECT EXISTS(
       AND o.state <> 'DELETED'
 )::boolean AS exists;
 
+-- name: ListObjectPrefixes :many
+-- The folders one level under a prefix (089): prefix + segment + delimiter,
+-- bytewise, at most the limit. The caller asks for one more than it shows to
+-- learn that the list was cut.
+SELECT folder::text
+FROM list_object_prefixes(
+        sqlc.arg('tenant_id')::uuid,
+        sqlc.arg('collection')::text,
+        sqlc.arg('prefix')::text,
+        sqlc.arg('delimiter')::text,
+        sqlc.narg('state')::text,
+        sqlc.arg('live_only')::boolean,
+        sqlc.arg('max_folders')::integer) AS folder;
+
 -- name: ListObjects :many
 -- The full CEL filter is still applied by the caller post-load; the
 -- nargs below are PUSHDOWN narrowing hints extracted from that CEL
@@ -247,7 +261,9 @@ WHERE o.id = ANY (ARRAY(
             sqlc.arg('live_only')::boolean,
             sqlc.arg('order_by')::text,
             sqlc.arg('sort_desc')::boolean,
-            sqlc.narg('after_value')::text)))
+            sqlc.narg('after_value')::text,
+            sqlc.narg('level')::text,
+            sqlc.narg('delimiter')::text)))
   AND o.tenant_id = sqlc.arg('tenant_id')::uuid
   AND o.collection_id = (
         SELECT c.id FROM collections c
