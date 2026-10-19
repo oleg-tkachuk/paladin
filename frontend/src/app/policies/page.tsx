@@ -114,17 +114,16 @@ export default function PoliciesPage() {
   } = useBuckets();
   const {
     collections,
-    fetchAllCollections,
+    refetch: refetchCollections,
     loading: collectionsLoading,
     error: collectionsError,
-    // The system-wide editor targets any tenant's Collection.
-  } = useCollections({ catalogue: true });
+    // The system-wide editor targets any tenant's Collection; read only
+    // while the scope picks one.
+  } = useCollections({ catalogue: true, enabled: scope === "collection" });
 
   useEffect(() => {
     if (scope === "bucket") void fetchBuckets();
-    // The target picker chooses from a set; one page hides the rest.
-    if (scope === "collection") void fetchAllCollections();
-  }, [scope, fetchBuckets, fetchAllCollections]);
+  }, [scope, fetchBuckets]);
 
   // Reset the selected target whenever the scope changes — render-phase
   // adjust-on-change (not set-state-in-effect).
@@ -389,7 +388,7 @@ export default function PoliciesPage() {
       ? failedRead(tenantsError, refetchTenants)
       : scope === "bucket"
         ? failedRead(bucketsError, fetchBuckets)
-        : failedRead(collectionsError, fetchAllCollections);
+        : failedRead(collectionsError, refetchCollections);
   const targetLabel = SCOPES.find((s) => s.value === scope)?.label ?? scope;
 
   const targetLoading =

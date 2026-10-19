@@ -68,14 +68,20 @@ type SortColumn = (typeof SORT_COLUMNS)[number];
 const COLUMNS = 5;
 
 export default function CollectionsPage() {
+  // The search is the server's filter; the list follows it through the cache.
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const {
     collections,
     loading,
     error: listError,
-    fetchAllCollections,
+    refetch: refetchCollections,
     createCollection,
     deleteCollection,
-  } = useCollections({ catalogue: true });
+  } = useCollections({
+    catalogue: true,
+    filter: searchFilter(debouncedSearch),
+  });
   // The rows span tenants; each names its own.
   const { tenants } = useTenants();
   const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
@@ -98,8 +104,6 @@ export default function CollectionsPage() {
   );
 
   // ── search + sort
-  const [search, setSearch] = useTableQuery(PAGE_TABLE);
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const { sort, toggleSort: handleSort } = useTableSort<SortColumn>(undefined, {
     url: PAGE_TABLE,
     tableId: TABLE_ID,
@@ -137,10 +141,6 @@ export default function CollectionsPage() {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
-
-  useEffect(() => {
-    void fetchAllCollections(searchFilter(debouncedSearch));
-  }, [fetchAllCollections, debouncedSearch]);
 
   const sorted = useMemo(() => {
     const list = [...collections];
@@ -219,9 +219,7 @@ export default function CollectionsPage() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() =>
-                    void fetchAllCollections(searchFilter(debouncedSearch))
-                  }
+                  onClick={() => refetchCollections()}
                   aria-label="Refresh"
                 >
                   <ArrowPathIcon
@@ -270,8 +268,7 @@ export default function CollectionsPage() {
                 ? {
                     what: "Collections",
                     reason: listError,
-                    onRetry: () =>
-                      void fetchAllCollections(searchFilter(debouncedSearch)),
+                    onRetry: () => refetchCollections(),
                   }
                 : null
             }
@@ -372,9 +369,7 @@ export default function CollectionsPage() {
         backendsFailed={failedRead(backendsError, refetchBackends)}
         bucketsHref="/buckets"
         createCollection={createCollection}
-        onCreated={() =>
-          void fetchAllCollections(searchFilter(debouncedSearch))
-        }
+        onCreated={() => refetchCollections()}
       />
 
       <CollectionDeleteDialog

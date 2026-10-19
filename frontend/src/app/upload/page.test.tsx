@@ -23,7 +23,7 @@ vi.mock("@/hooks/useCollections", () => ({
   useCollections: () => ({
     collections: h.collections,
     error: h.error,
-    fetchAllCollections: h.fetchAllCollections,
+    refetch: h.fetchAllCollections,
   }),
 }));
 

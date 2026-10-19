@@ -3,7 +3,7 @@
 // Copies the selected objects into a collection of this tenant, each under
 // its own key behind an optional prefix. The page owns the selection and the
 // RPC; this asks only where.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   Dialog,
@@ -41,14 +41,11 @@ export function BulkCopyDialog({
   onConfirm: (destination: string, prefix: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const { collections, error, fetchAllCollections } = useCollections();
+  // Read once the dialog opens: the destination is chosen from them.
+  const { collections, error, refetch } = useCollections({ enabled: open });
   const [destination, setDestination] = useState(sourceCollection);
   const [prefix, setPrefix] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (open) void fetchAllCollections();
-  }, [open, fetchAllCollections]);
 
   const problem = copyTargetProblem(sourceCollection, destination, prefix);
   const confirm = async () => {
@@ -93,7 +90,7 @@ export function BulkCopyDialog({
                 variant="inline"
                 what="Collections"
                 reason={error}
-                onRetry={() => void fetchAllCollections()}
+                onRetry={refetch}
               />
             ) : null}
           </div>
