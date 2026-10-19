@@ -1,5 +1,6 @@
 "use client";
 
+import { HelpTip } from "@/components/ui/HelpTip";
 import React from "react";
 import { LockClosedIcon, ScaleIcon } from "@heroicons/react/24/outline";
 
@@ -95,6 +96,7 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
         <h3 className={`${T.cardTitleProse} flex items-center gap-2`}>
           <LockClosedIcon className="size-4" aria-hidden="true" />
           Object Lock
+          <HelpTip topic="objectLock" />
         </h3>
         {retained && (
           <Badge
