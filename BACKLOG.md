@@ -856,13 +856,13 @@ order they are being taken up.
 
 #### Motion: view transitions and micro-animations
 
-- **Status:** Aspirational.
-- **Reason:** pages swap without transition, and state changes (a row
-  removed, a badge changing) happen in a single frame.
-- **Definition of Done:** View Transitions between pages, short transitions on
-  the state changes that carry meaning, all off under
+- **Status:** Deferred (owner decision 2026-10-19: animations are not wanted).
+- **Reason:** pages swap without transition, and state changes happen in a
+  single frame; the owner chose to leave it so.
+- **Definition of Done:** View Transitions between pages and short
+  transitions on the state changes that carry meaning, all off under
   `prefers-reduced-motion`.
-- **Blockers:** none.
+- **Blockers:** none — taken up only if asked for.
 
 #### Typography and spacing scale
 
@@ -906,14 +906,16 @@ order they are being taken up.
   than only in a toast.
 - **Blockers:** none.
 
-#### Remembered context and a live tab title
+#### A favicon that shows the user's operations
 
 - **Status:** Aspirational.
-- **Reason:** returning to a page loses its last tab and scroll position, and
-  a background tab does not show that an operation is running or failed.
-- **Definition of Done:** last tab and scroll restored per page; the title and
-  favicon carry the count of the user's running operations and a mark when one
-  failed.
+- **Reason:** a background tab's title now counts the user's running
+  operations and marks a failed one, but the tab's icon, which is all a
+  crowded tab bar shows, does not.
+- **Definition of Done:** the favicon carries the same signal (a dot for
+  running, another for failed), drawn from the same `titleWithActivity`
+  inputs. A page's last tab already returns, being in its URL; scroll
+  position is the browser's own on back and forward, and is left to it.
 - **Blockers:** none.
 
 #### CSV export, row links and shortcut hints
