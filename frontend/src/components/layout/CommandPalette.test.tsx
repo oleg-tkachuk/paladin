@@ -62,8 +62,18 @@ vi.mock("@/hooks/useResourceLinks", () => ({
   }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: h.push }) }));
+// What the page on screen registered with the palette.
+const page = vi.hoisted(() => ({
+  actions: [] as {
+    id: string;
+    label: string;
+    description?: string;
+    category: string;
+    perform: () => void;
+  }[],
+}));
 vi.mock("@/context/ActionsContext", () => ({
-  useActions: () => ({ actions: [] }),
+  useActions: () => ({ actions: page.actions }),
 }));
 vi.mock("@/app/tenants/[id]/tenant-context", () => ({
   useTenantOptional: () => h.routed,
@@ -343,5 +353,53 @@ describe("CommandPalette pinned and recent", () => {
       .filter((t) => /Pinned|Recent/.test(t));
     expect(titles[0]).toMatch(/Acme.*Pinned · Tenant/);
     expect(titles[1]).toMatch(/docs.*Recent · Collection/);
+  });
+});
+
+describe("CommandPalette page actions", () => {
+  afterEach(() => {
+    page.actions = [];
+    links.pinned = [];
+  });
+
+  it("leads with what the page on screen offers, its create first", () => {
+    const create = vi.fn();
+    page.actions = [
+      {
+        id: "objects.refresh",
+        label: "Sync View",
+        category: "operation",
+        perform: vi.fn(),
+      },
+      {
+        id: "create.bucket",
+        label: "New bucket",
+        description: "A bucket on a storage backend",
+        category: "create",
+        perform: create,
+      },
+    ];
+    links.pinned = [{ href: "/tenants/acme", label: "Acme", kind: "Tenant" }];
+    render(<CommandPalette />);
+    act(() => {
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+    });
+    const titles = screen
+      .getAllByRole("button")
+      .map((b) => b.textContent ?? "");
+    const at = (re: RegExp) => titles.findIndex((t) => re.test(t));
+    expect(at(/New bucket/)).toBeGreaterThanOrEqual(0);
+    expect(at(/New bucket/)).toBeLessThan(at(/Sync View/));
+    expect(at(/Sync View/)).toBeLessThan(at(/Acme/));
+    fireEvent.click(screen.getByRole("button", { name: /New bucket/ }));
+    expect(create).toHaveBeenCalled();
+  });
+
+  it("offers nothing of a page's own when it registered nothing", () => {
+    render(<CommandPalette />);
+    act(() => {
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+    });
+    expect(screen.queryByRole("button", { name: /New bucket/ })).toBeNull();
   });
 });

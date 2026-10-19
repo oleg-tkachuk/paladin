@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { IntentTableRow } from "@/components/ui/IntentTableRow";
 import { collectionDetailQuery } from "@/lib/queries/details";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
@@ -175,6 +177,19 @@ export default function TenantCollectionsPage() {
 
   // ── create dialog
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page does.
+  usePageAction(
+    !changesBlocked
+      ? {
+          id: CREATE_ACTION.tenantCollection,
+          label: "New collection",
+          description: "A collection of this tenant, routed to a bucket",
+          icon: PlusIcon,
+          category: "create",
+          perform: () => setCreateOpen(true),
+        }
+      : null,
+  );
 
   // ── delete confirm
   // The row as it was when Delete was chosen. Its resourceVersion is the OCC

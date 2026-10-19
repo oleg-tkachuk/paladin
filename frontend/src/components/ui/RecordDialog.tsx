@@ -13,6 +13,7 @@ import {
 import { useConfirmation } from "@/hooks/useConfirmation";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 // A value longer than this reads better under its label than beside it: it
 // would wrap in a narrow column into a block of fragments.
@@ -187,7 +188,10 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       onClick={() => {
         void navigator.clipboard?.writeText(value).then(confirm);
       }}
-      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      className={cn(
+        "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
+        FOCUS_RING,
+      )}
     >
       <Icon className="size-3.5" />
     </button>

@@ -798,17 +798,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Command palette: the create actions of the scope
-
-- **Status:** Aspirational.
-- **Reason:** the palette navigates, lists the pinned and recent resources
-  and carries the actions a page registers, but creating a tenant, a bucket
-  or a collection still starts from its page.
-- **Definition of Done:** palette entries for the create actions of the
-  current scope, opening the same dialogs the pages open, registered through
-  the actions registry rather than hard-coded in the palette.
-- **Blockers:** none.
-
 #### Keyboard navigation in tables
 
 - **Status:** Deferred (owner decision 2026-10-19: not a priority now).
@@ -846,14 +835,15 @@ order they are being taken up.
 #### Optimistic updates for changes whose answer is known
 
 - **Status:** Aspirational.
-- **Reason:** every mutation waits for its answer before the page shows it.
-  (A thin bar now marks first loads and saves, and rows warm their detail
-  page's query on hover, through shared query options in
-  `lib/queries/details`.)
-- **Definition of Done:** the renames, toggles and deletes whose result the
-  console can predict show at once and roll back on a refusal, one mutation
-  at a time with a test of the rollback; more detail pages read through
-  `lib/queries/details` so their rows can warm them.
+- **Reason:** the users' disable, rename, role change and delete and the
+  event subscriptions' toggle and delete show at once and roll back on a
+  refusal, through `optimistically` in `lib/optimistic`. The tenants,
+  buckets, collections and storage backends lists are held in `useState` by
+  their hooks rather than in the query cache, so their changes still wait.
+- **Definition of Done:** those four lists read through the query cache, and
+  their predictable changes (a tenant's rename, a collection's delete) take
+  `optimistically` with a test of the rollback; more detail pages read
+  through `lib/queries/details` so their rows can warm them.
 - **Blockers:** none.
 
 #### Motion: view transitions and micro-animations
@@ -877,16 +867,6 @@ order they are being taken up.
   way.
 - **Blockers:** none.
 
-#### Elevation and interaction states
-
-- **Status:** Aspirational.
-- **Reason:** shadows, borders and the focus, hover and pressed states differ
-  from one component to the next.
-- **Definition of Done:** an elevation scale as tokens; one set of focus,
-  hover and pressed states every interactive component takes; the contrast
-  tests extended to those states in every theme.
-- **Blockers:** none.
-
 #### Hover cards for tenants, buckets, users and capabilities
 
 - **Status:** Deferred (owner decision 2026-10-19: not now).
@@ -899,18 +879,6 @@ order they are being taken up.
   opens.
 - **Blockers:** none — taken up when it is asked for.
 
-#### A favicon that shows the user's operations
-
-- **Status:** Aspirational.
-- **Reason:** a background tab's title now counts the user's running
-  operations and marks a failed one, but the tab's icon, which is all a
-  crowded tab bar shows, does not.
-- **Definition of Done:** the favicon carries the same signal (a dot for
-  running, another for failed), drawn from the same `titleWithActivity`
-  inputs. A page's last tab already returns, being in its URL; scroll
-  position is the browser's own on back and forward, and is left to it.
-- **Blockers:** none.
-
 #### CSV export of a list
 
 - **Status:** Deferred (owner decision 2026-10-19: not now).
@@ -918,14 +886,4 @@ order they are being taken up.
 - **Definition of Done:** CSV export of what a list shows, in its order and
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
-
-#### Row links and shortcut hints
-
-- **Status:** Aspirational.
-- **Reason:** a row cannot be linked to, and the shortcuts are not mentioned
-  where the actions are.
-- **Definition of Done:** `?id=` opening a list scrolled to and highlighting
-  that row, on the URL-state contract; tooltips on actions naming their
-  shortcut from the shortcut registry.
-- **Blockers:** none.
 

@@ -735,7 +735,7 @@ function CollectionObjectsContent() {
               aria-hidden
               className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/5"
             >
-              <span className="rounded-md bg-card px-3 py-1.5 text-sm font-medium shadow-sm">
+              <span className="rounded-md bg-card px-3 py-1.5 text-sm font-medium shadow-raised">
                 Drop to upload to {collection}
               </span>
             </div>

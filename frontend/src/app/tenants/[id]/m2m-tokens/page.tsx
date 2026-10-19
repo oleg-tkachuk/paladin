@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { listAllPages } from "@/lib/listAllPages";
 import { API_PAGE_SIZE_MAX } from "@/constants";
@@ -227,6 +229,19 @@ export default function M2MTokensPage() {
   // ── create / revoke dialog targets ──────────────────────────────────
   // The dialogs own their own form + RPC; the page only tracks open state.
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page does.
+  usePageAction(
+    !changesBlocked
+      ? {
+          id: CREATE_ACTION.m2mToken,
+          label: "New token",
+          description: "A machine-to-machine token of this tenant",
+          icon: PlusIcon,
+          category: "create",
+          perform: () => setCreateOpen(true),
+        }
+      : null,
+  );
   const [revokeTarget, setRevokeTarget] = useState<APIToken | null>(null);
   const [opened, setOpened] = useState<APIToken | null>(null);
 

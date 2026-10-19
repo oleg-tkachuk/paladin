@@ -101,6 +101,7 @@ import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { formatCount } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 // IdentityCard renders the tenant's three identity fields in priority
 // order — display name as the heading (mutable, human-friendly), slug
@@ -336,7 +337,7 @@ export default function TenantOverviewPage() {
           <Link
             key={label}
             href={href(tenant.slug)}
-            className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn("group rounded-xl", FOCUS_RING)}
           >
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-card/60">
               <CardHeader className="flex flex-row items-start gap-3 px-4">
@@ -427,10 +428,7 @@ function CountTile({
   subtitle: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
+    <Link href={href} className={cn("group rounded-xl", FOCUS_RING)}>
       <Card className="h-full transition-colors hover:border-primary/40 hover:bg-card/60">
         <CardContent className="flex items-center gap-3 p-4">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary">
@@ -487,10 +485,7 @@ function BudgetTile({
   const overCap = capped && moneyToNanos(spent) > moneyToNanos(cap);
 
   return (
-    <Link
-      href={href}
-      className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
+    <Link href={href} className={cn("group rounded-xl", FOCUS_RING)}>
       <Card className="h-full transition-colors hover:border-primary/40 hover:bg-card/60">
         <CardContent className="flex items-start gap-3 p-4">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary">

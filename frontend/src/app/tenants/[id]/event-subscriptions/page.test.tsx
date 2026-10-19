@@ -257,6 +257,60 @@ describe("EventsPage", () => {
   });
 });
 
+// A toggle or a delete shows at once and is put back when refused. The list's
+// re-read after the refusal never answers here, so only the rollback can
+// bring the row back as it was.
+describe("EventsPage optimistic changes", () => {
+  const SUB = makeSub("sub-1", "https://hook.example.com/x");
+  const rereadHangs = () => {
+    h.list.mockResolvedValueOnce({ subscriptions: [SUB] });
+    h.list.mockImplementation(() => new Promise(() => {}));
+  };
+  const openMenu = async () =>
+    userEvent.click(await screen.findByText("Actions for subscription sub-1"));
+
+  it("shows a disable at once and puts it back when refused", async () => {
+    rereadHangs();
+    let refuse!: (e: Error) => void;
+    h.update.mockImplementation(
+      () => new Promise((_, reject) => (refuse = reject)),
+    );
+    render(<EventsPage />);
+    await openMenu();
+    await userEvent.click(screen.getByText("Disable"));
+    await openMenu();
+    expect(await screen.findByText("Enable")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    refuse(new Error("denied by policy"));
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "error", title: "Toggle failed" }),
+      ),
+    );
+    await openMenu();
+    expect(await screen.findByText("Disable")).toBeInTheDocument();
+  });
+
+  it("takes a deleted row out at once and puts it back when refused", async () => {
+    rereadHangs();
+    let refuse!: (e: Error) => void;
+    h.del.mockImplementation(
+      () => new Promise((_, reject) => (refuse = reject)),
+    );
+    render(<EventsPage />);
+    await openMenu();
+    await userEvent.click(screen.getByText("Delete"));
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Actions for subscription sub-1")).toBeNull(),
+    );
+    refuse(new Error("denied by policy"));
+    expect(
+      await screen.findByText("Actions for subscription sub-1"),
+    ).toBeInTheDocument();
+  });
+});
+
 // A failed list said "No event subscriptions".
 describe("EventsPage failed list", () => {
   it("says the list could not be loaded, not that there are none", async () => {

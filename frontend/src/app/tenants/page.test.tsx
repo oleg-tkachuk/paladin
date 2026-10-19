@@ -67,6 +67,8 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 
+import { CREATE_ACTION } from "@/lib/paletteActions";
+import { renderWithActions } from "@/test/withActions";
 import TenantsPage from "./page";
 
 beforeEach(() => {
@@ -133,6 +135,15 @@ describe("TenantsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /New tenant/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText(/Slug/i)).toBeInTheDocument();
+  });
+
+  // The palette's New tenant opens the dialog the page's button does.
+  it("offers New tenant in the palette, opening the create dialog", async () => {
+    const view = renderWithActions(<TenantsPage />);
+    expect(view.actionIds()).toContain(CREATE_ACTION.tenant);
+    await view.run(CREATE_ACTION.tenant);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    view.unmount();
   });
 
   it("rejects an invalid slug without calling createTenant", async () => {

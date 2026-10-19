@@ -28,6 +28,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { PlatformStatsSignal } from "@/gen/paladin/admin/v1/system_service_pb";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 // PageRequest.page_size 0: the server's own page size.
 const SERVER_PAGE_SIZE = 0;
@@ -73,7 +74,10 @@ export function SignalTenantsSheet({
       <SheetTrigger asChild>
         <button
           type="button"
-          className="block w-full rounded-sm text-left underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          className={cn(
+            "block w-full rounded-sm text-left underline-offset-4 hover:underline",
+            FOCUS_RING,
+          )}
           aria-label={`${title}: show tenants`}
         >
           {children}

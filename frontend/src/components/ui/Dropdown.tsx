@@ -210,7 +210,7 @@ Dropdown.Menu = function DropdownMenu({
           : {}),
       }}
       className={cn(
-        "z-[9999] rounded-2xl bg-popover text-popover-foreground border border-border shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-1.5 animate-fade-in backdrop-blur-2xl ring-1 ring-border/50",
+        "z-[9999] rounded-2xl bg-popover text-popover-foreground border border-border shadow-floating p-1.5 animate-fade-in backdrop-blur-2xl ring-1 ring-border/50",
         !usePixelWidth && width,
         className,
       )}

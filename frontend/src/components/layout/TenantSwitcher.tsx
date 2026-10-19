@@ -37,6 +37,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 /** The trigger's accessible name starts with this; the e2e suite finds it so. */
 export const TENANT_SWITCHER_LABEL = "Tenant switcher";
@@ -133,7 +134,8 @@ export const TenantSwitcher: React.FC = () => {
           aria-label={`${TENANT_SWITCHER_LABEL} — ${SIGNED_IN_TO.toLowerCase()} ${tenantLabel}`}
           className={cn(
             "group inline-flex h-9 max-w-64 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-left transition-colors",
-            "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "hover:bg-muted/60",
+            FOCUS_RING,
             open && "ring-2 ring-ring",
           )}
         >

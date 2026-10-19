@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyChord } from "@/components/ui/KeyChord";
 import { useResourceLinks } from "@/hooks/useResourceLinks";
 import { groupedLinks } from "@/lib/preferences/resourceLinks";
 import React, {
@@ -24,7 +25,7 @@ import {
   ClockIcon,
   QueueListIcon,
 } from "@heroicons/react/24/outline";
-import { useActions } from "@/context/ActionsContext";
+import { useActions, type Action } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
 import { useActingTenant } from "@/hooks/useActingTenant";
 import {
@@ -50,6 +51,22 @@ interface SearchResult {
   /** Where selecting it goes, so a route the principal cannot use is left out. */
   href?: string;
   onSelect: () => void;
+}
+
+/** Orders a page's create action ahead of its other actions. */
+const createFirst = (a: Action) => (a.category === "create" ? 0 : 1);
+
+/** An action a page registered, as a palette entry. */
+function actionResult(a: Action): SearchResult {
+  return {
+    id: `action-${a.id}`,
+    type: "action",
+    title: a.label,
+    subtitle: a.description,
+    icon: a.icon || CommandLineIcon,
+    shortcut: a.shortcut,
+    onSelect: () => a.perform(),
+  };
 }
 
 export function CommandPalette() {
@@ -273,9 +290,16 @@ export function CommandPalette() {
     [pinned, recent, router],
   );
 
+  // What the page on screen offers — its create action above all — leads the
+  // list: it is what the page was opened to do.
   const defaultNavs = useMemo(
-    () => [...linkNavs, ...tenantScopedNavs, ...staticNavs].filter(reachable),
-    [linkNavs, tenantScopedNavs, staticNavs, reachable],
+    () => [
+      ...[...actions]
+        .sort((a, b) => createFirst(a) - createFirst(b))
+        .map(actionResult),
+      ...[...linkNavs, ...tenantScopedNavs, ...staticNavs].filter(reachable),
+    ],
+    [actions, linkNavs, tenantScopedNavs, staticNavs, reachable],
   );
 
   const performSearch = useCallback(
@@ -296,15 +320,7 @@ export function CommandPalette() {
             (a.description &&
               a.description.toLowerCase().includes(searchQuery.toLowerCase())),
         )
-        .map((a) => ({
-          id: `action-${a.id}`,
-          type: "action",
-          title: a.label,
-          subtitle: a.description,
-          icon: a.icon || CommandLineIcon,
-          shortcut: a.shortcut,
-          onSelect: () => a.perform(),
-        }));
+        .map(actionResult);
 
       // Tenant-scoped jumps + global static navs both in the search
       // pool. Tenant-scoped entries naturally rank higher because
@@ -596,7 +612,7 @@ export function CommandPalette() {
       />
 
       {/* Palette Container */}
-      <div className="relative w-full max-w-2xl bg-background/95 rounded-4xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-border animate-bounce-in">
+      <div className="relative w-full max-w-2xl bg-background/95 rounded-4xl overflow-hidden shadow-overlay border border-border animate-bounce-in">
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
 
         <div className="p-6 border-b border-border flex items-center gap-4">
@@ -651,7 +667,7 @@ export function CommandPalette() {
                 }}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative ${
                   index === selectedIndex
-                    ? "bg-primary/10 border-primary/30 shadow-lg"
+                    ? "bg-primary/10 border-primary/30 shadow-raised"
                     : "bg-transparent border-transparent hover:bg-foreground/[0.02]"
                 }`}
                 onMouseEnter={() => setSelectedIndex(index)}
@@ -688,18 +704,7 @@ export function CommandPalette() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {result.shortcut && (
-                    <div className="flex gap-1">
-                      {result.shortcut.split(" ").map((s) => (
-                        <span
-                          key={s}
-                          className="px-2 py-1 rounded bg-foreground/5 border border-border text-xs font-mono text-muted-foreground"
-                        >
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  {result.shortcut && <KeyChord chord={result.shortcut} />}
                   {index === selectedIndex && (
                     <ArrowRightIcon className="w-4 h-4 text-primary animate-slide-right" />
                   )}

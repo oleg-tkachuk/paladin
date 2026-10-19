@@ -11,6 +11,8 @@
 // state it is in, what the last probe found. Every state change sits behind
 // the row's menu or the bulk bar, and disabling asks first.
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import React, {
@@ -253,6 +255,15 @@ export default function StorageBackendsPage() {
     StorageBackend | "selection" | null
   >(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page is on screen.
+  usePageAction({
+    id: CREATE_ACTION.storageBackend,
+    label: "New backend",
+    description: "An S3-compatible storage target",
+    icon: PlusIcon,
+    category: "create",
+    perform: () => setCreateOpen(true),
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);

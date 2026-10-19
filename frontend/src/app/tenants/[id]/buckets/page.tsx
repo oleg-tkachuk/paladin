@@ -17,6 +17,8 @@
 // so it lands on this list. A shared tenant binds to buckets it is granted:
 // the page sends the operator to /buckets, where a bucket's page grants it.
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { useTenantChangesBlocked } from "../tenant-context";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
@@ -127,6 +129,19 @@ export default function TenantBucketsPage() {
   );
   const ownedByTenant = (b: Bucket) => b.ownerTenantId === tenant.tenantId;
   const dedicated = isDedicatedLayout(tenant.storageLayout);
+  // The palette offers the create while this page does.
+  usePageAction(
+    dedicated && !changesBlocked
+      ? {
+          id: CREATE_ACTION.tenantBucket,
+          label: "New bucket",
+          description: "A bucket of this tenant's own",
+          icon: PlusIcon,
+          category: "create",
+          perform: () => setCreateOpen(true),
+        }
+      : null,
+  );
 
   useEffect(() => {
     void refetch();

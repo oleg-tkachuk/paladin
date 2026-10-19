@@ -5,14 +5,20 @@
 // Operators can see who has which roles across all tenants; each user
 // opens on a page of their own, where roles and scopes are edited.
 
+import { usePageAction } from "@/context/ActionsContext";
+import { CREATE_ACTION } from "@/lib/paletteActions";
 import { IntentTableRow } from "@/components/ui/IntentTableRow";
-import { userDetailQuery } from "@/lib/queries/details";
+import { USERS_LIST_QUERY_KEY, userDetailQuery } from "@/lib/queries/details";
 import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowPathIcon, UserCircleIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  PlusIcon,
+  UserCircleIcon,
+} from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { UserCreateDialog } from "@/components/features/users/UserCreateDialog";
@@ -79,13 +85,22 @@ type UserColumn = "user" | "tenant" | "login" | "state";
 export default function UsersPage() {
   const { tenants, error: tenantsError, fetchTenants } = useTenants();
   const [createOpen, setCreateOpen] = useState(false);
+  // The palette offers the create while this page is on screen.
+  usePageAction({
+    id: CREATE_ACTION.user,
+    label: "New user",
+    description: "A user of a tenant",
+    icon: PlusIcon,
+    category: "create",
+    perform: () => setCreateOpen(true),
+  });
   // The generated password is returned once and never again, so it is held
   // here until the operator dismisses it rather than shown in a toast that
   // can be missed.
   const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
 
   const usersQuery = useQuery({
-    queryKey: ["users"],
+    queryKey: USERS_LIST_QUERY_KEY,
     // Every page: the search below runs over these rows.
     queryFn: ({ signal }) =>
       listAllPages((pageToken) =>

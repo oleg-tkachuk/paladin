@@ -4,6 +4,7 @@ import React from "react";
 import { ClipboardIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { useConfirmation } from "@/hooks/useConfirmation";
 import { cn } from "@/lib/utils";
+import { PRESSED } from "@/lib/ui/states";
 
 /** What the live region says once the value is on the clipboard. */
 export const COPIED_NOTICE = "Copied";
@@ -41,7 +42,8 @@ export function IdentifierCopy({
         type="button"
         onClick={handleCopy}
         className={cn(
-          "p-2 rounded-xl transition-all active:scale-95 group/copy",
+          "p-2 rounded-xl transition-all group/copy",
+          PRESSED,
           copied
             ? "bg-success/10 text-success"
             : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted",

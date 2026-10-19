@@ -9,6 +9,8 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { tenantClient } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
+import { PRESSED } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 /**
  * RenamedSlugHint inspects the current `/tenants/<slug>/…` path and, when that
@@ -58,7 +60,10 @@ export function RenamedSlugHint() {
       </p>
       <Link
         href={target}
-        className="inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-all hover:bg-primary active:scale-95"
+        className={cn(
+          "inline-block rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-all hover:bg-primary",
+          PRESSED,
+        )}
       >
         Go to the new address
       </Link>

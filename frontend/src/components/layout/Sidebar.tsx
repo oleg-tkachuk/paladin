@@ -2,6 +2,9 @@
 
 import { SidebarResourceLinks } from "@/components/layout/ResourceLinks";
 import { useScope } from "@/context/ScopeContext";
+import { KeyChord } from "@/components/ui/KeyChord";
+import { useActingTenant } from "@/hooks/useActingTenant";
+import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
 import { sessionTenantLabel } from "@/lib/tenant/sessionTenantLabel";
 import { useState } from "react";
 import Link from "next/link";
@@ -52,6 +55,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
+import {
+  FOCUS_RING,
+  SELECTED_SURFACE,
+  SIDEBAR_HOVER_SURFACE,
+} from "@/lib/ui/states";
 
 /**
  * Icons stay neutral (muted-foreground) at rest and brighten to the
@@ -368,6 +376,9 @@ function SidebarBody({
   // via replaceState.
   const tenantHandle = user?.tenantSlug || user?.tenantId || null;
   const { tenant } = useScope();
+  // The g-jump that lands on a row, named beside it; the tenant on screen
+  // decides where the scoped jumps go, as the handler does.
+  const jumpBase = tenantBasePath(useActingTenant());
   const sessionTenantName = sessionTenantLabel({
     displayName: tenant?.displayName,
     slug: user?.tenantSlug,
@@ -483,6 +494,7 @@ function SidebarBody({
                 if (href === null) return null;
                 const active = isCurrent(href);
                 const Icon = item.icon;
+                const chord = chordFor(href, jumpBase);
                 const link = (
                   <Link
                     key={item.name}
@@ -492,11 +504,14 @@ function SidebarBody({
                       // Layout — left rail consumes 2px on the inside
                       "group relative flex h-9 items-center gap-3 rounded-md pr-2 text-sm transition-colors",
                       collapsed ? "justify-center pl-0" : "pl-3",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      FOCUS_RING,
                       // Active = brighter sidebar-accent + primary-tinted bg
                       active
-                        ? "bg-primary/10 text-foreground font-medium"
-                        : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                        ? cn(SELECTED_SURFACE, "text-foreground font-medium")
+                        : cn(
+                            SIDEBAR_HOVER_SURFACE,
+                            "text-muted-foreground hover:text-foreground",
+                          ),
                     )}
                     aria-current={active ? "page" : undefined}
                   >
@@ -518,6 +533,12 @@ function SidebarBody({
                     {!collapsed && (
                       <>
                         <span className="truncate">{item.name}</span>
+                        {chord && (
+                          <KeyChord
+                            chord={chord}
+                            className="ml-auto hidden group-hover:flex group-focus-visible:flex"
+                          />
+                        )}
                       </>
                     )}
                   </Link>
@@ -526,7 +547,13 @@ function SidebarBody({
                 return collapsed ? (
                   <Tooltip key={item.name}>
                     <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right">{item.name}</TooltipContent>
+                    <TooltipContent
+                      side="right"
+                      className="flex items-center gap-2"
+                    >
+                      {item.name}
+                      {chord && <KeyChord chord={chord} />}
+                    </TooltipContent>
                   </Tooltip>
                 ) : (
                   link
