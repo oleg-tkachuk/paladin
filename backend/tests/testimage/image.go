@@ -1,6 +1,7 @@
-// Package testimage names the images the integration suites start besides
-// Postgres (internal/pgtest), and makes sure one is present before a suite
-// asks testcontainers for a container.
+// Package testimage names the container images the integration suites
+// start, and makes sure one is present before a suite asks testcontainers for
+// a container. Test infrastructure only: nothing under internal/ or cmd/ that
+// ships in the binary imports it.
 //
 // testcontainers pulls a missing image itself, but reads the pull's response
 // to its end without decoding it. The daemon reports a failed pull — a

@@ -10,7 +10,7 @@ set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 readonly COMPOSE_FILES=(backend/deploy/docker-compose.yaml frontend/tests/e2e/docker-compose.test.yaml)
-readonly GO_IMAGE_FILE=backend/internal/pgtest/image.go
+readonly GO_IMAGE_FILE=backend/tests/testimage/postgres.go
 readonly IMAGE=postgres
 
 # version <image ref>: the server version a ref names. The variant suffix
@@ -32,7 +32,7 @@ for f in "${COMPOSE_FILES[@]}"; do
     while IFS= read -r ref; do refs+=("$f $ref"); done < <(
         yq --yaml-fix-merge-anchor-to-spec=true -e ".services[].image | select(test(\"^${IMAGE}:\"))" "$f")
 done
-go_ref=$(sed -n "s/^const Image = \"\(${IMAGE}:[^\"]*\)\"$/\1/p" "$GO_IMAGE_FILE")
+go_ref=$(sed -n "s/^const Postgres = \"\(${IMAGE}:[^\"]*\)\"$/\1/p" "$GO_IMAGE_FILE")
 [ -n "$go_ref" ] || { echo "FAIL no Postgres image constant in $GO_IMAGE_FILE" >&2; exit 1; }
 refs+=("$GO_IMAGE_FILE $go_ref")
 

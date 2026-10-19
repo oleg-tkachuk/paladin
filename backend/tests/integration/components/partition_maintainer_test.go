@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -22,7 +22,6 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
@@ -31,11 +30,11 @@ func TestPartitionMaintainer_CreateAndDrop(t *testing.T) {
 	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
-	if err := testimage.Ensure(ctx, pgtest.Image); err != nil {
+	if err := testimage.Ensure(ctx, testimage.Postgres); err != nil {
 		t.Fatalf("ensure image: %v", err)
 	}
 	pgC, err := tcpostgres.Run(ctx,
-		pgtest.Image,
+		testimage.Postgres,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin_migrate"),
 		tcpostgres.WithPassword("paladin"),
@@ -136,11 +135,11 @@ func TestPartitionMaintainer_RecoversDefaultOverlap(t *testing.T) {
 	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
-	if err := testimage.Ensure(ctx, pgtest.Image); err != nil {
+	if err := testimage.Ensure(ctx, testimage.Postgres); err != nil {
 		t.Fatalf("ensure image: %v", err)
 	}
 	pgC, err := tcpostgres.Run(ctx,
-		pgtest.Image,
+		testimage.Postgres,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin"),
 		tcpostgres.WithPassword("paladin"),

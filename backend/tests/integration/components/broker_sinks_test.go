@@ -47,8 +47,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 )
 
 // brokerTestSub builds the subscription row DeliverOne dispatches on.

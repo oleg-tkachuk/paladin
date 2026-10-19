@@ -46,7 +46,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
+	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -57,12 +57,11 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
 const (
-	postgresImage = pgtest.Image
+	postgresImage = testimage.Postgres
 	// migrateRole is the container's bootstrap superuser, and the role goose
 	// applies DDL as.
 	migrateRole     = "paladin_migrate"

@@ -23,10 +23,9 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/pgtest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
-	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
+	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 )
 
 const (
@@ -61,11 +60,11 @@ func TestMigrations_ApplyWithoutSuperuser(t *testing.T) {
 	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
-	if err := testimage.Ensure(ctx, pgtest.Image); err != nil {
+	if err := testimage.Ensure(ctx, testimage.Postgres); err != nil {
 		t.Fatalf("ensure image: %v", err)
 	}
 	pgC, err := tcpostgres.Run(ctx,
-		pgtest.Image,
+		testimage.Postgres,
 		tcpostgres.WithUsername(privSuperuser),
 		tcpostgres.WithPassword(privSuperuserPassword),
 		testcontainers.WithWaitStrategy(
