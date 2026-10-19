@@ -6,7 +6,8 @@ import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { TenantProvider } from "@/app/tenants/[id]/tenant-context";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   usePathname: () => "/tenants/acme/collections/docs/objects",
   useRouter: () => ({ push: vi.fn() }),
 }));

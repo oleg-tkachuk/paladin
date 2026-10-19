@@ -11,7 +11,8 @@ const h = vi.hoisted(() => ({
   fetchAllCollections: vi.fn(() => Promise.resolve({ collections: [] })),
 }));
 
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));

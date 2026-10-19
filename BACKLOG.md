@@ -773,6 +773,233 @@ open deliberately — each notes why._
   all, decided when it is taken up.
 - **Blockers:** none — a product decision.
 
+### Console UX programme (2026-10-19)
+
+The entries below are one programme, agreed on 2026-10-19, to make the console
+faster to work in and more finished to look at. Each lands as its own pull
+request with tests and is deleted here by the one that closes it. Every entry
+is `Aspirational` with no blocker unless it says otherwise; the order is the
+order they are being taken up.
+
+#### Object browser: folders, drop upload, preview, bulk actions
+
+- **Status:** Aspirational.
+- **Reason:** the objects page is a flat list. Keys with `/` read as one long
+  name, an upload goes through a dialog, an object cannot be looked at without
+  downloading it, and the batch operations the API has are not offered on a
+  selection.
+- **Definition of Done:** prefix navigation with breadcrumbs (the list RPC's
+  delimiter, not a client-side split); drag-and-drop upload onto the
+  collection; an inline preview for images, text and PDF through a presigned
+  GET; bulk delete/restore/tag on the shared `SelectionBar` through the
+  existing batch operations; `useObjectListState` moved onto the shared
+  URL-state hooks (`useUrlState`, `TABLE_PARAMS`) that every other list uses,
+  instead of its own `router.replace` and parameter names.
+- **Blockers:** none.
+
+#### Undo after a soft delete
+
+- **Status:** Aspirational.
+- **Reason:** a delete that only moves to the trash still ends in a toast that
+  says it is done; the way back is to find the trash and restore by hand.
+- **Definition of Done:** the toast after a soft delete carries Undo, which
+  restores from the trash through the existing restore RPC behind the confirm
+  the console requires for every restore.
+- **Blockers:** none.
+
+#### Policy simulator: can this subject do this action on this resource
+
+- **Status:** Aspirational.
+- **Reason:** answering "why was this refused" means reading Cedar policies by
+  hand; the engine that decides is not reachable from the console.
+- **Definition of Done:** a page that takes a principal, an action and a
+  resource, asks the server to evaluate them against the live policy set, and
+  shows the decision with the policies that decided it.
+- **Blockers:** needs an evaluate RPC on the admin plane.
+
+#### Command palette: actions, recent items, shortcut sheet
+
+- **Status:** Aspirational.
+- **Reason:** the palette only navigates; creating a tenant or a bucket starts
+  from its page, and the shortcuts are discoverable only from the help dialog.
+- **Definition of Done:** palette entries for the create and refresh actions
+  of the current scope; recently opened resources first; a `?` overlay listing
+  every shortcut from the one registry the handlers read.
+- **Blockers:** none.
+
+#### Pinned and recent resources in the sidebar
+
+- **Status:** Aspirational.
+- **Reason:** an operator who works in three tenants navigates to each through
+  the tenant list every time.
+- **Definition of Done:** pin and recent lists in the sidebar, kept in the
+  user's settings `preferences` rather than browser storage, so they follow
+  the user.
+- **Blockers:** none.
+
+#### Keyboard navigation in tables
+
+- **Status:** Aspirational.
+- **Reason:** every list needs the mouse to move between rows and open one.
+- **Definition of Done:** `j`/`k` move a row focus, `Enter` opens it, `x`
+  selects it where the table selects; one hook every table uses, off while a
+  text field has focus.
+- **Blockers:** none.
+
+#### One Live toggle for every refreshing view
+
+- **Status:** Aspirational.
+- **Reason:** audit streams over SSE, operations poll every two seconds,
+  health and objects refresh on their own schedules; each page wires and
+  labels its own.
+- **Definition of Done:** a shared Live control and hook (on, paused, the
+  interval or the stream it uses) adopted by audit, operations, objects and
+  health; a paused view says so.
+- **Blockers:** none.
+
+#### Browser notifications when an operation finishes
+
+- **Status:** Aspirational.
+- **Reason:** a long batch operation finishes while the tab is in the
+  background and nothing says so.
+- **Definition of Done:** opt-in in the profile, stored in the user's
+  settings; a notification for each of the user's own operations that succeeds
+  or fails while the tab is hidden.
+- **Blockers:** none.
+
+#### Dashboard: my operations, tenants near their limits, health, first run
+
+- **Status:** Aspirational.
+- **Reason:** the dashboard shows platform totals; it does not show what needs
+  the operator's attention.
+- **Definition of Done:** the user's recent operations; tenants nearest their
+  quota or budget with a sparkline each; one line of backend health; a
+  checklist for an empty installation (backend, tenant, bucket, first token).
+- **Blockers:** tenants near budget needs a cross-tenant read; see "Billing
+  has no view across tenants".
+
+#### Page templates: list, detail, settings
+
+- **Status:** Aspirational.
+- **Reason:** each page arranges its header, toolbar, table and empty state by
+  hand, and they drift.
+- **Definition of Done:** `ListPage`, `DetailPage` and `SettingsPage` layouts
+  that pages fill; empty states with the page's primary action in the list
+  template.
+- **Blockers:** none.
+
+#### Per-user table preferences: density, columns, default sort
+
+- **Status:** Aspirational.
+- **Reason:** the user settings carry a `preferences` field nothing reads,
+  while every table shows every column at one density.
+- **Definition of Done:** density, visible columns and a default sort per
+  table, kept in `preferences` under one typed key per table and applied
+  through the shared table hooks; the URL still overrides the default sort.
+- **Blockers:** none.
+
+#### Mobile layout for the main pages
+
+- **Status:** Aspirational.
+- **Reason:** below a tablet's width the tables scroll sideways.
+- **Definition of Done:** tables render as cards under the small breakpoint
+  on the tenant, bucket, collection, object, user and operation lists; the
+  shell's sidebar collapses to a sheet.
+- **Blockers:** none.
+
+#### Contextual help linking to the ADRs
+
+- **Status:** Aspirational.
+- **Reason:** terms such as public read, retention or capability spend are
+  explained only in the ADRs, which the console never links to.
+- **Definition of Done:** a `?` beside the terms that need it, opening a short
+  explanation with a link to the ADR or doc page; the texts live in one module.
+- **Blockers:** none.
+
+#### Faster-feeling navigation: prefetch, optimistic updates, progress
+
+- **Status:** Aspirational.
+- **Reason:** nothing is prefetched, every mutation waits for its answer to
+  show, and a slow route gives no sign it is loading.
+- **Definition of Done:** detail queries prefetched on row hover; optimistic
+  updates for the renames, toggles and deletes whose answer is known; a thin
+  progress bar for route changes and long requests; no layout shift while
+  data arrives.
+- **Blockers:** none.
+
+#### Motion: view transitions and micro-animations
+
+- **Status:** Aspirational.
+- **Reason:** pages swap without transition, and state changes (a row
+  removed, a badge changing) happen in a single frame.
+- **Definition of Done:** View Transitions between pages, short transitions on
+  the state changes that carry meaning, all off under
+  `prefers-reduced-motion`.
+- **Blockers:** none.
+
+#### Typography and spacing scale
+
+- **Status:** Aspirational.
+- **Reason:** sizes and spacing are chosen per component; figures align only
+  where a table remembered `tabular-nums`.
+- **Definition of Done:** type and spacing scales as tokens in `globals.css`;
+  tabular figures in every number column; units muted beside their values,
+  with the exact value in a tooltip; the typeface option above decided either
+  way.
+- **Blockers:** none.
+
+#### Elevation and interaction states
+
+- **Status:** Aspirational.
+- **Reason:** shadows, borders and the focus, hover and pressed states differ
+  from one component to the next.
+- **Definition of Done:** an elevation scale as tokens; one set of focus,
+  hover and pressed states every interactive component takes; the contrast
+  tests extended to those states in every theme.
+- **Blockers:** none.
+
+#### Hover cards and one-click copy for every identifier
+
+- **Status:** Aspirational.
+- **Reason:** a tenant, bucket, user or capability named in a table shows an
+  ID; what it is needs another page.
+- **Definition of Done:** hover cards for those four with the essentials and a
+  link; every ID copyable in one click through `IdentifierCopy`; tooltips
+  carry the exact value wherever a value is shortened.
+- **Blockers:** none.
+
+#### Voice, empty states and local confirmations
+
+- **Status:** Aspirational.
+- **Reason:** messages are written page by page in different voices, empty
+  states say only that nothing is there, and every success is a toast in a
+  corner.
+- **Definition of Done:** a short voice guide applied to the existing
+  messages; empty states that say what the thing is for and offer the action;
+  a success confirmed where it happened (the row, the field) rather than only
+  in a toast.
+- **Blockers:** none.
+
+#### Remembered context and a live tab title
+
+- **Status:** Aspirational.
+- **Reason:** returning to a page loses its last tab and scroll position, and
+  a background tab does not show that an operation is running or failed.
+- **Definition of Done:** last tab and scroll restored per page; the title and
+  favicon carry the count of the user's running operations and a mark when one
+  failed.
+- **Blockers:** none.
+
+#### CSV export, row links and shortcut hints
+
+- **Status:** Aspirational.
+- **Reason:** a list cannot be taken out of the console, a row cannot be
+  linked to, and the shortcuts are not mentioned where the actions are.
+- **Definition of Done:** CSV export of what a list shows; `?id=` opening a
+  list scrolled to and highlighting that row; tooltips on actions naming their
+  shortcut from the shortcut registry.
+- **Blockers:** none.
+
 ### Platform Stats: no cached rollup — the object census is a live GROUP BY
 
 - **Status:** Deferred (correct at current scale; revisit on fleet growth).

@@ -29,13 +29,14 @@ import { SortableHead } from "@/components/ui/SortHeader";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useTableView } from "@/hooks/useTableView";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import { useTableFilter } from "@/hooks/useTableUrl";
 import {
   DEFAULT_LIFECYCLE_FILTER,
   LIFECYCLE_BADGE,
   LIFECYCLE_FILTERS,
   LIFECYCLE_FILTER_LABEL,
   keepsLifecycle,
-  type LifecycleFilter,
 } from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
@@ -130,8 +131,10 @@ export default function M2MTokensPage() {
   const { showNotification } = useNotification();
 
   // ── list state ──────────────────────────────────────────────────────
-  const [stateFilter, setStateFilter] = useState<LifecycleFilter>(
+  const [stateFilter, setStateFilter] = useTableFilter(
+    LIFECYCLE_FILTERS,
     DEFAULT_LIFECYCLE_FILTER,
+    PAGE_TABLE,
   );
   const { includeRevoked, includeExpired } = listFlagsFor(stateFilter);
 
@@ -229,6 +232,7 @@ export default function M2MTokensPage() {
   const view = useTableView(inState, {
     text: TOKEN_SEARCH,
     accessors: TOKEN_SORT,
+    url: PAGE_TABLE,
   });
   const visibleTokens = view.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };

@@ -194,7 +194,9 @@ export function progressPercent(p: OpProgress): number {
 
 /** Which operations a list shows, by where they stand. */
 export type OpView = "all" | "active" | "failed" | "done";
-export const OP_VIEWS: { value: OpView; label: string }[] = [
+/** The view the operations list opens on. */
+export const DEFAULT_OP_VIEW: OpView = "all";
+export const OP_VIEWS: readonly { value: OpView; label: string }[] = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "failed", label: "Failed" },

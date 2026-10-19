@@ -64,9 +64,12 @@ describe("AuditPage search", () => {
     );
   });
 
-  it("presets the filter from an ?audience= deep link", () => {
-    h.search = "audience=paladin-mcp";
+  // The search lives in the URL, so a link to the log opens it filtered, and
+  // the first request already carries the filter.
+  it("opens with the search a link names", () => {
+    window.history.replaceState(null, "", "/audit?q=paladin-mcp");
     render(<AuditPage />);
+    expect(screen.getByPlaceholderText(SEARCH_BOX)).toHaveValue("paladin-mcp");
     expect(h.filters[0]).toBe('search.contains("paladin-mcp")');
   });
 });

@@ -35,7 +35,8 @@ vi.mock("@/hooks/useObject", () => ({
     purgeObject: h.purgeObject,
   }),
 }));
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: h.push }),
   usePathname: () => "/tenants/t1/collections/ok1/objects/o1",
 }));

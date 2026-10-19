@@ -24,11 +24,16 @@ import {
 } from "@/components/ui/table";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useTableView } from "@/hooks/useTableView";
+import type { TableUrl } from "@/lib/table/urlState";
 import type { SortAccessors } from "@/lib/table/view";
 import { T } from "@/lib/ui/typography";
 
 import { useMcpLive } from "./mcp-status";
 import { errorMessage } from "@/hooks/errorContract";
+
+// The session list keeps its search and sort in the URL under its own names, beside the
+// page's other tables.
+const SESSIONS_TABLE: TableUrl = { namespace: "sessions" };
 
 /** Characters of a session id shown; enough to tell rows apart. */
 const SESSION_ID_SHOWN = 8;
@@ -69,6 +74,7 @@ export function MCPSessions() {
   const view = useTableView(all, {
     text: SESSION_SEARCH,
     accessors: SESSION_SORT,
+    url: SESSIONS_TABLE,
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 

@@ -11,7 +11,8 @@ import {
   TRASHED_TENANT_BLOCK,
 } from "@/app/tenants/[id]/tenant-context";
 
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   usePathname: () => "/tenants/acme/collections/docs/objects",
   useRouter: () => ({ push: vi.fn() }),
 }));

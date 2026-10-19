@@ -8,3 +8,7 @@ export const AUDIT_ORDER = {
 } as const;
 
 export type AuditOrderField = (typeof AUDIT_ORDER)[keyof typeof AUDIT_ORDER];
+
+/** Every field the log sorts by, for reading a sort back from a URL. */
+export const AUDIT_ORDER_FIELDS: readonly AuditOrderField[] =
+  Object.values(AUDIT_ORDER);

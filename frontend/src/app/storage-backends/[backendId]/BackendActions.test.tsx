@@ -22,7 +22,8 @@ vi.mock("@/lib/connect/client", () => ({
     deleteBackend: h.del,
   },
 }));
-vi.mock("next/navigation", () => ({
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: h.push }),
 }));
 vi.mock("@/components/ui/Notification", () => ({

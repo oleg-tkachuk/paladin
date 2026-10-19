@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -20,7 +19,13 @@ import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 import { Button } from "@/components/ui/button";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { useTableSort } from "@/hooks/useTableSort";
-import { AUDIT_ORDER, type AuditOrderField } from "@/lib/auditOrder";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
+import {
+  AUDIT_ORDER,
+  AUDIT_ORDER_FIELDS,
+  type AuditOrderField,
+} from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { Card } from "@/components/ui/Card";
 import {
@@ -55,12 +60,7 @@ const AUDIT_PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function AuditPage() {
-  // Optional ?audience=… deep-link (used by /mcp → audit) — preset
-  // the search box on first mount via the lazy useState initialiser.
-  // Chip stays editable; clearing the search input clears the
-  // filter.
-  const params = useSearchParams();
-  const [search, setSearch] = useState(() => params?.get("audience") ?? "");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
@@ -68,7 +68,10 @@ export default function AuditPage() {
   }, [search]);
   // Sorted on the server: the log loads a page at a time, so a sort in the
   // browser would order only what has loaded. A new sort starts over.
-  const { sort, toggleSort } = useTableSort<AuditOrderField>();
+  const { sort, toggleSort } = useTableSort<AuditOrderField>(undefined, {
+    url: PAGE_TABLE,
+    columns: AUDIT_ORDER_FIELDS,
+  });
   const sortProps = { current: sort, onSort: toggleSort };
   const { entries, loading, error, nextCursor, refresh, loadMore } =
     useAuditLogs(AUDIT_PAGE_SIZE, searchFilter(debouncedSearch), "", sort);

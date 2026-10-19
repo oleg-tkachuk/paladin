@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+
+import { useTableFilter, useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
@@ -45,6 +48,7 @@ import { adminOperationClient } from "@/lib/connect/client";
 import { formatDuration } from "@/lib/format/duration";
 import {
   OP_STATUS_BADGE,
+  DEFAULT_OP_VIEW,
   OP_VIEWS,
   isActive,
   objectCountLabel,
@@ -55,7 +59,6 @@ import {
   operationProgress,
   operationStatus,
   outcomeLine,
-  type OpView,
 } from "@/lib/operations";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
@@ -75,11 +78,11 @@ const MS_PER_SECOND = 1_000;
 const POLL_SECONDS = OPERATIONS_POLL_MS / MS_PER_SECOND;
 
 export default function OperationsPage() {
-  const [view, setView] = useState<OpView>("all");
+  const [view, setView] = useTableFilter(OP_VIEWS, DEFAULT_OP_VIEW, PAGE_TABLE);
   const [scope, setScope] = useState<OpScope>("mine");
   const [includeDismissed, setIncludeDismissed] = useState(false);
   const [live, setLive] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
   const [opened, setOpened] = useState<Operation | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
 

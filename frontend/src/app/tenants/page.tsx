@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -46,7 +48,8 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { SortableHead } from "@/components/ui/SortHeader";
 
-type SortColumn = "slug" | "displayName";
+const SORT_COLUMNS = ["slug", "displayName"] as const;
+type SortColumn = (typeof SORT_COLUMNS)[number];
 
 // Tenant.default_bucket is the resource name of the single (backend, bucket)
 // the tenant is bound to: "storageBackends/{backend}/buckets/{bucket}". Empty
@@ -65,8 +68,11 @@ export default function TenantsPage() {
   } = useTenants();
 
   // ─── search + sort ────────────────────────────────────────────────────────
-  const [search, setSearch] = useState("");
-  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>();
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const { sort, toggleSort: handleSort } = useTableSort<SortColumn>(undefined, {
+    url: PAGE_TABLE,
+    columns: SORT_COLUMNS,
+  });
 
   // Dialog open/target state. The create/edit/delete form state + handlers
   // live inside their respective Tenant*Dialog components; the page only holds

@@ -32,11 +32,16 @@ import {
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { useTableView } from "@/hooks/useTableView";
+import type { TableUrl } from "@/lib/table/urlState";
 import type { SortAccessors } from "@/lib/table/view";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { MCP_PLANES, planeTone } from "./mcp-status";
+
+// The catalog keeps its search and sort in the URL under its own names, beside the
+// page's other tables.
+const TOOLS_TABLE: TableUrl = { namespace: "tools" };
 
 const ALL = "__all__";
 
@@ -229,6 +234,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
   const view = useTableView(narrowed, {
     text: TOOL_SEARCH,
     accessors: TOOL_SORT,
+    url: TOOLS_TABLE,
   });
   const rows = view.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };

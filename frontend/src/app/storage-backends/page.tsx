@@ -40,6 +40,8 @@ import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import { sortRows, type SortAccessors } from "@/lib/table/view";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -190,7 +192,14 @@ const DISABLE_CONSEQUENCE =
   "The configured default backend cannot be disabled.";
 
 // The list is searched on the server and loaded whole, so it sorts here.
-type BackendColumn = "backend" | "storage" | "region" | "state" | "health";
+const SORT_COLUMNS = [
+  "backend",
+  "storage",
+  "region",
+  "state",
+  "health",
+] as const;
+type BackendColumn = (typeof SORT_COLUMNS)[number];
 const BACKEND_SORT: SortAccessors<StorageBackend, BackendColumn> = {
   backend: (b) => b.backendId,
   storage: (b) => STORAGE_KIND_LABELS[b.kind] || undefined,
@@ -211,7 +220,10 @@ export default function StorageBackendsPage() {
     error: listError,
   } = useBackends();
   const { showNotification } = useNotification();
-  const { sort, toggleSort } = useTableSort<BackendColumn>();
+  const { sort, toggleSort } = useTableSort<BackendColumn>(undefined, {
+    url: PAGE_TABLE,
+    columns: SORT_COLUMNS,
+  });
   const sortProps = { current: sort, onSort: toggleSort };
   const sorted = useMemo(
     () => sortRows(backends, sort, BACKEND_SORT),
@@ -220,8 +232,8 @@ export default function StorageBackendsPage() {
 
   // Server-side, like /buckets: the derived `search` field joins id, display
   // name, region and endpoint, and the state choice is a conjunct beside it.
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [state, setState] = useState<StateFilter>("all");
   // The backend a row action is running on; its menu stays disabled meanwhile.
   const [busyId, setBusyId] = useState<string | null>(null);
