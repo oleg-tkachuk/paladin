@@ -15,6 +15,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 )
 
 // seaweedImage pins the SeaweedFS release the e2e compose stack uses, for a
@@ -69,6 +70,9 @@ func startS3With(t *testing.T, identities string) (endpoint, accessKey, secretKe
 	ctx := context.Background()
 	const user, pass = "paladin-test-access", "paladin-test-secret-key"
 	const configPath = "/etc/seaweedfs/s3.json"
+	if err := testimage.Ensure(ctx, seaweedImage); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image: seaweedImage,

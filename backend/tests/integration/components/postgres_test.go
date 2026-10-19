@@ -22,6 +22,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -86,6 +87,9 @@ func TestMain(m *testing.M) {
 
 func startShared() error {
 	ctx := context.Background()
+	if err := testimage.Ensure(ctx, postgresImage); err != nil {
+		return fmt.Errorf("ensure image: %w", err)
+	}
 	ctr, err := tcpostgres.Run(ctx, postgresImage,
 		tcpostgres.WithDatabase(templateDB),
 		tcpostgres.WithUsername(postgresUser),

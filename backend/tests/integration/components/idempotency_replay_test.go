@@ -38,6 +38,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -45,6 +46,9 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 	// Not parallel: sets goose's package-level dialect and filesystem.
 	ctx := context.Background()
 
+	if err := testimage.Ensure(ctx, pgtest.Image); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	pgC, err := tcpostgres.Run(ctx,
 		pgtest.Image,
 		tcpostgres.WithDatabase("paladin"),

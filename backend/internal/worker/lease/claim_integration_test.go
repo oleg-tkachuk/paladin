@@ -32,12 +32,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
 func startPostgres(tb testing.TB) *pgxpool.Pool {
 	tb.Helper()
 	ctx := context.Background()
+	if err := testimage.Ensure(ctx, pgtest.Image); err != nil {
+		tb.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := tcpostgres.Run(ctx, pgtest.Image,
 		tcpostgres.WithDatabase("paladin"),
 		tcpostgres.WithUsername("paladin"),

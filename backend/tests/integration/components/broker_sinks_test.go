@@ -47,6 +47,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/testimage"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -91,7 +92,10 @@ func TestKafkaSinkDelivery_SCRAM(t *testing.T) {
 	ctx := context.Background()
 	const user, pass = "paladin-writer", "paladin-secret-pw"
 
-	rp, err := redpanda.Run(ctx, "docker.redpanda.com/redpandadata/redpanda:v24.3.6",
+	if err := testimage.Ensure(ctx, testimage.Redpanda); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
+	rp, err := redpanda.Run(ctx, testimage.Redpanda,
 		redpanda.WithEnableSASL(),
 		redpanda.WithEnableKafkaAuthorization(),
 		redpanda.WithNewServiceAccount(user, pass),
@@ -167,9 +171,12 @@ func TestRabbitMQSinkDelivery(t *testing.T) {
 	ctx := context.Background()
 	const user, pass = "paladin", "paladin-secret-pw"
 
+	if err := testimage.Ensure(ctx, testimage.RabbitMQ); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "rabbitmq:4.0-alpine",
+			Image:        testimage.RabbitMQ,
 			ExposedPorts: []string{"5672/tcp"},
 			Env: map[string]string{
 				"RABBITMQ_DEFAULT_USER": user,
@@ -240,9 +247,12 @@ func TestSQSSinkDelivery(t *testing.T) {
 	}
 	ctx := context.Background()
 
+	if err := testimage.Ensure(ctx, testimage.ElasticMQ); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "softwaremill/elasticmq-native:1.6.11",
+			Image:        testimage.ElasticMQ,
 			ExposedPorts: []string{"9324/tcp"},
 			WaitingFor:   wait.ForListeningPort("9324/tcp").WithStartupTimeout(60 * time.Second),
 		},
@@ -355,7 +365,10 @@ func TestKafkaSinkDelivery_SASL_SSL(t *testing.T) {
 	const user, pass = "paladin-writer", "paladin-secret-pw"
 	certPEM, keyPEM := genServerCert(t)
 
-	rp, err := redpanda.Run(ctx, "docker.redpanda.com/redpandadata/redpanda:v24.3.6",
+	if err := testimage.Ensure(ctx, testimage.Redpanda); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
+	rp, err := redpanda.Run(ctx, testimage.Redpanda,
 		redpanda.WithTLS([]byte(certPEM), []byte(keyPEM)),
 		redpanda.WithEnableSASL(),
 		redpanda.WithNewServiceAccount(user, pass),
@@ -517,9 +530,12 @@ ssl_options.fail_if_no_peer_cert = true
 		{Reader: strings.NewReader(sslConf), ContainerFilePath: "/etc/rabbitmq/conf.d/10-ssl.conf", FileMode: 0o644},
 	}
 
+	if err := testimage.Ensure(ctx, testimage.RabbitMQ); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "rabbitmq:4.0-alpine",
+			Image:        testimage.RabbitMQ,
 			ExposedPorts: []string{"5671/tcp", "5672/tcp"},
 			Env: map[string]string{
 				"RABBITMQ_DEFAULT_USER": user,
@@ -617,9 +633,12 @@ func TestKafkaSinkDelivery_MTLSRequireClientAuth(t *testing.T) {
 	srvCert, srvKey := genLeaf(t, ca, caKey, "redpanda-server", true)
 	cliCert, cliKey := genLeaf(t, ca, caKey, "paladin-dispatcher", false)
 
+	if err := testimage.Ensure(ctx, testimage.Redpanda); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "docker.redpanda.com/redpandadata/redpanda:v24.3.6",
+			Image:        testimage.Redpanda,
 			ExposedPorts: []string{"9092/tcp", "9644/tcp"},
 			// Injected files (docker cp) land root-owned and rpk rewrites the
 			// node config with a chown — run as root so that succeeds (the
@@ -763,9 +782,12 @@ func TestRabbitMQSinkDelivery_ConnectionDropRedial(t *testing.T) {
 	ctx := context.Background()
 	const user, pass = "paladin", "paladin-secret-pw"
 
+	if err := testimage.Ensure(ctx, testimage.RabbitMQ); err != nil {
+		t.Fatalf("ensure image: %v", err)
+	}
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "rabbitmq:4.0-alpine",
+			Image:        testimage.RabbitMQ,
 			ExposedPorts: []string{"5672/tcp"},
 			Env: map[string]string{
 				"RABBITMQ_DEFAULT_USER": user,
