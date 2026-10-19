@@ -454,7 +454,9 @@ export default function CapabilitiesPage() {
               <TableHead className={COL_AUDIENCE}>Audience</TableHead>
               <TableHead className={COL_ISSUED}>Issued</TableHead>
               <TableHead className={COL_EXPIRES}>Expires</TableHead>
-              <TableHead className={COL_USAGE}>Usage</TableHead>
+              <TableHead numeric className={COL_USAGE}>
+                Usage
+              </TableHead>
               <TableHead className="w-25">Status</TableHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
@@ -594,7 +596,7 @@ export default function CapabilitiesPage() {
                     >
                       <Timestamp ts={c.expiresAt} />
                     </TableCell>
-                    <TableCell className={cn(COL_USAGE, T.code)}>
+                    <TableCell numeric className={cn(COL_USAGE, T.code)}>
                       {(() => {
                         const u = usage.get(c.id);
                         if (u === undefined)

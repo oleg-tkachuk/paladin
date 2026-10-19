@@ -9,7 +9,7 @@ import { RenamedSlugHint } from "@/components/features/tenants/RenamedSlugHint";
 export default function TenantNotFound() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 animate-fade-in">
-      <div className="mb-4 select-none text-8xl font-bold tracking-tighter text-foreground/5">
+      <div className="mb-4 select-none text-display font-bold tracking-tighter text-foreground/5">
         404
       </div>
       <h1 className="mb-3 text-2xl font-bold tracking-tight text-foreground">

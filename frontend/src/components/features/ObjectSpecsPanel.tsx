@@ -4,13 +4,14 @@ import Link from "next/link";
 import { ClipboardIcon } from "@heroicons/react/24/outline";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
 import { T } from "@/lib/ui/typography";
 import { formatDateTime } from "@/lib/format/locale";
+import { Bytes } from "@/components/ui/Bytes";
 
 // SpecRow renders one fact in the Specs sidebar — label above value, value
 // gets full sidebar width to wrap into. The row's flex layout keeps the value
@@ -129,7 +130,7 @@ export function ObjectSpecsPanel({
 
           <SpecRow label="Size">
             <span className="font-mono text-xs">
-              {formatBytes(object.sizeBytes)}
+              <Bytes value={object.sizeBytes} />
             </span>
           </SpecRow>
 

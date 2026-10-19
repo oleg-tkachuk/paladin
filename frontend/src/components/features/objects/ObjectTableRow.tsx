@@ -24,10 +24,11 @@ import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { useTenantChangesBlocked } from "@/app/tenants/[id]/tenant-context";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
+import { cn, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatDateTime } from "@/lib/format/locale";
 import { OBJECT_COLUMN_CLASS } from "./columns";
+import { Bytes } from "@/components/ui/Bytes";
 
 interface ObjectTableRowProps {
   obj: Object$;
@@ -309,10 +310,10 @@ export const ObjectTableRow = React.memo(function ObjectTableRow({
         <td
           className={cn(
             OBJECT_COLUMN_CLASS.size,
-            "px-2 py-3 @lg:px-6 @lg:py-4 text-right text-muted-foreground font-mono text-xs whitespace-nowrap",
+            "px-2 py-3 @lg:px-6 @lg:py-4 text-right tabular-nums font-mono text-xs whitespace-nowrap",
           )}
         >
-          {formatBytes(obj.sizeBytes)}
+          <Bytes value={obj.sizeBytes} />
         </td>
       )}
 

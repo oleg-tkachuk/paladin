@@ -120,12 +120,29 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   );
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+/**
+ * A column of figures: right-aligned, in tabular figures, so units, tens and
+ * thousands line up row under row. Its head takes the same, to sit over them.
+ */
+const NUMERIC = "text-right tabular-nums";
+
+/** Marks a cell or head of a column of figures. */
+export const NUMERIC_ATTR = "data-numeric";
+
+type Numeric = { numeric?: boolean };
+
+function TableHead({
+  className,
+  numeric,
+  ...props
+}: React.ComponentProps<"th"> & Numeric) {
   return (
     <th
       data-slot="table-head"
+      {...(numeric ? { [NUMERIC_ATTR]: true } : {})}
       className={cn(
         "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        numeric && NUMERIC,
         className,
       )}
       {...props}
@@ -133,12 +150,18 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   );
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({
+  className,
+  numeric,
+  ...props
+}: React.ComponentProps<"td"> & Numeric) {
   return (
     <td
       data-slot="table-cell"
+      {...(numeric ? { [NUMERIC_ATTR]: true } : {})}
       className={cn(
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        numeric && NUMERIC,
         className,
       )}
       {...props}

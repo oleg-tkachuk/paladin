@@ -28,7 +28,7 @@ import { SortableHead } from "@/components/ui/SortHeader";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { buildObjectFilter } from "@/lib/objectFilter";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
-import { cn, formatBytes, formatDate, timestampToDate } from "@/lib/utils";
+import { cn, formatDate, timestampToDate } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ import {
 import { useCollection } from "../collection-context";
 import { useTenantChangesBlocked } from "../../../tenant-context";
 import { formatDateTime } from "@/lib/format/locale";
+import { Bytes } from "@/components/ui/Bytes";
 
 /** The state a trashed object is in. */
 const TRASHED_STATE = "DELETED";
@@ -263,7 +264,7 @@ export default function CollectionTrashPage() {
                   </button>
                 }
               />
-              <TableHead className="hidden @2xl:table-cell text-right">
+              <TableHead numeric className="hidden @2xl:table-cell">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="cursor-help border-b border-dotted border-muted-foreground/50">
@@ -345,8 +346,11 @@ export default function CollectionTrashPage() {
                     <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground font-mono">
                       {obj.contentType || "binary/octet-stream"}
                     </TableCell>
-                    <TableCell className="hidden @md:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
-                      {formatBytes(Number(obj.sizeBytes))}
+                    <TableCell
+                      numeric
+                      className="hidden @md:table-cell text-xs font-mono"
+                    >
+                      <Bytes value={obj.sizeBytes} />
                     </TableCell>
                     <TableCell className="hidden @xs:table-cell text-xs text-muted-foreground whitespace-nowrap">
                       {obj.terminatedAt
@@ -355,7 +359,10 @@ export default function CollectionTrashPage() {
                           : formatDateTime(timestampToDate(obj.terminatedAt))
                         : "—"}
                     </TableCell>
-                    <TableCell className="hidden @2xl:table-cell text-right text-xs font-mono tabular-nums text-muted-foreground">
+                    <TableCell
+                      numeric
+                      className="hidden @2xl:table-cell text-xs font-mono text-muted-foreground"
+                    >
                       {obj.resourceVersion || "—"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -490,7 +497,7 @@ export default function CollectionTrashPage() {
               {opened.contentType || "binary/octet-stream"}
             </RecordField>
             <RecordField label="Size" mono>
-              {formatBytes(Number(opened.sizeBytes))}
+              <Bytes value={opened.sizeBytes} />
             </RecordField>
             <RecordField label="Deleted">
               {opened.terminatedAt

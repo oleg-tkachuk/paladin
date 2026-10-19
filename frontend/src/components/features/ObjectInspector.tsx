@@ -23,9 +23,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { formatDateTime } from "@/lib/format/locale";
+import { Bytes } from "@/components/ui/Bytes";
 
 interface ObjectInspectorProps {
   collection: string | null;
@@ -133,7 +134,7 @@ export function ObjectInspector({
                 {ObjectState[object.state]}
               </span>
               <Badge variant="outline" className={T.codeSmall}>
-                {formatBytes(object.sizeBytes)}
+                <Bytes value={object.sizeBytes} />
               </Badge>
             </div>
           )}

@@ -1,11 +1,13 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-// The text sizes globals.css adds to Tailwind's scale (`--text-<name>`); none
-// today. tailwind-merge has to be told any it gets: a size it does not know
+import { BYTE_DECIMALS, bytesParts } from "@/lib/format/bytes";
+
+// The text sizes globals.css adds to Tailwind's scale (`--text-<name>`).
+// tailwind-merge has to be told any it gets: a size it does not know
 // reads as a text colour, so `text-tiny text-muted-foreground` kept the colour,
 // dropped the size, and the text rendered at whatever it inherited.
-export const CUSTOM_TEXT_SIZES: string[] = [];
+export const CUSTOM_TEXT_SIZES: string[] = ["display"];
 
 const twMerge = extendTailwindMerge({
   extend: { theme: { text: CUSTOM_TEXT_SIZES } },
@@ -42,14 +44,13 @@ export function formatDate(date: Date | undefined): string {
   return `${seconds}s ago`;
 }
 
-export function formatBytes(bytes: number | bigint, decimals = 2) {
-  const n = typeof bytes === "bigint" ? Number(bytes) : bytes;
-  if (n === 0) return "0 Bytes";
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-  const i = Math.floor(Math.log(n) / Math.log(k));
-  return parseFloat((n / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+/** A size as one string: "1.5 KB". Bytes renders it with its exact count. */
+export function formatBytes(
+  bytes: number | bigint,
+  decimals: number = BYTE_DECIMALS,
+) {
+  const { value, unit } = bytesParts(bytes, decimals);
+  return `${value} ${unit}`;
 }
 
 /**

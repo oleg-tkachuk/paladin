@@ -47,6 +47,14 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* The type scale is Tailwind's, xs to 3xl (typeScale.test holds pages to
+     it), plus one display size for the big numerals of an error page. The
+     spacing scale is Tailwind's too: every p-, m-, gap- and size- step is a
+     multiple of --spacing (arbitraryValues.test). */
+  --spacing: 0.25rem;
+  --text-display: 6rem;
+  --text-display--line-height: 1;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
