@@ -37,26 +37,21 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(h.search),
 }));
 vi.mock("@/hooks/useTenants", () => ({
-  useTenants: () => ({
+  useTenants: (set: string = "active") => ({
     error: h.tenantsError,
+    refetch: vi.fn(),
+    fetchedAt: 1,
     // Answers as ListTenants does: trashed tenants only when asked for.
-    fetchTenants: (
-      _filter: string,
-      _page: string,
-      opts: { includeTrashed?: boolean } = {},
-    ) =>
-      Promise.resolve({
-        tenants: [
-          { tenantId: "t-1", slug: "platform", displayName: "Platform" },
-          { tenantId: "t-2", slug: "globex", displayName: "Globex" },
-          {
-            tenantId: "t-3",
-            slug: "smoke",
-            displayName: "Smoke",
-            deletedAt: { seconds: 1n, nanos: 0 },
-          },
-        ].filter((t) => opts.includeTrashed || !t.deletedAt),
-      }),
+    tenants: [
+      { tenantId: "t-1", slug: "platform", displayName: "Platform" },
+      { tenantId: "t-2", slug: "globex", displayName: "Globex" },
+      {
+        tenantId: "t-3",
+        slug: "smoke",
+        displayName: "Smoke",
+        deletedAt: { seconds: 1n, nanos: 0 },
+      },
+    ].filter((t) => set === "all" || !t.deletedAt),
   }),
 }));
 

@@ -25,13 +25,11 @@ loading, error }` triad. Wrapping a query in `try/catch` is redundant, and
 ## Caller patterns
 
 ```ts
-// QUERY — read state, never try/catch:
-const { tenants, loading, error, fetchTenants } = useTenants();
-useEffect(() => {
-  void fetchTenants();
-}, [fetchTenants]);
+// QUERY — read state, never try/catch. The list comes from the query cache
+// (lib/queries/tenants), so there is nothing to fetch on mount:
+const { tenants, loading, error, refetch } = useTenants();
 // render the failure, never the empty state, when the list did not load:
-//   error ? <ListLoadError what="Tenants" reason={error} onRetry={fetchTenants} />
+//   error ? <ListLoadError what="Tenants" reason={error} onRetry={refetch} />
 //         : <Table rows={tenants} />
 
 // MUTATION — await in try/catch, surface via errorMessage():

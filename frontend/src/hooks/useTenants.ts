@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -9,10 +10,15 @@ import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { TenantSchema } from "@/gen/paladin/admin/v1/types_pb";
 import type { StorageMigrationStatus } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import { useBumpRefresh } from "@/context/RefreshContext";
-import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
-import { MAX_LIST_PAGES } from "@/hooks/useBuckets";
 import { fieldMask } from "@/lib/connect/fieldMask";
+import { useOptimistic } from "@/hooks/useOptimistic";
+import { edit, type OptimisticEdit } from "@/lib/optimistic";
+import {
+  TENANTS_QUERY_KEY,
+  tenantsQuery,
+  type TenantSet,
+} from "@/lib/queries/tenants";
 
 /**
  * useTenants — wrapper around admin/v1.TenantService.
@@ -27,55 +33,43 @@ import { fieldMask } from "@/lib/connect/fieldMask";
 
 const tenantResourceName = (id: string) => `tenants/${id}`;
 
-export function useTenants() {
-  const bumpRefresh = useBumpRefresh();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/** A tenant's fields as an edit leaves them, in every list that holds it. */
+function changedIn(tenantId: string, fields: Partial<Tenant>) {
+  return (list: Tenant[]) =>
+    list.map((t) => (t.tenantId === tenantId ? { ...t, ...fields } : t));
+}
 
-  // fetchTenants — defaults to the active set (deleted_at IS NULL).
-  // Pass `includeTrashed: true` to get both; `onlyTrashed: true` to
-  // get just the trash. /trash page uses onlyTrashed; default everywhere
-  // else stays clean so deleted rows can't accept new bindings.
-  const fetchTenants = useCallback(
-    async (
-      filter: string = "",
-      pageToken: string = "",
-      opts: { includeTrashed?: boolean; onlyTrashed?: boolean } = {},
-    ) => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Every page, from pageToken on: the callers name owners and
-        // grantees and pick a tenant from this set, and a set cut at one page
-        // hid every tenant past it — a grant could not be given to one.
-        let token = pageToken;
-        let pages = 0;
-        const acc: Tenant[] = [];
-        do {
-          const res = await tenantClient.listTenants({
-            page: { pageSize: API_PAGE_SIZE_MAX, pageToken: token },
-            filter,
-            includeTrashed: !!opts.includeTrashed,
-            onlyTrashed: !!opts.onlyTrashed,
-          });
-          acc.push(...res.tenants);
-          token = res.page?.nextPageToken ?? "";
-          pages += 1;
-        } while (token && pages < MAX_LIST_PAGES);
-        setTenants(acc);
-        return { tenants: acc, nextPageToken: token };
-      } catch (err) {
-        // Query contract (state-only): surface via `error`, never throw.
-        // Callers read `error`; awaiting callers get an empty page.
-        setError(errorMessage(err, "Failed to fetch tenants"));
-        return { tenants: [], nextPageToken: "" };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
+/** A tenant taken out of the lists of one set. */
+function removedFrom(set: TenantSet, tenantId: string): OptimisticEdit {
+  return edit<Tenant[]>(tenantsQuery(set).queryKey, (list) =>
+    list.filter((t) => t.tenantId !== tenantId),
   );
+}
+
+/**
+ * The tenants of a set, read through the query cache (lib/queries/tenants),
+ * and the changes to them. A change the console can predict — a rename, a
+ * trash, a restore, a purge — shows in every cached list at once and is put
+ * back if the server refuses it (lib/optimistic).
+ */
+export function useTenants(set: TenantSet = "active") {
+  const bumpRefresh = useBumpRefresh();
+  const qc = useQueryClient();
+  const optimistic = useOptimistic();
+  const query = useQuery(tenantsQuery(set));
+  const tenants = useMemo(() => query.data ?? [], [query.data]);
+  const error = query.error
+    ? errorMessage(query.error, "Failed to fetch tenants")
+    : null;
+  const { refetch: refetchQuery } = query;
+  const refetch = useCallback(() => void refetchQuery(), [refetchQuery]);
+
+  // What the server answered differs from any prediction in other sets (a
+  // trashed tenant joins the trash), so every list reads again after.
+  const settle = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: TENANTS_QUERY_KEY });
+    bumpRefresh("tenants");
+  }, [qc, bumpRefresh]);
 
   // createTenant — Phase 0 + default-binding contract:
   //   - slug is required (caller-supplied kebab-case handle).
@@ -99,7 +93,6 @@ export function useTenants() {
       storageLayout: string = "shared",
     ): Promise<Tenant> => {
       try {
-        setError(null);
         const tenant = create(TenantSchema, {
           // name is server-derived — caller's value is ignored at the
           // server but we set it to "" to keep the wire shape clean.
@@ -117,15 +110,15 @@ export function useTenants() {
           tenant,
           defaultBucket,
         });
-        setTenants((prev) => [...prev, created]);
-        bumpRefresh("tenants");
+        // The server mints the id and the name: nothing to predict.
+        settle();
         return created;
       } catch (err) {
         // Mutation contract (throw-only): caller surfaces via errorMessage().
         throw err;
       }
     },
-    [bumpRefresh],
+    [settle],
   );
 
   const updateTenantMetadata = useCallback(
@@ -135,33 +128,36 @@ export function useTenants() {
       displayName: string,
       labels: Record<string, string> = {},
     ): Promise<Tenant> => {
+      const tenant = create(TenantSchema, {
+        name: tenantResourceName(tenantId),
+        tenantId,
+        displayName,
+        labels,
+        inheritedCedarPolicy: "",
+        resourceVersion,
+      });
       try {
-        setError(null);
-        const tenant = create(TenantSchema, {
-          name: tenantResourceName(tenantId),
-          tenantId,
-          displayName,
-          labels,
-          inheritedCedarPolicy: "",
-          resourceVersion,
-        });
-        const updated = await tenantClient.updateTenant({
-          name: tenantResourceName(tenantId),
-          resourceVersion,
-          updateMask: fieldMask(TenantSchema, "displayName", "labels"),
-          tenant,
-        });
-        setTenants((prev) =>
-          prev.map((t) => (t.tenantId === tenantId ? updated : t)),
-        );
-        bumpRefresh("tenants");
-        return updated;
-      } catch (err) {
         // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
+        return await optimistic(
+          [
+            edit<Tenant[]>(
+              TENANTS_QUERY_KEY,
+              changedIn(tenantId, { displayName, labels }),
+            ),
+          ],
+          () =>
+            tenantClient.updateTenant({
+              name: tenantResourceName(tenantId),
+              resourceVersion,
+              updateMask: fieldMask(TenantSchema, "displayName", "labels"),
+              tenant,
+            }),
+        );
+      } finally {
+        settle();
       }
     },
-    [bumpRefresh],
+    [optimistic, settle],
   );
 
   // deleteTenant — moves the tenant to the trash (the server sets deleted_at)
@@ -171,19 +167,17 @@ export function useTenants() {
   const deleteTenant = useCallback(
     async (tenantId: string, resourceVersion: string = ""): Promise<void> => {
       try {
-        setError(null);
-        await tenantClient.deleteTenant({
-          name: tenantResourceName(tenantId),
-          resourceVersion,
-        });
-        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-        bumpRefresh("tenants");
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
+        await optimistic([removedFrom("active", tenantId)], () =>
+          tenantClient.deleteTenant({
+            name: tenantResourceName(tenantId),
+            resourceVersion,
+          }),
+        );
+      } finally {
+        settle();
       }
     },
-    [bumpRefresh],
+    [optimistic, settle],
   );
 
   // restoreTenant — clears deleted_at on a trashed row. Returns the
@@ -193,21 +187,14 @@ export function useTenants() {
   const restoreTenant = useCallback(
     async (tenantId: string): Promise<Tenant> => {
       try {
-        setError(null);
-        const restored = await tenantClient.restoreTenant({
-          name: tenantResourceName(tenantId),
-        });
-        setTenants((prev) =>
-          prev.map((t) => (t.tenantId === tenantId ? restored : t)),
+        return await optimistic([removedFrom("trashed", tenantId)], () =>
+          tenantClient.restoreTenant({ name: tenantResourceName(tenantId) }),
         );
-        bumpRefresh("tenants");
-        return restored;
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
+      } finally {
+        settle();
       }
     },
-    [bumpRefresh],
+    [optimistic, settle],
   );
 
   // purgeTenant — hard-deletes a soft-deleted row. The server refuses
@@ -216,18 +203,16 @@ export function useTenants() {
   const purgeTenant = useCallback(
     async (tenantId: string): Promise<void> => {
       try {
-        setError(null);
-        await tenantClient.purgeTenant({
-          name: tenantResourceName(tenantId),
-        });
-        setTenants((prev) => prev.filter((t) => t.tenantId !== tenantId));
-        bumpRefresh("tenants");
-      } catch (err) {
-        // Mutation contract (throw-only): caller surfaces via errorMessage().
-        throw err;
+        await optimistic(
+          [removedFrom("trashed", tenantId), removedFrom("all", tenantId)],
+          () =>
+            tenantClient.purgeTenant({ name: tenantResourceName(tenantId) }),
+        );
+      } finally {
+        settle();
       }
     },
-    [bumpRefresh],
+    [optimistic, settle],
   );
 
   // getTenantStorageMigration returns the tenant's shared->dedicated migration
@@ -268,9 +253,11 @@ export function useTenants() {
 
   return {
     tenants,
-    loading,
+    loading: query.isFetching,
     error,
-    fetchTenants,
+    refetch,
+    /** When the list was last read, for ages measured against it. */
+    fetchedAt: query.dataUpdatedAt,
     createTenant,
     updateTenantMetadata,
     deleteTenant,
