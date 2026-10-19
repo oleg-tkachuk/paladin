@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PRESSED } from "@/lib/ui/states";
+import { cn } from "@/lib/utils";
 
 export default function NotFound() {
   return (
@@ -14,7 +16,10 @@ export default function NotFound() {
       </p>
       <Link
         href="/"
-        className="px-6 py-3 rounded-2xl bg-primary hover:bg-primary text-primary-foreground text-sm font-bold transition-all shadow-lg shadow-primary/20 active:scale-95"
+        className={cn(
+          "px-6 py-3 rounded-2xl bg-primary hover:bg-primary text-primary-foreground text-sm font-bold transition-all shadow-raised",
+          PRESSED,
+        )}
       >
         Return to Dashboard
       </Link>

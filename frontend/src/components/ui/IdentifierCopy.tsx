@@ -3,6 +3,7 @@
 import React from "react";
 import { ClipboardIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
+import { PRESSED } from "@/lib/ui/states";
 
 /** How long the copied tick stays before the icon returns. */
 export const COPIED_TICK_MS = 2_000;
@@ -43,7 +44,8 @@ export function IdentifierCopy({
         type="button"
         onClick={handleCopy}
         className={cn(
-          "p-2 rounded-xl transition-all active:scale-95 group/copy",
+          "p-2 rounded-xl transition-all group/copy",
+          PRESSED,
           copied
             ? "bg-success/10 text-success"
             : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted",

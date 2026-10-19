@@ -5,6 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { Tabs as TabsPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 function Tabs({
   className,
@@ -79,11 +80,11 @@ function TabsTrigger({
         // Idle / hover
         "text-muted-foreground hover:text-foreground",
         // Focus visible
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        FOCUS_RING,
         // Disabled
         "disabled:pointer-events-none disabled:opacity-50",
         // Active — segmented-control look that contrasts against bg-muted/70
-        "data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=active]:shadow-sm data-[state=active]:ring-1 data-[state=active]:ring-border",
+        "data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=active]:shadow-raised data-[state=active]:ring-1 data-[state=active]:ring-border",
         // Line variant overrides — underline only, no card
         "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none group-data-[variant=line]/tabs-list:data-[state=active]:ring-0",
         // Underline indicator (only used by line variant)

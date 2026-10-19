@@ -15,6 +15,8 @@ import {
   isBuildSkew,
   uiBuildInfo,
 } from "@/lib/ui/build-info";
+import { cn } from "@/lib/utils";
+import { FOCUS_RING } from "@/lib/ui/states";
 
 /** Where the version links: the page that lists every role's build. */
 const HEALTH_PATH = "/health";
@@ -49,7 +51,10 @@ export function BuildVersion({ fallback }: BuildVersionProps) {
         <Link
           href={HEALTH_PATH}
           aria-label={`Paladin ${label}${skew ? ", console built from a different commit" : ""}`}
-          className="flex min-w-0 items-center gap-1.5 rounded-sm font-mono text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 rounded-sm font-mono text-xs text-muted-foreground transition-colors hover:text-foreground",
+            FOCUS_RING,
+          )}
         >
           {skew ? (
             <span

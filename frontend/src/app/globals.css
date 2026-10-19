@@ -59,6 +59,16 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Elevation: three levels, each a shadow-* utility. Raised sits on the
+     page (a card, the active tab); floating hovers over it (a menu, a
+     tooltip); overlay takes the screen (a dialog, a sheet). The shadow's
+     colour is the palette's, so a dark ground gets a deeper one. */
+  --shadow-raised: 0 1px 2px 0 var(--elevation-shadow);
+  --shadow-floating:
+    0 4px 12px -2px var(--elevation-shadow),
+    0 2px 4px -2px var(--elevation-shadow);
+  --shadow-overlay: 0 24px 48px -12px var(--elevation-shadow-strong);
 }
 
 :root {
@@ -109,6 +119,9 @@
   --sidebar-accent-foreground: #1d1720;
   --sidebar-border: #e2d9cd;
   --sidebar-ring: #b74616;
+
+  --elevation-shadow: rgb(29 23 32 / 8%);
+  --elevation-shadow-strong: rgb(29 23 32 / 22%);
 }
 
 .light {
@@ -143,10 +156,11 @@
   --accent: oklch(0.3 0.02 210);
   --accent-foreground: oklch(0.955 0.006 230);
 
-  --destructive: oklch(0.66 0.185 23);
-  /* Text on a solid destructive fill. Eleven confirm buttons named this token
-     before it existed and showed the inherited foreground; this is that value. */
-  --destructive-foreground: oklch(0.955 0.006 230);
+  /* Light enough to read as text on the muted surface (themeContrast). */
+  --destructive: oklch(0.7 0.185 23);
+  /* Text on a solid destructive fill: the red is light, so the text is dark,
+     as on the warning fill; the near-white it inherited read at 3:1. */
+  --destructive-foreground: oklch(0.17 0.014 232);
   --success: oklch(0.74 0.14 160);
   --warning: oklch(0.79 0.13 76);
   /* Text on a solid warning fill: amber is light, so the text is dark. */
@@ -174,6 +188,9 @@
   --sidebar-accent-foreground: oklch(0.955 0.006 230);
   --sidebar-border: oklch(1 0 0 / 6%);
   --sidebar-ring: oklch(0.74 0.1 194 / 55%);
+
+  --elevation-shadow: rgb(0 0 0 / 35%);
+  --elevation-shadow-strong: rgb(0 0 0 / 60%);
 }
 
 .ember {
@@ -225,6 +242,9 @@
   --sidebar-accent-foreground: #ece7f1;
   --sidebar-border: #322c3c;
   --sidebar-ring: #ff7a3d;
+
+  --elevation-shadow: rgb(0 0 0 / 35%);
+  --elevation-shadow-strong: rgb(0 0 0 / 60%);
 }
 
 @layer base {

@@ -21,7 +21,7 @@ function Card({
     default: "",
     subtle: "bg-muted/30 ring-foreground/5",
     outline: "bg-transparent ring-border",
-    elevated: "shadow-lg ring-foreground/5",
+    elevated: "shadow-raised ring-foreground/5",
     glass: "bg-card/60 backdrop-blur-md ring-foreground/10",
   };
   return (
