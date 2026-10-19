@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 
 // status, tag and search are read out of the QUERY STRING, so they are text a
 // link can carry into a CEL expression the server compiles. This file exists
@@ -22,8 +22,14 @@ vi.mock("next/navigation", () => ({
 
 import { useObjectListState } from "./useObjectListState";
 
-function filterFor(query: string): string {
+/** Opens the page at this query string, as a link would. */
+function openAt(query: string) {
   params.current = new URLSearchParams(query);
+  window.history.replaceState(null, "", `/objects?${query}`);
+}
+
+function filterFor(query: string): string {
+  openAt(query);
   return renderHook(() => useObjectListState()).result.current.filter;
 }
 
@@ -76,7 +82,7 @@ describe("useObjectListState filter escaping", () => {
 
 describe("useObjectListState sort from the URL", () => {
   const sortFor = (query: string) => {
-    params.current = new URLSearchParams(query);
+    openAt(query);
     return renderHook(() => useObjectListState()).result.current.sort;
   };
 
@@ -98,4 +104,30 @@ describe("useObjectListState sort from the URL", () => {
       });
     },
   );
+});
+
+describe("useObjectListState folder", () => {
+  it.each([
+    ["", ""],
+    ["prefix=a%2Fb", "a/b/"],
+    ["prefix=%2Fa%2F", "a/"],
+  ])("opens %s at the folder %s", (query, want) => {
+    openAt(query);
+    expect(renderHook(() => useObjectListState()).result.current.prefix).toBe(
+      want,
+    );
+  });
+
+  it("writes the folder it opens, and the root as no parameter", () => {
+    openAt("q=x");
+    const { result, rerender } = renderHook(() => useObjectListState());
+    act(() => result.current.handlePrefixChange("a/b"));
+    rerender();
+    expect(result.current.prefix).toBe("a/b/");
+    expect(new URLSearchParams(window.location.search).get("prefix")).toBe(
+      "a/b/",
+    );
+    act(() => result.current.handlePrefixChange(""));
+    expect(window.location.search).toBe("?q=x");
+  });
 });

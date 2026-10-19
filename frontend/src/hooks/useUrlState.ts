@@ -11,6 +11,25 @@ export interface UrlCodec<T> {
   write(value: T): ParamUpdates;
 }
 
+/** A text parameter; empty is its absence. Built once, at module level. */
+export function textParam(key: string): UrlCodec<string> {
+  return {
+    read: (params) => params.get(key) ?? "",
+    write: (value) => ({ [key]: value || null }),
+  };
+}
+
+/** The value a flag parameter carries when it is on. */
+const FLAG_ON = "true";
+
+/** An on/off parameter, present only when on. Built once, at module level. */
+export function flagParam(key: string): UrlCodec<boolean> {
+  return {
+    read: (params) => params.get(key) === FLAG_ON,
+    write: (on) => ({ [key]: on ? FLAG_ON : null }),
+  };
+}
+
 /** The address bar's parameters now, which a replace changes at once. */
 function currentParams(): URLSearchParams {
   return typeof window === "undefined"

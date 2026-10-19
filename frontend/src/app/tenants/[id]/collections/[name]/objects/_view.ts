@@ -1,5 +1,5 @@
-// Pure view/sort model for the Collection objects page. No React — just the
-// saved-view shape (with its runtime schema) and the tri-state sort cycle.
+// Pure view model for the Collection objects page. No React — just the
+// saved-view shape (with its runtime schema) and the sort the table shows.
 import { z } from "zod";
 
 export interface ViewFilters {
@@ -39,13 +39,4 @@ export type SortDirection = "asc" | "desc" | null;
 export interface SortState {
   column: string;
   direction: SortDirection;
-}
-
-// Tri-state cycle per column: unsorted → asc → desc → unsorted. Switching to a
-// different column starts fresh at asc.
-export function getNextSort(prev: SortState, column: string): SortState {
-  if (prev.column !== column) return { column, direction: "asc" };
-  if (prev.direction === "asc") return { column, direction: "desc" };
-  if (prev.direction === "desc") return { column: "", direction: null };
-  return { column, direction: "asc" };
 }

@@ -1,16 +1,45 @@
-// URL-synced filter + sort state for the Collection objects page, extracted
-// from the page component. Owns status / search (with its 300ms debounce) /
-// tag-facet / recursive / sort, keeps them mirrored into the query string, and
-// derives the CEL `filter` the data hook consumes. Selection, tag-option
-// accumulation, and the data fetch itself stay in the page — they depend on the
-// loaded objects, which this hook never sees.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+// URL-synced filter, folder and sort state for the Collection objects page,
+// on the same contract as every other list (useUrlState, TABLE_PARAMS): the
+// search, the sort, the status / tag / type / metadata facets, the folder and
+// whether to list everything under it. Derives the CEL `filter` the data hook
+// consumes. Selection, tag-option accumulation, and the data fetch itself stay
+// in the page — they depend on the loaded objects, which this hook never sees.
+import { useCallback, useEffect, useState } from "react";
 
+import { useTableSort } from "@/hooks/useTableSort";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { flagParam, textParam, useUrlState } from "@/hooks/useUrlState";
 import { buildObjectFilter } from "@/lib/objectFilter";
-import { isObjectOrderField } from "@/lib/objectOrder";
+import { folderPrefix } from "@/lib/objectFolders";
+import {
+  OBJECT_ORDER_FIELDS,
+  isObjectOrderField,
+  type ObjectOrderField,
+} from "@/lib/objectOrder";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 
-import { getNextSort, type SortState } from "./_view";
+import type { SortState } from "./_view";
+
+/** The page's own query-string parameters, beside TABLE_PARAMS. */
+export const OBJECT_LIST_PARAMS = {
+  status: "status",
+  tag: "tag",
+  type: "type",
+  meta: "meta",
+  recursive: "recursive",
+  folder: "prefix",
+} as const;
+
+const STATUS = textParam(OBJECT_LIST_PARAMS.status);
+const TAG = textParam(OBJECT_LIST_PARAMS.tag);
+const TYPE = textParam(OBJECT_LIST_PARAMS.type);
+const META = textParam(OBJECT_LIST_PARAMS.meta);
+const RECURSIVE = flagParam(OBJECT_LIST_PARAMS.recursive);
+const FOLDER = textParam(OBJECT_LIST_PARAMS.folder);
+const SORT_IN_URL = { url: PAGE_TABLE, columns: OBJECT_ORDER_FIELDS };
+
+/** How long typing settles before the search becomes a list request. */
+const SEARCH_DEBOUNCE_MS = 300;
 
 export interface ObjectListState {
   status: string | undefined;
@@ -22,8 +51,11 @@ export interface ObjectListState {
   metaFilter: string | undefined;
   search: string;
   setSearch: (value: string) => void;
+  /** List every key under the folder rather than its one level. */
   recursive: boolean;
   setRecursive: (value: boolean) => void;
+  /** The folder listed: empty for the root, else ending in the delimiter. */
+  prefix: string;
   sort: SortState;
   /** Derived CEL predicate over the object list (status, search, tag, type,
    *  metadata). */
@@ -35,126 +67,40 @@ export interface ObjectListState {
   handleMetaChange: (value: string | undefined) => void;
   handleSearchChange: (value: string) => void;
   handleRecursiveChange: (value: boolean) => void;
+  handlePrefixChange: (value: string) => void;
 }
 
-export function useObjectListState(): ObjectListState {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+const unset = (v: string) => v || undefined;
 
-  const [status, setStatus] = useState<string | undefined>(
-    searchParams.get("status") || undefined,
-  );
-  // Tag facet: a single "key=value" pair (URL param `tag`) that becomes a
-  // `tags['k'] == 'v'` clause in the CEL filter. The option list is derived
-  // client-side from the tags of loaded objects (in the page) — a server-side
-  // distinct-tags index would broaden it to the whole tenant, tracked in
-  // BACKLOG.
-  const [tagFilter, setTagFilter] = useState<string | undefined>(
-    searchParams.get("tag") || undefined,
-  );
-  const [typeFilter, setTypeFilter] = useState<string | undefined>(
-    searchParams.get("type") || undefined,
-  );
-  const [metaFilter, setMetaFilter] = useState<string | undefined>(
-    searchParams.get("meta") || undefined,
-  );
-  const [search, setSearch] = useState(searchParams.get("search") || "");
-  // Trails `search` by 300ms (see the debounce effect below); feeds
-  // the CEL filter so list refetches don't fire per keystroke.
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [recursive, setRecursive] = useState(
-    searchParams.get("recursive") === "true",
-  );
+export function useObjectListState(): ObjectListState {
+  const [status, setStatusText] = useUrlState(STATUS, "");
+  const [tag, setTag] = useUrlState(TAG, "");
+  const [type, setType] = useUrlState(TYPE, "");
+  const [meta, setMeta] = useUrlState(META, "");
+  const [recursive, setRecursive] = useUrlState(RECURSIVE, false);
+  const [folder, setFolder] = useUrlState(FOLDER, "");
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // A sort the server cannot apply is dropped rather than sent: an old link
   // may still name a column the list once only pretended to sort by.
-  const [sort, setSort] = useState<SortState>(() => {
-    const column = searchParams.get("sort") || "";
-    return isObjectOrderField(column)
-      ? {
-          column,
-          direction: (searchParams.get("dir") as "asc" | "desc") || null,
-        }
-      : { column: "", direction: null };
-  });
-
-  const syncToUrl = useCallback(
-    (params: Record<string, string | undefined>) => {
-      const current = new URLSearchParams(searchParams.toString());
-      for (const [key, value] of Object.entries(params)) {
-        if (value) current.set(key, value);
-        else current.delete(key);
-      }
-      const qs = current.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [searchParams, pathname, router],
+  const { sort, toggleSort } = useTableSort<ObjectOrderField>(
+    undefined,
+    SORT_IN_URL,
   );
 
-  const handleSort = (column: string) => {
-    setSort((prev) => {
-      const next = getNextSort(prev, column);
-      syncToUrl({
-        sort: next.column || undefined,
-        dir: next.direction || undefined,
-      });
-      return next;
-    });
-  };
-
-  const handleStatusChange = (value: string | undefined) => {
-    setStatus(value);
-    syncToUrl({ status: value });
-  };
-
-  const handleTagChange = (value: string | undefined) => {
-    setTagFilter(value);
-    syncToUrl({ tag: value });
-  };
-
-  const handleTypeChange = (value: string | undefined) => {
-    setTypeFilter(value);
-    syncToUrl({ type: value });
-  };
-
-  const handleMetaChange = (value: string | undefined) => {
-    setMetaFilter(value);
-    syncToUrl({ meta: value });
-  };
-
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-  };
-
-  // Latest syncToUrl in a ref so the debounce always calls the current
-  // one (it closes over the live searchParams) WITHOUT re-arming the
-  // timer on every searchParams change. Depending on syncToUrl directly
-  // would reset the debounce after each sync; capturing it in the effect
-  // would call a stale copy that drops a concurrent filter change made
-  // during the 300ms window.
-  const syncToUrlRef = useRef(syncToUrl);
+  // Trails `search`, so a list request follows typing once it settles
+  // rather than once per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
-    syncToUrlRef.current = syncToUrl;
-  });
-
-  // Debounce the expensive consequences of typing: the visible input
-  // updates per keystroke, but the CEL filter (one list RPC per
-  // change) and the router.replace URL sync follow 300ms after typing
-  // stops. Without this every character ≥3 fired a fetch + a history
-  // replacement.
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setDebouncedSearch(search);
-      if (search.length > 2 || search === "") {
-        syncToUrlRef.current({ search: search || undefined });
-      }
-    }, 300);
+    const id = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [search]);
 
-  const handleRecursiveChange = (value: boolean) => {
-    setRecursive(value);
-    syncToUrl({ recursive: value ? "true" : undefined });
+  const setStatus = useCallback(
+    (value: string | undefined) => setStatusText(value ?? ""),
+    [setStatusText],
+  );
+  const handleSort = (column: string) => {
+    if (isObjectOrderField(column)) toggleSort(column);
   };
 
   // Every value here comes out of the QUERY STRING, so it is attacker-supplied
@@ -169,31 +115,33 @@ export function useObjectListState(): ObjectListState {
   // filter runs inside the caller's own tenant and collection — but a filter
   // nobody can predict is not a filter.
   const filter = buildObjectFilter({
-    status,
+    status: unset(status),
     search: debouncedSearch,
-    tag: tagFilter,
-    type: typeFilter,
-    meta: metaFilter,
+    tag: unset(tag),
+    type: unset(type),
+    meta: unset(meta),
   });
 
   return {
-    status,
+    status: unset(status),
     setStatus,
-    tagFilter,
-    typeFilter,
-    metaFilter,
+    tagFilter: unset(tag),
+    typeFilter: unset(type),
+    metaFilter: unset(meta),
     search,
     setSearch,
     recursive,
     setRecursive,
-    sort,
+    prefix: folderPrefix(folder),
+    sort: { column: sort.column ?? "", direction: sort.direction },
     filter,
     handleSort,
-    handleStatusChange,
-    handleTagChange,
-    handleTypeChange,
-    handleMetaChange,
-    handleSearchChange,
-    handleRecursiveChange,
+    handleStatusChange: setStatus,
+    handleTagChange: (v) => setTag(v ?? ""),
+    handleTypeChange: (v) => setType(v ?? ""),
+    handleMetaChange: (v) => setMeta(v ?? ""),
+    handleSearchChange: setSearch,
+    handleRecursiveChange: setRecursive,
+    handlePrefixChange: (v) => setFolder(folderPrefix(v)),
   };
 }
