@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { fireEvent, render, screen } from "@/test/utils";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 const h = vi.hoisted(() => ({
@@ -8,6 +8,10 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/connect/client", () => ({
   capabilityClient: { get: h.get },
+}));
+vi.mock("@/lib/utils", async (orig) => ({
+  ...(await orig<typeof import("@/lib/utils")>()),
+  copyToClipboard: vi.fn(async () => true),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -141,5 +145,16 @@ describe("CapabilityDetailsDialog", () => {
     );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(h.get).not.toHaveBeenCalled();
+  });
+
+  // Confirmed on the button that copied, not by a toast.
+  it("says Copied on the Copy ID button", async () => {
+    h.get.mockResolvedValue({ capability: CAP });
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Copy ID/ }));
+    expect(
+      await screen.findByRole("button", { name: /Copied/ }),
+    ).toBeInTheDocument();
+    expect(h.showNotification).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardDocumentIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -12,7 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useNotification } from "@/components/ui/Notification";
+import { COPIED_NOTICE } from "@/components/ui/IdentifierCopy";
+import { useConfirmation } from "@/hooks/useConfirmation";
 import { copyToClipboard } from "@/lib/utils";
 import { capabilityDetailQuery } from "@/lib/queries/details";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -42,7 +43,8 @@ export function CapabilityDetailsDialog({
   usageEntry: UsageEntry;
   onClose: () => void;
 }) {
-  const { showNotification } = useNotification();
+  // Confirmed on the button, not by a toast.
+  const { shown: copied, confirm } = useConfirmation();
   const recordQuery = useQuery({
     ...capabilityDetailQuery(id ?? ""),
     enabled: !!id,
@@ -69,16 +71,15 @@ export function CapabilityDetailsDialog({
               <Button
                 variant="outline"
                 onClick={() => {
-                  void copyToClipboard(shown.id);
-                  showNotification({
-                    type: "success",
-                    title: "Copied",
-                    message: "Capability ID copied.",
-                  });
+                  void copyToClipboard(shown.id).then((ok) => ok && confirm());
                 }}
               >
-                <ClipboardDocumentIcon className="size-4" />
-                Copy ID
+                {copied ? (
+                  <CheckIcon className="size-4" />
+                ) : (
+                  <ClipboardDocumentIcon className="size-4" />
+                )}
+                {copied ? COPIED_NOTICE : "Copy ID"}
               </Button>
               <Button onClick={onClose}>Close</Button>
             </DialogFooter>
