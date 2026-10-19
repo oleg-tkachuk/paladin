@@ -7,6 +7,7 @@
 // and files. This is the "physical layout" half of the IA — the
 // tenant-first half is at /tenants/[id]/.../objects.
 
+import { CopyableId } from "@/components/ui/CopyableId";
 import React, { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -96,7 +97,12 @@ export default function StorageBackendDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-2 pt-0 text-xs">
-            <Row k="id" v={backend.backendId} mono />
+            <div className="flex items-center gap-2">
+              <span className="w-20 uppercase tracking-wider text-muted-foreground">
+                id
+              </span>
+              <CopyableId value={backend.backendId} label="backend ID" />
+            </div>
             <Row k="kind" v={kindLabel(backend)} />
             {backend.region && <Row k="region" v={backend.region} mono />}
             <Row k="endpoint" v={backend.endpoint} mono truncate />

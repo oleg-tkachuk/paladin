@@ -2,8 +2,12 @@
 
 import React from "react";
 import { ClipboardIcon, CheckIcon } from "@heroicons/react/24/outline";
-import { useNotification } from "@/components/ui/Notification";
 import { cn } from "@/lib/utils";
+
+/** How long the copied tick stays before the icon returns. */
+export const COPIED_TICK_MS = 2_000;
+/** What the live region says once the value is on the clipboard. */
+export const COPIED_NOTICE = "Copied";
 
 interface IdentifierCopyProps {
   value: string;
@@ -18,20 +22,16 @@ export function IdentifierCopy({
   className,
   iconOnly,
 }: IdentifierCopyProps) {
+  // Confirmed where it happened — the tick on the button, said to assistive
+  // technology through the live region — not by a toast across the screen.
   const [copied, setCopied] = React.useState(false);
-  const { showNotification } = useNotification();
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      showNotification({
-        type: "success",
-        title: "Copied",
-        message: `${label} copied to clipboard.`,
-      });
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), COPIED_TICK_MS);
     } catch (err) {
       console.error("Failed to copy", err);
     }
@@ -50,12 +50,16 @@ export function IdentifierCopy({
           className,
         )}
         title={`Copy ${label}`}
+        aria-label={`Copy ${label}`}
       >
         {copied ? (
           <CheckIcon className="w-4 h-4" />
         ) : (
           <ClipboardIcon className="w-4 h-4 group-hover/copy:scale-110 transition-transform" />
         )}
+        <span className="sr-only" aria-live="polite">
+          {copied ? COPIED_NOTICE : ""}
+        </span>
       </button>
     );
   }
@@ -94,6 +98,9 @@ export function IdentifierCopy({
         ) : (
           <ClipboardIcon className="w-4 h-4" />
         )}
+      </span>
+      <span className="sr-only" aria-live="polite">
+        {copied ? COPIED_NOTICE : ""}
       </span>
     </button>
   );
