@@ -452,6 +452,9 @@ for g in "${BILLING_GRANULARITIES[@]}"; do
         "{\"tenantId\":\"$tenant\",\"periodStart\":\"$from\",\"periodEnd\":\"$to\",\"granularity\":\"$g\"}")
     expect "billing series by $g" "$r" test "$(code_of "$r")" = ok
 done
+r=$(admin_rpc BillingService/ListTenantSpend "{\"periodStart\":\"$from\",\"periodEnd\":\"$to\"}")
+expect "billing lists every tenant's spend" "$r" \
+    test "$(code_of "$r")" = ok -a "$(printf %s "$r" | jq -r '(.tenants // []) | type')" = array
 
 # ── a purged tenant's token is refused as revoked ───────────────────────────
 # A tenant of its own, with nothing that would hold its purge back.
