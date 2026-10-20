@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — capabilities run on limes v0.109
+## sdk/go/v0.93.0 — capabilities run on limes v0.109
 
 The capability layer moves from limes v0.69.0 to v0.109.0 and pgstore from
 v0.11.1 to v0.30.1. What an operator or a client sees:
