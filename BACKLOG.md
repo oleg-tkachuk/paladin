@@ -607,20 +607,6 @@ open deliberately — each notes why._
 
 ---
 
-## CI/CD
-
-### Workflows install their tools with inline shell
-
-- **Status:** Deferred.
-- **Reason:** The scripts the workflows run are TypeScript under
-  `.github/ci`; what is left in `run:` blocks is one-line invocations and the
-  curl-and-checksum installers of yq, hadolint, trivy, promtool and crane,
-  which hold no decision worth a test of its own.
-- **Definition of Done:** one `.github/ci` command installs a pinned tool by
-  name from a table of URLs and checksum files, tested, and each installer
-  step calls it.
-- **Blockers:** none.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

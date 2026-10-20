@@ -281,24 +281,19 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
+      # The tree is not dirtied: the scripts' node_modules is ignored, so the
+      # version derived below is the commit's.
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       - name: Set up yq
-        run: |
-          set -euo pipefail
-          sudo curl -fsSL -o /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-          yq --version
+        run: node .github/ci/install-tool.ts yq
 
       - name: Set up Task
         uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
         with:
           version: ${{ env.TASK_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # The tree is not dirtied: the scripts' node_modules is ignored, so the
-      # version derived below is the commit's.
-      - name: Set up the CI scripts
-        uses: ./.github/actions/setup-ci
 
       # Everything the image build needs, read from the component's Taskfile
       # and the task library rather than restated here, and refused when the
@@ -368,15 +363,7 @@ jobs:
       # crane reads a pushed chart's digest; `helm push` reports it only as a
       # line of text.
       - name: Set up crane
-        run: |
-          set -euo pipefail
-          base="https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}"
-          tgz="go-containerregistry_Linux_x86_64.tar.gz"
-          cd "$RUNNER_TEMP"
-          curl -fsSLO "${base}/${tgz}"
-          curl -fsSL "${base}/checksums.txt" | grep " ${tgz}\$" | sha256sum -c -
-          sudo tar -xzf "$tgz" -C /usr/local/bin crane
-          crane version
+        run: node .github/ci/install-tool.ts crane
 
       - name: Keep the SBOMs for the release
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
