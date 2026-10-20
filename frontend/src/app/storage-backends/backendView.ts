@@ -3,6 +3,7 @@
 // without rendering the page.
 
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import { worstStatus, type NodeStatus } from "@/lib/topology/model";
 import { StatusTone } from "@/lib/ui/status";
 
 type BackendFlags = Pick<StorageBackend, "enabled" | "readOnly">;
@@ -92,4 +93,25 @@ export function healthView(b: BackendHealth): {
         title: "Not probed yet: run Test connectivity on the backend",
       };
   }
+}
+
+/**
+ * The one state a backend is drawn in where a single glyph stands for it, as
+ * a node of the topology: whichever of its lifecycle, its maintenance flag
+ * and its last probe most needs a look. A failed probe on an enabled backend
+ * outranks the enablement; an enabled, untested one reads as untested.
+ */
+export function backendStatus(
+  b: BackendFlags & BackendHealth & Pick<StorageBackend, "maintenance">,
+): NodeStatus {
+  const { label, tone } = healthView(b);
+  // The probe first: of equals the first wins, and a working backend reads
+  // better as healthy than as merely enabled.
+  return worstStatus([
+    { label, tone },
+    lifecycleState(b),
+    b.maintenance
+      ? { label: "Maintenance", tone: StatusTone.Suspended }
+      : undefined,
+  ])!;
 }

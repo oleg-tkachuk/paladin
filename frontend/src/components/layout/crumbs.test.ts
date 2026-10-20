@@ -12,6 +12,7 @@ describe("pageTitle", () => {
     ["/", `${HOME_LABEL} · ${PRODUCT_NAME}`],
     ["/buckets", `Buckets · ${PRODUCT_NAME}`],
     ["/tenants/acme/quotas", `Quotas · acme · Tenants · ${PRODUCT_NAME}`],
+    ["/tenants/acme/topology", `Topology · acme · Tenants · ${PRODUCT_NAME}`],
     [
       "/tenants/acme/m2m-tokens",
       `M2M tokens · acme · Tenants · ${PRODUCT_NAME}`,

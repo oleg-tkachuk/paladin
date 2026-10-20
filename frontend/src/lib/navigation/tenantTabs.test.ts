@@ -9,6 +9,7 @@ import {
 describe("tenantTabState", () => {
   it.each([
     ["", "Overview", "Overview"],
+    ["topology", "Overview", "Topology"],
     ["collections", "Collections", "Collections"],
     ["buckets", "Storage", "Buckets"],
     ["default-binding", "Storage", "Default bucket"],
@@ -43,6 +44,7 @@ describe("TENANT_TAB_GROUPS", () => {
         "m2m-tokens",
         "policies",
         "quotas",
+        "topology",
       ].sort(),
     );
   });
