@@ -231,9 +231,10 @@ enum BiscuitStatus {
   BISCUIT_STATUS_UNSPECIFIED = 0;
   // ISSUED: biscuit holds the capability's Biscuit.
   BISCUIT_STATUS_ISSUED = 1;
-  // NOT_SHAREABLE: the capability's ops lack share. A Biscuit is handed on
-  // offline, which is what share allows.
-  BISCUIT_STATUS_NOT_SHAREABLE = 2;
+  // NOT_SHAREABLE is never sent: a capability is sealed as a Biscuit whether
+  // or not its ops include share, since a copy narrowed from the Biscuit
+  // allows no more than the token, which its bearer could hand on as it is.
+  BISCUIT_STATUS_NOT_SHAREABLE = 2 [deprecated = true];
   // KEY_BOUND: the capability is bound to a key (confirmation_jkt), which
   // only its holder can prove; the holder presents the token.
   BISCUIT_STATUS_KEY_BOUND = 3;

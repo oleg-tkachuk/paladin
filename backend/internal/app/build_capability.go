@@ -142,6 +142,12 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if err != nil {
 		return nil, fmt.Errorf("app: capability revocation cache: %w", err)
 	}
+	// Its hits, misses, lookups, evictions and clears, read when the
+	// provider collects. The registration lives as long as the cache: the
+	// process.
+	if _, err := otelmetric.InstrumentRevocationCache(cache); err != nil {
+		return nil, fmt.Errorf("app: capability revocation cache metrics: %w", err)
+	}
 
 	// Revocations made on any replica clear this one's caches at once; the
 	// TTL above is only the fallback for while the LISTEN connection is

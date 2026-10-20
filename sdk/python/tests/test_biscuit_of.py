@@ -20,7 +20,6 @@ def test_an_issued_biscuit_is_returned() -> None:
 @pytest.mark.parametrize(
     "status",
     [
-        pb.BISCUIT_STATUS_NOT_SHAREABLE,
         pb.BISCUIT_STATUS_KEY_BOUND,
         pb.BISCUIT_STATUS_NOT_YET_VALID,
         pb.BISCUIT_STATUS_UNSPECIFIED,

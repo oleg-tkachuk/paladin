@@ -78,6 +78,8 @@ readonly CHECKSUM_ALGORITHM=CHECKSUM_ALGORITHM_SHA256
 # sdk/testdata/capability_ops.json names it; limes defines no bare "presign".
 readonly OP_OBJECT_PRESIGN=object:presign
 readonly OP_BARE_PRESIGN=presign
+# What an Issue answer carrying the capability's Biscuit says, in JSON.
+readonly BISCUIT_STATUS_ISSUED=BISCUIT_STATUS_ISSUED
 readonly CODE_INVALID_ARGUMENT=invalid_argument
 readonly CODE_PERMISSION_DENIED=permission_denied
 readonly CODE_NOT_FOUND=not_found
@@ -365,8 +367,14 @@ expect "the child is admitted" "$r" test "$(code_of "$r")" = ok
 r=$(list_with "$parent_biscuit")
 expect "the Biscuit form is admitted" "$r" test "$(code_of "$r")" = ok
 r=$(issue_for live-smoke-noshare '["get","list"]' "$CAPABILITY_MAX_REQUESTS")
-capabilities+=("$(printf %s "$r" | jq -r '.capability.id // empty')")
-r=$(delegate "$(printf %s "$r" | jq -r '.token // empty')" "$(printf %s "$r" | jq -r '.capability.id // empty')")
+noshare=$(printf %s "$r" | jq -r '.token // empty')
+noshare_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+noshare_biscuit=$(printf %s "$r" | jq -r '.biscuit // empty')
+capabilities+=("$noshare_id")
+expect "a capability without share has a Biscuit form" "$r" test "$(printf %s "$r" | jq -r '.biscuitStatus // empty')" = "$BISCUIT_STATUS_ISSUED"
+r=$(list_with "$noshare_biscuit")
+expect "its Biscuit form is admitted" "$r" test "$(code_of "$r")" = ok
+r=$(delegate "$noshare" "$noshare_id")
 expect "delegate without share is refused" "$r" test "$(code_of "$r")" = "$CODE_PERMISSION_DENIED"
 r=$(admin_cap_rpc "" CapabilityService/Delegate "{\"parentId\":\"$parent_id\"}")
 expect "delegate with no capability presented is refused" "$r" test "$(code_of "$r")" = "$CODE_FAILED_PRECONDITION"

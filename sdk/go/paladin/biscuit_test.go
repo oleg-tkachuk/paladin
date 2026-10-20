@@ -20,7 +20,6 @@ func TestBiscuitOf(t *testing.T) {
 		t.Fatalf("an issued Biscuit = %q, %v", got, err)
 	}
 	for _, status := range []adminv1.BiscuitStatus{
-		adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE,
 		adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND,
 		adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID,
 		// A server too old to say: no Biscuit is no Biscuit.

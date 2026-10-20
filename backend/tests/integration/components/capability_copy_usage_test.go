@@ -76,8 +76,8 @@ func (m *copyMinter) issue(t *testing.T, ctx context.Context, tenant uuid.UUID) 
 		IssuedBy: seedIssuer,
 		Audience: []string{copyMinterAudience},
 		Caveats: limes.Caveats{
-			// A Biscuit is sealed only for a capability that may be shared.
-			Ops:      []limes.Op{limes.OpGet, limes.OpShare},
+			// No share: a Biscuit is sealed, and its copies counted, without it.
+			Ops:      []limes.Op{limes.OpGet},
 			Requests: lineageRequests,
 			Budget:   lineageRootBudget,
 			Copies:   limes.CopyQuota{Unlimited: true},

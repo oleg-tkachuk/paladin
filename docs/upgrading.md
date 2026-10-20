@@ -44,6 +44,19 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a capability has a Biscuit without share
+
+limes v0.110 seals a Biscuit for any capability: a copy narrowed from it
+allows no more than the token, which its bearer could hand on as it is, and a
+copy with limits of its own is counted against `copy_ceiling`.
+
+- `CapabilityService.Issue` and `Delegate` return `biscuit` whatever the
+  capability's ops; only a key-bound capability (`KEY_BOUND`) and one not
+  valid yet (`NOT_YET_VALID`) still come back without one.
+- `BISCUIT_STATUS_NOT_SHAREABLE` is deprecated and never sent, and
+  `require_biscuit` no longer refuses a capability for lacking `share`.
+- `Delegate` still requires `share` on the parent.
+
 ## sdk/go/v0.96.0 — the SDKs need no limes
 
 A client works with the Paladin SDK alone; limes is the server's.

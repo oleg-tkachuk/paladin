@@ -12,8 +12,9 @@ const (
 	OpList = "list"
 	// OpDelete deletes a resource.
 	OpDelete = "delete"
-	// OpShare delegates a narrower capability, and lets the capability be
-	// sealed as a Biscuit, which is handed on offline.
+	// OpShare delegates a narrower capability through
+	// CapabilityService.Delegate. A Biscuit needs none: its holder narrows it
+	// offline.
 	OpShare = "share"
 	// OpManage administers: tenants, policy.
 	OpManage = "manage"

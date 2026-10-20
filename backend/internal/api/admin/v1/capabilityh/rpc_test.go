@@ -147,9 +147,10 @@ func TestIssueMintsAToken(t *testing.T) {
 	}
 }
 
-// A Biscuit is handed on offline, so a capability that may not be shared is
-// issued as its token alone.
-func TestIssueSealsNoBiscuitWithoutShare(t *testing.T) {
+// A capability that may not be shared is sealed as a Biscuit too: a copy
+// narrowed from it allows no more than its token, which its bearer could
+// hand on as it is.
+func TestIssueSealsABiscuitWithoutShare(t *testing.T) {
 	h := mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{})
 	resp, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
@@ -162,8 +163,11 @@ func TestIssueSealsNoBiscuitWithoutShare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	if resp.GetToken() == "" || resp.GetBiscuit() != "" {
-		t.Errorf("token %t, biscuit %q: want a token and no Biscuit", resp.GetToken() != "", resp.GetBiscuit())
+	if resp.GetToken() == "" || resp.GetBiscuitStatus() != adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
+		t.Fatalf("token %t, status %v: want a token and a Biscuit", resp.GetToken() != "", resp.GetBiscuitStatus())
+	}
+	if _, err := limes.Attenuate(resp.GetBiscuit(), limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
+		t.Errorf("the returned Biscuit does not attenuate: %v", err)
 	}
 }
 
