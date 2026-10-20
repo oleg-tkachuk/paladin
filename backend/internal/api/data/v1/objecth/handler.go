@@ -1690,6 +1690,13 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		return apiutil.MapError(publicread.Rulef("a public object is deleted with permanent=true; it has no trash"))
 	}
 	if !permanent {
+		// Only an AVAILABLE object moves to the trash. Asking the state
+		// machine anyway matched no row and came back as a version conflict,
+		// which told the caller to reload and try again — for an upload that
+		// had simply not finished.
+		if obj.State != statemachine.StateAvailable {
+			return SoftDeleteRefusal(obj.State)
+		}
 		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
 		// the event is atomic with the AVAILABLE→DELETED flip.
 		err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
@@ -1718,6 +1725,22 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		return err
 	}
 	return h.PermanentDelete(ctx, tenantID, obj, rv, bypassGovernance)
+}
+
+// pendingNotTrashable is the refusal a PENDING object's soft delete gets.
+const pendingNotTrashable = "the upload has not completed, so there is nothing to move to the trash; " +
+	"it is failed and cleared once its upload URL expires"
+
+// SoftDeleteRefusal says why an object in state cannot move to the trash;
+// the batch delete reports the same reason per object. A
+// PENDING object is an upload that never completed: it holds no bytes to keep,
+// and the reaper fails it once its upload URL expires.
+func SoftDeleteRefusal(state statemachine.State) error {
+	if state == statemachine.StatePending {
+		return connect.NewError(connect.CodeFailedPrecondition, pendingNotTrashable)
+	}
+	return connect.Errorf(connect.CodeFailedPrecondition,
+		"object state %s cannot move to the trash", state)
 }
 
 // assertBypassAllowed gates the governance-retention override. It lives on

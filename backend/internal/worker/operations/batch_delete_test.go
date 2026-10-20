@@ -160,8 +160,8 @@ func TestBatchDeleteSucceeds(t *testing.T) {
 	tenant := uuid.New()
 	id1, id2 := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: id1, Collection: "k", ResourceVersion: 3},
-		{ObjectID: id2, Collection: "k", ResourceVersion: 7},
+		{ObjectID: id1, Collection: "k", ResourceVersion: 3, State: statemachine.StateAvailable},
+		{ObjectID: id2, Collection: "k", ResourceVersion: 7, State: statemachine.StateAvailable},
 	}}
 	tr := newFakeTransitions()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
@@ -195,8 +195,8 @@ func TestBatchDeleteLeavesOtherCollectionsAlone(t *testing.T) {
 	tenant := uuid.New()
 	inside, outside := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: inside, Collection: "k", ResourceVersion: 1},
-		{ObjectID: outside, Collection: "other", ResourceVersion: 1},
+		{ObjectID: inside, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable},
+		{ObjectID: outside, Collection: "other", ResourceVersion: 1, State: statemachine.StateAvailable},
 	}}
 	tr := newFakeTransitions()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
@@ -222,7 +222,7 @@ func TestBatchDeleteLeavesOtherCollectionsAlone(t *testing.T) {
 func TestBatchDeleteReportsMissingObjects(t *testing.T) {
 	tenant := uuid.New()
 	present, missing := uuid.New(), uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: present, Collection: "k", ResourceVersion: 1}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: present, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable}}}
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
@@ -249,7 +249,7 @@ func TestBatchDeleteReportsTransitionFailures(t *testing.T) {
 	tenant := uuid.New()
 	ok, bad := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: ok, Collection: "k", ResourceVersion: 1}, {ObjectID: bad, Collection: "k", ResourceVersion: 1},
+		{ObjectID: ok, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable}, {ObjectID: bad, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable},
 	}}
 	tr := newFakeTransitions()
 	tr.softErrs[bad] = statemachine.ErrConflict
@@ -294,7 +294,7 @@ func TestBatchDeleteLookupErrorFailsTheBatch(t *testing.T) {
 func TestBatchDeleteHonoursContextCancellation(t *testing.T) {
 	tenant := uuid.New()
 	id := uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable}}}
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: newFakeTransitions()}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -613,8 +613,8 @@ func TestBatchDeletePermanentHardDeletesEachObject(t *testing.T) {
 	tenant := uuid.New()
 	id1, id2 := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: id1, Collection: "k", ResourceVersion: 3},
-		{ObjectID: id2, Collection: "k", ResourceVersion: 7},
+		{ObjectID: id1, Collection: "k", ResourceVersion: 3, State: statemachine.StateAvailable},
+		{ObjectID: id2, Collection: "k", ResourceVersion: 7, State: statemachine.StateAvailable},
 	}}
 	tr := newFakeTransitions()
 	pd := newFakePermanentDeleter()
@@ -653,8 +653,8 @@ func TestBatchDeletePermanentReportsALockedObjectAndKeepsGoing(t *testing.T) {
 	tenant := uuid.New()
 	locked, free := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: locked, Collection: "k", ResourceVersion: 1},
-		{ObjectID: free, Collection: "k", ResourceVersion: 1},
+		{ObjectID: locked, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable},
+		{ObjectID: free, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable},
 	}}
 	pd := newFakePermanentDeleter()
 	pd.errs[locked] = errors.New("cannot delete: compliance retention until 2030-01-01")
@@ -683,7 +683,7 @@ func TestBatchDeletePermanentFailsTheBatchWithNoDeleterWired(t *testing.T) {
 	// guard used to prevent. A misconfigured worker must fail loudly.
 	tenant := uuid.New()
 	id := uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable}}}
 	tr := newFakeTransitions()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
 
@@ -701,7 +701,7 @@ func TestBatchDeletePermanentFailsTheBatchWithNoDeleterWired(t *testing.T) {
 func TestBatchDeleteDefaultsToSoftWhenPermanentIsUnset(t *testing.T) {
 	tenant := uuid.New()
 	id := uuid.New()
-	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 2}}}
+	repo := &lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 2, State: statemachine.StateAvailable}}}
 	tr := newFakeTransitions()
 	pd := newFakePermanentDeleter()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr, Permanent: pd, Erasures: noErasures{}}
@@ -725,8 +725,8 @@ func TestBatchSoftDeleteRefusesPublicObjects(t *testing.T) {
 	tenant := uuid.New()
 	private, public := uuid.New(), uuid.New()
 	repo := &lookupRepo{objs: []objecth.Object{
-		{ObjectID: private, Collection: "k", ResourceVersion: 1},
-		{ObjectID: public, Collection: "k", ResourceVersion: 1, PublicURL: "https://cdn.example/x"},
+		{ObjectID: private, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable},
+		{ObjectID: public, Collection: "k", ResourceVersion: 1, PublicURL: "https://cdn.example/x", State: statemachine.StateAvailable},
 	}}
 	tr := newFakeTransitions()
 	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
@@ -742,5 +742,35 @@ func TestBatchSoftDeleteRefusesPublicObjects(t *testing.T) {
 	}
 	if _, touched := tr.softArgs[public]; touched {
 		t.Error("the public object was moved to the trash")
+	}
+}
+
+// An upload that never completed is not trashed, and the batch says why
+// rather than reporting a version conflict nobody caused.
+func TestBatchSoftDeleteRefusesPendingObjects(t *testing.T) {
+	tenant := uuid.New()
+	ok, pending := uuid.New(), uuid.New()
+	repo := &lookupRepo{objs: []objecth.Object{
+		{ObjectID: ok, Collection: "k", ResourceVersion: 1, State: statemachine.StateAvailable},
+		{ObjectID: pending, Collection: "k", ResourceVersion: 1, State: statemachine.StatePending},
+	}}
+	tr := newFakeTransitions()
+	e := &BatchDeleteExecutor{Objects: repo, Transitions: tr}
+
+	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchDeleteArgs{
+		TenantID: tenant, Collection: "k", ObjectIDs: []uuid.UUID{ok, pending},
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	resp := decodeDeleteResp(t, body)
+	if resp.Succeeded != 1 || resp.Failed != 1 {
+		t.Fatalf("counts = %+v", resp)
+	}
+	if _, called := tr.softArgs[pending]; called {
+		t.Error("a PENDING object reached the state machine")
+	}
+	if f := resp.Failures[0]; f.ObjectID != pending.String() || !strings.Contains(f.Reason, "upload has not completed") {
+		t.Errorf("failure = %+v, want the pending object with its reason", f)
 	}
 }

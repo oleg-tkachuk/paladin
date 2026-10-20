@@ -13,6 +13,11 @@ import { useTablePrefs } from "@/hooks/useTablePrefs";
 import { COLUMN_OPTIONS } from "@/components/features/objects/columns";
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
+import {
+  NOTHING_TO_TRASH,
+  splitForTrash,
+  unfinishedNote,
+} from "@/lib/objects/trash";
 import React, {
   useCallback,
   useEffect,
@@ -391,29 +396,47 @@ function CollectionObjectsContent() {
       });
       return;
     }
+    // An upload that never completed has nothing to trash and is refused, so
+    // it is left out of the delete and the dialog says so.
+    const { trash, unfinished } = splitForTrash(selectedItems);
+    if (trash.length === 0) {
+      showNotification({
+        type: "warning",
+        title: NOTHING_TO_TRASH,
+        message: unfinishedNote(unfinished.length),
+      });
+      return;
+    }
+    const trashPayload = trash.map((o) => ({
+      name: o.name,
+      collection: o.collection,
+    }));
     setConfirm({
       open: true,
       type: "warning",
-      title: `Move ${ids.length} objects to Trash?`,
-      message: "The selected objects can no longer be read.",
+      title: `Move ${trash.length} objects to Trash?`,
+      message:
+        unfinished.length > 0
+          ? `The selected objects can no longer be read. ${unfinishedNote(unfinished.length)}`
+          : "The selected objects can no longer be read.",
       warning: STAY_RESTORABLE,
-      confirmText: `Move ${ids.length} to Trash`,
+      confirmText: `Move ${trash.length} to Trash`,
       onConfirm: async () => {
         try {
           setIsBulkDeleting(true);
-          await bulkDeleteObjects(deletePayload);
+          await bulkDeleteObjects(trashPayload);
           setSelectedIds(new Set());
           // Undo is a restore, so it is confirmed like any other.
           registerAction({
             id: "objects.bulk_restore_last",
             label: "Undo: Restore Objects",
             category: "operation",
-            perform: () => confirmBulkRestore(deletePayload),
+            perform: () => confirmBulkRestore(trashPayload),
           });
           showNotification({
             type: "success",
             title: "Moved to Trash",
-            message: `${ids.length} objects moved to trash.`,
+            message: `${trash.length} objects moved to trash.`,
             action: {
               label: "Undo",
               onClick: () => executeAction("objects.bulk_restore_last"),

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { ConfirmModal } from "./ConfirmModal";
+import { Code, ConnectError } from "@connectrpc/connect";
+
+import { CONFIRM_FAILED, ConfirmModal } from "./ConfirmModal";
 
 const baseProps = {
   isOpen: true,
@@ -181,5 +183,59 @@ describe("ConfirmModal", () => {
     );
     expect(screen.getByRole("button", { name: "Revoke copy" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  });
+
+  // A refused action used to leave the dialog sitting there, unchanged, while
+  // the error went unhandled: an upload that never finished could not be
+  // trashed, and nothing said so.
+  it("stays open and says why when the action is refused", async () => {
+    const onClose = vi.fn();
+    const refusal = new ConnectError(
+      "the upload has not completed, so there is nothing to move to the trash",
+      Code.FailedPrecondition,
+    );
+    render(
+      <ConfirmModal
+        {...baseProps}
+        confirmText="Move to Trash"
+        onConfirm={() => Promise.reject(refusal)}
+        onClose={onClose}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Move to Trash" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "the upload has not completed",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Move to Trash" })).toBeEnabled();
+  });
+
+  it("names a failure that gave no reason", async () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        confirmText="Delete"
+        onConfirm={() => Promise.reject(undefined)}
+        onClose={vi.fn()}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(CONFIRM_FAILED);
+  });
+
+  it("does not carry an old reason to another action", async () => {
+    const props = { ...baseProps, confirmText: "Delete", onClose: vi.fn() };
+    const { rerender } = render(
+      <ConfirmModal
+        {...props}
+        onConfirm={() => Promise.reject(new Error("refused"))}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("refused");
+    rerender(<ConfirmModal {...props} onConfirm={vi.fn()} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

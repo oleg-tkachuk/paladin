@@ -11,8 +11,12 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { errorMessage } from "@/hooks/errorContract";
 import { cn } from "@/lib/utils";
 import { PRESSED } from "@/lib/ui/states";
+
+/** What the dialog says when the action failed and gave no reason. */
+export const CONFIRM_FAILED = "The action failed.";
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -60,12 +64,27 @@ export function ConfirmModal({
   // twice even when the caller passes no loading state of its own.
   const [running, setRunning] = useState(false);
   const busy = loading || running;
+  // Why the action failed, kept against the action it belongs to: the
+  // dialog stays open on a refusal and says it, where it used to sit there
+  // unchanged while the error went unhandled. A different action reopening
+  // the dialog does not inherit an old reason.
+  const [failure, setFailure] = useState<{
+    action: ConfirmModalProps["onConfirm"];
+    reason: string;
+  } | null>(null);
+  const reason = failure?.action === onConfirm ? failure.reason : null;
 
   const handleConfirm = async () => {
     setRunning(true);
+    setFailure(null);
     try {
       await onConfirm();
       onClose();
+    } catch (err) {
+      setFailure({
+        action: onConfirm,
+        reason: errorMessage(err, CONFIRM_FAILED),
+      });
     } finally {
       setRunning(false);
     }
@@ -123,6 +142,14 @@ export function ConfirmModal({
           </div>
         )}
         {children}
+        {reason && (
+          <p
+            role="alert"
+            className="rounded-xl bg-destructive/10 px-3 py-2.5 text-left text-xs leading-relaxed text-destructive"
+          >
+            {reason}
+          </p>
+        )}
         <div className="flex gap-3">
           <button
             onClick={onClose}
