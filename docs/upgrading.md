@@ -61,6 +61,11 @@ copy with limits of its own is counted against `copy_ceiling`.
   otherwise, with the form and the status. A client that only presents the
   capability should use them rather than read `biscuit`; `BiscuitOf` stays
   for one that must narrow it.
+- Go's `paladintest` serves `CapabilityService` — `Issue`, `Delegate`,
+  `Revoke`, `Get` — to the server's rules: a Biscuit unless key-bound or not
+  yet valid, `InvalidArgument` for a bare `presign`, `require_biscuit` and
+  `Delegate`'s `share` as the server answers them. A consumer's own fake of
+  the service can go.
 - The operations are typed. Go: `paladin.Op`, with `Attenuation.Ops []Op`,
   `paladin.OpNames(…)` for `CapabilityCaveats.ops`, and `Op.Validate`. Python:
   `paladin.Op`, a `StrEnum`, whose members `OP_GET` … `OP_OBJECT_TAG` now are;

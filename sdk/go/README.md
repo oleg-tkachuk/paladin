@@ -406,7 +406,8 @@ data, _ := srv.Content(obj.GetName())
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`RegenerateUploadUrl`,
-`PresignDownload`) and `StorageBootstrapService`; every other RPC answers
+`PresignDownload`), `StorageBootstrapService` and `CapabilityService`
+(`Issue`, `Delegate`, `Revoke`, `Get`); every other RPC answers
 `Unimplemented`. Like the server it runs protovalidate on every request,
 after authentication, so a request the contract's rules refuse is
 `ErrInvalidArgument`; it checks `DeleteObject`'s `resource_version` —
@@ -494,6 +495,24 @@ the tenant the call names. It verifies no signature, Biscuit, caveat,
 scope, audience or expiry, and has no platform admin acting in another
 tenant. A refused call is in `Requests`, and is refused before `FailRPC`'s
 failures, which it does not spend.
+
+Its `CapabilityService` holds a capability to the server's rules where a
+consumer's tests meet them, and the server's tests hold the fake to the same
+answers:
+
+| Request | Answer |
+| --- | --- |
+| An operation limes does not define and that is not namespaced, such as a bare `presign` | `InvalidArgument` |
+| No request or no budget ceiling, or a `not_before` past the expiry | `InvalidArgument` |
+| A key-bound capability, or one valid only from a later `not_before` | Its token alone, `biscuit_status` `KEY_BOUND` or `NOT_YET_VALID`; with `require_biscuit`, `FailedPrecondition` |
+| Any other, `share` or no `share` | Its token and its Biscuit, `ISSUED` |
+| `Delegate` with no capability presented, or from a Biscuit copy | `FailedPrecondition` |
+| `Delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PermissionDenied` |
+
+The token and the Biscuit are the fake's own credentials — `Attenuate`
+refuses its Biscuit — and both are accepted under `WithStrictAuth` until the
+capability is revoked; `Revoke` with `cascade_children` revokes its children
+too. It checks no audience, resource, plane or copy quota.
 
 ### Concurrency
 
