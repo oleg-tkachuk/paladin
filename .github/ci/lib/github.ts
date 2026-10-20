@@ -46,6 +46,8 @@ export interface NewRelease {
   notes: { text: string } | { generated: true };
   // latest marks it Latest; otherwise GitHub is told it is not.
   latest: boolean;
+  // prerelease marks a release candidate, which is never the Latest.
+  prerelease?: boolean;
   // assets are files attached to it, by path.
   assets: readonly string[];
 }
@@ -177,7 +179,8 @@ export function gitHubOver(octokit: Octokit, repo: Repo): GitHub {
         tag_name: release.tag,
         name: release.title,
         ...("text" in release.notes ? { body: release.notes.text } : { generate_release_notes: true }),
-        ...(release.latest ? {} : { make_latest: MAKE_LATEST_FALSE }),
+        ...(release.latest && release.prerelease !== true ? {} : { make_latest: MAKE_LATEST_FALSE }),
+        ...(release.prerelease === true ? { prerelease: true } : {}),
       });
       for (const path of release.assets) {
         await octokit.rest.repos.uploadReleaseAsset({

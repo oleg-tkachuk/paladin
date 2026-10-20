@@ -77,3 +77,11 @@ test("dispatch and updateBranch reach their endpoints", async () => {
     ],
   );
 });
+
+test("a prerelease is published as one, and never as the Latest", async () => {
+  const { github, requests } = recording((r) => (r.path.includes("/git/ref/") ? { ref: "x" } : { id: 1 }));
+  await github.publishRelease({ tag: "v1.1.0-rc.1", title: "v1.1.0-rc.1", notes: { generated: true }, latest: true, prerelease: true, assets: [] });
+  const create = requests.find((r) => r.path === "/repos/o/r/releases");
+  assert.equal(create?.body?.prerelease, true);
+  assert.equal(create?.body?.make_latest, "false");
+});

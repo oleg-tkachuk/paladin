@@ -7,3 +7,12 @@ export const DEV_MARK = "-dev.";
 export function isDevVersion(version: string): boolean {
   return version.includes(DEV_MARK);
 }
+
+// RC is the prerelease identifier of a release candidate, <x.y.z>-rc.<n>.
+export const RC = "rc";
+const CANDIDATE = new RegExp(`-${RC}\\.[0-9]+$`);
+
+// isCandidate reports whether a tag or version is a release candidate's.
+export function isCandidate(tagOrVersion: string): boolean {
+  return CANDIDATE.test(tagOrVersion);
+}

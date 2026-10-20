@@ -14,6 +14,7 @@ import { info } from "./lib/actions.ts";
 import { requireEnv } from "./lib/env.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
+import { isCandidate } from "./lib/versions.ts";
 import { SBOM_SUFFIX } from "./sign.ts";
 
 // sboms are the SBOM files in dir, in name order.
@@ -31,7 +32,10 @@ export async function announce(github: GitHub, tag: string, dir: string): Promis
   if (assets.length === 0) {
     throw new Error(`no SBOM in ${dir}: refusing to announce ${tag} without them`);
   }
-  await github.publishRelease({ tag, title: tag, notes: { generated: true }, latest: true, assets });
+  // A release candidate is a prerelease, never the Latest: that stays the
+  // last release people should install.
+  const candidate = isCandidate(tag);
+  await github.publishRelease({ tag, title: tag, notes: { generated: true }, latest: !candidate, prerelease: candidate, assets });
   info(`announced ${tag} with ${assets.length} SBOMs`);
 }
 
