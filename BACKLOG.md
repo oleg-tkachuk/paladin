@@ -835,3 +835,15 @@ order they are being taken up.
   who wrote each and when, and the policy editor diffs any two of them in
   `DiffView`.
 - **Blockers:** the backend keeping a policy's history.
+
+#### Diff the running configuration against its defaults
+
+- **Status:** Blocked.
+- **Reason:** `/config` diffs the running configuration against a
+  config.yaml pasted in, but not against the defaults: GetConfig returns
+  only the loaded YAML, and the defaults live in the Go config loader.
+- **Definition of Done:** the API serves the defaults, redacted as the
+  running configuration is, and `/config` diffs the two in `DiffView`, so
+  an operator sees every setting their deployment changed.
+- **Blockers:** a field on GetConfigResponse (or a sibling RPC) carrying
+  the defaults.
