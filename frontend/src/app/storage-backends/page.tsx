@@ -41,7 +41,7 @@ import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { sortRows, type SortAccessors } from "@/lib/table/view";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Separator } from "@/components/ui/separator";
 
@@ -346,6 +346,17 @@ export default function StorageBackendsPage() {
     else void runBulk(action);
   };
 
+  // The backends a bulk disable reaches, by id: those of the selection that
+  // are enabled now, which runBulk disables and the rest it skips. Listed,
+  // not typed: enabling them again undoes it.
+  const disableIds = backends
+    .filter((b) => selected.has(b.backendId) && applies(b, "disable"))
+    .map((b) => b.backendId);
+  const disableAffected: Affected = {
+    heading: `${disableIds.length} ${disableIds.length === 1 ? "backend" : "backends"} to disable`,
+    items: disableIds,
+  };
+
   const confirmDisableNow = async () => {
     const target = confirmDisable;
     setConfirmDisable(null);
@@ -542,6 +553,7 @@ export default function StorageBackendsPage() {
         }
         message={DISABLE_CONSEQUENCE}
         confirmText="Disable"
+        affected={confirmDisable === "selection" ? disableAffected : undefined}
       />
 
       <BackendRegisterDialog

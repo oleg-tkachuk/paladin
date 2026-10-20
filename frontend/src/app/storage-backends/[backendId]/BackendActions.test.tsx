@@ -246,7 +246,10 @@ describe("BackendActions", () => {
     // Guard: disabled until the confirm text matches the id.
     expect(submit).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText(/confirm backend id/i), "b1");
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Type b1 to confirm" }),
+      "b1",
+    );
     expect(submit).toBeEnabled();
     await userEvent.click(submit);
 
@@ -257,5 +260,22 @@ describe("BackendActions", () => {
       }),
     );
     expect(h.push).toHaveBeenCalledWith("/storage-backends");
+  });
+
+  // Buckets on the backend refuse the delete; the reason stays beside the
+  // id the operator typed, and nothing navigates away.
+  it("keeps the dialog open with the reason when the delete is refused", async () => {
+    h.del.mockRejectedValueOnce(new Error("2 buckets still use backend b1"));
+    render(<BackendActions backend={backend} />);
+    await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+    await userEvent.type(
+      await screen.findByRole("textbox", { name: "Type b1 to confirm" }),
+      "b1{Enter}",
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "2 buckets still use backend b1",
+    );
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(h.push).not.toHaveBeenCalled();
   });
 });
