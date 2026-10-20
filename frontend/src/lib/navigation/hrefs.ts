@@ -51,3 +51,8 @@ export function collectionTrashHref(
 export function tenantBudgetHref(tenant: string): string {
   return `${tenantHref(tenant)}/budget`;
 }
+
+/** A tenant's billing: what its capabilities spent, against its budget. */
+export function tenantBillingHref(tenant: string): string {
+  return `${tenantHref(tenant)}/billing`;
+}

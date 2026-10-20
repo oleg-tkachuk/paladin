@@ -59,6 +59,13 @@ const PAGES = [
     heading: /Billing/i,
     content: /No tenant spent anything|^Charges$/,
   },
+  // One tenant's billing is its workspace tab; the chart's card shows once
+  // the summary has answered.
+  {
+    path: "/tenants/platform/billing",
+    heading: /Platform/,
+    content: /Spend over time/,
+  },
 ] as const;
 
 test.describe("Read-only pages", () => {
