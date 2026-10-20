@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -134,19 +135,35 @@ func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 	}
 }
 
-// A charge in a unit the counters do not hold fails the same way every time,
-// so the caller is told so rather than to retry.
-func TestChargeErrorRefusesAUnitMismatchAsAPrecondition(t *testing.T) {
+// Every metering refusal is answered by its limes family, so one no retry
+// mends never reads as one to retry; the ones that refuse the capability
+// carry their reason. A store failure alone is Unavailable.
+func TestMeterErrorAnswersEachFamily(t *testing.T) {
 	cases := map[error]connect.Code{
-		limes.ErrBudgetExceeded:       connect.CodeResourceExhausted,
-		limes.ErrTenantBudgetExceeded: connect.CodeResourceExhausted,
-		limes.ErrInvalidAmount:        connect.CodeInvalidArgument,
-		limes.ErrUnitCodeMismatch:     connect.CodeFailedPrecondition,
-		errors.New("store down"):      connect.CodeUnavailable,
+		limes.ErrRequestLimitExceeded:               connect.CodeResourceExhausted,
+		meter.ErrCopyLimitExceeded:                  connect.CodeResourceExhausted,
+		limes.ErrBudgetExceeded:                     connect.CodeResourceExhausted,
+		limes.ErrTenantBudgetExceeded:               connect.CodeResourceExhausted,
+		limes.ErrRevoked:                            connect.CodePermissionDenied,
+		limes.ErrTenantErased:                       connect.CodePermissionDenied,
+		limes.ErrExpired:                            connect.CodePermissionDenied,
+		limes.ErrInvalidAmount:                      connect.CodeInvalidArgument,
+		limes.ErrUnitCodeMismatch:                   connect.CodeFailedPrecondition,
+		meter.ErrCounterOverflow:                    connect.CodeFailedPrecondition,
+		limes.ErrNotFound:                           connect.CodeFailedPrecondition,
+		meter.ErrSettleConflict:                     connect.CodeAborted,
+		meter.ErrExternalRefConflict:                connect.CodeAborted,
+		errors.New("store down"):                    connect.CodeUnavailable,
+		fmt.Errorf("wrapped: %w", limes.ErrRevoked): connect.CodePermissionDenied,
 	}
 	for err, want := range cases {
-		if got := connect.CodeOf(chargeError(err)); got != want {
-			t.Errorf("chargeError(%v) = %v, want %v", err, got, want)
+		if got := connect.CodeOf(meterError(err)); got != want {
+			t.Errorf("meterError(%v) = %v, want %v", err, got, want)
 		}
+	}
+	// A revoked capability is told so, by reason, as a verifier tells it.
+	var ce *connect.Error
+	if !errors.As(meterError(limes.ErrTenantErased), &ce) || len(ce.Details()) == 0 {
+		t.Error("an erased tenant's refusal carries no reason")
 	}
 }
