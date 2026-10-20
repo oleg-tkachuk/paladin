@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — a capability has a Biscuit without share
+## sdk/go/v0.97.0 — a capability has a Biscuit without share
 
 limes v0.110 seals a Biscuit for any capability: a copy narrowed from it
 allows no more than the token, which its bearer could hand on as it is, and a
