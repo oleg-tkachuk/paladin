@@ -1,17 +1,21 @@
 package auth
 
-import "github.com/oleg-tkachuk/limes"
+import (
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+)
 
 // The data plane's own capability operations. limes defines only the ones
 // every resource server shares (get, put, list, delete, share, manage); a
 // consumer's are namespaced, and their effect is the consumer's to declare.
+// Their names are the Go SDK's, which its clients import.
 const (
 	// OpPresign mints a presigned URL for an object. The URL's own method is
 	// asserted beside it (OpGet or OpPut), so presign itself only reads.
-	OpPresign limes.Op = "object:presign"
+	OpPresign limes.Op = paladin.OpObjectPresign
 	// OpTag reads or changes an object's tags; left undeclared, it is held
 	// to the caveats that tighten writes.
-	OpTag limes.Op = "object:tag"
+	OpTag limes.Op = paladin.OpObjectTag
 )
 
 // opEffects is the effect declared for each of the data plane's own

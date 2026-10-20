@@ -20,8 +20,9 @@ export const TTL_OPTIONS: {
 ];
 
 // Capability ops: the ones limes defines, then the data plane's own, as
-// backend/internal/auth/capability_ops.go names them. Curated rather than
-// free-form so operators can't typo.
+// sdk/testdata/capability_ops.json names them for both SDKs and the server
+// (_constants.test.ts holds this list to it). Curated rather than free-form
+// so operators can't typo.
 export const OP_CHOICES = [
   "get",
   "put",
