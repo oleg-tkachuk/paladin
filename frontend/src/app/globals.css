@@ -366,7 +366,9 @@
 .graphite {
   /* ── "Graphite" ──────────────────────────────────────────────────────────
    * A neutral dark palette: grey planes with no tint, a lighter graphite
-   * sidebar, and one chartreuse accent with near-black text on it.
+   * sidebar, and one sand accent with near-black text on it. The accent is
+   * low in chroma: a vivid one, on the switches and buttons it fills, glared
+   * against the grey.
    */
   --radius: 0.5rem;
 
@@ -378,8 +380,8 @@
   --popover: #242428;
   --popover-foreground: #ececef;
 
-  --primary: #c8e64a;
-  --primary-foreground: #121407;
+  --primary: #c9b48a;
+  --primary-foreground: #16130c;
 
   --secondary: #232327;
   --secondary-foreground: #ececef;
@@ -389,10 +391,10 @@
   --accent-foreground: #ececef;
 
   --destructive: #ff5f68;
-  --destructive-foreground: #121407;
+  --destructive-foreground: #16130c;
   --success: #3ddc97;
   --warning: #f5b14c;
-  --warning-foreground: #121407;
+  --warning-foreground: #16130c;
   --info: #6bb8f2;
   --progress: #4fd4e0;
   --suspended: #b9a7f0;
@@ -400,9 +402,9 @@
 
   --border: #36363b;
   --input: #3a3a40;
-  --ring: #c8e64a;
+  --ring: #c9b48a;
 
-  --chart-1: #c8e64a;
+  --chart-1: #c9b48a;
   --chart-2: #3ddc97;
   --chart-3: #f5b14c;
   --chart-4: #ff5f68;
@@ -412,12 +414,12 @@
   /* above the ground. */
   --sidebar: #202024;
   --sidebar-foreground: #ececef;
-  --sidebar-primary: #c8e64a;
-  --sidebar-primary-foreground: #121407;
+  --sidebar-primary: #c9b48a;
+  --sidebar-primary-foreground: #16130c;
   --sidebar-accent: #2e2e33;
   --sidebar-accent-foreground: #ececef;
   --sidebar-border: #3c3c42;
-  --sidebar-ring: #c8e64a;
+  --sidebar-ring: #c9b48a;
 
   --elevation-shadow: rgb(0 0 0 / 25%);
   --elevation-shadow-soft: rgb(0 0 0 / 50%);
