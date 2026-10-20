@@ -44,6 +44,20 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the SDKs need no limes
+
+A client works with the Paladin SDK alone; limes is the server's.
+
+- Go: `paladin.Attenuate(biscuit, paladin.Attenuation{…})` narrows a
+  capability's Biscuit offline, in place of `limes.Attenuate`. Its ceilings
+  are `MaxRequests` and `MaxBudgetNanos` (`*int64`), the plane list is
+  `Planes`, and the key binding is `BindJKT`, as Python's `attenuate` names
+  them; a token that is no Paladin Biscuit wraps `paladin.ErrInvalidArgument`.
+- Both SDKs name every operation a capability can carry: Go's `paladin.OpGet`
+  … `paladin.OpObjectTag`, Python's `OP_GET` … `OP_OBJECT_TAG`, in place of
+  limes's `OpGet` and the rest. A client that imported limes for them drops
+  the import.
+
 ## sdk/go/v0.95.0 — an Issue answer says why it carries no Biscuit
 
 Since limes v0.109 a capability is sealed as a Biscuit only when its ops

@@ -86,7 +86,7 @@ up to `MaxRequestBytes` (4 MiB), the limits the server keeps.
 | --- | --- |
 | `WithBearerToken(token)` | Sends `Authorization: Bearer <token>`. An API token (`paladin_pat_…`) and an OIDC JWT are both accepted there. |
 | `WithAPIToken(token)` | Sends an API token in `X-Paladin-API-Token`, for a proxy that strips `Authorization`. |
-| `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`: the JWT or its Biscuit form, narrowed offline with `limes.Attenuate` or not. Can be combined with a bearer token. |
+| `WithCapability(token)` | Sends a capability token in `X-Paladin-Capability`: the JWT or its Biscuit form, narrowed offline with `Attenuate` or not. Can be combined with a bearer token. |
 | `WithCapabilitySource(source)` | Sends the capability `source(ctx)` returns for each call, for a client acting for many callers; an empty one leaves `WithCapability`'s. DPoP proofs sign over it. |
 | `WithDPoP(key)` | Proves possession of `key` — any `crypto.Signer` with an Ed25519 or P-256 public key, a KMS-held one included — on every call that sends a capability: each request, each retry included, carries a fresh RFC 9449 proof in `DPoP`. A capability issued with `confirmation_jkt = DPoPThumbprint(key.Public())` is refused without one. A server that asks for nonces sends one with each response; the client keeps the latest and signs it into the next proof, and a unary call refused with `use_dpop_nonce` is sent once more with the nonce it carried. A stream signs the latest nonce held and is not resent. Proofs are signed `Ed25519` or `ES256`, for `POST`, so do not combine it with `connecthttp.WithHTTPGet`. |
 | `WithHeader(name, value)` | Sends a header on every call, replacing what the SDK would send there — `User-Agent` included, which is `paladin-sdk-go/<module version>` by default. |
@@ -134,23 +134,15 @@ is sealed as one, and neither a key-bound one nor one not valid yet:
 `biscuit_status` says which. `paladin.BiscuitOf(issued)` returns the Biscuit,
 or an error wrapping `paladin.ErrNoBiscuit` that names the status, and
 `require_biscuit` on the request refuses one that could not be sealed before
-anything is issued. To narrow it, this SDK has no helper of its own: import
-[limes](https://github.com/oleg-tkachuk/limes), the capability primitive the
-server runs, whose `Attenuate` is the code the server's verifier is tested
-against, so there is no second implementation of the vocabulary to drift from
-it.
-
-```bash
-go get github.com/oleg-tkachuk/limes
-```
+anything is issued. `paladin.Attenuate` narrows it, writing the block with
+the code the server's verifier is tested against, so there is no second
+implementation of the vocabulary to drift from it:
 
 ```go
-import "github.com/oleg-tkachuk/limes"
-
-narrowed, err := limes.Attenuate(issued.GetBiscuit(), limes.Attenuation{
-    Ops:              []limes.Op{limes.OpGet},
+narrowed, err := paladin.Attenuate(biscuit, paladin.Attenuation{
+    Ops:              []string{paladin.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
-    Audience:         []string{"data"}, // the data plane
+    Planes:           []string{"data"}, // the data plane
     ExpiresAt:        time.Now().Add(10 * time.Minute),
 })
 client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))
@@ -158,14 +150,14 @@ client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))
 
 A field left empty leaves that dimension as it is; a set one replaces it and
 must be within what the token allows, or the server refuses the whole token.
-Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `ConfirmationJKT`
+Setting `ResourcePrefixes` or `ResourceURIs` replaces both. `BindJKT`
 (`DPoPThumbprint(key.Public())`) binds the token to a key, and only an unbound
-token can be bound. `Requests` (`&limes.RequestCeiling{Max: n}`) and `Budget`
-(`&limes.BudgetCeiling{Max: n}`, in `limes.Nanos`, billionths of the
-capability's unit) give the copy limits of its own, counted apart from other
+token can be bound. `MaxRequests` and `MaxBudgetNanos` (in nanos, billionths
+of the capability's unit) give the copy limits of its own, counted apart from other
 copies and within every limit already in force; spending past them answers
-`ResourceExhausted`. A limit of 0 freezes the copy without revoking it. A copy
-only narrows, so an unlimited ceiling is refused.
+`ResourceExhausted`. A limit of 0 freezes the copy without revoking it. A token that is no Paladin Biscuit wraps `ErrInvalidArgument`. The
+operations a capability names are this package's `OpGet`, `OpPut`, `OpList`,
+`OpDelete`, `OpShare`, `OpManage`, `OpObjectPresign` and `OpObjectTag`.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
 force on it with what has been counted against it. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
@@ -526,7 +518,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
-| Biscuit attenuation | `limes.Attenuate`, from [limes](https://github.com/oleg-tkachuk/limes) | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
+| Biscuit attenuation | `Attenuate` | `attenuate`, with the `biscuit` extra | Go writes the block with the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `connectrpc-otel` through `interceptors`, and `pyqwest`'s own spans through `http_client` and `Transfer(otel=True)` | |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
