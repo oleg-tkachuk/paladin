@@ -48,6 +48,10 @@ import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import { useTenants } from "@/hooks/useTenants";
 import { errorMessage } from "@/hooks/errorContract";
 import { useScope } from "@/context/ScopeContext";
+import { useAuth } from "@/context/AuthContext";
+import { isPlatformAdmin } from "@/constants/roles";
+import { TenantSpendCard } from "@/components/features/billing/TenantSpendCard";
+import { tenantLabel } from "@/components/features/billing/tenantLabel";
 import { billingClient } from "@/lib/connect/client";
 import { normalizeError } from "@/lib/connect/error";
 import { sortRows, type SortAccessors } from "@/lib/table/view";
@@ -76,8 +80,8 @@ import { Count } from "@/components/ui/Count";
 // over time, and which capabilities, actors and operations it went to.
 //
 // The tenant is the one ?tenant= names, else the console's scope, so a link
-// opens the same view. A summary across every tenant waits on the ledger's
-// API (BACKLOG.md).
+// opens the same view. A platform admin with no ?tenant= opens on every
+// tenant's spend instead, each leading to that tenant's view.
 
 const TENANT_PARAM = "tenant";
 
@@ -104,7 +108,15 @@ function BillingView() {
   const { tenantId: scopeTenantId } = useScope();
   const router = useRouter();
   const search = useSearchParams();
-  const tenantId = search.get(TENANT_PARAM) || scopeTenantId || undefined;
+  const { user } = useAuth();
+  const named = search.get(TENANT_PARAM);
+  // Every tenant's spend is the platform admin's to read, and the view they
+  // open on until they choose one.
+  const crossTenant = isPlatformAdmin(user?.roles ?? []);
+  const acrossTenants = crossTenant && !named;
+  const tenantId = acrossTenants
+    ? undefined
+    : named || scopeTenantId || undefined;
   const platformCurrency = usePlatformCurrency();
 
   // ── tenants ─────────────────────────────────────────────────────────
@@ -122,7 +134,11 @@ function BillingView() {
       (tenants ?? [])
         .map((t) => ({
           value: t.tenantId,
-          label: `${t.displayName || t.slug}${t.deletedAt ? " · in trash" : ""}`,
+          label: tenantLabel({
+            displayName: t.displayName,
+            slug: t.slug,
+            deleted: Boolean(t.deletedAt),
+          }),
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     [tenants],
@@ -135,6 +151,12 @@ function BillingView() {
     const next = new URLSearchParams(search.toString());
     next.set(TENANT_PARAM, id);
     router.replace(`?${next.toString()}`);
+  };
+  const showAllTenants = () => {
+    const next = new URLSearchParams(search.toString());
+    next.delete(TENANT_PARAM);
+    const query = next.toString();
+    router.replace(query ? `?${query}` : "?");
   };
 
   // ── period ──────────────────────────────────────────────────────────
@@ -265,14 +287,18 @@ function BillingView() {
     <div className="space-y-6">
       <PageHeader
         title="Billing"
-        description="One tenant's capability spend from the charges ledger: against its budget, over time, and what it went to."
+        description={
+          acrossTenants
+            ? "Every tenant's capability spend from the charges ledger, the most first."
+            : "One tenant's capability spend from the charges ledger: against its budget, over time, and what it went to."
+        }
         showDefaultActions={false}
         actions={
           <Button
             variant="outline"
             size="sm"
             onClick={refresh}
-            disabled={refreshing || !ready}
+            disabled={acrossTenants ? !range : refreshing || !ready}
           >
             <ArrowPathIcon
               className={cn("size-4", refreshing && "animate-spin")}
@@ -294,6 +320,11 @@ function BillingView() {
             className="w-64 min-w-0 [&_[data-slot=select-value]]:truncate"
           />
         </div>
+        {crossTenant && !acrossTenants ? (
+          <Button variant="outline" size="sm" onClick={showAllTenants}>
+            All tenants
+          </Button>
+        ) : null}
         <div className="space-y-1">
           <span className={cn(T.label, "block")}>Period</span>
           <Segmented
@@ -344,7 +375,11 @@ function BillingView() {
         />
       )}
 
-      {loadError && !summary ? (
+      {acrossTenants ? (
+        range ? (
+          <TenantSpendCard period={range} onPick={selectTenant} />
+        ) : null
+      ) : loadError && !summary ? (
         <Card className="space-y-2 p-8 text-center">
           <h3 className={T.cardTitleProse}>Billing is unavailable</h3>
           <p className={cn(T.helper, "mx-auto max-w-xl")}>

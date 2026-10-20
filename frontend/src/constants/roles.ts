@@ -67,3 +67,12 @@ export const ADMIN_AUDIENCE_ROLES: readonly string[] = [
 export function canUseAdminPlane(roles: readonly string[]): boolean {
   return roles.some((r) => ADMIN_AUDIENCE_ROLES.includes(r));
 }
+
+/**
+ * Whether these roles read across tenants — every tenant's billing, say.
+ * The console uses it to choose what to open on; the server still decides
+ * every call.
+ */
+export function isPlatformAdmin(roles: readonly string[]): boolean {
+  return roles.includes(ROLES.platformAdmin);
+}

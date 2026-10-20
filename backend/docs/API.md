@@ -28,7 +28,7 @@ browser from reaching tenant administration.
 - **Protocol**: Connect, Connect-Web and gRPC over the same endpoints
 - **Handlers**: `backend/internal/api/{admin,data,iam}/v1/`, adapted to the
   generated Connect interfaces in `backend/internal/api/connectshim/`
-- **Surface**: 157 RPCs across 28 services (inventory below)
+- **Surface**: 158 RPCs across 28 services (inventory below)
 
 ## Two headers you cannot skip
 
@@ -123,7 +123,7 @@ Every service and RPC in `proto/`, by plane.
 | `APITokenService` | 5 | `Create`, `Revoke`, `List`, `GetSelf`, `GetUsage` |
 | `AuditLogService` | 3 | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | 10 | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
-| `BillingService` | 3 | `GetTenantSummary`, `GetTenantTimeSeries`, `GetBillingSettings` |
+| `BillingService` | 4 | `GetTenantSummary`, `GetTenantTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |
 | `BucketService` | 14 | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
 | `CELService` | 1 | `Validate` |
 | `CapabilityService` | 8 | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |

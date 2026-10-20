@@ -38,7 +38,7 @@ func assertUnavailable(t *testing.T, name string, err error) {
 }
 
 func TestBillingServer_NilHandler_Unavailable(t *testing.T) {
-	srv := NewBillingServer(nil)
+	srv := NewBillingServer(nil, nil)
 	ctx := context.Background()
 
 	// A real tenant id, not the zero value: both RPCs parse tenant_id, and

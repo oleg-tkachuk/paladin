@@ -54,7 +54,11 @@ const PAGES = [
   },
   { path: "/stats", heading: /Platform Statistics/i, content: /By backend/i },
   { path: "/config", heading: /Configuration/i, content: /datastores/ },
-  { path: "/billing", heading: /Billing/i, content: /Spend over time/i },
+  {
+    path: "/billing",
+    heading: /Billing/i,
+    content: /No tenant spent anything|^Charges$/,
+  },
 ] as const;
 
 test.describe("Read-only pages", () => {

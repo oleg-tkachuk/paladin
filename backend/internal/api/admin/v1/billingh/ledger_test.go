@@ -22,10 +22,12 @@ type fakeLedger struct {
 	pageSize int
 	err      error
 	requests []meter.SumChargesRequest
+	// ctx is the context of the last request.
+	ctx context.Context
 }
 
-func (f *fakeLedger) SumCharges(_ context.Context, req meter.SumChargesRequest) (limes.Page[meter.ChargeSum], error) {
-	f.requests = append(f.requests, req)
+func (f *fakeLedger) SumCharges(ctx context.Context, req meter.SumChargesRequest) (limes.Page[meter.ChargeSum], error) {
+	f.requests, f.ctx = append(f.requests, req), ctx
 	if f.err != nil {
 		return limes.Page[meter.ChargeSum]{}, f.err
 	}
