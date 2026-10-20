@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { render, screen, within } from "@/test/utils";
 
 // The panel re-reads the entry by id via auditClient.getAuditLogEntry.
 const h = vi.hoisted(() => ({ get: vi.fn() }));
@@ -55,30 +55,71 @@ describe("AuditEntryPanel", () => {
     ).toHaveTextContent("e1");
   });
 
-  it("shows what the action changed as a diff of the snapshots", async () => {
-    h.get.mockResolvedValue(UPDATE);
-    panel("e1", "changes");
-    const diff = await screen.findByRole("table", {
-      name: "Changes from before to after",
+  it("lists the fields the action changed, with their values", async () => {
+    h.get.mockResolvedValue({
+      ...UPDATE,
+      beforeJson: enc({ name: "b1", versioning: false, quota: { bytes: 1 } }),
+      afterJson: enc({ name: "b1", versioning: true, quota: {}, tags: ["a"] }),
     });
-    const removed = diff.querySelector('[data-diff="remove"]');
-    const added = diff.querySelector('[data-diff="add"]');
-    expect(removed).toHaveTextContent('"versioning": false');
-    expect(added).toHaveTextContent('"versioning": true');
-    // The unchanged field is context, not a change.
-    expect(screen.getByText("1 added, 1 removed")).toBeInTheDocument();
+    panel("e1", "changes");
+    const list = await screen.findByRole("list", { name: "Fields changed" });
+    const rows = within(list).getAllByRole("listitem");
+    // The unchanged name is not a change.
+    expect(rows.map((r) => r.getAttribute("data-change"))).toEqual([
+      "changed",
+      "removed",
+      "added",
+    ]);
+    expect(rows[0]).toHaveTextContent("versioning");
+    expect(rows[0].querySelector('[data-side="before"]')).toHaveTextContent(
+      "false",
+    );
+    expect(rows[0].querySelector('[data-side="after"]')).toHaveTextContent(
+      "true",
+    );
+    expect(rows[1]).toHaveTextContent("quota.bytes");
+    expect(rows[2]).toHaveTextContent("tags");
+    expect(rows[2].querySelector('[data-side="after"]')).toHaveTextContent(
+      '["a"]',
+    );
+    expect(rows[2].querySelector('[data-side="before"]')).toBeNull();
+    expect(screen.getByText("3 fields changed")).toBeInTheDocument();
   });
 
-  it("reads a create, with no before, as all added", async () => {
+  it("says so when the snapshots match", async () => {
+    h.get.mockResolvedValue({ ...UPDATE, afterJson: UPDATE.beforeJson });
+    panel("e1", "changes");
+    expect(await screen.findByText(/No field changed/)).toBeInTheDocument();
+  });
+
+  // A create's one snapshot is the Snapshots tab's: a diff of it against
+  // nothing would only repeat it, every line added.
+  it("offers no Changes tab when a side is missing", async () => {
     h.get.mockResolvedValue({
       ...UPDATE,
       beforeJson: new Uint8Array(),
       afterJson: enc({ name: "b1" }),
     });
     panel("e1", "changes");
-    await screen.findByRole("table");
-    expect(document.querySelector('[data-diff="remove"]')).toBeNull();
-    expect(screen.getByText("3 added, 0 removed")).toBeInTheDocument();
+    expect(
+      await screen.findByText("admin.BucketService.UpdateBucket"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Changes" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Snapshots" })).toBeInTheDocument();
+  });
+
+  it("compares snapshots that are not JSON as text", async () => {
+    const text = (s: string) => new TextEncoder().encode(s);
+    h.get.mockResolvedValue({
+      ...UPDATE,
+      beforeJson: text("mode=a"),
+      afterJson: text("mode=b"),
+    });
+    panel("e1", "changes");
+    await screen.findByRole("table", { name: "Changes from before to after" });
+    expect(document.querySelector('[data-diff="add"]')).toHaveTextContent(
+      "mode=b",
+    );
   });
 
   it("shows the decoded snapshots whole", async () => {
@@ -118,7 +159,7 @@ describe("AuditEntryPanel", () => {
       beforeJson: new Uint8Array(),
       afterJson: new Uint8Array(),
     });
-    panel("e2", "changes");
+    panel("e2", "snapshots");
     expect(
       await screen.findByText(/no state snapshot recorded/i),
     ).toBeInTheDocument();
