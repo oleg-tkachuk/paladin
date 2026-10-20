@@ -56,6 +56,8 @@ const FULL_PERCENT = 100;
 const NANOS_PER_UNIT = 1e9;
 // The period the empty state offers when the chosen one held no charge.
 const WIDER_PRESET = "90d";
+// The height a KPI tile takes, so its placeholder keeps the same place.
+const KPI_TILE_HEIGHT = "h-18";
 
 // A long identifier keeps its ends: enough to tell two apart.
 const SHORT_LABEL_MAX = 24;
@@ -218,9 +220,9 @@ export function TenantBilling({
         <>
           {!summary ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
+              <Skeleton className={KPI_TILE_HEIGHT} />
+              <Skeleton className={KPI_TILE_HEIGHT} />
+              <Skeleton className={KPI_TILE_HEIGHT} />
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -244,51 +246,45 @@ export function TenantBilling({
                 label="Budget"
                 value={
                   capped ? (
-                    <>
-                      {money(remaining)}
-                      <span className={cn(T.helper, "ml-1.5 text-sm")}>
-                        left
-                      </span>
-                    </>
+                    money(remaining)
                   ) : unlimited ? (
                     "Unlimited"
                   ) : (
                     <span className={T.helper}>None</span>
                   )
                 }
-                helper={
-                  <div className="space-y-2">
-                    {capped ? (
-                      <div
-                        role="progressbar"
-                        aria-label="Budget used"
-                        aria-valuemin={0}
-                        aria-valuemax={FULL_PERCENT}
-                        aria-valuenow={Math.round(pctOfBudget)}
-                        className="h-1.5 w-full rounded bg-muted"
-                      >
-                        <div
-                          className={cn(
-                            "h-full rounded transition-all",
-                            pctOfBudget >= BUDGET_CRITICAL_PERCENT
-                              ? "bg-destructive"
-                              : pctOfBudget >= BUDGET_WARN_PERCENT
-                                ? "bg-warning"
-                                : "bg-success",
-                          )}
-                          style={{ width: `${pctOfBudget}%` }}
-                        />
-                      </div>
-                    ) : null}
-                    <Link
-                      href={tenantBudgetHref(tenantHandle)}
-                      className="text-xs text-primary hover:underline"
+                helper={capped ? "left" : undefined}
+                action={
+                  <Link
+                    href={tenantBudgetHref(tenantHandle)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    {capped || unlimited ? "Change the budget" : "Set a budget"}
+                  </Link>
+                }
+                footer={
+                  capped ? (
+                    <div
+                      role="progressbar"
+                      aria-label="Budget used"
+                      aria-valuemin={0}
+                      aria-valuemax={FULL_PERCENT}
+                      aria-valuenow={Math.round(pctOfBudget)}
+                      className="h-1.5 w-full rounded bg-muted"
                     >
-                      {capped || unlimited
-                        ? "Change the budget"
-                        : "Set a budget"}
-                    </Link>
-                  </div>
+                      <div
+                        className={cn(
+                          "h-full rounded transition-all",
+                          pctOfBudget >= BUDGET_CRITICAL_PERCENT
+                            ? "bg-destructive"
+                            : pctOfBudget >= BUDGET_WARN_PERCENT
+                              ? "bg-warning"
+                              : "bg-success",
+                        )}
+                        style={{ width: `${pctOfBudget}%` }}
+                      />
+                    </div>
+                  ) : null
                 }
               />
             </div>
@@ -413,20 +409,37 @@ export function TenantBilling({
   );
 }
 
+/**
+ * A headline figure: its label, with the tile's one action beside it, over
+ * the value and what qualifies it on one line. The card's own gap and
+ * padding are tightened so a row of these stays a band, not a block.
+ */
 function KPITile({
   label,
   value,
   helper,
+  action,
+  footer,
 }: {
   label: string;
   value: React.ReactNode;
   helper?: React.ReactNode;
+  action?: React.ReactNode;
+  footer?: React.ReactNode;
 }) {
   return (
-    <Card className="space-y-2 p-4">
-      <h3 className={T.label}>{label}</h3>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      {helper && <div className={cn(T.helper, "text-xs")}>{helper}</div>}
+    <Card className="gap-1.5 px-4 py-3" aria-label={label} role="group">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className={T.label}>{label}</h3>
+        {action}
+      </div>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-xl font-semibold leading-tight tabular-nums">
+          {value}
+        </span>
+        {helper && <span className={T.hint}>{helper}</span>}
+      </div>
+      {footer}
     </Card>
   );
 }
