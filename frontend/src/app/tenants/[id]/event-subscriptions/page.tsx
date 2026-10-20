@@ -434,10 +434,10 @@ export default function EventsPage() {
                         </span>
                       ) : (
                         <span
-                          className={cn(T.pill, "text-chart-2")}
+                          className={cn(T.pill, "text-success")}
                           aria-label="active"
                         >
-                          <span className={cn(T.pillDot, "bg-chart-2")} />
+                          <span className={cn(T.pillDot, "bg-success")} />
                           active
                         </span>
                       )}
@@ -548,6 +548,10 @@ export default function EventsPage() {
             : ""
         }
         confirmText="Delete"
+        // Nothing restores a subscription, and its subscriber hears nothing
+        // of it: the deliveries just stop. Typed as the verb, since a
+        // subscription has no name of its own, only its sink.
+        typeToConfirm="delete"
         loading={deleting}
       />
     </div>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { fireEvent, render, screen, waitFor } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
   token: vi.fn(),
@@ -27,6 +27,10 @@ function Probe() {
       <span data-testid="operations">{shell.operations.status}</span>
       <span data-testid="ops-count">{shell.operations.data?.length ?? -1}</span>
       <span data-testid="health-reason">{shell.health.reason ?? ""}</span>
+      <span data-testid="banner">{shell.banner?.content ?? "none"}</span>
+      <button type="button" onClick={() => void shell.refresh()}>
+        refresh
+      </button>
     </div>
   );
 }
@@ -196,6 +200,52 @@ describe("ShellContext", () => {
     expect(screen.getByTestId("version")).toHaveTextContent("unavailable");
     expect(screen.getByTestId("health")).toHaveTextContent("unavailable");
     expect(screen.getByTestId("ops-count")).toHaveTextContent("-1");
+  });
+
+  it("hands the operator's banner to the chrome", async () => {
+    mockShellResponse({
+      version: { status: "ok", data: { version: "1.2.3" } },
+      health: { status: "ok", data: {} },
+      operations: { status: "ok", data: {} },
+      banner: {
+        status: "ok",
+        data: { content: "Maintenance tonight", position: "top" },
+      },
+    });
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("banner")).toHaveTextContent(
+        "Maintenance tonight",
+      ),
+    );
+  });
+
+  // A maintenance notice is most needed when the console cannot reach what
+  // it announces, so a failed poll does not take it down.
+  it("keeps the banner when the next poll fails", async () => {
+    mockShellResponse({
+      banner: { status: "ok", data: { content: "Planes restarting" } },
+    });
+    render(
+      <ShellProvider>
+        <Probe />
+      </ShellProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("banner")).toHaveTextContent(
+        "Planes restarting",
+      ),
+    );
+    mockShellResponse({}, false);
+    fireEvent.click(screen.getByRole("button", { name: "refresh" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("version")).toHaveTextContent("unavailable"),
+    );
+    expect(screen.getByTestId("banner")).toHaveTextContent("Planes restarting");
   });
 });
 

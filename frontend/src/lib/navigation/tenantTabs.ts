@@ -17,7 +17,15 @@ export interface TenantTabGroup {
 }
 
 export const TENANT_TAB_GROUPS: readonly TenantTabGroup[] = [
-  { label: "Overview", pages: [{ slug: "", label: "Overview" }] },
+  {
+    // The topology is the overview drawn: what the tenant is made of and
+    // where it lands, rather than a section of its own.
+    label: "Overview",
+    pages: [
+      { slug: "", label: "Overview" },
+      { slug: "topology", label: "Topology" },
+    ],
+  },
   {
     label: "Collections",
     pages: [{ slug: "collections", label: "Collections" }],
@@ -39,7 +47,10 @@ export const TENANT_TAB_GROUPS: readonly TenantTabGroup[] = [
   },
   {
     label: "Activity",
+    // History first: what changed, who changed it and how it ended, read
+    // before the raw audit log or the event deliveries behind it.
     pages: [
+      { slug: "history", label: "History" },
       { slug: "event-subscriptions", label: "Events" },
       { slug: "audit-log", label: "Audit" },
     ],

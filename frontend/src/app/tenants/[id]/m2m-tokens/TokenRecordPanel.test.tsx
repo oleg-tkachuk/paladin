@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@/test/utils";
 
-import { TokenUsage, type UsageSnap } from "./TokenRecordDialog";
+import { TokenUsage, type UsageSnap } from "./TokenRecordPanel";
 
 const READ_AT_MS = 1_700_000_000_000;
 const snap = (over: Partial<UsageSnap>): UsageSnap => ({

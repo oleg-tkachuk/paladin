@@ -129,8 +129,8 @@ export function ObjectInspector({
 
           {object && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className={cn(T.pill, "text-chart-2")}>
-                <span className={cn(T.pillDot, "bg-chart-2")} />
+              <span className={cn(T.pill, "text-success")}>
+                <span className={cn(T.pillDot, "bg-success")} />
                 {ObjectState[object.state]}
               </span>
               <Badge variant="outline" className={T.codeSmall}>

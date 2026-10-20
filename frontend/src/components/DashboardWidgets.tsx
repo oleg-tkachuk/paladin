@@ -409,7 +409,7 @@ function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
           <div
             className={cn(
               "h-full rounded-full",
-              over ? "bg-destructive" : pct >= 90 ? "bg-warning" : "bg-chart-2",
+              over ? "bg-destructive" : pct >= 90 ? "bg-warning" : "bg-success",
             )}
             style={{ width: `${Math.min(100, pct)}%` }}
           />

@@ -26,7 +26,7 @@ export function VersionRow({
   onRestore: () => void;
 }) {
   const changesBlocked = useTenantChangesBlocked();
-  const dotClass = version.isCurrent ? "bg-chart-2" : "bg-muted-foreground/40";
+  const dotClass = version.isCurrent ? "bg-success" : "bg-muted-foreground/40";
   return (
     <Card className="p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -86,6 +86,7 @@ describe("GET /api/shell", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Body;
     expect(Object.keys(body).sort()).toEqual([
+      "banner",
       "health",
       "operations",
       "version",
@@ -118,7 +119,7 @@ describe("GET /api/shell", () => {
     expect(body.operations.status).toBe("ok");
   });
 
-  it("still answers 200 when every section fails", async () => {
+  it("still answers 200 when every plane's section fails", async () => {
     // A page whose chrome is entirely unavailable must still render; turning
     // this into a 500 would take the console down with one plane.
     h.getVersion.mockRejectedValue(new Error("boom"));
@@ -127,10 +128,13 @@ describe("GET /api/shell", () => {
 
     const res = await GET(shellReq(bothTokens()));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Body;
-    expect(Object.values(body).every((s) => s.status === "unavailable")).toBe(
+    const { banner, ...planes } = (await res.json()) as Body;
+    expect(Object.values(planes).every((s) => s.status === "unavailable")).toBe(
       true,
     );
+    // The banner asks no plane, so a maintenance notice still reaches the
+    // reader while the planes it announces are down.
+    expect(banner.status).toBe("ok");
   });
 
   it("401s with no token for either plane, and calls nothing", async () => {
@@ -215,6 +219,32 @@ describe("GET /api/shell", () => {
     const req = h.listOperations.mock.calls[0][0];
     expect(req.sortOrder).toBe(2); // SortOrder.DESC
     expect(req.page.pageSize).toBe(50);
+  });
+
+  describe("banner", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("is null when the operator set none", async () => {
+      vi.stubEnv("PALADIN_BANNER_CONTENT", "");
+      const body = (await (await GET(shellReq(bothTokens()))).json()) as Body;
+      expect(body.banner).toEqual({ status: "ok", data: null });
+    });
+
+    it("carries what the environment sets, read at request time", async () => {
+      vi.stubEnv("PALADIN_BANNER_CONTENT", "Maintenance on Sunday 02:00 UTC");
+      vi.stubEnv("PALADIN_BANNER_SEVERITY", "warning");
+      vi.stubEnv("PALADIN_BANNER_URL", "https://status.example.com");
+      vi.stubEnv("PALADIN_BANNER_PERMANENT", "true");
+      vi.stubEnv("PALADIN_BANNER_POSITION", "both");
+      const body = (await (await GET(shellReq(bothTokens()))).json()) as Body;
+      expect(body.banner.data).toEqual({
+        content: "Maintenance on Sunday 02:00 UTC",
+        severity: "warning",
+        url: "https://status.example.com",
+        permanent: true,
+        position: "both",
+      });
+    });
   });
 
   it("is never cached", async () => {

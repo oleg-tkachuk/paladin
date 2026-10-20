@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { typeToConfirm } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
@@ -39,9 +40,13 @@ describe("CollectionDeleteDialog", () => {
     expect(screen.getByRole("note")).toHaveTextContent(/no trash/);
   });
 
-  it("deletes only once confirmed", async () => {
+  it("deletes only once confirmed with the Collection's name", async () => {
     const { onConfirm, onClose } = dialog();
+    expect(
+      screen.getByRole("button", { name: "Delete Collection" }),
+    ).toBeDisabled();
     expect(onConfirm).not.toHaveBeenCalled();
+    await typeToConfirm("invoices");
     await userEvent.click(
       screen.getByRole("button", { name: "Delete Collection" }),
     );

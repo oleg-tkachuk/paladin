@@ -66,9 +66,10 @@ export const typography = {
   hint: "text-xs text-muted-foreground",
 
   // ─── Status pills ──────────────────────────────────────────────────
-  // Inline status indicator with a colour dot. Pair with the chart
-  // tokens (text-chart-2 / text-chart-3 / text-destructive) at the
-  // call site since the colour depends on the status enum.
+  // Inline status indicator with a colour dot. Pair with a status
+  // tone's ink and fill (lib/ui/status: text-success, text-progress,
+  // text-destructive, …) at the call site since the colour depends on
+  // the status enum.
   pill: "inline-flex items-center gap-1.5 text-sm font-medium",
 
   // The dot inside a pill. Slightly larger than the size-1.5 the page

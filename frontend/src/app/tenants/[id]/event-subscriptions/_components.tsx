@@ -96,7 +96,7 @@ export function TestResultDisplay({ result }: { result: TestResult }) {
   // the parenthesised number so the chip doesn't read "Delivered (0)".
   if (result.delivered && result.statusCode === 0) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-chart-2">
+      <span className="inline-flex items-center gap-1.5 text-xs text-success">
         <CheckCircleSolid className="size-4" />
         Delivered
       </span>
@@ -104,7 +104,7 @@ export function TestResultDisplay({ result }: { result: TestResult }) {
   }
   if (result.delivered && result.statusCode === 200) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-chart-2">
+      <span className="inline-flex items-center gap-1.5 text-xs text-success">
         <CheckCircleSolid className="size-4" />
         Delivered ({result.statusCode})
       </span>
@@ -112,7 +112,7 @@ export function TestResultDisplay({ result }: { result: TestResult }) {
   }
   if (result.delivered && result.statusCode >= 400) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-chart-3">
+      <span className="inline-flex items-center gap-1.5 text-xs text-warning">
         <ExclamationSolid className="size-4" />
         Reached endpoint, HTTP {result.statusCode}
       </span>

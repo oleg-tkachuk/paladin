@@ -474,7 +474,7 @@ function RuleCard({ rule, busy, onEdit, onToggle, onDelete }: RuleCardProps) {
             <span
               className={cn(
                 T.pillDot,
-                rule.enabled ? "bg-chart-2" : "bg-muted-foreground/40",
+                rule.enabled ? "bg-success" : "bg-muted-foreground/40",
               )}
               aria-hidden
             />

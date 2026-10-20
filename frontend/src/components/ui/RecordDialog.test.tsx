@@ -1,4 +1,5 @@
 import type React from "react";
+import { createPortal } from "react-dom";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@/test/utils";
 
@@ -67,6 +68,24 @@ describe("openableRow clicks", () => {
     const open = vi.fn();
     render(<Row open={open} />);
     fireEvent.click(screen.getByText(name));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("leaves a click in something the row portals out, like its menu", () => {
+    const open = vi.fn();
+    render(
+      <table>
+        <tbody>
+          <tr {...openableRow(open)}>
+            <td>
+              r-1
+              {createPortal(<div>Revoke</div>, document.body)}
+            </td>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    fireEvent.click(screen.getByText("Revoke"));
     expect(open).not.toHaveBeenCalled();
   });
 

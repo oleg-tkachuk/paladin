@@ -16,9 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { DiffView } from "@/components/ui/DiffView";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { useConfig } from "@/hooks/useConfig";
 import {
+  comparableConfigs,
   filterConfigSections,
   parseConfigSections,
   redactedCount,
@@ -34,12 +38,14 @@ import { FROSTED_MUTED, STICKY_BELOW_TOPBAR } from "@/lib/ui/states";
 // admin/v1.SystemService.GetConfig returns it: the loaded config.yaml with
 // every secret redacted by the server. Read as sections — one per top-level
 // key, each setting a dotted path and its value — with a search over names
-// and values; the YAML stays one toggle away for copying or diffing.
+// and values; the YAML stays one toggle away for copying, and Compare diffs
+// it against a config.yaml pasted in, such as the one checked in.
 
-type View = "sections" | "yaml";
+type View = "sections" | "yaml" | "compare";
 const VIEWS: { value: View; label: string }[] = [
   { value: "sections", label: "Sections" },
   { value: "yaml", label: "YAML" },
+  { value: "compare", label: "Compare" },
 ];
 
 /**
@@ -227,7 +233,9 @@ export default function ConfigPage() {
             </p>
           ) : null}
 
-          {effectiveView === "yaml" ? (
+          {effectiveView === "compare" ? (
+            <CompareView running={config ?? ""} />
+          ) : effectiveView === "yaml" ? (
             <Card className="p-0">
               <pre className="paladin-scroll max-h-[70vh] overflow-auto px-6 py-5 font-mono text-xs leading-relaxed">
                 {config}
@@ -253,6 +261,55 @@ export default function ConfigPage() {
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * The running configuration diffed against one pasted in. Both are written
+ * out alike first (comparableConfigs), so the diff holds settings that
+ * differ, not comments or key order. Nothing pasted is sent anywhere.
+ */
+function CompareView({ running }: { running: string }) {
+  const [pasted, setPasted] = useState("");
+  const compared = useMemo(() => {
+    if (!pasted.trim()) return null;
+    try {
+      return comparableConfigs(running, pasted);
+    } catch {
+      return "invalid" as const;
+    }
+  }, [running, pasted]);
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="config-compare">Compare with</Label>
+        <Textarea
+          id="config-compare"
+          value={pasted}
+          onChange={(e) => setPasted(e.target.value)}
+          placeholder="Paste a config.yaml, such as the one checked in"
+          className="min-h-32 font-mono text-xs"
+          spellCheck={false}
+        />
+        <p className={T.hint}>
+          Comments, quoting and key order are not counted, and a secret the
+          server redacts is redacted in the pasted copy too.
+        </p>
+      </div>
+      {compared === "invalid" ? (
+        <p className="flex items-center gap-2 text-sm text-warning">
+          <ExclamationTriangleIcon className="size-4" />
+          The pasted text is not YAML.
+        </p>
+      ) : compared ? (
+        <DiffView
+          before={compared.other}
+          after={compared.running}
+          beforeLabel="Pasted"
+          afterLabel="Running"
+        />
+      ) : null}
+    </Card>
   );
 }
 

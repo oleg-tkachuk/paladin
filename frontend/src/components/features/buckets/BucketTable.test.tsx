@@ -3,6 +3,7 @@ import { render, screen, within } from "@/test/utils";
 import { create } from "@bufbuild/protobuf";
 
 import { BucketSchema } from "@/gen/paladin/admin/v1/types_pb";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import {
   BucketTable,
@@ -55,6 +56,28 @@ describe("BucketTable", () => {
     expect(screen.getByRole("link", { name: /b1/ }).getAttribute("href")).toBe(
       "/storage-backends/primary/buckets/b1",
     );
+  });
+
+  it("marks a bucket whose labels carry a notice", () => {
+    render(
+      <TooltipProvider>
+        <BucketTable
+          buckets={[
+            bucket({
+              labels: { "notice.paladin.io/content": "Draining to cold" },
+            }),
+          ]}
+          tenants={tenants}
+          loading={false}
+          error={null}
+          onRetry={vi.fn()}
+          empty="none here"
+        />
+      </TooltipProvider>,
+    );
+    expect(
+      screen.getByRole("img", { name: "Notice: Draining to cold" }),
+    ).toBeInTheDocument();
   });
 
   it("says who a bucket is shared with, and counts past the first few", () => {

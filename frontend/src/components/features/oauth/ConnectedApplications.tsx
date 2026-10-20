@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { CLEAR_FILTERS_LABEL } from "@/components/ui/EmptyState";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import {
   RecordDialog,
@@ -37,13 +38,10 @@ import {
 import { errorMessage } from "@/hooks/errorContract";
 import { useTableView } from "@/hooks/useTableView";
 import type { TableUrl } from "@/lib/table/urlState";
-import { useTableFilter } from "@/hooks/useTableUrl";
+import { useTableFacets } from "@/hooks/useTableFacets";
 import {
-  DEFAULT_LIFECYCLE_FILTER,
   LIFECYCLE_BADGE,
-  LIFECYCLE_FILTERS,
-  LIFECYCLE_FILTER_LABEL,
-  keepsLifecycle,
+  lifecycleFacet,
   type Lifecycle,
 } from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
@@ -56,15 +54,10 @@ import { cn } from "@/lib/utils";
 const APPS_TABLE: TableUrl = { namespace: "apps" };
 
 /**
- * The query key of a user's grants: the live ones, or with inactive every one
- * whose rows remain. Invalidating the key without the second part refetches
- * both.
+ * The query key of a user's grants: every one whose rows remain, ended ones
+ * too, since the state facet counts each state over what was read.
  */
-function oauthGrantsKey(userName: string, includeInactive?: boolean) {
-  return includeInactive === undefined
-    ? (["oauthGrants", userName] as const)
-    : (["oauthGrants", userName, includeInactive] as const);
-}
+const oauthGrantsKey = (userName: string) => ["oauthGrants", userName] as const;
 
 // The columns of the table; the empty and loading rows span them.
 const GRANT_COLUMNS = 7;
@@ -79,6 +72,9 @@ const LIFECYCLE_OF = {
 } as const satisfies Record<OAuthGrant_State, Lifecycle>;
 const lifecycle = (g: OAuthGrant): Lifecycle => LIFECYCLE_OF[g.state];
 const isActive = (g: OAuthGrant) => lifecycle(g) === "active";
+const GRANT_FACETS = [lifecycleFacet(lifecycle)];
+// Kept whole while the first read is in flight, so the facets' memos hold.
+const NO_GRANTS: readonly OAuthGrant[] = [];
 
 type GrantColumn =
   "application" | "access" | "state" | "plane" | "granted" | "used";
@@ -127,27 +123,18 @@ export function ConnectedApplications({
   const { showNotification } = useNotification();
   const [opened, setOpened] = useState<OAuthGrant | null>(null);
   const [target, setTarget] = useState<OAuthGrant | null>(null);
-  const [stateFilter, setStateFilter] = useTableFilter(
-    LIFECYCLE_FILTERS,
-    DEFAULT_LIFECYCLE_FILTER,
-    APPS_TABLE,
-  );
-  // Only the live grants come by default; any other state asks for them all.
-  const includeInactive = stateFilter !== DEFAULT_LIFECYCLE_FILTER;
-
   const query = useQuery({
-    queryKey: oauthGrantsKey(userName, includeInactive),
+    queryKey: oauthGrantsKey(userName),
     queryFn: ({ signal }) =>
       userClient.listOAuthGrants(
-        { name: userName, includeInactive },
+        { name: userName, includeInactive: true },
         { signal },
       ),
     enabled: !!userName,
   });
-  const inState = (query.data?.grants ?? []).filter((g) =>
-    keepsLifecycle(stateFilter, lifecycle(g)),
-  );
-  const view = useTableView(inState, {
+  const grants = query.data?.grants ?? NO_GRANTS;
+  const facets = useTableFacets(grants, GRANT_FACETS, APPS_TABLE);
+  const view = useTableView(facets.rows, {
     text: SEARCH_IN,
     accessors: SORT_BY,
     url: APPS_TABLE,
@@ -200,16 +187,11 @@ export function ConnectedApplications({
             onQueryChange={view.setQuery}
             placeholder="Search by application, plane or scope…"
             searchLabel="Search connected applications"
-            filter={{
-              label: LIFECYCLE_FILTER_LABEL,
-              options: LIFECYCLE_FILTERS,
-              value: stateFilter,
-              onChange: setStateFilter,
-            }}
+            facets={facets.controls}
             count={
               query.isPending
                 ? undefined
-                : { shown: view.rows.length, total: view.total }
+                : { shown: view.rows.length, total: grants.length }
             }
           />
           <Card className="p-0">
@@ -259,11 +241,24 @@ export function ConnectedApplications({
                       colSpan={GRANT_COLUMNS}
                       className="whitespace-normal py-8 text-center text-muted-foreground"
                     >
-                      {view.total > 0
-                        ? "No application matches the search."
-                        : stateFilter === DEFAULT_LIFECYCLE_FILTER
-                          ? `${own ? "You have" : "This user has"} not let any application in. An agent that authorizes through OAuth — one connected to the MCP server, say — appears here.`
-                          : "No grant is in this state. Ended grants stay listed until their tokens are purged."}
+                      {grants.length > 0 ? (
+                        <div className="flex flex-col items-center gap-3">
+                          No application matches your filters. Ended grants stay
+                          listed until their tokens are purged.
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              view.setQuery("");
+                              facets.clear();
+                            }}
+                          >
+                            {CLEAR_FILTERS_LABEL}
+                          </Button>
+                        </div>
+                      ) : (
+                        `${own ? "You have" : "This user has"} not let any application in. An agent that authorizes through OAuth — one connected to the MCP server, say — appears here.`
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (

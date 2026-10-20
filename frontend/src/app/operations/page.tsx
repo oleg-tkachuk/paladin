@@ -31,14 +31,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { openableRow } from "@/components/ui/RecordDialog";
-import { useLinkedRow, type LinkedRowProps } from "@/hooks/useLinkedRow";
+import { useDetailPanel, type DetailRowProps } from "@/hooks/useDetailPanel";
 import { Timestamp } from "@/components/Timestamp";
 import { ActorName } from "@/components/features/audit/ActorName";
 import {
   CancelOperationButton,
   CollectionLink,
   OperationProgressBar,
-  OperationRecord,
+  OperationPanel,
   STATUS_ICON,
   STATUS_TINT,
 } from "@/components/features/operations/parts";
@@ -88,7 +88,7 @@ export default function OperationsPage() {
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // The open record is in the URL, so an open record's address links to it.
   // The row clicked stays at hand for one the list no longer holds.
-  const linked = useLinkedRow();
+  const linked = useDetailPanel();
   const [clicked, setClicked] = useState<Operation | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
 
@@ -297,12 +297,12 @@ export default function OperationsPage() {
         </Table>
       </ListPage>
 
-      <OperationRecord
+      <OperationPanel
         op={
           // The record follows the live list, so an open one keeps moving.
-          linked.linkedId
-            ? (operations.find((o) => o.name === linked.linkedId) ??
-              (clicked?.name === linked.linkedId ? clicked : null))
+          linked.openId
+            ? (operations.find((o) => o.name === linked.openId) ??
+              (clicked?.name === linked.openId ? clicked : null))
             : null
         }
         onClose={linked.close}
@@ -324,7 +324,7 @@ function OperationRow({
   onCancel: (name: string) => Promise<void>;
   onDismiss: () => Promise<void>;
   onOpen: () => void;
-  linkedProps: LinkedRowProps;
+  linkedProps: DetailRowProps;
 }) {
   const status = operationStatus(op);
   const badge = OP_STATUS_BADGE[status];

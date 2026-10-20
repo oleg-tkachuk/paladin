@@ -155,6 +155,10 @@ test.describe("Event subscriptions", () => {
     await expect(deleteItem).toBeVisible({ timeout: 15_000 });
     await deleteItem.click({ timeout: 20_000 });
 
+    // Nothing restores a subscription, so the verb is typed first.
+    await page
+      .getByRole("textbox", { name: "Type delete to confirm" })
+      .fill("delete");
     const confirm = page.getByRole("button", { name: /^Delete/ }).last();
     await expect(confirm).toBeVisible({ timeout: 15_000 });
     await confirm.click({ timeout: 20_000 });

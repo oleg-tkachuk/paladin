@@ -18,7 +18,7 @@ const GENERATED = "gen";
 const COLOUR_UTILITY =
   "bg|text|border|ring|from|to|via|fill|stroke|shadow|outline|divide|placeholder|decoration|caret|accent";
 const TOKEN_FAMILY =
-  "primary|secondary|muted|accent|destructive|warning|success|info|danger|card|popover|background|foreground|border|input|ring|sidebar|chart|surface";
+  "primary|secondary|muted|accent|destructive|warning|success|info|progress|suspended|unknown|danger|card|popover|background|foreground|border|input|ring|sidebar|chart|surface";
 const TOKEN_CLASS = new RegExp(
   `(?:^|[\\s:])(?:${COLOUR_UTILITY})-((?:${TOKEN_FAMILY})[a-z0-9-]*)(?=$|[\\s/])`,
   "g",

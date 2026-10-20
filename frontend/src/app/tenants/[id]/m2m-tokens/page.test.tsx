@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@/test/utils";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  typeToConfirm,
+} from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the m2m-tokens page (consts, then the create
@@ -56,6 +63,7 @@ const makeToken = (id: string, displayName: string) => ({
 });
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/tenants/t-1/m2m-tokens");
   h.list.mockResolvedValue({ apiTokens: [] });
   h.getUsage.mockResolvedValue({
     limitRpm: undefined,
@@ -142,6 +150,7 @@ describe("M2MTokensPage", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /Revoke ci-uploader/i }),
     );
+    await typeToConfirm("revoke");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() =>
       expect(h.revoke).toHaveBeenCalledWith(
@@ -166,6 +175,21 @@ describe("M2MTokensPage token record", () => {
     expect(dialog).toHaveTextContent("Rolesuploader");
     expect(dialog).toHaveTextContent("Rate limitunlimited");
     expect(dialog).toHaveTextContent("by user:ops");
+    // The open token is in the address, so the panel is a link to it.
+    expect(window.location.search).toBe("?id=tok-1");
+  });
+
+  it("revokes from the token's panel through the same confirmation", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [makeToken("tok-1", "ci-uploader")],
+    });
+    render(<M2MTokensPage />);
+    fireEvent.click(await screen.findByRole("row", { name: /ci-uploader/ }));
+    const panel = await screen.findByRole("dialog", { name: "ci-uploader" });
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Revoke" }),
+    );
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
   });
 
   it("leaves the row's revoke action to itself", async () => {
@@ -209,30 +233,32 @@ describe("M2MTokensPage paging", () => {
 describe("M2MTokensPage state and search", () => {
   const REVOKED_AT = { seconds: 1_700_000_000n };
 
-  it("asks for ended tokens only when a state shows them", async () => {
-    h.list.mockImplementation(({ includeRevoked }) =>
-      Promise.resolve({
-        apiTokens: includeRevoked
-          ? [
-              makeToken("tok-live", "live-one"),
-              { ...makeToken("tok-gone", "gone-one"), revokedAt: REVOKED_AT },
-            ]
-          : [makeToken("tok-live", "live-one")],
-      }),
-    );
+  it("reads the ended tokens too, and shows them under their state", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [
+        makeToken("tok-live", "live-one"),
+        { ...makeToken("tok-gone", "gone-one"), revokedAt: REVOKED_AT },
+      ],
+    });
     render(<M2MTokensPage />);
     expect(await screen.findByText("live-one")).toBeInTheDocument();
+    // The state facet counts every state, so every state is asked for.
     expect(h.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRevoked: false, includeExpired: false }),
+      expect.objectContaining({ includeRevoked: true, includeExpired: true }),
       expect.anything(),
     );
+    expect(screen.queryByText("gone-one")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
-    expect(await screen.findByText("gone-one")).toBeInTheDocument();
-    expect(h.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRevoked: true, includeExpired: false }),
-      expect.anything(),
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state, 1 chosen" }),
     );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Active/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Revoked/ }),
+    );
+    expect(await screen.findByText("gone-one")).toBeInTheDocument();
     // Only the revoked one shows under Revoked.
     expect(screen.queryByText("live-one")).toBeNull();
   });

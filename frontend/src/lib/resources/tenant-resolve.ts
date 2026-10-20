@@ -20,6 +20,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { useQuery } from "@tanstack/react-query";
 
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
+import { noticeFromLabels, type Notice } from "@/lib/notice";
 import { tenantDetailQuery } from "@/lib/queries/details";
 
 /**
@@ -35,6 +36,8 @@ export type ResolvedTenant = {
   storageLayout: string;
   /** In the trash: the tenant is frozen and takes no changes. */
   trashed: boolean;
+  /** The notice its labels carry (notice.paladin.io/*), when there is one. */
+  notice?: Notice | null;
 };
 
 const UUID_RE =
@@ -99,6 +102,7 @@ export function resolvedTenant(res: Tenant, id: string): ResolvedTenant {
     displayName: res.displayName || slug,
     storageLayout: res.storageLayout || DEFAULT_STORAGE_LAYOUT,
     trashed: res.deletedAt !== undefined,
+    notice: noticeFromLabels(res.labels),
   };
 }
 

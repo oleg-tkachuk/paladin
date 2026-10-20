@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 
-import { listFlagsFor, tokenLifecycle } from "./_constants";
+import { tokenLifecycle } from "./_constants";
 
 const HOUR_S = 3600n;
 const nowS = () => BigInt(Math.floor(Date.now() / 1000));
@@ -25,19 +25,5 @@ describe("tokenLifecycle", () => {
     ],
   ] as const)("names %s %s", (_, t, want) => {
     expect(tokenLifecycle(token(t))).toBe(want);
-  });
-});
-
-describe("listFlagsFor", () => {
-  it.each([
-    ["active", false, false],
-    ["revoked", true, false],
-    ["expired", false, true],
-    ["all", true, true],
-  ] as const)("asks for what %s shows", (filter, revoked, expired) => {
-    expect(listFlagsFor(filter)).toEqual({
-      includeRevoked: revoked,
-      includeExpired: expired,
-    });
   });
 });

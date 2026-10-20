@@ -2,7 +2,8 @@
 
 // The pieces every view of an operation shares — the drawer in the top bar
 // and the operations page: its collection as a link, its state's icon, and
-// its whole record.
+// its whole record, in a dialog from the drawer and in a panel beside the
+// page's list.
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
@@ -22,7 +23,9 @@ import {
   RecordBlock,
   RecordDialog,
   RecordField,
+  RecordFields,
 } from "@/components/ui/RecordDialog";
+import { DetailPanel } from "@/components/ui/DetailPanel";
 import { Timestamp } from "@/components/Timestamp";
 import { ActorName } from "@/components/features/audit/ActorName";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
@@ -84,6 +87,97 @@ export function CollectionLink({
 }
 
 /** An operation's whole record: what it was asked, how it went, why not. */
+function OperationFields({ op }: { op: Operation }) {
+  const status = operationStatus(op);
+  const outcome = operationOutcome(op);
+  const progress = operationProgress(op);
+  const elapsed = operationElapsedMs(op, new Date());
+  return (
+    <RecordFields>
+      <RecordField label="State">
+        <Badge variant={OP_STATUS_BADGE[status].variant}>
+          {OP_STATUS_BADGE[status].label}
+        </Badge>
+      </RecordField>
+      <RecordField label="Type" mono>
+        {op.type}
+      </RecordField>
+      {op.target ? (
+        <>
+          <RecordField label="Collection">
+            <CollectionLink name={op.target.collection} />
+          </RecordField>
+          {op.target.destination ? (
+            <RecordField label="Copied into">
+              <CollectionLink name={op.target.destination} />
+            </RecordField>
+          ) : null}
+          <RecordField label="Objects">
+            {objectCountLabel(op.target.objectCount)}
+          </RecordField>
+        </>
+      ) : null}
+      {op.initiatorSubject ? (
+        <RecordField label="Started by">
+          <ActorName
+            subject={op.initiatorSubject}
+            tenantId={op.initiatorTenantId}
+          />
+        </RecordField>
+      ) : null}
+      <RecordField label="Started">
+        {op.createdAt ? <Timestamp ts={op.createdAt} /> : "—"}
+      </RecordField>
+      {op.doneAt ? (
+        <RecordField label="Finished">
+          <Timestamp ts={op.doneAt} />
+        </RecordField>
+      ) : null}
+      {op.expireTime ? (
+        // The housekeeping reaper removes finished operations; until then
+        // they stay listed, cleared or not.
+        <RecordField label="Kept until">
+          <Timestamp ts={op.expireTime} />
+        </RecordField>
+      ) : null}
+      {elapsed !== null ? (
+        <RecordField label={isActive(status) ? "Running for" : "Took"}>
+          {formatDuration(elapsed)}
+        </RecordField>
+      ) : null}
+      {progress ? (
+        <RecordField label="Progress">
+          {progress.processed} of {progress.total}
+        </RecordField>
+      ) : null}
+      {outcome ? (
+        <RecordField label="Result">
+          {outcome.succeeded} done
+          {outcome.alreadyApplied > 0
+            ? `, ${outcome.alreadyApplied} already so`
+            : ""}
+          {outcome.failed > 0 ? `, ${outcome.failed} failed` : ""} of{" "}
+          {outcome.total}
+        </RecordField>
+      ) : null}
+      {operationError(op) ? (
+        <RecordField label="Error">
+          <span className="text-destructive">{operationError(op)}</span>
+        </RecordField>
+      ) : null}
+      {outcome && outcome.failures.length > 0 ? (
+        <RecordBlock label="Objects that failed">
+          {outcome.failures.map((f) => `${f.objectId}  ${f.reason}`).join("\n")}
+        </RecordBlock>
+      ) : null}
+    </RecordFields>
+  );
+}
+
+/**
+ * An operation's record in a dialog, for the drawer in the top bar, which is
+ * itself a panel and has no list beside it to keep in view.
+ */
 export function OperationRecord({
   op,
   onClose,
@@ -91,10 +185,6 @@ export function OperationRecord({
   op: Operation | null;
   onClose: () => void;
 }) {
-  const status = op ? operationStatus(op) : null;
-  const outcome = op ? operationOutcome(op) : null;
-  const progress = op ? operationProgress(op) : null;
-  const elapsed = op ? operationElapsedMs(op, new Date()) : null;
   return (
     <RecordDialog
       open={op !== null}
@@ -102,89 +192,29 @@ export function OperationRecord({
       title={op ? operationLabel(op) : "Operation"}
       subtitle={op?.name}
     >
-      {op && status ? (
-        <>
-          <RecordField label="State">
-            <Badge variant={OP_STATUS_BADGE[status].variant}>
-              {OP_STATUS_BADGE[status].label}
-            </Badge>
-          </RecordField>
-          <RecordField label="Type" mono>
-            {op.type}
-          </RecordField>
-          {op.target ? (
-            <>
-              <RecordField label="Collection">
-                <CollectionLink name={op.target.collection} />
-              </RecordField>
-              {op.target.destination ? (
-                <RecordField label="Copied into">
-                  <CollectionLink name={op.target.destination} />
-                </RecordField>
-              ) : null}
-              <RecordField label="Objects">
-                {objectCountLabel(op.target.objectCount)}
-              </RecordField>
-            </>
-          ) : null}
-          {op.initiatorSubject ? (
-            <RecordField label="Started by">
-              <ActorName
-                subject={op.initiatorSubject}
-                tenantId={op.initiatorTenantId}
-              />
-            </RecordField>
-          ) : null}
-          <RecordField label="Started">
-            {op.createdAt ? <Timestamp ts={op.createdAt} /> : "—"}
-          </RecordField>
-          {op.doneAt ? (
-            <RecordField label="Finished">
-              <Timestamp ts={op.doneAt} />
-            </RecordField>
-          ) : null}
-          {op.expireTime ? (
-            // The housekeeping reaper removes finished operations; until then
-            // they stay listed, cleared or not.
-            <RecordField label="Kept until">
-              <Timestamp ts={op.expireTime} />
-            </RecordField>
-          ) : null}
-          {elapsed !== null ? (
-            <RecordField label={isActive(status) ? "Running for" : "Took"}>
-              {formatDuration(elapsed)}
-            </RecordField>
-          ) : null}
-          {progress ? (
-            <RecordField label="Progress">
-              {progress.processed} of {progress.total}
-            </RecordField>
-          ) : null}
-          {outcome ? (
-            <RecordField label="Result">
-              {outcome.succeeded} done
-              {outcome.alreadyApplied > 0
-                ? `, ${outcome.alreadyApplied} already so`
-                : ""}
-              {outcome.failed > 0 ? `, ${outcome.failed} failed` : ""} of{" "}
-              {outcome.total}
-            </RecordField>
-          ) : null}
-          {operationError(op) ? (
-            <RecordField label="Error">
-              <span className="text-destructive">{operationError(op)}</span>
-            </RecordField>
-          ) : null}
-          {outcome && outcome.failures.length > 0 ? (
-            <RecordBlock label="Objects that failed">
-              {outcome.failures
-                .map((f) => `${f.objectId}  ${f.reason}`)
-                .join("\n")}
-            </RecordBlock>
-          ) : null}
-        </>
-      ) : null}
+      {op ? <OperationFields op={op} /> : null}
     </RecordDialog>
+  );
+}
+
+/** An operation's record in a panel beside the operations list. */
+export function OperationPanel({
+  op,
+  onClose,
+}: {
+  op: Operation | null;
+  onClose: () => void;
+}) {
+  return (
+    <DetailPanel
+      open={op !== null}
+      onClose={onClose}
+      rowId={op?.name}
+      title={op ? operationLabel(op) : "Operation"}
+      identifier={op?.name}
+    >
+      {op ? <OperationFields op={op} /> : null}
+    </DetailPanel>
   );
 }
 

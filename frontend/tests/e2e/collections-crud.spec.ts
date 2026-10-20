@@ -214,6 +214,12 @@ test.describe("Collections CRUD", () => {
     // The confirm dialog names what is about to go, because a Collection is
     // the binding every object under it resolves through.
     await expect(page.getByText(/Delete this Collection\?/i)).toBeVisible();
+    // A Collection has no trash, so its name is typed first.
+    await page
+      .getByRole("textbox", {
+        name: `Type ${collection.collection} to confirm`,
+      })
+      .fill(collection.collection);
     const confirm = page.getByRole("button", { name: /^Delete Collection$/ });
     await expect(confirm).toBeVisible({ timeout: 15_000 });
     await confirm.click({ timeout: 20_000 });

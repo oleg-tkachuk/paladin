@@ -75,6 +75,9 @@ export function RevokeCapabilityDialog({
       }
       warning="Every delegation issued under it stops too. A revoke cannot be undone: holders need a new capability."
       confirmText="Revoke"
+      // A revoke cannot be undone and reaches every delegation under the
+      // capability, so it is typed out; as the verb, since its id is opaque.
+      typeToConfirm="revoke"
     >
       <div className="space-y-3 text-left">
         <div className="space-y-1.5">

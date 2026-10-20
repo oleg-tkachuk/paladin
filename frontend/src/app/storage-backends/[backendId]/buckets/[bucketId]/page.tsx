@@ -1,7 +1,8 @@
 "use client";
 
-// A bucket's overview: what it is, who owns it, and who it is shared with.
-// Its settings are the other tabs; what each tenant stores is Collections.
+// A bucket's overview: where it stands, what it is, who owns it, and who it
+// is shared with. Its settings are the other tabs; what each tenant stores is
+// Collections.
 
 import Link from "next/link";
 import {
@@ -13,11 +14,18 @@ import {
 
 import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { failedRead } from "@/components/ui/ListLoadError";
+import { StatusPanel, type StatusCardSpec } from "@/components/ui/StatusPanel";
 import { BucketGrantsCard } from "@/components/features/buckets/BucketGrantsCard";
 import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { useTenants } from "@/hooks/useTenants";
 import { backendHref, bucketHref, tenantHref } from "@/lib/navigation/hrefs";
+import {
+  bucketPolicyStatus,
+  protectionStatus,
+  provisionStatus,
+  replicationStatus,
+} from "@/lib/resourceStatus";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -40,8 +48,43 @@ export default function BucketOverviewPage() {
     bucketHref(bucket.backendId, bucket.bucketId, slug);
   const ownerName = owner?.displayName || owner?.slug || bucket.ownerTenantId;
 
+  // After Argo CD's status panel: where the bucket stands on its backend, and
+  // the settings that decide what happens to what it holds. Each is read off
+  // the bucket the layout already has.
+  const status: StatusCardSpec[] = [
+    {
+      title: "Provisioning",
+      ...provisionStatus(bucket.provisionState),
+      help: "bucketProvisioning",
+      href: backendHref(bucket.backendId),
+      linkLabel: "Open its backend",
+    },
+    {
+      title: "Protection",
+      ...protectionStatus(bucket),
+      help: "objectLock",
+      href: tab(bucket.versioning?.enabled ? "versioning" : "object-lock"),
+      linkLabel: "Open versioning and object lock",
+    },
+    {
+      title: "Replication",
+      ...replicationStatus(bucket),
+      href: tab("replication"),
+      linkLabel: "Open replication",
+    },
+    {
+      title: "Policy",
+      ...bucketPolicyStatus(bucket),
+      help: "policyLayers",
+      href: tab("policy"),
+      linkLabel: "Open policy",
+    },
+  ];
+
   return (
     <div className="space-y-4">
+      <StatusPanel label="Bucket status" cards={status} />
+
       <Card>
         <CardHeader className="flex flex-row items-center gap-2">
           <CardTitle

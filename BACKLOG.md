@@ -432,6 +432,21 @@ open deliberately — each notes why._
 
 ## Features
 
+### A tenant's history shows its operations only to its own sessions
+
+- **Status:** Blocked.
+- **Reason:** `ListOperations` lists the operations of the caller's own
+  tenant, so a platform admin reading another tenant's History tab sees its
+  audit trail without the batches its collections ran; the console filters
+  to the tenant on the page, which keeps another tenant's batches out but
+  cannot bring this one's in.
+- **Definition of Done:** `ListOperations` takes a tenant a platform admin
+  may name, as `ListAuditLogRequest.tenant_id` does, with a test for its
+  authorization; the tenant's History reads it, and its test covers a
+  platform admin on another tenant's page.
+- **Blockers:** an `OperationService` contract change, out of scope for the
+  console slice that added the History tab.
+
 ### Ingest acts on the first record of a batched S3 notification only
 
 - **Status:** Deferred.
@@ -785,16 +800,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Keyboard navigation in tables
-
-- **Status:** Deferred (owner decision 2026-10-19: not a priority now).
-- **Reason:** every list needs the mouse to move between rows and open one;
-  the rest of the programme comes first.
-- **Definition of Done:** `j`/`k` move a row focus, `Enter` opens it, `x`
-  selects it where the table selects; one hook every table uses, off while a
-  text field has focus.
-- **Blockers:** none — taken up when it is asked for.
-
 #### Dashboard: a trend for the tenants nearest their limits
 
 - **Status:** Blocked.
@@ -825,4 +830,142 @@ order they are being taken up.
 - **Definition of Done:** CSV export of what a list shows, in its order and
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
+
+#### Facets and pages for the remaining lists
+
+- **Status:** Aspirational.
+- **Reason:** counted facets (useTableFacets) and pages (useTablePage) came
+  to the lists loaded whole that are visited most: storage backends,
+  tenants, buckets, users and M2M tokens, and the connected applications
+  card takes facets. The rest do not yet. Operations, trash, MCP
+  authorization, configuration and objects keep their single-choice
+  toolbar filter; the capabilities page browses by kind, subject and two
+  server-side flags of its own; the tenant's and the backend's bucket lists
+  show every row. Audit, operations and collections page on the server with
+  Load more, so a count beside an answer would describe only the rows read
+  so far.
+- **Definition of Done:** every list either filters through facets and
+  pages through the shared hooks, or this entry names it and says why not;
+  no page keeps a single-choice filter beside facets; a list paged on the
+  server shows counts the API gives, not counts of what it loaded.
+- **Blockers:** per-answer counts for the server-paged lists, which no List
+  RPC returns today.
+
+#### Facet choices remembered between visits
+
+- **Status:** Deferred (needs an owner decision).
+- **Reason:** Argo CD keeps a list's filters across visits. Here they live
+  in the URL alone: a reload or a shared link keeps them, but a visit from
+  the sidebar opens the list on its initial choice. Remembering them would
+  open a list narrowed by a choice made weeks ago, which reads as rows gone
+  missing, so it was left out until it is asked for.
+- **Definition of Done:** if wanted, a table's choices saved per table in
+  console.tables beside its page size, applied only when the URL names no
+  facet, with the toolbar showing they are on and Clear filters clearing the
+  saved ones too.
+- **Blockers:** the owner's decision.
+
+#### A tenant purge names what it takes by row, not by kind
+
+- **Status:** Deferred.
+- **Reason:** the purge confirmation on the Trash page asks for the slug and
+  lists the kinds the cascade removes (API tokens, event subscriptions,
+  capabilities, quotas, operations), but not which of them this tenant
+  holds: the page reads no tenant's tokens or subscriptions, and three list
+  reads per dialog, each paged, would count only what they happened to load.
+- **Definition of Done:** the purge dialog lists the tenant's API tokens and
+  event subscriptions by name, and how many capabilities it holds, with
+  counts that are exact past the first page — from one server-side preview of
+  what `PurgeTenant` would remove rather than reads assembled in the browser.
+- **Blockers:** a preview (dry-run) read for `PurgeTenant` on the admin API.
+#### Topology: a tenant's policies and capabilities as a side branch
+
+- **Status:** Deferred.
+- **Reason:** the tenant topology draws tenant → collections → buckets →
+  backends only; a policy layer is read one resource at a time
+  (PolicyService.GetEffectivePolicy) and capabilities are listed one principal
+  at a time (CapabilityService.List), so a branch for them costs a request per
+  collection and per principal on every open.
+- **Definition of Done:** the tenant topology shows which of its resources
+  carry a Cedar layer of their own and the principals holding live
+  capabilities, as a branch off the tenant, each linking to its page, from
+  reads that answer for the whole tenant at once.
+- **Blockers:** a tenant-wide read of policy layers and of capabilities.
+
+#### Topology: collections in the platform view
+
+- **Status:** Deferred.
+- **Reason:** `/topology` draws backends → buckets → tenants; adding each
+  tenant's collections means reading the cross-tenant collections catalogue,
+  which on a large platform is thousands of nodes for a picture whose question
+  is which tenants stand behind which infrastructure.
+- **Definition of Done:** a platform topology can open one bucket or one
+  tenant down to its collections (the tenant view already shows them per
+  tenant), read on demand rather than all at once.
+- **Blockers:** none — taken up when it is asked for.
+
+
+#### Diff a policy against its earlier versions
+
+- **Status:** Blocked.
+- **Reason:** a Cedar policy is stored in place on its tenant, bucket or
+  collection and no RPC returns an earlier text, so the policy editor diffs
+  only the draft against what is saved. The audit log's before/after
+  snapshots of a policy write are the nearest thing, one entry at a time.
+- **Definition of Done:** the API serves a policy's previous versions, with
+  who wrote each and when, and the policy editor diffs any two of them in
+  `DiffView`.
+- **Blockers:** the backend keeping a policy's history.
+
+#### Diff the running configuration against its defaults
+
+- **Status:** Blocked.
+- **Reason:** `/config` diffs the running configuration against a
+  config.yaml pasted in, but not against the defaults: GetConfig returns
+  only the loaded YAML, and the defaults live in the Go config loader.
+- **Definition of Done:** the API serves the defaults, redacted as the
+  running configuration is, and `/config` diffs the two in `DiffView`, so
+  an operator sees every setting their deployment changed.
+- **Blockers:** a field on GetConfigResponse (or a sibling RPC) carrying
+  the defaults.
+
+#### Detail panels for the remaining record dialogs
+
+- **Status:** Aspirational.
+- **Reason:** `DetailPanel` took over the record dialogs of the audit log
+  (both), capabilities, M2M tokens and operations. A collection's trash, the
+  MCP sessions, tool catalogue and authorisation tables, and connected
+  applications still open a dialog: their open row lives in component state,
+  the MCP tables share one page and need namespaced parameters, and the
+  trash's paged list may not hold a linked object after a reload, so it has
+  to be read by id first.
+- **Definition of Done:** each opens in `DetailPanel` through
+  `useDetailPanel`, namespaced where a page holds more than one table, and a
+  linked record the loaded page does not hold is read by its id.
+- **Blockers:** none.
+#### The tenants list cannot tell a tenant near its limits
+
+- **Status:** Blocked.
+- **Reason:** the tenants list's status bar, tiles and summary tell a tenant
+  in the trash (Frozen) and one whose notice is a warning or critical from an
+  active one, but not one near its quota or budget: ListTenants carries no
+  usage, and reading each tenant's quotas from the browser is one call per
+  row.
+- **Definition of Done:** "Near quota" and "Over budget" states in
+  `tenantStatus` (app/tenants/tenantView.ts), counted in the status bar and
+  shown on the tiles, from usage the list read serves.
+- **Blockers:** the cross-tenant read in "Dashboard: a trend for the tenants
+  nearest their limits".
+
+#### A bucket's notice is set through the API only
+
+- **Status:** Deferred.
+- **Reason:** a bucket shows the notice its `notice.paladin.io/*` labels
+  carry, on its page and in every bucket list, but the console has no form
+  that edits a bucket's labels; `UpdateBucket` with `labels` in the mask is
+  the only way to set one. The tenant's edit dialog has the form.
+- **Definition of Done:** the bucket's settings edit its notice as the
+  tenant's edit dialog does, keeping its other labels as they are.
+- **Blockers:** none. Storage backends carry no labels at all, so a notice
+  on one would need a field in the API first.
 

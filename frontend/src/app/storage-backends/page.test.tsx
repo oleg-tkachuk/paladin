@@ -2,12 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   fireEvent,
-  render,
+  render as rtlRender,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+import { TooltipProvider } from "@/components/ui/Tooltip";
+
+// In the root layout's TooltipProvider, as the app renders it: the status bar
+// over the list carries tooltips, and one outside a provider throws.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: TooltipProvider });
 
 // Characterization net for the storage-backends page. useBackends auto-fetches
 // on mount; mock it + notifications and pin the shell + create-dialog open.
@@ -81,6 +88,8 @@ beforeEach(() => {
   h.setBackendMaintenance.mockClear();
   h.showNotification.mockClear();
   h.backends = [];
+  // A facet chosen in one test would otherwise open the next one narrowed.
+  window.history.replaceState(null, "", "/storage-backends");
 });
 
 const makeBackend = (over: Record<string, unknown> = {}) => ({
@@ -361,6 +370,33 @@ describe("StorageBackendsPage", () => {
     expect(h.setBackendEnabled).toHaveBeenCalledWith("b", false, "2");
   });
 
+  // The confirmation names the backends that stop serving, not only how many
+  // were ticked: one already disabled is skipped, so it is not listed.
+  it("lists the backends a bulk disable reaches, by id", async () => {
+    h.backends = [
+      makeBackend({ backendId: "a", enabled: true, resourceVersion: "1" }),
+      makeBackend({ backendId: "b", enabled: false, resourceVersion: "2" }),
+      makeBackend({ backendId: "c", enabled: true, resourceVersion: "3" }),
+    ];
+    render(<StorageBackendsPage />);
+    for (const id of ["a", "b", "c"]) {
+      await userEvent.click(screen.getByLabelText(`Select ${id}`));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Bulk disable" }));
+
+    const dialog = screen.getByRole("alertdialog");
+    const listed = within(dialog).getByRole("list", {
+      name: "2 backends to disable",
+    });
+    expect(
+      within(listed)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["a", "c"]);
+    // Enabling undoes it, so nothing is typed.
+    expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
   it("bulk-enables without asking", async () => {
     h.backends = [
       makeBackend({ backendId: "a", enabled: false, resourceVersion: "1" }),
@@ -549,34 +585,94 @@ describe("StorageBackendsPage search", () => {
   });
 });
 
-// The state picker narrows on the server too, as a conjunct beside the search.
-describe("StorageBackendsPage state filter", () => {
-  it("sends the chosen state as a CEL conjunct", async () => {
+// A long list is cut into pages; selecting all selects the page on screen.
+describe("StorageBackendsPage pages", () => {
+  it("shows fifty backends a page, and the next fifty on the next", async () => {
+    h.backends = Array.from({ length: 55 }, (_, i) =>
+      makeBackend({ backendId: `b-${String(i).padStart(2, "0")}` }),
+    );
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("b-49")).toBeInTheDocument();
+    expect(screen.queryByText("b-50")).toBeNull();
+    expect(screen.getByText("1–50 of 55")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all backends" }),
+    );
+    expect(screen.getByText(/50 selected/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("b-54")).toBeInTheDocument();
+    expect(screen.queryByText("b-00")).toBeNull();
+    expect(window.location.search).toContain("page=2");
+  });
+});
+
+// The state and health facets narrow what the search loaded, each answer
+// counted; several answers of one facet are any of them.
+describe("StorageBackendsPage facets", () => {
+  it("narrows to the chosen states without asking the server again", async () => {
+    h.backends = [
+      makeBackend({ backendId: "live" }),
+      makeBackend({ backendId: "drained", readOnly: true }),
+      makeBackend({ backendId: "off", enabled: false, maintenance: true }),
+    ];
     render(<StorageBackendsPage />);
     h.filters = [];
 
     await userEvent.click(
-      screen.getByRole("combobox", { name: "Filter by state" }),
+      screen.getByRole("button", { name: "Filter by state" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Draining" }));
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Draining, 1 row" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Maintenance, 1 row" }),
+    );
+    await userEvent.keyboard("{Escape}");
 
-    await waitFor(() =>
-      expect(h.filters.at(-1)).toBe("enabled == true && read_only == true"),
-    );
+    expect(screen.queryByText("live")).toBeNull();
+    expect(screen.getByText("drained")).toBeInTheDocument();
+    expect(screen.getByText("off")).toBeInTheDocument();
+    expect(screen.getByText("2 of 3")).toBeInTheDocument();
+    expect(window.location.search).toContain("state=draining%2Cmaintenance");
+    expect(h.filters.filter(Boolean)).toEqual([]);
   });
 
   it("says nothing matches, rather than none registered, when a state is chosen", async () => {
     render(<StorageBackendsPage />);
     await userEvent.click(
-      screen.getByRole("combobox", { name: "Filter by state" }),
+      screen.getByRole("button", { name: "Filter by state" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Disabled" }));
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Disabled/ }),
+    );
     expect(
       await screen.findByText("No storage backends match your filters."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Register the first backend/ }),
     ).toBeNull();
+  });
+
+  it("shows every backend again from the empty state", async () => {
+    h.backends = [makeBackend({ backendId: "live" })];
+    window.history.replaceState(null, "", "/storage-backends?q=x&state=any");
+    render(<StorageBackendsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Disabled/ }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByText("live")).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear filters" }),
+    );
+    expect(screen.getByText("live")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox")).toHaveValue("");
   });
 });
 
@@ -631,5 +727,76 @@ describe("StorageBackendsPage sorting", () => {
     fireEvent.click(screen.getByRole("button", { name: /^State/ }));
     // Disabled before Enabled, by the state's name.
     expect(ids()[0]).toBe("alpha");
+  });
+});
+
+describe("StorageBackendsPage views", () => {
+  const fleet = () => [
+    makeBackend({ backendId: "alpha", healthStatus: "ok", provider: "aws" }),
+    makeBackend({
+      backendId: "beta",
+      healthStatus: "error",
+      healthMessage: "refused",
+      provider: "garage",
+      region: "",
+    }),
+    makeBackend({ backendId: "gamma", enabled: false, provider: "aws" }),
+  ];
+  beforeEach(() => window.history.replaceState(null, "", "/storage-backends"));
+  afterEach(() => window.history.replaceState(null, "", "/storage-backends"));
+
+  // After Argo CD's application status bar: how the listed backends split,
+  // above the list in every view.
+  it("tallies the backends' states above the list", () => {
+    h.backends = fleet();
+    render(<StorageBackendsPage />);
+    expect(
+      screen.getByRole("img", {
+        name: "1 Probe failed · 1 Disabled · 1 Healthy",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("lays the backends out as tiles, and keeps the choice in the URL", () => {
+    h.backends = fleet();
+    render(<StorageBackendsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Tiles" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const tiles = within(
+      screen.getByRole("list", { name: "Storage backends" }),
+    );
+    expect(tiles.getAllByRole("listitem")).toHaveLength(3);
+    expect(tiles.getByRole("link", { name: "beta" })).toHaveAttribute(
+      "href",
+      "/storage-backends/beta",
+    );
+    expect(tiles.getAllByRole("link", { name: "Buckets" })[0]).toHaveAttribute(
+      "href",
+      "/storage-backends/alpha/buckets",
+    );
+    expect(window.location.search).toBe("?view=tiles");
+  });
+
+  it("opens in the view a link names, as a summary of the backends", () => {
+    window.history.replaceState(null, "", "/storage-backends?view=summary");
+    h.backends = fleet();
+    render(<StorageBackendsPage />);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const provider = screen
+      .getByRole("heading", { name: "Provider" })
+      .closest("[data-slot=card]")!;
+    expect(
+      within(provider as HTMLElement)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["AWS (2)", "Garage (1)"]);
+    expect(screen.getByRole("heading", { name: "Region" })).toBeInTheDocument();
+  });
+
+  // Loading, a failure and an empty list read as the table says them.
+  it("shows the table's empty state in any view", () => {
+    window.history.replaceState(null, "", "/storage-backends?view=tiles");
+    render(<StorageBackendsPage />);
+    expect(screen.getByText(/No storage backends yet/)).toBeInTheDocument();
   });
 });

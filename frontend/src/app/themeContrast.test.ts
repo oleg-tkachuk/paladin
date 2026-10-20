@@ -94,6 +94,9 @@ const TEXT_ON_SURFACES = [
   "--success",
   "--warning",
   "--info",
+  "--progress",
+  "--suspended",
+  "--unknown",
 ];
 const FILLS: [string, string][] = [
   ["--primary-foreground", "--primary"],
@@ -144,6 +147,24 @@ const ICON_CHIP_PAIRS = Object.entries(ICON_CHIP_TONE).map(
   },
 );
 
+// A tinted status badge's ink on its tint (badge.tsx: `bg-<tone>/10`), laid
+// over a card and its header band, where the console's badges sit: in table
+// rows and card bodies. On the light ground itself the tint takes these to
+// about 4.1:1; the old chart-N tints read below 2:1 on any surface.
+const BADGE_TINT_PAIRS: [string, Paint][] = [
+  "--success",
+  "--warning",
+  "--info",
+  "--progress",
+  "--suspended",
+  "--unknown",
+].flatMap((ink) =>
+  ["--card", "--band"].map((over): [string, Paint] => [
+    ink,
+    { token: ink, alpha: 0.1, over },
+  ]),
+);
+
 // The focus indicator against each surface a focusable control sits on.
 const RING_ON = ["--background", "--card", "--muted", "--sidebar"];
 
@@ -154,7 +175,7 @@ describe.each(PALETTES)("the %s palette", (theme) => {
     expect(formatHex(colour(p, "--background"))).toMatch(/^#/);
   });
 
-  it.each([...TEXT_PAIRS, ...STATE_PAIRS])(
+  it.each([...TEXT_PAIRS, ...STATE_PAIRS, ...BADGE_TINT_PAIRS])(
     "%s on %j reaches 4.5:1",
     (text, surface) => {
       const ground = painted(p, surface);

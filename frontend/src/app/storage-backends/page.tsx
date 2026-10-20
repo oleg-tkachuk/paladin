@@ -41,7 +41,7 @@ import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { sortRows, type SortAccessors } from "@/lib/table/view";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Separator } from "@/components/ui/separator";
 
@@ -55,13 +55,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SelectContent,
-  SelectItem,
-  SelectRoot,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import {
   Table,
   TableCell,
@@ -83,17 +76,18 @@ import {
 } from "@/lib/storageFeatures";
 import { errorMessage } from "@/hooks/errorContract";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
-import {
-  STATE_FILTERS,
-  STATE_FILTER_LABELS,
-  allOf,
-  healthView,
-  lifecycleState,
-  stateFilter,
-  type HealthTone,
-  type StateFilter,
-} from "./backendView";
+import { BACKEND_FACETS, healthView, lifecycleState } from "./backendView";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { TableScope } from "@/components/ui/TableScope";
+import { StatusDot } from "@/components/ui/StatusIcon";
+import { STATUS_BADGE } from "@/lib/ui/status";
+import { StatusBar, tallyStatus } from "@/components/ui/StatusBar";
+import { ViewModeSwitcher } from "@/components/ui/ViewModeSwitcher";
+import { useTableViewMode } from "@/hooks/useTableViewMode";
+import { backendStatus } from "./backendView";
+import { BackendSummary, BackendTiles } from "./BackendViews";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "storageBackends";
@@ -102,12 +96,6 @@ const TABLE_ID = "storageBackends";
 const COLUMN_COUNT = 7;
 // Trails the search box so a refetch does not fire per keystroke.
 const SEARCH_DEBOUNCE_MS = 300;
-
-const HEALTH_DOT: Record<HealthTone, string> = {
-  ok: "bg-chart-2",
-  error: "bg-destructive",
-  unknown: "bg-muted-foreground/50",
-};
 
 type Action =
   "enable" | "disable" | "drain" | "undrain" | "maintenance" | "unmaintenance";
@@ -206,11 +194,13 @@ const BACKEND_SORT: SortAccessors<StorageBackend, BackendColumn> = {
 };
 
 export default function StorageBackendsPage() {
-  // Server-side, like /buckets: the derived `search` field joins id, display
-  // name, region and endpoint, and the state choice is a conjunct beside it.
+  // The search is server-side, like /buckets: the derived `search` field
+  // joins id, display name, region and endpoint. The facets narrow what it
+  // returns here instead. A choice of several states is a disjunction, which
+  // pushes nothing down (src/lib/cel.ts), and the counts beside each answer
+  // need every state loaded anyway; a platform has backends by the handful.
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [state, setState] = useState<StateFilter>("all");
   const {
     backends,
     loading,
@@ -220,20 +210,25 @@ export default function StorageBackendsPage() {
     setBackendReadOnly,
     setBackendMaintenance,
     error: listError,
-  } = useBackends({
-    filter: allOf(searchFilter(debouncedSearch), stateFilter(state)),
-  });
+  } = useBackends({ filter: searchFilter(debouncedSearch) });
   const { showNotification } = useNotification();
+  const facets = useTableFacets(backends, BACKEND_FACETS, PAGE_TABLE);
   const { sort, toggleSort } = useTableSort<BackendColumn>(undefined, {
     url: PAGE_TABLE,
     tableId: TABLE_ID,
     columns: SORT_COLUMNS,
   });
   const sortProps = { current: sort, onSort: toggleSort };
+  const { view, setView } = useTableViewMode(TABLE_ID);
   const sorted = useMemo(
-    () => sortRows(backends, sort, BACKEND_SORT),
-    [backends, sort],
+    () => sortRows(facets.rows, sort, BACKEND_SORT),
+    [facets.rows, sort],
   );
+  const paged = useTablePage(sorted, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [search, facets.selection],
+  });
 
   // The backend a row action is running on; its menu stays disabled meanwhile.
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -351,6 +346,17 @@ export default function StorageBackendsPage() {
     else void runBulk(action);
   };
 
+  // The backends a bulk disable reaches, by id: those of the selection that
+  // are enabled now, which runBulk disables and the rest it skips. Listed,
+  // not typed: enabling them again undoes it.
+  const disableIds = backends
+    .filter((b) => selected.has(b.backendId) && applies(b, "disable"))
+    .map((b) => b.backendId);
+  const disableAffected: Affected = {
+    heading: `${disableIds.length} ${disableIds.length === 1 ? "backend" : "backends"} to disable`,
+    items: disableIds,
+  };
+
   const confirmDisableNow = async () => {
     const target = confirmDisable;
     setConfirmDisable(null);
@@ -358,34 +364,69 @@ export default function StorageBackendsPage() {
     else if (target) await runRow(target, "disable");
   };
 
-  const hasFilters = search.trim() !== "" || state !== "all";
+  const hasFilters = search.trim() !== "" || facets.active > 0;
+  // The empty state's way back when the search and the facets hid every row.
+  const clearFilters = () => {
+    setSearch("");
+    facets.clear();
+  };
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
+  // "All" is every row on screen: selecting all while the list is narrowed
+  // to the disabled backends selects those on this page, not the ones the
+  // facets hide or another page holds.
+  const onScreen = paged.rows;
   const allSelected =
-    backends.length > 0 && backends.every((b) => selected.has(b.backendId));
+    onScreen.length > 0 && onScreen.every((b) => selected.has(b.backendId));
+
+  // Tiles of the page the table would show, or a summary of every row it
+  // pages through; the table itself while there are none, so loading, a
+  // failure and an empty list read as it says them.
+  const showRows = sorted.length > 0 && !listError;
+  const otherView =
+    showRows && view === "tiles" ? (
+      <BackendTiles backends={paged.rows} />
+    ) : showRows && view === "summary" ? (
+      <BackendSummary backends={sorted} />
+    ) : undefined;
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
       <ListPage
-        header={
-          <PageHeader
-            title="Storage Backends"
-            description="Physical S3-compatible targets. Buckets and tenants bind here."
-            showDefaultActions={false}
-            actions={
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <PlusIcon className="size-4" />
-                New backend
-              </Button>
-            }
-          />
+        // A summary counts every row, so it has no pages to step through.
+        footer={
+          view === "summary" ? undefined : (
+            <TablePagination {...paged.pagination} />
+          )
         }
+        header={
+          <>
+            <PageHeader
+              title="Storage Backends"
+              description="Physical S3-compatible targets. Buckets and tenants bind here."
+              showDefaultActions={false}
+              actions={
+                <>
+                  <ViewModeSwitcher value={view} onChange={setView} />
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <PlusIcon className="size-4" />
+                    New backend
+                  </Button>
+                </>
+              }
+            />
+            <StatusBar segments={tallyStatus(sorted, backendStatus)} />
+          </>
+        }
+        view={otherView}
         toolbar={
           <TableToolbar
             query={search}
             onQueryChange={setSearch}
             searchLabel="Search storage backends"
             placeholder="Search by ID, name, region, endpoint…"
+            facets={facets.controls}
+            count={{ shown: sorted.length, total: backends.length }}
             actions={
               <>
                 <Button
@@ -400,23 +441,7 @@ export default function StorageBackendsPage() {
                 </Button>
               </>
             }
-          >
-            <SelectRoot
-              value={state}
-              onValueChange={(v) => setState(v as StateFilter)}
-            >
-              <SelectTrigger aria-label="Filter by state" className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATE_FILTERS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STATE_FILTER_LABELS[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </SelectRoot>
-          </TableToolbar>
+          />
         }
       >
         <Table>
@@ -429,7 +454,7 @@ export default function StorageBackendsPage() {
                   onCheckedChange={(v) =>
                     setSelected(
                       v === true
-                        ? new Set(backends.map((b) => b.backendId))
+                        ? new Set(onScreen.map((b) => b.backendId))
                         : new Set(),
                     )
                   }
@@ -475,7 +500,7 @@ export default function StorageBackendsPage() {
                 : null
             }
             empty={
-              backends.length === 0
+              sorted.length === 0
                 ? {
                     icon: CloudIcon,
                     what: "storage backends",
@@ -487,6 +512,7 @@ export default function StorageBackendsPage() {
                       pending: searchPending,
                       filtered: hasFilters,
                     }),
+                    onClearFilters: clearFilters,
                     purpose:
                       "A storage backend is an S3-compatible store Paladin keeps objects in.",
                     action: {
@@ -497,7 +523,7 @@ export default function StorageBackendsPage() {
                 : null
             }
           >
-            {sorted.map((b) => (
+            {onScreen.map((b) => (
               <BackendRow
                 key={b.backendId}
                 backend={b}
@@ -547,6 +573,7 @@ export default function StorageBackendsPage() {
         }
         message={DISABLE_CONSEQUENCE}
         confirmText="Disable"
+        affected={confirmDisable === "selection" ? disableAffected : undefined}
       />
 
       <BackendRegisterDialog
@@ -642,9 +669,9 @@ function BackendRow({
 
       <TableCell>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={state.variant}>{state.label}</Badge>
+          <Badge variant={STATUS_BADGE[state.tone]}>{state.label}</Badge>
           {b.maintenance && (
-            <Badge variant="warning">
+            <Badge variant="suspended">
               <WrenchScrewdriverIcon />
               Maintenance
             </Badge>
@@ -663,10 +690,7 @@ function BackendRow({
             className="inline-flex items-center gap-1.5 text-sm"
             title={health.title}
           >
-            <span
-              aria-hidden
-              className={cn("size-2 rounded-full", HEALTH_DOT[health.tone])}
-            />
+            <StatusDot tone={health.tone} />
             {health.label}
           </span>
           {compat.variant !== COMPATIBLE_VARIANT && (

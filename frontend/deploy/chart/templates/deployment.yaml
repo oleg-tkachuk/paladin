@@ -97,6 +97,21 @@ spec:
             # Read by src/proxy.ts into the CSP (src/lib/security/storageOrigins.ts).
             - name: PALADIN_STORAGE_ORIGINS
               value: {{ join "," .Values.storageOrigins | quote }}
+            {{- with .Values.banner }}
+            {{- if .content }}
+            # The platform banner, read by /api/shell (src/lib/banner.ts).
+            - name: PALADIN_BANNER_CONTENT
+              value: {{ .content | quote }}
+            - name: PALADIN_BANNER_SEVERITY
+              value: {{ .severity | default "info" | quote }}
+            - name: PALADIN_BANNER_URL
+              value: {{ .url | default "" | quote }}
+            - name: PALADIN_BANNER_PERMANENT
+              value: {{ .permanent | default false | quote }}
+            - name: PALADIN_BANNER_POSITION
+              value: {{ .position | default "top" | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.backend.tls }}
             - name: NODE_EXTRA_CA_CERTS
               value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}

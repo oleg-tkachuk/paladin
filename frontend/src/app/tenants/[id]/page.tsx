@@ -3,6 +3,9 @@
 // Tenant Overview — landing page for /tenants/<id>.
 //
 // Composition:
+//   - Status panel: health (frozen or active), quota by its fullest cap,
+//     budget, the last change and the policy layers, after Argo CD's
+//     application status panel.
 //   - Identity (slug + tenant_id + display).
 //   - Counts row: buckets it may bind to (owned or granted, ADR-0032),
 //     collections provisioned. Each tile
@@ -20,6 +23,7 @@
 import { IconChip, IconTone } from "@/components/ui/IconChip";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 import {
@@ -38,6 +42,7 @@ import { IdentityField } from "@/components/IdentityField";
 import { RelativeTime } from "@/components/RelativeTime";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { StatusPanel, type StatusCardSpec } from "@/components/ui/StatusPanel";
 import { StorageMigrationCard } from "./StorageMigrationCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -93,14 +98,18 @@ const QUICK_LINKS: Array<{
 // XXX case (no suffix), so a metering-only tenant looked like
 // "0 / 1,000" — same digits the cap had. The shared formatter
 // emits "0 units / 1,000 units" for that case.
-import {
-  formatMoney,
-  moneyPercent,
-  moneyToNanos,
-  unitOf,
-} from "@/lib/format/money";
+import { formatMoney, unitOf } from "@/lib/format/money";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { plainAction } from "@/lib/history";
+import { effectivePolicyQuery, tenantQuotaQuery } from "@/lib/queries/details";
+import {
+  budgetStanding,
+  policyStanding,
+  quotaStanding,
+  tenantHealth,
+} from "@/lib/resourceStatus";
+import { StatusTone } from "@/lib/ui/status";
 import { formatCount } from "@/lib/format/locale";
 import { errorMessage } from "@/hooks/errorContract";
 import { FOCUS_RING } from "@/lib/ui/states";
@@ -307,6 +316,16 @@ export default function TenantOverviewPage() {
           so the link is reversible. */}
       <StorageBreadcrumb />
 
+      {/* ─── Status ────────────────────────────────────────────── */}
+      <TenantStatusPanel
+        trashed={tenant.trashed}
+        tenantId={tenant.tenantId}
+        slug={tenant.slug}
+        budget={budgetLoaded ? budget : undefined}
+        lastChange={auditEntries ?? undefined}
+        lastChangeError={auditError}
+      />
+
       {/* ─── Identity ──────────────────────────────────────────── */}
       <IdentityCard tenant={tenant} />
 
@@ -407,6 +426,123 @@ export default function TenantOverviewPage() {
   );
 }
 
+// ─── status panel ───────────────────────────────────────────────
+
+/**
+ * Where the tenant stands, at the top of its overview. The budget and the
+ * last change are what the page already reads for its tile and its feed;
+ * undefined is still being read. The quota and the policy are read with the
+ * same queries as their own tabs, so a change there moves the panel too.
+ */
+function TenantStatusPanel({
+  trashed,
+  tenantId,
+  slug,
+  budget,
+  lastChange,
+  lastChangeError,
+}: {
+  trashed: boolean;
+  tenantId: string;
+  slug: string;
+  budget: TenantBudget | null | undefined;
+  lastChange: AuditLogEntry[] | undefined;
+  lastChangeError: string | null;
+}) {
+  const quota = useQuery(tenantQuotaQuery(tenantId));
+  const policy = useQuery(effectivePolicyQuery(`tenants/${tenantId}`));
+  const base = `/tenants/${slug}`;
+
+  const health = tenantHealth(trashed);
+  const cards: StatusCardSpec[] = [
+    {
+      title: "Health",
+      ...health,
+      help: "tenantTrash",
+      ...(trashed
+        ? { href: "/trash", linkLabel: "Restore it from the Trash" }
+        : {}),
+    },
+    {
+      title: "Quota",
+      ...(quota.isError
+        ? unread("The quota could not be read.")
+        : quotaStanding(quota.data?.quota ?? null)),
+      pending: quota.isPending,
+      help: "quota",
+      href: `${base}/quotas`,
+      linkLabel: "Open quotas",
+    },
+    {
+      title: "Budget",
+      ...budgetStanding(budget ?? null),
+      pending: budget === undefined,
+      href: `${base}/budget`,
+      linkLabel: "Open budget",
+    },
+    {
+      title: "Last change",
+      ...lastChangeFact(lastChange, lastChangeError),
+      pending: lastChange === undefined,
+      href: `${base}/history`,
+      linkLabel: "Open history",
+    },
+    {
+      title: "Policy",
+      ...(policy.isError
+        ? unread("The effective policy could not be read.")
+        : policyStanding(policy.data?.layers ?? [])),
+      pending: policy.isPending,
+      help: "policyLayers",
+      href: `${base}/policies`,
+      linkLabel: "Open policies",
+    },
+  ];
+  return <StatusPanel label="Tenant status" cards={cards} />;
+}
+
+/** A fact whose read failed: nobody has said, which is not a zero. */
+function unread(detail: string) {
+  return { tone: StatusTone.Unknown, value: "Unknown", detail };
+}
+
+/** The newest entry of the tenant's trail: what it was, by whom, and when. */
+function lastChangeFact(
+  entries: AuditLogEntry[] | undefined,
+  error: string | null,
+): Pick<StatusCardSpec, "tone" | "value" | "detail"> {
+  if (error) return unread("The audit trail could not be read.");
+  const last = entries?.[0];
+  if (!last) {
+    return {
+      tone: StatusTone.Unknown,
+      value: "None yet",
+      detail: "Nothing has been changed in this tenant.",
+    };
+  }
+  const failed = last.errorMessage !== "";
+  return {
+    tone: failed ? StatusTone.Danger : StatusTone.Success,
+    value: failed ? "Failed" : "Succeeded",
+    detail: (
+      <>
+        {plainAction(last.action)}
+        {last.actorSubject && (
+          <>
+            {" by "}
+            <ActorName
+              subject={last.actorSubject}
+              tenantId={last.actorTenantId}
+            />
+          </>
+        )}
+        {", "}
+        <RelativeTime ts={last.at} />
+      </>
+    ),
+  };
+}
+
 // ─── tiles ──────────────────────────────────────────────────────
 
 /** A tile's number: still counting, counted, or not countable. */
@@ -485,10 +621,8 @@ function BudgetTile({
   // non-currency metering. Avoids a misleading "$0.00" label on a tenant
   // that doesn't actually pay in USD.
   const unit = budgetUnit(budget?.budgetCeiling) || unitOf(spent);
-  // pct only makes sense under a cap; a cap of zero is full from the start.
-  const capped = cap !== undefined;
-  const pct = capped ? Math.min(100, moneyPercent(spent, cap) ?? 100) : null;
-  const overCap = capped && moneyToNanos(spent) > moneyToNanos(cap);
+  // The share and the state the status panel reads too, so the two agree.
+  const { capped, pct, overCap, tone } = budgetStanding(budget);
 
   return (
     <Link href={href} className={cn("group rounded-xl", FOCUS_RING)}>
@@ -526,11 +660,11 @@ function BudgetTile({
                     <div
                       className={cn(
                         "h-full transition-all",
-                        overCap
+                        tone === StatusTone.Danger
                           ? "bg-destructive"
-                          : pct > 80
+                          : tone === StatusTone.Warning
                             ? "bg-warning"
-                            : "bg-chart-2",
+                            : "bg-success",
                       )}
                       style={{ width: `${pct}%` }}
                     />
@@ -564,7 +698,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
       <span
         className={cn(
           "mt-1.5 size-1.5 shrink-0 rounded-full",
-          failed ? "bg-destructive" : "bg-chart-2",
+          failed ? "bg-destructive" : "bg-success",
         )}
         aria-hidden
       />

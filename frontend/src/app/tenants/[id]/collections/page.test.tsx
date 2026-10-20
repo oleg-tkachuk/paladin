@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, typeToConfirm, waitFor } from "@/test/utils";
 
 // A failed list fell through to "No Collections yet", inviting the operator to
 // create one that may already exist; the toast that said otherwise faded.
@@ -116,6 +116,7 @@ describe("TenantCollectionsPage delete", () => {
     );
     // The list now holds nothing; the confirm still names the chosen row.
     answerSearch();
+    await typeToConfirm("c1");
     await user.click(
       await screen.findByRole("button", { name: /^Delete Collection$/ }),
     );
@@ -238,6 +239,7 @@ describe("TenantCollectionsPage delete refused", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /Delete Collection/i }),
     );
+    await typeToConfirm("c1");
     await user.click(
       await screen.findByRole("button", { name: /^Delete Collection$/ }),
     );

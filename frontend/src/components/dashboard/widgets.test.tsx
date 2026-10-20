@@ -36,6 +36,7 @@ const stats = (o: {
   buckets: number;
   atLimit?: number;
   nearLimit?: number;
+  withLimits?: number;
 }) =>
   create(GetPlatformStatsResponseSchema, {
     backends: { total: n(o.backends) },
@@ -46,7 +47,11 @@ const stats = (o: {
       available: true,
       objects: { totalCount: n(1) },
       apiTokens: { total: n(1) },
-      quotas: { atLimit: n(o.atLimit ?? 0), nearLimit: n(o.nearLimit ?? 0) },
+      quotas: {
+        atLimit: n(o.atLimit ?? 0),
+        nearLimit: n(o.nearLimit ?? 0),
+        withLimits: n(o.withLimits ?? 0),
+      },
     },
   });
 
@@ -112,6 +117,22 @@ describe("QuotaAlertsWidget", () => {
     render(<QuotaAlertsWidget />);
     expect(screen.getByText("2 at their limit")).toBeInTheDocument();
     expect(screen.getByText("3 near it")).toBeInTheDocument();
+  });
+
+  // After Argo CD's status bar: the quotas with a cap, split by where they
+  // stand, so a few at their limit read against how many there are.
+  it("draws how the capped quotas split, the rest within their limits", () => {
+    h.summary.data = stats({
+      backends: 1,
+      buckets: 1,
+      atLimit: 2,
+      nearLimit: 3,
+      withLimits: 10,
+    });
+    render(<QuotaAlertsWidget />);
+    expect(
+      screen.getByRole("img", { name: "2 at limit · 3 near · 5 within" }),
+    ).toBeInTheDocument();
   });
 
   it("says when none is near", () => {

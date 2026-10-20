@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
-import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  typeToConfirm,
+  waitFor,
+  within,
+} from "@/test/utils";
 
 const DAY = 24 * 60 * 60 * 1000;
 const RETENTION_DAYS = 30;
@@ -138,6 +145,37 @@ describe("TrashPage", () => {
     expect(await screen.findAllByText("bare-slug")).toHaveLength(1);
   });
 
+  // Purge is irreversible and cascades, so it asks for the slug, as Argo CD
+  // asks for an application's name, and names what goes with the tenant.
+  const confirmPurge = async (slug: string) => {
+    await typeToConfirm(slug);
+    fireEvent.click(screen.getByRole("button", { name: "Purge permanently" }));
+  };
+
+  it("purges only once the slug is typed, and lists what goes with it", async () => {
+    h.purgeTenant.mockResolvedValue(undefined);
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const cascade = within(dialog).getByRole("list", {
+      name: "Removed with it",
+    });
+    expect(cascade).toHaveTextContent("API tokens");
+    expect(cascade).toHaveTextContent("Event subscriptions");
+    const purge = within(dialog).getByRole("button", {
+      name: "Purge permanently",
+    });
+    expect(purge).toBeDisabled();
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: /to confirm/ }),
+      { target: { value: "smoke-oldest" } },
+    );
+    expect(purge).toBeDisabled();
+    await confirmPurge("smoke-old");
+    await waitFor(() => expect(h.purgeTenant).toHaveBeenCalledWith("t-old"));
+  });
+
   // A refused purge is reported under the tenant's own row, not in a toast
   // that disappears.
   it("keeps a refused purge's reason under its row", async () => {
@@ -147,9 +185,7 @@ describe("TrashPage", () => {
     render(<TrashPage />);
     await screen.findByText("Older");
     fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Purge permanently" }),
-    );
+    await confirmPurge("smoke-old");
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Purge refused.");
@@ -168,9 +204,7 @@ describe("TrashPage", () => {
     await screen.findByText("Older");
     for (let i = 0; i < 2; i++) {
       fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Purge permanently" }),
-      );
+      await confirmPurge("smoke-old");
       await waitFor(() => expect(h.purgeTenant).toHaveBeenCalledTimes(i + 1));
     }
     await waitFor(() =>

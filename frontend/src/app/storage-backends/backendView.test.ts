@@ -1,71 +1,96 @@
 import { describe, expect, it } from "vitest";
 
+import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import { countOptions, filterByFacets } from "@/lib/table/facets";
+
 import {
+  BACKEND_FACETS,
   HEALTH_ERROR,
   HEALTH_OK,
-  STATE_FILTERS,
-  allOf,
+  backendStatus,
   healthView,
   lifecycleState,
-  stateFilter,
 } from "./backendView";
 
-describe("stateFilter", () => {
-  it.each([
-    ["all", ""],
-    ["active", "enabled == true && read_only == false"],
-    ["draining", "enabled == true && read_only == true"],
-    ["maintenance", "maintenance == true"],
-    ["disabled", "enabled == false"],
-  ] as const)("%s → %s", (choice, cel) => {
-    expect(stateFilter(choice)).toBe(cel);
-  });
+const backend = (over: Partial<StorageBackend>) =>
+  ({
+    enabled: true,
+    readOnly: false,
+    maintenance: false,
+    healthStatus: "",
+    healthMessage: "",
+    ...over,
+  }) as StorageBackend;
 
-  // A disjunction pushes nothing down (src/lib/cel.ts); every choice must
-  // stay a conjunction so it can sit in the same && chain as the search.
-  it("never builds a disjunction", () => {
-    for (const choice of STATE_FILTERS) {
-      expect(stateFilter(choice)).not.toContain("||");
-    }
-  });
-});
+const [STATE, HEALTH] = BACKEND_FACETS;
 
-describe("allOf", () => {
-  it("joins the non-empty conjuncts", () => {
-    expect(allOf('search.contains("eu")', "enabled == false")).toBe(
-      'search.contains("eu") && enabled == false',
+describe("BACKEND_FACETS", () => {
+  const rows = [
+    backend({ healthStatus: HEALTH_OK }),
+    backend({ readOnly: true, maintenance: true, healthStatus: HEALTH_ERROR }),
+    backend({ enabled: false }),
+  ];
+
+  it("counts a backend in maintenance under its state as well", () => {
+    const counts = Object.fromEntries(
+      countOptions(rows, STATE, []).map((o) => [o.value, o.count]),
     );
+    expect(counts).toEqual({
+      enabled: 1,
+      draining: 1,
+      disabled: 1,
+      maintenance: 1,
+    });
   });
 
-  it("drops empty ones, and is empty when all are", () => {
-    expect(allOf("", "maintenance == true", "")).toBe("maintenance == true");
-    expect(allOf("", "")).toBe("");
+  it("names every health a probe can leave", () => {
+    expect(
+      countOptions(rows, HEALTH, []).map((o) => [o.label, o.count]),
+    ).toEqual([
+      ["Healthy", 1],
+      ["Probe failed", 1],
+      ["Untested", 1],
+    ]);
+  });
+
+  it("keeps a backend giving any chosen state, and passing every facet", () => {
+    expect(
+      filterByFacets(rows, BACKEND_FACETS, {
+        state: ["disabled", "maintenance"],
+      }),
+    ).toEqual([rows[1], rows[2]]);
+    expect(
+      filterByFacets(rows, BACKEND_FACETS, {
+        state: ["disabled", "maintenance"],
+        health: [HEALTH_ERROR],
+      }),
+    ).toEqual([rows[1]]);
   });
 });
 
 describe("lifecycleState", () => {
   it.each([
     [{ enabled: true, readOnly: false }, "Enabled", "success"],
-    [{ enabled: true, readOnly: true }, "Draining", "warning"],
-    [{ enabled: false, readOnly: false }, "Disabled", "destructive"],
+    [{ enabled: true, readOnly: true }, "Draining", "progress"],
+    [{ enabled: false, readOnly: false }, "Disabled", "suspended"],
     // A disabled backend refuses everything; draining adds nothing.
-    [{ enabled: false, readOnly: true }, "Disabled", "destructive"],
-  ])("%o → %s", (flags, label, variant) => {
-    expect(lifecycleState(flags)).toEqual({ label, variant });
+    [{ enabled: false, readOnly: true }, "Disabled", "suspended"],
+  ])("%o → %s", (flags, label, tone) => {
+    expect(lifecycleState(flags)).toEqual({ label, tone });
   });
 });
 
 describe("healthView", () => {
   it("is healthy after a successful probe", () => {
     expect(healthView({ healthStatus: HEALTH_OK, healthMessage: "" })).toEqual(
-      expect.objectContaining({ label: "Healthy", tone: "ok" }),
+      expect.objectContaining({ label: "Healthy", tone: "success" }),
     );
   });
 
   it("carries the probe's error as its explanation", () => {
     expect(
       healthView({ healthStatus: HEALTH_ERROR, healthMessage: "refused" }),
-    ).toEqual({ label: "Probe failed", tone: "error", title: "refused" });
+    ).toEqual({ label: "Probe failed", tone: "danger", title: "refused" });
   });
 
   it("falls back to a generic explanation when the probe left none", () => {
@@ -80,5 +105,27 @@ describe("healthView", () => {
         expect.objectContaining({ label: "Untested", tone: "unknown" }),
       );
     }
+  });
+});
+
+describe("backendStatus", () => {
+  const healthy = {
+    enabled: true,
+    readOnly: false,
+    maintenance: false,
+    healthStatus: HEALTH_OK,
+    healthMessage: "",
+  };
+
+  it.each([
+    [{}, "Healthy", "success"],
+    // A failed probe on an enabled backend is what needs the look.
+    [{ healthStatus: HEALTH_ERROR }, "Probe failed", "danger"],
+    [{ enabled: false }, "Disabled", "suspended"],
+    [{ maintenance: true }, "Maintenance", "suspended"],
+    [{ readOnly: true }, "Draining", "progress"],
+    [{ healthStatus: "" }, "Untested", "unknown"],
+  ])("%o → %s", (change, label, tone) => {
+    expect(backendStatus({ ...healthy, ...change })).toEqual({ label, tone });
   });
 });

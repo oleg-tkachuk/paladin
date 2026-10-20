@@ -63,6 +63,7 @@ vi.mock("@/components/layout/PageHeader", () => ({
 
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { renderWithActions } from "@/test/withActions";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import TenantsPage from "./page";
 
 beforeEach(() => {
@@ -170,7 +171,7 @@ describe("TenantsPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /Actions for t-1/i }),
     );
-    await userEvent.click(screen.getByText("Edit display name"));
+    await userEvent.click(screen.getByText("Edit tenant"));
     const input = await screen.findByLabelText("Display name");
     await userEvent.clear(input);
     await userEvent.type(input, "Acme Renamed");
@@ -183,6 +184,34 @@ describe("TenantsPage", () => {
         {},
       ),
     );
+  });
+
+  // A notice in the labels reads as a glyph beside the slug, not as label
+  // badges; the tenant's other labels still show.
+  it("marks a tenant that carries a notice", () => {
+    h.state.tenants = [
+      {
+        tenantId: "t-1",
+        slug: "acme",
+        displayName: "Acme Corp",
+        labels: {
+          team: "storage",
+          "notice.paladin.io/content": "Moving to the new backend",
+          "notice.paladin.io/severity": "warning",
+        },
+        resourceVersion: "7",
+      },
+    ];
+    render(
+      <TooltipProvider>
+        <TenantsPage />
+      </TooltipProvider>,
+    );
+    expect(
+      screen.getByRole("img", { name: "Warning: Moving to the new backend" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("team=storage")).toBeInTheDocument();
+    expect(screen.queryByText(/notice\.paladin\.io/)).not.toBeInTheDocument();
   });
 
   it("deletes a tenant through the row menu + confirmation", async () => {
@@ -240,6 +269,83 @@ describe("TenantsPage load failure", () => {
   it("still says 'none yet' when the list really is empty", () => {
     render(<TenantsPage />);
     expect(screen.getByText("No tenants yet.")).toBeInTheDocument();
+  });
+});
+
+describe("TenantsPage views", () => {
+  const tenants = () => [
+    {
+      tenantId: "t-1",
+      slug: "acme",
+      displayName: "Acme Corp",
+      storageLayout: "dedicated",
+      defaultBucket: "storageBackends/primary/buckets/paladin-t-1",
+      labels: { team: "storage" },
+      resourceVersion: "1",
+    },
+    {
+      tenantId: "t-2",
+      slug: "globex",
+      displayName: "Globex",
+      storageLayout: "shared",
+      defaultBucket: "storageBackends/primary/buckets/pool",
+      labels: {
+        "notice.paladin.io/content": "Read-only until Friday",
+        "notice.paladin.io/severity": "critical",
+      },
+      resourceVersion: "1",
+    },
+  ];
+  const renderPage = () =>
+    render(
+      <TooltipProvider>
+        <TenantsPage />
+      </TooltipProvider>,
+    );
+  beforeEach(() => window.history.replaceState(null, "", "/tenants"));
+  afterEach(() => window.history.replaceState(null, "", "/tenants"));
+
+  it("tallies the tenants' states above the list", () => {
+    h.state.tenants = tenants();
+    renderPage();
+    expect(
+      screen.getByRole("img", { name: "1 Critical notice · 1 Active" }),
+    ).toBeInTheDocument();
+  });
+
+  it("lays the tenants out as tiles with links into each", async () => {
+    h.state.tenants = tenants();
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: "Tiles" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const tiles = within(screen.getByRole("list", { name: "Tenants" }));
+    expect(tiles.getAllByRole("listitem")).toHaveLength(2);
+    expect(tiles.getByRole("link", { name: "Globex" })).toHaveAttribute(
+      "href",
+      "/tenants/globex",
+    );
+    expect(tiles.getAllByRole("link", { name: "Quotas" })[0]).toHaveAttribute(
+      "href",
+      "/tenants/acme/quotas",
+    );
+    expect(window.location.search).toBe("?view=tiles");
+  });
+
+  it("opens in the view a link names, as a summary of the tenants", () => {
+    window.history.replaceState(null, "", "/tenants?view=summary");
+    h.state.tenants = tenants();
+    renderPage();
+    const layout = screen
+      .getByRole("heading", { name: "Storage layout" })
+      .closest("[data-slot=card]") as HTMLElement;
+    expect(
+      within(layout)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Dedicated (1)", "Shared (1)"]);
+    expect(
+      screen.getByRole("heading", { name: "Default backend" }),
+    ).toBeInTheDocument();
   });
 });
 

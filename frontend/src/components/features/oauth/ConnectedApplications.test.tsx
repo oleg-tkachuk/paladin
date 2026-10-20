@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
 
 const h = vi.hoisted(() => ({
   list: vi.fn(),
@@ -74,27 +75,30 @@ describe("ConnectedApplications", () => {
     expect(
       within(await row(WRITER.clientId)).getByText("read & write"),
     ).toBeInTheDocument();
+    // The state facet counts every state, so the ended grants come too.
     expect(h.list).toHaveBeenCalledWith(
-      { name: USER, includeInactive: false },
+      { name: USER, includeInactive: true },
       expect.anything(),
     );
   });
 
-  it("asks for ended grants only when a state other than active is chosen", async () => {
-    h.list.mockImplementation(({ includeInactive }) =>
-      Promise.resolve({
-        grants: includeInactive ? [GRANT, REVOKED, EXPIRED] : [GRANT],
-      }),
-    );
+  it("shows the live grants first, and the ended ones under their state", async () => {
+    h.list.mockResolvedValue({ grants: [GRANT, REVOKED, EXPIRED] });
     render(<ConnectedApplications userName={USER} own />);
     await row(GRANT.clientId);
+    expect(shownClients()).toEqual([GRANT.clientId]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
-    expect(await row(REVOKED.clientId)).toBeInTheDocument();
-    expect(h.list).toHaveBeenLastCalledWith(
-      { name: USER, includeInactive: true },
-      expect.anything(),
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state, 1 chosen" }),
     );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Active/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Revoked/ }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(await row(REVOKED.clientId)).toBeInTheDocument();
     expect(shownClients()).toEqual([REVOKED.clientId]);
     // An ended grant shows its state, and offers nothing to revoke.
     const revoked = await row(REVOKED.clientId);
@@ -103,7 +107,10 @@ describe("ConnectedApplications", () => {
       within(revoked).queryByRole("button", { name: "Revoke" }),
     ).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state, 1 chosen" }),
+    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
     await waitFor(() => expect(shownClients()).toHaveLength(3));
     expect(screen.getByText("3 shown")).toBeInTheDocument();
   });
@@ -120,7 +127,7 @@ describe("ConnectedApplications", () => {
     expect(screen.getByText("1 of 2")).toBeInTheDocument();
     fireEvent.change(search, { target: { value: "nothing-like-it" } });
     expect(
-      screen.getByText("No application matches the search."),
+      screen.getByText(/No application matches your filters\./),
     ).toBeInTheDocument();
   });
 

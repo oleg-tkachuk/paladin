@@ -38,6 +38,8 @@ const ALLOWED: Record<string, string> = {
     "tenant names label bucket rows; a failed read falls back to the id",
   "app/tenants/[id]/buckets/page.tsx::useTenants":
     "tenant names label bucket rows; a failed read falls back to the id",
+  "app/storage-backends/[backendId]/history/page.tsx::useBackends":
+    "the backend only names the header; a failed read shows its id, and the history is read on its own",
   "app/storage-backends/[backendId]/buckets/[bucketId]/collections/page.tsx::useTenants":
     "tenant names label the groups; a failed read falls back to the id",
 };

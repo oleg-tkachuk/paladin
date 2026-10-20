@@ -12,6 +12,8 @@ import {
   type Density,
   type TablePrefs,
 } from "@/lib/preferences/tablePrefs";
+import type { PageSize } from "@/lib/table/paging";
+import { DEFAULT_VIEW_MODE, type ViewMode } from "@/lib/table/viewMode";
 
 const asStored = (raw: unknown) => raw;
 
@@ -38,5 +40,12 @@ export function useTablePrefs(tableId: string) {
     toggleColumn: (column: string) => change((p) => toggleHidden(p, column)),
     saveSort: (sort: DefaultSort) => change((p) => ({ ...p, sort })),
     clearSort: () => change((p) => ({ ...p, sort: undefined })),
+    setPageSize: (pageSize: PageSize) => change((p) => ({ ...p, pageSize })),
+    // The default view is left out, as an unset one.
+    saveView: (view: ViewMode) =>
+      change((p) => ({
+        ...p,
+        view: view === DEFAULT_VIEW_MODE ? undefined : view,
+      })),
   };
 }

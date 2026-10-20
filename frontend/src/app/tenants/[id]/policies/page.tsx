@@ -10,7 +10,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 
-import { collectionClient, policyClient } from "@/lib/connect/client";
+import { collectionClient } from "@/lib/connect/client";
+import { effectivePolicyQuery } from "@/lib/queries/details";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
 import { PolicyLayers } from "@/components/features/policy/PolicyLayers";
@@ -56,11 +57,7 @@ export default function TenantPoliciesPage() {
       label: `Collection ${c.collection}`,
     })),
   ];
-  const effective = useQuery({
-    queryKey: ["effective-policy", resourceName],
-    queryFn: ({ signal }) =>
-      policyClient.getEffectivePolicy({ resourceName }, { signal }),
-  });
+  const effective = useQuery(effectivePolicyQuery(resourceName));
 
   return (
     <div className="space-y-4">

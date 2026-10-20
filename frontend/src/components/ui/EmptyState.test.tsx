@@ -48,4 +48,41 @@ describe("EmptyState", () => {
       expect(screen.queryByText("x")).toBeNull();
     },
   );
+
+  it("offers to clear the filters when they hid every row", async () => {
+    const onClearFilters = vi.fn();
+    render(
+      <EmptyState
+        icon={ArchiveBoxIcon}
+        what="buckets"
+        reason="filtered"
+        action={action()}
+        onClearFilters={onClearFilters}
+      />,
+    );
+    expect(
+      screen.getByText("No buckets match your filters."),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear filters" }),
+    );
+    expect(onClearFilters).toHaveBeenCalled();
+  });
+
+  it.each(["empty", "pending"] as const)(
+    "offers no clear while %s: nothing is hidden yet",
+    (reason) => {
+      render(
+        <EmptyState
+          icon={ArchiveBoxIcon}
+          what="buckets"
+          reason={reason}
+          onClearFilters={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByRole("button", { name: "Clear filters" }),
+      ).toBeNull();
+    },
+  );
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -237,5 +237,194 @@ describe("ConfirmModal", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("refused");
     rerender(<ConfirmModal {...props} onConfirm={vi.fn()} />);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("ConfirmModal typed confirmation", () => {
+  const typed = {
+    ...baseProps,
+    type: "danger" as const,
+    confirmText: "Delete bucket",
+    typeToConfirm: "media-eu",
+  };
+  const field = () => screen.getByRole("textbox", { name: /to confirm/ });
+  const confirmButton = () =>
+    screen.getByRole("button", { name: "Delete bucket" });
+
+  it("asks for nothing to be typed unless typeToConfirm is given", () => {
+    render(
+      <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("names what to type in the field's label and says how it is matched", () => {
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={vi.fn()} />);
+    expect(field()).toHaveAccessibleName("Type media-eu to confirm");
+    expect(field()).toHaveAccessibleDescription(
+      "It has to match exactly, capitals included.",
+    );
+  });
+
+  it("takes the focus when the dialog opens", () => {
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={vi.fn()} />);
+    expect(field()).toHaveFocus();
+  });
+
+  it("holds the confirm button until the text matches exactly", async () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={onConfirm} />);
+    expect(confirmButton()).toBeDisabled();
+    await userEvent.type(field(), "media-e");
+    expect(confirmButton()).toBeDisabled();
+    await userEvent.type(field(), "u");
+    expect(confirmButton()).toBeEnabled();
+    await userEvent.click(confirmButton());
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("matches case-sensitively", async () => {
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={vi.fn()} />);
+    await userEvent.type(field(), "MEDIA-EU");
+    expect(confirmButton()).toBeDisabled();
+  });
+
+  // A name copied from the table often brings a space or a newline along.
+  it("lets go of whitespace at either end, and only there", async () => {
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={vi.fn()} />);
+    await userEvent.type(field(), "  media-eu ");
+    expect(confirmButton()).toBeEnabled();
+    await userEvent.clear(field());
+    await userEvent.type(field(), "media -eu");
+    expect(confirmButton()).toBeDisabled();
+  });
+
+  it("confirms on Enter only once the text matches", async () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={onConfirm} />);
+    await userEvent.type(field(), "media{Enter}");
+    expect(onConfirm).not.toHaveBeenCalled();
+    await userEvent.type(field(), "-eu{Enter}");
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("does not confirm on Enter while the action runs", async () => {
+    const onConfirm = vi.fn(() => new Promise<void>(() => {}));
+    render(<ConfirmModal {...typed} onClose={vi.fn()} onConfirm={onConfirm} />);
+    await userEvent.type(field(), "media-eu{Enter}");
+    await userEvent.type(field(), "{Enter}");
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("still holds the button while confirmDisabled, whatever is typed", async () => {
+    render(
+      <ConfirmModal
+        {...typed}
+        confirmDisabled
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    await userEvent.type(field(), "media-eu");
+    expect(confirmButton()).toBeDisabled();
+  });
+
+  it("starts empty each time it opens", async () => {
+    const props = { ...typed, onClose: vi.fn(), onConfirm: vi.fn() };
+    const { rerender } = render(<ConfirmModal {...props} />);
+    await userEvent.type(field(), "media-eu");
+    rerender(<ConfirmModal {...props} isOpen={false} />);
+    rerender(<ConfirmModal {...props} />);
+    expect(field()).toHaveValue("");
+    expect(confirmButton()).toBeDisabled();
+  });
+
+  it("starts empty when it names another target", async () => {
+    const props = { ...typed, onClose: vi.fn(), onConfirm: vi.fn() };
+    const { rerender } = render(<ConfirmModal {...props} />);
+    await userEvent.type(field(), "media-eu");
+    rerender(<ConfirmModal {...props} typeToConfirm="media-us" />);
+    expect(field()).toHaveValue("");
+    expect(field()).toHaveAccessibleName("Type media-us to confirm");
+  });
+});
+
+describe("ConfirmModal affected list", () => {
+  const list = () => screen.getByRole("list", { name: "7 backends" });
+
+  it("lists nothing unless affected is given", () => {
+    render(
+      <ConfirmModal {...baseProps} onClose={vi.fn()} onConfirm={vi.fn()} />,
+    );
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+
+  it("names every item when there are few", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        affected={{ heading: "2 backends", items: ["b1", "b2"] }}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const items = screen.getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual(["b1", "b2"]);
+  });
+
+  it("names the first five and counts the rest", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        affected={{
+          heading: "7 backends",
+          items: ["b1", "b2", "b3", "b4", "b5", "b6", "b7"],
+        }}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const items = within(list()).getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual([
+      "b1",
+      "b2",
+      "b3",
+      "b4",
+      "b5",
+      "and 2 more",
+    ]);
+  });
+
+  // A selection can reach past the rows the page has loaded.
+  it("counts a total beyond the names it was given", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        affected={{ heading: "7 backends", items: ["b1", "b2"], total: 7 }}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(within(list()).getByText("and 5 more")).toBeInTheDocument();
+  });
+
+  it("sits between the warning and the buttons", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        warning="No trash."
+        affected={{ heading: "7 backends", items: ["b1"] }}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("note").compareDocumentPosition(list())).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(
+      list().compareDocumentPosition(
+        screen.getByRole("button", { name: "Cancel" }),
+      ),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 });

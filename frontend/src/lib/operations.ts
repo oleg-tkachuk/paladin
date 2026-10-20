@@ -14,6 +14,7 @@ import {
   type OpProgress,
 } from "@/lib/operationProgress";
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
+import { StatusTone } from "@/lib/ui/status";
 
 export type OpStatus =
   "pending" | "running" | "succeeded" | "failed" | "cancelled";
@@ -75,14 +76,32 @@ export function operationLabel(op: Operation): string {
     case OP_BATCH_RESTORE:
       return "Restore from trash";
     default:
-      // An unknown type, split at its capitals: "MigrateTenantStorageLayout"
-      // reads "Migrate tenant storage layout".
-      return (op.type || "Operation")
-        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-        .replace(/^./, (c) => c.toUpperCase())
-        .replace(/ ([A-Z])/g, (_, c: string) => ` ${c.toLowerCase()}`);
+      return camelWords(op.type || "Operation");
   }
 }
+
+/**
+ * A CamelCase name in words, split at its capitals and in sentence case:
+ * "MigrateTenantStorageLayout" reads "Migrate tenant storage layout".
+ */
+export function camelWords(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/ ([A-Z])/g, (_, c: string) => ` ${c.toLowerCase()}`);
+}
+
+/**
+ * Each state in the console's status vocabulary: queued and running are a
+ * change under way, a cancelled operation a stop someone chose.
+ */
+export const OP_STATUS_TONE: Record<OpStatus, StatusTone> = {
+  pending: StatusTone.Progress,
+  running: StatusTone.Progress,
+  succeeded: StatusTone.Success,
+  failed: StatusTone.Danger,
+  cancelled: StatusTone.Suspended,
+};
 
 /** A collection named "tenants/{tenant}/collections/{name}", in parts. */
 export function parseCollectionName(

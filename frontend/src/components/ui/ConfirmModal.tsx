@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import {
   ExclamationTriangleIcon,
   TrashIcon,
@@ -11,12 +11,36 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/hooks/errorContract";
+import { formatCount } from "@/lib/format/locale";
 import { cn } from "@/lib/utils";
 import { PRESSED } from "@/lib/ui/states";
 
 /** What the dialog says when the action failed and gave no reason. */
 export const CONFIRM_FAILED = "The action failed.";
+
+/** How many affected names are listed before the rest become a count. */
+const AFFECTED_SHOWN = 5;
+
+/**
+ * What an action removes or changes, listed in the dialog so the operator
+ * reads the names rather than a number: the backends a bulk disable reaches,
+ * the objects a purge destroys.
+ */
+export interface Affected {
+  /** The list's heading, with its count: "3 backends", "Removed with it". */
+  heading: string;
+  /** The names, in the order shown; only the first few are listed. */
+  items: readonly string[];
+  /**
+   * How many there are, when the names given are not all of them; the rest
+   * are counted in "and N more".
+   */
+  total?: number;
+  /** Names are set in monospace, as identifiers are; off for prose. */
+  mono?: boolean;
+}
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -37,6 +61,17 @@ interface ConfirmModalProps {
   confirmDisabled?: boolean;
   cancelText?: string;
   loading?: boolean;
+  // The exact text the operator types before the confirm button enables, as
+  // Argo CD asks for an application's name before deleting it. Given for an
+  // action nothing in the console can undo: a purge, a delete with no trash,
+  // a credential's revoke. It is the target's name where it has one an
+  // operator knows it by (a slug, a bucket, a Collection, a backend, a user),
+  // and the action's verb where it does not (an object key, an opaque id, a
+  // selection): pasting an id copied from the row proves nothing, and a
+  // selection's count changes as rows are ticked.
+  typeToConfirm?: string;
+  // What the action reaches, listed by name; see Affected.
+  affected?: Affected;
 }
 
 // Colours are theme tokens, like every other dialog's: the fixed dark hex and
@@ -59,6 +94,8 @@ export function ConfirmModal({
   confirmDisabled = false,
   cancelText = "Cancel",
   loading = false,
+  typeToConfirm,
+  affected,
 }: ConfirmModalProps) {
   // Held while onConfirm runs, so a second click cannot start the action
   // twice even when the caller passes no loading state of its own.
@@ -73,6 +110,24 @@ export function ConfirmModal({
     reason: string;
   } | null>(null);
   const reason = failure?.action === onConfirm ? failure.reason : null;
+
+  // What the operator has typed, emptied whenever the dialog opens, closes or
+  // names another target: a match typed for one bucket must not stand for
+  // the next. Adjusted during render rather than in an effect, so no frame
+  // shows the old text holding the button enabled.
+  const [typed, setTyped] = useState("");
+  const [typedFor, setTypedFor] = useState({ isOpen, typeToConfirm });
+  if (typedFor.isOpen !== isOpen || typedFor.typeToConfirm !== typeToConfirm) {
+    setTypedFor({ isOpen, typeToConfirm });
+    setTyped("");
+  }
+  // Exact and case-sensitive, as the names are. Only the whitespace a paste
+  // brings along at either end is let go, since no name begins or ends in it.
+  const typedMatches =
+    typeToConfirm === undefined || typed.trim() === typeToConfirm;
+  const typedRef = useRef<HTMLInputElement>(null);
+  const typedId = useId();
+  const canConfirm = !busy && !confirmDisabled && typedMatches;
 
   const handleConfirm = async () => {
     setRunning(true);
@@ -100,6 +155,14 @@ export function ConfirmModal({
       <AlertDialogContent
         overlayClassName="z-100"
         className="z-100 max-w-sm rounded-[2rem] border border-border bg-popover shadow-overlay p-8 gap-6"
+        // The typed field is what has to be filled before anything else
+        // works, so it takes the focus; otherwise the first control would,
+        // which may be an option the action takes.
+        onOpenAutoFocus={(e) => {
+          if (!typedRef.current) return;
+          e.preventDefault();
+          typedRef.current.focus();
+        }}
       >
         <div className="flex flex-col items-center text-center space-y-4">
           <div
@@ -141,7 +204,44 @@ export function ConfirmModal({
             <div>{warning}</div>
           </div>
         )}
+        {affected && <AffectedList {...affected} />}
         {children}
+        {typeToConfirm !== undefined && (
+          <div className="space-y-1.5 text-left">
+            <label
+              htmlFor={typedId}
+              className="block text-xs leading-relaxed text-muted-foreground"
+            >
+              Type{" "}
+              <span className="font-mono font-semibold break-all text-foreground">
+                {typeToConfirm}
+              </span>{" "}
+              to confirm
+            </label>
+            <Input
+              ref={typedRef}
+              id={typedId}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              // Enter confirms only once the text matches; before that it
+              // does nothing, rather than acting on a half-typed name.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                if (canConfirm) void handleConfirm();
+              }}
+              aria-describedby={`${typedId}-hint`}
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="font-mono"
+            />
+            <p id={`${typedId}-hint`} className="text-xs text-muted-foreground">
+              It has to match exactly, capitals included.
+            </p>
+          </div>
+        )}
         {reason && (
           <p
             role="alert"
@@ -160,7 +260,7 @@ export function ConfirmModal({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={busy || confirmDisabled}
+            disabled={!canConfirm}
             className={cn(
               "flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50",
               PRESSED,
@@ -174,5 +274,44 @@ export function ConfirmModal({
         </div>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+// The names an action reaches, a few at most and then how many more: enough
+// to recognise the selection by, without the dialog outgrowing the screen.
+function AffectedList({ heading, items, total, mono = true }: Affected) {
+  const headingId = useId();
+  const shown = items.slice(0, AFFECTED_SHOWN);
+  const more = Math.max(total ?? 0, items.length) - shown.length;
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-left">
+      <p id={headingId} className="text-xs font-semibold text-foreground">
+        {heading}
+      </p>
+      <ul
+        aria-labelledby={headingId}
+        className={cn(
+          "mt-1.5 space-y-0.5 text-xs text-muted-foreground",
+          mono && "font-mono",
+        )}
+      >
+        {/* An identifier is cut to one line, whole on hover, so a long
+            object key does not stretch the dialog; prose wraps. */}
+        {shown.map((item, i) => (
+          <li
+            key={`${i}:${item}`}
+            className={mono ? "truncate" : undefined}
+            title={mono ? item : undefined}
+          >
+            {item}
+          </li>
+        ))}
+        {more > 0 && (
+          <li className="font-sans tabular-nums">
+            and {formatCount(more)} more
+          </li>
+        )}
+      </ul>
+    </div>
   );
 }

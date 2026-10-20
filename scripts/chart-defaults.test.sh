@@ -235,6 +235,20 @@ if helm template paladin-console "$CONSOLE_CHART" --set "storageOrigins={$STORAG
     bad "console: a storage origin with a path was not refused"
 fi
 
+# The platform banner reaches the BFF's environment, which /api/shell reads on
+# every poll; none is set by default.
+check "console: no banner by default" "$(console_env defaults PALADIN_BANNER_CONTENT)" ""
+console banner --set "banner.content=Maintenance tonight" --set banner.severity=warning \
+    --set banner.permanent=true --set banner.position=both
+check "console: banner content" "$(console_env banner PALADIN_BANNER_CONTENT)" "Maintenance tonight"
+check "console: banner severity" "$(console_env banner PALADIN_BANNER_SEVERITY)" "warning"
+check "console: banner permanent" "$(console_env banner PALADIN_BANNER_PERMANENT)" "true"
+check "console: banner position" "$(console_env banner PALADIN_BANNER_POSITION)" "both"
+cases=$((cases + 1))
+if helm template paladin-console "$CONSOLE_CHART" --set banner.severity=urgent >/dev/null 2>&1; then
+    bad "console: an unknown banner severity was not refused"
+fi
+
 # Readiness asks the console process, not the role fan-out. /api/health/all
 # feeds the /health page and answers 200 whatever the roles say, so as a probe
 # it never measured the upstreams — only whether six fetches fit the kubelet's

@@ -39,8 +39,9 @@ import { Select } from "@/components/ui/Select";
 import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
 import { IssueCapabilityDialog } from "./IssueCapabilityDialog";
-import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
-import { useLinkedRow } from "@/hooks/useLinkedRow";
+import { CapabilityDetailsPanel } from "./CapabilityDetailsPanel";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
+import { openableRow } from "@/components/ui/RecordDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
@@ -310,14 +311,15 @@ export default function CapabilitiesPage() {
   };
 
   // ── details ─────────────────────────────────────────────────────────
-  // Read-only "everything we know about this capability" dialog,
-  // opened from the row's kebab menu. Mirrors what the List response
-  // already carries plus the usage snapshot we've already fetched —
-  // no extra RPC. Token plaintext is NOT shown (the issuer keeps no
-  // copy by design; only the freshly-issued reveal panel sees it).
-  // The capability open in it is in the URL (?id=), so the audit log can
-  // link to one and an open one's address is its link.
-  const linked = useLinkedRow();
+  // Read-only "everything we know about this capability" panel, opened
+  // from a row or its kebab menu, beside the list. Mirrors what the List
+  // response already carries plus the usage snapshot we've already
+  // fetched, and the record for who issued it and why it was revoked.
+  // Token plaintext is NOT shown (the issuer keeps no copy by design; only
+  // the freshly-issued reveal panel sees it). The capability open in it is
+  // in the URL (?id=), so the audit log can link to one and an open one's
+  // address is its link.
+  const linked = useDetailPanel();
 
   // ── revoke ──────────────────────────────────────────────────────────
   const [revokeTarget, setRevokeTarget] = useState<Capability | null>(null);
@@ -327,7 +329,7 @@ export default function CapabilitiesPage() {
   const visibleItems = useMemo(() => items, [items]);
   // The audit log links by id alone; the dialog reads a capability the
   // browsed list does not hold from its record.
-  const listedTarget = items.find((c) => c.id === linked.linkedId) ?? null;
+  const listedTarget = items.find((c) => c.id === linked.openId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -519,11 +521,13 @@ export default function CapabilitiesPage() {
             ) : (
               visibleItems.map((c) => {
                 const expired = isExpired(c);
+                const row = openableRow(() => linked.open(c.id));
                 return (
                   <TableRow
                     key={c.id}
-                    className="group"
+                    {...row}
                     {...linked.rowProps(c.id)}
+                    className={cn("group", row.className)}
                   >
                     <TableCell>
                       <span
@@ -663,11 +667,10 @@ export default function CapabilitiesPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {/* Kebab menu — View details + Revoke. Click on
-                          the row's ID won't open details (the row is
-                          large and we don't want accidental dialogs);
-                          the explicit View action keeps the affordance
-                          clear. */}
+                      {/* Kebab menu — View details + Revoke. The row
+                          opens the details too: they open beside the
+                          list rather than over it, so an accidental open
+                          costs nothing. */}
                       <Dropdown align="right" width="w-44">
                         <Dropdown.Trigger
                           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -717,12 +720,13 @@ export default function CapabilitiesPage() {
         onIssued={handleIssued}
       />
 
-      {/* ─── Details dialog ────────────────────────────────────────── */}
-      <CapabilityDetailsDialog
-        id={linked.linkedId}
+      {/* ─── Details panel ─────────────────────────────────────────── */}
+      <CapabilityDetailsPanel
+        id={linked.openId}
         cap={listedTarget}
-        usageEntry={linked.linkedId ? usage.get(linked.linkedId) : undefined}
+        usageEntry={linked.openId ? usage.get(linked.openId) : undefined}
         onClose={linked.close}
+        onRevoke={setRevokeTarget}
       />
 
       {/* ─── Revoke confirm ────────────────────────────────────────── */}

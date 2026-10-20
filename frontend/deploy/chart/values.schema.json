@@ -161,6 +161,30 @@
       },
       "type": "object"
     },
+    "banner": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "critical"]
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^(https?://.+|/([^/\\\\].*)?)?$"
+        },
+        "permanent": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["top", "bottom", "both"]
+        }
+      },
+      "type": "object"
+    },
     "extraEnv": {
       "type": "array"
     },

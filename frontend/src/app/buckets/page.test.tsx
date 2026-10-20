@@ -61,6 +61,8 @@ beforeEach(() => {
   h.buckets.loading = false;
   h.buckets.refetch.mockClear();
   h.backends.backends = [];
+  // A facet chosen in one test would otherwise open the next one narrowed.
+  window.history.replaceState(null, "", "/buckets");
 });
 
 describe("BucketsPage", () => {
@@ -334,17 +336,19 @@ describe("BucketsPage sharing", () => {
     expect(screen.getByText("pool")).toBeInTheDocument();
     expect(screen.getByText("solo")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Filter by sharing" }));
     await user.click(
-      screen.getByRole("combobox", { name: "Filter by sharing" }),
+      await screen.findByRole("menuitemcheckbox", { name: "Shared, 1 row" }),
     );
-    await user.click(await screen.findByRole("option", { name: "Shared" }));
     expect(screen.getByText("pool")).toBeInTheDocument();
     expect(screen.queryByText("solo")).not.toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("combobox", { name: "Filter by sharing" }),
+      screen.getByRole("menuitemcheckbox", { name: "Shared, 1 row" }),
     );
-    await user.click(await screen.findByRole("option", { name: "Owner only" }));
+    await user.click(
+      screen.getByRole("menuitemcheckbox", { name: "Owner only, 1 row" }),
+    );
     expect(screen.queryByText("pool")).not.toBeInTheDocument();
     expect(screen.getByText("solo")).toBeInTheDocument();
   });

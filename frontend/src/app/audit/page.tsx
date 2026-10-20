@@ -1,7 +1,7 @@
 "use client";
 
 import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
-import { useLinkedRow } from "@/hooks/useLinkedRow";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -18,7 +18,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 import { searchFilter } from "@/lib/cel";
 import { useAuditStream } from "@/hooks/useAuditStream";
-import { AuditEntryDetailDialog } from "./AuditEntryDetailDialog";
 import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +47,10 @@ import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
 import { CapabilityHoverCard } from "@/components/features/hover/ResourceHoverCards";
+import {
+  AUDIT_ENTRY_TABS,
+  AuditEntryPanel,
+} from "@/components/features/audit/AuditEntryPanel";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "audit";
@@ -89,8 +92,9 @@ export default function AuditPage() {
   // rows costs one ListAuditLog, and the full entry (incl. before/after)
   // flows through the same RPC path as a manual refresh.
   // Row-click detail (GetAuditLogEntry by id) + header-triggered export.
-  // The open entry is in the URL, so an open entry's address links to it.
-  const detail = useLinkedRow();
+  // The open entry and its tab are in the URL, so an open entry's address
+  // links to it; it opens beside the log, which stays where it was.
+  const detail = useDetailPanel(AUDIT_ENTRY_TABS);
   const [exportOpen, setExportOpen] = useState(false);
 
   const [live, setLive] = useState(true);
@@ -352,11 +356,11 @@ export default function AuditPage() {
         </Table>
       </ListPage>
 
-      <AuditEntryDetailDialog
-        entryId={detail.linkedId}
-        onOpenChange={(o) => {
-          if (!o) detail.close();
-        }}
+      <AuditEntryPanel
+        entryId={detail.openId}
+        tab={detail.tab}
+        onTabChange={detail.setTab}
+        onClose={detail.close}
       />
       <ExportAuditLogDialog open={exportOpen} onOpenChange={setExportOpen} />
     </TableScope>

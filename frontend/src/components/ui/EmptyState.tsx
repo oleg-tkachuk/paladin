@@ -2,10 +2,12 @@
 
 // What a list shows when it has nothing: why (emptyReason), what the thing
 // is for when there are none at all, and the action that makes the first
-// one. A list that failed to load shows ListLoadError instead — an empty
-// state for a failed read invites creating what may already exist.
+// one; or, when a search or a filter hid every row, the way to show them
+// again, right there. A list that failed to load shows ListLoadError
+// instead — an empty state for a failed read invites creating what may
+// already exist.
 import type React from "react";
-import { PlusIcon } from "@heroicons/react/24/outline";
+import { FunnelIcon, PlusIcon } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -28,7 +30,15 @@ export interface EmptyStateProps {
   purpose?: string;
   /** Makes the first one; offered only when there are none. */
   action?: EmptyAction;
+  /**
+   * Empties the search and every filter; offered only when they hid every
+   * row, so the reader is not left hunting for the control that did.
+   */
+  onClearFilters?: () => void;
 }
+
+/** What the button that shows the hidden rows again says. */
+export const CLEAR_FILTERS_LABEL = "Clear filters";
 
 export function EmptyState({
   icon: Icon,
@@ -36,6 +46,7 @@ export function EmptyState({
   reason,
   purpose,
   action,
+  onClearFilters,
 }: EmptyStateProps) {
   const none = reason === "empty";
   return (
@@ -56,6 +67,12 @@ export function EmptyState({
         >
           <PlusIcon className="size-4" />
           {action.label}
+        </Button>
+      ) : null}
+      {reason === "filtered" && onClearFilters ? (
+        <Button size="sm" variant="outline" onClick={onClearFilters}>
+          <FunnelIcon className="size-4" />
+          {CLEAR_FILTERS_LABEL}
         </Button>
       ) : null}
     </div>

@@ -22,7 +22,6 @@ import { useTenantChangesBlocked } from "../tenant-context";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -39,7 +38,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 import { quotaClient } from "@/lib/connect/client";
-import { notFoundIsAnswer } from "@/lib/connect/expected";
+import {
+  fetchTenantQuota,
+  tenantQuotaName,
+  tenantQuotaQuery,
+} from "@/lib/queries/details";
 import { QuotaSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { cn, formatBytes } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
@@ -67,7 +70,7 @@ function progressColour(pct: number): string {
 export default function TenantQuotasPage() {
   const changesBlocked = useTenantChangesBlocked();
   const tenant = useTenant();
-  const quotaName = `tenants/${tenant.tenantId}/quota`;
+  const quotaName = tenantQuotaName(tenant.tenantId);
   const { showNotification } = useNotification();
 
   // Form state: each cap's typed limit and whether it is lifted. A tenant
@@ -80,24 +83,18 @@ export default function TenantQuotasPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
 
+  // The overview's status panel reads the same query, so a save here moves
+  // it too; this page adds the toast for a failed read.
   const quotaQuery = useQuery({
-    queryKey: ["tenantQuota", quotaName],
-    retry: false, // queryFn toasts real failures; NotFound is a normal state.
+    ...tenantQuotaQuery(tenant.tenantId),
     queryFn: async ({ signal }) => {
       try {
-        const res = await quotaClient.getQuota(
-          { name: quotaName },
-          notFoundIsAnswer({ signal }),
-        );
-        return { quota: res, notFound: false };
+        // No quota row yet is a normal "unlimited / create" state, not an error.
+        return await fetchTenantQuota(quotaName, signal);
       } catch (err) {
         // An aborted query is not a failure the operator needs to see:
         // TanStack cancels in-flight reads on unmount and on supersede.
         if (isAbortError(err)) throw err;
-        // No quota row yet is a normal "unlimited / create" state, not an error.
-        if (err instanceof ConnectError && err.code === Code.NotFound) {
-          return { quota: null, notFound: true };
-        }
         showNotification({
           type: "error",
           title: "Load failed",

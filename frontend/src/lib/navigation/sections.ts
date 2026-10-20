@@ -13,6 +13,7 @@ export const SECTION = {
   buckets: "/buckets",
   collections: "/collections",
   tenants: "/tenants",
+  topology: "/topology",
   users: "/users",
   policies: "/policies",
   trash: "/trash",

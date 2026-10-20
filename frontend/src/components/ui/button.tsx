@@ -25,9 +25,9 @@ const buttonVariants = cva(
           "bg-destructive/10 text-destructive hover:bg-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30",
         // Tinted color variants for context-appropriate actions.
         success:
-          "bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 hover:bg-chart-2/25",
+          "bg-success/15 text-success ring-1 ring-success/30 hover:bg-success/25",
         warning:
-          "bg-chart-3/15 text-chart-3 ring-1 ring-chart-3/30 hover:bg-chart-3/25",
+          "bg-warning/15 text-warning ring-1 ring-warning/30 hover:bg-warning/25",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

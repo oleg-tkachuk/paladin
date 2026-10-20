@@ -89,8 +89,8 @@ const KNOWN_STATES = ["PENDING", "AVAILABLE", "DELETED"] as const;
 // Per-state accent. AVAILABLE is the healthy steady state, PENDING is only
 // interesting if it stays high, and DELETED is history. Muted everywhere the number is zero (see StateCell).
 const STATE_ACCENT: Record<string, string> = {
-  PENDING: "text-chart-3",
-  AVAILABLE: "text-chart-2",
+  PENDING: "text-warning",
+  AVAILABLE: "text-success",
   DELETED: "text-muted-foreground",
 };
 
@@ -227,7 +227,7 @@ function BreakdownCard({
  */
 function RLSBadge({ up }: { up: boolean }) {
   return (
-    <Badge variant="outline" className={up ? "text-chart-2" : "text-chart-3"}>
+    <Badge variant="outline" className={up ? "text-success" : "text-warning"}>
       {up ? "live" : "unavailable"}
     </Badge>
   );
@@ -573,7 +573,7 @@ export default function StatsPage() {
                 value={num(data.tenants?.trashed)}
                 accent={
                   (data.tenants?.trashed ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -592,7 +592,7 @@ export default function StatsPage() {
                 value={num(data.tenants?.withoutDefaultBinding)}
                 accent={
                   (data.tenants?.withoutDefaultBinding ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -605,7 +605,7 @@ export default function StatsPage() {
                 value={num(data.backends?.disabled)}
                 accent={
                   (data.backends?.disabled ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -614,7 +614,7 @@ export default function StatsPage() {
                 value={num(data.backends?.readOnly)}
                 accent={
                   (data.backends?.readOnly ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -623,7 +623,7 @@ export default function StatsPage() {
                 value={num(data.backends?.maintenance)}
                 accent={
                   (data.backends?.maintenance ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -678,7 +678,7 @@ export default function StatsPage() {
                 value={num(data.collections?.unbound)}
                 accent={
                   (data.collections?.unbound ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -731,7 +731,7 @@ export default function StatsPage() {
                   value={num(rls?.quotas?.nearLimit)}
                   accent={
                     (rls?.quotas?.nearLimit ?? 0n) > 0n
-                      ? "text-chart-3"
+                      ? "text-warning"
                       : undefined
                   }
                 />
@@ -764,7 +764,7 @@ export default function StatsPage() {
                   value={num(rls?.capabilities?.expiringSoon)}
                   accent={
                     (rls?.capabilities?.expiringSoon ?? 0n) > 0n
-                      ? "text-chart-3"
+                      ? "text-warning"
                       : undefined
                   }
                 />
@@ -794,7 +794,7 @@ export default function StatsPage() {
                   value={num(rls?.apiTokens?.expiringSoon)}
                   accent={
                     (rls?.apiTokens?.expiringSoon ?? 0n) > 0n
-                      ? "text-chart-3"
+                      ? "text-warning"
                       : undefined
                   }
                 />
@@ -804,7 +804,7 @@ export default function StatsPage() {
                 value={num(rls?.apiTokens?.neverUsed)}
                 accent={
                   (rls?.apiTokens?.neverUsed ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -818,7 +818,7 @@ export default function StatsPage() {
                 value={num(rls?.subscriptions?.disabled)}
                 accent={
                   (rls?.subscriptions?.disabled ?? 0n) > 0n
-                    ? "text-chart-3"
+                    ? "text-warning"
                     : undefined
                 }
               />

@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  typeToConfirm,
+  waitFor,
+  within,
+} from "@/test/utils";
 
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -139,6 +146,10 @@ describe("CollectionTrashPage confirmations", () => {
       /cannot be undone/,
     );
     expect(h.purgeObject).not.toHaveBeenCalled();
+    expect(
+      within(dialog).getByRole("button", { name: "Purge permanently" }),
+    ).toBeDisabled();
+    await typeToConfirm("purge");
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Purge permanently" }),
     );
@@ -167,6 +178,7 @@ describe("CollectionTrashPage confirmations", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Select old.pdf" }));
     fireEvent.click(bar().getByRole("button", { name: /^Purge$/ }));
     const purge = await screen.findByRole("alertdialog");
+    await typeToConfirm("purge");
     fireEvent.click(
       within(purge).getByRole("button", { name: "Purge permanently" }),
     );

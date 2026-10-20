@@ -59,8 +59,8 @@ const WARNING_STYLE: Record<
   },
   warning: {
     icon: ExclamationTriangleIcon,
-    text: "text-chart-3",
-    box: "border-chart-3/30 bg-chart-3/5",
+    text: "text-warning",
+    box: "border-warning/30 bg-warning/5",
   },
   info: {
     icon: InformationCircleIcon,
@@ -84,7 +84,7 @@ const SUPPORT_STYLE: Record<
   },
   [FeatureSupport.SUPPORTED]: {
     icon: CheckCircleIcon,
-    text: "text-chart-2",
+    text: "text-success",
     variant: "success",
   },
   [FeatureSupport.UNSUPPORTED]: {
@@ -170,7 +170,7 @@ export function BackendFeatures({ backend }: { backend: Backend }) {
             })}
           </ul>
         ) : (
-          <p className="flex items-center gap-2 text-sm text-chart-2">
+          <p className="flex items-center gap-2 text-sm text-success">
             <CheckCircleIcon className="size-4" />
             Every feature Paladin uses is supported.
           </p>

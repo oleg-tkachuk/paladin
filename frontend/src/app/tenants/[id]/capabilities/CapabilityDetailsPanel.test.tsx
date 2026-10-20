@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@/test/utils";
+import { render, screen } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 const h = vi.hoisted(() => ({
   get: vi.fn(),
+  revoke: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
@@ -19,7 +21,7 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
-import { CapabilityDetailsDialog } from "./CapabilityDetailsDialog";
+import { CapabilityDetailsPanel } from "./CapabilityDetailsPanel";
 
 const CAP = {
   id: "cap-1",
@@ -40,16 +42,17 @@ const CAP = {
 
 function open() {
   render(
-    <CapabilityDetailsDialog
+    <CapabilityDetailsPanel
       id={CAP.id}
       cap={CAP}
       usageEntry="never"
       onClose={vi.fn()}
+      onRevoke={h.revoke}
     />,
   );
 }
 
-describe("CapabilityDetailsDialog", () => {
+describe("CapabilityDetailsPanel", () => {
   beforeEach(() => {
     h.get.mockReset();
   });
@@ -110,11 +113,12 @@ describe("CapabilityDetailsDialog", () => {
   describe("by id alone", () => {
     const openById = () =>
       render(
-        <CapabilityDetailsDialog
+        <CapabilityDetailsPanel
           id={CAP.id}
           cap={null}
           usageEntry={undefined}
           onClose={vi.fn()}
+          onRevoke={h.revoke}
         />,
       );
 
@@ -122,8 +126,7 @@ describe("CapabilityDetailsDialog", () => {
       h.get.mockResolvedValue({ capability: CAP });
       openById();
       expect(screen.getByText("Reading the capability…")).toBeInTheDocument();
-      expect(await screen.findByText("Copy ID")).toBeInTheDocument();
-      expect(screen.getByText(/agent:1/)).toBeInTheDocument();
+      expect(await screen.findByText(/agent:1/)).toBeInTheDocument();
     });
 
     it("says there is none when the record cannot be read", async () => {
@@ -137,11 +140,12 @@ describe("CapabilityDetailsDialog", () => {
 
   it("stays closed with no id", () => {
     render(
-      <CapabilityDetailsDialog
+      <CapabilityDetailsPanel
         id={null}
         cap={CAP}
         usageEntry="never"
         onClose={vi.fn()}
+        onRevoke={h.revoke}
       />,
     );
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -149,13 +153,26 @@ describe("CapabilityDetailsDialog", () => {
   });
 
   // Confirmed on the button that copied, not by a toast.
-  it("says Copied on the Copy ID button", async () => {
+  it("says Copied on the identifier's copy button", async () => {
+    const user = userEvent.setup();
     h.get.mockResolvedValue({ capability: CAP });
     open();
-    fireEvent.click(await screen.findByRole("button", { name: /Copy ID/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Copy capability details id" }),
+    );
     expect(
       await screen.findByRole("button", { name: /Copied/ }),
     ).toBeInTheDocument();
     expect(h.showNotification).not.toHaveBeenCalled();
+  });
+
+  // Revoking is a decision, confirmed by the page's own dialog.
+  it("asks the page to revoke the capability shown", async () => {
+    const user = userEvent.setup();
+    h.revoke.mockReset();
+    h.get.mockResolvedValue({ capability: CAP });
+    open();
+    await user.click(await screen.findByRole("button", { name: "Revoke" }));
+    expect(h.revoke).toHaveBeenCalledWith(CAP);
   });
 });

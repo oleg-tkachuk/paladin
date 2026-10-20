@@ -7,7 +7,7 @@
 // "fix one, see the next."
 //
 // Visual contract:
-//   - Errors render in `text-destructive`, warnings in `text-chart-3`.
+//   - Errors render in `text-destructive`, warnings in `text-warning`.
 //   - Each row shows severity icon + message + line/col when known.
 //   - Sits below the Textarea with the same T.hint sizing rhythm used
 //     by CELIndicator so the two readers feel consistent.
@@ -43,7 +43,7 @@ export function CedarIndicator({
 
   if (state.status === "valid") {
     return (
-      <div className={cn(T.hint, "flex items-center gap-1.5 text-chart-2")}>
+      <div className={cn(T.hint, "flex items-center gap-1.5 text-success")}>
         <CheckCircleIcon className="size-3.5" aria-hidden />
         <span>Valid Cedar</span>
       </div>
@@ -62,7 +62,7 @@ export function CedarIndicator({
 
 function DiagnosticLine({ diag }: { diag: PolicyDiagnostic }): JSX.Element {
   const isError = diag.severity.toLowerCase() === "error";
-  const tone = isError ? "text-destructive" : "text-chart-3";
+  const tone = isError ? "text-destructive" : "text-warning";
   const pos =
     diag.line > 0 || diag.column > 0
       ? `line ${diag.line}, col ${diag.column}: `

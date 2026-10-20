@@ -39,6 +39,9 @@ export function CollectionDeleteDialog({
       }
       warning="Collections have no trash: the delete is immediate and cannot be undone."
       confirmText="Delete Collection"
+      // No trash, and its policy goes with it: the name is typed, so the
+      // Collection deleted is the one meant and not its neighbour's row.
+      typeToConfirm={target?.collection}
     />
   );
 }

@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { typeToConfirm } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 
@@ -353,6 +354,10 @@ describe("CollectionObjectsPage", () => {
     expect(
       await screen.findByText("Permanently delete object?"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Purge permanently" }),
+    ).toBeDisabled();
+    await typeToConfirm("purge");
     await userEvent.click(
       screen.getByRole("button", { name: "Purge permanently" }),
     );
@@ -427,6 +432,11 @@ describe("CollectionObjectsPage bulk trash", () => {
     await userEvent.click(screen.getByText("bulk delete"));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByRole("note")).toHaveTextContent(/restorable/);
+    // Listed by key; nothing is typed for a delete the trash gives back.
+    expect(
+      within(dialog).getByRole("list", { name: "1 object" }),
+    ).toHaveTextContent("a.txt");
+    expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
     expect(h.bulkDelete).not.toHaveBeenCalled();
     await userEvent.click(
       within(dialog).getByRole("button", { name: /Move 1 to Trash/ }),
@@ -527,6 +537,7 @@ describe("CollectionObjectsPage in a public collection", () => {
     render(<CollectionObjectsPage />);
     await userEvent.click(screen.getByText("bulk delete"));
     expect(h.bulkDelete).not.toHaveBeenCalled();
+    await typeToConfirm("purge");
     await userEvent.click(
       screen.getByRole("button", { name: "Delete permanently" }),
     );

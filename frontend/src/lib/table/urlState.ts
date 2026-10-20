@@ -13,6 +13,10 @@ export const TABLE_PARAMS = {
   filter: "filter",
   /** The row a link points at: opened, highlighted and scrolled to. */
   row: "id",
+  /** The page of a paged list, from 1; the first is left out. */
+  page: "page",
+  /** The tab the open row's detail panel shows; its first tab is no tab. */
+  tab: "tab",
 } as const;
 
 export type TableParam = keyof typeof TABLE_PARAMS;
@@ -35,7 +39,14 @@ export const PAGE_TABLE: TableUrl = {};
 
 /** The name a table keeps one part of its view under. */
 export function tableParam(name: TableParam, url: TableUrl): string {
-  const base = TABLE_PARAMS[name];
+  return namespacedParam(TABLE_PARAMS[name], url);
+}
+
+/**
+ * Any parameter name under the table's namespace: the fixed ones above, and
+ * the ones a table names itself, such as a facet's.
+ */
+export function namespacedParam(base: string, url: TableUrl): string {
   return url.namespace ? `${url.namespace}${NAMESPACE_SEPARATOR}${base}` : base;
 }
 

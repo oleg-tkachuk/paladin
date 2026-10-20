@@ -1,14 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+
+import { render, screen, within } from "@/test/utils";
 
 // ADR-0027: a public bucket is marked as such on its overview, with where it
 // is served from and the content types it may serve.
 const h = vi.hoisted(() => ({
+  provisionState: "ready",
+  versioning: undefined as { enabled: boolean } | undefined,
+  replication: undefined as
+    { enabled: boolean; destinationBucket: string } | undefined,
   publicRead: false,
   publicBaseUrl: "",
   allowedContentTypes: [] as string[],
 }));
 
+vi.mock("@/lib/connect/client", () => ({
+  userSettingsClient: {
+    getMine: vi.fn(async () => ({ preferences: {} })),
+    updateMine: vi.fn(),
+  },
+}));
 vi.mock("@/hooks/useTenants", () => ({
   useTenants: () => ({ tenants: [], error: null, fetchTenants: vi.fn() }),
 }));
@@ -26,7 +37,9 @@ vi.mock("./bucket-context", () => ({
       ownerTenantId: "t-1",
       lifecycleRules: [],
       cedarPolicy: "",
-      provisionState: "ready",
+      provisionState: h.provisionState,
+      versioning: h.versioning,
+      replication: h.replication,
       resourceVersion: "3",
       publicRead: h.publicRead,
       publicBaseUrl: h.publicBaseUrl,
@@ -47,6 +60,9 @@ vi.mock("./bucket-context", () => ({
 import BucketOverviewPage from "./page";
 
 beforeEach(() => {
+  h.provisionState = "ready";
+  h.versioning = undefined;
+  h.replication = undefined;
   h.publicRead = false;
   h.publicBaseUrl = "";
   h.allowedContentTypes = [];
@@ -103,5 +119,45 @@ describe("BucketOverviewPage owner", () => {
   it("leaves out a region that is not set", () => {
     render(<BucketOverviewPage />);
     expect(screen.queryByText("Region")).not.toBeInTheDocument();
+  });
+});
+
+// After Argo CD's status panel: where the bucket stands, in the status tones,
+// each fact linking to the tab that changes it.
+describe("BucketOverviewPage status panel", () => {
+  const card = async (title: string) => {
+    const panel = await screen.findByRole("region", { name: "Bucket status" });
+    return within(panel)
+      .getAllByText(title)[0]
+      .closest('[data-slot="status-card"]') as HTMLElement;
+  };
+
+  it("reads a bucket being provisioned as a change under way", async () => {
+    h.provisionState = "pending";
+    render(<BucketOverviewPage />);
+    const c = await card("Provisioning");
+    expect(c).toHaveAttribute("data-tone", "progress");
+    expect(within(c).getAllByText("Provisioning")).toHaveLength(2);
+  });
+
+  it("names what protects the objects and where they are copied", async () => {
+    h.versioning = { enabled: true };
+    h.replication = {
+      enabled: true,
+      destinationBucket: "storageBackends/dr/buckets/assets",
+    };
+    render(<BucketOverviewPage />);
+    const protection = await card("Protection");
+    expect(protection).toHaveAttribute("data-tone", "success");
+    expect(within(protection).getByRole("link")).toHaveAttribute(
+      "href",
+      "/storage-backends/primary/buckets/assets/versioning",
+    );
+    const replication = await card("Replication");
+    expect(replication).toHaveTextContent(
+      "To storageBackends/dr/buckets/assets.",
+    );
+    // No overlay is a choice, not a fault.
+    expect(await card("Policy")).toHaveAttribute("data-tone", "suspended");
   });
 });

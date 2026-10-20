@@ -72,11 +72,16 @@ test.describe("Console shell", () => {
 
     const sections = JSON.parse(ok!.body) as Record<string, Section>;
     expect(Object.keys(sections).sort()).toEqual([
+      "banner",
       "health",
       "operations",
       "version",
     ]);
-    for (const [name, s] of Object.entries(sections)) {
+    // The banner asks no plane, and with none configured it is ok and
+    // empty; each plane must answer with data.
+    const { banner, ...planes } = sections;
+    expect(banner.status).toBe("ok");
+    for (const [name, s] of Object.entries(planes)) {
       expect(
         s.status,
         `${name} is ${s.status}: ${s.reason ?? "no reason given"}`,

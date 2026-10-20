@@ -4,9 +4,11 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { labelCells } from "@/lib/table/cellLabels";
-import { useTableDensity } from "@/components/ui/TableScope";
+import { useInTableScope, useTableDensity } from "@/components/ui/TableScope";
+import { useTableKeyboard } from "@/hooks/useTableKeyboard";
+import { KEYBOARD_TABLE_ATTR } from "@/lib/tableKeys";
 import type { Density } from "@/lib/preferences/tablePrefs";
-import { HOVER_SURFACE } from "@/lib/ui/states";
+import { HOVER_SURFACE, ROW_FOCUS_RING } from "@/lib/ui/states";
 
 /** How rows are set, by the density the user chose for the table. */
 const DENSITY_CLASS: Record<Density, string> = {
@@ -29,9 +31,22 @@ const STACKED_CLASS = [
   "@max-md:[&_td[data-label]]:before:content-[attr(data-label)] @max-md:[&_td]:before:text-xs @max-md:[&_td]:before:text-muted-foreground",
 ].join(" ");
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  keyboardRows,
+  ...props
+}: React.ComponentProps<"table"> & {
+  /**
+   * Whether j/k, Enter, x and Esc work its rows (useTableKeyboard). A page's
+   * list, the table in its TableScope, does by default; a table in a card
+   * beside it does not, so one key moves one list.
+   */
+  keyboardRows?: boolean;
+}) {
   // Inside a TableScope, the user's density for that table.
   const density = useTableDensity();
+  const inScope = useInTableScope();
+  const navigable = keyboardRows ?? inScope;
   // Each body cell learns its column's name, and learns it again as rows
   // come and go, for the stacked layout above.
   const ref = React.useRef<HTMLTableElement>(null);
@@ -43,6 +58,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     observer.observe(table, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
+  useTableKeyboard(ref, navigable);
   return (
     // A size container, so a page shows optional columns by the width the
     // table actually has (`hidden @2xl:table-cell`), not the viewport's: the
@@ -56,6 +72,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
         ref={ref}
         data-slot="table"
         data-density={density}
+        {...(navigable ? { [KEYBOARD_TABLE_ATTR]: true } : {})}
         className={cn(
           "w-full caption-bottom text-sm",
           DENSITY_CLASS[density],
@@ -117,6 +134,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
       className={cn(
         "border-b transition-colors has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted data-linked:bg-primary/10 data-linked:shadow-[inset_2px_0_0_var(--primary)]",
         HOVER_SURFACE,
+        ROW_FOCUS_RING,
         className,
       )}
       {...props}

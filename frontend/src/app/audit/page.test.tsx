@@ -31,9 +31,20 @@ vi.mock("@/hooks/useAuditStream", () => ({
 vi.mock("@/components/features/audit/ActorName", () => ({
   ActorName: ({ subject }: { subject: string }) => subject,
 }));
-vi.mock("./AuditEntryDetailDialog", () => ({
-  AuditEntryDetailDialog: ({ entryId }: { entryId: string | null }) =>
-    entryId ? <div role="dialog">{entryId}</div> : null,
+vi.mock("@/components/features/audit/AuditEntryPanel", () => ({
+  AUDIT_ENTRY_TABS: ["summary", "changes"],
+  AuditEntryPanel: ({
+    entryId,
+    tab,
+  }: {
+    entryId: string | null;
+    tab: string;
+  }) =>
+    entryId ? (
+      <div role="dialog">
+        {entryId} on {tab}
+      </div>
+    ) : null,
 }));
 
 import { LINKED_ROW_ATTR } from "@/components/ui/table";
@@ -135,6 +146,13 @@ describe("AuditPage linked entry", () => {
     expect(
       screen.getByRole("row", { name: /tenants\/t-1/ }),
     ).not.toHaveAttribute(LINKED_ROW_ATTR);
+  });
+
+  it("opens the entry on the tab a link names", () => {
+    window.history.replaceState(null, "", "/audit?id=entry-1&tab=changes");
+    h.search = "id=entry-1&tab=changes";
+    render(<AuditPage />);
+    expect(screen.getByRole("dialog")).toHaveTextContent("entry-1 on changes");
   });
 
   it("puts an entry opened from its row in the address", () => {

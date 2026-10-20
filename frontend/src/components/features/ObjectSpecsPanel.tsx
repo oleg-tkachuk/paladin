@@ -44,10 +44,10 @@ function formatExpiresAt(seconds: bigint | undefined): string {
 
 function stateColorClasses(state: ObjectState): { text: string; dot: string } {
   if (state === ObjectState.AVAILABLE)
-    return { text: "text-chart-2", dot: "bg-chart-2" };
+    return { text: "text-success", dot: "bg-success" };
   if (state === ObjectState.DELETED)
     return { text: "text-destructive", dot: "bg-destructive" };
-  return { text: "text-chart-3", dot: "bg-chart-3" };
+  return { text: "text-warning", dot: "bg-warning" };
 }
 
 /**

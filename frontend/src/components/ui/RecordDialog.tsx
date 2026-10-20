@@ -76,19 +76,38 @@ export function RecordDialog({
             <DialogDescription className="sr-only">{title}</DialogDescription>
           )}
         </DialogHeader>
-        <div
-          className={cn(
-            "grid max-h-[70vh] min-w-0 grid-cols-1 content-start gap-y-3 overflow-y-auto px-5 py-4 text-sm",
-            "sm:grid-cols-[fit-content(11rem)_minmax(0,1fr)] sm:gap-x-6",
-            // Anything that is not a field — a hint, an action, a block —
-            // spans both columns.
-            "[&>*]:col-span-full",
-          )}
-        >
+        <RecordFields className="max-h-[70vh] overflow-y-auto px-5 py-4">
           {children}
-        </div>
+        </RecordFields>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The fields of a record, sharing one column of labels as wide as the longest
+ * label. The body of a RecordDialog, and of a record shown in a DetailPanel.
+ */
+export function RecordFields({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid min-w-0 grid-cols-1 content-start gap-y-3 text-sm",
+        "sm:grid-cols-[fit-content(11rem)_minmax(0,1fr)] sm:gap-x-6",
+        // Anything that is not a field — a hint, an action, a block —
+        // spans both columns.
+        "[&>*]:col-span-full",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -175,9 +194,10 @@ export function RecordBlock({
 
 /**
  * Copies value, and says so on itself for a moment. No toast: a record's
- * dialog is opened from many pages, not all of them inside a notifier.
+ * dialog or panel is opened from many pages, not all of them inside a
+ * notifier.
  */
-function CopyButton({ value, label }: { value: string; label: string }) {
+export function CopyButton({ value, label }: { value: string; label: string }) {
   const { shown: copied, confirm } = useConfirmation();
   const Icon = copied ? CheckIcon : ClipboardIcon;
   return (
@@ -204,6 +224,9 @@ const ROW_CONTROLS =
   "a, button, input, select, textarea, [role=button], [role=menuitem], [role=checkbox]";
 
 function onControl(ev: React.SyntheticEvent): boolean {
+  // React bubbles an event out of a portal along the component tree, so a
+  // click in a row's menu or dialog reaches the row though it is not in it.
+  if (!ev.currentTarget.contains(ev.target as Node)) return true;
   const control = (ev.target as Element).closest(ROW_CONTROLS);
   return (
     control !== null &&

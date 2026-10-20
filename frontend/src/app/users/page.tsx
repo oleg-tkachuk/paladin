@@ -35,17 +35,18 @@ import { normalizeError } from "@/lib/connect/error";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
-import {
-  TableToolbar,
-  type ToolbarFilterOption,
-} from "@/components/ui/TableToolbar";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { User } from "@/gen/paladin/iam/v1/types_pb";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
-import { useTableFilter } from "@/hooks/useTableUrl";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
+import type { Facet } from "@/lib/table/facets";
 import type { SearchText, SortAccessors } from "@/lib/table/view";
+import { StatusTone } from "@/lib/ui/status";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -70,13 +71,18 @@ const USER_COLUMNS = 6;
 type UserStanding = "active" | "disabled";
 const standing = (u: User): UserStanding =>
   u.disabled ? "disabled" : "active";
-type StandingFilter = UserStanding | "all";
-const STANDING_FILTERS: readonly ToolbarFilterOption<StandingFilter>[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "disabled", label: "Disabled" },
+// A disabled user is one an operator stopped on purpose, not a fault.
+const USER_FACETS: readonly Facet<User>[] = [
+  {
+    id: "state",
+    label: "State",
+    values: (u) => [standing(u)],
+    options: [
+      { value: "active", label: "Active", tone: StatusTone.Success },
+      { value: "disabled", label: "Disabled", tone: StatusTone.Suspended },
+    ],
+  },
 ];
-const DEFAULT_STANDING_FILTER: StandingFilter = "all";
 
 type UserColumn = "user" | "tenant" | "login" | "state";
 
@@ -130,18 +136,7 @@ export default function UsersPage() {
     [tenants],
   );
 
-  const [standingFilter, setStandingFilter] = useTableFilter(
-    STANDING_FILTERS,
-    DEFAULT_STANDING_FILTER,
-    PAGE_TABLE,
-  );
-  const inStanding = useMemo(
-    () =>
-      standingFilter === DEFAULT_STANDING_FILTER
-        ? users
-        : users.filter((u) => standing(u) === standingFilter),
-    [users, standingFilter],
-  );
+  const facets = useTableFacets(users, USER_FACETS, PAGE_TABLE);
   // A user's tenant sorts and is searched by its slug, which only the tenant
   // list knows.
   const sortBy = useMemo<SortAccessors<User, UserColumn>>(
@@ -162,18 +157,24 @@ export default function UsersPage() {
     ],
     [tenantByID],
   );
-  const view = useTableView(inStanding, {
+  const view = useTableView(facets.rows, {
     text: searchIn,
     accessors: sortBy,
     url: PAGE_TABLE,
     tableId: TABLE_ID,
   });
   const filtered = view.rows;
+  const paged = useTablePage(filtered, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [view.query, facets.selection],
+  });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
     <TableScope id={TABLE_ID} sort={view.sort}>
       <ListPage
+        footer={<TablePagination {...paged.pagination} />}
         header={
           <PageHeader
             title="Users"
@@ -187,12 +188,7 @@ export default function UsersPage() {
             onQueryChange={view.setQuery}
             searchLabel="Search users"
             placeholder="Search subject, display name, role, tenant slug…"
-            filter={{
-              label: "Standing",
-              options: STANDING_FILTERS,
-              value: standingFilter,
-              onChange: setStandingFilter,
-            }}
+            facets={facets.controls}
             count={
               usersQuery.data
                 ? { shown: filtered.length, total: users.length }
@@ -261,11 +257,15 @@ export default function UsersPage() {
                     icon: UserCircleIcon,
                     what: "users",
                     reason: emptyReason({ filtered: users.length > 0 }),
+                    onClearFilters: () => {
+                      view.setQuery("");
+                      facets.clear();
+                    },
                   }
                 : null
             }
           >
-            {filtered.map((u) => {
+            {paged.rows.map((u) => {
               const tenant = tenantByID.get(u.tenantId);
               return (
                 <IntentTableRow

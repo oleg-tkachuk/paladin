@@ -131,7 +131,7 @@ export function TrashRetention({
       >
         <div
           className={
-            info.pastRetention ? "h-full bg-chart-3" : "h-full bg-primary/70"
+            info.pastRetention ? "h-full bg-warning" : "h-full bg-primary/70"
           }
           style={{ width: `${elapsed * 100}%` }}
         />
