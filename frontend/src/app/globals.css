@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 /* Both dark palettes take the `dark:` variant. Light is the bare :root. */
-@custom-variant dark (&:is(.dark *, .ember *, .navy *, .graphite *, .bordeaux *));
+@custom-variant dark (&:is(.dark *, .dusk *, .navy *, .graphite *, .bordeaux *));
 
 /* ─── shadcn/ui tokens (neutral, dark-default) ─────────────────────────── */
 @theme inline {
@@ -93,8 +93,8 @@
   --radius: 0.625rem;
 
   /* Light palette: the "light" theme, and "system" on a light OS. The light
-   * side of ember: a warm paper ground, a burnt-orange accent with white text
-   * on it. Charts keep ember's sequence. Its larger corners are set on
+   * side of dusk: a warm paper ground, a burnt-orange accent with white text
+   * on it. Charts keep dusk's sequence. Its larger corners are set on
    * .light below, since :root is also what the dark palettes start from.
    *
    * The accent and the status colours are the scheme's own hues made darker,
@@ -234,13 +234,13 @@
   --elevation-highlight: rgb(255 255 255 / 7%);
 }
 
-.ember {
-  /* ── "Ember" ──────────────────────────────────────────────────────────
+.dusk {
+  /* ── "Dusk" ───────────────────────────────────────────────────────────
    * A second dark palette: a warm plum ground, one orange accent with
-   * near-black text on it, and larger corners. The ground is the lightest
+   * near-black text on it, and larger corners. Status fills carry dark text
+   * too, so every solid fill reads the same way. The ground is the lightest
    * dark of the palettes, so the page does not sink below the sidebar
-   * around it; the danger, unknown and muted inks are lifted to match. Status fills carry dark text
-   * too, so every solid fill reads the same way. */
+   * around it; the danger, unknown and muted inks are lifted to match. */
   --radius: 0.8rem;
 
   --background: #232028;
@@ -496,7 +496,7 @@
     color-scheme: light;
   }
   html.dark,
-  html.ember,
+  html.dusk,
   html.navy,
   html.graphite,
   html.bordeaux {

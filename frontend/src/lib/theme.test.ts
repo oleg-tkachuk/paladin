@@ -40,7 +40,7 @@ describe("themes", () => {
   });
 
   it("recognises only the offered themes", () => {
-    expect(isTheme("ember")).toBe(true);
+    expect(isTheme("dusk")).toBe(true);
     expect(isTheme("system")).toBe(true);
     expect(isTheme("midnight")).toBe(false);
     expect(isTheme("violet")).toBe(false);
@@ -54,8 +54,8 @@ describe("fetchMySettings", () => {
   });
 
   it("returns the settings", async () => {
-    h.getMine.mockResolvedValue({ theme: "ember" });
-    await expect(fetchMySettings()).resolves.toEqual({ theme: "ember" });
+    h.getMine.mockResolvedValue({ theme: "dusk" });
+    await expect(fetchMySettings()).resolves.toEqual({ theme: "dusk" });
   });
 
   it("returns null for a user who never saved any", async () => {

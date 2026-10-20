@@ -8,7 +8,7 @@ import { userSettingsClient } from "@/lib/connect/client";
 export const THEME_SYSTEM = "system";
 export const THEME_LIGHT = "light";
 export const THEME_DARK = "dark";
-export const THEME_EMBER = "ember";
+export const THEME_DUSK = "dusk";
 export const THEME_NAVY = "navy";
 export const THEME_GRAPHITE = "graphite";
 export const THEME_BORDEAUX = "bordeaux";
@@ -17,7 +17,7 @@ export type Theme =
   | typeof THEME_SYSTEM
   | typeof THEME_LIGHT
   | typeof THEME_DARK
-  | typeof THEME_EMBER
+  | typeof THEME_DUSK
   | typeof THEME_NAVY
   | typeof THEME_GRAPHITE
   | typeof THEME_BORDEAUX;
@@ -27,7 +27,7 @@ export type Theme =
 export const PALETTES: readonly Theme[] = [
   THEME_LIGHT,
   THEME_DARK,
-  THEME_EMBER,
+  THEME_DUSK,
   THEME_NAVY,
   THEME_GRAPHITE,
   THEME_BORDEAUX,
@@ -40,7 +40,7 @@ export const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
   { value: THEME_SYSTEM, label: "Match system" },
   { value: THEME_LIGHT, label: "Light" },
   { value: THEME_DARK, label: "Dark" },
-  { value: THEME_EMBER, label: "Ember" },
+  { value: THEME_DUSK, label: "Dusk" },
   { value: THEME_NAVY, label: "Navy" },
   { value: THEME_GRAPHITE, label: "Graphite" },
   { value: THEME_BORDEAUX, label: "Bordeaux" },

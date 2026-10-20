@@ -184,7 +184,7 @@ describe("ProfilePage preferences", () => {
     const trigger = await screen.findByRole("combobox", { name: "Theme" });
     expect(trigger).toHaveTextContent("Dark");
     await userEvent.click(trigger);
-    await userEvent.click(await screen.findByRole("option", { name: "Ember" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Dusk" }));
     const confirmed = () =>
       screen.getAllByRole("status").some((s) => s.textContent === "Saved");
     expect(confirmed()).toBe(false);
@@ -192,7 +192,7 @@ describe("ProfilePage preferences", () => {
     await waitFor(() =>
       expect(h.updateMine).toHaveBeenCalledWith(
         expect.objectContaining({
-          theme: "ember",
+          theme: "dusk",
           timezone: "Europe/London",
           locale: "en-GB",
         }),

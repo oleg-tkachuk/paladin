@@ -44,7 +44,7 @@ func TestValidateLocale(t *testing.T) {
 
 func TestValidateTheme(t *testing.T) {
 	t.Parallel()
-	for _, ok := range []string{"light", "dark", "system", "ember", "navy", "graphite", "bordeaux"} {
+	for _, ok := range []string{"light", "dark", "system", "dusk", "navy", "graphite", "bordeaux"} {
 		if err := ValidateTheme(ok); err != nil {
 			t.Errorf("ValidateTheme(%q): %v", ok, err)
 		}

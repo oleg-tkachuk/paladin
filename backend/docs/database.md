@@ -108,6 +108,8 @@ them, so they must exist before it runs.
 | `086` | `list_audit_entry_ids`, sorted and keyset-paged audit listing (`SECURITY INVOKER`) |
 | `087` | `operations.initiator_subject` and its index, for the console's own-operations list |
 | `088` | `operations.dismissed_at`: the initiator cleared it from their own list |
+| `090` | `user_settings.theme` accepts three more dark palettes (`navy`, `graphite`, `bordeaux`) |
+| `091` | `user_settings.theme` renames `ember` to `dusk`, carrying saved settings over |
 
 Each file's header comment says why it exists.
 
