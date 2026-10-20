@@ -91,7 +91,7 @@ The wire number is unchanged, so a binary client that sent a plain prefix
 keeps working; a JSON client, and any client that sent an expression, has to
 change.
 
-## Unreleased — the console names the storage origins it uploads to
+## v39.0.0 — the console names the storage origins it uploads to
 
 The console's Content-Security-Policy allowed only its own origin, so the
 browser refused every upload PUT and image preview on a presigned URL, which
