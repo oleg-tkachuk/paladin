@@ -280,13 +280,17 @@
   --chart-4: #ff5d6c;
   --chart-5: #59b6ea;
 
-  --sidebar: #110f15;
+  /* The sidebar is a zone of its own, after Argo CD's: a step above the
+     ground in a deeper, more saturated aubergine than the page's plum, so
+     the navigation and the page read apart at a glance while keeping to
+     the palette's hue. */
+  --sidebar: #20142b;
   --sidebar-foreground: #ece7f1;
   --sidebar-primary: #ff7a3d;
   --sidebar-primary-foreground: #160f09;
-  --sidebar-accent: #221d29;
+  --sidebar-accent: #2f223a;
   --sidebar-accent-foreground: #ece7f1;
-  --sidebar-border: #2f2938;
+  --sidebar-border: #3b2f48;
   --sidebar-ring: #ff7a3d;
 
   --elevation-shadow: rgb(0 0 0 / 25%);
