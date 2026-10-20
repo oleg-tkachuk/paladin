@@ -51,18 +51,24 @@ func ValidateLocale(s string) error {
 }
 
 // Themes the web client understands. ThemeSystem follows the browser's
-// light/dark preference; ThemeEmber is a second dark palette.
-// migrations/023_user_settings_theme_ember.sql holds the same set as a CHECK
-// constraint, and TestThemesMatchMigrationCheck keeps the two equal.
+// light/dark preference; the others name a palette, every one but
+// ThemeLight a dark one. The newest migration that declares the
+// user_settings theme CHECK holds the same set, and
+// TestThemesMatchMigrationCheck keeps the two equal.
 const (
-	ThemeSystem = "system"
-	ThemeLight  = "light"
-	ThemeDark   = "dark"
-	ThemeEmber  = "ember"
+	ThemeSystem   = "system"
+	ThemeLight    = "light"
+	ThemeDark     = "dark"
+	ThemeEmber    = "ember"
+	ThemeNavy     = "navy"
+	ThemeGraphite = "graphite"
+	ThemeBordeaux = "bordeaux"
 )
 
 // Themes lists every accepted theme.
-var Themes = []string{ThemeSystem, ThemeLight, ThemeDark, ThemeEmber}
+var Themes = []string{
+	ThemeSystem, ThemeLight, ThemeDark, ThemeEmber, ThemeNavy, ThemeGraphite, ThemeBordeaux,
+}
 
 // ValidateTheme bounds the theme universe to the values understood by the
 // web client. Storing arbitrary strings here would break the UI silently.

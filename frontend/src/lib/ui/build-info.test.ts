@@ -25,6 +25,12 @@ describe("formatBuildLabel", () => {
     );
   });
 
+  it("drops a development build's time-and-commit suffix", () => {
+    expect(
+      formatBuildLabel("39.1.1-dev.1792533470.gac81891a", "ac81891a2b"),
+    ).toBe("v39.1.1-dev (ac81891)");
+  });
+
   it("drops the brackets when the commit is unknown", () => {
     expect(formatBuildLabel("11.9.0", "")).toBe("v11.9.0");
   });

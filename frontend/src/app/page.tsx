@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {
-  AdjustmentsVerticalIcon,
   ArrowUpTrayIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -32,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
-import { uiBuildInfo, type BuildInfo } from "@/lib/ui/build-info";
+import { isBuildSkew, uiBuildInfo } from "@/lib/ui/build-info";
 
 // /  — Dashboard.
 //
@@ -40,72 +39,10 @@ import { uiBuildInfo, type BuildInfo } from "@/lib/ui/build-info";
 // Cmd+K's; this page answers one question — "is anything wrong, and what
 // happened recently?" — with three attention widgets (recent activity,
 // failed operations, budget alerts), the event-dispatcher backlog, and a
-// slim footer strip, one line high, carrying the health rollup, signed-in
-// identity, and the backend/UI build pair so a version skew is obvious at a
-// glance.
-
-// BuildBadge renders one "label v · sha" for the footer's backend / UI
-// pair, inline.
-function BuildBadge({ label, build }: { label: string; build: BuildInfo }) {
-  if (!build.version) return null;
-  return (
-    <span className="whitespace-nowrap">
-      <span className="text-muted-foreground">{label}</span>{" "}
-      <span className={cn(T.code, "text-foreground")}>{build.version}</span>
-      {build.commit && (
-        <>
-          {" · "}
-          <span
-            className={cn(T.code, "text-foreground")}
-            title={build.buildTime || undefined}
-          >
-            {build.commit}
-          </span>
-        </>
-      )}
-    </span>
-  );
-}
-
-/**
- * The backend and UI builds. One build when they match, which is the usual
- * case and needs saying once; both, in the warning tone, when they differ,
- * so a stale tab against a redeployed backend stands out.
- */
-function BuildPair({ backend, ui }: { backend: BuildInfo; ui: BuildInfo }) {
-  const same = backend.version === ui.version && backend.commit === ui.commit;
-  return (
-    <div
-      className={cn(
-        T.hint,
-        "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1",
-        !same && backend.version && ui.version && "text-warning",
-      )}
-    >
-      <AdjustmentsVerticalIcon className="size-4 shrink-0" />
-      {same ? (
-        <BuildBadge label="build" build={ui} />
-      ) : (
-        <>
-          <BuildBadge label="backend" build={backend} />
-          <BuildBadge label="ui" build={ui} />
-        </>
-      )}
-    </div>
-  );
-}
-
-// backendBuild lifts the *VersionInfo shape SystemService returns onto
-// the BuildInfo shape BuildBadge consumes. Empty shell until stats land.
-function backendBuild(
-  stats: { version?: { version: string; commit: string } } | null | undefined,
-): BuildInfo {
-  return {
-    version: stats?.version?.version ?? "",
-    commit: (stats?.version?.commit ?? "").slice(0, 7),
-    buildTime: "",
-  };
-}
+// slim footer strip, one line high, carrying the health rollup and the
+// signed-in identity. The release lives under the product name in the
+// sidebar (BuildVersion); the strip names the builds only when the console
+// and the backend were built from different commits.
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -114,7 +51,7 @@ export default function DashboardPage() {
   // hold skeletons, which is right for both.
   const adminPlane = !user || canUseAdminPlane(user.roles);
   // UI build-info is bundle-time static — three baked-in env lookups.
-  const ui = uiBuildInfo();
+  const skew = isBuildSkew(stats?.version?.commit ?? "", uiBuildInfo().commit);
 
   // ── Health rollup ──────────────────────────────────────────────────
   const components: ComponentHealth[] = stats?.health?.components ?? [];
@@ -230,7 +167,18 @@ export default function DashboardPage() {
               )}
             </span>
           </div>
-          <BuildPair backend={backendBuild(stats)} ui={ui} />
+          {skew && (
+            <Link
+              href="/health"
+              className={cn(
+                T.hint,
+                "flex items-center gap-1.5 text-warning hover:underline",
+              )}
+            >
+              <ExclamationTriangleIcon className="size-4 shrink-0" />
+              The console and the backend were built from different commits
+            </Link>
+          )}
         </CardContent>
       </Card>
     </div>
