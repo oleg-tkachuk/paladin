@@ -44,6 +44,23 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — an Issue answer says why it carries no Biscuit
+
+Since limes v0.109 a capability is sealed as a Biscuit only when its ops
+include `share`, and `biscuit` came back empty with nothing else to say so: a
+client that handed the empty field on looked authorized and was not.
+
+- `CapabilityServiceIssueResponse.biscuit_status` names whether `biscuit` is
+  set — `ISSUED` — or why not: `NOT_SHAREABLE`, `KEY_BOUND`,
+  `NOT_YET_VALID`. Issue and Delegate both answer it.
+- `require_biscuit` on `CapabilityServiceIssueRequest` and
+  `CapabilityServiceDelegateRequest` refuses such a capability with
+  `FailedPrecondition`, naming why, before anything is issued.
+- The SDKs read it for you: Go's `paladin.BiscuitOf` returns an error
+  wrapping `paladin.ErrNoBiscuit`, Python's `biscuit_of` raises
+  `NoBiscuitError`. A client that needs the Biscuit should use one of them,
+  or set `require_biscuit`, rather than read `biscuit` directly.
+
 ## v39.0.0, sdk/go/v0.93.0 — capabilities run on limes v0.109
 
 The capability layer moves from limes v0.69.0 to v0.109.0 and pgstore from

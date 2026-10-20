@@ -199,6 +199,12 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		nbf = t.AsTime()
 	}
 
+	if req.GetRequireBiscuit() {
+		if err := requireBiscuit(caveats, req.GetConfirmationJkt(), nbf); err != nil {
+			return nil, err
+		}
+	}
+
 	// The row lands under the subject's tenant, so the connection has to be
 	// scoped there — the cross-tenant gate above is what makes this safe.
 	ctx = auth.WithActingTenant(ctx, subj.TenantID)
@@ -297,6 +303,21 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 			return nil, connect.NewError(connect.CodeInvalidArgument, perr.Error()).WithCause(perr)
 		}
 		delegSubj = s
+	}
+
+	if req.GetRequireBiscuit() {
+		// The child as limes will mint it: the parent's caveats when it asks
+		// for them, and the parent's key binding unless it names its own.
+		child, jkt := caveats, req.GetConfirmationJkt()
+		if inherit {
+			child = parent.Caveats
+		}
+		if jkt == "" {
+			jkt = parent.ConfirmationJKT
+		}
+		if err := requireBiscuit(child, jkt, nbf); err != nil {
+			return nil, err
+		}
 	}
 
 	// The child is recorded in the parent's tenant, where the parent's own
@@ -562,45 +583,81 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 }
 
 // issued answers Issue and Delegate: the capability, its JWT, and the same
-// capability as a Biscuit its holder can narrow offline.
+// capability as a Biscuit its holder can narrow offline — or why not.
 func (h *Handler) issued(ctx context.Context, res limes.IssueResult) (*adminv1.CapabilityServiceIssueResponse, error) {
-	bisc, err := h.seal(ctx, res)
+	bisc, status, err := h.seal(ctx, res)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &adminv1.CapabilityServiceIssueResponse{
-		Capability: capabilityToProto(&res.Capability),
-		Token:      res.Token,
-		Biscuit:    bisc,
+		Capability:    capabilityToProto(&res.Capability),
+		Token:         res.Token,
+		Biscuit:       bisc,
+		BiscuitStatus: status,
 	}, nil
 }
 
+// biscuitStatusOf is whether a capability with caveats, bound to the key jkt
+// names and valid from nbf, can be sealed as a Biscuit at now, and why not.
+// limes seals only a capability that may be shared, since a Biscuit is
+// handed on offline; a key-bound one verifies only with a proof of its
+// holder's key, which the server does not have; and one valid only from a
+// later not-before verifies only then. Their holders present the JWT.
+func biscuitStatusOf(caveats limes.Caveats, jkt string, nbf, now time.Time) adminv1.BiscuitStatus {
+	switch {
+	case !hasOp(caveats.Ops, limes.OpShare):
+		return adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE
+	case jkt != "":
+		return adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND
+	case nbf.After(now):
+		return adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID
+	default:
+		return adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED
+	}
+}
+
+// biscuitRefusals says, for require_biscuit, why each status leaves a
+// capability without its Biscuit.
+var biscuitRefusals = map[adminv1.BiscuitStatus]string{
+	adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE: "its ops lack share, which a Biscuit handed on offline needs",
+	adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND:     "it is bound to a key, and only its holder can prove it; present the token",
+	adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID: "it is valid only from a later not_before",
+}
+
+// requireBiscuit refuses, before anything is issued, a capability that could
+// not be sealed as a Biscuit, as FailedPrecondition naming why.
+func requireBiscuit(caveats limes.Caveats, jkt string, nbf time.Time) error {
+	status := biscuitStatusOf(caveats, jkt, nbf, time.Now())
+	if status == adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
+		return nil
+	}
+	return connect.Errorf(connect.CodeFailedPrecondition,
+		"require_biscuit: the capability cannot be sealed as a Biscuit (%s): %s", status, biscuitRefusals[status])
+}
+
 // seal is the capability just minted as a Biscuit its holder can narrow
-// offline, or "" for one without OpShare, a key-bound one or one not valid
-// yet. A Biscuit is handed on offline, so limes seals only a capability that
-// may be shared. Issuer.Biscuit seals only a capability a verifier accepted,
-// so the token is verified first, for an audience it names; a key-bound
-// capability verifies only with a proof of its holder's key, which the server
-// does not have — its holder presents the JWT.
-func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, error) {
+// offline, with its status, or no Biscuit and the status that says why.
+// Issuer.Biscuit seals only a capability a verifier accepted, so the token is
+// verified first, for an audience it names.
+func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, adminv1.BiscuitStatus, error) {
 	c := res.Capability
-	if !hasOp(c.Caveats.Ops, limes.OpShare) || c.ConfirmationJKT != "" || len(c.Audience) == 0 {
-		return "", nil
+	status := biscuitStatusOf(c.Caveats, c.ConfirmationJKT, c.NotBefore, time.Now())
+	if status != adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
+		return "", status, nil
 	}
 	verified, err := h.verifier.Verify(ctx, limes.VerifyRequest{Token: res.Token, Audience: c.Audience[0]})
 	if errors.Is(err, limes.ErrNotYetValid) {
-		// A capability valid only from a later not-before verifies only
-		// then; its holder presents the JWT, as for a key-bound one.
-		return "", nil
+		// A not-before the clock reached between the check and the verify.
+		return "", adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("capabilityh: verify the minted capability: %w", err)
+		return "", 0, fmt.Errorf("capabilityh: verify the minted capability: %w", err)
 	}
 	b, err := h.issuer.Biscuit(ctx, limes.BiscuitRequest{Capability: verified})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return b.Token, nil
+	return b.Token, status, nil
 }
 
 // protoToCaveats reads c. A ceiling c leaves unset is parent's, in parent's

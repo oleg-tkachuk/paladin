@@ -45,9 +45,14 @@ func (d *denyAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ c
 // them are loud.
 type fakeStore struct {
 	cap *limes.Capability
+	// inserted counts the capabilities put on record.
+	inserted int
 }
 
-func (s *fakeStore) Insert(context.Context, limes.InsertRequest) error { return nil }
+func (s *fakeStore) Insert(context.Context, limes.InsertRequest) error {
+	s.inserted++
+	return nil
+}
 func (s *fakeStore) GetRecord(_ context.Context, id uuid.UUID) (limes.Record, error) {
 	if s.cap != nil && s.cap.ID == id {
 		return limes.Record{Capability: *s.cap}, nil
