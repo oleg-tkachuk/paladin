@@ -40,6 +40,7 @@ import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import { usePreference } from "@/hooks/usePreference";
 import { PREFERENCE_KEYS, readFlag } from "@/lib/preferences/keys";
 import { anyActive } from "@/lib/operationNotices";
+import { bannerFromJson, type PlatformBanner } from "@/lib/banner";
 
 export type SectionStatus = "ok" | "unavailable" | "loading";
 
@@ -53,6 +54,8 @@ interface ShellState {
   version: ShellSection<VersionInfo>;
   health: ShellSection<HealthInfo>;
   operations: ShellSection<Operation[]>;
+  /** The operator's banner (/api/shell's banner section), or null. */
+  banner: PlatformBanner | null;
   /** Set when the aggregate itself could not be reached at all. */
   error: string | null;
   lastUpdated: Date | null;
@@ -98,6 +101,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<ShellSection<HealthInfo>>(LOADING);
   const [operations, setOperations] =
     useState<ShellSection<Operation[]>>(LOADING);
+  const [banner, setBanner] = useState<PlatformBanner | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   // IAM never issues a pure tenant.user the admin audience; asking on every
@@ -158,6 +162,11 @@ export function ShellProvider({ children }: { children: ReactNode }) {
           return parsed.operations;
         }),
       );
+      // An unreadable banner section leaves the last banner up rather than
+      // taking it down: the notice it carried is still the operator's.
+      if (body.banner?.status === "ok") {
+        setBanner(bannerFromJson(body.banner.data ?? null));
+      }
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
@@ -169,6 +178,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       setVersion({ status: "unavailable", reason: message, data: null });
       setHealth({ status: "unavailable", reason: message, data: null });
       setOperations({ status: "unavailable", reason: message, data: null });
+      // The banner is kept: a maintenance notice is most needed exactly when
+      // the console cannot reach what it announces.
     }
   }, [adminAllowed]);
 
@@ -200,8 +211,16 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo<ShellState>(
-    () => ({ version, health, operations, error, lastUpdated, refresh }),
-    [version, health, operations, error, lastUpdated, refresh],
+    () => ({
+      version,
+      health,
+      operations,
+      banner,
+      error,
+      lastUpdated,
+      refresh,
+    }),
+    [version, health, operations, banner, error, lastUpdated, refresh],
   );
 
   return (

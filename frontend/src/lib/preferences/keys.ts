@@ -10,6 +10,7 @@ export const PREFERENCE_KEYS = {
   notifyOperations: "console.notifyOperations",
   hideResourceLinks: "console.hideResourceLinks",
   tables: "console.tables",
+  dismissedNotices: "console.dismissedNotices",
 } as const;
 
 export type PreferenceKey =

@@ -14,6 +14,7 @@ import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { anyRegistry } from "@/lib/connect/any-registry";
 import { planeTransport } from "@/lib/server/upstream";
 import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
+import { bannerFromEnv } from "@/lib/banner";
 
 /**
  * One call for the console shell's own state.
@@ -117,7 +118,7 @@ export async function GET(req: Request) {
   };
   const iamUsable = iamHeaders !== null && tokenMatchesPlane(iamAuth, "iam");
 
-  const [version, health, operations] = await Promise.all([
+  const [version, health, operations, banner] = await Promise.all([
     section("version", async () =>
       iamUsable
         ? toJson(
@@ -159,12 +160,17 @@ export async function GET(req: Request) {
         { registry: anyRegistry },
       );
     }),
+    // The operator's banner, read from this process's environment on every
+    // call: no plane is asked, so it is there even when every plane is not.
+    // Null when none is set.
+    section("banner", async () => bannerFromEnv(process.env)),
   ]);
 
-  const body: Record<string, Section<JsonValue>> = {
+  const body: Record<string, Section<JsonValue | object | null>> = {
     version,
     health,
     operations,
+    banner,
   };
   return Response.json(body, {
     // The shell is per-operator and changes constantly; a cached copy would
