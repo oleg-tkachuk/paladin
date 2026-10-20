@@ -248,6 +248,39 @@ In production both charts read the token from one Secret: the backend through
 `scripts/health-token-secret.test.sh` checks the rendered production manifests
 agree.
 
+### Platform banner
+
+A message across every page of the console — a maintenance window, a
+migration, a policy change — after Argo CD's `ui.bannercontent`. The chart's
+`banner` value sets it, through these variables:
+
+| Chart value | Variable | Default | Meaning |
+| --- | --- | --- | --- |
+| `banner.content` | `PALADIN_BANNER_CONTENT` | `""` | the message; empty shows no banner |
+| `banner.severity` | `PALADIN_BANNER_SEVERITY` | `info` | `info`, `warning` or `critical`: the banner's colour and glyph |
+| `banner.url` | `PALADIN_BANNER_URL` | `""` | where "Read more" goes: an `http(s)` address or a path in the console |
+| `banner.permanent` | `PALADIN_BANNER_PERMANENT` | `false` | `true`: nobody can dismiss it |
+| `banner.position` | `PALADIN_BANNER_POSITION` | `top` | `top`, `bottom` or `both` |
+
+```yaml
+banner:
+  content: "Storage is read-only on Sunday from 02:00 to 04:00 UTC."
+  severity: warning
+  url: https://status.example.com
+```
+
+The BFF reads the variables on every `/api/shell` poll
+(`frontend/src/lib/banner.ts`), so a new banner is a rollout, not a rebuild,
+and it stays up while the planes it announces are down. It shows once the
+reader is signed in. A banner that is not permanent is dismissed per user:
+the dismissal is kept in their settings (`console.dismissedNotices`) under a
+hash of the banner's text, link and severity, so it follows them to another
+browser and shows again when any of those changes. An unknown severity reads
+as `info`, an unknown position as `top`, and a link that is neither `http(s)`
+nor a console path is dropped.
+
+### Build metadata
+
 `frontend/configs/config.yaml`, read at boot from `/app/configs/config.yaml`
 or `configs/config.yaml` and validated with zod (`frontend/src/config.ts`),
 carries only build metadata (`runtimeConfig.public.uiMetadata`). It has no
