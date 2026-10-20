@@ -146,6 +146,31 @@ describe("CapabilitiesPage", () => {
     });
     expect(caveats.budgetCeiling.case).toBe("unlimitedBudget");
     expect(caveats.budgetCeiling.value).toMatchObject({ currencyCode: "" });
+    expect(caveats.copyCeiling).toEqual({
+      case: "unlimitedCopies",
+      value: true,
+    });
+  });
+
+  // A quota of Biscuit copies is a limit like the others: 0 allows no copy
+  // with limits of its own.
+  it("sends a typed quota of Biscuit copies", async () => {
+    h.issue.mockRejectedValue(new Error("boom"));
+    render(<CapabilitiesPage />);
+    await userEvent.click(issueButtons()[0]);
+    const dialog = within(screen.getByRole("dialog"));
+    await userEvent.type(dialogSubject(), "agent-x");
+    const copies = dialog.getByLabelText(/Max Biscuit copies/);
+    await userEvent.click(
+      copies.parentElement!.querySelector("button[aria-pressed]")!,
+    );
+    await userEvent.type(copies, "3");
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    await waitFor(() => expect(h.issue).toHaveBeenCalled());
+    expect(h.issue.mock.calls[0][0].caveats.copyCeiling).toEqual({
+      case: "maxCopies",
+      value: 3n,
+    });
   });
 
   // 0 is a limit now, not "none": a capability can be issued frozen.
@@ -201,6 +226,7 @@ describe("CapabilitiesPage", () => {
           resourceUris: [],
           sourceIpCidr: [],
           requestCeiling: { case: "unlimitedRequests", value: true },
+          copyCeiling: { case: "unlimitedCopies", value: true },
           budgetCeiling: {
             case: "unlimitedBudget",
             value: { currencyCode: "XXX" },
@@ -242,6 +268,7 @@ describe("CapabilitiesPage", () => {
       resourceUris: [],
       sourceIpCidr: [],
       requestCeiling: { case: "unlimitedRequests", value: true },
+      copyCeiling: { case: "unlimitedCopies", value: true },
       budgetCeiling: {
         case: "unlimitedBudget",
         value: { currencyCode: "XXX" },
