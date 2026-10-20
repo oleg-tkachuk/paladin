@@ -860,4 +860,29 @@ order they are being taken up.
   counts that are exact past the first page — from one server-side preview of
   what `PurgeTenant` would remove rather than reads assembled in the browser.
 - **Blockers:** a preview (dry-run) read for `PurgeTenant` on the admin API.
+#### Topology: a tenant's policies and capabilities as a side branch
+
+- **Status:** Deferred.
+- **Reason:** the tenant topology draws tenant → collections → buckets →
+  backends only; a policy layer is read one resource at a time
+  (PolicyService.GetEffectivePolicy) and capabilities are listed one principal
+  at a time (CapabilityService.List), so a branch for them costs a request per
+  collection and per principal on every open.
+- **Definition of Done:** the tenant topology shows which of its resources
+  carry a Cedar layer of their own and the principals holding live
+  capabilities, as a branch off the tenant, each linking to its page, from
+  reads that answer for the whole tenant at once.
+- **Blockers:** a tenant-wide read of policy layers and of capabilities.
+
+#### Topology: collections in the platform view
+
+- **Status:** Deferred.
+- **Reason:** `/topology` draws backends → buckets → tenants; adding each
+  tenant's collections means reading the cross-tenant collections catalogue,
+  which on a large platform is thousands of nodes for a picture whose question
+  is which tenants stand behind which infrastructure.
+- **Definition of Done:** a platform topology can open one bucket or one
+  tenant down to its collections (the tenant view already shows them per
+  tenant), read on demand rather than all at once.
+- **Blockers:** none — taken up when it is asked for.
 

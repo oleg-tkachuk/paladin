@@ -7,6 +7,7 @@ import {
   BACKEND_FACETS,
   HEALTH_ERROR,
   HEALTH_OK,
+  backendStatus,
   healthView,
   lifecycleState,
 } from "./backendView";
@@ -104,5 +105,27 @@ describe("healthView", () => {
         expect.objectContaining({ label: "Untested", tone: "unknown" }),
       );
     }
+  });
+});
+
+describe("backendStatus", () => {
+  const healthy = {
+    enabled: true,
+    readOnly: false,
+    maintenance: false,
+    healthStatus: HEALTH_OK,
+    healthMessage: "",
+  };
+
+  it.each([
+    [{}, "Healthy", "success"],
+    // A failed probe on an enabled backend is what needs the look.
+    [{ healthStatus: HEALTH_ERROR }, "Probe failed", "danger"],
+    [{ enabled: false }, "Disabled", "suspended"],
+    [{ maintenance: true }, "Maintenance", "suspended"],
+    [{ readOnly: true }, "Draining", "progress"],
+    [{ healthStatus: "" }, "Untested", "unknown"],
+  ])("%o → %s", (change, label, tone) => {
+    expect(backendStatus({ ...healthy, ...change })).toEqual({ label, tone });
   });
 });

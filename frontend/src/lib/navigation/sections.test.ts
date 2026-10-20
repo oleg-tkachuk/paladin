@@ -15,6 +15,9 @@ describe("sectionFor", () => {
     ["/collections", SECTION.collections],
     ["/tenants", SECTION.tenants],
     ["/tenants/acme/collections/docs", SECTION.tenants],
+    // A tenant's own topology is its workspace's, not the platform's.
+    ["/tenants/acme/topology", SECTION.tenants],
+    ["/topology", SECTION.topology],
     ["/audit", SECTION.audit],
     // The MCP group's pages each own their row; anything deeper is the
     // overview's.

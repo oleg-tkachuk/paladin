@@ -24,6 +24,7 @@ import {
   BuildingOfficeIcon,
   ClockIcon,
   QueueListIcon,
+  ShareIcon,
 } from "@heroicons/react/24/outline";
 import { useActions, type Action } from "@/context/ActionsContext";
 import { useScope } from "@/context/ScopeContext";
@@ -149,6 +150,15 @@ export function CommandPalette() {
         onSelect: () => router.push(`${base}/collections`),
       },
       {
+        id: "nav-tenant-topology",
+        type: "nav",
+        title: `Topology of ${label}`,
+        subtitle: "Its collections, their buckets and backends, drawn",
+        icon: ShareIcon,
+        href: `${base}/topology`,
+        onSelect: () => router.push(`${base}/topology`),
+      },
+      {
         id: "nav-tenant-policies",
         type: "nav",
         title: `Policies in ${label}`,
@@ -218,6 +228,15 @@ export function CommandPalette() {
           icon: ServerStackIcon,
           href: "/collections",
           onSelect: () => router.push("/collections"),
+        },
+        {
+          id: "nav-topology",
+          type: "nav",
+          title: "Topology",
+          subtitle: "Backends, their buckets and the tenants each serves",
+          icon: ShareIcon,
+          href: SECTION.topology,
+          onSelect: () => router.push(SECTION.topology),
         },
         {
           id: "nav-upload",
