@@ -53,7 +53,7 @@ import { FolderTrail } from "./FolderTrail";
 import { LiveToggle } from "@/components/ui/LiveToggle";
 import { liveState } from "@/lib/live";
 import { FOLDER_DELIMITER } from "@/lib/objectFolders";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
 import { Button } from "@/components/ui/button";
 import { UploadQueue } from "@/components/features/upload/UploadQueue";
@@ -73,6 +73,17 @@ const STAYS_RESTORABLE =
 const STAY_RESTORABLE =
   "They stay restorable from the Trash tab until they are purged.";
 const CANNOT_BE_UNDONE = "This cannot be undone.";
+// What a permanent delete asks to be typed: the verb, not an object's key,
+// which can run to a long path, and the same word for one object or many.
+const PURGE_WORD = "purge";
+
+// A selection, listed by key in its confirmation.
+function selectionAffected(items: readonly { key: string }[]): Affected {
+  return {
+    heading: `${items.length} ${items.length === 1 ? "object" : "objects"}`,
+    items: items.map((o) => o.key),
+  };
+}
 
 function CollectionObjectsContent() {
   const { collection: collectionResource } = useCollection();
@@ -213,6 +224,9 @@ function CollectionObjectsContent() {
     warning?: string;
     confirmText: string;
     onConfirm: () => Promise<void>;
+    // Typed out for a delete nothing restores; see ConfirmModal.
+    typeToConfirm?: string;
+    affected?: Affected;
   }>({
     open: false,
     title: "",
@@ -253,6 +267,7 @@ function CollectionObjectsContent() {
       message: `This will permanently delete "${obj.key.split("/").pop()}".`,
       warning: CANNOT_BE_UNDONE,
       confirmText: "Purge permanently",
+      typeToConfirm: PURGE_WORD,
       onConfirm: async () => {
         const full = objects.find((o) => o.objectId === obj.objectId);
         if (full) await purgeObject(full);
@@ -384,6 +399,8 @@ function CollectionObjectsContent() {
         warning:
           "Their public URLs stop answering, though a CDN may serve a cached copy until it expires. This cannot be undone.",
         confirmText: "Delete permanently",
+        typeToConfirm: PURGE_WORD,
+        affected: selectionAffected(selectedItems),
         onConfirm: async () => {
           await bulkDeleteObjects(deletePayload, { permanent: true });
           setSelectedIds(new Set());
@@ -421,6 +438,8 @@ function CollectionObjectsContent() {
           : "The selected objects can no longer be read.",
       warning: STAY_RESTORABLE,
       confirmText: `Move ${trash.length} to Trash`,
+      // Listed, not typed: the trash gives them back, and Undo is offered.
+      affected: selectionAffected(trash),
       onConfirm: async () => {
         try {
           setIsBulkDeleting(true);
@@ -900,6 +919,8 @@ function CollectionObjectsContent() {
           message={confirm.message}
           warning={confirm.warning}
           confirmText={confirm.confirmText}
+          typeToConfirm={confirm.typeToConfirm}
+          affected={confirm.affected}
           onConfirm={confirm.onConfirm}
           onClose={() => setConfirm((p) => ({ ...p, open: false }))}
         />

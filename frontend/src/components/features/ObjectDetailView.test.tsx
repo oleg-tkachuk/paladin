@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, typeToConfirm, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 
@@ -144,6 +144,19 @@ describe("ObjectDetailView", () => {
       screen.getByRole("button", { name: "Move to Trash" }),
     );
     await waitFor(() => expect(h.softDeleteObject).toHaveBeenCalled());
+  });
+
+  it("purges only once the verb is typed", async () => {
+    render(<ObjectDetailView collection="o1" />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Object actions" }),
+    );
+    await userEvent.click(screen.getByText("Permanently Delete"));
+    const purge = screen.getByRole("button", { name: "Delete Forever" });
+    expect(purge).toBeDisabled();
+    await typeToConfirm("purge");
+    await userEvent.click(purge);
+    await waitFor(() => expect(h.purgeObject).toHaveBeenCalled());
   });
 
   // ADR-0027: a public object shows where anyone reads it, and has no trash.
