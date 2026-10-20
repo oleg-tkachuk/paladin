@@ -15,6 +15,8 @@ export const TABLE_PARAMS = {
   row: "id",
   /** The page of a paged list, from 1; the first is left out. */
   page: "page",
+  /** The tab the open row's detail panel shows; its first tab is no tab. */
+  tab: "tab",
 } as const;
 
 export type TableParam = keyof typeof TABLE_PARAMS;

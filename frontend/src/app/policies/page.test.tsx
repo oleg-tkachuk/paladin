@@ -139,3 +139,29 @@ describe("PoliciesPage collection targets", () => {
     );
   });
 });
+
+// What Save would write is shown against what is saved before it is pressed.
+describe("PoliciesPage unsaved changes", () => {
+  it("diffs the draft against the saved policy, and not until it differs", async () => {
+    h.tenants = [{ tenantId: "acme", displayName: "Acme" }];
+    h.getTenant.mockResolvedValue({
+      inheritedCedarPolicy: "permit (principal, action, resource);\n",
+      resourceVersion: "7",
+    });
+    const user = userEvent.setup();
+    render(<PoliciesPage />);
+    await user.click(screen.getByLabelText("Target"));
+    await user.click(screen.getByRole("option", { name: /Acme/ }));
+    const editor = await screen.findByDisplayValue(/permit \(principal/);
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+
+    await user.type(editor, "forbid");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    const diff = screen.getByRole("table", {
+      name: "Changes from saved to draft",
+    });
+    expect(diff).toHaveTextContent("forbid");
+    expect(diff.querySelector('[data-diff="add"]')).not.toBeNull();
+    h.tenants = [];
+  });
+});

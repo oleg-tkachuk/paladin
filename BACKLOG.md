@@ -886,3 +886,42 @@ order they are being taken up.
   tenant), read on demand rather than all at once.
 - **Blockers:** none — taken up when it is asked for.
 
+
+#### Diff a policy against its earlier versions
+
+- **Status:** Blocked.
+- **Reason:** a Cedar policy is stored in place on its tenant, bucket or
+  collection and no RPC returns an earlier text, so the policy editor diffs
+  only the draft against what is saved. The audit log's before/after
+  snapshots of a policy write are the nearest thing, one entry at a time.
+- **Definition of Done:** the API serves a policy's previous versions, with
+  who wrote each and when, and the policy editor diffs any two of them in
+  `DiffView`.
+- **Blockers:** the backend keeping a policy's history.
+
+#### Diff the running configuration against its defaults
+
+- **Status:** Blocked.
+- **Reason:** `/config` diffs the running configuration against a
+  config.yaml pasted in, but not against the defaults: GetConfig returns
+  only the loaded YAML, and the defaults live in the Go config loader.
+- **Definition of Done:** the API serves the defaults, redacted as the
+  running configuration is, and `/config` diffs the two in `DiffView`, so
+  an operator sees every setting their deployment changed.
+- **Blockers:** a field on GetConfigResponse (or a sibling RPC) carrying
+  the defaults.
+
+#### Detail panels for the remaining record dialogs
+
+- **Status:** Aspirational.
+- **Reason:** `DetailPanel` took over the record dialogs of the audit log
+  (both), capabilities, M2M tokens and operations. A collection's trash, the
+  MCP sessions, tool catalogue and authorisation tables, and connected
+  applications still open a dialog: their open row lives in component state,
+  the MCP tables share one page and need namespaced parameters, and the
+  trash's paged list may not hold a linked object after a reload, so it has
+  to be read by id first.
+- **Definition of Done:** each opens in `DetailPanel` through
+  `useDetailPanel`, namespaced where a page holds more than one table, and a
+  linked record the loaded page does not hold is read by its id.
+- **Blockers:** none.

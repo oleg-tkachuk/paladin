@@ -1,6 +1,10 @@
 "use client";
 
-import { RecordDialog, RecordField } from "@/components/ui/RecordDialog";
+import { TrashIcon } from "@heroicons/react/24/outline";
+
+import { DetailPanel } from "@/components/ui/DetailPanel";
+import { RecordField, RecordFields } from "@/components/ui/RecordDialog";
+import { Button } from "@/components/ui/button";
 import { Timestamp } from "@/components/Timestamp";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { T } from "@/lib/ui/typography";
@@ -70,27 +74,46 @@ export function TokenUsage({
   );
 }
 
-/** One M2M token with every column the table hides on a narrow screen. */
-export function TokenRecordDialog({
+/**
+ * One M2M token with every column the table hides on a narrow screen, in a
+ * panel beside the list, with Revoke along the bottom while it is live.
+ */
+export function TokenRecordPanel({
   token,
   usage,
   readAtMs,
   onClose,
+  onRevoke,
 }: {
   token: APIToken | null;
   usage: UsageSnap | "never" | undefined;
   readAtMs: number;
   onClose: () => void;
+  /** Asks to revoke the token shown; the page confirms it. */
+  onRevoke: (token: APIToken) => void;
 }) {
   return (
-    <RecordDialog
+    <DetailPanel
       open={token !== null}
-      onOpenChange={(o) => !o && onClose()}
+      onClose={onClose}
+      rowId={token?.id}
       title={token?.displayName || "M2M token"}
-      subtitle={token ? `paladin_pat_${token.prefix}…` : undefined}
+      identifier={token ? `paladin_pat_${token.prefix}…` : undefined}
+      footer={
+        token && !isRevoked(token) ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onRevoke(token)}
+          >
+            <TrashIcon className="size-4" />
+            Revoke
+          </Button>
+        ) : null
+      }
     >
       {token ? (
-        <>
+        <RecordFields>
           <RecordField label="Status">
             <TokenStatus token={token} />
           </RecordField>
@@ -135,8 +158,8 @@ export function TokenRecordDialog({
               <Timestamp ts={token.revokedAt} />
             </RecordField>
           ) : null}
-        </>
+        </RecordFields>
       ) : null}
-    </RecordDialog>
+    </DetailPanel>
   );
 }

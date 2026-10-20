@@ -134,3 +134,52 @@ export function withoutUnset(sections: ConfigSection[]): ConfigSection[] {
     return entries.length > 0 ? [{ ...s, entries }] : [];
   });
 }
+
+/**
+ * A copy of `other` with each value the running configuration redacts
+ * redacted too, so a secret written out in a checked-in file does not read
+ * as a difference the server would never show.
+ */
+function redactedAsIn(other: unknown, running: unknown): unknown {
+  if (running === REDACTED) {
+    return other === null || other === undefined || other === ""
+      ? other
+      : REDACTED;
+  }
+  if (isMap(other) && isMap(running)) {
+    return Object.fromEntries(
+      Object.entries(other).map(([k, v]) => [k, redactedAsIn(v, running[k])]),
+    );
+  }
+  if (Array.isArray(other) && Array.isArray(running)) {
+    return other.map((v, i) => redactedAsIn(v, running[i]));
+  }
+  return other;
+}
+
+/** A parsed document as YAML in one fixed form: keys sorted, lines unwrapped. */
+const canonical = (doc: unknown): string =>
+  doc === undefined || doc === null
+    ? ""
+    : dump(doc, { sortKeys: true, lineWidth: -1 });
+
+/**
+ * The running configuration and another one — a config.yaml as checked in —
+ * written out alike for a line diff: both parsed and dumped again with their
+ * keys sorted, so comments, quoting and key order do not count as changes,
+ * and the other's secrets redacted where the server redacts them. A document
+ * that is not YAML throws.
+ */
+export function comparableConfigs(
+  running: string,
+  other: string,
+): { running: string; other: string } {
+  // js-yaml refuses an empty document; here it is an empty configuration.
+  const parse = (yaml: string) => (yaml.trim() ? load(yaml) : null);
+  const runningDoc = parse(running);
+  const otherDoc = parse(other);
+  return {
+    running: canonical(runningDoc),
+    other: canonical(redactedAsIn(otherDoc, runningDoc)),
+  };
+}

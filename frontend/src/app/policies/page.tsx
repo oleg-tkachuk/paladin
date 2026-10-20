@@ -49,6 +49,7 @@ import {
 import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
+import { DiffView } from "@/components/ui/DiffView";
 import { PolicyLayers } from "@/components/features/policy/PolicyLayers";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
@@ -560,6 +561,22 @@ export default function PoliciesPage() {
               />
             )}
             <CedarIndicator state={cedarState} />
+            {/* What Save would change, read before pressing it: the draft
+                against the text last loaded or saved. */}
+            {target &&
+            !loadingPolicy &&
+            !policyFailed &&
+            policyText !== serverSnapshot ? (
+              <section aria-label="Unsaved changes" className="space-y-1.5">
+                <p className="text-sm font-medium">Unsaved changes</p>
+                <DiffView
+                  before={serverSnapshot}
+                  after={policyText}
+                  beforeLabel="Saved"
+                  afterLabel="Draft"
+                />
+              </section>
+            ) : null}
             {diagnostics !== null && diagnostics.length === 0 && (
               <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-sm text-success">
                 <CheckCircleIcon className="size-4" />

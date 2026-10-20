@@ -279,6 +279,22 @@ describe("CapabilitiesPage", () => {
     expect(await screen.findByText("Capability details")).toBeInTheDocument();
   });
 
+  it("opens the details beside the list from the row itself", async () => {
+    seedBrowse();
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    render(<CapabilitiesPage />);
+    const row = (
+      await screen.findByText("Actions for capability cap-1")
+    ).closest("tr") as HTMLElement;
+    await userEvent.click(row);
+    expect(await screen.findByText("Capability details")).toBeInTheDocument();
+    expect(window.location.search).toBe("?id=cap-1");
+    // Revoke from the panel asks for the same confirmation as the menu's.
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
+  });
+
   it("puts the capability open in details in the address", async () => {
     seedBrowse();
     h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });

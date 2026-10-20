@@ -7,7 +7,7 @@
 // work inside the tenant included.
 //
 // Free-text search filters client-side over the loaded page, same
-// affordance as /audit.
+// affordance as /audit, and a row opens the entry beside the log, as there.
 
 import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
 import { emptyReason } from "@/lib/emptyState";
@@ -49,6 +49,12 @@ import { RelayedBy } from "@/components/features/audit/RelayedBy";
 import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
 import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
+import { openableRow } from "@/components/ui/RecordDialog";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
+import {
+  AUDIT_ENTRY_TABS,
+  AuditEntryPanel,
+} from "@/components/features/audit/AuditEntryPanel";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "tenantAudit";
@@ -71,6 +77,8 @@ export default function TenantAuditLogPage() {
     useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId, sort);
 
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  // The open entry and its tab are in the URL, as on /audit.
+  const detail = useDetailPanel(AUDIT_ENTRY_TABS);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -210,10 +218,13 @@ export default function TenantAuditLogPage() {
           >
             {filtered.map((e) => {
               const hasError = !!e.errorMessage;
+              const row = openableRow(() => detail.open(e.entryId));
               return (
                 <TableRow
                   key={e.entryId}
-                  className={cn(hasError && "bg-destructive/5")}
+                  {...row}
+                  {...detail.rowProps(e.entryId)}
+                  className={cn(row.className, hasError && "bg-destructive/5")}
                 >
                   <TableCell
                     className={cn(
@@ -303,6 +314,13 @@ export default function TenantAuditLogPage() {
           </ListBody>
         </Table>
       </ListPage>
+
+      <AuditEntryPanel
+        entryId={detail.openId}
+        tab={detail.tab}
+        onTabChange={detail.setTab}
+        onClose={detail.close}
+      />
     </TableScope>
   );
 }

@@ -126,6 +126,35 @@ describe("ConfigPage", () => {
     expect(screen.queryAllByRole("region")).toHaveLength(0);
   });
 
+  it("diffs the running configuration against one pasted in", async () => {
+    render(<ConfigPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Compare" }));
+    const box = screen.getByLabelText("Compare with");
+    await userEvent.click(box);
+    // Checked in with a comment, the secret in clear and another level.
+    await userEvent.paste(
+      "# checked in\n" +
+        YAML.replace("'***'", "s3cret").replace("info", "debug"),
+    );
+    const diff = screen.getByRole("table", {
+      name: "Changes from pasted to running",
+    });
+    expect(diff).toHaveTextContent("level: debug");
+    expect(diff).toHaveTextContent("level: info");
+    expect(diff).not.toHaveTextContent("s3cret");
+    expect(screen.getByText("1 added, 1 removed")).toBeInTheDocument();
+  });
+
+  it("says when the pasted text is not YAML", async () => {
+    render(<ConfigPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Compare" }));
+    await userEvent.click(screen.getByLabelText("Compare with"));
+    await userEvent.paste("app: [unclosed");
+    expect(
+      screen.getByText("The pasted text is not YAML."),
+    ).toBeInTheDocument();
+  });
+
   it("shows a document that is not YAML as text, and says so", () => {
     h.config.config = "app: [unclosed";
     render(<ConfigPage />);

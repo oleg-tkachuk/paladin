@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   REDACTED,
+  comparableConfigs,
   filterConfigSections,
   parseConfigSections,
   redactedCount,
@@ -146,5 +147,48 @@ describe("withoutUnset", () => {
     expect(
       withoutUnset(parseConfigSections("cors: {}\napp:\n  name: x\n")),
     ).toEqual([expect.objectContaining({ key: "app" })]);
+  });
+});
+
+describe("comparableConfigs", () => {
+  it("does not count comments, quoting or key order as changes", () => {
+    const { running, other } = comparableConfigs(
+      "app:\n  name: paladin\n  env: prod\n",
+      "# checked in\napp:\n  env: 'prod'\n  name: \"paladin\"\n",
+    );
+    expect(other).toBe(running);
+    expect(running).toBe("app:\n  env: prod\n  name: paladin\n");
+  });
+
+  it("redacts a secret where the server redacts it", () => {
+    const { running, other } = comparableConfigs(
+      `db:\n  dsn: "${REDACTED}"\n  pool: 10\nkeys:\n  - "${REDACTED}"\n`,
+      "db:\n  dsn: postgres://u:p@h/db\n  pool: 20\nkeys:\n  - hunter2\n",
+    );
+    expect(other).not.toContain("hunter2");
+    expect(other).not.toContain("postgres://");
+    expect(other).toBe(running.replace("pool: 10", "pool: 20"));
+  });
+
+  it("keeps a secret the other file leaves unset as unset", () => {
+    const { other } = comparableConfigs(
+      `db:\n  dsn: "${REDACTED}"\n`,
+      "db:\n  dsn: ''\n",
+    );
+    expect(other).toBe("db:\n  dsn: ''\n");
+  });
+
+  it("keeps settings only one side has", () => {
+    const { running, other } = comparableConfigs("a: 1\n", "a: 1\nb: 2\n");
+    expect(running).toBe("a: 1\n");
+    expect(other).toBe("a: 1\nb: 2\n");
+  });
+
+  it("reads an empty document as empty", () => {
+    expect(comparableConfigs("", "")).toEqual({ running: "", other: "" });
+  });
+
+  it("throws on a document that is not YAML", () => {
+    expect(() => comparableConfigs("a: 1\n", "a: [1\n")).toThrow();
   });
 });
