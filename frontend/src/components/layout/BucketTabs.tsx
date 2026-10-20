@@ -6,6 +6,7 @@
 //   Collections — what each tenant stores in it.
 //   the settings — lifecycle, policy, versioning, object lock, replication;
 //                  each reaches every tenant the bucket is shared with.
+//   History     — the changes made to it, newest first.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -36,6 +37,7 @@ const TABS: TabSpec[] = [
   { slug: "versioning", label: "Versioning" },
   { slug: "object-lock", label: "Object lock" },
   { slug: "replication", label: "Replication" },
+  { slug: "history", label: "History" },
 ];
 
 /** Whether pathname is one of a bucket's settings tabs. */

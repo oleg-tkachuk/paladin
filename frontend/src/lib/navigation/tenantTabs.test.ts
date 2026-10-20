@@ -14,6 +14,7 @@ describe("tenantTabState", () => {
     ["default-binding", "Storage", "Default bucket"],
     ["capabilities", "Access", "Capabilities"],
     ["audit-log", "Activity", "Audit"],
+    ["history", "Activity", "History"],
     ["budget", "Limits", "Budget"],
   ])("%s → %s / %s", (tab, group, page) => {
     const got = tenantTabState(tab);
@@ -40,6 +41,7 @@ describe("TENANT_TAB_GROUPS", () => {
         "collections",
         "default-binding",
         "event-subscriptions",
+        "history",
         "m2m-tokens",
         "policies",
         "quotas",

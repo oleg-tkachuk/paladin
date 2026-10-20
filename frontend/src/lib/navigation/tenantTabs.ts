@@ -39,7 +39,10 @@ export const TENANT_TAB_GROUPS: readonly TenantTabGroup[] = [
   },
   {
     label: "Activity",
+    // History first: what changed, who changed it and how it ended, read
+    // before the raw audit log or the event deliveries behind it.
     pages: [
+      { slug: "history", label: "History" },
       { slug: "event-subscriptions", label: "Events" },
       { slug: "audit-log", label: "Audit" },
     ],
