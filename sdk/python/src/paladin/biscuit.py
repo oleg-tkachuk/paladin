@@ -20,7 +20,9 @@ import base64
 import binascii
 import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from paladin.admin.v1 import capability_service_pb2
@@ -65,11 +67,63 @@ def biscuit_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -> s
     Raises ``NoBiscuitError`` naming the answer's ``biscuit_status`` when it
     carries none, so a caller that needs one fails where it asks rather than
     passing an empty token on. To be refused before anything is issued
-    instead, set ``require_biscuit``.
+    instead, set ``require_biscuit``. A caller that only presents the
+    capability wants ``credential_of``.
     """
     if resp.biscuit_status == capability_service_pb2.BISCUIT_STATUS_ISSUED and resp.biscuit:
         return resp.biscuit
     raise NoBiscuitError(resp.biscuit_status)
+
+
+class CredentialForm(StrEnum):
+    """Which form of a capability a ``Credential`` is. Both are presented the
+    same way, as ``capability=``."""
+
+    TOKEN = "token"
+    """The capability's JWT."""
+    BISCUIT = "biscuit"
+    """Its Biscuit, which its holder can also narrow offline with ``attenuate``."""
+
+
+@dataclass(frozen=True)
+class Credential:
+    """What to present for a capability an Issue or Delegate answer carries."""
+
+    value: str
+    """Presented as ``capability=``."""
+    form: CredentialForm
+    """Which form ``value`` is."""
+    biscuit_status: int
+    """The answer's: ``BISCUIT_STATUS_ISSUED`` for a Biscuit, otherwise why the
+    token is presented instead."""
+
+
+class NoCredentialError(Exception):
+    """An Issue or Delegate answer that carries neither a token nor a Biscuit."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(
+            "the answer carries no capability to present: "
+            f"{capability_service_pb2.BiscuitStatus.Name(status)}"
+        )
+
+
+def credential_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -> Credential:
+    """What to present for the capability an Issue or Delegate answer
+    carries: its Biscuit when ``biscuit_status`` is ``ISSUED``, its token
+    otherwise, with the status that says why.
+
+    A caller that only presents the capability needs no more; one that must
+    narrow it offline asks ``biscuit_of``. Raises ``NoCredentialError`` for an
+    answer that carries neither.
+    """
+    status = resp.biscuit_status
+    if resp.biscuit and status == capability_service_pb2.BISCUIT_STATUS_ISSUED:
+        return Credential(resp.biscuit, CredentialForm.BISCUIT, status)
+    if resp.token:
+        return Credential(resp.token, CredentialForm.TOKEN, status)
+    raise NoCredentialError(status)
 
 
 def _biscuit() -> Any:

@@ -130,7 +130,11 @@ and `Issue*` calls and answers a repeated key with the first response.
 `CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
 no key and no call to the server. Every capability is sealed as one but a
-key-bound one and one not valid yet: `biscuit_status` says which. `paladin.BiscuitOf(issued)` returns the Biscuit,
+key-bound one and one not valid yet: `biscuit_status` says which.
+`paladin.CredentialOf(issued)` is what to present: the Biscuit when it was
+issued, the token otherwise, with its `Form` and the `BiscuitStatus` that says
+why — both forms go to `WithCapability` alike, so a client that only presents
+the capability needs nothing more. `paladin.BiscuitOf(issued)` returns the Biscuit,
 or an error wrapping `paladin.ErrNoBiscuit` that names the status, and
 `require_biscuit` on the request refuses one that could not be sealed before
 anything is issued. `paladin.Attenuate` narrows it, writing the block with

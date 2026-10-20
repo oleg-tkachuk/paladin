@@ -25,7 +25,15 @@ from paladin.auth import (
     Session,
     StaticToken,
 )
-from paladin.biscuit import NoBiscuitError, attenuate, biscuit_of
+from paladin.biscuit import (
+    Credential,
+    CredentialForm,
+    NoBiscuitError,
+    NoCredentialError,
+    attenuate,
+    biscuit_of,
+    credential_of,
+)
 from paladin.capability_cache import (
     CAPABILITY_REFRESH_MARGIN,
     AsyncCapabilityCache,
@@ -222,6 +230,8 @@ __all__ = [
     "Client",
     "CollectionName",
     "ContractSkewError",
+    "Credential",
+    "CredentialForm",
     "Endpoints",
     "FailedPreconditionError",
     "Hooks",
@@ -231,6 +241,7 @@ __all__ = [
     "NoBiscuitError",
     "NoCAError",
     "NoCapabilityKeyError",
+    "NoCredentialError",
     "NoPartSplitError",
     "NotFoundError",
     "ObjectChangedError",
@@ -289,6 +300,7 @@ __all__ = [
     "complete_multipart",
     "connect",
     "connect_async",
+    "credential_of",
     "current_idempotency_key",
     "default_retryable",
     "delete",

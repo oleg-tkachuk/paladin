@@ -56,6 +56,11 @@ copy with limits of its own is counted against `copy_ceiling`.
 - `BISCUIT_STATUS_NOT_SHAREABLE` is deprecated and never sent, and
   `require_biscuit` no longer refuses a capability for lacking `share`.
 - `Delegate` still requires `share` on the parent.
+- `paladin.CredentialOf` (Go) and `credential_of` (Python) say what to
+  present for an issued capability: the Biscuit when it was issued, the token
+  otherwise, with the form and the status. A client that only presents the
+  capability should use them rather than read `biscuit`; `BiscuitOf` stays
+  for one that must narrow it.
 - The operations are typed. Go: `paladin.Op`, with `Attenuation.Ops []Op`,
   `paladin.OpNames(…)` for `CapabilityCaveats.ops`, and `Op.Validate`. Python:
   `paladin.Op`, a `StrEnum`, whose members `OP_GET` … `OP_OBJECT_TAG` now are;
