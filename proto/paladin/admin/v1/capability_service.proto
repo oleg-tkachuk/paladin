@@ -218,6 +218,27 @@ message CapabilityServiceIssueRequest {
     (buf.validate.field).string.pattern = "^[A-Za-z0-9_-]{43}$",
     (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
   ];
+  // require_biscuit refuses, with FailedPrecondition naming why, a request
+  // whose capability could not be sealed as a Biscuit, rather than issue it
+  // with its token alone. Nothing is issued when it is refused.
+  bool require_biscuit = 7;
+}
+
+// BiscuitStatus is whether an Issue or Delegate answer carries the
+// capability's Biscuit, and why it does not when it does not. The server
+// always names one; UNSPECIFIED is a server too old to say.
+enum BiscuitStatus {
+  BISCUIT_STATUS_UNSPECIFIED = 0;
+  // ISSUED: biscuit holds the capability's Biscuit.
+  BISCUIT_STATUS_ISSUED = 1;
+  // NOT_SHAREABLE: the capability's ops lack share. A Biscuit is handed on
+  // offline, which is what share allows.
+  BISCUIT_STATUS_NOT_SHAREABLE = 2;
+  // KEY_BOUND: the capability is bound to a key (confirmation_jkt), which
+  // only its holder can prove; the holder presents the token.
+  BISCUIT_STATUS_KEY_BOUND = 3;
+  // NOT_YET_VALID: the capability is valid only from a later not_before.
+  BISCUIT_STATUS_NOT_YET_VALID = 4;
 }
 
 message CapabilityServiceIssueResponse {
@@ -227,10 +248,11 @@ message CapabilityServiceIssueResponse {
   // biscuit is the same capability as a Biscuit v3 token, which its holder
   // can narrow offline — fewer operations, resources or planes, an earlier
   // expiry, a key binding — with no call to the issuer. Present it like
-  // token. Empty when the server does not issue Biscuits, and for a
-  // capability without the share operation — a Biscuit is handed on offline
-  // — a key-bound one or one not valid yet. Returned once, never persisted.
+  // token. Empty unless biscuit_status is ISSUED. Returned once, never
+  // persisted.
   string biscuit = 3 [debug_redact = true];
+  // biscuit_status says whether biscuit is set, and why not.
+  BiscuitStatus biscuit_status = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message CapabilityServiceDelegateRequest {
@@ -250,6 +272,9 @@ message CapabilityServiceDelegateRequest {
     (buf.validate.field).string.pattern = "^[A-Za-z0-9_-]{43}$",
     (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
   ];
+  // require_biscuit refuses a child that could not be sealed as a Biscuit,
+  // as CapabilityServiceIssueRequest.require_biscuit does.
+  bool require_biscuit = 8;
 }
 
 message CapabilityServiceRevokeRequest {

@@ -60,6 +60,7 @@ export const TENANT_TAB_GROUPS: readonly TenantTabGroup[] = [
     pages: [
       { slug: "quotas", label: "Quotas" },
       { slug: "budget", label: "Budget" },
+      { slug: "billing", label: "Billing" },
     ],
   },
 ];

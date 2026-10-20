@@ -154,7 +154,12 @@ export default defineConfig({
   webServer: process.env.PALADIN_E2E_BASE_URL
     ? undefined
     : {
-        command: `docker compose -p ${COMPOSE_PROJECT} -f tests/e2e/docker-compose.test.yaml up --wait`,
+        // `up --wait` exits once the stack is healthy, and Playwright fails
+        // the run on any exit it sees before its own URL probe succeeds —
+        // exit code 0 included. Holding the process open removes that race;
+        // Playwright kills it at the end, and frontend/scripts/verify-e2e.sh
+        // tears the stack down.
+        command: `docker compose -p ${COMPOSE_PROJECT} -f tests/e2e/docker-compose.test.yaml up --wait && exec tail -f /dev/null`,
         url: UI_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { BuildingOffice2Icon } from "@heroicons/react/24/outline";
 
@@ -30,15 +31,16 @@ const SKELETON_ROWS = 3;
 
 /**
  * Every tenant that spent over the period, in the order the server ranks
- * them — the platform's currency first, then the most spent — each leading
+ * them — the platform's currency first, then the most spent — each a link
  * to that tenant's billing.
  */
 export function TenantSpendCard({
   period,
-  onPick,
+  hrefOf,
 }: {
   period: BillingPeriod;
-  onPick: (tenantId: string) => void;
+  /** Where a tenant's row leads, by its slug, or its id when it has none. */
+  hrefOf: (tenant: string) => string;
 }) {
   const query = useQuery(tenantSpendQuery(period));
   const tenants = query.data?.tenants;
@@ -84,13 +86,12 @@ export function TenantSpendCard({
                 {tenants.map((t) => (
                   <TableRow key={t.tenantId}>
                     <TableCell className="max-w-64 truncate">
-                      <button
-                        type="button"
-                        className="text-left text-primary hover:underline"
-                        onClick={() => onPick(t.tenantId)}
+                      <Link
+                        href={hrefOf(t.slug || t.tenantId)}
+                        className="text-primary hover:underline"
                       >
                         {tenantLabel(t)}
-                      </button>
+                      </Link>
                     </TableCell>
                     <TableCell numeric>
                       {formatMoney(t.spent, { fractionDigits: SPEND_DIGITS })}

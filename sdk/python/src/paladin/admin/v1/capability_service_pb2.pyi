@@ -20,10 +20,23 @@ class PrincipalKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PRINCIPAL_KIND_USER: _ClassVar[PrincipalKind]
     PRINCIPAL_KIND_AGENT: _ClassVar[PrincipalKind]
     PRINCIPAL_KIND_SERVICE: _ClassVar[PrincipalKind]
+
+class BiscuitStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    BISCUIT_STATUS_UNSPECIFIED: _ClassVar[BiscuitStatus]
+    BISCUIT_STATUS_ISSUED: _ClassVar[BiscuitStatus]
+    BISCUIT_STATUS_NOT_SHAREABLE: _ClassVar[BiscuitStatus]
+    BISCUIT_STATUS_KEY_BOUND: _ClassVar[BiscuitStatus]
+    BISCUIT_STATUS_NOT_YET_VALID: _ClassVar[BiscuitStatus]
 PRINCIPAL_KIND_UNSPECIFIED: PrincipalKind
 PRINCIPAL_KIND_USER: PrincipalKind
 PRINCIPAL_KIND_AGENT: PrincipalKind
 PRINCIPAL_KIND_SERVICE: PrincipalKind
+BISCUIT_STATUS_UNSPECIFIED: BiscuitStatus
+BISCUIT_STATUS_ISSUED: BiscuitStatus
+BISCUIT_STATUS_NOT_SHAREABLE: BiscuitStatus
+BISCUIT_STATUS_KEY_BOUND: BiscuitStatus
+BISCUIT_STATUS_NOT_YET_VALID: BiscuitStatus
 
 class CapabilityPrincipal(_message.Message):
     __slots__ = ("kind", "tenant_id", "subject", "agent_type", "agent_version", "run_id", "parent_run_id", "model", "mcp_client")
@@ -100,33 +113,37 @@ class Capability(_message.Message):
     def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceIssueRequest(_message.Message):
-    __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt")
+    __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt", "require_biscuit")
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
     CAVEATS_FIELD_NUMBER: _ClassVar[int]
     TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
     NOT_BEFORE_FIELD_NUMBER: _ClassVar[int]
     CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
+    REQUIRE_BISCUIT_FIELD_NUMBER: _ClassVar[int]
     subject: CapabilityPrincipal
     audience: _containers.RepeatedScalarFieldContainer[str]
     caveats: CapabilityCaveats
     ttl_seconds: int
     not_before: _timestamp_pb2.Timestamp
     confirmation_jkt: str
-    def __init__(self, subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
+    require_biscuit: bool
+    def __init__(self, subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ..., require_biscuit: _Optional[bool] = ...) -> None: ...
 
 class CapabilityServiceIssueResponse(_message.Message):
-    __slots__ = ("capability", "token", "biscuit")
+    __slots__ = ("capability", "token", "biscuit", "biscuit_status")
     CAPABILITY_FIELD_NUMBER: _ClassVar[int]
     TOKEN_FIELD_NUMBER: _ClassVar[int]
     BISCUIT_FIELD_NUMBER: _ClassVar[int]
+    BISCUIT_STATUS_FIELD_NUMBER: _ClassVar[int]
     capability: Capability
     token: str
     biscuit: str
-    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., token: _Optional[str] = ..., biscuit: _Optional[str] = ...) -> None: ...
+    biscuit_status: BiscuitStatus
+    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., token: _Optional[str] = ..., biscuit: _Optional[str] = ..., biscuit_status: _Optional[_Union[BiscuitStatus, str]] = ...) -> None: ...
 
 class CapabilityServiceDelegateRequest(_message.Message):
-    __slots__ = ("parent_id", "subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt")
+    __slots__ = ("parent_id", "subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt", "require_biscuit")
     PARENT_ID_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     AUDIENCE_FIELD_NUMBER: _ClassVar[int]
@@ -134,6 +151,7 @@ class CapabilityServiceDelegateRequest(_message.Message):
     TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
     NOT_BEFORE_FIELD_NUMBER: _ClassVar[int]
     CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
+    REQUIRE_BISCUIT_FIELD_NUMBER: _ClassVar[int]
     parent_id: str
     subject: CapabilityPrincipal
     audience: _containers.RepeatedScalarFieldContainer[str]
@@ -141,7 +159,8 @@ class CapabilityServiceDelegateRequest(_message.Message):
     ttl_seconds: int
     not_before: _timestamp_pb2.Timestamp
     confirmation_jkt: str
-    def __init__(self, parent_id: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
+    require_biscuit: bool
+    def __init__(self, parent_id: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., ttl_seconds: _Optional[int] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., confirmation_jkt: _Optional[str] = ..., require_biscuit: _Optional[bool] = ...) -> None: ...
 
 class CapabilityServiceRevokeRequest(_message.Message):
     __slots__ = ("id", "reason", "cascade_children")
