@@ -35,7 +35,14 @@ export const PAGE_TABLE: TableUrl = {};
 
 /** The name a table keeps one part of its view under. */
 export function tableParam(name: TableParam, url: TableUrl): string {
-  const base = TABLE_PARAMS[name];
+  return namespacedParam(TABLE_PARAMS[name], url);
+}
+
+/**
+ * Any parameter name under the table's namespace: the fixed ones above, and
+ * the ones a table names itself, such as a facet's.
+ */
+export function namespacedParam(base: string, url: TableUrl): string {
   return url.namespace ? `${url.namespace}${NAMESPACE_SEPARATOR}${base}` : base;
 }
 

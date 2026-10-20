@@ -209,30 +209,32 @@ describe("M2MTokensPage paging", () => {
 describe("M2MTokensPage state and search", () => {
   const REVOKED_AT = { seconds: 1_700_000_000n };
 
-  it("asks for ended tokens only when a state shows them", async () => {
-    h.list.mockImplementation(({ includeRevoked }) =>
-      Promise.resolve({
-        apiTokens: includeRevoked
-          ? [
-              makeToken("tok-live", "live-one"),
-              { ...makeToken("tok-gone", "gone-one"), revokedAt: REVOKED_AT },
-            ]
-          : [makeToken("tok-live", "live-one")],
-      }),
-    );
+  it("reads the ended tokens too, and shows them under their state", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [
+        makeToken("tok-live", "live-one"),
+        { ...makeToken("tok-gone", "gone-one"), revokedAt: REVOKED_AT },
+      ],
+    });
     render(<M2MTokensPage />);
     expect(await screen.findByText("live-one")).toBeInTheDocument();
+    // The state facet counts every state, so every state is asked for.
     expect(h.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRevoked: false, includeExpired: false }),
+      expect.objectContaining({ includeRevoked: true, includeExpired: true }),
       expect.anything(),
     );
+    expect(screen.queryByText("gone-one")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
-    expect(await screen.findByText("gone-one")).toBeInTheDocument();
-    expect(h.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRevoked: true, includeExpired: false }),
-      expect.anything(),
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state, 1 chosen" }),
     );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Active/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Revoked/ }),
+    );
+    expect(await screen.findByText("gone-one")).toBeInTheDocument();
     // Only the revoked one shows under Revoked.
     expect(screen.queryByText("live-one")).toBeNull();
   });

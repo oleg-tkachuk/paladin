@@ -21,6 +21,8 @@ import {
 import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 import type { SortState } from "@/hooks/useTableSort";
 import { backendHref, bucketHref, tenantHref } from "@/lib/navigation/hrefs";
+import type { Facet } from "@/lib/table/facets";
+import { StatusTone } from "@/lib/ui/status";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -83,25 +85,43 @@ export function tenantLabelMap(
   );
 }
 
-/** Which buckets a list keeps by how they are shared. */
-export const SHARING = {
-  all: "all",
-  shared: "shared",
-  ownerOnly: "owner-only",
-} as const;
-export type Sharing = (typeof SHARING)[keyof typeof SHARING];
+/** The provisioning state a bucket from before the state was kept reads as. */
+const READY = "ready";
 
-/** The buckets that pass a sharing filter. */
-export function bySharing<B extends { grantedTenantIds: readonly string[] }>(
-  buckets: readonly B[],
-  sharing: Sharing,
-): B[] {
-  if (sharing === SHARING.shared)
-    return buckets.filter((b) => b.grantedTenantIds.length > 0);
-  if (sharing === SHARING.ownerOnly)
-    return buckets.filter((b) => b.grantedTenantIds.length === 0);
-  return [...buckets];
-}
+/**
+ * The facets a list of buckets filters by: the backend it lives on (the ones
+ * the loaded buckets name), whether it is shared (ADR-0032 made who it is
+ * shared with the fact its settings reach), and where its provisioning
+ * stands, toned as ProvisionStateBadge names it.
+ */
+export const BUCKET_FACETS: readonly Facet<Bucket>[] = [
+  { id: "backend", label: "Backend", values: (b) => [b.backendId] },
+  {
+    id: "sharing",
+    label: "Sharing",
+    values: (b) => [b.grantedTenantIds.length > 0 ? "shared" : "owner-only"],
+    options: [
+      { value: "shared", label: "Shared" },
+      { value: "owner-only", label: "Owner only" },
+    ],
+  },
+  {
+    id: "state",
+    label: "State",
+    values: (b) => [b.provisionState || READY],
+    options: [
+      { value: READY, label: "Ready", tone: StatusTone.Success },
+      { value: "pending", label: "Provisioning", tone: StatusTone.Progress },
+      { value: "deleting", label: "Deleting", tone: StatusTone.Progress },
+      { value: "failed", label: "Failed", tone: StatusTone.Danger },
+      {
+        value: "deletion_failed",
+        label: "Delete failed",
+        tone: StatusTone.Danger,
+      },
+    ],
+  },
+];
 
 /** The name a row gives a tenant: its display name, its slug, its id. */
 export function tenantLabel(

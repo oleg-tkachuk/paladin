@@ -31,14 +31,8 @@ import { TableToolbar } from "@/components/ui/TableToolbar";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
-import { useTableFilter } from "@/hooks/useTableUrl";
-import {
-  DEFAULT_LIFECYCLE_FILTER,
-  LIFECYCLE_BADGE,
-  LIFECYCLE_FILTERS,
-  LIFECYCLE_FILTER_LABEL,
-  keepsLifecycle,
-} from "@/lib/table/lifecycle";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { LIFECYCLE_BADGE, lifecycleFacet } from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
 import { useTenant } from "../tenant-context";
@@ -48,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
-import { isRevoked, listFlagsFor, tokenLifecycle } from "./_constants";
+import { isRevoked, tokenLifecycle } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
 import {
@@ -95,6 +89,7 @@ const TOKEN_SORT: SortAccessors<APIToken, TokenColumn> = {
   expires: (t) => at(t.expiresAt),
   status: (t) => LIFECYCLE_BADGE[tokenLifecycle(t)].label,
 };
+const TOKEN_FACETS = [lifecycleFacet(tokenLifecycle)];
 const TOKEN_SEARCH = (t: APIToken) => [
   t.displayName,
   t.prefix,
@@ -135,15 +130,12 @@ export default function M2MTokensPage() {
   const { showNotification } = useNotification();
 
   // ── list state ──────────────────────────────────────────────────────
-  const [stateFilter, setStateFilter] = useTableFilter(
-    LIFECYCLE_FILTERS,
-    DEFAULT_LIFECYCLE_FILTER,
-    PAGE_TABLE,
-  );
-  const { includeRevoked, includeExpired } = listFlagsFor(stateFilter);
-
+  // Every token comes, ended ones too: the state facet counts each state
+  // over the loaded set, and a count of the live ones alone would say a
+  // tenant has no revoked tokens when it was simply not asked. A tenant's
+  // tokens are few enough to read whole.
   const tokensQuery = useQuery({
-    queryKey: ["m2mTokens", tenantId, includeRevoked, includeExpired],
+    queryKey: ["m2mTokens", tenantId],
     enabled: !!tenantId,
     retry: false, // queryFn toasts real failures.
     queryFn: async ({ signal }) => {
@@ -155,8 +147,8 @@ export default function M2MTokensPage() {
             .list(
               {
                 parent: `tenants/${tenantId}`,
-                includeRevoked,
-                includeExpired,
+                includeRevoked: true,
+                includeExpired: true,
                 pageSize: API_PAGE_SIZE_MAX,
                 pageToken,
               },
@@ -164,12 +156,13 @@ export default function M2MTokensPage() {
             )
             .then((r) => ({ items: r.apiTokens, next: r.nextPageToken })),
         );
-        // Fan-out usage fetches for non-revoked tokens (revoked have no live
-        // counters worth showing). NotFound ⇒ "never". The shared signal
-        // cancels them if the list query is superseded.
+        // Fan-out usage fetches for the live tokens: a revoked or expired one
+        // verifies no more, so it has no live counters worth showing.
+        // NotFound ⇒ "never". The shared signal cancels them if the list
+        // query is superseded.
         const entries = await Promise.all(
           apiTokens.map(async (t) => {
-            if (isRevoked(t)) return null;
+            if (tokenLifecycle(t) !== "active") return null;
             try {
               const u = await apiTokenClient.getUsage(
                 { name: t.name },
@@ -242,11 +235,8 @@ export default function M2MTokensPage() {
   const [revokeTarget, setRevokeTarget] = useState<APIToken | null>(null);
   const [opened, setOpened] = useState<APIToken | null>(null);
 
-  const inState = useMemo(
-    () => tokens.filter((t) => keepsLifecycle(stateFilter, tokenLifecycle(t))),
-    [tokens, stateFilter],
-  );
-  const view = useTableView(inState, {
+  const facets = useTableFacets(tokens, TOKEN_FACETS, PAGE_TABLE);
+  const view = useTableView(facets.rows, {
     text: TOKEN_SEARCH,
     accessors: TOKEN_SORT,
     url: PAGE_TABLE,
@@ -298,15 +288,10 @@ export default function M2MTokensPage() {
             onQueryChange={view.setQuery}
             searchLabel="Search M2M tokens"
             placeholder="Search by name, prefix, audience, role or scope…"
-            filter={{
-              label: LIFECYCLE_FILTER_LABEL,
-              options: LIFECYCLE_FILTERS,
-              value: stateFilter,
-              onChange: setStateFilter,
-            }}
+            facets={facets.controls}
             count={
               tokensQuery.data
-                ? { shown: visibleTokens.length, total: view.total }
+                ? { shown: visibleTokens.length, total: tokens.length }
                 : undefined
             }
           />
@@ -379,11 +364,7 @@ export default function M2MTokensPage() {
                     icon: KeyIcon,
                     what: "M2M tokens",
                     // A search or a state filter can hide every token.
-                    reason: emptyReason({
-                      filtered:
-                        view.total > 0 ||
-                        stateFilter !== DEFAULT_LIFECYCLE_FILTER,
-                    }),
+                    reason: emptyReason({ filtered: tokens.length > 0 }),
                     purpose:
                       "An M2M token lets a service call Paladin's APIs as this tenant, with the roles and scopes it was issued.",
                     action: {

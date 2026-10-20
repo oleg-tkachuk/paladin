@@ -9,6 +9,8 @@ import { emptyReason } from "@/lib/emptyState";
 import React, { useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import type { Facet } from "@/lib/table/facets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import Link from "next/link";
 import {
@@ -57,6 +59,29 @@ const TABLE_ID = "tenants";
 const SORT_COLUMNS = ["slug", "displayName"] as const;
 type SortColumn = (typeof SORT_COLUMNS)[number];
 
+/**
+ * Whether a tenant has a default bucket — one without cannot provision a
+ * collection until it is given one — and the labels it carries, each as the
+ * "key=value" its badge shows. Labels are free-form, so the menu offers the
+ * ones the loaded tenants carry.
+ */
+const TENANT_FACETS: readonly Facet<Tenant>[] = [
+  {
+    id: "bucket",
+    label: "Default bucket",
+    values: (t) => [t.defaultBucket ? "set" : "none"],
+    options: [
+      { value: "set", label: "Set" },
+      { value: "none", label: "None" },
+    ],
+  },
+  {
+    id: "label",
+    label: "Label",
+    values: (t) => Object.entries(t.labels).map(([k, v]) => `${k}=${v}`),
+  },
+];
+
 // Tenant.default_bucket is the resource name of the single (backend, bucket)
 // the tenant is bound to: "storageBackends/{backend}/buckets/{bucket}". Empty
 // when unset. Split into its parts so the Storage column can render a compact
@@ -97,9 +122,10 @@ export default function TenantsPage() {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
 
+  const facets = useTableFacets(tenants, TENANT_FACETS, PAGE_TABLE);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = tenants;
+    let list = facets.rows;
     if (q) {
       // Search across all three identity fields. Slug is the most
       // common keystroke target, ID is the audit/debug fallback.
@@ -125,7 +151,7 @@ export default function TenantsPage() {
       });
     }
     return list;
-  }, [tenants, search, sort]);
+  }, [facets.rows, search, sort]);
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
@@ -149,6 +175,12 @@ export default function TenantsPage() {
             onQueryChange={setSearch}
             searchLabel="Search tenants"
             placeholder="Search tenants by ID or name…"
+            facets={facets.controls}
+            count={
+              tenants.length > 0
+                ? { shown: filtered.length, total: tenants.length }
+                : undefined
+            }
             actions={
               <>
                 <Button
@@ -213,7 +245,9 @@ export default function TenantsPage() {
                 ? {
                     icon: BuildingOfficeIcon,
                     what: "tenants",
-                    reason: emptyReason({ filtered: !!search }),
+                    reason: emptyReason({
+                      filtered: !!search || facets.active > 0,
+                    }),
                     purpose:
                       "A tenant is one customer kept apart from the rest: its own users, collections, quotas and budget.",
                     action: {

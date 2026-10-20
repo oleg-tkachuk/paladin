@@ -1,7 +1,7 @@
 // Shared constants + pure helpers for the m2m-tokens page and its dialogs.
 // No React here.
 import type { APIToken } from "@/gen/paladin/admin/v1/api_token_service_pb";
-import type { Lifecycle, LifecycleFilter } from "@/lib/table/lifecycle";
+import type { Lifecycle } from "@/lib/table/lifecycle";
 
 export const TTL_OPTIONS: {
   label: string;
@@ -78,18 +78,4 @@ export function isExpired(t: APIToken): boolean {
 export function tokenLifecycle(t: APIToken): Lifecycle {
   if (isRevoked(t)) return "revoked";
   return isExpired(t) ? "expired" : "active";
-}
-
-/**
- * What List must be asked for so a filter's rows arrive: the live tokens
- * always come, and the ended ones only when the filter shows them.
- */
-export function listFlagsFor(filter: LifecycleFilter): {
-  includeRevoked: boolean;
-  includeExpired: boolean;
-} {
-  return {
-    includeRevoked: filter === "revoked" || filter === "all",
-    includeExpired: filter === "expired" || filter === "all",
-  };
 }

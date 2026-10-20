@@ -127,4 +127,28 @@ describe("TableToolbar", () => {
     );
     expect(screen.getByText("1 of 3")).toBeInTheDocument();
   });
+
+  it("offers a menu per facet, after the page's own filters", () => {
+    const facet = (id: string, label: string) => ({
+      id,
+      label,
+      options: [],
+      selected: [],
+      onChange: () => {},
+    });
+    render(
+      <TableToolbar
+        query=""
+        onQueryChange={() => {}}
+        placeholder="Search…"
+        searchLabel="Search rows"
+        facets={[facet("state", "State"), facet("health", "Health")]}
+      >
+        <button type="button">Plane</button>
+      </TableToolbar>,
+    );
+    expect(
+      screen.getAllByRole("button").map((b) => b.getAttribute("aria-label")),
+    ).toEqual([null, "Filter by state", "Filter by health"]);
+  });
 });

@@ -81,6 +81,8 @@ beforeEach(() => {
   h.setBackendMaintenance.mockClear();
   h.showNotification.mockClear();
   h.backends = [];
+  // A facet chosen in one test would otherwise open the next one narrowed.
+  window.history.replaceState(null, "", "/storage-backends");
 });
 
 const makeBackend = (over: Record<string, unknown> = {}) => ({
@@ -549,28 +551,45 @@ describe("StorageBackendsPage search", () => {
   });
 });
 
-// The state picker narrows on the server too, as a conjunct beside the search.
-describe("StorageBackendsPage state filter", () => {
-  it("sends the chosen state as a CEL conjunct", async () => {
+// The state and health facets narrow what the search loaded, each answer
+// counted; several answers of one facet are any of them.
+describe("StorageBackendsPage facets", () => {
+  it("narrows to the chosen states without asking the server again", async () => {
+    h.backends = [
+      makeBackend({ backendId: "live" }),
+      makeBackend({ backendId: "drained", readOnly: true }),
+      makeBackend({ backendId: "off", enabled: false, maintenance: true }),
+    ];
     render(<StorageBackendsPage />);
     h.filters = [];
 
     await userEvent.click(
-      screen.getByRole("combobox", { name: "Filter by state" }),
+      screen.getByRole("button", { name: "Filter by state" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Draining" }));
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Draining, 1 row" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Maintenance, 1 row" }),
+    );
+    await userEvent.keyboard("{Escape}");
 
-    await waitFor(() =>
-      expect(h.filters.at(-1)).toBe("enabled == true && read_only == true"),
-    );
+    expect(screen.queryByText("live")).toBeNull();
+    expect(screen.getByText("drained")).toBeInTheDocument();
+    expect(screen.getByText("off")).toBeInTheDocument();
+    expect(screen.getByText("2 of 3")).toBeInTheDocument();
+    expect(window.location.search).toContain("state=draining%2Cmaintenance");
+    expect(h.filters.filter(Boolean)).toEqual([]);
   });
 
   it("says nothing matches, rather than none registered, when a state is chosen", async () => {
     render(<StorageBackendsPage />);
     await userEvent.click(
-      screen.getByRole("combobox", { name: "Filter by state" }),
+      screen.getByRole("button", { name: "Filter by state" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Disabled" }));
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Disabled/ }),
+    );
     expect(
       await screen.findByText("No storage backends match your filters."),
     ).toBeInTheDocument();

@@ -30,13 +30,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SelectRoot,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
@@ -49,13 +42,12 @@ import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
 import {
   BucketTable,
-  SHARING,
-  bySharing,
+  BUCKET_FACETS,
   tenantLabelMap,
   BUCKET_SORT_COLUMNS,
   type BucketSortColumn,
-  type Sharing,
 } from "@/components/features/buckets/BucketTable";
+import { useTableFacets } from "@/hooks/useTableFacets";
 import { bucketHref } from "@/lib/navigation/hrefs";
 import { TableScope } from "@/components/ui/TableScope";
 
@@ -65,14 +57,11 @@ const TABLE_ID = "buckets";
 /** The bucket tab the row menu opens. */
 const LIFECYCLE_TAB = "lifecycle";
 
-const ALL_BACKENDS = "__all__";
-
 export default function BucketsPage() {
-  // Search and the backend picker are server-side: see below.
+  // The search is server-side: see below.
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // Trails `search` by 300ms so a read does not fire per keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
   const {
     buckets,
     loading,
@@ -80,10 +69,7 @@ export default function BucketsPage() {
     refetch,
     createBucket,
     deleteBucket,
-  } = useBuckets({
-    backendId: filterBackend === ALL_BACKENDS ? undefined : filterBackend,
-    filter: searchFilter(debouncedSearch),
-  });
+  } = useBuckets({ filter: searchFilter(debouncedSearch) });
   const {
     backends: backendRows,
     error: backendsError,
@@ -97,19 +83,16 @@ export default function BucketsPage() {
     refetch: refetchTenants,
   } = useTenants();
 
-  const backends = useMemo(
-    () => backendRows.map((b) => b.backendId),
-    [backendRows],
-  );
-
   // ─── filters + sort ──────────────────────────────────────────────────────
   //
-  // Search and the backend picker are SERVER-side now. This page used to fetch
-  // every bucket — 859 of them, two requests of 500 — and filter the result in
-  // the browser, so the whole table was pulled to answer a five-character
-  // query. The filter goes to the API instead, as one conjunct over the derived
-  // `search` field so it pushes down to SQL (see src/lib/cel.ts for why it must
-  // not be a disjunction).
+  // The search is SERVER-side. This page used to fetch every bucket — 859 of
+  // them, two requests of 500 — and filter the result in the browser, so the
+  // whole table was pulled to answer a five-character query. The filter goes
+  // to the API instead, as one conjunct over the derived `search` field so it
+  // pushes down to SQL (see src/lib/cel.ts for why it must not be a
+  // disjunction). The facets narrow what the search returned: with no search
+  // that is every bucket, which the page read before they existed too, and
+  // their counts are of that set.
   const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>(
     undefined,
     {
@@ -147,14 +130,14 @@ export default function BucketsPage() {
     PROVISION_POLL_MS,
   );
 
-  // Sort only. The two filters that used to live here are server-side now;
-  // re-applying them in the browser would be dead code that quietly disagreed
-  // with the API the day the two definitions of "matches" drifted apart.
+  // The search is not applied again here: re-applying it in the browser would
+  // be dead code that quietly disagreed with the API the day the two
+  // definitions of "matches" drifted apart.
   const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
-  const [sharing, setSharing] = useState<Sharing>(SHARING.all);
+  const facets = useTableFacets(buckets, BUCKET_FACETS, PAGE_TABLE);
 
   const filtered = useMemo(() => {
-    let list = bySharing(buckets, sharing);
+    let list = facets.rows;
     if (sort.column && sort.direction) {
       const dir = sort.direction === "asc" ? 1 : -1;
       list = [...list].sort((a, b) => {
@@ -164,12 +147,9 @@ export default function BucketsPage() {
       });
     }
     return list;
-  }, [buckets, sort, sharing]);
+  }, [facets.rows, sort]);
 
-  const hasFilters =
-    search.trim() !== "" ||
-    filterBackend !== ALL_BACKENDS ||
-    sharing !== SHARING.all;
+  const hasFilters = search.trim() !== "" || facets.active > 0;
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
 
@@ -194,6 +174,12 @@ export default function BucketsPage() {
           onQueryChange={setSearch}
           searchLabel="Search buckets"
           placeholder="Search by name or display label…"
+          facets={facets.controls}
+          count={
+            buckets.length > 0
+              ? { shown: filtered.length, total: buckets.length }
+              : undefined
+          }
           actions={
             <>
               <Button
@@ -208,34 +194,7 @@ export default function BucketsPage() {
               </Button>
             </>
           }
-        >
-          <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
-            <SelectTrigger aria-label="Filter by backend" className="w-50">
-              <SelectValue placeholder="All backends" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_BACKENDS}>All backends</SelectItem>
-              {backends.map((b) => (
-                <SelectItem key={b} value={b}>
-                  {b}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </SelectRoot>
-          <SelectRoot
-            value={sharing}
-            onValueChange={(v) => setSharing(v as Sharing)}
-          >
-            <SelectTrigger aria-label="Filter by sharing" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SHARING.all}>Shared or not</SelectItem>
-              <SelectItem value={SHARING.shared}>Shared</SelectItem>
-              <SelectItem value={SHARING.ownerOnly}>Owner only</SelectItem>
-            </SelectContent>
-          </SelectRoot>
-        </TableToolbar>
+        />
 
         <BucketTable
           buckets={filtered}

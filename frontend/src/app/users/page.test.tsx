@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
 
 const h = vi.hoisted(() => ({ listUsers: vi.fn() }));
 vi.mock("@/lib/connect/client", () => ({
@@ -72,11 +73,21 @@ describe("UsersPage", () => {
         .map((l) => l.textContent)
         .filter((t) => ["Alice", "Bob", "Carol"].includes(t ?? ""));
 
-    fireEvent.click(screen.getByRole("button", { name: "Disabled" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state" }),
+    );
+    // Each answer is counted over the loaded users.
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Disabled, 1 row" }),
+    );
+    await userEvent.keyboard("{Escape}");
     expect(names()).toEqual(["Bob"]);
     expect(screen.getByText("1 of 3")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state, 1 chosen" }),
+    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
     fireEvent.click(screen.getByRole("button", { name: /^User/ }));
     expect(names()).toEqual(["Alice", "Bob", "Carol"]);
   });
@@ -97,7 +108,7 @@ describe("UsersPage", () => {
     window.history.replaceState(
       null,
       "",
-      "/users?filter=disabled&q=b&sort=user&dir=desc",
+      "/users?state=disabled&q=b&sort=user&dir=desc",
     );
     render(<UsersPage />);
     await screen.findByRole("link", { name: "Bob" });
@@ -109,12 +120,14 @@ describe("UsersPage", () => {
           ["Alice", "Bert", "Bob", "Carol", "Dana"].includes(t ?? ""),
         ),
     ).toEqual(["Bob", "Bert"]);
-    expect(screen.getByRole("button", { name: "Disabled" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state, 1 chosen" }),
     );
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Disabled/ }),
+    ).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
     expect(window.location.search).toBe("?q=b&sort=user&dir=desc");
   });
 

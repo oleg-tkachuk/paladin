@@ -1,70 +1,51 @@
-// What the storage-backends list shows for a backend, and how its state
-// filter reaches the API. Pure, so the row and the filter can be tested
-// without rendering the page.
+// What the storage-backends list shows for a backend, and the facets it
+// filters by. Pure, so the row and the filters can be tested without
+// rendering the page.
 
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import type { Facet } from "@/lib/table/facets";
 import { StatusTone } from "@/lib/ui/status";
 
 type BackendFlags = Pick<StorageBackend, "enabled" | "readOnly">;
 type BackendHealth = Pick<StorageBackend, "healthStatus" | "healthMessage">;
 
-/** The state-filter choices, in the order the picker lists them. */
-export const STATE_FILTERS = [
-  "all",
-  "active",
-  "draining",
-  "maintenance",
-  "disabled",
-] as const;
-export type StateFilter = (typeof STATE_FILTERS)[number];
-
-export const STATE_FILTER_LABELS: Record<StateFilter, string> = {
-  all: "All states",
-  active: "Active",
-  draining: "Draining",
-  maintenance: "Maintenance",
-  disabled: "Disabled",
-};
-
-// Each is a conjunction over fields StorageBackendSchema declares, so it joins
-// the search conjunct with `&&` and the whole filter stays one chain the
-// server can push down (src/lib/cel.ts says why a disjunction must not).
-const STATE_FILTER_CEL: Record<StateFilter, string> = {
-  all: "",
-  active: "enabled == true && read_only == false",
-  draining: "enabled == true && read_only == true",
-  maintenance: "maintenance == true",
-  disabled: "enabled == false",
-};
-
-/** The CEL for one state choice; "" for no narrowing. */
-export function stateFilter(choice: StateFilter): string {
-  return STATE_FILTER_CEL[choice];
-}
-
-/** Joins non-empty conjuncts with `&&`; "" when there are none. */
-export function allOf(...conjuncts: string[]): string {
-  return conjuncts.filter((c) => c !== "").join(" && ");
-}
+/**
+ * The lifecycle states a backend can lead with. Disabled is a pause an
+ * operator chose, not a fault, and draining is a change under way, not a
+ * warning.
+ */
+const LIFECYCLE = {
+  enabled: { label: "Enabled", tone: StatusTone.Success },
+  draining: { label: "Draining", tone: StatusTone.Progress },
+  disabled: { label: "Disabled", tone: StatusTone.Suspended },
+} as const satisfies Record<string, { label: string; tone: StatusTone }>;
+type LifecycleKey = keyof typeof LIFECYCLE;
 
 /**
- * The one lifecycle state a row leads with. Disabled outranks draining: a
- * disabled backend refuses everything, so whether it would also refuse writes
- * says nothing more. Disabled is a pause an operator chose, not a fault, and
- * draining is a change under way, not a warning.
+ * Which state a backend leads with. Disabled outranks draining: a disabled
+ * backend refuses everything, so whether it would also refuse writes says
+ * nothing more.
  */
+function lifecycleKey(b: BackendFlags): LifecycleKey {
+  if (!b.enabled) return "disabled";
+  return b.readOnly ? "draining" : "enabled";
+}
+
+/** The one lifecycle state a row leads with, and its tone. */
 export function lifecycleState(b: BackendFlags): {
   label: string;
   tone: StatusTone;
 } {
-  if (!b.enabled) return { label: "Disabled", tone: StatusTone.Suspended };
-  if (b.readOnly) return { label: "Draining", tone: StatusTone.Progress };
-  return { label: "Enabled", tone: StatusTone.Success };
+  const { label, tone } = LIFECYCLE[lifecycleKey(b)];
+  return { label, tone };
 }
 
 /** The values healthStatus carries for a probed backend. */
 export const HEALTH_OK = "ok";
 export const HEALTH_ERROR = "error";
+
+/** The health facet's answer for a backend no probe has reached. */
+const HEALTH_UNTESTED = "untested";
 
 /** What the last connectivity probe found, and the text a hover explains it with. */
 export function healthView(b: BackendHealth): {
@@ -93,3 +74,40 @@ export function healthView(b: BackendHealth): {
       };
   }
 }
+
+/** The facet answer for maintenance, which a backend carries beside its state. */
+const MAINTENANCE = "maintenance";
+
+/**
+ * The facets the list filters by. Maintenance is advisory and orthogonal to
+ * the lifecycle, so it is one more answer to State that a backend gives as
+ * well as its own: choosing Enabled and Maintenance lists either.
+ */
+export const BACKEND_FACETS: readonly Facet<StorageBackend>[] = [
+  {
+    id: "state",
+    label: "State",
+    values: (b) =>
+      b.maintenance ? [lifecycleKey(b), MAINTENANCE] : [lifecycleKey(b)],
+    options: [
+      ...Object.entries(LIFECYCLE).map(([value, s]) => ({ value, ...s })),
+      { value: MAINTENANCE, label: "Maintenance", tone: StatusTone.Suspended },
+    ],
+  },
+  {
+    id: "health",
+    label: "Health",
+    values: (b) => [
+      b.healthStatus === HEALTH_OK || b.healthStatus === HEALTH_ERROR
+        ? b.healthStatus
+        : HEALTH_UNTESTED,
+    ],
+    options: [HEALTH_OK, HEALTH_ERROR, HEALTH_UNTESTED].map((value) => {
+      const { label, tone } = healthView({
+        healthStatus: value,
+        healthMessage: "",
+      });
+      return { value, label, tone };
+    }),
+  },
+];
