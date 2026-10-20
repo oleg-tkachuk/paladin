@@ -45,6 +45,11 @@ func TestTheSDKFakeIssuesAsTheServerDoes(t *testing.T) {
 			r.ConfirmationJkt, r.RequireBiscuit = testJKT, true
 		},
 		"not yet, required": func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore, r.RequireBiscuit = later, true },
+		// require_biscuit is refused before what limes refuses as it mints.
+		"a bare op, key-bound, required": func(r *adminv1.CapabilityServiceIssueRequest) {
+			r.Caveats, r.ConfirmationJkt, r.RequireBiscuit = openCaveats("presign"), testJKT, true
+		},
+		"past expiry, required": func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore, r.RequireBiscuit = pastExpiry, true },
 		"no share, required": func(r *adminv1.CapabilityServiceIssueRequest) {
 			r.Caveats, r.RequireBiscuit = openCaveats(limes.OpGet), true
 		},
@@ -96,6 +101,9 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 		"narrowed off share":     {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo(limes.OpGet)},
 		"an op the parent lacks": {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo(limes.OpPut)},
 		"narrowed to a bare op":  {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo("presign")},
+		"wider and key-bound, required": {[]limes.Op{limes.OpGet, limes.OpShare}, func(r *adminv1.CapabilityServiceDelegateRequest) {
+			r.Caveats, r.ConfirmationJkt, r.RequireBiscuit = openCaveats(limes.OpPut), testJKT, true
+		}},
 		"a key-bound child, required": {[]limes.Op{limes.OpGet, limes.OpShare}, func(r *adminv1.CapabilityServiceDelegateRequest) {
 			r.ConfirmationJkt, r.RequireBiscuit = testJKT, true
 		}},

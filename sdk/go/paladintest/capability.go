@@ -132,19 +132,21 @@ func (s capabilityService) Issue(ctx context.Context, req *adminv1.CapabilitySer
 	case caveats.GetBudgetCeiling() == nil:
 		return nil, withReason(connect.NewError(connect.CodeInvalidArgument, msgNoBudgetCeiling))
 	}
-	if err := validOps(caveats.GetOps()); err != nil {
-		return nil, err
-	}
-	now := time.Now()
-	nbf, expires, err := lifetime(now, req.GetNotBefore(), req.GetTtlSeconds())
-	if err != nil {
-		return nil, err
-	}
+	// require_biscuit first, then what limes refuses as it mints: the
+	// server's order.
+	now, nbf := time.Now(), notBefore(req.GetNotBefore())
 	status := biscuitStatusOf(req.GetConfirmationJkt(), nbf, now)
 	if req.GetRequireBiscuit() {
 		if err := requireBiscuit(status); err != nil {
 			return nil, err
 		}
+	}
+	if err := validOps(caveats.GetOps()); err != nil {
+		return nil, err
+	}
+	expires, err := lifetime(now, nbf, req.GetTtlSeconds())
+	if err != nil {
+		return nil, err
 	}
 	return s.mint(&adminv1.Capability{
 		Subject:         proto.CloneOf(req.GetSubject()),
@@ -183,6 +185,19 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	case cred.biscuit:
 		return nil, withReason(connect.NewError(connect.CodeFailedPrecondition, msgBiscuitDelegates))
 	}
+	jkt := req.GetConfirmationJkt()
+	if jkt == "" {
+		jkt = parent.msg.GetConfirmationJkt()
+	}
+	// require_biscuit first, then what limes refuses as it mints: the
+	// server's order.
+	now, nbf := time.Now(), notBefore(req.GetNotBefore())
+	status := biscuitStatusOf(jkt, nbf, now)
+	if req.GetRequireBiscuit() {
+		if err := requireBiscuit(status); err != nil {
+			return nil, err
+		}
+	}
 	caveats := parentCaveats
 	if c := req.GetCaveats(); c != nil {
 		if err := validOps(c.GetOps()); err != nil {
@@ -196,20 +211,9 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 		}
 		caveats = c
 	}
-	jkt := req.GetConfirmationJkt()
-	if jkt == "" {
-		jkt = parent.msg.GetConfirmationJkt()
-	}
-	now := time.Now()
-	nbf, expires, err := lifetime(now, req.GetNotBefore(), req.GetTtlSeconds())
+	expires, err := lifetime(now, nbf, req.GetTtlSeconds())
 	if err != nil {
 		return nil, err
-	}
-	status := biscuitStatusOf(jkt, nbf, now)
-	if req.GetRequireBiscuit() {
-		if err := requireBiscuit(status); err != nil {
-			return nil, err
-		}
 	}
 	subject := parent.msg.GetSubject()
 	if req.GetSubject() != nil {
@@ -266,23 +270,27 @@ func (s capabilityService) Get(_ context.Context, req *adminv1.CapabilityService
 }
 
 // lifetime is when a capability issued at now for ttlSeconds — the default
-// when 0 — from the not-before nbf is valid, as the server reckons it: it
-// expires ttl after it is issued, and a not-before that is not before then
-// is InvalidArgument.
-func lifetime(now time.Time, nbf *timestamppb.Timestamp, ttlSeconds int64) (from, until time.Time, err error) {
+// when 0 — expires, as the server reckons it: ttl after it is issued. A
+// not-before nbf that is not before then is InvalidArgument.
+func lifetime(now, nbf time.Time, ttlSeconds int64) (time.Time, error) {
 	ttl := DefaultCapabilityTTL
 	if ttlSeconds > 0 {
 		ttl = time.Duration(ttlSeconds) * time.Second
 	}
-	until = now.Add(ttl)
-	if nbf.IsValid() {
-		from = nbf.AsTime()
-		if !from.Before(until) {
-			return time.Time{}, time.Time{}, withReason(connect.Errorf(connect.CodeInvalidArgument,
-				"limes: invalid request: NotBefore %s is not before ExpiresAt %s", from.UTC(), until.UTC()))
-		}
+	until := now.Add(ttl)
+	if !nbf.IsZero() && !nbf.Before(until) {
+		return time.Time{}, withReason(connect.Errorf(connect.CodeInvalidArgument,
+			"limes: invalid request: NotBefore %s is not before ExpiresAt %s", nbf.UTC(), until.UTC()))
 	}
-	return from, until, nil
+	return until, nil
+}
+
+// notBefore is t, or the zero time when it is unset.
+func notBefore(t *timestamppb.Timestamp) time.Time {
+	if !t.IsValid() {
+		return time.Time{}
+	}
+	return t.AsTime()
 }
 
 // mint records c, issued at now and valid from nbf until expires, and
