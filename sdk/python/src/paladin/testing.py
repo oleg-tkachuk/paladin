@@ -541,22 +541,24 @@ def _require_biscuit(status: int) -> None:
         )
 
 
-def _lifetime(
-    now: datetime, nbf: timestamp_pb2.Timestamp | None, ttl_seconds: int
-) -> tuple[datetime | None, datetime]:
+def _not_before(request: Message) -> datetime | None:
+    """The request's ``not_before``, None when it names none."""
+    if not request.HasField("not_before"):
+        return None
+    return request.not_before.ToDatetime(tzinfo=UTC)  # type: ignore[attr-defined,no-any-return]
+
+
+def _lifetime(now: datetime, nbf: datetime | None, ttl_seconds: int) -> datetime:
     """When a capability issued at ``now`` for ``ttl_seconds`` — the default
-    when 0 — is valid, as the server reckons it: it expires ttl after it is
-    issued, and a not-before that is not before then is INVALID_ARGUMENT."""
+    when 0 — expires, as the server reckons it: ttl after it is issued. A
+    not-before ``nbf`` that is not before then is INVALID_ARGUMENT."""
     until = now + (timedelta(seconds=ttl_seconds) if ttl_seconds > 0 else DEFAULT_CAPABILITY_TTL)
-    if nbf is None:
-        return None, until
-    start = nbf.ToDatetime(tzinfo=UTC)
-    if start >= until:
+    if nbf is not None and nbf >= until:
         raise _with_reason(
             Code.INVALID_ARGUMENT,
-            f"limes: invalid request: NotBefore {start} is not before ExpiresAt {until}",
+            f"limes: invalid request: NotBefore {nbf} is not before ExpiresAt {until}",
         )
-    return start, until
+    return until
 
 
 def _timestamp(t: datetime) -> timestamp_pb2.Timestamp:
@@ -586,14 +588,14 @@ class _CapabilityService(CapabilityServiceSync):
             raise _with_reason(Code.INVALID_ARGUMENT, _NO_REQUEST_CEILING)
         if not caveats.HasField("budget_ceiling"):
             raise _with_reason(Code.INVALID_ARGUMENT, _NO_BUDGET_CEILING)
-        _check_ops(caveats.ops)
-        now = datetime.now(UTC)
-        nbf, expires = _lifetime(
-            now, request.not_before if request.HasField("not_before") else None, request.ttl_seconds
-        )
+        # require_biscuit first, then what limes refuses as it mints: the
+        # server's order.
+        now, nbf = datetime.now(UTC), _not_before(request)
         status = _biscuit_status(request.confirmation_jkt, nbf, now)
         if request.require_biscuit:
             _require_biscuit(status)
+        _check_ops(caveats.ops)
+        expires = _lifetime(now, nbf, request.ttl_seconds)
         c = capability_service_pb2.Capability(
             subject=request.subject,
             audience=list(request.audience),
@@ -627,6 +629,13 @@ class _CapabilityService(CapabilityServiceSync):
             raise _with_reason(Code.PERMISSION_DENIED, _NOT_OWN_PARENT)
         if credential.biscuit:
             raise _with_reason(Code.FAILED_PRECONDITION, _BISCUIT_DELEGATES)
+        jkt = request.confirmation_jkt or parent.msg.confirmation_jkt
+        # require_biscuit first, then what limes refuses as it mints: the
+        # server's order.
+        now, nbf = datetime.now(UTC), _not_before(request)
+        status = _biscuit_status(jkt, nbf, now)
+        if request.require_biscuit:
+            _require_biscuit(status)
         caveats = parent.msg.caveats
         if request.HasField("caveats"):
             _check_ops(request.caveats.ops)
@@ -637,14 +646,7 @@ class _CapabilityService(CapabilityServiceSync):
                         f"limes: delegation too wide: op {json.dumps(op)} is not granted to the parent",
                     )
             caveats = request.caveats
-        jkt = request.confirmation_jkt or parent.msg.confirmation_jkt
-        now = datetime.now(UTC)
-        nbf, expires = _lifetime(
-            now, request.not_before if request.HasField("not_before") else None, request.ttl_seconds
-        )
-        status = _biscuit_status(jkt, nbf, now)
-        if request.require_biscuit:
-            _require_biscuit(status)
+        expires = _lifetime(now, nbf, request.ttl_seconds)
         c = capability_service_pb2.Capability(
             subject=request.subject if request.HasField("subject") else parent.msg.subject,
             audience=list(request.audience) or list(parent.msg.audience),

@@ -148,6 +148,23 @@ def test_issue_takes_the_data_planes_ops(fake: FakePaladin) -> None:
     fake.connect().admin.capability.issue(_issue_request(fake, Op.OBJECT_PRESIGN, Op.GET))
 
 
+def test_require_biscuit_is_refused_before_the_caveats(fake: FakePaladin) -> None:
+    """The server's order: a request failing both is FAILED_PRECONDITION."""
+    admin = fake.connect().admin.capability
+    bare = _issue_request(fake, "presign")
+    bare.confirmation_jkt, bare.require_biscuit = JKT, True
+    late = _issue_request(fake, Op.GET)
+    late.not_before.CopyFrom(_in(DEFAULT_CAPABILITY_TTL + timedelta(minutes=1)))
+    late.require_biscuit = True
+    for req in (bare, late):
+        assert _code(lambda r=req: admin.issue(r)) == Code.FAILED_PRECONDITION
+    parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
+    wider = _narrow(parent.capability.id, Op.PUT)
+    wider.confirmation_jkt, wider.require_biscuit = JKT, True
+    delegate = fake.connect(capability=parent.token).admin.capability.delegate
+    assert _code(lambda: delegate(wider)) == Code.FAILED_PRECONDITION
+
+
 def test_a_not_before_past_the_expiry_is_refused(fake: FakePaladin) -> None:
     req = _issue_request(fake, Op.GET)
     req.not_before.CopyFrom(_in(DEFAULT_CAPABILITY_TTL + timedelta(minutes=1)))
