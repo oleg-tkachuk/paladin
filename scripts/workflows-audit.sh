@@ -11,7 +11,7 @@
 # GitHub token when `gh` has one; without it they are skipped, as in CI with
 # no token.
 #
-# Runs as `task -t Taskfile.dev.yaml verify:workflows`. Needs go and pipx.
+# Runs as `task -t Taskfile.dev.yaml verify:workflows`. Needs go and uv.
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ readonly CI_WORKFLOW=.github/workflows/ci.yaml
 readonly ZIZMOR_CONFIG=.github/zizmor.yml
 readonly WORKFLOWS_DIR=.github/workflows/
 
-for tool in go pipx yq; do
+for tool in go uvx yq; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "!!! $tool is not installed; the workflows went unchecked" >&2
         exit 1
@@ -46,7 +46,7 @@ go run "github.com/rhysd/actionlint/cmd/actionlint@${actionlint_version}"
 
 echo ">>> zizmor ${zizmor_version}"
 token=$(gh auth token 2>/dev/null || true)
-GH_TOKEN="$token" pipx run "zizmor==${zizmor_version}" \
+GH_TOKEN="$token" uvx "zizmor@${zizmor_version}" \
     --config "$ZIZMOR_CONFIG" --persona=regular --format=plain "$WORKFLOWS_DIR"
 
 echo "workflows: actionlint and zizmor pass at CI's pinned versions"

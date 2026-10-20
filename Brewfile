@@ -23,6 +23,7 @@
 #                         github.com/securego/gosec/v2/cmd/gosec` installs the pin.
 # not-brew: govulncheck — go install golang.org/x/vuln/cmd/govulncheck@latest
 # not-brew: node        — nvm locally; the console image pins ARG NODE_VERSION.
+# not-brew: uvx         — the second binary of brew "uv" below.
 # A formula whose binary is named differently says so as `# bin: <name>`;
 # every other trailing comment is prose.
 #
@@ -37,7 +38,8 @@ brew "go-task"          # bin: task
 brew "golangci-lint"
 brew "buf"
 # The Python SDK: its venv, dependencies and the protoc it generates with
-# (grpcio-tools, pinned in sdk/python/pyproject.toml).
+# (grpcio-tools, pinned in sdk/python/pyproject.toml). Also runs the pinned
+# checkov (CHECKOV_VERSION) through uvx.
 brew "uv"
 brew "helm"
 brew "yq"               # chart-netpol.py needs YAML; jq reads only JSON
@@ -56,7 +58,6 @@ brew "kubeconform"      # release:chart:validate
 brew "cosign"           # release signing; skip with COSIGN_SIGN=0
 
 # ─── policy scans: verify:checkov, verify:chart-scan ────────────────────────
-brew "pipx"             # runs the pinned checkov (CHECKOV_VERSION)
 brew "trivy"            # also task sec:trivy
 brew "prometheus"       # bin: promtool — verify:chart-alerts, verify:grafana-dashboards
 
