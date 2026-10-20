@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { NAV_CHORD_WINDOW_MS, NAV_PREFIX } from "@/lib/navShortcuts";
+import { SEARCH_KEY, TABLE_SEARCH_ATTR } from "@/lib/tableKeys";
 
 const h = vi.hoisted(() => ({
   push: vi.fn(),
@@ -119,5 +120,24 @@ describe("useGlobalShortcuts", () => {
     press("b", {}, el);
     expect(h.push).not.toHaveBeenCalled();
     el.remove();
+  });
+
+  it("puts the focus in the list's search on /", () => {
+    render(
+      <>
+        <Harness />
+        <input aria-label="search" {...{ [TABLE_SEARCH_ATTR]: true }} />
+      </>,
+    );
+    const search = screen.getByLabelText("search");
+    press(SEARCH_KEY);
+    expect(search).toHaveFocus();
+    // A / typed into the search is a /.
+    expect(press(SEARCH_KEY, {}, search)).toBe(true);
+  });
+
+  it("leaves / alone on a page with no list", () => {
+    render(<Harness />);
+    expect(press(SEARCH_KEY)).toBe(true);
   });
 });

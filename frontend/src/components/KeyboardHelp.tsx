@@ -5,11 +5,12 @@
 // listens for the ? key globally and pops itself.
 //
 // SHORTCUTS lists only keys that a real handler serves: this
-// component (?), CommandPalette (⌘K) and useGlobalShortcuts (the
-// g-prefix jumps, read from NAV_JUMPS so they cannot drift).
+// component (?), CommandPalette (⌘K), useGlobalShortcuts (the g-prefix
+// jumps, read from NAV_JUMPS so they cannot drift, and the list search's
+// /) and useTableKeyboard (the row keys, read from ROW_KEYS).
 // KeyboardHelp.test.tsx fails when a listed key loses its handler.
 
-import React, { useEffect, useState } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 
 import {
   Dialog,
@@ -18,11 +19,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { NAV_JUMPS, NAV_PREFIX } from "@/lib/navShortcuts";
+import { TABLE_SHORTCUTS } from "@/lib/tableKeys";
 import { cn } from "@/lib/utils";
 
 interface Shortcut {
   keys: string[];
   desc: string;
+  /** The keys each do it alone ("j or ↓"), rather than one after another. */
+  alternatives?: boolean;
 }
 
 export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
@@ -33,6 +37,10 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
       { keys: ["⌘", "K"], desc: "Open command palette" },
       ...NAV_JUMPS.map((j) => ({ keys: [NAV_PREFIX, j.key], desc: j.label })),
     ],
+  },
+  {
+    group: "Lists",
+    items: TABLE_SHORTCUTS.map((s) => ({ ...s, alternatives: true })),
   },
 ];
 
@@ -76,16 +84,20 @@ export function KeyboardHelp() {
                     className="flex items-center justify-between gap-3 text-xs"
                   >
                     <span className="text-muted-foreground">{s.desc}</span>
-                    <span className="flex shrink-0 gap-1">
+                    <span className="flex shrink-0 items-center gap-1">
                       {s.keys.map((k, i) => (
-                        <kbd
-                          key={i}
-                          className={cn(
-                            "inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-muted px-1 font-mono text-sm",
-                          )}
-                        >
-                          {k}
-                        </kbd>
+                        <Fragment key={i}>
+                          {s.alternatives && i > 0 ? (
+                            <span className="text-muted-foreground">or</span>
+                          ) : null}
+                          <kbd
+                            className={cn(
+                              "inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-muted px-1 font-mono text-sm",
+                            )}
+                          >
+                            {k}
+                          </kbd>
+                        </Fragment>
                       ))}
                     </span>
                   </li>

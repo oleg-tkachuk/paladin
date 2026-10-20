@@ -14,6 +14,14 @@
 export const FOCUS_RING =
   "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 
+/**
+ * A table row the row keys are on (useTableKeyboard): the same outline,
+ * drawn inside the row's edge, since the table's scrolling container would
+ * clip one set outside it, over the hover surface.
+ */
+export const ROW_FOCUS_RING =
+  "outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:bg-muted/50";
+
 /** A row or an item answering the pointer. */
 export const HOVER_SURFACE = "hover:bg-muted/50";
 

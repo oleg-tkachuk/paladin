@@ -19,6 +19,12 @@ type TableScopeValue = ReturnType<typeof useTablePrefs> & {
 
 const TableScopeContext = createContext<TableScopeValue | null>(null);
 
+/**
+ * Whether a table is a page's list, with or without preferences: the one
+ * table on the page the row keys move through (useTableKeyboard).
+ */
+const InScopeContext = createContext(false);
+
 type TableScopeProps = {
   id: string;
   sort?: SortState<string>;
@@ -29,11 +35,20 @@ export function TableScope(props: TableScopeProps) {
   // The preferences are the user's settings, read through the query client;
   // where there is none (a component rendered on its own) the table keeps
   // its defaults and offers no menu.
-  return useContext(QueryClientContext) ? (
-    <ScopeWithPrefs {...props} />
-  ) : (
-    <>{props.children}</>
+  return (
+    <InScopeContext.Provider value>
+      {useContext(QueryClientContext) ? (
+        <ScopeWithPrefs {...props} />
+      ) : (
+        props.children
+      )}
+    </InScopeContext.Provider>
   );
+}
+
+/** Whether the table is inside a TableScope. */
+export function useInTableScope(): boolean {
+  return useContext(InScopeContext);
 }
 
 function ScopeWithPrefs({ id, sort, children }: TableScopeProps) {

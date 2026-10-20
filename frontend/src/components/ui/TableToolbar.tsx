@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 import { FacetFilter } from "@/components/ui/FacetFilter";
 import type { FacetControl } from "@/hooks/useTableFacets";
+import { TABLE_SEARCH_ATTR } from "@/lib/tableKeys";
 import { FROSTED, STICKY_BELOW_TOPBAR } from "@/lib/ui/states";
 
 /** One choice of a toolbar filter. */
@@ -75,6 +76,8 @@ export function TableToolbar<V extends string>({
         <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
+          // `/` focuses it from anywhere on the page (useGlobalShortcuts).
+          {...{ [TABLE_SEARCH_ATTR]: true }}
           aria-label={searchLabel}
           placeholder={placeholder}
           value={query}

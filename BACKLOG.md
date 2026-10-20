@@ -782,16 +782,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Keyboard navigation in tables
-
-- **Status:** Deferred (owner decision 2026-10-19: not a priority now).
-- **Reason:** every list needs the mouse to move between rows and open one;
-  the rest of the programme comes first.
-- **Definition of Done:** `j`/`k` move a row focus, `Enter` opens it, `x`
-  selects it where the table selects; one hook every table uses, off while a
-  text field has focus.
-- **Blockers:** none — taken up when it is asked for.
-
 #### Dashboard: a trend for the tenants nearest their limits
 
 - **Status:** Blocked.
