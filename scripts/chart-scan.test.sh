@@ -38,10 +38,10 @@ done
 
 if [[ "$(checkov --version 2>/dev/null || true)" == "$CHECKOV_VERSION" ]]; then
     run_checkov() { checkov "$@"; }
-elif command -v pipx >/dev/null 2>&1; then
-    run_checkov() { pipx run "checkov==$CHECKOV_VERSION" "$@"; }
+elif command -v uvx >/dev/null 2>&1; then
+    run_checkov() { uvx "checkov@$CHECKOV_VERSION" "$@"; }
 else
-    echo "!!! checkov $CHECKOV_VERSION is pinned and neither it nor pipx is installed" >&2
+    echo "!!! checkov $CHECKOV_VERSION is pinned and neither it nor uv is installed" >&2
     exit 1
 fi
 
