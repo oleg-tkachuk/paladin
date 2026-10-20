@@ -20,12 +20,14 @@ import { QuotaAlertsWidget } from "@/components/dashboard/QuotaAlertsWidget";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBar } from "@/components/ui/StatusBar";
 import { useStats } from "@/context/StatsContext";
 import { useAuth } from "@/context/AuthContext";
 import { canUseAdminPlane } from "@/constants/roles";
 import { NoAdminRole } from "@/components/NoAdminRole";
 import {
   type ComponentHealth,
+  componentSegments,
   componentStatusLabel,
 } from "@/lib/connect/system";
 import { cn } from "@/lib/utils";
@@ -182,6 +184,12 @@ export default function DashboardPage() {
               {components.length} comp
             </Badge>
           </div>
+          {/* How the components split by state: one failing among many
+              shows here before the rollup turns. */}
+          <StatusBar
+            segments={componentSegments(components)}
+            className="w-64 max-w-full"
+          />
           <div className={cn(T.hint, "flex items-center gap-2")}>
             <UserCircleIcon className="size-4" />
             <span>

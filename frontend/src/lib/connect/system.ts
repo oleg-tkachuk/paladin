@@ -12,7 +12,12 @@ export {
   type VersionInfo,
 } from "@/gen/paladin/iam/v1/health_service_pb";
 
-import { ComponentStatus } from "@/gen/paladin/iam/v1/health_service_pb";
+import {
+  ComponentStatus,
+  type ComponentHealth,
+} from "@/gen/paladin/iam/v1/health_service_pb";
+import type { StatusSegment } from "@/components/ui/StatusBar";
+import { StatusTone } from "@/lib/ui/status";
 
 /**
  * componentStatusLabel maps the proto enum to the upper-case string the
@@ -32,4 +37,36 @@ export function componentStatusLabel(s: ComponentStatus): string {
     default:
       return "UNKNOWN";
   }
+}
+
+// Each state's tone and its name in a tally. Disabled is switched off on
+// purpose, so it is a pause, not a fault.
+const COMPONENT_SEGMENT: Record<
+  ComponentStatus,
+  { tone: StatusTone; label: string }
+> = {
+  [ComponentStatus.HEALTHY]: { tone: StatusTone.Success, label: "healthy" },
+  [ComponentStatus.DEGRADED]: { tone: StatusTone.Warning, label: "degraded" },
+  [ComponentStatus.UNHEALTHY]: {
+    tone: StatusTone.Danger,
+    label: "unhealthy",
+  },
+  [ComponentStatus.DISABLED]: {
+    tone: StatusTone.Suspended,
+    label: "disabled",
+  },
+  [ComponentStatus.UNSPECIFIED]: { tone: StatusTone.Unknown, label: "unknown" },
+};
+
+/** How the components split by state, for a StatusBar. */
+export function componentSegments(
+  components: readonly ComponentHealth[],
+): StatusSegment[] {
+  const counts = new Map<ComponentStatus, number>();
+  for (const c of components) {
+    const s =
+      c.status in COMPONENT_SEGMENT ? c.status : ComponentStatus.UNSPECIFIED;
+    counts.set(s, (counts.get(s) ?? 0) + 1);
+  }
+  return [...counts].map(([s, count]) => ({ ...COMPONENT_SEGMENT[s], count }));
 }

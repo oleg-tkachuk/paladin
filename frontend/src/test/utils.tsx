@@ -5,6 +5,8 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { TooltipProvider } from "@/components/ui/Tooltip";
+
 // Re-export the RTL helpers the suites use so a test only needs one import.
 export {
   screen,
@@ -19,7 +21,8 @@ export {
  * render() wrapped in a fresh QueryClientProvider so components that use
  * useQuery / useInfiniteQuery work under test (otherwise they throw "No
  * QueryClient set"). A new client per render keeps tests isolated; retries
- * off + gcTime 0 keep them deterministic.
+ * off + gcTime 0 keep them deterministic. The TooltipProvider is the one the
+ * root layout gives every page, which a Radix tooltip throws without.
  */
 export function render(
   ui: ReactElement,
@@ -32,7 +35,9 @@ export function render(
     },
   });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </QueryClientProvider>
   );
   return rtlRender(ui, { wrapper: Wrapper, ...options });
 }
