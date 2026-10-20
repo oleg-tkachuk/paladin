@@ -55,6 +55,15 @@ describe("BuildVersion", () => {
     h.ui = { version: "11.9.0", commit: "a1b2c3d", buildTime: "" };
   });
 
+  it("shows nothing by default until the backend's version arrives", () => {
+    const { container } = render(
+      <TooltipProvider>
+        <BuildVersion />
+      </TooltipProvider>,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("shows the fallback until the backend's version arrives", () => {
     show();
     expect(screen.getByText("Control Plane")).toBeInTheDocument();
@@ -77,9 +86,8 @@ describe("BuildVersion", () => {
     expect(screen.queryByText("Control Plane")).not.toBeInTheDocument();
   });
 
-  // The release is a line under the product name: a size below it, and set
-  // smaller still because its monospace reads larger than its size.
-  it("sets the release a size below the product name", () => {
+  // A monospace reads larger than its size, so the release is set small.
+  it("sets the release small", () => {
     backend("11.9.0", "a1b2c3d4e5f6");
     show();
     const link = screen.getByRole("link", { name: /v11\.9\.0/ });

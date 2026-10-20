@@ -77,7 +77,7 @@ export type UserSettings = Message<"paladin.iam.v1.UserSettings"> & {
   locale: string;
 
   /**
-   * "light" | "dark" | "ember" | "navy" | "graphite" | "bordeaux" | "system".
+   * "light" | "dark" | "dusk" | "navy" | "graphite" | "bordeaux" | "system".
    *
    * @generated from field: string theme = 6;
    */

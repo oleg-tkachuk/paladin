@@ -272,9 +272,8 @@ const navigationGroups: Array<{
  * fail on its first request. Until the user is known (null) nothing is taken
  * away, so an operator's sidebar does not flash short on load.
  */
-// The product name over the release line (BuildVersion, text-xs). At the
-// same 14px the name looked the smaller of the two, the release being a
-// monospace that reads larger than its size.
+// The product name over its "Control Plane" line, a size above it: at the
+// same 14px the name looked the smaller of the two.
 export const BRAND_NAME_CLASS = "block text-base font-semibold tracking-tight";
 
 // A group's label (CORE, MANAGEMENT, …). text-sm is a size cn() keeps:
@@ -430,13 +429,9 @@ function SidebarBody({
               <Link href="/" className={BRAND_NAME_CLASS}>
                 Paladin
               </Link>
-              <BuildVersion
-                fallback={
-                  <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                    Control Plane
-                  </div>
-                }
-              />
+              <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Control Plane
+              </div>
             </div>
           )}
         </div>
@@ -580,53 +575,64 @@ function SidebarBody({
           which looked fine in a static screenshot but lied about who
           was actually using the cluster. Logout now lives both here
           (always-visible) and in the topbar avatar dropdown. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-sidebar-border p-3">
-        <Link
-          href="/profile"
-          className={cn(
-            "group/me flex min-w-0 items-center gap-2 rounded-md transition-colors hover:text-foreground",
-            collapsed && "justify-center w-full",
-          )}
-        >
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground group-hover/me:bg-primary group-hover/me:text-primary-foreground">
-            {initials}
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="truncate text-xs font-medium">{displayName}</div>
-              <div className="truncate text-sm text-muted-foreground">
-                {user?.roles?.[0] || (user ? "no role" : "not signed in")}
-              </div>
-            </div>
-          )}
-        </Link>
-        {!collapsed && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleLogout}
-                aria-label="Sign out"
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              >
-                <ArrowRightOnRectangleIcon className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Sign out</TooltipContent>
-          </Tooltip>
-        )}
-        {onToggleCollapse && (
-          <button
-            onClick={onToggleCollapse}
-            className="hidden rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground lg:inline-flex"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? (
-              <ChevronDoubleRightIcon className="size-4" />
-            ) : (
-              <ChevronDoubleLeftIcon className="size-4" />
+      <div className="shrink-0 border-t border-sidebar-border p-3">
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href="/profile"
+            className={cn(
+              "group/me flex min-w-0 items-center gap-2 rounded-md transition-colors hover:text-foreground",
+              collapsed && "justify-center w-full",
             )}
-          </button>
+          >
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground group-hover/me:bg-primary group-hover/me:text-primary-foreground">
+              {initials}
+            </div>
+            {!collapsed && (
+              <div className="min-w-0">
+                <div className="truncate text-xs font-medium">
+                  {displayName}
+                </div>
+                <div className="truncate text-sm text-muted-foreground">
+                  {user?.roles?.[0] || (user ? "no role" : "not signed in")}
+                </div>
+              </div>
+            )}
+          </Link>
+          {!collapsed && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  aria-label="Sign out"
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <ArrowRightOnRectangleIcon className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Sign out</TooltipContent>
+            </Tooltip>
+          )}
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="hidden rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground lg:inline-flex"
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? (
+                <ChevronDoubleRightIcon className="size-4" />
+              ) : (
+                <ChevronDoubleLeftIcon className="size-4" />
+              )}
+            </button>
+          )}
+        </div>
+        {/* The running release, after Argo CD's: under who is signed in, at
+          the foot of the navigation, rather than on every page. */}
+        {!collapsed && (
+          <div className="mt-2 pl-1">
+            <BuildVersion />
+          </div>
         )}
       </div>
     </div>

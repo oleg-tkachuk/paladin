@@ -59,7 +59,7 @@ const (
 	ThemeSystem   = "system"
 	ThemeLight    = "light"
 	ThemeDark     = "dark"
-	ThemeEmber    = "ember"
+	ThemeDusk     = "dusk"
 	ThemeNavy     = "navy"
 	ThemeGraphite = "graphite"
 	ThemeBordeaux = "bordeaux"
@@ -67,7 +67,7 @@ const (
 
 // Themes lists every accepted theme.
 var Themes = []string{
-	ThemeSystem, ThemeLight, ThemeDark, ThemeEmber, ThemeNavy, ThemeGraphite, ThemeBordeaux,
+	ThemeSystem, ThemeLight, ThemeDark, ThemeDusk, ThemeNavy, ThemeGraphite, ThemeBordeaux,
 }
 
 // ValidateTheme bounds the theme universe to the values understood by the
