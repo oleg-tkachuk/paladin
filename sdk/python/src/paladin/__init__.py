@@ -18,7 +18,7 @@ from paladin.auth import (
     Session,
     StaticToken,
 )
-from paladin.biscuit import attenuate
+from paladin.biscuit import NoBiscuitError, attenuate, biscuit_of
 from paladin.capability_cache import (
     CAPABILITY_REFRESH_MARGIN,
     AsyncCapabilityCache,
@@ -215,6 +215,7 @@ __all__ = [
     "IntegrityError",
     "InvalidArgumentError",
     "InvalidNameError",
+    "NoBiscuitError",
     "NoCAError",
     "NoCapabilityKeyError",
     "NoPartSplitError",
@@ -269,6 +270,7 @@ __all__ = [
     "aupload_many",
     "await_operation",
     "begin_multipart",
+    "biscuit_of",
     "checksum",
     "complete_multipart",
     "connect",
