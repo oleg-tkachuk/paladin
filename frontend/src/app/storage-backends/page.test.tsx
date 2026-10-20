@@ -551,6 +551,29 @@ describe("StorageBackendsPage search", () => {
   });
 });
 
+// A long list is cut into pages; selecting all selects the page on screen.
+describe("StorageBackendsPage pages", () => {
+  it("shows fifty backends a page, and the next fifty on the next", async () => {
+    h.backends = Array.from({ length: 55 }, (_, i) =>
+      makeBackend({ backendId: `b-${String(i).padStart(2, "0")}` }),
+    );
+    render(<StorageBackendsPage />);
+    expect(screen.getByText("b-49")).toBeInTheDocument();
+    expect(screen.queryByText("b-50")).toBeNull();
+    expect(screen.getByText("1–50 of 55")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select all backends" }),
+    );
+    expect(screen.getByText(/50 selected/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("b-54")).toBeInTheDocument();
+    expect(screen.queryByText("b-00")).toBeNull();
+    expect(window.location.search).toContain("page=2");
+  });
+});
+
 // The state and health facets narrow what the search loaded, each answer
 // counted; several answers of one facet are any of them.
 describe("StorageBackendsPage facets", () => {

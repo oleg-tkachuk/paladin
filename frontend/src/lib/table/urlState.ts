@@ -13,6 +13,8 @@ export const TABLE_PARAMS = {
   filter: "filter",
   /** The row a link points at: opened, highlighted and scrolled to. */
   row: "id",
+  /** The page of a paged list, from 1; the first is left out. */
+  page: "page",
 } as const;
 
 export type TableParam = keyof typeof TABLE_PARAMS;

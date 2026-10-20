@@ -12,6 +12,7 @@ import {
   type Density,
   type TablePrefs,
 } from "@/lib/preferences/tablePrefs";
+import type { PageSize } from "@/lib/table/paging";
 
 const asStored = (raw: unknown) => raw;
 
@@ -38,5 +39,6 @@ export function useTablePrefs(tableId: string) {
     toggleColumn: (column: string) => change((p) => toggleHidden(p, column)),
     saveSort: (sort: DefaultSort) => change((p) => ({ ...p, sort })),
     clearSort: () => change((p) => ({ ...p, sort: undefined })),
+    setPageSize: (pageSize: PageSize) => change((p) => ({ ...p, pageSize })),
   };
 }

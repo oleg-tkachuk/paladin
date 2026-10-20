@@ -42,6 +42,8 @@ import type { User } from "@/gen/paladin/iam/v1/types_pb";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import type { Facet } from "@/lib/table/facets";
 import type { SearchText, SortAccessors } from "@/lib/table/view";
 import { StatusTone } from "@/lib/ui/status";
@@ -162,11 +164,17 @@ export default function UsersPage() {
     tableId: TABLE_ID,
   });
   const filtered = view.rows;
+  const paged = useTablePage(filtered, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [view.query, facets.selection],
+  });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
     <TableScope id={TABLE_ID} sort={view.sort}>
       <ListPage
+        footer={<TablePagination {...paged.pagination} />}
         header={
           <PageHeader
             title="Users"
@@ -257,7 +265,7 @@ export default function UsersPage() {
                 : null
             }
           >
-            {filtered.map((u) => {
+            {paged.rows.map((u) => {
               const tenant = tenantByID.get(u.tenantId);
               return (
                 <IntentTableRow

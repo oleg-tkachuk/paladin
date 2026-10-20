@@ -13,10 +13,19 @@ describe("readTablePrefs", () => {
       density: "compact",
     });
   });
+  it("reads a page size the picker offers, every row included", () => {
+    expect(readTablePrefs({ users: { pageSize: 25 } }, "users")).toEqual({
+      pageSize: 25,
+    });
+    expect(readTablePrefs({ users: { pageSize: "all" } }, "users")).toEqual({
+      pageSize: "all",
+    });
+  });
   it.each([
     ["no map", undefined],
     ["a map of the wrong kind", "x"],
     ["an entry of the wrong shape", { users: { density: "huge" } }],
+    ["a page size the picker does not offer", { users: { pageSize: 7 } }],
   ])("reads %s as no preferences", (_, stored) => {
     expect(readTablePrefs(stored, "users")).toEqual({});
   });

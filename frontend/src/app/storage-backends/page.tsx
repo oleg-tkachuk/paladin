@@ -78,6 +78,8 @@ import { errorMessage } from "@/hooks/errorContract";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
 import { BACKEND_FACETS, healthView, lifecycleState } from "./backendView";
 import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { TableScope } from "@/components/ui/TableScope";
 import { StatusDot } from "@/components/ui/StatusIcon";
 import { STATUS_BADGE } from "@/lib/ui/status";
@@ -216,6 +218,11 @@ export default function StorageBackendsPage() {
     () => sortRows(facets.rows, sort, BACKEND_SORT),
     [facets.rows, sort],
   );
+  const paged = useTablePage(sorted, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [search, facets.selection],
+  });
 
   // The backend a row action is running on; its menu stays disabled meanwhile.
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -349,13 +356,16 @@ export default function StorageBackendsPage() {
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
   // "All" is every row on screen: selecting all while the list is narrowed
-  // to the disabled backends selects those, not the ones the facets hide.
+  // to the disabled backends selects those on this page, not the ones the
+  // facets hide or another page holds.
+  const onScreen = paged.rows;
   const allSelected =
-    sorted.length > 0 && sorted.every((b) => selected.has(b.backendId));
+    onScreen.length > 0 && onScreen.every((b) => selected.has(b.backendId));
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
       <ListPage
+        footer={<TablePagination {...paged.pagination} />}
         header={
           <PageHeader
             title="Storage Backends"
@@ -404,7 +414,7 @@ export default function StorageBackendsPage() {
                   onCheckedChange={(v) =>
                     setSelected(
                       v === true
-                        ? new Set(sorted.map((b) => b.backendId))
+                        ? new Set(onScreen.map((b) => b.backendId))
                         : new Set(),
                     )
                   }
@@ -473,7 +483,7 @@ export default function StorageBackendsPage() {
                 : null
             }
           >
-            {sorted.map((b) => (
+            {onScreen.map((b) => (
               <BackendRow
                 key={b.backendId}
                 backend={b}

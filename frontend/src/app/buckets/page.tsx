@@ -48,6 +48,8 @@ import {
   type BucketSortColumn,
 } from "@/components/features/buckets/BucketTable";
 import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { bucketHref } from "@/lib/navigation/hrefs";
 import { TableScope } from "@/components/ui/TableScope";
 
@@ -150,6 +152,11 @@ export default function BucketsPage() {
   }, [facets.rows, sort]);
 
   const hasFilters = search.trim() !== "" || facets.active > 0;
+  const paged = useTablePage(filtered, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [search, facets.selection],
+  });
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
 
@@ -197,7 +204,7 @@ export default function BucketsPage() {
         />
 
         <BucketTable
-          buckets={filtered}
+          buckets={paged.rows}
           tenants={tenantNames}
           loading={loading}
           error={listError}
@@ -260,6 +267,8 @@ export default function BucketsPage() {
             </DropdownMenu>
           )}
         />
+
+        <TablePagination {...paged.pagination} />
 
         <BucketCreateDialog
           open={createOpen}

@@ -32,6 +32,8 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { LIFECYCLE_BADGE, lifecycleFacet } from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
@@ -243,11 +245,17 @@ export default function M2MTokensPage() {
     tableId: TABLE_ID,
   });
   const visibleTokens = view.rows;
+  const paged = useTablePage(visibleTokens, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [view.query, facets.selection],
+  });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
   return (
     <TableScope id={TABLE_ID} sort={view.sort}>
       <ListPage
+        footer={<TablePagination {...paged.pagination} />}
         header={
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -381,7 +389,7 @@ export default function M2MTokensPage() {
                 : null
             }
           >
-            {visibleTokens.map((t) => {
+            {paged.rows.map((t) => {
               const revoked = isRevoked(t);
               const row = openableRow(() => setOpened(t));
               return (

@@ -10,6 +10,8 @@ import React, { useMemo, useState } from "react";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import type { Facet } from "@/lib/table/facets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import Link from "next/link";
@@ -152,10 +154,16 @@ export default function TenantsPage() {
     }
     return list;
   }, [facets.rows, search, sort]);
+  const paged = useTablePage(filtered, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [search, facets.selection],
+  });
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
       <ListPage
+        footer={<TablePagination {...paged.pagination} />}
         header={
           <PageHeader
             title="Tenants"
@@ -262,7 +270,7 @@ export default function TenantsPage() {
                 : null
             }
           >
-            {filtered.map((tenant) => {
+            {paged.rows.map((tenant) => {
               const labelEntries = Object.entries(tenant.labels);
               const db = parseBucketName(tenant.defaultBucket);
               // Slug is the canonical handle in URLs; UUID is the
