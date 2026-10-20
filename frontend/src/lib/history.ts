@@ -52,7 +52,7 @@ export function actorKind(subject: string): ActorKind {
 }
 
 /** An audit action in words: "/paladin.admin.v1.BucketService/UpdateBucket" reads "Update bucket". */
-function plainAction(action: string): string {
+export function plainAction(action: string): string {
   const { name } = parseAuditAction(action);
   // An event's last step is snake_case: "bootstrap_admin.reset" ends "reset".
   return camelWords(name.replace(/_(\w)/g, (_, c: string) => c.toUpperCase()));

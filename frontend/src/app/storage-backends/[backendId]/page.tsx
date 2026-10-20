@@ -29,10 +29,21 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BackendActions } from "./BackendActions";
 import { BackendHeader, kindLabel } from "./BackendHeader";
 import { FeaturesSummary } from "./FeaturesSummary";
+import { FEATURES_TAB } from "./BackendHeader";
+import { healthView } from "../backendView";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { StatusPanel, type StatusCardSpec } from "@/components/ui/StatusPanel";
+import { RelativeTime } from "@/components/RelativeTime";
+import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import { backendHref } from "@/lib/navigation/hrefs";
+import {
+  backendLifecycleStatus,
+  compatibilityStatus,
+  maintenanceStatus,
+} from "@/lib/resourceStatus";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
@@ -70,6 +81,8 @@ export default function StorageBackendDetailPage() {
   return (
     <div className="space-y-6">
       <BackendHeader backendId={backendId} backend={backend} />
+
+      {backend && <BackendStatusPanel backend={backend} />}
 
       {/* Identity card */}
       {loadingBackends && !backend ? (
@@ -184,6 +197,40 @@ export default function StorageBackendDetailPage() {
       />
     </div>
   );
+}
+
+/**
+ * Where the backend stands, after Argo CD's status panel: what it lets
+ * through, what its last probe found of it and of its S3 features, and
+ * whether an operator marked it as under maintenance.
+ */
+function BackendStatusPanel({ backend }: { backend: StorageBackend }) {
+  const health = healthView(backend);
+  const cards: StatusCardSpec[] = [
+    { title: "Lifecycle", ...backendLifecycleStatus(backend) },
+    {
+      title: "Connectivity",
+      tone: health.tone,
+      value: health.label,
+      detail: backend.healthCheckedAt ? (
+        <>
+          {health.title}, <RelativeTime ts={backend.healthCheckedAt} />
+        </>
+      ) : (
+        health.title
+      ),
+      help: "storageFeatures",
+    },
+    {
+      title: "S3 features",
+      ...compatibilityStatus(backend),
+      help: "storageFeatures",
+      href: `${backendHref(backend.backendId)}/${FEATURES_TAB}`,
+      linkLabel: "Open S3 features",
+    },
+    { title: "Maintenance", ...maintenanceStatus(backend.maintenance) },
+  ];
+  return <StatusPanel label="Backend status" cards={cards} />;
 }
 
 function Row({

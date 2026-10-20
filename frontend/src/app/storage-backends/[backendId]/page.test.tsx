@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test/utils";
+import { render, screen, within } from "@/test/utils";
 
 // A failed backend or bucket read used to render as a claim about the data:
 // "Backend not found." for a backend that may exist, and "No buckets on this
@@ -34,6 +34,12 @@ vi.mock("next/navigation", async (importOriginal) => ({
   usePathname: () => "/storage-backends/primary",
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));
+vi.mock("@/lib/connect/client", () => ({
+  userSettingsClient: {
+    getMine: vi.fn(async () => ({ preferences: {} })),
+    updateMine: vi.fn(),
+  },
+}));
 vi.mock("./BackendActions", () => ({ BackendActions: () => null }));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
 vi.mock("@/hooks/useBuckets", () => ({
@@ -157,6 +163,42 @@ describe("StorageBackendDetailPage features", () => {
     expect(screen.getByRole("tab", { name: "S3 features" })).toHaveAttribute(
       "aria-selected",
       "false",
+    );
+  });
+});
+
+// After Argo CD's status panel: a draining backend is a change under way and
+// maintenance a pause, neither a fault; a probe that failed is one.
+describe("StorageBackendDetailPage status panel", () => {
+  const card = async (title: string) => {
+    const panel = await screen.findByRole("region", { name: "Backend status" });
+    return within(panel)
+      .getAllByText(title)[0]
+      .closest('[data-slot="status-card"]') as HTMLElement;
+  };
+
+  it("reads each fact in the status tones", async () => {
+    h.backends.backends = [
+      {
+        ...PRIMARY,
+        enabled: true,
+        readOnly: true,
+        maintenance: true,
+        healthStatus: "error",
+        healthMessage: "dial tcp: refused",
+      },
+    ];
+    render(<StorageBackendDetailPage />);
+    expect(await card("Lifecycle")).toHaveAttribute("data-tone", "progress");
+    const connectivity = await card("Connectivity");
+    expect(connectivity).toHaveAttribute("data-tone", "danger");
+    expect(connectivity).toHaveTextContent("dial tcp: refused");
+    expect(await card("Maintenance")).toHaveAttribute("data-tone", "suspended");
+    const features = await card("S3 features");
+    expect(features).toHaveAttribute("data-tone", "unknown");
+    expect(within(features).getByRole("link")).toHaveAttribute(
+      "href",
+      "/storage-backends/primary/features",
     );
   });
 });

@@ -13,6 +13,7 @@ import {
   historyFromOperation,
   mergeHistory,
   operationsFilterFor,
+  plainAction,
 } from "./history";
 
 const USER = "0b9d3c62-1f7c-4c4e-9a53-3f2a2b8d2a11";
@@ -29,6 +30,17 @@ describe("actorKind", () => {
     ["", "system"],
   ])("%s → %s", (subject, kind) => {
     expect(actorKind(subject)).toBe(kind);
+  });
+});
+
+describe("plainAction", () => {
+  it("says an RPC's method and an event's last step in words", () => {
+    expect(plainAction("/paladin.admin.v1.BucketService/UpdateBucket")).toBe(
+      "Update bucket",
+    );
+    expect(plainAction("iam.bootstrap_admin.password_reset")).toBe(
+      "Password reset",
+    );
   });
 });
 
