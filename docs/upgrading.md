@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — the SDKs need no limes
+## sdk/go/v0.96.0 — the SDKs need no limes
 
 A client works with the Paladin SDK alone; limes is the server's.
 
