@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing tenants/page: asserts the list branches +
@@ -246,5 +240,31 @@ describe("TenantsPage load failure", () => {
   it("still says 'none yet' when the list really is empty", () => {
     render(<TenantsPage />);
     expect(screen.getByText("No tenants yet.")).toBeInTheDocument();
+  });
+});
+
+// A tenant's row warms the query its page reads, by the handle its link uses.
+describe("TenantsPage row intent", () => {
+  it("warms the tenant's detail query when pointed at", async () => {
+    const { render: rtlRender } = await import("@testing-library/react");
+    const { QueryClient, QueryClientProvider } =
+      await import("@tanstack/react-query");
+    const { tenantDetailQuery } = await import("@/lib/queries/details");
+    h.state.tenants = [
+      { tenantId: "t-1", slug: "acme", displayName: "Acme Corp", labels: {} },
+    ];
+    const client = new QueryClient();
+    const prefetch = vi
+      .spyOn(client, "prefetchQuery")
+      .mockResolvedValue(undefined);
+    rtlRender(
+      <QueryClientProvider client={client}>
+        <TenantsPage />
+      </QueryClientProvider>,
+    );
+    fireEvent.mouseEnter(screen.getByText("acme").closest("tr")!);
+    expect(prefetch).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: tenantDetailQuery("acme").queryKey }),
+    );
   });
 });

@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/button";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
-import { bucketClient, tenantClient } from "@/lib/connect/client";
+import { bucketDetailQuery, tenantDetailQuery } from "@/lib/queries/details";
 import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import { tenantHref } from "@/lib/navigation/hrefs";
@@ -25,9 +25,6 @@ import { cn } from "@/lib/utils";
 
 import { BucketProvider, type BucketOwner } from "./bucket-context";
 import { SharedBucketNotice } from "./SharedBucketNotice";
-
-const bucketResourceName = (backendId: string, bucketId: string) =>
-  `storageBackends/${backendId}/buckets/${bucketId}`;
 
 export default function BucketLayout({
   children,
@@ -39,16 +36,11 @@ export default function BucketLayout({
   const bucketId = decodeURIComponent(params?.bucketId ?? "");
 
   const queryClient = useQueryClient();
-  const bucketKey = ["bucket", backendId, bucketId] as const;
-  const bucketQuery = useQuery({
-    queryKey: bucketKey,
-    retry: false, // NotFound short-circuits to notFound(); a retry won't help.
-    queryFn: ({ signal }) =>
-      bucketClient.getBucket(
-        { name: bucketResourceName(backendId, bucketId) },
-        { signal },
-      ),
-  });
+  // The query a buckets row and a bucket hover card warm, so the page opens
+  // on the bucket they already read.
+  const bucketDetail = bucketDetailQuery(backendId, bucketId);
+  const bucketKey = bucketDetail.queryKey;
+  const bucketQuery = useQuery(bucketDetail);
   const bucket = bucketQuery.data ?? null;
   const loading = bucketQuery.isFetching;
   const notFoundFlag =
@@ -71,17 +63,14 @@ export default function BucketLayout({
   // changes: a bucket whose owner is in the trash is frozen with it.
   const ownerId = bucket?.ownerTenantId ?? "";
   const ownerQuery = useQuery({
-    queryKey: ["tenant", ownerId],
+    ...tenantDetailQuery(ownerId),
     enabled: ownerId !== "",
-    queryFn: ({ signal }): Promise<BucketOwner> =>
-      tenantClient
-        .getTenant({ name: `tenants/${ownerId}` }, { signal })
-        .then((t) => ({
-          tenantId: t.tenantId,
-          slug: t.slug,
-          displayName: t.displayName,
-          trashed: t.deletedAt !== undefined,
-        })),
+    select: (t): BucketOwner => ({
+      tenantId: t.tenantId,
+      slug: t.slug,
+      displayName: t.displayName,
+      trashed: t.deletedAt !== undefined,
+    }),
   });
   const owner = ownerQuery.data ?? null;
   const changesBlocked = owner?.trashed ? TRASHED_TENANT_BLOCK : null;

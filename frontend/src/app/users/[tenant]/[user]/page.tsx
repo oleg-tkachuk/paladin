@@ -4,7 +4,7 @@
 // scopes, with the same disable / reset / delete actions as the list. The
 // path mirrors the resource name, tenants/<tenant>/users/<user>.
 
-import { userDetailQuery } from "@/lib/queries/details";
+import { tenantDetailQuery, userDetailQuery } from "@/lib/queries/details";
 import { CopyableId } from "@/components/ui/CopyableId";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -25,7 +25,6 @@ import {
 } from "@/components/features/users/UserRowActions";
 import { UserRolesCard } from "@/components/features/users/UserRolesCard";
 import { UserScopesCard } from "@/components/features/users/UserScopesCard";
-import { tenantClient } from "@/lib/connect/client";
 import { T } from "@/lib/ui/typography";
 import { ConnectedApplications } from "@/components/features/oauth/ConnectedApplications";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
@@ -63,10 +62,8 @@ export default function UserDetailPage() {
   // The path holds ids; the trail and the tab title name them: the tenant by
   // its slug, leading to its page (/users/<tenant> is none), the user by login.
   const tenantQuery = useQuery({
-    queryKey: ["tenant", user?.tenantId],
+    ...tenantDetailQuery(user?.tenantId ?? ""),
     enabled: Boolean(user?.tenantId),
-    queryFn: ({ signal }) =>
-      tenantClient.getTenant({ name: `tenants/${user?.tenantId}` }, { signal }),
   });
   const slug = tenantQuery.data?.slug;
   const crumbNames = useMemo(

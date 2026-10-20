@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@/test/utils";
 
 // A failed backend or bucket read used to render as a claim about the data:
 // "Backend not found." for a backend that may exist, and "No buckets on this

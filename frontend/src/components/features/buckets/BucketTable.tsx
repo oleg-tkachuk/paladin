@@ -1,5 +1,7 @@
 "use client";
 
+import { bucketDetailQuery } from "@/lib/queries/details";
+import { IntentTableRow } from "@/components/ui/IntentTableRow";
 import Link from "next/link";
 import { ArchiveBoxIcon } from "@heroicons/react/24/outline";
 
@@ -228,7 +230,10 @@ function BucketRow({
   const named = grantees.slice(0, GRANTEES_NAMED);
   const more = grantees.length - named.length;
   return (
-    <TableRow className="group">
+    <IntentTableRow
+      className="group"
+      query={bucketDetailQuery(b.backendId, b.bucketId)}
+    >
       <TableCell>
         <Link
           href={bucketHref(b.backendId, b.bucketId)}
@@ -296,6 +301,6 @@ function BucketRow({
       {actions !== undefined && (
         <TableCell className="text-right">{actions}</TableCell>
       )}
-    </TableRow>
+    </IntentTableRow>
   );
 }
