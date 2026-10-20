@@ -21,10 +21,20 @@ export const CARD_PLANE = "ring-1 ring-border shadow-raised";
 
 /**
  * The header that opens a card sits on a band of its own, ruled off from the
- * body: it pulls up over the card's top padding to reach the edge.
+ * body. The card gives up its top padding for it (CARD_OPENS_WITH_HEADER), so
+ * the band reaches the edge whatever padding the card was given; pulling the
+ * band up by the default padding instead pushed it past the edge of a card
+ * that had none, clipping its icon.
  */
 export const CARD_HEADER_BAND =
-  "first:-mt-4 first:border-b first:border-border first:bg-band first:py-3 group-data-[size=sm]/card:first:-mt-3 group-data-[size=sm]/card:first:py-2";
+  "first:border-b first:border-border first:bg-band first:py-3 group-data-[size=sm]/card:first:py-2";
+
+/**
+ * A card that opens with its header has no top padding above the band, a
+ * header first inside a form that fills the card included.
+ */
+export const CARD_OPENS_WITH_HEADER =
+  "has-[>[data-slot=card-header]:first-child]:pt-0 has-[>form:first-child>[data-slot=card-header]:first-child]:pt-0";
 
 function Card({
   className,
@@ -53,6 +63,7 @@ function Card({
         // class merge does not know shadow-raised for a shadow, so a
         // shadow-none beside it would not win.
         variantClass[variant ?? "default"],
+        CARD_OPENS_WITH_HEADER,
         className,
       )}
       {...props}

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 
 import {
   CARD_HEADER_BAND,
+  CARD_OPENS_WITH_HEADER,
   CARD_PLANE,
   Card,
   CardContent,
@@ -64,6 +65,17 @@ describe("Card", () => {
       expect(screen.getByTestId("card")).not.toHaveClass("shadow-raised");
     },
   );
+
+  // The band was pulled up by the card's default padding, so a card with
+  // none (py-0, as health and stats use) had it, and its icon, cut off at
+  // the top edge.
+  it("gives up its top padding for the band, rather than pulling it up", () => {
+    render(<Card data-testid="card" className="py-0" />);
+    expect(screen.getByTestId("card")).toHaveClass(
+      ...classes(CARD_OPENS_WITH_HEADER),
+    );
+    expect(CARD_HEADER_BAND).not.toMatch(/-m[ty]-/);
+  });
 
   it("puts the header that opens it on a band of its own", () => {
     render(
