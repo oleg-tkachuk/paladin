@@ -24,9 +24,12 @@ describe("splitForTrash", () => {
 
 describe("unfinishedNote", () => {
   it("counts in the singular and the plural", () => {
-    expect(unfinishedNote(1)).toMatch(/^1 upload has not completed and stays /);
+    // One upload "stays as it is"; it read "stays as they are".
+    expect(unfinishedNote(1)).toMatch(
+      /^1 upload has not completed and stays as it is; /,
+    );
     expect(unfinishedNote(3)).toMatch(
-      /^3 uploads have not completed and stay /,
+      /^3 uploads have not completed and stay as they are; /,
     );
   });
 });
