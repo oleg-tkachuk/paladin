@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { NOTHING_TO_TRASH } from "@/lib/objects/trash";
 import {
   act,
   fireEvent,
@@ -406,20 +407,36 @@ describe("CollectionObjectsPage", () => {
 // Trashing a selection is confirmed first, and so is its Undo: that is a
 // restore, which is never run on a click.
 describe("CollectionObjectsPage bulk trash", () => {
+  const ITEM = { name: "objects/o1", collection: "ok-1" };
+  const pending = (key: string, id: string) => ({
+    ...makeObj(key),
+    objectId: id,
+    name: `objects/${id}`,
+    state: ObjectState.PENDING,
+  });
+  const selectAll = () =>
+    userEvent.click(screen.getByRole("checkbox", { name: "Select all rows" }));
+
+  beforeEach(() => {
+    h.objects = [{ ...makeObj("a.txt"), state: ObjectState.AVAILABLE }];
+  });
+
   it("asks before trashing the selection", async () => {
     render(<CollectionObjectsPage />);
+    await selectAll();
     await userEvent.click(screen.getByText("bulk delete"));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByRole("note")).toHaveTextContent(/restorable/);
     expect(h.bulkDelete).not.toHaveBeenCalled();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: /Move 0 to Trash/ }),
+      within(dialog).getByRole("button", { name: /Move 1 to Trash/ }),
     );
-    await waitFor(() => expect(h.bulkDelete).toHaveBeenCalledWith([]));
+    await waitFor(() => expect(h.bulkDelete).toHaveBeenCalledWith([ITEM]));
   });
 
   it("does not trash when cancelled", async () => {
     render(<CollectionObjectsPage />);
+    await selectAll();
     await userEvent.click(screen.getByText("bulk delete"));
     await userEvent.click(
       await screen.findByRole("button", { name: "Cancel" }),
@@ -427,11 +444,46 @@ describe("CollectionObjectsPage bulk trash", () => {
     expect(h.bulkDelete).not.toHaveBeenCalled();
   });
 
+  // An upload that never completed is refused by the server; it used to be
+  // sent anyway and reported as moved.
+  it("leaves an unfinished upload out, and says so", async () => {
+    h.objects = [
+      { ...makeObj("a.txt"), state: ObjectState.AVAILABLE },
+      pending("b.txt", "o2"),
+    ];
+    render(<CollectionObjectsPage />);
+    await selectAll();
+    await userEvent.click(screen.getByText("bulk delete"));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("1 upload has not completed");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: /Move 1 to Trash/ }),
+    );
+    await waitFor(() => expect(h.bulkDelete).toHaveBeenCalledWith([ITEM]));
+  });
+
+  it("asks nothing when only unfinished uploads are selected", async () => {
+    h.objects = [pending("b.txt", "o2")];
+    render(<CollectionObjectsPage />);
+    await selectAll();
+    await userEvent.click(screen.getByText("bulk delete"));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(h.bulkDelete).not.toHaveBeenCalled();
+    expect(h.showNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "warning",
+        title: NOTHING_TO_TRASH,
+        message: expect.stringContaining("1 upload has not completed"),
+      }),
+    );
+  });
+
   it("confirms the Undo before restoring", async () => {
     render(<CollectionObjectsPage />);
+    await selectAll();
     await userEvent.click(screen.getByText("bulk delete"));
     await userEvent.click(
-      await screen.findByRole("button", { name: /Move 0 to Trash/ }),
+      await screen.findByRole("button", { name: /Move 1 to Trash/ }),
     );
     await waitFor(() => expect(h.bulkDelete).toHaveBeenCalled());
     await waitFor(() =>
@@ -444,12 +496,12 @@ describe("CollectionObjectsPage bulk trash", () => {
 
     act(() => void undo!.perform());
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog).toHaveTextContent("Restore 0 objects?");
+    expect(dialog).toHaveTextContent("Restore 1 objects?");
     expect(h.bulkRestore).not.toHaveBeenCalled();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Restore 0 objects" }),
+      within(dialog).getByRole("button", { name: "Restore 1 objects" }),
     );
-    await waitFor(() => expect(h.bulkRestore).toHaveBeenCalledWith([]));
+    await waitFor(() => expect(h.bulkRestore).toHaveBeenCalledWith([ITEM]));
   });
 });
 
