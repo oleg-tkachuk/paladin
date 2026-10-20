@@ -302,7 +302,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			billingHandler = billingh.NewHandler(ledger, usageStore, polEngine).
 				WithCurrency(deps.Cfg.Capability.Currency)
 		}
-		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler))
+		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
 	}
 	paladinadminv1connect.RegisterAuditLogServiceHandler(adminServer, admin.NewAuditServer(auditH))
 	paladinadminv1connect.RegisterEventSubscriptionServiceHandler(adminServer, admin.NewEventSubscriptionServer(eventSubH, tenantH))

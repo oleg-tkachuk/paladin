@@ -13,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
@@ -25,21 +26,24 @@ import (
 type BillingServer struct {
 	paladinadminv1connect.UnimplementedBillingServiceHandler
 	H billingHandler
+	// Tenants names the tenants ListTenantSpend lists: the ledger carries
+	// their ids alone.
+	Tenants tenanth.Names
 }
 
 // NewBillingServer wires the handler. h may be nil — callers that
 // reach a nil-H server get CodeUnavailable (matches the
 // TenantBudgetServer disabled-subsystem shape).
-func NewBillingServer(h *billingh.Handler) *BillingServer {
+func NewBillingServer(h *billingh.Handler, tenants tenanth.Names) *BillingServer {
 	// H is an interface, so a nil *billingh.Handler assigned straight into it
 	// would produce a NON-nil interface value and the `s.H == nil`
 	// disabled-subsystem checks below would silently stop firing — the
 	// RPCs would panic on a nil receiver instead of answering
 	// CodeUnavailable. Leave the field zero instead.
 	if h == nil {
-		return &BillingServer{}
+		return &BillingServer{Tenants: tenants}
 	}
-	return &BillingServer{H: h}
+	return &BillingServer{H: h, Tenants: tenants}
 }
 
 func (s *BillingServer) GetTenantSummary(
@@ -98,6 +102,44 @@ func (s *BillingServer) GetTenantTimeSeries(
 			Start:       timestamppb.New(b.Start),
 			Spent:       apiutil.MoneyOf(ts.UnitCode, b.Amount),
 			ChargeCount: b.ChargeCount,
+		})
+	}
+	return out, nil
+}
+
+// ListTenantSpend lists the tenants that spent over the period, the most
+// first, each named as its tenant row names it — a tenant in the trash too,
+// marked deleted, since what it spent still counts.
+func (s *BillingServer) ListTenantSpend(
+	ctx context.Context,
+	req *pb.ListTenantSpendRequest,
+) (*pb.ListTenantSpendResponse, error) {
+	if s.H == nil {
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+	}
+	spend, truncated, err := s.H.ListTenantSpend(ctx,
+		timeFromPB(req.GetPeriodStart()), timeFromPB(req.GetPeriodEnd()), int(req.GetLimit()))
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, 0, len(spend))
+	for _, t := range spend {
+		ids = append(ids, t.TenantID)
+	}
+	names, err := s.Tenants.TenantNames(ctx, ids)
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: tenant names: %w", err))
+	}
+	out := &pb.ListTenantSpendResponse{Tenants: make([]*pb.TenantSpend, 0, len(spend)), Truncated: truncated}
+	for _, t := range spend {
+		name := names[t.TenantID]
+		out.Tenants = append(out.Tenants, &pb.TenantSpend{
+			TenantId:    t.TenantID.String(),
+			Slug:        name.Slug,
+			DisplayName: name.DisplayName,
+			Deleted:     name.Deleted,
+			Spent:       apiutil.MoneyOf(t.UnitCode, t.Amount),
+			ChargeCount: t.ChargeCount,
 		})
 	}
 	return out, nil

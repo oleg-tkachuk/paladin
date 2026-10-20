@@ -28,7 +28,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_billing_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSIbChlHZXRCaWxsaW5nU2V0dGluZ3NSZXF1ZXN0IjgKGkdldEJpbGxpbmdTZXR0aW5nc1Jlc3BvbnNlEhoKDWN1cnJlbmN5X2NvZGUYASABKAlCA+BBAyKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIswDChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRIoCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlIABI9ChB1bmxpbWl0ZWRfYnVkZ2V0GAwgASgLMiEucGFsYWRpbi5hZG1pbi52MS5VbmxpbWl0ZWRCdWRnZXRIABI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANCEAoOYnVkZ2V0X2NlaWxpbmdKBAgBEAJKBAgCEANKBAgIEAlKBAgDEARKBAgJEApSDHRvdGFsX2Ftb3VudFIMdG90YWxfbWljcm9zUgl1bml0X2NvZGVSEW1heF9idWRnZXRfYW1vdW50UhFtYXhfYnVkZ2V0X21pY3JvcyJ1CghUb3BFbnRyeRINCgVsYWJlbBgBIAEoCRIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zIrABChpHZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEjAKDHBlcmlvZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZ3JhbnVsYXJpdHkYBCABKAkiXQobR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXRKBAgCEANSCXVuaXRfY29kZSKYAQoKVGltZUJ1Y2tldBIuCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zMu8CCg5CaWxsaW5nU2VydmljZRJuChBHZXRUZW5hbnRTdW1tYXJ5EikucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdW1tYXJ5UmVxdWVzdBoqLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlc3BvbnNlIgOQAgESdwoTR2V0VGVuYW50VGltZVNlcmllcxIsLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QaLS5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZSIDkAIBEnQKEkdldEJpbGxpbmdTZXR0aW5ncxIrLnBhbGFkaW4uYWRtaW4udjEuR2V0QmlsbGluZ1NldHRpbmdzUmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuR2V0QmlsbGluZ1NldHRpbmdzUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKSAQoWTGlzdFRlbmFudFNwZW5kUmVxdWVzdBIwCgxwZXJpb2Rfc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhYKBWxpbWl0GAMgASgFQge6SAQaAigAImEKF0xpc3RUZW5hbnRTcGVuZFJlc3BvbnNlEi4KB3RlbmFudHMYASADKAsyHS5wYWxhZGluLmFkbWluLnYxLlRlbmFudFNwZW5kEhYKCXRydW5jYXRlZBgCIAEoCEID4EEDIqwBCgtUZW5hbnRTcGVuZBIWCgl0ZW5hbnRfaWQYASABKAlCA+BBAxIRCgRzbHVnGAIgASgJQgPgQQMSGQoMZGlzcGxheV9uYW1lGAMgASgJQgPgQQMSFAoHZGVsZXRlZBgEIAEoCEID4EEDEiYKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlCA+BBAxIZCgxjaGFyZ2VfY291bnQYBiABKANCA+BBAyIbChlHZXRCaWxsaW5nU2V0dGluZ3NSZXF1ZXN0IjgKGkdldEJpbGxpbmdTZXR0aW5nc1Jlc3BvbnNlEhoKDWN1cnJlbmN5X2NvZGUYASABKAlCA+BBAyKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIswDChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRIoCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlIABI9ChB1bmxpbWl0ZWRfYnVkZ2V0GAwgASgLMiEucGFsYWRpbi5hZG1pbi52MS5VbmxpbWl0ZWRCdWRnZXRIABI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANCEAoOYnVkZ2V0X2NlaWxpbmdKBAgBEAJKBAgCEANKBAgIEAlKBAgDEARKBAgJEApSDHRvdGFsX2Ftb3VudFIMdG90YWxfbWljcm9zUgl1bml0X2NvZGVSEW1heF9idWRnZXRfYW1vdW50UhFtYXhfYnVkZ2V0X21pY3JvcyJ1CghUb3BFbnRyeRINCgVsYWJlbBgBIAEoCRIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zIrABChpHZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEjAKDHBlcmlvZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZ3JhbnVsYXJpdHkYBCABKAkiXQobR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXRKBAgCEANSCXVuaXRfY29kZSKYAQoKVGltZUJ1Y2tldBIuCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zMtwDCg5CaWxsaW5nU2VydmljZRJuChBHZXRUZW5hbnRTdW1tYXJ5EikucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdW1tYXJ5UmVxdWVzdBoqLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlc3BvbnNlIgOQAgESdwoTR2V0VGVuYW50VGltZVNlcmllcxIsLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50VGltZVNlcmllc1JlcXVlc3QaLS5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZSIDkAIBEmsKD0xpc3RUZW5hbnRTcGVuZBIoLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudFNwZW5kUmVxdWVzdBopLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudFNwZW5kUmVzcG9uc2UiA5ACARJ0ChJHZXRCaWxsaW5nU2V0dGluZ3MSKy5wYWxhZGluLmFkbWluLnYxLkdldEJpbGxpbmdTZXR0aW5nc1JlcXVlc3QaLC5wYWxhZGluLmFkbWluLnYxLkdldEJpbGxpbmdTZXR0aW5nc1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -37,6 +37,118 @@ export const file_paladin_admin_v1_billing_service: GenFile =
       file_paladin_admin_v1_types,
     ],
   );
+
+/**
+ * @generated from message paladin.admin.v1.ListTenantSpendRequest
+ */
+export type ListTenantSpendRequest =
+  Message<"paladin.admin.v1.ListTenantSpendRequest"> & {
+    /**
+     * @generated from field: google.protobuf.Timestamp period_start = 1;
+     */
+    periodStart?: Timestamp | undefined;
+
+    /**
+     * @generated from field: google.protobuf.Timestamp period_end = 2;
+     */
+    periodEnd?: Timestamp | undefined;
+
+    /**
+     * limit is how many tenants to return, the most spent first; 0 is the
+     * server's default, and more than its maximum is refused.
+     *
+     * @generated from field: int32 limit = 3;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListTenantSpendRequest.
+ * Use `create(ListTenantSpendRequestSchema)` to create a new message.
+ */
+export const ListTenantSpendRequestSchema: GenMessage<ListTenantSpendRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_billing_service, 0);
+
+/**
+ * @generated from message paladin.admin.v1.ListTenantSpendResponse
+ */
+export type ListTenantSpendResponse =
+  Message<"paladin.admin.v1.ListTenantSpendResponse"> & {
+    /**
+     * tenants that spent anything over the period: a tenant with no charge in
+     * it is not listed. Ordered by unit — the platform's currency first, then
+     * the others by code, since amounts in different units do not compare —
+     * then by spend, the most first.
+     *
+     * @generated from field: repeated paladin.admin.v1.TenantSpend tenants = 1;
+     */
+    tenants: TenantSpend[];
+
+    /**
+     * truncated is true when more tenants spent than limit let through.
+     *
+     * @generated from field: bool truncated = 2;
+     */
+    truncated: boolean;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListTenantSpendResponse.
+ * Use `create(ListTenantSpendResponseSchema)` to create a new message.
+ */
+export const ListTenantSpendResponseSchema: GenMessage<ListTenantSpendResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_billing_service, 1);
+
+/**
+ * TenantSpend is what one tenant's charges came to over a period, net of
+ * refunds, in the unit most of them are in.
+ *
+ * @generated from message paladin.admin.v1.TenantSpend
+ */
+export type TenantSpend = Message<"paladin.admin.v1.TenantSpend"> & {
+  /**
+   * @generated from field: string tenant_id = 1;
+   */
+  tenantId: string;
+
+  /**
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string display_name = 3;
+   */
+  displayName: string;
+
+  /**
+   * deleted is true for a tenant in the trash, which still spent in the
+   * period.
+   *
+   * @generated from field: bool deleted = 4;
+   */
+  deleted: boolean;
+
+  /**
+   * @generated from field: google.type.Money spent = 5;
+   */
+  spent?: Money | undefined;
+
+  /**
+   * @generated from field: int64 charge_count = 6;
+   */
+  chargeCount: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.TenantSpend.
+ * Use `create(TenantSpendSchema)` to create a new message.
+ */
+export const TenantSpendSchema: GenMessage<TenantSpend> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_billing_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.GetBillingSettingsRequest
@@ -50,7 +162,7 @@ export type GetBillingSettingsRequest =
  */
 export const GetBillingSettingsRequestSchema: GenMessage<GetBillingSettingsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 0);
+  messageDesc(file_paladin_admin_v1_billing_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.GetBillingSettingsResponse
@@ -73,7 +185,7 @@ export type GetBillingSettingsResponse =
  */
 export const GetBillingSettingsResponseSchema: GenMessage<GetBillingSettingsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 1);
+  messageDesc(file_paladin_admin_v1_billing_service, 4);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantSummaryRequest
@@ -102,7 +214,7 @@ export type GetTenantSummaryRequest =
  */
 export const GetTenantSummaryRequestSchema: GenMessage<GetTenantSummaryRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 2);
+  messageDesc(file_paladin_admin_v1_billing_service, 5);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantSummaryResponse
@@ -174,7 +286,7 @@ export type GetTenantSummaryResponse =
  */
 export const GetTenantSummaryResponseSchema: GenMessage<GetTenantSummaryResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 3);
+  messageDesc(file_paladin_admin_v1_billing_service, 6);
 
 /**
  * @generated from message paladin.admin.v1.TopEntry
@@ -207,7 +319,7 @@ export type TopEntry = Message<"paladin.admin.v1.TopEntry"> & {
  */
 export const TopEntrySchema: GenMessage<TopEntry> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 4);
+  messageDesc(file_paladin_admin_v1_billing_service, 7);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantTimeSeriesRequest
@@ -244,7 +356,7 @@ export type GetTenantTimeSeriesRequest =
  */
 export const GetTenantTimeSeriesRequestSchema: GenMessage<GetTenantTimeSeriesRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 5);
+  messageDesc(file_paladin_admin_v1_billing_service, 8);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantTimeSeriesResponse
@@ -263,7 +375,7 @@ export type GetTenantTimeSeriesResponse =
  */
 export const GetTenantTimeSeriesResponseSchema: GenMessage<GetTenantTimeSeriesResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 6);
+  messageDesc(file_paladin_admin_v1_billing_service, 9);
 
 /**
  * @generated from message paladin.admin.v1.TimeBucket
@@ -293,7 +405,7 @@ export type TimeBucket = Message<"paladin.admin.v1.TimeBucket"> & {
  */
 export const TimeBucketSchema: GenMessage<TimeBucket> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 7);
+  messageDesc(file_paladin_admin_v1_billing_service, 10);
 
 /**
  * BillingService surfaces per-tenant capability spend over the
@@ -301,7 +413,8 @@ export const TimeBucketSchema: GenMessage<TimeBucket> =
  * that one manages the cap; this one renders the spend.
  *
  * Authorization: platform-admin / tenant-admin only. Cedar action
- * `ReadBilling` on the tenant resource gates every RPC.
+ * `ReadBilling` on the tenant resource gates every RPC; ListTenantSpend,
+ * which reads every tenant, also needs the platform.admin role.
  *
  * @generated from service paladin.admin.v1.BillingService
  */
@@ -328,6 +441,19 @@ export const BillingService: GenService<{
     methodKind: "unary";
     input: typeof GetTenantTimeSeriesRequestSchema;
     output: typeof GetTenantTimeSeriesResponseSchema;
+  };
+  /**
+   * ListTenantSpend lists the tenants that spent anything over the period,
+   * the most first, from one sum of the charges ledger across tenants.
+   * Defaults to the last 30 days, as GetTenantSummary does. Gated by
+   * ReadBilling on the caller's own tenant and the platform.admin role.
+   *
+   * @generated from rpc paladin.admin.v1.BillingService.ListTenantSpend
+   */
+  listTenantSpend: {
+    methodKind: "unary";
+    input: typeof ListTenantSpendRequestSchema;
+    output: typeof ListTenantSpendResponseSchema;
   };
   /**
    * GetBillingSettings returns the platform's billing settings, so a client

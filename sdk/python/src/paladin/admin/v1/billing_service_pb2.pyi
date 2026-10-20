@@ -13,6 +13,40 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class ListTenantSpendRequest(_message.Message):
+    __slots__ = ("period_start", "period_end", "limit")
+    PERIOD_START_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_END_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    period_start: _timestamp_pb2.Timestamp
+    period_end: _timestamp_pb2.Timestamp
+    limit: int
+    def __init__(self, period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., limit: _Optional[int] = ...) -> None: ...
+
+class ListTenantSpendResponse(_message.Message):
+    __slots__ = ("tenants", "truncated")
+    TENANTS_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    tenants: _containers.RepeatedCompositeFieldContainer[TenantSpend]
+    truncated: bool
+    def __init__(self, tenants: _Optional[_Iterable[_Union[TenantSpend, _Mapping]]] = ..., truncated: _Optional[bool] = ...) -> None: ...
+
+class TenantSpend(_message.Message):
+    __slots__ = ("tenant_id", "slug", "display_name", "deleted", "spent", "charge_count")
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    SLUG_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    DELETED_FIELD_NUMBER: _ClassVar[int]
+    SPENT_FIELD_NUMBER: _ClassVar[int]
+    CHARGE_COUNT_FIELD_NUMBER: _ClassVar[int]
+    tenant_id: str
+    slug: str
+    display_name: str
+    deleted: bool
+    spent: _money_pb2.Money
+    charge_count: int
+    def __init__(self, tenant_id: _Optional[str] = ..., slug: _Optional[str] = ..., display_name: _Optional[str] = ..., deleted: _Optional[bool] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., charge_count: _Optional[int] = ...) -> None: ...
+
 class GetBillingSettingsRequest(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...

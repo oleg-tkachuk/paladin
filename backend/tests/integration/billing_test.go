@@ -498,7 +498,7 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 	}
 	f.charge(t, capID, limes.MustParseAmount("0.2"), "USD", "put", "agent-M", tenant)
 
-	srv := connectshim.NewBillingServer(f.handler)
+	srv := connectshim.NewBillingServer(f.handler, nil)
 	end := time.Now().UTC().Add(time.Hour)
 	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{
 		TenantId:    tenant.String(),
@@ -577,7 +577,7 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 func TestBilling_SummaryCeilingArms(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
-	srv := connectshim.NewBillingServer(f.handler)
+	srv := connectshim.NewBillingServer(f.handler, nil)
 	summary := func(tenant uuid.UUID) *pb.GetTenantSummaryResponse {
 		t.Helper()
 		resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{TenantId: tenant.String()})
@@ -600,5 +600,49 @@ func TestBilling_SummaryCeilingArms(t *testing.T) {
 	}
 	if got := summary(open).GetUnlimitedBudget().GetCurrencyCode(); got != "EUR" {
 		t.Errorf("unlimited: currency = %q, want EUR", got)
+	}
+}
+
+// A platform admin lists every tenant's spend through the pool the server
+// uses, row-level security and all, from one sum across tenants: the read
+// must be scoped to every tenant, read-only, or the policies hide the other
+// tenants' rows and the list holds the caller's alone. Other tests charge
+// the same ledger, so only these tenants' rows and order are checked.
+func TestBilling_AdminListsEveryTenantsSpendUnderRLS(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+	handler := billingh.NewHandler(newLedger(t, f.h.PoolApp), newUsageStore(t, f.h.PoolApp), allowAuth{}).WithCurrency(seedUnitCode)
+
+	home := mustCreateTenant(t, f.h.PoolMigrate, "bil-spend-home")
+	more := mustCreateTenant(t, f.h.PoolMigrate, "bil-spend-more")
+	less := mustCreateTenant(t, f.h.PoolMigrate, "bil-spend-less")
+	f.charge(t, f.seedCapability(t, more, "agent-more"), limes.MustParseAmount("2.5"), seedUnitCode, "get", "agent-more", more)
+	f.charge(t, f.seedCapability(t, less, "agent-less"), limes.MustParseAmount("0.4"), seedUnitCode, "get", "agent-less", less)
+
+	end := time.Now().UTC().Add(time.Hour)
+	spend, _, err := handler.ListTenantSpend(ctxAdmin(t, home), end.Add(-24*time.Hour), end, billingh.MaxSpendLimit)
+	if err != nil {
+		t.Fatalf("list tenant spend: %v", err)
+	}
+	at := map[uuid.UUID]int{}
+	for i, s := range spend {
+		at[s.TenantID] = i
+		switch s.TenantID {
+		case more:
+			if s.Amount != limes.MustParseAmount("2.5") || s.ChargeCount != 1 || s.UnitCode != seedUnitCode {
+				t.Errorf("the tenant that spent more = %+v", s)
+			}
+		case less:
+			if s.Amount != limes.MustParseAmount("0.4") || s.ChargeCount != 1 {
+				t.Errorf("the tenant that spent less = %+v", s)
+			}
+		case home:
+			t.Error("the caller's tenant, which spent nothing, is listed")
+		}
+	}
+	iMore, okMore := at[more]
+	iLess, okLess := at[less]
+	if !okMore || !okLess || iMore > iLess {
+		t.Errorf("positions: more %d (%v), less %d (%v); want both listed, the larger first", iMore, okMore, iLess, okLess)
 	}
 }
