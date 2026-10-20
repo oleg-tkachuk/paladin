@@ -1729,12 +1729,13 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 
 // pendingNotTrashable is the refusal a PENDING object's soft delete gets.
 const pendingNotTrashable = "the upload has not completed, so there is nothing to move to the trash; " +
-	"it is failed and cleared once its upload URL expires"
+	"the worker discards it some time after its upload URL expires"
 
 // SoftDeleteRefusal says why an object in state cannot move to the trash;
-// the batch delete reports the same reason per object. A
-// PENDING object is an upload that never completed: it holds no bytes to keep,
-// and the reaper fails it once its upload URL expires.
+// the batch delete reports the same reason per object. The worker's
+// reconciler discards a PENDING row once its upload URL has expired and the
+// reconciler's grace period has passed, not the moment the URL expires. A
+// PENDING object is an upload that never completed: it holds no bytes to keep.
 func SoftDeleteRefusal(state statemachine.State) error {
 	if state == statemachine.StatePending {
 		return connect.NewError(connect.CodeFailedPrecondition, pendingNotTrashable)

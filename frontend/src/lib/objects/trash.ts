@@ -26,6 +26,9 @@ export const NOTHING_TO_TRASH = "Nothing to move to the trash";
 
 /** Why the unfinished uploads stay, for a count of them. */
 export function unfinishedNote(count: number): string {
-  const which = count === 1 ? "1 upload has" : `${count} uploads have`;
-  return `${which} not completed and stay${count === 1 ? "s" : ""} as they are; an unfinished upload is cleared once its upload URL expires.`;
+  const which =
+    count === 1
+      ? "1 upload has not completed and stays as it is"
+      : `${count} uploads have not completed and stay as they are`;
+  return `${which}; the worker discards an unfinished upload some time after its upload URL expires.`;
 }
