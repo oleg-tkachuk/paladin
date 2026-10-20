@@ -97,6 +97,31 @@ describe("BuildVersion", () => {
     expect(tip).not.toHaveTextContent("different commits");
   });
 
+  it("labels a development build short and keeps it whole in the tooltip", async () => {
+    backend("39.1.1-dev.1792533470.gac81891a", "ac81891a2b");
+    h.ui = {
+      version: "39.1.1-dev.1792533470.gac81891a",
+      commit: "ac81891",
+      buildTime: "",
+    };
+    show();
+    const link = screen.getByRole("link", {
+      name: "Paladin v39.1.1-dev (ac81891)",
+    });
+    expect(link).toHaveTextContent("v39.1.1-dev (ac81891)");
+    await userEvent.hover(link);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "39.1.1-dev.1792533470.gac81891a",
+    );
+  });
+
+  it("does not repeat a release's version in the tooltip", async () => {
+    backend("11.9.0", "a1b2c3d");
+    show();
+    await userEvent.hover(screen.getByRole("link"));
+    expect(await screen.findByRole("tooltip")).not.toHaveTextContent("Version");
+  });
+
   it("flags a console built from another commit", async () => {
     backend("11.9.0", "a1b2c3d");
     h.ui = { version: "11.8.0", commit: "9f8e7d6", buildTime: "" };

@@ -30,15 +30,22 @@ export function shortCommit(sha: string): string {
   return sha.trim().slice(0, SHORT_COMMIT_LENGTH);
 }
 
+// What a development build appends to its pre-release: the build's unix time
+// and its commit, `39.1.1-dev.1792533470.gac81891a`. The label shows the
+// commit once, after it, so the suffix only lengthens it.
+const DEV_BUILD_SUFFIX = /\.\d+\.g[0-9a-f]+$/;
+
 /**
  * A release as one label: `v11.9.0 (a1b2c3d)`.
  *
  * Release builds carry the bare semver (the tag without its `v`), so the `v`
- * is added here, once. An unversioned build reads as "local", and an unknown
- * commit drops the parenthesised hash rather than showing empty brackets.
+ * is added here, once. A development build drops its time-and-commit suffix,
+ * `v39.1.1-dev (ac81891)`. An unversioned build reads as "local", and an
+ * unknown commit drops the parenthesised hash rather than showing empty
+ * brackets.
  */
 export function formatBuildLabel(version: string, commit: string): string {
-  const v = version.trim();
+  const v = version.trim().replace(DEV_BUILD_SUFFIX, "");
   const shown = !v ? LOCAL_BUILD_VERSION : /^\d/.test(v) ? `v${v}` : v;
   const sha = shortCommit(commit);
   return sha ? `${shown} (${sha})` : shown;

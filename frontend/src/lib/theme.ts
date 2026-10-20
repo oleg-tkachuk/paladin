@@ -9,12 +9,18 @@ export const THEME_SYSTEM = "system";
 export const THEME_LIGHT = "light";
 export const THEME_DARK = "dark";
 export const THEME_EMBER = "ember";
+export const THEME_NAVY = "navy";
+export const THEME_GRAPHITE = "graphite";
+export const THEME_BORDEAUX = "bordeaux";
 
 export type Theme =
   | typeof THEME_SYSTEM
   | typeof THEME_LIGHT
   | typeof THEME_DARK
-  | typeof THEME_EMBER;
+  | typeof THEME_EMBER
+  | typeof THEME_NAVY
+  | typeof THEME_GRAPHITE
+  | typeof THEME_BORDEAUX;
 
 // The palettes: each is a class on <html> that globals.css styles. "system"
 // is not one — it resolves to light or dark from the browser's preference.
@@ -22,6 +28,9 @@ export const PALETTES: readonly Theme[] = [
   THEME_LIGHT,
   THEME_DARK,
   THEME_EMBER,
+  THEME_NAVY,
+  THEME_GRAPHITE,
+  THEME_BORDEAUX,
 ];
 
 // What the console shows before the user's setting has loaded, and on /login.
@@ -32,6 +41,9 @@ export const THEME_OPTIONS: readonly { value: Theme; label: string }[] = [
   { value: THEME_LIGHT, label: "Light" },
   { value: THEME_DARK, label: "Dark" },
   { value: THEME_EMBER, label: "Ember" },
+  { value: THEME_NAVY, label: "Navy" },
+  { value: THEME_GRAPHITE, label: "Graphite" },
+  { value: THEME_BORDEAUX, label: "Bordeaux" },
 ];
 
 export function isTheme(value: string): value is Theme {
