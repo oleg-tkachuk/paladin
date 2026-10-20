@@ -20,6 +20,7 @@
 // Server load is minimal: small page sizes, no polling — only
 // re-fetch on tenant context refresh from RefreshContext.
 
+import { IconChip, alertTone } from "@/components/ui/IconChip";
 import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -238,11 +239,9 @@ function FailedOpsWidget() {
     >
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <ExclamationTriangleIcon
-            className={cn(
-              "size-4",
-              ops.length > 0 ? "text-destructive" : "text-muted-foreground",
-            )}
+          <IconChip
+            icon={ExclamationTriangleIcon}
+            tone={alertTone(ops.length)}
           />
           Failed operations
           {ops.length > 0 && <Badge variant="destructive">{ops.length}</Badge>}
@@ -316,12 +315,7 @@ function BudgetAlertsWidget() {
     >
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <BoltIcon
-            className={cn(
-              "size-4",
-              overCap > 0 ? "text-destructive" : "text-muted-foreground",
-            )}
-          />
+          <IconChip icon={BoltIcon} tone={alertTone(overCap)} />
           Budget alerts
           {rows.length > 0 && (
             <Badge variant={overCap > 0 ? "destructive" : "secondary"}>

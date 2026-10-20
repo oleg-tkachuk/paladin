@@ -1,5 +1,6 @@
 "use client";
 
+import { IconChip, IconTone } from "@/components/ui/IconChip";
 import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -148,9 +149,7 @@ export default function UploadPage() {
           {/* Destination */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-3 px-5">
-              <div className="flex size-9 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
-                <FolderIcon className="size-5" />
-              </div>
+              <IconChip icon={FolderIcon} size="lg" />
               <div className="flex-1 space-y-0.5">
                 <CardTitle className="text-sm">
                   Destination Collection
@@ -209,9 +208,7 @@ export default function UploadPage() {
           {/* Global tags */}
           <Card>
             <CardHeader className="flex flex-row items-center gap-3 px-5">
-              <div className="flex size-9 items-center justify-center rounded-md bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30">
-                <TagIcon className="size-5" />
-              </div>
+              <IconChip icon={TagIcon} tone={IconTone.Info} size="lg" />
               <div className="flex-1 space-y-0.5">
                 <CardTitle className="text-sm">
                   Global tags

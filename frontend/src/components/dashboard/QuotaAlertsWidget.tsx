@@ -3,6 +3,7 @@
 // How many quotas sit at or near their limits, platform-wide, from the
 // reconciled census (GetPlatformStats.rls.quotas). The stats page breaks it
 // down; this says whether to look.
+import { IconChip, alertTone } from "@/components/ui/IconChip";
 import Link from "next/link";
 import { ScaleIcon } from "@heroicons/react/24/outline";
 
@@ -24,7 +25,7 @@ export function QuotaAlertsWidget() {
     <Card className={cn(alarm && "border-destructive/40")}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <ScaleIcon className="size-4 text-muted-foreground" />
+          <IconChip icon={ScaleIcon} tone={alertTone(atLimit, near)} />
           Quotas
           <Link
             href={SECTION.stats}

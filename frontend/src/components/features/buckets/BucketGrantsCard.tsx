@@ -1,5 +1,6 @@
 "use client";
 
+import { IconChip, IconTone } from "@/components/ui/IconChip";
 import { HelpTip } from "@/components/ui/HelpTip";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -199,7 +200,7 @@ export function BucketGrantsCard({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <ShareIcon className="size-5 text-chart-5" />
+          <IconChip icon={ShareIcon} tone={IconTone.Info} size="md" />
           Shared with
           <HelpTip topic="bucketGrants" />
           <span className="text-xs font-normal text-muted-foreground">

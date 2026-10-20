@@ -17,6 +17,7 @@
 // client-side (buckets) or server-side (collections via parent,
 // audit via filter expression).
 
+import { IconChip, IconTone } from "@/components/ui/IconChip";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -341,9 +342,7 @@ export default function TenantOverviewPage() {
           >
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-card/60">
               <CardHeader className="flex flex-row items-start gap-3 px-4">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-secondary">
-                  <Icon className="size-5 text-chart-2/85" />
-                </div>
+                <IconChip icon={Icon} size="lg" />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <CardTitle className="text-sm">{label}</CardTitle>
                   <p className={cn(T.hint, "leading-snug")}>{description}</p>
@@ -365,7 +364,7 @@ export default function TenantOverviewPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
-            <ClipboardDocumentListIcon className="size-4 text-chart-3" />
+            <IconChip icon={ClipboardDocumentListIcon} tone={IconTone.Info} />
             Recent activity
           </CardTitle>
           <Link

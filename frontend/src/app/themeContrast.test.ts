@@ -11,6 +11,7 @@ import {
 } from "culori";
 import { describe, expect, it } from "vitest";
 
+import { ICON_CHIP_TONE } from "@/components/ui/IconChip";
 import { PALETTES } from "@/lib/theme";
 import {
   HOVER_SURFACE,
@@ -134,6 +135,15 @@ const STATE_PAIRS: [string, Paint][] = [
   ["--accent-foreground", solid("--accent")],
 ];
 
+// Each icon chip's ink on its own tinted surface, laid over a card.
+const ICON_CHIP_PAIRS = Object.entries(ICON_CHIP_TONE).map(
+  ([tone, { surface, ink }]): [string, string, Paint] => {
+    const m = ink.match(/^text-([a-z-]+)$/);
+    if (!m) throw new Error(`${tone}: ${ink} is not one text colour`);
+    return [tone, `--${m[1]}`, stateSurface(surface, "--card")];
+  },
+);
+
 // The focus indicator against each surface a focusable control sits on.
 const RING_ON = ["--background", "--card", "--muted", "--sidebar"];
 
@@ -151,6 +161,16 @@ describe.each(PALETTES)("the %s palette", (theme) => {
       expect(
         wcagContrast(painted(p, { token: text, over: surface.token }), ground),
       ).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+    },
+  );
+
+  it.each(ICON_CHIP_PAIRS)(
+    "the %s icon chip's ink shows 3:1 on its chip",
+    (_tone, ink, chip) => {
+      const ground = painted(p, chip);
+      expect(
+        wcagContrast(painted(p, { token: ink, over: chip.token }), ground),
+      ).toBeGreaterThanOrEqual(MIN_NONTEXT_CONTRAST);
     },
   );
 

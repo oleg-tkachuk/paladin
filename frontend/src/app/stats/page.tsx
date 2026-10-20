@@ -13,6 +13,7 @@
 // second leg can be absent while the first is fine, so every card fed by
 // it says "unavailable" rather than rendering a misleading all-zero view.
 
+import { IconChip } from "@/components/ui/IconChip";
 import { useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -206,7 +207,7 @@ function BreakdownCard({
     // a band of empty card between every title and its numbers.
     <Card className="flex flex-col gap-0 py-0">
       <CardHeader className="flex flex-row items-center gap-2 px-4 py-2.5">
-        <Icon className="size-5 shrink-0 text-muted-foreground" />
+        <IconChip icon={Icon} size="md" />
         <CardTitle className={cn(T.cardTitleProse, "min-w-0 truncate")}>
           {title}
         </CardTitle>
@@ -872,7 +873,7 @@ export default function StatsPage() {
           <Card className="gap-0 py-0">
             <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
               <div className="flex items-center gap-2">
-                <CubeIcon className="size-5 shrink-0 text-muted-foreground" />
+                <IconChip icon={CubeIcon} size="md" />
                 <CardTitle className={T.cardTitleProse}>
                   Objects by state, per tenant
                 </CardTitle>
