@@ -129,7 +129,12 @@ and `Issue*` calls and answers a repeated key with the first response.
 
 `CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
-no key and no call to the server. This SDK has no helper of its own: import
+no key and no call to the server. Only a capability whose ops include `share`
+is sealed as one, and neither a key-bound one nor one not valid yet:
+`biscuit_status` says which. `paladin.BiscuitOf(issued)` returns the Biscuit,
+or an error wrapping `paladin.ErrNoBiscuit` that names the status, and
+`require_biscuit` on the request refuses one that could not be sealed before
+anything is issued. To narrow it, this SDK has no helper of its own: import
 [limes](https://github.com/oleg-tkachuk/limes), the capability primitive the
 server runs, whose `Attenuate` is the code the server's verifier is tested
 against, so there is no second implementation of the vocabulary to drift from

@@ -23,6 +23,8 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
+from paladin.admin.v1 import capability_service_pb2
+
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
 # the shared spec the server's tests read too.
 FACT_CAPABILITY = "limes_capability"
@@ -44,6 +46,29 @@ _JWT_PAYLOAD = 1
 _JWT_SEGMENTS = 3
 _PADDING = "="
 _PARAM = "v"
+
+
+class NoBiscuitError(Exception):
+    """An Issue or Delegate answer that carries no Biscuit; ``status`` is why."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(
+            f"the capability was issued without a Biscuit: {capability_service_pb2.BiscuitStatus.Name(status)}"
+        )
+
+
+def biscuit_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -> str:
+    """The Biscuit an Issue or Delegate answer carries.
+
+    Raises ``NoBiscuitError`` naming the answer's ``biscuit_status`` when it
+    carries none, so a caller that needs one fails where it asks rather than
+    passing an empty token on. To be refused before anything is issued
+    instead, set ``require_biscuit``.
+    """
+    if resp.biscuit_status == capability_service_pb2.BISCUIT_STATUS_ISSUED and resp.biscuit:
+        return resp.biscuit
+    raise NoBiscuitError(resp.biscuit_status)
 
 
 def _biscuit() -> Any:
