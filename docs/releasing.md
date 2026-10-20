@@ -47,6 +47,14 @@ several breaking changes is one major. The workflow then publishes an image and
 a chart for each component at that tag. The GitHub
 release is created last, and only when every image and chart was pushed; if a
 push fails, the tag stays without a release until the failed jobs are re-run.
+
+A release candidate goes the same way with the `prerelease` channel —
+`gh workflow run release.yaml -f channel=prerelease`. It tags the version the
+release would take as `vX.Y.Z-rc.N`, one past the last candidate of that
+version ([`prerelease.ts`](../.github/ci/prerelease.ts)), publishes its images
+and charts at `X.Y.Z-rc.N`, and announces it as a prerelease that is never the
+Latest. semantic-release counts only stable tags, so the release that follows
+the candidates is still `vX.Y.Z`.
 Between releases every green commit is published as a dev build (below), so
 nothing waits on a release to reach the dev cluster.
 
