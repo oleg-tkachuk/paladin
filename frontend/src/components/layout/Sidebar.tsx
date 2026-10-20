@@ -40,6 +40,7 @@ import {
   TrashIcon,
   FolderIcon,
   QueueListIcon,
+  ShareIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -177,6 +178,13 @@ const navigationGroups: Array<{
         name: "Tenants",
         path: "/tenants",
         icon: UsersIcon,
+      },
+      {
+        // Topology — the rows above as one picture: backends, the buckets
+        // on them and the tenants each bucket serves.
+        name: "Topology",
+        path: SECTION.topology,
+        icon: ShareIcon,
       },
       { name: "Users", path: "/users", icon: UserCircleIcon },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },

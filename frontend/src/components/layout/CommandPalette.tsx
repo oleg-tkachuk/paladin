@@ -230,6 +230,15 @@ export function CommandPalette() {
           onSelect: () => router.push("/collections"),
         },
         {
+          id: "nav-topology",
+          type: "nav",
+          title: "Topology",
+          subtitle: "Backends, their buckets and the tenants each serves",
+          icon: ShareIcon,
+          href: SECTION.topology,
+          onSelect: () => router.push(SECTION.topology),
+        },
+        {
           id: "nav-upload",
           type: "nav",
           title: "Upload Assets",
