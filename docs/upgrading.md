@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — an Issue answer says why it carries no Biscuit
+## sdk/go/v0.95.0 — an Issue answer says why it carries no Biscuit
 
 Since limes v0.109 a capability is sealed as a Biscuit only when its ops
 include `share`, and `biscuit` came back empty with nothing else to say so: a
