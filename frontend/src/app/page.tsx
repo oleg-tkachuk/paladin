@@ -19,7 +19,6 @@ import { MyOperationsWidget } from "@/components/dashboard/MyOperationsWidget";
 import { QuotaAlertsWidget } from "@/components/dashboard/QuotaAlertsWidget";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { StatusBar } from "@/components/ui/StatusBar";
 import { useStats } from "@/context/StatsContext";
 import { useAuth } from "@/context/AuthContext";
@@ -31,6 +30,7 @@ import {
   componentStatusLabel,
 } from "@/lib/connect/system";
 import { cn } from "@/lib/utils";
+import { formatCount } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
 import { uiBuildInfo, type BuildInfo } from "@/lib/ui/build-info";
 
@@ -40,31 +40,57 @@ import { uiBuildInfo, type BuildInfo } from "@/lib/ui/build-info";
 // Cmd+K's; this page answers one question — "is anything wrong, and what
 // happened recently?" — with three attention widgets (recent activity,
 // failed operations, budget alerts), the event-dispatcher backlog, and a
-// slim footer strip carrying the health rollup, signed-in identity, and
-// the backend/UI build pair so a version skew is obvious at a glance.
+// slim footer strip, one line high, carrying the health rollup, signed-in
+// identity, and the backend/UI build pair so a version skew is obvious at a
+// glance.
 
-// BuildBadge renders one "label v · sha" pill for the footer's backend /
-// UI pair — stacked so a skew (stale tab vs redeployed backend) shows.
+// BuildBadge renders one "label v · sha" for the footer's backend / UI
+// pair, inline.
 function BuildBadge({ label, build }: { label: string; build: BuildInfo }) {
   if (!build.version) return null;
   return (
-    <div className="flex items-center gap-2">
+    <span className="whitespace-nowrap">
+      <span className="text-muted-foreground">{label}</span>{" "}
+      <span className={cn(T.code, "text-foreground")}>{build.version}</span>
+      {build.commit && (
+        <>
+          {" · "}
+          <span
+            className={cn(T.code, "text-foreground")}
+            title={build.buildTime || undefined}
+          >
+            {build.commit}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The backend and UI builds. One build when they match, which is the usual
+ * case and needs saying once; both, in the warning tone, when they differ,
+ * so a stale tab against a redeployed backend stands out.
+ */
+function BuildPair({ backend, ui }: { backend: BuildInfo; ui: BuildInfo }) {
+  const same = backend.version === ui.version && backend.commit === ui.commit;
+  return (
+    <div
+      className={cn(
+        T.hint,
+        "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1",
+        !same && backend.version && ui.version && "text-warning",
+      )}
+    >
       <AdjustmentsVerticalIcon className="size-4 shrink-0" />
-      <span>
-        <span className="text-muted-foreground">{label}</span>{" "}
-        <span className={cn(T.code, "text-foreground")}>{build.version}</span>
-        {build.commit && (
-          <>
-            {" · "}
-            <span
-              className={cn(T.code, "text-foreground")}
-              title={build.buildTime || undefined}
-            >
-              {build.commit}
-            </span>
-          </>
-        )}
-      </span>
+      {same ? (
+        <BuildBadge label="build" build={ui} />
+      ) : (
+        <>
+          <BuildBadge label="backend" build={backend} />
+          <BuildBadge label="ui" build={ui} />
+        </>
+      )}
     </div>
   );
 }
@@ -101,14 +127,12 @@ export default function DashboardPage() {
       ? {
           label: "Healthy",
           color: "text-success",
-          dot: "bg-success",
           Icon: CheckCircleIcon,
         }
       : rollupKey === "DEGRADED"
         ? {
             label: "Degraded",
             color: "text-warning",
-            dot: "bg-warning",
             Icon: ExclamationTriangleIcon,
           }
         : rollupKey === "UNHEALTHY" ||
@@ -117,13 +141,11 @@ export default function DashboardPage() {
           ? {
               label: "Unhealthy",
               color: "text-destructive",
-              dot: "bg-destructive",
               Icon: XCircleIcon,
             }
           : {
               label: "Unknown",
               color: "text-muted-foreground",
-              dot: "bg-muted-foreground",
               Icon: ShieldCheckIcon,
             };
   const RollupIcon = rollupMeta.Icon;
@@ -166,32 +188,27 @@ export default function DashboardPage() {
       )}
 
       {/* ─── Footer strip: health rollup · identity · build pair ────── */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
-          <div className={cn(T.pill, rollupMeta.color)}>
-            <span
-              className={cn(
-                T.pillDot,
-                rollupMeta.dot,
-                rollupMeta.label !== "Healthy" &&
-                  rollupMeta.label !== "Unknown" &&
-                  "animate-pulse",
-              )}
-            />
+      <Card className="py-0">
+        <CardContent className="flex flex-wrap items-center gap-x-5 gap-y-2 py-2.5">
+          <div className={cn(T.pill, "shrink-0", rollupMeta.color)}>
             <RollupIcon className="size-4" />
             <span>{rollupMeta.label}</span>
-            <Badge variant="outline" className="font-mono">
-              {components.length} comp
-            </Badge>
+            {components.length > 0 && (
+              <span className="font-normal text-muted-foreground">
+                · {formatCount(components.length)}{" "}
+                {components.length === 1 ? "component" : "components"}
+              </span>
+            )}
           </div>
           {/* How the components split by state: one failing among many
-              shows here before the rollup turns. */}
+              shows here before the rollup turns. It takes the room the
+              line has left. */}
           <StatusBar
             segments={componentSegments(components)}
-            className="w-64 max-w-full"
+            className="min-w-48 flex-1"
           />
-          <div className={cn(T.hint, "flex items-center gap-2")}>
-            <UserCircleIcon className="size-4" />
+          <div className={cn(T.hint, "flex min-w-0 items-center gap-2")}>
+            <UserCircleIcon className="size-4 shrink-0" />
             <span>
               Signed in as{" "}
               <span className="font-medium text-foreground">
@@ -213,12 +230,7 @@ export default function DashboardPage() {
               )}
             </span>
           </div>
-          <div
-            className={cn(T.hint, "ml-auto flex flex-col items-end gap-0.5")}
-          >
-            <BuildBadge label="backend" build={backendBuild(stats)} />
-            <BuildBadge label="ui" build={ui} />
-          </div>
+          <BuildPair backend={backendBuild(stats)} ui={ui} />
         </CardContent>
       </Card>
     </div>
