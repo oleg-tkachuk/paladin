@@ -169,6 +169,9 @@ test.describe("M2M tokens", () => {
     await page
       .getByRole("button", { name: new RegExp(`Revoke ${name}`) })
       .click();
+    await page
+      .getByRole("textbox", { name: "Type revoke to confirm" })
+      .fill("revoke");
     await page.getByRole("button", { name: /^Revoke$/ }).click();
 
     // Revocation keeps the row: an operator auditing "which credentials

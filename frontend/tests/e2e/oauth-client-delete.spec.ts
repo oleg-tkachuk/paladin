@@ -46,6 +46,9 @@ test.describe("OAuth client deletion", () => {
     await record.getByRole("button", { name: DELETE }).click();
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toContainText("every tenant");
+    await confirm
+      .getByRole("textbox", { name: "Type delete to confirm" })
+      .fill("delete");
     await confirm.getByRole("button", { name: DELETE }).click();
     // The open confirmation hides the page from the accessibility tree, so
     // the row reads as gone before the delete has answered: wait it out.
