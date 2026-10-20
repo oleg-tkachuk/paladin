@@ -114,7 +114,6 @@ jobs:
         # Which diff, and which groups it reaches: .github/ci/changes.ts.
         run: node .github/ci/changes.ts
 
-
   # The repository's own commit gate, `task -t Taskfile.dev.yaml verify-all`,
   # run as its groups: one job per group the change can reach, each installing
   # only what that group runs. Together the groups are exactly verify-all, so
@@ -211,16 +210,20 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: false
 
+      # verify:ci tests the CI scripts, and verify:release-rules runs the
+      # pinned commit analyzer against .github/release/release.config.cjs:
+      # both on the Node release.yaml runs them with.
+      - name: Set up the CI scripts and the release tooling
+        if: matrix.group == 'repo'
+        uses: ./.github/actions/setup-ci
+        with:
+          release-tooling: "true"
+
       # The runner image ships a yq, but not a version this repository chose.
       # The chart and Taskfile checks read YAML through it.
       - name: Set up yq
         if: matrix.group == 'repo'
-        run: |
-          set -euo pipefail
-          sudo curl -fsSL -o /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-          yq --version
+        run: node .github/ci/install-tool.ts yq
 
       - name: Set up Task
         uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
@@ -248,50 +251,20 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
-      # verify:ci tests the CI scripts, and verify:release-rules runs the
-      # pinned commit analyzer against .github/release/release.config.cjs:
-      # both on the Node release.yaml runs them with.
-      - name: Set up the CI scripts and the release tooling
-        if: matrix.group == 'repo'
-        uses: ./.github/actions/setup-ci
-        with:
-          release-tooling: "true"
-
       # --yes accepts the first-fetch trust prompt for the shared task library
       # include; unattended, that prompt is a hang rather than a question.
       - name: Set up hadolint
         if: matrix.group == 'repo'
-        run: |
-          set -euo pipefail
-          sudo curl -fsSL -o /usr/local/bin/hadolint \
-            "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/hadolint-linux-x86_64"
-          sudo chmod +x /usr/local/bin/hadolint
-          hadolint --version
+        run: node .github/ci/install-tool.ts hadolint
+
       - name: Set up trivy
         if: matrix.group == 'repo'
-        run: |
-          set -euo pipefail
-          v="${TRIVY_VERSION#v}"
-          base="https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}"
-          archive="trivy_${v}_Linux-64bit.tar.gz"
-          cd "$RUNNER_TEMP"
-          curl -fsSLO "${base}/${archive}"
-          curl -fsSL "${base}/trivy_${v}_checksums.txt" | grep " ${archive}\$" | sha256sum -c -
-          sudo tar -xzf "$archive" -C /usr/local/bin trivy
-          trivy --version
+        run: node .github/ci/install-tool.ts trivy
+
       - name: Set up promtool
         if: matrix.group == 'repo'
-        run: |
-          set -euo pipefail
-          v="${PROMETHEUS_VERSION#v}"
-          base="https://github.com/prometheus/prometheus/releases/download/${PROMETHEUS_VERSION}"
-          dir="prometheus-${v}.linux-amd64"
-          archive="${dir}.tar.gz"
-          cd "$RUNNER_TEMP"
-          curl -fsSLO "${base}/${archive}"
-          curl -fsSL "${base}/sha256sums.txt" | grep " ${archive}\$" | sha256sum -c -
-          sudo tar -xzf "$archive" -C /usr/local/bin --strip-components=1 "${dir}/promtool"
-          promtool --version
+        run: node .github/ci/install-tool.ts promtool
+
       - name: Pin the Python SDK's interpreter
         if: matrix.group == 'sdk'
         run: echo "UV_PYTHON=${PY_SDK_PYTHON}" >> "$GITHUB_ENV"
@@ -339,13 +312,11 @@ jobs:
           version: ${{ env.TASK_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       - name: Set up yq
-        run: |
-          set -euo pipefail
-          sudo curl -fsSL -o /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-          yq --version
+        run: node .github/ci/install-tool.ts yq
 
       # The backend image's go build cache (scripts/go-build-cache.sh): restored
       # here, imported into BuildKit, and saved from main like the Go caches.
@@ -424,15 +395,13 @@ jobs:
           version: ${{ env.TASK_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       # scripts/stack-ports.sh derives the images to pre-pull from the compose
       # file through yq.
       - name: Set up yq
-        run: |
-          set -euo pipefail
-          sudo curl -fsSL -o /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-          yq --version
+        run: node .github/ci/install-tool.ts yq
 
       # Version comes from frontend/package.json "packageManager".
       - name: Set up pnpm
@@ -622,24 +591,14 @@ jobs:
           version: ${{ env.TASK_VERSION }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
       - name: Set up yq
-        run: |
-          set -euo pipefail
-          sudo curl -fsSL -o /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-          yq --version
+        run: node .github/ci/install-tool.ts yq
 
       - name: Set up step
-        run: |
-          set -euo pipefail
-          base="https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}"
-          deb="step-cli_${STEP_VERSION}-1_amd64.deb"
-          cd "$RUNNER_TEMP"
-          curl -fsSLO "${base}/${deb}"
-          curl -fsSL "${base}/checksums.txt" | grep " ${deb}\$" | sha256sum -c -
-          sudo dpkg -i "$deb"
-          step version
+        run: node .github/ci/install-tool.ts step
 
       # The backend image's go build cache (scripts/go-build-cache.sh): restored
       # here, imported into BuildKit, and saved from main like the Go caches.

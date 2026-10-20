@@ -11,6 +11,18 @@ import { requireEnv } from "./env.ts";
 const OUTPUT_FILE = "GITHUB_OUTPUT";
 const SUMMARY_FILE = "GITHUB_STEP_SUMMARY";
 
+// PATH_FILE names the file a step appends directories to, which the runner
+// puts on PATH for the steps after it.
+const PATH_FILE = "GITHUB_PATH";
+
+// addPath puts dir on PATH for the steps after this one.
+export function addPath(dir: string): void {
+  if (/[\r\n]/.test(dir)) {
+    throw new Error(`path ${dir}: spans lines`);
+  }
+  appendFileSync(requireEnv(PATH_FILE), `${dir}\n`);
+}
+
 // setOutput records name=value for the steps after this one. A value is one
 // line: a newline in it would start an output of the value's choosing.
 export function setOutput(name: string, value: string): void {
