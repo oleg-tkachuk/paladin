@@ -665,8 +665,9 @@ type CapabilityServiceIssueResponse struct {
 	// biscuit is the same capability as a Biscuit v3 token, which its holder
 	// can narrow offline — fewer operations, resources or planes, an earlier
 	// expiry, a key binding — with no call to the issuer. Present it like
-	// token. Empty when the server does not issue Biscuits. Returned once,
-	// never persisted.
+	// token. Empty when the server does not issue Biscuits, and for a
+	// capability without the share operation — a Biscuit is handed on offline
+	// — a key-bound one or one not valid yet. Returned once, never persisted.
 	Biscuit       string `protobuf:"bytes,3,opt,name=biscuit,proto3" json:"biscuit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
