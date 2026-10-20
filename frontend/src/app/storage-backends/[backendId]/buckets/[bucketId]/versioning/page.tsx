@@ -10,7 +10,7 @@ import { RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
 import { Switch } from "@/components/ui/switch";
@@ -57,8 +57,8 @@ export default function BucketVersioningPage() {
   };
 
   return (
-    <Card className="max-w-2xl space-y-6 p-6">
-      <div>
+    <Card className="max-w-2xl">
+      <CardHeader>
         <CardTitle
           className="text-lg font-semibold"
           icon={RectangleStackIcon}
@@ -70,53 +70,54 @@ export default function BucketVersioningPage() {
           When enabled, overwrites and deletes preserve prior object versions
           instead of replacing them in place.
         </p>
-      </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label
+              htmlFor="versioning-enabled"
+              className="text-sm text-foreground"
+            >
+              Enable versioning
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Keeps a version history per object.
+            </p>
+          </div>
+          <Switch
+            id="versioning-enabled"
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
+        </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label
-            htmlFor="versioning-enabled"
-            className="text-sm text-foreground"
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="keep-deletes" className="text-sm text-foreground">
+              Keep deletes forever
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Soft-deletes never reclaim storage; delete markers are retained.
+            </p>
+          </div>
+          <Switch
+            id="keep-deletes"
+            checked={enabled && keepDeletes}
+            disabled={!enabled}
+            onCheckedChange={setKeepDeletes}
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            onClick={save}
+            disabled={Boolean(changesBlocked) || !dirty || saving}
+            title={changesBlocked ?? undefined}
           >
-            Enable versioning
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Keeps a version history per object.
-          </p>
+            {saving ? "Saving…" : "Save"}
+          </Button>
         </div>
-        <Switch
-          id="versioning-enabled"
-          checked={enabled}
-          onCheckedChange={setEnabled}
-        />
-      </div>
-
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label htmlFor="keep-deletes" className="text-sm text-foreground">
-            Keep deletes forever
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Soft-deletes never reclaim storage; delete markers are retained.
-          </p>
-        </div>
-        <Switch
-          id="keep-deletes"
-          checked={enabled && keepDeletes}
-          disabled={!enabled}
-          onCheckedChange={setKeepDeletes}
-        />
-      </div>
-
-      <div className="flex justify-end">
-        <Button
-          onClick={save}
-          disabled={Boolean(changesBlocked) || !dirty || saving}
-          title={changesBlocked ?? undefined}
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
+      </CardContent>
     </Card>
   );
 }

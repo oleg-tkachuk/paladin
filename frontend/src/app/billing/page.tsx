@@ -13,7 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -433,8 +433,8 @@ function BillingView() {
             </div>
           )}
 
-          <Card className="space-y-3 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <Card>
+            <CardHeader className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle
                 level={3}
                 className={T.cardTitleProse}
@@ -451,38 +451,40 @@ function BillingView() {
                 value={granularity}
                 onChange={setWanted}
               />
-            </div>
-            {!seriesQuery.data ? (
-              <Skeleton className="h-48" />
-            ) : buckets.length === 0 ? (
-              <div className={cn(T.helper, "py-8 text-center")}>
-                No spend for {tenantName} in this period.
-              </div>
-            ) : (
-              <>
-                <SpendChart
-                  points={points}
-                  granularity={granularity}
-                  formatValue={formatAxis}
-                  formatPoint={(p) =>
-                    money(p.spent as typeof total, seriesUnit)
-                  }
-                />
-                <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
-                  {peak && peak.start ? (
-                    <span>
-                      Peak: {money(peak.spent, seriesUnit)} on{" "}
-                      {formatDate(timestampDate(peak.start))}
-                    </span>
-                  ) : null}
-                  <span>
-                    Average:{" "}
-                    {money(moneyFromNanos(avgNanos, seriesUnit), seriesUnit)}{" "}
-                    per {granularity}
-                  </span>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!seriesQuery.data ? (
+                <Skeleton className="h-48" />
+              ) : buckets.length === 0 ? (
+                <div className={cn(T.helper, "py-8 text-center")}>
+                  No spend for {tenantName} in this period.
                 </div>
-              </>
-            )}
+              ) : (
+                <>
+                  <SpendChart
+                    points={points}
+                    granularity={granularity}
+                    formatValue={formatAxis}
+                    formatPoint={(p) =>
+                      money(p.spent as typeof total, seriesUnit)
+                    }
+                  />
+                  <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
+                    {peak && peak.start ? (
+                      <span>
+                        Peak: {money(peak.spent, seriesUnit)} on{" "}
+                        {formatDate(timestampDate(peak.start))}
+                      </span>
+                    ) : null}
+                    <span>
+                      Average:{" "}
+                      {money(moneyFromNanos(avgNanos, seriesUnit), seriesUnit)}{" "}
+                      per {granularity}
+                    </span>
+                  </div>
+                </>
+              )}
+            </CardContent>
           </Card>
 
           {summary && chargeCount === 0 ? (
@@ -650,58 +652,62 @@ function BreakdownCard({
   );
   const sortProps = { current: sort, onSort: toggleSort };
   return (
-    <Card className="space-y-3 p-4">
-      <CardTitle
-        level={3}
-        className={T.cardTitleProse}
-        icon={TableCellsIcon}
-        tone={IconTone.Neutral}
-      >
-        {title}
-      </CardTitle>
-      {entries.length === 0 ? (
-        <div className={T.helper}>{emptyHint}</div>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead label="Label" column="label" {...sortProps} />
-              <SortableHead
-                label="Spend"
-                column="spend"
-                align="end"
-                className="text-right"
-                {...sortProps}
-              />
-              <SortableHead
-                label="Charges"
-                column="charges"
-                align="end"
-                className="text-right"
-                {...sortProps}
-              />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((e) => (
-              <TableRow key={e.label}>
-                <TableCell className="max-w-48 truncate">
-                  {renderLabel(e.label)}
-                </TableCell>
-                <TableCell numeric>
-                  {formatMoney(e.spent, {
-                    fallbackUnit,
-                    fractionDigits: SPEND_DIGITS,
-                  })}
-                </TableCell>
-                <TableCell numeric className="font-mono text-sm">
-                  <Count value={e.chargeCount} />
-                </TableCell>
+    <Card>
+      <CardHeader>
+        <CardTitle
+          level={3}
+          className={T.cardTitleProse}
+          icon={TableCellsIcon}
+          tone={IconTone.Neutral}
+        >
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {entries.length === 0 ? (
+          <div className={T.helper}>{emptyHint}</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableHead label="Label" column="label" {...sortProps} />
+                <SortableHead
+                  label="Spend"
+                  column="spend"
+                  align="end"
+                  className="text-right"
+                  {...sortProps}
+                />
+                <SortableHead
+                  label="Charges"
+                  column="charges"
+                  align="end"
+                  className="text-right"
+                  {...sortProps}
+                />
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+            </TableHeader>
+            <TableBody>
+              {rows.map((e) => (
+                <TableRow key={e.label}>
+                  <TableCell className="max-w-48 truncate">
+                    {renderLabel(e.label)}
+                  </TableCell>
+                  <TableCell numeric>
+                    {formatMoney(e.spent, {
+                      fallbackUnit,
+                      fractionDigits: SPEND_DIGITS,
+                    })}
+                  </TableCell>
+                  <TableCell numeric className="font-mono text-sm">
+                    <Count value={e.chargeCount} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
     </Card>
   );
 }

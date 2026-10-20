@@ -11,7 +11,7 @@ import {
   IdentificationIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { BucketGrantsCard } from "@/components/features/buckets/BucketGrantsCard";
 import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
@@ -42,17 +42,17 @@ export default function BucketOverviewPage() {
 
   return (
     <div className="space-y-4">
-      <Card className="p-6">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <CardTitle
-              className="text-lg font-semibold"
-              icon={IdentificationIcon}
-            >
-              Identity
-            </CardTitle>
-            <ProvisionStateBadge state={bucket.provisionState} />
-          </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2">
+          <CardTitle
+            className="text-lg font-semibold"
+            icon={IdentificationIcon}
+          >
+            Identity
+          </CardTitle>
+          <ProvisionStateBadge state={bucket.provisionState} />
+        </CardHeader>
+        <CardContent>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <Field label="Resource name">
               <code className={cn(T.code, "break-all")}>{bucket.name}</code>
@@ -113,7 +113,7 @@ export default function BucketOverviewPage() {
               <code className={T.code}>{bucket.resourceVersion || NONE}</code>
             </Field>
           </dl>
-        </div>
+        </CardContent>
       </Card>
 
       <BucketGrantsCard

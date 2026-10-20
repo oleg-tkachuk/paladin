@@ -118,6 +118,20 @@ describe("card titles", () => {
     expect(offenders).toEqual([]);
   });
 
+  // The header band, and the rule under it, come with CardHeader: a title
+  // laid straight onto the card sits on the body's colour.
+  it("hold their titles in a CardHeader", () => {
+    const offenders = files.flatMap((file) =>
+      cards(readFileSync(join(SRC, file), "utf8"))
+        .filter(
+          (block) =>
+            block.includes("<CardTitle") && !block.includes("<CardHeader"),
+        )
+        .map((block) => `${file}: ${block.slice(0, 60)}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("exempt only cards that are still there", () => {
     const stale = EXEMPT.filter(([file, heading]) => {
       try {

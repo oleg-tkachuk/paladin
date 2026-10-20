@@ -4,7 +4,7 @@ import { HelpTip } from "@/components/ui/HelpTip";
 import React from "react";
 import { LockClosedIcon, ScaleIcon } from "@heroicons/react/24/outline";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -91,8 +91,8 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
   };
 
   return (
-    <Card className="space-y-4 p-4">
-      <div className="flex items-center justify-between">
+    <Card>
+      <CardHeader className="flex items-center justify-between">
         <CardTitle level={3} className={T.cardTitleProse} icon={LockClosedIcon}>
           Object Lock
           <HelpTip topic="objectLock" />
@@ -104,143 +104,145 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
             {lock?.mode}
           </Badge>
         )}
-      </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading && <p className={T.hint}>Reading lock state…</p>}
+        {error && <p className={T.hint}>{error}</p>}
 
-      {isLoading && <p className={T.hint}>Reading lock state…</p>}
-      {error && <p className={T.hint}>{error}</p>}
-
-      {!isLoading && !error && (
-        <>
-          <div className="space-y-1">
-            {retained ? (
-              <p className={T.hint}>
-                Retained under <strong>{lock?.mode}</strong> until{" "}
-                <time dateTime={activeUntil?.toISOString()}>
-                  {activeUntil ? formatDateTime(activeUntil) : null}
-                </time>
-                .{" "}
-                {lock?.mode === "COMPLIANCE"
-                  ? "This window cannot be shortened by anyone."
-                  : "Shortening this window requires the governance bypass."}
-              </p>
-            ) : (
-              <p className={T.hint}>
-                No retention window. This version can be deleted.
-              </p>
-            )}
-          </div>
-
-          {/* ─── Retention ─────────────────────────────────────────────── */}
-          <div className="space-y-2 border-t pt-3">
-            <label className={T.label} htmlFor="lock-mode">
-              {retained ? "Extend or tighten retention" : "Apply retention"}
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <SelectRoot
-                value={mode}
-                onValueChange={(v) => {
-                  setMode(v as "GOVERNANCE" | "COMPLIANCE");
-                  setConfirming(false);
-                }}
-              >
-                <SelectTrigger id="lock-mode" className="w-45">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GOVERNANCE">GOVERNANCE</SelectItem>
-                  <SelectItem value="COMPLIANCE">COMPLIANCE</SelectItem>
-                </SelectContent>
-              </SelectRoot>
-
-              <Input
-                type="datetime-local"
-                aria-label="Retain until"
-                value={until}
-                onChange={(e) => {
-                  setUntil(e.target.value);
-                  setConfirming(false);
-                }}
-                className="w-[230px]"
-              />
+        {!isLoading && !error && (
+          <>
+            <div className="space-y-1">
+              {retained ? (
+                <p className={T.hint}>
+                  Retained under <strong>{lock?.mode}</strong> until{" "}
+                  <time dateTime={activeUntil?.toISOString()}>
+                    {activeUntil ? formatDateTime(activeUntil) : null}
+                  </time>
+                  .{" "}
+                  {lock?.mode === "COMPLIANCE"
+                    ? "This window cannot be shortened by anyone."
+                    : "Shortening this window requires the governance bypass."}
+                </p>
+              ) : (
+                <p className={T.hint}>
+                  No retention window. This version can be deleted.
+                </p>
+              )}
             </div>
 
-            {mode === "COMPLIANCE" && (
-              <p className={T.hint}>
-                COMPLIANCE cannot be shortened, downgraded or removed — not by a
-                tenant admin, not by a platform admin, not by you. The object
-                and its storage are pinned until this date passes.
-              </p>
-            )}
-
-            {retained && lock?.mode === "GOVERNANCE" && (
-              <label className="flex items-center gap-2">
-                <Switch checked={bypass} onCheckedChange={setBypass} />
-                <span className={T.hint}>
-                  Use governance bypass (needed only to shorten the current
-                  window; requires the <code>lock.governance.bypass</code> role)
-                </span>
+            {/* ─── Retention ─────────────────────────────────────────────── */}
+            <div className="space-y-2 border-t pt-3">
+              <label className={T.label} htmlFor="lock-mode">
+                {retained ? "Extend or tighten retention" : "Apply retention"}
               </label>
-            )}
+              <div className="flex flex-wrap items-center gap-2">
+                <SelectRoot
+                  value={mode}
+                  onValueChange={(v) => {
+                    setMode(v as "GOVERNANCE" | "COMPLIANCE");
+                    setConfirming(false);
+                  }}
+                >
+                  <SelectTrigger id="lock-mode" className="w-45">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GOVERNANCE">GOVERNANCE</SelectItem>
+                    <SelectItem value="COMPLIANCE">COMPLIANCE</SelectItem>
+                  </SelectContent>
+                </SelectRoot>
 
-            {mode === "COMPLIANCE" && !confirming ? (
-              <Button
-                variant="outline"
-                disabled={!until || saving || frozen}
-                title={changesBlocked ?? undefined}
-                onClick={() => setConfirming(true)}
-              >
-                Apply COMPLIANCE retention…
-              </Button>
-            ) : (
-              <div className="flex items-center gap-2">
+                <Input
+                  type="datetime-local"
+                  aria-label="Retain until"
+                  value={until}
+                  onChange={(e) => {
+                    setUntil(e.target.value);
+                    setConfirming(false);
+                  }}
+                  className="w-[230px]"
+                />
+              </div>
+
+              {mode === "COMPLIANCE" && (
+                <p className={T.hint}>
+                  COMPLIANCE cannot be shortened, downgraded or removed — not by
+                  a tenant admin, not by a platform admin, not by you. The
+                  object and its storage are pinned until this date passes.
+                </p>
+              )}
+
+              {retained && lock?.mode === "GOVERNANCE" && (
+                <label className="flex items-center gap-2">
+                  <Switch checked={bypass} onCheckedChange={setBypass} />
+                  <span className={T.hint}>
+                    Use governance bypass (needed only to shorten the current
+                    window; requires the <code>lock.governance.bypass</code>{" "}
+                    role)
+                  </span>
+                </label>
+              )}
+
+              {mode === "COMPLIANCE" && !confirming ? (
                 <Button
+                  variant="outline"
                   disabled={!until || saving || frozen}
                   title={changesBlocked ?? undefined}
-                  onClick={apply}
+                  onClick={() => setConfirming(true)}
                 >
-                  {mode === "COMPLIANCE"
-                    ? "Yes — pin permanently until that date"
-                    : "Apply retention"}
+                  Apply COMPLIANCE retention…
                 </Button>
-                {confirming && (
+              ) : (
+                <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
-                    disabled={saving}
-                    onClick={() => setConfirming(false)}
+                    disabled={!until || saving || frozen}
+                    title={changesBlocked ?? undefined}
+                    onClick={apply}
                   >
-                    Cancel
+                    {mode === "COMPLIANCE"
+                      ? "Yes — pin permanently until that date"
+                      : "Apply retention"}
                   </Button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ─── Legal hold ────────────────────────────────────────────── */}
-          <div className="space-y-2 border-t pt-3">
-            <div className="flex items-center justify-between gap-3">
-              <label
-                className={`${T.label} flex items-center gap-2`}
-                htmlFor="legal-hold"
-              >
-                <ScaleIcon className="size-4" aria-hidden="true" />
-                Legal hold
-              </label>
-              <Switch
-                id="legal-hold"
-                checked={held}
-                disabled={saving || frozen}
-                title={changesBlocked ?? undefined}
-                onCheckedChange={toggleHold}
-              />
+                  {confirming && (
+                    <Button
+                      variant="ghost"
+                      disabled={saving}
+                      onClick={() => setConfirming(false)}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
-            <p className={T.hint}>
-              {held
-                ? "On. Deletion is blocked for as long as the hold stands, regardless of any retention window, and the governance bypass does not lift it."
-                : "Off. A hold blocks deletion indefinitely and can be lifted again — use it when the release date is not yet known."}
-            </p>
-          </div>
-        </>
-      )}
+
+            {/* ─── Legal hold ────────────────────────────────────────────── */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between gap-3">
+                <label
+                  className={`${T.label} flex items-center gap-2`}
+                  htmlFor="legal-hold"
+                >
+                  <ScaleIcon className="size-4" aria-hidden="true" />
+                  Legal hold
+                </label>
+                <Switch
+                  id="legal-hold"
+                  checked={held}
+                  disabled={saving || frozen}
+                  title={changesBlocked ?? undefined}
+                  onCheckedChange={toggleHold}
+                />
+              </div>
+              <p className={T.hint}>
+                {held
+                  ? "On. Deletion is blocked for as long as the hold stands, regardless of any retention window, and the governance bypass does not lift it."
+                  : "Off. A hold blocks deletion indefinitely and can be lifted again — use it when the release date is not yet known."}
+              </p>
+            </div>
+          </>
+        )}
+      </CardContent>
     </Card>
   );
 }

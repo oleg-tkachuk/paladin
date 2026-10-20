@@ -13,7 +13,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { SECTION } from "@/lib/navigation/sections";
@@ -264,8 +264,8 @@ function TransportCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-center gap-2">
+    <Card>
+      <CardHeader className="flex items-center gap-2">
         <CardTitle
           level={3}
           className={T.cardTitleProse}
@@ -277,8 +277,8 @@ function TransportCard({
         <Badge variant={enabled ? "success" : "outline"}>
           {enabled ? "enabled" : "disabled"}
         </Badge>
-      </div>
-      {children}
+      </CardHeader>
+      <CardContent className="space-y-3">{children}</CardContent>
     </Card>
   );
 }

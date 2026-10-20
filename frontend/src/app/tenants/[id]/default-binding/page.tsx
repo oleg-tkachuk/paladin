@@ -22,7 +22,7 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { tenantClient } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -142,8 +142,8 @@ export default function DefaultBindingPage() {
 
   return (
     <div className="space-y-4">
-      <Card className="space-y-4 p-5">
-        <div>
+      <Card>
+        <CardHeader>
           <CardTitle
             className="text-base font-semibold"
             icon={ArchiveBoxIcon}
@@ -156,69 +156,70 @@ export default function DefaultBindingPage() {
             for this tenant. Creating a collection with no bucket and no default
             bucket is rejected.
           </p>
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bindingQuery.isLoading ? (
+            <Skeleton className="h-8 w-64" />
+          ) : binding ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <BucketBadges bucket={binding.bucket} />
+              {binding.setBy && (
+                <span className="text-xs text-muted-foreground">
+                  set by {binding.setBy}
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No default bucket set — bare-name creation will be rejected.
+            </p>
+          )}
 
-        {bindingQuery.isLoading ? (
-          <Skeleton className="h-8 w-64" />
-        ) : binding ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <BucketBadges bucket={binding.bucket} />
-            {binding.setBy && (
-              <span className="text-xs text-muted-foreground">
-                set by {binding.setBy}
-              </span>
+          {/* A failed read left the select holding only "Select a bucket…" and
+            Set disabled, which read as a tenant with nothing to bind. */}
+          {bucketsError ? (
+            <ListLoadError
+              variant="inline"
+              what="Buckets"
+              reason={bucketsError}
+              onRetry={() => void loadBuckets()}
+            />
+          ) : null}
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-sm">
+              <span className="mb-1 block text-muted-foreground">Bucket</span>
+              <select
+                className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+                value={selected}
+                onChange={(e) => setSelected(Number(e.target.value))}
+                aria-label="Default bucket"
+              >
+                <option value={-1}>Select a bucket…</option>
+                {buckets.map((b, i) => (
+                  <option key={`${b.backendId}/${b.bucketId}`} value={i}>
+                    {b.backendId} / {b.bucketId}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button
+              onClick={handleSet}
+              disabled={Boolean(changesBlocked) || busy || selected < 0}
+              title={changesBlocked ?? undefined}
+            >
+              {binding ? "Update" : "Set"}
+            </Button>
+            {binding && (
+              <Button
+                variant="outline"
+                onClick={() => setConfirmClear(true)}
+                disabled={busy}
+              >
+                Clear
+              </Button>
             )}
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No default bucket set — bare-name creation will be rejected.
-          </p>
-        )}
-
-        {/* A failed read left the select holding only "Select a bucket…" and
-            Set disabled, which read as a tenant with nothing to bind. */}
-        {bucketsError ? (
-          <ListLoadError
-            variant="inline"
-            what="Buckets"
-            reason={bucketsError}
-            onRetry={() => void loadBuckets()}
-          />
-        ) : null}
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="text-sm">
-            <span className="mb-1 block text-muted-foreground">Bucket</span>
-            <select
-              className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-              value={selected}
-              onChange={(e) => setSelected(Number(e.target.value))}
-              aria-label="Default bucket"
-            >
-              <option value={-1}>Select a bucket…</option>
-              {buckets.map((b, i) => (
-                <option key={`${b.backendId}/${b.bucketId}`} value={i}>
-                  {b.backendId} / {b.bucketId}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button
-            onClick={handleSet}
-            disabled={Boolean(changesBlocked) || busy || selected < 0}
-            title={changesBlocked ?? undefined}
-          >
-            {binding ? "Update" : "Set"}
-          </Button>
-          {binding && (
-            <Button
-              variant="outline"
-              onClick={() => setConfirmClear(true)}
-              disabled={busy}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
+        </CardContent>
       </Card>
       <ConfirmModal
         isOpen={confirmClear}

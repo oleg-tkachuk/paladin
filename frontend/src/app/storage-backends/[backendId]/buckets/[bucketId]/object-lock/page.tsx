@@ -11,7 +11,7 @@ import { LockClosedIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
@@ -102,8 +102,8 @@ export default function BucketObjectLockPage() {
   };
 
   return (
-    <Card className="max-w-2xl space-y-6 p-6">
-      <div>
+    <Card className="max-w-2xl">
+      <CardHeader>
         <CardTitle className="text-lg font-semibold" icon={LockClosedIcon}>
           Object lock
         </CardTitle>
@@ -111,77 +111,78 @@ export default function BucketObjectLockPage() {
           Write-once-read-many retention. Objects can&apos;t be deleted or
           overwritten until their retention expires.
         </p>
-      </div>
-
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label htmlFor="lock-enabled" className="text-sm text-foreground">
-            Enable object lock
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Applies a default retention to new objects.
-          </p>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="lock-enabled" className="text-sm text-foreground">
+              Enable object lock
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Applies a default retention to new objects.
+            </p>
+          </div>
+          <Switch
+            id="lock-enabled"
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
         </div>
-        <Switch
-          id="lock-enabled"
-          checked={enabled}
-          onCheckedChange={setEnabled}
-        />
-      </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label className="text-sm text-foreground">Default mode</Label>
-          <p className="text-xs text-muted-foreground">
-            Governance is bypassable by a privileged role; Compliance is not,
-            until expiry.
-          </p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label className="text-sm text-foreground">Default mode</Label>
+            <p className="text-xs text-muted-foreground">
+              Governance is bypassable by a privileged role; Compliance is not,
+              until expiry.
+            </p>
+          </div>
+          <SelectRoot
+            value={mode}
+            onValueChange={(v) => setMode(v as "governance" | "compliance")}
+            disabled={!enabled}
+          >
+            <SelectTrigger className="w-44" aria-label="Default mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="governance">Governance</SelectItem>
+              <SelectItem value="compliance">Compliance</SelectItem>
+            </SelectContent>
+          </SelectRoot>
         </div>
-        <SelectRoot
-          value={mode}
-          onValueChange={(v) => setMode(v as "governance" | "compliance")}
-          disabled={!enabled}
-        >
-          <SelectTrigger className="w-44" aria-label="Default mode">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="governance">Governance</SelectItem>
-            <SelectItem value="compliance">Compliance</SelectItem>
-          </SelectContent>
-        </SelectRoot>
-      </div>
 
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Label htmlFor="lock-days" className="text-sm text-foreground">
-            Default retention (days)
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Blank or 0 sets no default retention window.
-          </p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="lock-days" className="text-sm text-foreground">
+              Default retention (days)
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Blank or 0 sets no default retention window.
+            </p>
+          </div>
+          <Input
+            id="lock-days"
+            type="number"
+            min="0"
+            placeholder="30"
+            className="w-28"
+            value={days}
+            disabled={!enabled}
+            onChange={(e) => setDays(e.target.value)}
+          />
         </div>
-        <Input
-          id="lock-days"
-          type="number"
-          min="0"
-          placeholder="30"
-          className="w-28"
-          value={days}
-          disabled={!enabled}
-          onChange={(e) => setDays(e.target.value)}
-        />
-      </div>
 
-      <div className="flex justify-end">
-        <Button
-          onClick={save}
-          disabled={Boolean(changesBlocked) || !dirty || !daysValid || saving}
-          title={changesBlocked ?? undefined}
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={save}
+            disabled={Boolean(changesBlocked) || !dirty || !daysValid || saving}
+            title={changesBlocked ?? undefined}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 }
