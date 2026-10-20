@@ -3,6 +3,7 @@ package paladin_test
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -18,10 +19,15 @@ func TestCapabilityOpsMatchTheSharedTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	var table struct {
+		Limes     []string          `json:"limes"`
 		DataPlane map[string]string `json:"data_plane"`
 	}
 	if err := json.Unmarshal(raw, &table); err != nil {
 		t.Fatal(err)
+	}
+	shared := []string{paladin.OpGet, paladin.OpPut, paladin.OpList, paladin.OpDelete, paladin.OpShare, paladin.OpManage}
+	if !slices.Equal(table.Limes, shared) {
+		t.Errorf("the shared ops are %v in the SDK, %v in the table", shared, table.Limes)
 	}
 	want := map[string]string{"object_presign": paladin.OpObjectPresign, "object_tag": paladin.OpObjectTag}
 	if len(table.DataPlane) != len(want) {

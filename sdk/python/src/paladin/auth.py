@@ -32,9 +32,21 @@ AUDIENCE_DATA = "paladin-data"
 AUDIENCE_ADMIN = "paladin-admin"
 AUDIENCE_IAM = "paladin-iam"
 
-# The data plane's own capability operations, as a capability names them in
-# its caveats; the others are limes's (get, put, list, delete, share, manage).
-# tests/test_capability_ops.py keeps them equal to sdk/testdata/capability_ops.json.
+# The operations a capability names in its caveats. tests/test_capability_ops.py
+# keeps them equal to sdk/testdata/capability_ops.json, which the Go SDK and
+# the server are held to as well.
+OP_GET = "get"
+"""Read one resource."""
+OP_PUT = "put"
+"""Write one resource."""
+OP_LIST = "list"
+"""List resources under a prefix."""
+OP_DELETE = "delete"
+"""Delete a resource."""
+OP_SHARE = "share"
+"""Delegate a narrower capability, and let it be sealed as a Biscuit, which is handed on offline."""
+OP_MANAGE = "manage"
+"""Administer: tenants, policy."""
 OP_OBJECT_PRESIGN = "object:presign"
 """Mint a presigned URL for an object; the URL's own method needs get or put."""
 OP_OBJECT_TAG = "object:tag"

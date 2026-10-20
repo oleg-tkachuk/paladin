@@ -172,10 +172,10 @@ client = paladin.Client(data_url, capability=narrowed)
 | `attenuate(token, *, ops=None, resource_prefixes=None, resource_uris=None, planes=None, expires_at=None, bind_jkt=None, max_requests=None, max_budget_nanos=None)` | `token` with one more block appended, as a new token; `token` keeps working. An argument left `None` leaves that dimension as it is; a set one replaces it and must be within what the token allows, or the server refuses the whole token. Setting `resource_prefixes` or `resource_uris` replaces both. `expires_at` is timezone-aware and kept to the second. `bind_jkt` (`dpop_thumbprint(key.public_key())`) binds the token to a key, and only an unbound token can be bound. `max_requests` and `max_budget_nanos` (non-negative `int`s; nanos are billionths of the capability's unit) give the copy limits of its own, counted apart from other copies and within every limit already in force; 0 freezes the copy without revoking it, so its first request and first charge are refused; `CapabilityService.get_biscuit_usage` reports each limit in force on a copy with what has been counted against it. Raises `ValueError` for a JWT or anything else that is not a Paladin Biscuit, `ImportError` without the extra. |
 
 The block holds only the facts the server reads
-([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
-a copy of the vocabulary [limes](https://github.com/oleg-tkachuk/limes)
-defines); a token the SDK attenuated is verified by limes in the server's
-tests.
+([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json));
+the server's tests verify a token this SDK attenuated. The operations a
+capability names are `OP_GET`, `OP_PUT`, `OP_LIST`, `OP_DELETE`, `OP_SHARE`,
+`OP_MANAGE`, `OP_OBJECT_PRESIGN` and `OP_OBJECT_TAG`.
 
 `CapabilityService.revoke_biscuit` revokes one copy: the token sent and every
 copy attenuated from it. The copy it came from, its siblings and the
@@ -557,7 +557,7 @@ tests hold its parsers to as well. Where they differ, it is on purpose:
 | Minimum TLS version | `TLS.MinVersion`, 1.2 by default | `TLS(min_version=…)`, `ssl.TLSVersion.TLSv1_2` by default | |
 | CRC32C verification | Always | With the `crc32c` extra; otherwise not verified | The standard library has no CRC32C. |
 | Webhook signatures | `VerifyWebhook`, options for the window and clock | `verify_webhook`, keyword arguments | Each language's idiom; both run the vectors in `sdk/testdata/webhook_signatures.json`. |
-| Biscuit attenuation | `limes.Attenuate`, from [limes](https://github.com/oleg-tkachuk/limes) | `attenuate`, with the `biscuit` extra | Go uses the server's own code; Python writes the same facts with `biscuit-python`. |
+| Biscuit attenuation | `Attenuate` | `attenuate`, with the `biscuit` extra | Go writes the block with the server's own code; Python writes the same facts with `biscuit-python`. |
 | OpenTelemetry | connect's `otelconnect` and `otelhttp`, through the options | `connectrpc-otel` through `interceptors`, and `pyqwest`'s own spans through `http_client` and `Transfer(otel=True)` | |
 | Bulk transfers | `DownloadMany`, a callback per reader; `UploadMany`, objects in input order and failures by index | `download_many` / `adownload_many` and `upload_many` / `aupload_many`, iterators of results as each finishes | Each language's idiom. |
 | asyncio | — | An `a…` form of every workflow | Go has goroutines. |
