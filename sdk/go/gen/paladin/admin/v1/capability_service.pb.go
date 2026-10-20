@@ -89,8 +89,11 @@ const (
 	BiscuitStatus_BISCUIT_STATUS_UNSPECIFIED BiscuitStatus = 0
 	// ISSUED: biscuit holds the capability's Biscuit.
 	BiscuitStatus_BISCUIT_STATUS_ISSUED BiscuitStatus = 1
-	// NOT_SHAREABLE: the capability's ops lack share. A Biscuit is handed on
-	// offline, which is what share allows.
+	// NOT_SHAREABLE is never sent: a capability is sealed as a Biscuit whether
+	// or not its ops include share, since a copy narrowed from the Biscuit
+	// allows no more than the token, which its bearer could hand on as it is.
+	//
+	// Deprecated: Marked as deprecated in paladin/admin/v1/capability_service.proto.
 	BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE BiscuitStatus = 2
 	// KEY_BOUND: the capability is bound to a key (confirmation_jkt), which
 	// only its holder can prove; the holder presents the token.
@@ -1886,11 +1889,11 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13PRINCIPAL_KIND_USER\x10\x01\x12\x18\n" +
 	"\x14PRINCIPAL_KIND_AGENT\x10\x02\x12\x1a\n" +
-	"\x16PRINCIPAL_KIND_SERVICE\x10\x03*\xac\x01\n" +
+	"\x16PRINCIPAL_KIND_SERVICE\x10\x03*\xb0\x01\n" +
 	"\rBiscuitStatus\x12\x1e\n" +
 	"\x1aBISCUIT_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15BISCUIT_STATUS_ISSUED\x10\x01\x12 \n" +
-	"\x1cBISCUIT_STATUS_NOT_SHAREABLE\x10\x02\x12\x1c\n" +
+	"\x15BISCUIT_STATUS_ISSUED\x10\x01\x12$\n" +
+	"\x1cBISCUIT_STATUS_NOT_SHAREABLE\x10\x02\x1a\x02\b\x01\x12\x1c\n" +
 	"\x18BISCUIT_STATUS_KEY_BOUND\x10\x03\x12 \n" +
 	"\x1cBISCUIT_STATUS_NOT_YET_VALID\x10\x042\xd2\a\n" +
 	"\x11CapabilityService\x12j\n" +

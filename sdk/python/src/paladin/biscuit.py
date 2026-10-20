@@ -20,10 +20,13 @@ import base64
 import binascii
 import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from paladin.admin.v1 import capability_service_pb2
+from paladin.auth import Op
 
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
 # the shared spec the server's tests read too.
@@ -64,11 +67,63 @@ def biscuit_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -> s
     Raises ``NoBiscuitError`` naming the answer's ``biscuit_status`` when it
     carries none, so a caller that needs one fails where it asks rather than
     passing an empty token on. To be refused before anything is issued
-    instead, set ``require_biscuit``.
+    instead, set ``require_biscuit``. A caller that only presents the
+    capability wants ``credential_of``.
     """
     if resp.biscuit_status == capability_service_pb2.BISCUIT_STATUS_ISSUED and resp.biscuit:
         return resp.biscuit
     raise NoBiscuitError(resp.biscuit_status)
+
+
+class CredentialForm(StrEnum):
+    """Which form of a capability a ``Credential`` is. Both are presented the
+    same way, as ``capability=``."""
+
+    TOKEN = "token"
+    """The capability's JWT."""
+    BISCUIT = "biscuit"
+    """Its Biscuit, which its holder can also narrow offline with ``attenuate``."""
+
+
+@dataclass(frozen=True)
+class Credential:
+    """What to present for a capability an Issue or Delegate answer carries."""
+
+    value: str
+    """Presented as ``capability=``."""
+    form: CredentialForm
+    """Which form ``value`` is."""
+    biscuit_status: int
+    """The answer's: ``BISCUIT_STATUS_ISSUED`` for a Biscuit, otherwise why the
+    token is presented instead."""
+
+
+class NoCredentialError(Exception):
+    """An Issue or Delegate answer that carries neither a token nor a Biscuit."""
+
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(
+            "the answer carries no capability to present: "
+            f"{capability_service_pb2.BiscuitStatus.Name(status)}"
+        )
+
+
+def credential_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -> Credential:
+    """What to present for the capability an Issue or Delegate answer
+    carries: its Biscuit when ``biscuit_status`` is ``ISSUED``, its token
+    otherwise, with the status that says why.
+
+    A caller that only presents the capability needs no more; one that must
+    narrow it offline asks ``biscuit_of``. Raises ``NoCredentialError`` for an
+    answer that carries neither.
+    """
+    status = resp.biscuit_status
+    if resp.biscuit and status == capability_service_pb2.BISCUIT_STATUS_ISSUED:
+        return Credential(resp.biscuit, CredentialForm.BISCUIT, status)
+    if resp.token:
+        return Credential(resp.token, CredentialForm.TOKEN, status)
+    raise NoCredentialError(status)
 
 
 def _biscuit() -> Any:
@@ -96,6 +151,18 @@ def _strings(name: str, values: Iterable[str] | None, *, non_empty: bool = False
             raise TypeError(f"{name} takes strings, got {type(v).__name__}")
         if non_empty and not v:
             raise ValueError(f"{name} takes non-empty strings")
+    return out
+
+
+def _ops(ops: Iterable[Op] | None) -> list[Op]:
+    """``ops`` as ``Op`` members; a name that is none is a ``ValueError``."""
+    out: list[Op] = []
+    for v in _strings("ops", ops):
+        try:
+            out.append(Op(v))
+        except ValueError:
+            known = ", ".join(op.value for op in Op)
+            raise ValueError(f"ops: {v!r} is no operation; the operations are {known}") from None
     return out
 
 
@@ -144,7 +211,7 @@ def _root_key(ba: Any, token: str) -> Any:
 def attenuate(
     token: str,
     *,
-    ops: Iterable[str] | None = None,
+    ops: Iterable[Op] | None = None,
     resource_prefixes: Iterable[str] | None = None,
     resource_uris: Iterable[str] | None = None,
     planes: Iterable[str] | None = None,
@@ -158,8 +225,9 @@ def attenuate(
 
     Each argument left ``None`` leaves that dimension as it is; a set one
     replaces it, and must be within what the token already allows or the
-    server refuses the whole token. ``ops`` are operation names (``"get"``,
-    ``"list"``, …) and ``planes`` audiences (``"data"``, ``"mcp"``, …).
+    server refuses the whole token. ``ops`` are ``Op`` members (``Op.GET``,
+    ``Op.LIST``, …), and a name that is none is a ``ValueError`` here rather
+    than a refused token; ``planes`` are audiences (``"data"``, ``"mcp"``, …).
     Setting ``resource_prefixes`` or ``resource_uris`` replaces both.
     ``expires_at`` (timezone-aware, kept to the second) shortens the
     lifetime. ``bind_jkt`` — ``dpop_thumbprint(key.public_key())`` — binds
@@ -176,7 +244,7 @@ def attenuate(
     if not token or _JWT_SEPARATOR in token:
         raise ValueError("not a Biscuit token: pass the 'biscuit' field, not the JWT 'token'")
     facts: list[tuple[str, Any]] = []
-    facts += [(FACT_OP, v) for v in _strings("ops", ops)]
+    facts += [(FACT_OP, str(v)) for v in _ops(ops)]
     facts += [
         (FACT_RESOURCE_PREFIX, v)
         for v in _strings("resource_prefixes", resource_prefixes, non_empty=True)

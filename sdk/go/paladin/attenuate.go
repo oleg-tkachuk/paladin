@@ -14,7 +14,7 @@ import (
 // what the token allows, or the server refuses the whole token.
 type Attenuation struct {
 	// Ops the copy keeps: OpGet, OpList and the rest of this package's.
-	Ops []string
+	Ops []Op
 	// ResourcePrefixes and ResourceURIs the copy keeps; setting either
 	// replaces both.
 	ResourcePrefixes []string

@@ -21,24 +21,22 @@ import (
 const testJKT = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
 
 // Each reason a capability goes without its Biscuit, the first that applies.
+// Its ops play no part: one without share is sealed too.
 func TestBiscuitStatusOf(t *testing.T) {
 	now := time.Now()
-	share := limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpShare}}
 	cases := map[string]struct {
-		caveats limes.Caveats
-		jkt     string
-		nbf     time.Time
-		want    adminv1.BiscuitStatus
+		jkt  string
+		nbf  time.Time
+		want adminv1.BiscuitStatus
 	}{
-		"shareable":             {share, "", time.Time{}, adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED},
-		"a not-before passed":   {share, "", now.Add(-time.Minute), adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED},
-		"no share":              {limes.Caveats{Ops: []limes.Op{limes.OpGet}}, "", time.Time{}, adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE},
-		"no share, bound too":   {limes.Caveats{Ops: []limes.Op{limes.OpGet}}, testJKT, time.Time{}, adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE},
-		"bound to a key":        {share, testJKT, time.Time{}, adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND},
-		"valid only from later": {share, "", now.Add(time.Hour), adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID},
+		"unbound, valid now":    {"", time.Time{}, adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED},
+		"a not-before passed":   {"", now.Add(-time.Minute), adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED},
+		"bound to a key":        {testJKT, time.Time{}, adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND},
+		"bound, and later":      {testJKT, now.Add(time.Hour), adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND},
+		"valid only from later": {"", now.Add(time.Hour), adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID},
 	}
 	for name, tc := range cases {
-		if got := biscuitStatusOf(tc.caveats, tc.jkt, tc.nbf, now); got != tc.want {
+		if got := biscuitStatusOf(tc.jkt, tc.nbf, now); got != tc.want {
 			t.Errorf("%s: %v, want %v", name, got, tc.want)
 		}
 	}
@@ -71,7 +69,12 @@ func TestIssueNamesTheBiscuitStatus(t *testing.T) {
 		hasBiscuit bool
 	}{
 		"shareable": {issueReq(string(limes.OpGet), string(limes.OpShare)), adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED, true},
-		"no share":  {issueReq(string(limes.OpGet)), adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE, false},
+		"no share":  {issueReq(string(limes.OpGet)), adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED, true},
+		"key-bound": {func() *adminv1.CapabilityServiceIssueRequest {
+			r := issueReq(string(limes.OpGet))
+			r.ConfirmationJkt = testJKT
+			return r
+		}(), adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND, false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -98,7 +101,7 @@ func TestIssueRequireBiscuit(t *testing.T) {
 		why     string
 	}{
 		"shareable":     {func(*adminv1.CapabilityServiceIssueRequest) {}, []string{"get", "share"}, false, ""},
-		"no share":      {func(*adminv1.CapabilityServiceIssueRequest) {}, []string{"get"}, true, "share"},
+		"no share":      {func(*adminv1.CapabilityServiceIssueRequest) {}, []string{"get"}, false, ""},
 		"key-bound":     {func(r *adminv1.CapabilityServiceIssueRequest) { r.ConfirmationJkt = testJKT }, []string{"get", "share"}, true, "bound to a key"},
 		"not yet valid": {func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore = future }, []string{"get", "share"}, true, "not_before"},
 	}
@@ -112,7 +115,7 @@ func TestIssueRequireBiscuit(t *testing.T) {
 			resp, err := h.Issue(adminCtx(), req)
 			if !tc.refused {
 				if err != nil || resp.GetBiscuit() == "" {
-					t.Fatalf("a shareable capability: %v, biscuit %t", err, resp.GetBiscuit() != "")
+					t.Fatalf("a capability that can be sealed: %v, biscuit %t", err, resp.GetBiscuit() != "")
 				}
 				return
 			}
@@ -126,8 +129,8 @@ func TestIssueRequireBiscuit(t *testing.T) {
 	}
 }
 
-// Delegate holds require_biscuit to the child as limes mints it: the ops it
-// narrows to, and the key binding it inherits or names.
+// Delegate holds require_biscuit to the child as limes mints it: the key
+// binding it inherits or names. A child narrowed off share is sealed too.
 func TestDelegateRequireBiscuit(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
@@ -144,8 +147,9 @@ func TestDelegateRequireBiscuit(t *testing.T) {
 	narrowed := delegateReq(parent)
 	narrowed.RequireBiscuit = true
 	narrowed.Caveats = openCaveats(limes.OpGet)
-	if _, err := h.Delegate(ctx, narrowed); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("a child narrowed off share: %v, want FailedPrecondition", err)
+	resp, err = h.Delegate(ctx, narrowed)
+	if err != nil || resp.GetBiscuitStatus() != adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED || resp.GetBiscuit() == "" {
+		t.Errorf("a child narrowed off share: %v, status %v", err, resp.GetBiscuitStatus())
 	}
 
 	bound := delegateReq(parent)

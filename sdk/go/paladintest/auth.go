@@ -64,11 +64,14 @@ const (
 )
 
 // credential is one the fake issued: its kind, its tenant, and whether it
-// was revoked.
+// was revoked; for one CapabilityService issued, the capability it presents
+// and whether it is that capability's Biscuit.
 type credential struct {
-	kind    credentialKind
-	tenant  string
-	revoked bool
+	kind       credentialKind
+	tenant     string
+	revoked    bool
+	capability string
+	biscuit    bool
 }
 
 // The server's answers to a credential it refuses, word for word.

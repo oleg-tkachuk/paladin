@@ -200,7 +200,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 	}
 
 	if req.GetRequireBiscuit() {
-		if err := requireBiscuit(caveats, req.GetConfirmationJkt(), nbf); err != nil {
+		if err := requireBiscuit(req.GetConfirmationJkt(), nbf); err != nil {
 			return nil, err
 		}
 	}
@@ -306,16 +306,13 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	}
 
 	if req.GetRequireBiscuit() {
-		// The child as limes will mint it: the parent's caveats when it asks
-		// for them, and the parent's key binding unless it names its own.
-		child, jkt := caveats, req.GetConfirmationJkt()
-		if inherit {
-			child = parent.Caveats
-		}
+		// The child as limes will mint it: bound to the parent's key unless
+		// it names its own.
+		jkt := req.GetConfirmationJkt()
 		if jkt == "" {
 			jkt = parent.ConfirmationJKT
 		}
-		if err := requireBiscuit(child, jkt, nbf); err != nil {
+		if err := requireBiscuit(jkt, nbf); err != nil {
 			return nil, err
 		}
 	}
@@ -597,16 +594,16 @@ func (h *Handler) issued(ctx context.Context, res limes.IssueResult) (*adminv1.C
 	}, nil
 }
 
-// biscuitStatusOf is whether a capability with caveats, bound to the key jkt
-// names and valid from nbf, can be sealed as a Biscuit at now, and why not.
-// limes seals only a capability that may be shared, since a Biscuit is
-// handed on offline; a key-bound one verifies only with a proof of its
-// holder's key, which the server does not have; and one valid only from a
-// later not-before verifies only then. Their holders present the JWT.
-func biscuitStatusOf(caveats limes.Caveats, jkt string, nbf, now time.Time) adminv1.BiscuitStatus {
+// biscuitStatusOf is whether a capability bound to the key jkt names and
+// valid from nbf can be sealed as a Biscuit at now, and why not. A key-bound
+// one verifies only with a proof of its holder's key, which the server does
+// not have, and one valid only from a later not-before verifies only then:
+// their holders present the JWT. Share is not needed: a copy narrowed from
+// the Biscuit allows no more than the JWT, which its bearer could hand on as
+// it is, and a copy with limits of its own is counted against the
+// capability's copy quota.
+func biscuitStatusOf(jkt string, nbf, now time.Time) adminv1.BiscuitStatus {
 	switch {
-	case !hasOp(caveats.Ops, limes.OpShare):
-		return adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE
 	case jkt != "":
 		return adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND
 	case nbf.After(now):
@@ -619,15 +616,14 @@ func biscuitStatusOf(caveats limes.Caveats, jkt string, nbf, now time.Time) admi
 // biscuitRefusals says, for require_biscuit, why each status leaves a
 // capability without its Biscuit.
 var biscuitRefusals = map[adminv1.BiscuitStatus]string{
-	adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_SHAREABLE: "its ops lack share, which a Biscuit handed on offline needs",
 	adminv1.BiscuitStatus_BISCUIT_STATUS_KEY_BOUND:     "it is bound to a key, and only its holder can prove it; present the token",
 	adminv1.BiscuitStatus_BISCUIT_STATUS_NOT_YET_VALID: "it is valid only from a later not_before",
 }
 
 // requireBiscuit refuses, before anything is issued, a capability that could
 // not be sealed as a Biscuit, as FailedPrecondition naming why.
-func requireBiscuit(caveats limes.Caveats, jkt string, nbf time.Time) error {
-	status := biscuitStatusOf(caveats, jkt, nbf, time.Now())
+func requireBiscuit(jkt string, nbf time.Time) error {
+	status := biscuitStatusOf(jkt, nbf, time.Now())
 	if status == adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
 		return nil
 	}
@@ -641,7 +637,7 @@ func requireBiscuit(caveats limes.Caveats, jkt string, nbf time.Time) error {
 // verified first, for an audience it names.
 func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, adminv1.BiscuitStatus, error) {
 	c := res.Capability
-	status := biscuitStatusOf(c.Caveats, c.ConfirmationJKT, c.NotBefore, time.Now())
+	status := biscuitStatusOf(c.ConfirmationJKT, c.NotBefore, time.Now())
 	if status != adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
 		return "", status, nil
 	}

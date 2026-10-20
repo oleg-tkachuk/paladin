@@ -44,6 +44,34 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — a capability has a Biscuit without share
+
+limes v0.110 seals a Biscuit for any capability: a copy narrowed from it
+allows no more than the token, which its bearer could hand on as it is, and a
+copy with limits of its own is counted against `copy_ceiling`.
+
+- `CapabilityService.Issue` and `Delegate` return `biscuit` whatever the
+  capability's ops; only a key-bound capability (`KEY_BOUND`) and one not
+  valid yet (`NOT_YET_VALID`) still come back without one.
+- `BISCUIT_STATUS_NOT_SHAREABLE` is deprecated and never sent, and
+  `require_biscuit` no longer refuses a capability for lacking `share`.
+- `Delegate` still requires `share` on the parent.
+- `paladin.CredentialOf` (Go) and `credential_of` (Python) say what to
+  present for an issued capability: the Biscuit when it was issued, the token
+  otherwise, with the form and the status. A client that only presents the
+  capability should use them rather than read `biscuit`; `BiscuitOf` stays
+  for one that must narrow it.
+- Go's `paladintest` and Python's `paladin.testing` serve
+  `CapabilityService` — `Issue`, `Delegate`, `Revoke`, `Get` — to the
+  server's rules: a Biscuit unless key-bound or not
+  yet valid, `InvalidArgument` for a bare `presign`, `require_biscuit` and
+  `Delegate`'s `share` as the server answers them. A consumer's own fake of
+  the service can go.
+- The operations are typed. Go: `paladin.Op`, with `Attenuation.Ops []Op`,
+  `paladin.OpNames(…)` for `CapabilityCaveats.ops`, and `Op.Validate`. Python:
+  `paladin.Op`, a `StrEnum`, whose members `OP_GET` … `OP_OBJECT_TAG` now are;
+  `attenuate` raises `ValueError` for an op that is no member.
+
 ## sdk/go/v0.96.0 — the SDKs need no limes
 
 A client works with the Paladin SDK alone; limes is the server's.

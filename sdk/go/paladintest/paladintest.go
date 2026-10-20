@@ -8,7 +8,8 @@
 //
 // It serves ObjectService (upload, complete, get, lookup, list, download,
 // delete), MultipartUploadService, ListParts included, PresignService
-// (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService; every
+// (RegenerateUploadUrl, PresignDownload), StorageBootstrapService and
+// CapabilityService (Issue, Delegate, Revoke, Get — see capability.go); every
 // other RPC of every plane answers Unimplemented, as a server that lacks it
 // does. Like the server it runs protovalidate on every request, after
 // authentication, and checks DeleteObject's resource_version; ListObjects
@@ -63,6 +64,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
@@ -218,6 +220,8 @@ type Server struct {
 	// issued, by token.
 	strictAuth  bool
 	credentials map[string]*credential
+	// capabilities are the ones CapabilityService issued, by id.
+	capabilities map[string]*capabilityRecord
 	// replays are the responses memoised per procedure and idempotency key,
 	// with the fingerprint of the request each answered — as the server keeps.
 	replays map[string]replay
@@ -277,6 +281,7 @@ var servedServices = []string{
 	paladindatav1connect.MultipartUploadServiceName,
 	paladindatav1connect.StorageBootstrapServiceName,
 	paladindatav1connect.PresignServiceName,
+	paladinadminv1connect.CapabilityServiceName,
 }
 
 // serverReason is the google.rpc.ErrorInfo reason the server attaches to a
@@ -478,8 +483,9 @@ func Start(opts ...Option) (*Server, func()) {
 
 		rpcFaults: map[string][]*rpcFault{},
 
-		credentials: map[string]*credential{},
-		replays:     map[string]replay{},
+		credentials:  map[string]*credential{},
+		capabilities: map[string]*capabilityRecord{},
+		replays:      map[string]replay{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -517,6 +523,7 @@ func Start(opts ...Option) (*Server, func()) {
 	paladindatav1connect.RegisterMultipartUploadServiceHandler(server, s)
 	paladindatav1connect.RegisterStorageBootstrapServiceHandler(server, s)
 	paladindatav1connect.RegisterPresignServiceHandler(server, s)
+	paladinadminv1connect.RegisterCapabilityServiceHandler(server, capabilityService{Server: s})
 	connecthttp.Mount(mux, server)
 
 	mux.Handle(storagePath, http.HandlerFunc(s.storage))

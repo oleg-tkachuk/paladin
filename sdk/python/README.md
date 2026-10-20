@@ -158,7 +158,7 @@ from datetime import datetime, timedelta, timezone
 
 narrowed = paladin.attenuate(
     issued.biscuit,
-    ops=["get"],
+    ops=[paladin.Op.GET],
     resource_prefixes=["corpus/public/"],
     planes=["data"],  # the capability planes: "data", "admin", "mcp"
     expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
@@ -168,14 +168,18 @@ client = paladin.Client(data_url, capability=narrowed)
 
 | Name | Does |
 | --- | --- |
-| `biscuit_of(resp)` | The Biscuit an Issue or Delegate answer carries. Only a capability whose ops include `share` is sealed as one, and neither a key-bound one nor one not valid yet; raises `NoBiscuitError`, whose `status` is the answer's `biscuit_status`, when it carries none. `require_biscuit` on the request refuses one that could not be sealed before anything is issued. |
+| `credential_of(resp)` | What to present for the capability an Issue or Delegate answer carries: a `Credential` whose `value` is the Biscuit when `biscuit_status` is `ISSUED` and the token otherwise, with its `form` (`CredentialForm.BISCUIT` or `.TOKEN`) and the `biscuit_status` that says why. Both forms go to `capability=` alike, so a client that only presents the capability needs nothing more. Raises `NoCredentialError` for an answer that carries neither. |
+| `biscuit_of(resp)` | The Biscuit an Issue or Delegate answer carries. Every capability is sealed as one but a key-bound one and one not valid yet; raises `NoBiscuitError`, whose `status` is the answer's `biscuit_status`, when it carries none. `require_biscuit` on the request refuses one that could not be sealed before anything is issued. |
 | `attenuate(token, *, ops=None, resource_prefixes=None, resource_uris=None, planes=None, expires_at=None, bind_jkt=None, max_requests=None, max_budget_nanos=None)` | `token` with one more block appended, as a new token; `token` keeps working. An argument left `None` leaves that dimension as it is; a set one replaces it and must be within what the token allows, or the server refuses the whole token. Setting `resource_prefixes` or `resource_uris` replaces both. `expires_at` is timezone-aware and kept to the second. `bind_jkt` (`dpop_thumbprint(key.public_key())`) binds the token to a key, and only an unbound token can be bound. `max_requests` and `max_budget_nanos` (non-negative `int`s; nanos are billionths of the capability's unit) give the copy limits of its own, counted apart from other copies and within every limit already in force; 0 freezes the copy without revoking it, so its first request and first charge are refused; `CapabilityService.get_biscuit_usage` reports each limit in force on a copy with what has been counted against it. Raises `ValueError` for a JWT or anything else that is not a Paladin Biscuit, `ImportError` without the extra. |
 
 The block holds only the facts the server reads
 ([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json));
 the server's tests verify a token this SDK attenuated. The operations a
-capability names are `OP_GET`, `OP_PUT`, `OP_LIST`, `OP_DELETE`, `OP_SHARE`,
-`OP_MANAGE`, `OP_OBJECT_PRESIGN` and `OP_OBJECT_TAG`.
+capability names are the members of `Op`, a `StrEnum`: `Op.GET`, `Op.PUT`,
+`Op.LIST`, `Op.DELETE`, `Op.SHARE`, `Op.MANAGE`, `Op.OBJECT_PRESIGN` and
+`Op.OBJECT_TAG`, also exported as `OP_GET` … `OP_OBJECT_TAG`. A member is a
+`str`, so it goes into `CapabilityCaveats(ops=[...])` as it is; `attenuate`
+raises `ValueError` for an op that is no member, such as a bare `"presign"`.
 
 `CapabilityService.revoke_biscuit` revokes one copy: the token sent and every
 copy attenuated from it. The copy it came from, its siblings and the
@@ -431,7 +435,8 @@ with FakePaladin() as fake:
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`regenerate_upload_url`,
-`presign_download`) and `StorageBootstrapService`; every other RPC answers
+`presign_download`), `StorageBootstrapService` and `CapabilityService`
+(`issue`, `delegate`, `revoke`, `get`); every other RPC answers
 `UNIMPLEMENTED`. Like the server it runs protovalidate on every request,
 after authentication, so a request the contract's rules refuse is
 `InvalidArgumentError`; it checks `delete_object`'s `resource_version` —
@@ -519,6 +524,24 @@ the tenant the call names. It verifies no signature, Biscuit, caveat,
 scope, audience or expiry, and has no platform admin acting in another
 tenant. A refused call is in `requests()`, and is refused before
 `fail_rpc`'s failures, which it does not spend.
+
+Its `CapabilityService` holds a capability to the server's rules where a
+consumer's tests meet them, as the Go SDK's fake does, and the server's tests
+hold that fake to the same answers:
+
+| Request | Answer |
+| --- | --- |
+| An operation limes does not define and that is not namespaced, such as a bare `presign` | `INVALID_ARGUMENT` |
+| No request or no budget ceiling, or a `not_before` past the expiry | `INVALID_ARGUMENT` |
+| A key-bound capability, or one valid only from a later `not_before` | Its token alone, `biscuit_status` `KEY_BOUND` or `NOT_YET_VALID`; with `require_biscuit`, `FAILED_PRECONDITION` |
+| Any other, `share` or no `share` | Its token and its Biscuit, `ISSUED` |
+| `delegate` with no capability presented, or from a Biscuit copy | `FAILED_PRECONDITION` |
+| `delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PERMISSION_DENIED` |
+
+The token and the Biscuit are the fake's own credentials — `attenuate`
+refuses its Biscuit — and both are accepted with `strict_auth` until the
+capability is revoked; `revoke` with `cascade_children` revokes its children
+too. It checks no audience, resource, plane or copy quota.
 
 ### Concurrency and asyncio
 

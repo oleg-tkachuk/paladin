@@ -14,6 +14,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Protocol
 
 import pyqwest
@@ -35,22 +36,42 @@ AUDIENCE_IAM = "paladin-iam"
 # The operations a capability names in its caveats. tests/test_capability_ops.py
 # keeps them equal to sdk/testdata/capability_ops.json, which the Go SDK and
 # the server are held to as well.
-OP_GET = "get"
-"""Read one resource."""
-OP_PUT = "put"
-"""Write one resource."""
-OP_LIST = "list"
-"""List resources under a prefix."""
-OP_DELETE = "delete"
-"""Delete a resource."""
-OP_SHARE = "share"
-"""Delegate a narrower capability, and let it be sealed as a Biscuit, which is handed on offline."""
-OP_MANAGE = "manage"
-"""Administer: tenants, policy."""
-OP_OBJECT_PRESIGN = "object:presign"
-"""Mint a presigned URL for an object; the URL's own method needs get or put."""
-OP_OBJECT_TAG = "object:tag"
-"""Read or change an object's tags."""
+
+
+class Op(StrEnum):
+    """An operation a capability names in its caveats. A ``str``, so it goes
+    into ``CapabilityCaveats(ops=[...])`` as it is, and a misspelt member is an
+    ``AttributeError`` where it is written rather than an InvalidArgument from
+    the server."""
+
+    GET = "get"
+    """Read one resource."""
+    PUT = "put"
+    """Write one resource."""
+    LIST = "list"
+    """List resources under a prefix."""
+    DELETE = "delete"
+    """Delete a resource."""
+    SHARE = "share"
+    """Delegate a narrower capability through ``CapabilityService.Delegate``.
+    A Biscuit needs none: its holder narrows it offline."""
+    MANAGE = "manage"
+    """Administer: tenants, policy."""
+    OBJECT_PRESIGN = "object:presign"
+    """Mint a presigned URL for an object; the URL's own method needs get or put."""
+    OBJECT_TAG = "object:tag"
+    """Read or change an object's tags."""
+
+
+# The same operations under their earlier names.
+OP_GET = Op.GET
+OP_PUT = Op.PUT
+OP_LIST = Op.LIST
+OP_DELETE = Op.DELETE
+OP_SHARE = Op.SHARE
+OP_MANAGE = Op.MANAGE
+OP_OBJECT_PRESIGN = Op.OBJECT_PRESIGN
+OP_OBJECT_TAG = Op.OBJECT_TAG
 
 TOKEN_REFRESH_MARGIN = 30.0
 """Seconds before expiry at which a cached access token is replaced."""

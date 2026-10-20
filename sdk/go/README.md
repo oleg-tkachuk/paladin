@@ -129,9 +129,12 @@ and `Issue*` calls and answers a repeated key with the first response.
 
 `CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
-no key and no call to the server. Only a capability whose ops include `share`
-is sealed as one, and neither a key-bound one nor one not valid yet:
-`biscuit_status` says which. `paladin.BiscuitOf(issued)` returns the Biscuit,
+no key and no call to the server. Every capability is sealed as one but a
+key-bound one and one not valid yet: `biscuit_status` says which.
+`paladin.CredentialOf(issued)` is what to present: the Biscuit when it was
+issued, the token otherwise, with its `Form` and the `BiscuitStatus` that says
+why — both forms go to `WithCapability` alike, so a client that only presents
+the capability needs nothing more. `paladin.BiscuitOf(issued)` returns the Biscuit,
 or an error wrapping `paladin.ErrNoBiscuit` that names the status, and
 `require_biscuit` on the request refuses one that could not be sealed before
 anything is issued. `paladin.Attenuate` narrows it, writing the block with
@@ -140,7 +143,7 @@ implementation of the vocabulary to drift from it:
 
 ```go
 narrowed, err := paladin.Attenuate(biscuit, paladin.Attenuation{
-    Ops:              []string{paladin.OpGet},
+    Ops:              []paladin.Op{paladin.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
     Planes:           []string{"data"}, // the data plane
     ExpiresAt:        time.Now().Add(10 * time.Minute),
@@ -156,8 +159,11 @@ token can be bound. `MaxRequests` and `MaxBudgetNanos` (in nanos, billionths
 of the capability's unit) give the copy limits of its own, counted apart from other
 copies and within every limit already in force; spending past them answers
 `ResourceExhausted`. A limit of 0 freezes the copy without revoking it. A token that is no Paladin Biscuit wraps `ErrInvalidArgument`. The
-operations a capability names are this package's `OpGet`, `OpPut`, `OpList`,
-`OpDelete`, `OpShare`, `OpManage`, `OpObjectPresign` and `OpObjectTag`.
+operations a capability names are this package's `Op` constants: `OpGet`,
+`OpPut`, `OpList`, `OpDelete`, `OpShare`, `OpManage`, `OpObjectPresign` and
+`OpObjectTag`, so a misspelt one fails to compile. `OpNames` spells them for
+`CapabilityCaveats.ops`, and `Op.Validate` refuses, wrapping
+`ErrInvalidArgument`, a name the server refuses, such as a bare `presign`.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
 force on it with what has been counted against it. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
@@ -400,7 +406,8 @@ data, _ := srv.Content(obj.GetName())
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`RegenerateUploadUrl`,
-`PresignDownload`) and `StorageBootstrapService`; every other RPC answers
+`PresignDownload`), `StorageBootstrapService` and `CapabilityService`
+(`Issue`, `Delegate`, `Revoke`, `Get`); every other RPC answers
 `Unimplemented`. Like the server it runs protovalidate on every request,
 after authentication, so a request the contract's rules refuse is
 `ErrInvalidArgument`; it checks `DeleteObject`'s `resource_version` —
@@ -488,6 +495,24 @@ the tenant the call names. It verifies no signature, Biscuit, caveat,
 scope, audience or expiry, and has no platform admin acting in another
 tenant. A refused call is in `Requests`, and is refused before `FailRPC`'s
 failures, which it does not spend.
+
+Its `CapabilityService` holds a capability to the server's rules where a
+consumer's tests meet them, and the server's tests hold the fake to the same
+answers:
+
+| Request | Answer |
+| --- | --- |
+| An operation limes does not define and that is not namespaced, such as a bare `presign` | `InvalidArgument` |
+| No request or no budget ceiling, or a `not_before` past the expiry | `InvalidArgument` |
+| A key-bound capability, or one valid only from a later `not_before` | Its token alone, `biscuit_status` `KEY_BOUND` or `NOT_YET_VALID`; with `require_biscuit`, `FailedPrecondition` |
+| Any other, `share` or no `share` | Its token and its Biscuit, `ISSUED` |
+| `Delegate` with no capability presented, or from a Biscuit copy | `FailedPrecondition` |
+| `Delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PermissionDenied` |
+
+The token and the Biscuit are the fake's own credentials — `Attenuate`
+refuses its Biscuit — and both are accepted under `WithStrictAuth` until the
+capability is revoked; `Revoke` with `cascade_children` revokes its children
+too. It checks no audience, resource, plane or copy quota.
 
 ### Concurrency
 
