@@ -279,6 +279,25 @@ browser and shows again when any of those changes. An unknown severity reads
 as `info`, an unknown position as `top`, and a link that is neither `http(s)`
 nor a console path is dropped.
 
+### Resource notices
+
+A tenant or a bucket can carry a notice of its own, after Argo CD's
+`notice.argocd.argoproj.io/*` annotations: a banner on its pages and a glyph
+with a tooltip in its list row. It is kept in the resource's labels:
+
+| Label | Meaning |
+| --- | --- |
+| `notice.paladin.io/content` | the message; without it there is no notice |
+| `notice.paladin.io/severity` | `info` (default), `warning` or `critical` |
+| `notice.paladin.io/url` | where "Read more" goes, as for the banner |
+| `notice.paladin.io/permanent` | `true`: nobody can dismiss it |
+
+A tenant's notice is set in the console's Edit tenant dialog. A bucket's is
+set through `UpdateBucket` with `labels` in the update mask, which replaces
+every label, so send the ones it has as well. Content past 500 characters is
+cut. Dismissals are remembered like the banner's. Storage backends carry no
+labels, so they have no notice.
+
 ### Build metadata
 
 `frontend/configs/config.yaml`, read at boot from `/app/configs/config.yaml`
