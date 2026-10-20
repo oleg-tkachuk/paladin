@@ -42,6 +42,9 @@ on:
   repository_dispatch:
     types: [release]
   workflow_dispatch:
+    # The one input picks the tag cut, vX.Y.Z or vX.Y.Z-rc.N, not what is
+    # built: the build is the commit CI passed on main, from its own tree.
+    # checkov:skip=CKV_GHA_7: the channel names a release, it does not change the build
     inputs:
       channel:
         description: A release, or a release candidate (vX.Y.Z-rc.N)
