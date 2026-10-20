@@ -34,6 +34,7 @@ describe("TENANT_TAB_GROUPS", () => {
       [
         "",
         "audit-log",
+        "billing",
         "budget",
         "buckets",
         "capabilities",

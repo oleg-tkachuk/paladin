@@ -60,11 +60,24 @@ describe("card titles", () => {
   const EXEMPT: [file: string, heading: string, why: string][] = [
     [
       "app/billing/page.tsx",
+      "No tenant to show",
+      "a message in place of the page",
+    ],
+    [
+      "components/features/billing/TenantBilling.tsx",
       "Billing is unavailable",
       "a message in place of the page",
     ],
-    ["app/billing/page.tsx", "No charges in this period", "an empty state"],
-    ["app/billing/page.tsx", "{label}", "a figure's label on a number tile"],
+    [
+      "components/features/billing/TenantBilling.tsx",
+      "No charges in this period",
+      "an empty state",
+    ],
+    [
+      "components/features/billing/TenantBilling.tsx",
+      "{label}",
+      "a figure's label on a number tile",
+    ],
     [
       "app/storage-backends/[backendId]/buckets/[bucketId]/lifecycle/page.tsx",
       "No lifecycle rules",
