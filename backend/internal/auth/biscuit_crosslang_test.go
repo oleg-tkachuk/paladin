@@ -23,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
 // The cross-language Biscuit case. limes mints seed.biscuit from its golden
@@ -114,6 +115,13 @@ func (noBiscuitRevocations) IsBiscuitRevoked(context.Context, [][]byte) (bool, e
 
 type crossLangCase struct {
 	Attenuate struct {
+		Ops              []string  `json:"ops"`
+		ResourcePrefixes []string  `json:"resource_prefixes"`
+		Planes           []string  `json:"planes"`
+		ExpiresAt        time.Time `json:"expires_at"`
+		BindJKT          string    `json:"bind_jkt"`
+		MaxRequests      int64     `json:"max_requests"`
+		MaxBudgetNanos   int64     `json:"max_budget_nanos"`
 		// BindKeySeed is the hex seed of the Ed25519 key the copy is bound
 		// to, so the proof of possession can be signed.
 		BindKeySeed string `json:"bind_key_seed"`
@@ -169,13 +177,42 @@ func crossLangVerifier(t *testing.T) *limes.Verifier {
 	return v
 }
 
-// The token the Python SDK attenuated verifies under limes, narrowed exactly
-// as the shared case says.
-func TestPythonAttenuationVerifies(t *testing.T) {
+// readCrossLangCase is the shared attenuation case.
+func readCrossLangCase(t *testing.T) crossLangCase {
+	t.Helper()
 	var c crossLangCase
 	if err := json.Unmarshal([]byte(readShared(t, biscuitCase)), &c); err != nil {
 		t.Fatalf("parse case: %v", err)
 	}
+	return c
+}
+
+// The token the Python SDK attenuated verifies under limes, narrowed exactly
+// as the shared case says.
+func TestPythonAttenuationVerifies(t *testing.T) {
+	c := readCrossLangCase(t)
+	checkCrossLangAttenuation(t, c, readShared(t, pythonBiscuit), "Python")
+}
+
+// The Go SDK, which its clients narrow a Biscuit with, attenuates the seed
+// into a token the verifier reads as the shared case says.
+func TestGoSDKAttenuationVerifies(t *testing.T) {
+	c := readCrossLangCase(t)
+	a := c.Attenuate
+	token, err := paladin.Attenuate(readShared(t, biscuitSeed), paladin.Attenuation{
+		Ops: a.Ops, ResourcePrefixes: a.ResourcePrefixes, Planes: a.Planes, ExpiresAt: a.ExpiresAt,
+		BindJKT: a.BindJKT, MaxRequests: &a.MaxRequests, MaxBudgetNanos: &a.MaxBudgetNanos,
+	})
+	if err != nil {
+		t.Fatalf("the Go SDK refuses the shared case: %v", err)
+	}
+	checkCrossLangAttenuation(t, c, token, "Go SDK")
+}
+
+// checkCrossLangAttenuation verifies token, the seed attenuated by who with
+// the shared case's arguments, and holds it to what the case expects.
+func checkCrossLangAttenuation(t *testing.T, c crossLangCase, token, who string) {
+	t.Helper()
 	v := crossLangVerifier(t)
 	bindSeed, err := hex.DecodeString(c.Attenuate.BindKeySeed)
 	if err != nil || len(bindSeed) != ed25519.SeedSize {
@@ -189,7 +226,6 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	seed := seedVerified.Capability()
-	token := readShared(t, pythonBiscuit)
 	// The copy is bound, so it is accepted only with a proof from its key.
 	proof, err := dpop.Sign(ctx, bindKey, dpop.SignRequest{
 		Method: http.MethodPost, URL: crossLangProofURL, Token: token, IssuedAt: crossLangClock(),
@@ -202,7 +238,7 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 		DPoP: dpop.Proof{JWT: proof, Method: http.MethodPost, URL: crossLangProofURL},
 	})
 	if err != nil {
-		t.Fatalf("the Python-attenuated token is refused: %v", err)
+		t.Fatalf("the %s-attenuated token is refused: %v", who, err)
 	}
 	got := verified.Capability()
 
