@@ -29,7 +29,6 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BackendActions } from "./BackendActions";
 import { BackendHeader, kindLabel } from "./BackendHeader";
 import { FeaturesSummary } from "./FeaturesSummary";
-import { FEATURES_TAB } from "./BackendHeader";
 import { healthView } from "../backendView";
 
 import { Button } from "@/components/ui/button";
@@ -38,10 +37,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusPanel, type StatusCardSpec } from "@/components/ui/StatusPanel";
 import { RelativeTime } from "@/components/RelativeTime";
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
-import { backendHref } from "@/lib/navigation/hrefs";
 import {
   backendLifecycleStatus,
-  compatibilityStatus,
   maintenanceStatus,
 } from "@/lib/resourceStatus";
 import { cn } from "@/lib/utils";
@@ -201,8 +198,9 @@ export default function StorageBackendDetailPage() {
 
 /**
  * Where the backend stands, after Argo CD's status panel: what it lets
- * through, what its last probe found of it and of its S3 features, and
- * whether an operator marked it as under maintenance.
+ * through, what its last probe found of it, and whether an operator marked
+ * it as under maintenance. Its S3 features have a tab of their own, so the
+ * panel does not repeat them.
  */
 function BackendStatusPanel({ backend }: { backend: StorageBackend }) {
   const health = healthView(backend);
@@ -220,13 +218,6 @@ function BackendStatusPanel({ backend }: { backend: StorageBackend }) {
         health.title
       ),
       help: "storageFeatures",
-    },
-    {
-      title: "S3 features",
-      ...compatibilityStatus(backend),
-      help: "storageFeatures",
-      href: `${backendHref(backend.backendId)}/${FEATURES_TAB}`,
-      linkLabel: "Open S3 features",
     },
     { title: "Maintenance", ...maintenanceStatus(backend.maintenance) },
   ];
