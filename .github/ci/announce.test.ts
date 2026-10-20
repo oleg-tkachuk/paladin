@@ -15,8 +15,15 @@ test("the release, with generated notes and every SBOM", async () => {
     for (const f of ["b.spdx.json", "a.spdx.json", "notes.txt"]) writeFileSync(join(dir, f), "{}");
     await announce(fakeGitHub(data), "v1.0.0", dir);
     assert.deepEqual(data.published, [
-      { tag: "v1.0.0", title: "v1.0.0", notes: { generated: true }, latest: true, assets: [join(dir, "a.spdx.json"), join(dir, "b.spdx.json")] },
+      { tag: "v1.0.0", title: "v1.0.0", notes: { generated: true }, latest: true, prerelease: false, assets: [join(dir, "a.spdx.json"), join(dir, "b.spdx.json")] },
     ]);
+
+    // A release candidate is a prerelease, and never the Latest.
+    await announce(fakeGitHub(data), "v1.1.0-rc.1", dir);
+    assert.deepEqual(
+      data.published.slice(1).map((r) => [r.tag, r.latest, r.prerelease]),
+      [["v1.1.0-rc.1", false, true]],
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -31,6 +31,9 @@ name: Release
 #   workflow_dispatch    an operator, when the product is to be released: the
 #                        product's tag from every change since the last one, so
 #                        however many breaking changes it carries make one major.
+#                        The prerelease channel tags a release candidate of that
+#                        version instead, vX.Y.Z-rc.N, published like a release
+#                        and announced as a prerelease (.github/ci/prerelease.ts).
 #
 # A manual run releases main's head only once CI passed on it
 # (.github/ci/release-head.ts): a click cannot release an untested commit, which is
@@ -39,6 +42,12 @@ on:
   repository_dispatch:
     types: [release]
   workflow_dispatch:
+    inputs:
+      channel:
+        description: A release, or a release candidate (vX.Y.Z-rc.N)
+        type: choice
+        options: [release, prerelease]
+        default: release
 
 permissions: {}
 
@@ -142,12 +151,18 @@ jobs:
       # The product releases by hand only: a train of every change since the
       # last release, rather than a release per merge.
       - name: Compute and push the tag
-        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch'
+        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'release'
         working-directory: .github/release
         run: npx semantic-release --no-ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_STREAM: product
+
+      # A release candidate of the version the release would be: the same
+      # pipeline below publishes and announces it. See .github/ci/prerelease.ts.
+      - name: Tag a release candidate
+        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'prerelease'
+        run: node .github/ci/prerelease.ts
 
       # The SDK versions on its own, from the commits that touch it
       # (.github/release/release.config.cjs). Its tag is the release: the Go
