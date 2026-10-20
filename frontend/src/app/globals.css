@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 /* Both dark palettes take the `dark:` variant. Light is the bare :root. */
-@custom-variant dark (&:is(.dark *, .ember *));
+@custom-variant dark (&:is(.dark *, .ember *, .navy *, .graphite *, .bordeaux *));
 
 /* ─── shadcn/ui tokens (neutral, dark-default) ─────────────────────────── */
 @theme inline {
@@ -295,6 +295,193 @@
   --elevation-highlight: rgb(255 255 255 / 7%);
 }
 
+.navy {
+  /* ── "Navy" ──────────────────────────────────────────────────────────────
+   * A cool dark palette after Argo CD's: a slate-ink ground, a saturated
+   * navy sidebar, and an azure accent with near-black text on it.
+   */
+  --radius: 0.7rem;
+
+  --background: #12161d;
+  --foreground: #e6ebf2;
+  --card: #1b212b;
+  --card-foreground: #e6ebf2;
+  --band: #202734;
+  --popover: #232a37;
+  --popover-foreground: #e6ebf2;
+
+  --primary: #5b9dff;
+  --primary-foreground: #0a111d;
+
+  --secondary: #222a36;
+  --secondary-foreground: #e6ebf2;
+  --muted: #222a36;
+  --muted-foreground: #9aa6b6;
+  --accent: #222a36;
+  --accent-foreground: #e6ebf2;
+
+  --destructive: #ff6470;
+  --destructive-foreground: #0a111d;
+  --success: #3fd59a;
+  --warning: #f2b553;
+  --warning-foreground: #0a111d;
+  --info: #7cc3f7;
+  --progress: #4fd4e0;
+  --suspended: #b6a6f5;
+  --unknown: #a0a8b4;
+
+  --border: #333c4a;
+  --input: #36404f;
+  --ring: #5b9dff;
+
+  --chart-1: #5b9dff;
+  --chart-2: #3fd59a;
+  --chart-3: #f2b553;
+  --chart-4: #ff6470;
+  --chart-5: #b6a6f5;
+
+  /* The sidebar is the palette's namesake: a zone of its own, a step */
+  /* above the ground. */
+  --sidebar: #172030;
+  --sidebar-foreground: #e6ebf2;
+  --sidebar-primary: #5b9dff;
+  --sidebar-primary-foreground: #0a111d;
+  --sidebar-accent: #252f40;
+  --sidebar-accent-foreground: #e6ebf2;
+  --sidebar-border: #2f394a;
+  --sidebar-ring: #5b9dff;
+
+  --elevation-shadow: rgb(0 0 0 / 25%);
+  --elevation-shadow-soft: rgb(0 0 0 / 50%);
+  --elevation-shadow-strong: rgb(0 0 0 / 45%);
+  --elevation-highlight: rgb(255 255 255 / 7%);
+}
+
+.graphite {
+  /* ── "Graphite" ──────────────────────────────────────────────────────────
+   * A neutral dark palette: grey planes with no tint, a lighter graphite
+   * sidebar, and one chartreuse accent with near-black text on it.
+   */
+  --radius: 0.5rem;
+
+  --background: #111113;
+  --foreground: #ececef;
+  --card: #1a1a1e;
+  --card-foreground: #ececef;
+  --band: #202024;
+  --popover: #242428;
+  --popover-foreground: #ececef;
+
+  --primary: #c8e64a;
+  --primary-foreground: #121407;
+
+  --secondary: #232327;
+  --secondary-foreground: #ececef;
+  --muted: #232327;
+  --muted-foreground: #a3a3aa;
+  --accent: #232327;
+  --accent-foreground: #ececef;
+
+  --destructive: #ff5f68;
+  --destructive-foreground: #121407;
+  --success: #3ddc97;
+  --warning: #f5b14c;
+  --warning-foreground: #121407;
+  --info: #6bb8f2;
+  --progress: #4fd4e0;
+  --suspended: #b9a7f0;
+  --unknown: #a3a3aa;
+
+  --border: #36363b;
+  --input: #3a3a40;
+  --ring: #c8e64a;
+
+  --chart-1: #c8e64a;
+  --chart-2: #3ddc97;
+  --chart-3: #f5b14c;
+  --chart-4: #ff5f68;
+  --chart-5: #6bb8f2;
+
+  /* The sidebar is the palette's namesake: a zone of its own, a step */
+  /* above the ground. */
+  --sidebar: #202024;
+  --sidebar-foreground: #ececef;
+  --sidebar-primary: #c8e64a;
+  --sidebar-primary-foreground: #121407;
+  --sidebar-accent: #2e2e33;
+  --sidebar-accent-foreground: #ececef;
+  --sidebar-border: #3c3c42;
+  --sidebar-ring: #c8e64a;
+
+  --elevation-shadow: rgb(0 0 0 / 25%);
+  --elevation-shadow-soft: rgb(0 0 0 / 50%);
+  --elevation-shadow-strong: rgb(0 0 0 / 45%);
+  --elevation-highlight: rgb(255 255 255 / 7%);
+}
+
+.bordeaux {
+  /* ── "Bordeaux" ──────────────────────────────────────────────────────────
+   * A warm dark palette: a wine-black ground, a bordeaux sidebar, and a
+   * gold accent with near-black text on it. Warnings turn orange, away
+   * from the gold.
+   */
+  --radius: 0.8rem;
+
+  --background: #151113;
+  --foreground: #f1e8ec;
+  --card: #1f191c;
+  --card-foreground: #f1e8ec;
+  --band: #251e22;
+  --popover: #282125;
+  --popover-foreground: #f1e8ec;
+
+  --primary: #e9b949;
+  --primary-foreground: #1a1206;
+
+  --secondary: #261f23;
+  --secondary-foreground: #f1e8ec;
+  --muted: #261f23;
+  --muted-foreground: #ad9ea5;
+  --accent: #261f23;
+  --accent-foreground: #f1e8ec;
+
+  --destructive: #ff6b6b;
+  --destructive-foreground: #1a1206;
+  --success: #3fd39a;
+  --warning: #ff9f55;
+  --warning-foreground: #1a1206;
+  --info: #6db7ec;
+  --progress: #4fd0dc;
+  --suspended: #c2a5ee;
+  --unknown: #a99da3;
+
+  --border: #3b2f35;
+  --input: #3f3339;
+  --ring: #e9b949;
+
+  --chart-1: #e9b949;
+  --chart-2: #3fd39a;
+  --chart-3: #ff9f55;
+  --chart-4: #ff6b6b;
+  --chart-5: #6db7ec;
+
+  /* The sidebar is the palette's namesake: a zone of its own, a step */
+  /* above the ground. */
+  --sidebar: #28171f;
+  --sidebar-foreground: #f1e8ec;
+  --sidebar-primary: #e9b949;
+  --sidebar-primary-foreground: #1a1206;
+  --sidebar-accent: #37252e;
+  --sidebar-accent-foreground: #f1e8ec;
+  --sidebar-border: #45323a;
+  --sidebar-ring: #e9b949;
+
+  --elevation-shadow: rgb(0 0 0 / 25%);
+  --elevation-shadow-soft: rgb(0 0 0 / 50%);
+  --elevation-shadow-strong: rgb(0 0 0 / 45%);
+  --elevation-highlight: rgb(255 255 255 / 7%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -303,7 +490,10 @@
     color-scheme: light;
   }
   html.dark,
-  html.ember {
+  html.ember,
+  html.navy,
+  html.graphite,
+  html.bordeaux {
     color-scheme: dark;
   }
   body {

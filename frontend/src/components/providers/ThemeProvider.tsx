@@ -11,7 +11,7 @@ import { DEFAULT_THEME, PALETTES } from "@/lib/theme";
  * SettingsSync then applies the theme saved in the user's settings.
  *
  * color-scheme is left to globals.css: next-themes only writes it for
- * "light" and "dark", and would leave a stale value under "ember".
+ * "light" and "dark", and would leave a stale value under the other palettes.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
