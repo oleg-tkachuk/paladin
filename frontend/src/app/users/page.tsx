@@ -249,6 +249,10 @@ export default function UsersPage() {
                     icon: UserCircleIcon,
                     what: "users",
                     reason: emptyReason({ filtered: users.length > 0 }),
+                    onClearFilters: () => {
+                      view.setQuery("");
+                      facets.clear();
+                    },
                   }
                 : null
             }

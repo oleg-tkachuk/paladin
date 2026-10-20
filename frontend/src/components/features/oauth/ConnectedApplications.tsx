@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { CLEAR_FILTERS_LABEL } from "@/components/ui/EmptyState";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import {
   RecordDialog,
@@ -240,9 +241,24 @@ export function ConnectedApplications({
                       colSpan={GRANT_COLUMNS}
                       className="whitespace-normal py-8 text-center text-muted-foreground"
                     >
-                      {grants.length > 0
-                        ? "No application matches your filters. Ended grants stay listed until their tokens are purged."
-                        : `${own ? "You have" : "This user has"} not let any application in. An agent that authorizes through OAuth — one connected to the MCP server, say — appears here.`}
+                      {grants.length > 0 ? (
+                        <div className="flex flex-col items-center gap-3">
+                          No application matches your filters. Ended grants stay
+                          listed until their tokens are purged.
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              view.setQuery("");
+                              facets.clear();
+                            }}
+                          >
+                            {CLEAR_FILTERS_LABEL}
+                          </Button>
+                        </div>
+                      ) : (
+                        `${own ? "You have" : "This user has"} not let any application in. An agent that authorizes through OAuth — one connected to the MCP server, say — appears here.`
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (

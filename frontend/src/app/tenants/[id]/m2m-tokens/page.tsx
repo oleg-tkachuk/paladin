@@ -365,6 +365,10 @@ export default function M2MTokensPage() {
                     what: "M2M tokens",
                     // A search or a state filter can hide every token.
                     reason: emptyReason({ filtered: tokens.length > 0 }),
+                    onClearFilters: () => {
+                      view.setQuery("");
+                      facets.clear();
+                    },
                     purpose:
                       "An M2M token lets a service call Paladin's APIs as this tenant, with the roles and scopes it was issued.",
                     action: {

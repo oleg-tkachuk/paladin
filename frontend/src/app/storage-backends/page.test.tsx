@@ -597,6 +597,26 @@ describe("StorageBackendsPage facets", () => {
       screen.queryByRole("button", { name: /Register the first backend/ }),
     ).toBeNull();
   });
+
+  it("shows every backend again from the empty state", async () => {
+    h.backends = [makeBackend({ backendId: "live" })];
+    window.history.replaceState(null, "", "/storage-backends?q=x&state=any");
+    render(<StorageBackendsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by state" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Disabled/ }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByText("live")).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear filters" }),
+    );
+    expect(screen.getByText("live")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+  });
 });
 
 // A list that FAILED must not render as a list that is empty.

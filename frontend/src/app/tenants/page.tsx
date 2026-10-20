@@ -248,6 +248,10 @@ export default function TenantsPage() {
                     reason: emptyReason({
                       filtered: !!search || facets.active > 0,
                     }),
+                    onClearFilters: () => {
+                      setSearch("");
+                      facets.clear();
+                    },
                     purpose:
                       "A tenant is one customer kept apart from the rest: its own users, collections, quotas and budget.",
                     action: {

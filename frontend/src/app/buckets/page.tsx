@@ -217,6 +217,10 @@ export default function BucketsPage() {
                 pending: searchPending,
                 filtered: hasFilters,
               })}
+              onClearFilters={() => {
+                setSearch("");
+                facets.clear();
+              }}
               purpose="A bucket is a store on a backend that collections keep their objects in."
               action={{
                 label: "Create the first bucket",

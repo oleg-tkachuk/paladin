@@ -341,6 +341,11 @@ export default function StorageBackendsPage() {
   };
 
   const hasFilters = search.trim() !== "" || facets.active > 0;
+  // The empty state's way back when the search and the facets hid every row.
+  const clearFilters = () => {
+    setSearch("");
+    facets.clear();
+  };
   // The debounce has not fired yet, or its refetch is still running.
   const searchPending = search.trim() !== debouncedSearch.trim() || loading;
   // "All" is every row on screen: selecting all while the list is narrowed
@@ -457,6 +462,7 @@ export default function StorageBackendsPage() {
                       pending: searchPending,
                       filtered: hasFilters,
                     }),
+                    onClearFilters: clearFilters,
                     purpose:
                       "A storage backend is an S3-compatible store Paladin keeps objects in.",
                     action: {
