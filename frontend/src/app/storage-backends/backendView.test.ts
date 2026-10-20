@@ -5,6 +5,7 @@ import {
   HEALTH_OK,
   STATE_FILTERS,
   allOf,
+  backendStatus,
   healthView,
   lifecycleState,
   stateFilter,
@@ -80,5 +81,43 @@ describe("healthView", () => {
         expect.objectContaining({ label: "Untested", tone: "unknown" }),
       );
     }
+  });
+});
+
+describe("backendStatus", () => {
+  const healthy = {
+    enabled: true,
+    readOnly: false,
+    maintenance: false,
+    healthStatus: HEALTH_OK,
+    healthMessage: "",
+  };
+
+  // Each backend counts once in the status bar, under the state that most
+  // needs saying, in this order.
+  it.each([
+    ["healthy", {}, "Healthy", "success"],
+    ["untested", { healthStatus: "" }, "Untested", "unknown"],
+    ["draining", { readOnly: true }, "Draining", "progress"],
+    [
+      "in maintenance",
+      { maintenance: true, readOnly: true },
+      "Maintenance",
+      "suspended",
+    ],
+    [
+      "failing its probe",
+      { healthStatus: HEALTH_ERROR, maintenance: true },
+      "Probe failed",
+      "danger",
+    ],
+    [
+      "disabled",
+      { enabled: false, healthStatus: HEALTH_ERROR },
+      "Disabled",
+      "suspended",
+    ],
+  ] as const)("leads a %s backend with its state", (_, over, label, tone) => {
+    expect(backendStatus({ ...healthy, ...over })).toEqual({ label, tone });
   });
 });

@@ -19,6 +19,24 @@ export function statusSegments(segments: StatusSegment[]): StatusSegment[] {
     );
 }
 
+/**
+ * A list's items tallied by the one state each leads with, as segments in
+ * the order states first appear; statusSegments orders them for the bar.
+ */
+export function tallyStatus<R>(
+  rows: readonly R[],
+  statusOf: (row: R) => { label: string; tone: StatusTone },
+): StatusSegment[] {
+  const byLabel = new Map<string, StatusSegment>();
+  for (const row of rows) {
+    const { label, tone } = statusOf(row);
+    const seen = byLabel.get(label);
+    if (seen) seen.count += 1;
+    else byLabel.set(label, { tone, label, count: 1 });
+  }
+  return [...byLabel.values()];
+}
+
 /** The tally in words: "2 Error · 1 Maintenance · 9 Healthy". */
 export function statusSummary(segments: StatusSegment[]): string {
   return statusSegments(segments)

@@ -272,6 +272,83 @@ describe("TenantsPage load failure", () => {
   });
 });
 
+describe("TenantsPage views", () => {
+  const tenants = () => [
+    {
+      tenantId: "t-1",
+      slug: "acme",
+      displayName: "Acme Corp",
+      storageLayout: "dedicated",
+      defaultBucket: "storageBackends/primary/buckets/paladin-t-1",
+      labels: { team: "storage" },
+      resourceVersion: "1",
+    },
+    {
+      tenantId: "t-2",
+      slug: "globex",
+      displayName: "Globex",
+      storageLayout: "shared",
+      defaultBucket: "storageBackends/primary/buckets/pool",
+      labels: {
+        "notice.paladin.io/content": "Read-only until Friday",
+        "notice.paladin.io/severity": "critical",
+      },
+      resourceVersion: "1",
+    },
+  ];
+  const renderPage = () =>
+    render(
+      <TooltipProvider>
+        <TenantsPage />
+      </TooltipProvider>,
+    );
+  beforeEach(() => window.history.replaceState(null, "", "/tenants"));
+  afterEach(() => window.history.replaceState(null, "", "/tenants"));
+
+  it("tallies the tenants' states above the list", () => {
+    h.state.tenants = tenants();
+    renderPage();
+    expect(
+      screen.getByRole("img", { name: "1 Critical notice · 1 Active" }),
+    ).toBeInTheDocument();
+  });
+
+  it("lays the tenants out as tiles with links into each", async () => {
+    h.state.tenants = tenants();
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: "Tiles" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const tiles = within(screen.getByRole("list", { name: "Tenants" }));
+    expect(tiles.getAllByRole("listitem")).toHaveLength(2);
+    expect(tiles.getByRole("link", { name: "Globex" })).toHaveAttribute(
+      "href",
+      "/tenants/globex",
+    );
+    expect(tiles.getAllByRole("link", { name: "Quotas" })[0]).toHaveAttribute(
+      "href",
+      "/tenants/acme/quotas",
+    );
+    expect(window.location.search).toBe("?view=tiles");
+  });
+
+  it("opens in the view a link names, as a summary of the tenants", () => {
+    window.history.replaceState(null, "", "/tenants?view=summary");
+    h.state.tenants = tenants();
+    renderPage();
+    const layout = screen
+      .getByRole("heading", { name: "Storage layout" })
+      .closest("[data-slot=card]") as HTMLElement;
+    expect(
+      within(layout)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Dedicated (1)", "Shared (1)"]);
+    expect(
+      screen.getByRole("heading", { name: "Default backend" }),
+    ).toBeInTheDocument();
+  });
+});
+
 // A tenant's row warms the query its page reads, by the handle its link uses.
 describe("TenantsPage row intent", () => {
   it("warms the tenant's detail query when pointed at", async () => {

@@ -95,6 +95,11 @@ import {
 import { TableScope } from "@/components/ui/TableScope";
 import { StatusDot } from "@/components/ui/StatusIcon";
 import { STATUS_BADGE } from "@/lib/ui/status";
+import { StatusBar, tallyStatus } from "@/components/ui/StatusBar";
+import { ViewModeSwitcher } from "@/components/ui/ViewModeSwitcher";
+import { useTableViewMode } from "@/hooks/useTableViewMode";
+import { backendStatus } from "./backendView";
+import { BackendSummary, BackendTiles } from "./BackendViews";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "storageBackends";
@@ -225,6 +230,7 @@ export default function StorageBackendsPage() {
     columns: SORT_COLUMNS,
   });
   const sortProps = { current: sort, onSort: toggleSort };
+  const { view, setView } = useTableViewMode(TABLE_ID);
   const sorted = useMemo(
     () => sortRows(backends, sort, BACKEND_SORT),
     [backends, sort],
@@ -359,22 +365,40 @@ export default function StorageBackendsPage() {
   const allSelected =
     backends.length > 0 && backends.every((b) => selected.has(b.backendId));
 
+  // Tiles or a summary of the rows the table would show; the table itself
+  // while there are none, so loading, a failure and an empty list read as
+  // it says them.
+  const showRows = sorted.length > 0 && !listError;
+  const otherView =
+    showRows && view === "tiles" ? (
+      <BackendTiles backends={sorted} />
+    ) : showRows && view === "summary" ? (
+      <BackendSummary backends={sorted} />
+    ) : undefined;
+
   return (
     <TableScope id={TABLE_ID} sort={sort}>
       <ListPage
         header={
-          <PageHeader
-            title="Storage Backends"
-            description="Physical S3-compatible targets. Buckets and tenants bind here."
-            showDefaultActions={false}
-            actions={
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <PlusIcon className="size-4" />
-                New backend
-              </Button>
-            }
-          />
+          <>
+            <PageHeader
+              title="Storage Backends"
+              description="Physical S3-compatible targets. Buckets and tenants bind here."
+              showDefaultActions={false}
+              actions={
+                <>
+                  <ViewModeSwitcher value={view} onChange={setView} />
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <PlusIcon className="size-4" />
+                    New backend
+                  </Button>
+                </>
+              }
+            />
+            <StatusBar segments={tallyStatus(sorted, backendStatus)} />
+          </>
         }
+        view={otherView}
         toolbar={
           <TableToolbar
             query={search}

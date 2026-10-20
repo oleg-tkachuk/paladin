@@ -93,3 +93,23 @@ export function healthView(b: BackendHealth): {
       };
   }
 }
+
+/**
+ * The one state a backend leads with in the list's status bar and its tile:
+ * its lifecycle and its last probe, folded so each backend counts once.
+ * Disabled first, because an operator chose it and it refuses everything;
+ * then a failed probe, which needs a look; then a maintenance flag and a
+ * drain, changes under way; then an untested backend; then a healthy one.
+ */
+export function backendStatus(
+  b: BackendFlags & BackendHealth & Pick<StorageBackend, "maintenance">,
+): { label: string; tone: StatusTone } {
+  if (!b.enabled) return lifecycleState(b);
+  const { label, tone } = healthView(b);
+  if (b.healthStatus === HEALTH_ERROR) return { label, tone };
+  if (b.maintenance) {
+    return { label: "Maintenance", tone: StatusTone.Suspended };
+  }
+  if (b.readOnly) return lifecycleState(b);
+  return { label, tone };
+}

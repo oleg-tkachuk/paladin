@@ -823,6 +823,20 @@ order they are being taken up.
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
 
+#### The tenants list cannot tell a tenant near its limits
+
+- **Status:** Blocked.
+- **Reason:** the tenants list's status bar, tiles and summary tell a tenant
+  in the trash (Frozen) and one whose notice is a warning or critical from an
+  active one, but not one near its quota or budget: ListTenants carries no
+  usage, and reading each tenant's quotas from the browser is one call per
+  row.
+- **Definition of Done:** "Near quota" and "Over budget" states in
+  `tenantStatus` (app/tenants/tenantView.ts), counted in the status bar and
+  shown on the tiles, from usage the list read serves.
+- **Blockers:** the cross-tenant read in "Dashboard: a trend for the tenants
+  nearest their limits".
+
 #### A bucket's notice is set through the API only
 
 - **Status:** Deferred.

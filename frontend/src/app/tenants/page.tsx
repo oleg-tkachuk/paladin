@@ -51,7 +51,12 @@ import { T } from "@/lib/ui/typography";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
 import { NoticeIcon } from "@/components/ui/Notice";
-import { isNoticeLabel, noticeFromLabels } from "@/lib/notice";
+import { noticeFromLabels } from "@/lib/notice";
+import { StatusBar, tallyStatus } from "@/components/ui/StatusBar";
+import { ViewModeSwitcher } from "@/components/ui/ViewModeSwitcher";
+import { useTableViewMode } from "@/hooks/useTableViewMode";
+import { plainLabels, tenantStatus } from "./tenantView";
+import { TenantSummary, TenantTiles } from "./TenantViews";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "tenants";
@@ -129,22 +134,41 @@ export default function TenantsPage() {
     return list;
   }, [tenants, search, sort]);
 
+  // Tiles or a summary of the rows the table would show; the table itself
+  // while there are none, so loading, a failure and an empty list read as
+  // it says them.
+  const { view, setView } = useTableViewMode(TABLE_ID);
+  const showRows = filtered.length > 0 && !listError;
+  const otherView =
+    showRows && view === "tiles" ? (
+      <TenantTiles tenants={filtered} />
+    ) : showRows && view === "summary" ? (
+      <TenantSummary tenants={filtered} />
+    ) : undefined;
+
   return (
     <TableScope id={TABLE_ID} sort={sort}>
       <ListPage
         header={
-          <PageHeader
-            title="Tenants"
-            description="Multi-tenant workspaces and inherited Cedar policy."
-            showDefaultActions={false}
-            actions={
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <PlusIcon className="size-4" />
-                New tenant
-              </Button>
-            }
-          />
+          <>
+            <PageHeader
+              title="Tenants"
+              description="Multi-tenant workspaces and inherited Cedar policy."
+              showDefaultActions={false}
+              actions={
+                <>
+                  <ViewModeSwitcher value={view} onChange={setView} />
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <PlusIcon className="size-4" />
+                    New tenant
+                  </Button>
+                </>
+              }
+            />
+            <StatusBar segments={tallyStatus(filtered, tenantStatus)} />
+          </>
         }
+        view={otherView}
         toolbar={
           <TableToolbar
             query={search}
@@ -228,9 +252,7 @@ export default function TenantsPage() {
           >
             {filtered.map((tenant) => {
               // A notice's labels show as its glyph, not as label badges.
-              const labelEntries = Object.entries(tenant.labels).filter(
-                ([k]) => !isNoticeLabel(k),
-              );
+              const labelEntries = plainLabels(tenant.labels);
               const notice = noticeFromLabels(tenant.labels);
               const db = parseBucketName(tenant.defaultBucket);
               // Slug is the canonical handle in URLs; UUID is the

@@ -1,7 +1,9 @@
-// How each table looks to this user: its density, the columns they hid and
-// the sort it opens with. One entry per table id in console.tables, read
+// How each table looks to this user: its density, the columns they hid, the
+// sort it opens with and the view it is laid out in. One entry per table id in console.tables, read
 // through a schema so a malformed one is the default, never a broken table.
 import { z } from "zod";
+
+import { VIEW_MODES } from "@/lib/table/viewMode";
 
 /** How tightly rows are set. */
 export const DENSITIES = ["comfortable", "compact"] as const;
@@ -17,6 +19,8 @@ const TablePrefsSchema = z.object({
   density: z.enum(DENSITIES).optional(),
   hidden: z.array(z.string()).optional(),
   sort: SortSchema.optional(),
+  /** Table, tiles or summary (lib/table/viewMode). */
+  view: z.enum(VIEW_MODES).optional(),
 });
 
 export type TablePrefs = z.infer<typeof TablePrefsSchema>;
