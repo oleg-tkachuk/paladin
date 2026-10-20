@@ -27,6 +27,7 @@ import { TenantTabs } from "@/components/layout/TenantTabs";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
+import { NoticeBanner } from "@/components/ui/Notice";
 import { useTenantResolve } from "@/lib/resources/tenant-resolve";
 
 import { TenantProvider } from "./tenant-context";
@@ -98,6 +99,10 @@ export default function TenantLayout({
           description={`Tenant workspace · ${tenant.slug}`}
           showDefaultActions={false}
         />
+        {/* The operator's word on this tenant, from its labels. */}
+        {tenant.notice && (
+          <NoticeBanner notice={tenant.notice} className="rounded-md" />
+        )}
         {tenant.trashed && (
           <div
             role="status"

@@ -25,6 +25,7 @@ export function ListPage({
   header,
   toolbar,
   footer,
+  view,
   children,
 }: {
   /** The page's PageHeader, or a tenant tab's own heading. */
@@ -33,6 +34,12 @@ export function ListPage({
   toolbar?: React.ReactNode;
   /** After the table: Load more, a truncation note. */
   footer?: React.ReactNode;
+  /**
+   * Another view of the same rows, shown in place of the table: tiles, a
+   * summary (lib/table/viewMode). Set only while there are rows to show, so
+   * loading, a failed read and an empty list still read as the table says.
+   */
+  view?: React.ReactNode;
   /** The Table. */
   children: React.ReactNode;
 }) {
@@ -40,7 +47,7 @@ export function ListPage({
     <div className={PAGE_STACK}>
       {header}
       {toolbar}
-      <Card className="p-0">{children}</Card>
+      {view ?? <Card className="p-0">{children}</Card>}
       {footer}
     </div>
   );

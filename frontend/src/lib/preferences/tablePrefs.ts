@@ -1,10 +1,11 @@
 // How each table looks to this user: its density, the columns they hid, the
-// sort it opens with and how many rows a page holds. One entry per table id
-// in console.tables, read through a schema so a malformed one is the default,
-// never a broken table.
+// sort it opens with, how many rows a page holds and the view it is laid
+// out in. One entry per table id in console.tables, read through a schema so
+// a malformed one is the default, never a broken table.
 import { z } from "zod";
 
 import { PAGE_SIZES } from "@/lib/table/paging";
+import { VIEW_MODES } from "@/lib/table/viewMode";
 
 /** How tightly rows are set. */
 export const DENSITIES = ["comfortable", "compact"] as const;
@@ -23,6 +24,8 @@ const TablePrefsSchema = z.object({
   // Only a size the picker offers: a size another console stored, or one
   // since dropped, would leave the picker naming nothing.
   pageSize: z.literal(PAGE_SIZES).optional(),
+  /** Table, tiles or summary (lib/table/viewMode). */
+  view: z.enum(VIEW_MODES).optional(),
 });
 
 export type TablePrefs = z.infer<typeof TablePrefsSchema>;

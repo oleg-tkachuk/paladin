@@ -83,6 +83,11 @@ import { TablePagination } from "@/components/ui/TablePagination";
 import { TableScope } from "@/components/ui/TableScope";
 import { StatusDot } from "@/components/ui/StatusIcon";
 import { STATUS_BADGE } from "@/lib/ui/status";
+import { StatusBar, tallyStatus } from "@/components/ui/StatusBar";
+import { ViewModeSwitcher } from "@/components/ui/ViewModeSwitcher";
+import { useTableViewMode } from "@/hooks/useTableViewMode";
+import { backendStatus } from "./backendView";
+import { BackendSummary, BackendTiles } from "./BackendViews";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "storageBackends";
@@ -214,6 +219,7 @@ export default function StorageBackendsPage() {
     columns: SORT_COLUMNS,
   });
   const sortProps = { current: sort, onSort: toggleSort };
+  const { view, setView } = useTableViewMode(TABLE_ID);
   const sorted = useMemo(
     () => sortRows(facets.rows, sort, BACKEND_SORT),
     [facets.rows, sort],
@@ -373,23 +379,46 @@ export default function StorageBackendsPage() {
   const allSelected =
     onScreen.length > 0 && onScreen.every((b) => selected.has(b.backendId));
 
+  // Tiles of the page the table would show, or a summary of every row it
+  // pages through; the table itself while there are none, so loading, a
+  // failure and an empty list read as it says them.
+  const showRows = sorted.length > 0 && !listError;
+  const otherView =
+    showRows && view === "tiles" ? (
+      <BackendTiles backends={paged.rows} />
+    ) : showRows && view === "summary" ? (
+      <BackendSummary backends={sorted} />
+    ) : undefined;
+
   return (
     <TableScope id={TABLE_ID} sort={sort}>
       <ListPage
-        footer={<TablePagination {...paged.pagination} />}
-        header={
-          <PageHeader
-            title="Storage Backends"
-            description="Physical S3-compatible targets. Buckets and tenants bind here."
-            showDefaultActions={false}
-            actions={
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <PlusIcon className="size-4" />
-                New backend
-              </Button>
-            }
-          />
+        // A summary counts every row, so it has no pages to step through.
+        footer={
+          view === "summary" ? undefined : (
+            <TablePagination {...paged.pagination} />
+          )
         }
+        header={
+          <>
+            <PageHeader
+              title="Storage Backends"
+              description="Physical S3-compatible targets. Buckets and tenants bind here."
+              showDefaultActions={false}
+              actions={
+                <>
+                  <ViewModeSwitcher value={view} onChange={setView} />
+                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <PlusIcon className="size-4" />
+                    New backend
+                  </Button>
+                </>
+              }
+            />
+            <StatusBar segments={tallyStatus(sorted, backendStatus)} />
+          </>
+        }
+        view={otherView}
         toolbar={
           <TableToolbar
             query={search}

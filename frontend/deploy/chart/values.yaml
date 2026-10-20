@@ -52,6 +52,22 @@ backend:
     dispatcher: ""
     ingest: ""
 
+# A message across every page of the console — a maintenance window, a
+# migration — after Argo CD's ui.bannercontent. Empty content shows nothing.
+# The console reads it from the environment on every shell poll, so changing
+# it is a rollout, not a rebuild.
+#   severity:  info | warning | critical — the banner's colour and glyph.
+#   url:       where "Read more" goes: an http(s) address or a console path.
+#   permanent: true and the banner cannot be dismissed; otherwise each user
+#              dismisses it once, and it shows again when its text changes.
+#   position:  top | bottom | both.
+banner:
+  content: ""
+  severity: info
+  url: ""
+  permanent: false
+  position: top
+
 # Extra environment variables appended to the UI container's env block.
 # Use for knobs the chart doesn't model first-class. Common cases:
 #   - NODE_TLS_REJECT_UNAUTHORIZED=0 on dev clusters where the BFF dials

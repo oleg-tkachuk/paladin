@@ -59,3 +59,30 @@ describe("TenantLayout trash banner", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
+
+describe("TenantLayout notice", () => {
+  it("shows the notice the tenant's labels carry", () => {
+    h.resolve.mockReturnValue({
+      tenant: {
+        tenantId: "t-1",
+        slug: "acme",
+        displayName: "Acme",
+        storageLayout: "shared",
+        trashed: false,
+        notice: {
+          content: "Moving to the new backend on Friday",
+          severity: "warning",
+          permanent: true,
+        },
+      },
+      loading: false,
+      error: null,
+      errorIsNotFound: false,
+      retry: vi.fn(),
+    });
+    render(<TenantLayout>page</TenantLayout>);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Warning: Moving to the new backend on Friday",
+    );
+  });
+});

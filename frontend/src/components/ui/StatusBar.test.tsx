@@ -2,7 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "./Tooltip";
-import { StatusBar, statusSegments, statusSummary } from "./StatusBar";
+import {
+  StatusBar,
+  statusSegments,
+  statusSummary,
+  tallyStatus,
+} from "./StatusBar";
 
 const SEGMENTS = [
   { tone: "success" as const, label: "Healthy", count: 6 },
@@ -20,6 +25,22 @@ describe("statusSegments", () => {
 
   it("says the tally in words", () => {
     expect(statusSummary(SEGMENTS)).toBe("2 Error · 6 Healthy");
+  });
+});
+
+describe("tallyStatus", () => {
+  it("counts each item once under the state it leads with", () => {
+    const rows = [{ ok: true }, { ok: false }, { ok: true }];
+    expect(
+      tallyStatus(rows, (r) =>
+        r.ok
+          ? { label: "Healthy", tone: "success" as const }
+          : { label: "Error", tone: "danger" as const },
+      ),
+    ).toEqual([
+      { tone: "success", label: "Healthy", count: 2 },
+      { tone: "danger", label: "Error", count: 1 },
+    ]);
   });
 });
 

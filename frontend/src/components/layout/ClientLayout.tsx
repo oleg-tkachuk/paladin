@@ -23,6 +23,7 @@ import { UndoTrashProvider } from "@/hooks/useUndoTrash";
 import { CrumbNamesProvider, useCrumbNames } from "@/context/CrumbNamesContext";
 
 import { pageTitle } from "./crumbs";
+import { PlatformBanner } from "./PlatformBanner";
 import { ShellPageTitle } from "./ShellPageTitle";
 
 // Routes that DON'T require an authenticated session — these render
@@ -119,6 +120,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                         <TopBar
                           onMenuToggle={() => setSidebarOpen((v) => !v)}
                         />
+                        <PlatformBanner edge="top" />
                         <main className="flex-1">
                           <div className="mx-auto w-full max-w-400 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                             <SettingsSync>
@@ -126,6 +128,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                             </SettingsSync>
                           </div>
                         </main>
+                        <PlatformBanner edge="bottom" />
                       </div>
                     </div>
                   </AuthGate>

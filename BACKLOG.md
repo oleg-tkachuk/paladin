@@ -940,3 +940,29 @@ order they are being taken up.
   `useDetailPanel`, namespaced where a page holds more than one table, and a
   linked record the loaded page does not hold is read by its id.
 - **Blockers:** none.
+#### The tenants list cannot tell a tenant near its limits
+
+- **Status:** Blocked.
+- **Reason:** the tenants list's status bar, tiles and summary tell a tenant
+  in the trash (Frozen) and one whose notice is a warning or critical from an
+  active one, but not one near its quota or budget: ListTenants carries no
+  usage, and reading each tenant's quotas from the browser is one call per
+  row.
+- **Definition of Done:** "Near quota" and "Over budget" states in
+  `tenantStatus` (app/tenants/tenantView.ts), counted in the status bar and
+  shown on the tiles, from usage the list read serves.
+- **Blockers:** the cross-tenant read in "Dashboard: a trend for the tenants
+  nearest their limits".
+
+#### A bucket's notice is set through the API only
+
+- **Status:** Deferred.
+- **Reason:** a bucket shows the notice its `notice.paladin.io/*` labels
+  carry, on its page and in every bucket list, but the console has no form
+  that edits a bucket's labels; `UpdateBucket` with `labels` in the mask is
+  the only way to set one. The tenant's edit dialog has the form.
+- **Definition of Done:** the bucket's settings edit its notice as the
+  tenant's edit dialog does, keeping its other labels as they are.
+- **Blockers:** none. Storage backends carry no labels at all, so a notice
+  on one would need a field in the API first.
+

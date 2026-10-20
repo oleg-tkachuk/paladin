@@ -2,12 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   fireEvent,
-  render,
+  render as rtlRender,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+import { TooltipProvider } from "@/components/ui/Tooltip";
+
+// In the root layout's TooltipProvider, as the app renders it: the status bar
+// over the list carries tooltips, and one outside a provider throws.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: TooltipProvider });
 
 // Characterization net for the storage-backends page. useBackends auto-fetches
 // on mount; mock it + notifications and pin the shell + create-dialog open.
@@ -720,5 +727,76 @@ describe("StorageBackendsPage sorting", () => {
     fireEvent.click(screen.getByRole("button", { name: /^State/ }));
     // Disabled before Enabled, by the state's name.
     expect(ids()[0]).toBe("alpha");
+  });
+});
+
+describe("StorageBackendsPage views", () => {
+  const fleet = () => [
+    makeBackend({ backendId: "alpha", healthStatus: "ok", provider: "aws" }),
+    makeBackend({
+      backendId: "beta",
+      healthStatus: "error",
+      healthMessage: "refused",
+      provider: "garage",
+      region: "",
+    }),
+    makeBackend({ backendId: "gamma", enabled: false, provider: "aws" }),
+  ];
+  beforeEach(() => window.history.replaceState(null, "", "/storage-backends"));
+  afterEach(() => window.history.replaceState(null, "", "/storage-backends"));
+
+  // After Argo CD's application status bar: how the listed backends split,
+  // above the list in every view.
+  it("tallies the backends' states above the list", () => {
+    h.backends = fleet();
+    render(<StorageBackendsPage />);
+    expect(
+      screen.getByRole("img", {
+        name: "1 Probe failed · 1 Disabled · 1 Healthy",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("lays the backends out as tiles, and keeps the choice in the URL", () => {
+    h.backends = fleet();
+    render(<StorageBackendsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Tiles" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const tiles = within(
+      screen.getByRole("list", { name: "Storage backends" }),
+    );
+    expect(tiles.getAllByRole("listitem")).toHaveLength(3);
+    expect(tiles.getByRole("link", { name: "beta" })).toHaveAttribute(
+      "href",
+      "/storage-backends/beta",
+    );
+    expect(tiles.getAllByRole("link", { name: "Buckets" })[0]).toHaveAttribute(
+      "href",
+      "/storage-backends/alpha/buckets",
+    );
+    expect(window.location.search).toBe("?view=tiles");
+  });
+
+  it("opens in the view a link names, as a summary of the backends", () => {
+    window.history.replaceState(null, "", "/storage-backends?view=summary");
+    h.backends = fleet();
+    render(<StorageBackendsPage />);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const provider = screen
+      .getByRole("heading", { name: "Provider" })
+      .closest("[data-slot=card]")!;
+    expect(
+      within(provider as HTMLElement)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["AWS (2)", "Garage (1)"]);
+    expect(screen.getByRole("heading", { name: "Region" })).toBeInTheDocument();
+  });
+
+  // Loading, a failure and an empty list read as the table says them.
+  it("shows the table's empty state in any view", () => {
+    window.history.replaceState(null, "", "/storage-backends?view=tiles");
+    render(<StorageBackendsPage />);
+    expect(screen.getByText(/No storage backends yet/)).toBeInTheDocument();
   });
 });

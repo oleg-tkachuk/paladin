@@ -21,11 +21,17 @@ describe("readTablePrefs", () => {
       pageSize: "all",
     });
   });
+  it("reads the view a table is laid out in", () => {
+    expect(readTablePrefs({ tenants: { view: "tiles" } }, "tenants")).toEqual({
+      view: "tiles",
+    });
+  });
   it.each([
     ["no map", undefined],
     ["a map of the wrong kind", "x"],
     ["an entry of the wrong shape", { users: { density: "huge" } }],
     ["a page size the picker does not offer", { users: { pageSize: 7 } }],
+    ["a view this console does not offer", { users: { view: "kanban" } }],
   ])("reads %s as no preferences", (_, stored) => {
     expect(readTablePrefs(stored, "users")).toEqual({});
   });
