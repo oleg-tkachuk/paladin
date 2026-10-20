@@ -50,6 +50,8 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
+import { NoticeIcon } from "@/components/ui/Notice";
+import { isNoticeLabel, noticeFromLabels } from "@/lib/notice";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "tenants";
@@ -225,7 +227,11 @@ export default function TenantsPage() {
             }
           >
             {filtered.map((tenant) => {
-              const labelEntries = Object.entries(tenant.labels);
+              // A notice's labels show as its glyph, not as label badges.
+              const labelEntries = Object.entries(tenant.labels).filter(
+                ([k]) => !isNoticeLabel(k),
+              );
+              const notice = noticeFromLabels(tenant.labels);
               const db = parseBucketName(tenant.defaultBucket);
               // Slug is the canonical handle in URLs; UUID is the
               // safety net when slug is empty (legacy rows). Phase 0
@@ -240,24 +246,28 @@ export default function TenantsPage() {
                   query={tenantDetailQuery(handle)}
                 >
                   <TableCell>
-                    <Link
-                      href={detailHref}
-                      className="flex items-center gap-3 hover:text-primary"
-                    >
-                      <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
-                        <BuildingOfficeIcon className="size-4" />
-                      </div>
-                      <span
-                        title={tenant.slug}
-                        className="max-w-48 truncate whitespace-nowrap font-medium group-hover:underline"
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={detailHref}
+                        className="flex items-center gap-3 hover:text-primary"
                       >
-                        {tenant.slug || (
-                          <span className="text-muted-foreground italic">
-                            (no slug)
-                          </span>
-                        )}
-                      </span>
-                    </Link>
+                        <div className="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary ring-1 ring-primary/30">
+                          <BuildingOfficeIcon className="size-4" />
+                        </div>
+                        <span
+                          title={tenant.slug}
+                          className="max-w-48 truncate whitespace-nowrap font-medium group-hover:underline"
+                        >
+                          {tenant.slug || (
+                            <span className="text-muted-foreground italic">
+                              (no slug)
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                      {/* Beside the link, not in it: the glyph takes focus. */}
+                      {notice && <NoticeIcon notice={notice} />}
+                    </div>
                   </TableCell>
                   {/* Free text: wraps rather than widening the table. */}
                   <TableCell className="whitespace-normal break-words">
@@ -337,7 +347,7 @@ export default function TenantsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setEditing(tenant)}>
                           <PencilSquareIcon className="size-4" />
-                          Edit display name
+                          Edit tenant
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

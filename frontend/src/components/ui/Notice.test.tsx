@@ -12,7 +12,8 @@ vi.mock("@/hooks/usePreference", () => ({
   usePreference: () => [h.stored, vi.fn(), h.update],
 }));
 
-import { NoticeBanner } from "./Notice";
+import { NoticeBanner, NoticeIcon } from "./Notice";
+import { TooltipProvider } from "./Tooltip";
 
 const NOTICE: Notice = {
   content: "Maintenance on Sunday from 02:00 UTC",
@@ -86,5 +87,19 @@ describe("NoticeBanner", () => {
     expect(
       screen.queryByRole("button", { name: "Dismiss notice" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("NoticeIcon", () => {
+  it("reads the notice to a screen reader and takes focus for its tooltip", () => {
+    render(
+      <TooltipProvider>
+        <NoticeIcon notice={{ ...NOTICE, severity: "critical" }} />
+      </TooltipProvider>,
+    );
+    const icon = screen.getByRole("img", {
+      name: "Critical: Maintenance on Sunday from 02:00 UTC",
+    });
+    expect(icon).toHaveAttribute("tabindex", "0");
   });
 });

@@ -13,6 +13,8 @@ import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 import { BucketTabs } from "@/components/layout/BucketTabs";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { NoticeBanner } from "@/components/ui/Notice";
+import { noticeFromLabels } from "@/lib/notice";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/button";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
@@ -75,6 +77,8 @@ export default function BucketLayout({
   const owner = ownerQuery.data ?? null;
   const changesBlocked = owner?.trashed ? TRASHED_TENANT_BLOCK : null;
   const ownerName = owner?.displayName || owner?.slug || ownerId;
+  // The operator's word on this bucket, from its labels (notice.paladin.io/*).
+  const notice = noticeFromLabels(bucket?.labels);
 
   if (notFoundFlag) {
     notFound();
@@ -115,6 +119,8 @@ export default function BucketLayout({
           {bucket.publicRead && <PublicReadBadge />}
         </div>
       )}
+
+      {notice && <NoticeBanner notice={notice} className="rounded-md" />}
 
       <BucketTabs backendId={backendId} bucketId={bucketId} />
 

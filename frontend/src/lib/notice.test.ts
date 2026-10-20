@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { noticeKey, readDismissed, readNotice, withDismissed } from "./notice";
+import {
+  isNoticeLabel,
+  noticeFromLabels,
+  noticeKey,
+  noticeUrl,
+  readDismissed,
+  readNotice,
+  withDismissed,
+  withNoticeLabels,
+} from "./notice";
+
+// Spelled out rather than imported: these are the keys operators write, and a
+// change to them is a change to every resource that carries one.
+const NOTICE_LABELS = {
+  content: "notice.paladin.io/content",
+  severity: "notice.paladin.io/severity",
+  url: "notice.paladin.io/url",
+  permanent: "notice.paladin.io/permanent",
+};
 
 describe("readNotice", () => {
   it("is null when there is nothing to say", () => {
@@ -58,6 +76,75 @@ describe("readNotice", () => {
     expect(readNotice({ content: "a".repeat(2000) })?.content).toHaveLength(
       500,
     );
+  });
+});
+
+describe("noticeUrl", () => {
+  it("keeps what a notice may link to, trimmed", () => {
+    expect(noticeUrl(" https://status.example.com ")).toBe(
+      "https://status.example.com",
+    );
+    expect(noticeUrl("/tenants/acme")).toBe("/tenants/acme");
+    expect(noticeUrl("javascript:void(0)")).toBeUndefined();
+    expect(noticeUrl("")).toBeUndefined();
+  });
+});
+
+describe("notice labels", () => {
+  it("knows its own keys", () => {
+    for (const key of Object.values(NOTICE_LABELS)) {
+      expect(isNoticeLabel(key)).toBe(true);
+    }
+    expect(isNoticeLabel("team")).toBe(false);
+    expect(isNoticeLabel("notice.paladin.io/other")).toBe(false);
+  });
+
+  it("reads a resource's notice from its labels", () => {
+    expect(
+      noticeFromLabels({
+        team: "storage",
+        [NOTICE_LABELS.content]: "Migrating to the new backend",
+        [NOTICE_LABELS.severity]: "warning",
+      }),
+    ).toEqual({
+      content: "Migrating to the new backend",
+      severity: "warning",
+      permanent: false,
+    });
+    expect(noticeFromLabels({ team: "storage" })).toBeNull();
+    expect(noticeFromLabels(undefined)).toBeNull();
+  });
+
+  it("writes a notice and keeps every other label", () => {
+    const labels = withNoticeLabels(
+      { team: "storage", [NOTICE_LABELS.url]: "https://old.example.com" },
+      { content: "Frozen for audit", severity: "info", permanent: true },
+    );
+    // The default severity is left out, and so is the link the new notice
+    // does not have.
+    expect(labels).toEqual({
+      team: "storage",
+      [NOTICE_LABELS.content]: "Frozen for audit",
+      [NOTICE_LABELS.permanent]: "true",
+    });
+    expect(noticeFromLabels(labels)).toEqual({
+      content: "Frozen for audit",
+      severity: "info",
+      permanent: true,
+    });
+  });
+
+  it("takes the notice out", () => {
+    expect(
+      withNoticeLabels(
+        {
+          team: "storage",
+          [NOTICE_LABELS.content]: "x",
+          [NOTICE_LABELS.severity]: "critical",
+        },
+        null,
+      ),
+    ).toEqual({ team: "storage" });
   });
 });
 

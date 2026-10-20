@@ -63,6 +63,7 @@ vi.mock("@/components/layout/PageHeader", () => ({
 
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { renderWithActions } from "@/test/withActions";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import TenantsPage from "./page";
 
 beforeEach(() => {
@@ -170,7 +171,7 @@ describe("TenantsPage", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /Actions for t-1/i }),
     );
-    await userEvent.click(screen.getByText("Edit display name"));
+    await userEvent.click(screen.getByText("Edit tenant"));
     const input = await screen.findByLabelText("Display name");
     await userEvent.clear(input);
     await userEvent.type(input, "Acme Renamed");
@@ -183,6 +184,34 @@ describe("TenantsPage", () => {
         {},
       ),
     );
+  });
+
+  // A notice in the labels reads as a glyph beside the slug, not as label
+  // badges; the tenant's other labels still show.
+  it("marks a tenant that carries a notice", () => {
+    h.state.tenants = [
+      {
+        tenantId: "t-1",
+        slug: "acme",
+        displayName: "Acme Corp",
+        labels: {
+          team: "storage",
+          "notice.paladin.io/content": "Moving to the new backend",
+          "notice.paladin.io/severity": "warning",
+        },
+        resourceVersion: "7",
+      },
+    ];
+    render(
+      <TooltipProvider>
+        <TenantsPage />
+      </TooltipProvider>,
+    );
+    expect(
+      screen.getByRole("img", { name: "Warning: Moving to the new backend" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("team=storage")).toBeInTheDocument();
+    expect(screen.queryByText(/notice\.paladin\.io/)).not.toBeInTheDocument();
   });
 
   it("deletes a tenant through the row menu + confirmation", async () => {

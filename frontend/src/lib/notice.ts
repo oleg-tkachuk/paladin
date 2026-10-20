@@ -48,7 +48,7 @@ function severityOf(raw: string | undefined): NoticeSeverity {
  * — is dropped, because the text comes from a label any tenant editor can
  * write and the link is shown to every reader.
  */
-function safeUrl(raw: string | undefined): string | undefined {
+export function noticeUrl(raw: string | undefined): string | undefined {
   const v = (raw ?? "").trim();
   if (!v) return undefined;
   if (v.startsWith("/")) {
@@ -65,7 +65,7 @@ function safeUrl(raw: string | undefined): string | undefined {
 export function readNotice(raw: RawNotice): Notice | null {
   const content = (raw.content ?? "").trim().slice(0, MAX_CONTENT);
   if (!content) return null;
-  const url = safeUrl(raw.url);
+  const url = noticeUrl(raw.url);
   return {
     content,
     severity: severityOf(raw.severity),
@@ -75,6 +75,56 @@ export function readNotice(raw: RawNotice): Notice | null {
       (typeof raw.permanent === "string" &&
         raw.permanent.trim().toLowerCase() === FLAG_ON),
   };
+}
+
+/**
+ * The label keys a resource carries its notice under. The prefix follows the
+ * `paladin.io/` the charts label their own objects with.
+ */
+const NOTICE_LABELS = {
+  content: "notice.paladin.io/content",
+  severity: "notice.paladin.io/severity",
+  url: "notice.paladin.io/url",
+  permanent: "notice.paladin.io/permanent",
+} as const;
+
+/** Whether a label is one of a notice's, which a list of labels leaves out. */
+export function isNoticeLabel(key: string): boolean {
+  return Object.values<string>(NOTICE_LABELS).includes(key);
+}
+
+/** The notice a resource's labels carry, or null. */
+export function noticeFromLabels(
+  labels: Readonly<Record<string, string>> | undefined,
+): Notice | null {
+  if (!labels) return null;
+  return readNotice({
+    content: labels[NOTICE_LABELS.content],
+    severity: labels[NOTICE_LABELS.severity],
+    url: labels[NOTICE_LABELS.url],
+    permanent: labels[NOTICE_LABELS.permanent],
+  });
+}
+
+/**
+ * The labels with the notice written into them, or taken out when it is
+ * null. Every other label is kept as it was, and a default (info, not
+ * permanent, no link) is left out rather than stored.
+ */
+export function withNoticeLabels(
+  labels: Readonly<Record<string, string>>,
+  notice: Notice | null,
+): Record<string, string> {
+  const next = { ...labels };
+  for (const key of Object.values(NOTICE_LABELS)) delete next[key];
+  if (!notice) return next;
+  next[NOTICE_LABELS.content] = notice.content;
+  if (notice.severity !== "info") {
+    next[NOTICE_LABELS.severity] = notice.severity;
+  }
+  if (notice.url) next[NOTICE_LABELS.url] = notice.url;
+  if (notice.permanent) next[NOTICE_LABELS.permanent] = FLAG_ON;
+  return next;
 }
 
 /**

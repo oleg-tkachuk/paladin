@@ -823,3 +823,15 @@ order they are being taken up.
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
 
+#### A bucket's notice is set through the API only
+
+- **Status:** Deferred.
+- **Reason:** a bucket shows the notice its `notice.paladin.io/*` labels
+  carry, on its page and in every bucket list, but the console has no form
+  that edits a bucket's labels; `UpdateBucket` with `labels` in the mask is
+  the only way to set one. The tenant's edit dialog has the form.
+- **Definition of Done:** the bucket's settings edit its notice as the
+  tenant's edit dialog does, keeping its other labels as they are.
+- **Blockers:** none. Storage backends carry no labels at all, so a notice
+  on one would need a field in the API first.
+

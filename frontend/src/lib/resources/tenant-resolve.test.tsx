@@ -130,4 +130,27 @@ describe("useTenantResolve", () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.tenant?.displayName).toBe("Platform");
   });
+
+  it("reads the notice the tenant's labels carry", async () => {
+    window.history.pushState({}, "", `/tenants/${TENANT_SLUG}`);
+    getTenant.mockResolvedValue({
+      name: `tenants/${TENANT_UUID}`,
+      slug: TENANT_SLUG,
+      displayName: "Platform",
+      labels: {
+        "notice.paladin.io/content": "Read-only until Friday",
+        "notice.paladin.io/severity": "critical",
+      },
+    });
+    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG), {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(result.current.tenant?.notice).toEqual({
+        content: "Read-only until Friday",
+        severity: "critical",
+        permanent: false,
+      }),
+    );
+  });
 });

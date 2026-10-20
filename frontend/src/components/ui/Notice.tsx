@@ -1,7 +1,8 @@
 "use client";
 
-// A notice on screen, across a page as a banner. Its severity takes the
-// console's status tokens — info the info ink, warning the warning tone, critical the danger
+// A notice on screen: across a page as a banner, or beside a list row as a
+// glyph whose tooltip reads it. Its severity takes the console's status
+// tokens — info the info ink, warning the warning tone, critical the danger
 // tone — with the tone's glyph, so it reads without colour as well.
 import type React from "react";
 import Link from "next/link";
@@ -12,8 +13,14 @@ import {
 } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
+import {
+  TooltipContent,
+  TooltipRoot,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { useNoticeDismissal } from "@/hooks/useNoticeDismissal";
 import type { Notice, NoticeSeverity } from "@/lib/notice";
+import { FOCUS_RING } from "@/lib/ui/states";
 import { STATUS_TONE } from "@/lib/ui/status";
 import { cn } from "@/lib/utils";
 
@@ -106,5 +113,38 @@ export function NoticeBanner({
         </Button>
       )}
     </div>
+  );
+}
+
+/**
+ * A notice beside a list row: its severity's glyph, which reads the notice
+ * in a tooltip and to a screen reader. Focusable, so the tooltip opens from
+ * the keyboard too.
+ */
+export function NoticeIcon({ notice }: { notice: Notice }) {
+  const tone = NOTICE_TONE[notice.severity];
+  const Icon = tone.icon;
+  return (
+    <TooltipRoot>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          tabIndex={0}
+          aria-label={`${tone.label}: ${notice.content}`}
+          data-slot="notice-icon"
+          data-severity={notice.severity}
+          className={cn(
+            "inline-flex shrink-0 rounded-sm",
+            tone.ink,
+            FOCUS_RING,
+          )}
+        >
+          <Icon className="size-4" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="whitespace-pre-line">
+        {notice.content}
+      </TooltipContent>
+    </TooltipRoot>
   );
 }

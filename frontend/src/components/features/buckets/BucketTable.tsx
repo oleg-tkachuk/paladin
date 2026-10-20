@@ -7,6 +7,7 @@ import { ArchiveBoxIcon } from "@heroicons/react/24/outline";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
+import { NoticeIcon } from "@/components/ui/Notice";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SortableHead } from "@/components/ui/SortHeader";
@@ -21,6 +22,7 @@ import {
 import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 import type { SortState } from "@/hooks/useTableSort";
 import { backendHref, bucketHref, tenantHref } from "@/lib/navigation/hrefs";
+import { noticeFromLabels } from "@/lib/notice";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -229,28 +231,33 @@ function BucketRow({
   const grantees = b.grantedTenantIds;
   const named = grantees.slice(0, GRANTEES_NAMED);
   const more = grantees.length - named.length;
+  const notice = noticeFromLabels(b.labels);
   return (
     <IntentTableRow
       className="group"
       query={bucketDetailQuery(b.backendId, b.bucketId)}
     >
       <TableCell>
-        <Link
-          href={bucketHref(b.backendId, b.bucketId)}
-          className="flex items-center gap-3 hover:text-primary"
-        >
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
-            <ArchiveBoxIcon className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <div className={cn(T.code, "truncate group-hover:underline")}>
-              {b.bucketId}
+        <div className="flex items-center gap-2">
+          <Link
+            href={bucketHref(b.backendId, b.bucketId)}
+            className="flex min-w-0 items-center gap-3 hover:text-primary"
+          >
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30">
+              <ArchiveBoxIcon className="size-4" />
             </div>
-            {b.displayName && (
-              <div className={cn(T.hint, "truncate")}>{b.displayName}</div>
-            )}
-          </div>
-        </Link>
+            <div className="min-w-0">
+              <div className={cn(T.code, "truncate group-hover:underline")}>
+                {b.bucketId}
+              </div>
+              {b.displayName && (
+                <div className={cn(T.hint, "truncate")}>{b.displayName}</div>
+              )}
+            </div>
+          </Link>
+          {/* Beside the link, not in it: the glyph takes focus itself. */}
+          {notice && <NoticeIcon notice={notice} />}
+        </div>
       </TableCell>
       {showBackend && (
         <TableCell className="hidden @md:table-cell">
