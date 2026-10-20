@@ -11,7 +11,7 @@ import { Confirmation } from "@/components/ui/Confirmation";
 import { useConfirmation } from "@/hooks/useConfirmation";
 import { useState } from "react";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -84,8 +84,8 @@ export function UserRolesCard({
   }
 
   return (
-    <Card className="space-y-4 p-5">
-      <div className="space-y-1">
+    <Card>
+      <CardHeader>
         <CardTitle className="text-sm font-semibold" icon={UserGroupIcon}>
           Roles
         </CardTitle>
@@ -93,70 +93,71 @@ export function UserRolesCard({
           What the user may do, as Cedar policy reads it. Tokens already issued
           keep their roles until they expire.
         </p>
-      </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {kept.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={T.hint}>Kept as granted:</span>
+            {kept.map((r) => (
+              <Badge key={r} variant="outline" className="font-mono">
+                {r}
+              </Badge>
+            ))}
+          </div>
+        )}
 
-      {kept.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className={T.hint}>Kept as granted:</span>
-          {kept.map((r) => (
-            <Badge key={r} variant="outline" className="font-mono">
-              {r}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {ASSIGNABLE_ROLES.map((role) => {
-          const id = `user-role-${role}`;
-          return (
-            <label
-              key={role}
-              htmlFor={id}
-              className={cn(
-                "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2",
-                CHECKED_OPTION,
-              )}
-            >
-              <Checkbox
-                id={id}
-                className="mt-0.5"
-                checked={draft.includes(role)}
-                onCheckedChange={() => toggle(role)}
-              />
-              <span className="min-w-0 space-y-0.5">
-                <span className="block font-mono text-xs">
-                  {role}
-                  {ADMIN_AUDIENCE_ROLES.includes(role) ? (
-                    <span className="ml-1.5 font-sans text-sm text-muted-foreground">
-                      console
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ASSIGNABLE_ROLES.map((role) => {
+            const id = `user-role-${role}`;
+            return (
+              <label
+                key={role}
+                htmlFor={id}
+                className={cn(
+                  "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2",
+                  CHECKED_OPTION,
+                )}
+              >
+                <Checkbox
+                  id={id}
+                  className="mt-0.5"
+                  checked={draft.includes(role)}
+                  onCheckedChange={() => toggle(role)}
+                />
+                <span className="min-w-0 space-y-0.5">
+                  <span className="block font-mono text-xs">
+                    {role}
+                    {ADMIN_AUDIENCE_ROLES.includes(role) ? (
+                      <span className="ml-1.5 font-sans text-sm text-muted-foreground">
+                        console
+                      </span>
+                    ) : null}
+                  </span>
+                  {ROLE_DESCRIPTIONS[role] ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {ROLE_DESCRIPTIONS[role]}
                     </span>
                   ) : null}
                 </span>
-                {ROLE_DESCRIPTIONS[role] ? (
-                  <span className="block text-xs text-muted-foreground">
-                    {ROLE_DESCRIPTIONS[role]}
-                  </span>
-                ) : null}
-              </span>
-            </label>
-          );
-        })}
-      </div>
+              </label>
+            );
+          })}
+        </div>
 
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="outline"
-          disabled={!changed || busy}
-          onClick={() => setDraft(user.roles)}
-        >
-          Discard
-        </Button>
-        <Confirmation shown={saved}>Saved</Confirmation>
-        <Button disabled={!changed || busy} onClick={() => void save()}>
-          {busy ? "Saving…" : "Save roles"}
-        </Button>
-      </div>
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            disabled={!changed || busy}
+            onClick={() => setDraft(user.roles)}
+          >
+            Discard
+          </Button>
+          <Confirmation shown={saved}>Saved</Confirmation>
+          <Button disabled={!changed || busy} onClick={() => void save()}>
+            {busy ? "Saving…" : "Save roles"}
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 }

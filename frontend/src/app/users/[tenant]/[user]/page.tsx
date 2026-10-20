@@ -15,7 +15,7 @@ import { ArrowLeftIcon, IdentificationIcon } from "@heroicons/react/24/outline";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DetailPage } from "@/components/layout/templates/DetailPage";
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/RelativeTime";
 import {
@@ -125,42 +125,46 @@ export default function UserDetailPage() {
       >
         {user ? (
           <>
-            <Card className="space-y-2 p-5">
-              <CardTitle
-                className="text-sm font-semibold"
-                icon={IdentificationIcon}
-              >
-                Identity
-              </CardTitle>
-              <dl className="space-y-1.5">
-                <Fact label="Subject">
-                  <span className="font-mono text-xs">{user.subject}</span>
-                </Fact>
-                <Fact label="User ID">
-                  <CopyableId value={user.userId} label="user ID" />
-                </Fact>
-                <Fact label="Tenant">
-                  <Link
-                    href={`/tenants/${encodeURIComponent(slug || user.tenantId)}`}
-                    className="font-mono text-xs hover:text-primary hover:underline"
-                  >
-                    {slug || user.tenantId}
-                  </Link>
-                </Fact>
-                <Fact label="State">
-                  {user.disabled ? (
-                    <Badge variant="destructive">disabled</Badge>
-                  ) : (
-                    <Badge variant="outline">active</Badge>
-                  )}
-                </Fact>
-                <Fact label="Last login">
-                  <RelativeTime ts={user.lastLoginAt} />
-                </Fact>
-                <Fact label="Created">
-                  <RelativeTime ts={user.createdAt} />
-                </Fact>
-              </dl>
+            <Card>
+              <CardHeader>
+                <CardTitle
+                  className="text-sm font-semibold"
+                  icon={IdentificationIcon}
+                >
+                  Identity
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <dl className="space-y-1.5">
+                  <Fact label="Subject">
+                    <span className="font-mono text-xs">{user.subject}</span>
+                  </Fact>
+                  <Fact label="User ID">
+                    <CopyableId value={user.userId} label="user ID" />
+                  </Fact>
+                  <Fact label="Tenant">
+                    <Link
+                      href={`/tenants/${encodeURIComponent(slug || user.tenantId)}`}
+                      className="font-mono text-xs hover:text-primary hover:underline"
+                    >
+                      {slug || user.tenantId}
+                    </Link>
+                  </Fact>
+                  <Fact label="State">
+                    {user.disabled ? (
+                      <Badge variant="destructive">disabled</Badge>
+                    ) : (
+                      <Badge variant="outline">active</Badge>
+                    )}
+                  </Fact>
+                  <Fact label="Last login">
+                    <RelativeTime ts={user.lastLoginAt} />
+                  </Fact>
+                  <Fact label="Created">
+                    <RelativeTime ts={user.createdAt} />
+                  </Fact>
+                </dl>
+              </CardContent>
             </Card>
             <UserRolesCard user={user} onChanged={refresh} />
             <UserScopesCard user={user} onChanged={refresh} />

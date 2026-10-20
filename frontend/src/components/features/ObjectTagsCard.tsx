@@ -7,7 +7,7 @@ import {
   TagIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -85,8 +85,8 @@ export function ObjectTagsCard({
   };
 
   return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-center justify-between">
+    <Card>
+      <CardHeader className="flex items-center justify-between">
         <CardTitle
           className="text-sm font-semibold"
           icon={TagIcon}
@@ -103,98 +103,99 @@ export function ObjectTagsCard({
         >
           {isEditing ? "Cancel" : "Edit"}
         </Button>
-      </div>
-
-      {isEditing ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
-            <Input
-              placeholder="TAG_KEY"
-              aria-label="New tag key"
-              value={newLabelKey}
-              onChange={(e) => setNewLabelKey(e.target.value.toUpperCase())}
-              className="font-mono text-xs"
-            />
-            <Input
-              placeholder="TAG_VALUE"
-              aria-label="New tag value"
-              value={newLabelValue}
-              onChange={(e) => setNewLabelValue(e.target.value)}
-              className="font-mono text-xs"
-            />
-            <Button
-              size="sm"
-              onClick={addLabel}
-              disabled={!newLabelKey || !newLabelValue}
-            >
-              <PlusIcon className="size-4" />
-              Add
-            </Button>
-          </div>
-
-          <div className="space-y-1.5">
-            {Object.entries(editingLabels).filter(([k]) => k !== "object_tag")
-              .length === 0 ? (
-              <p className={T.hint}>No tags assigned.</p>
-            ) : (
-              Object.entries(editingLabels)
-                .filter(([k]) => k !== "object_tag")
-                .map(([key, value]) => (
-                  <div
-                    key={key}
-                    className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
-                  >
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {key}
-                    </span>
-                    <span className="text-muted-foreground">=</span>
-                    <span className="flex-1 break-all font-mono text-xs">
-                      {value}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => removeLabel(key)}
-                      aria-label="Remove tag"
-                    >
-                      <TrashIcon className="size-3.5" />
-                    </Button>
-                  </div>
-                ))
-            )}
-          </div>
-
-          <div className="flex justify-end">
-            <Button size="sm" onClick={handleSave} disabled={isSaving}>
-              <CheckIcon className="size-4" />
-              {isSaving ? "Saving…" : "Save"}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        (() => {
-          // View mode also filters object_tag — its value is the
-          // classification slug rendered in the Specs panel.
-          const freeFormTags = Object.entries(tags || {}).filter(
-            ([k]) => k !== "object_tag",
-          );
-          return freeFormTags.length > 0 ? (
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {freeFormTags.map(([key, value]) => (
-                <Badge
-                  key={key}
-                  variant="outline"
-                  className="justify-start font-mono"
-                >
-                  {key}={value}
-                </Badge>
-              ))}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isEditing ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <Input
+                placeholder="TAG_KEY"
+                aria-label="New tag key"
+                value={newLabelKey}
+                onChange={(e) => setNewLabelKey(e.target.value.toUpperCase())}
+                className="font-mono text-xs"
+              />
+              <Input
+                placeholder="TAG_VALUE"
+                aria-label="New tag value"
+                value={newLabelValue}
+                onChange={(e) => setNewLabelValue(e.target.value)}
+                className="font-mono text-xs"
+              />
+              <Button
+                size="sm"
+                onClick={addLabel}
+                disabled={!newLabelKey || !newLabelValue}
+              >
+                <PlusIcon className="size-4" />
+                Add
+              </Button>
             </div>
-          ) : (
-            <p className={T.hint}>No tags assigned.</p>
-          );
-        })()
-      )}
+
+            <div className="space-y-1.5">
+              {Object.entries(editingLabels).filter(([k]) => k !== "object_tag")
+                .length === 0 ? (
+                <p className={T.hint}>No tags assigned.</p>
+              ) : (
+                Object.entries(editingLabels)
+                  .filter(([k]) => k !== "object_tag")
+                  .map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-2"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {key}
+                      </span>
+                      <span className="text-muted-foreground">=</span>
+                      <span className="flex-1 break-all font-mono text-xs">
+                        {value}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => removeLabel(key)}
+                        aria-label="Remove tag"
+                      >
+                        <TrashIcon className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                <CheckIcon className="size-4" />
+                {isSaving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          (() => {
+            // View mode also filters object_tag — its value is the
+            // classification slug rendered in the Specs panel.
+            const freeFormTags = Object.entries(tags || {}).filter(
+              ([k]) => k !== "object_tag",
+            );
+            return freeFormTags.length > 0 ? (
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {freeFormTags.map(([key, value]) => (
+                  <Badge
+                    key={key}
+                    variant="outline"
+                    className="justify-start font-mono"
+                  >
+                    {key}={value}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className={T.hint}>No tags assigned.</p>
+            );
+          })()
+        )}
+      </CardContent>
     </Card>
   );
 }

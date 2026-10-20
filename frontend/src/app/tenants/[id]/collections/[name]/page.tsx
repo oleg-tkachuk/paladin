@@ -20,7 +20,7 @@ import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { LinkIcon, IdentificationIcon } from "@heroicons/react/24/outline";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,93 +150,99 @@ export default function CollectionOverviewPage() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* ─── Identity ────────────────────────────────────────────────── */}
-      <Card className="space-y-3 p-4">
-        <CardTitle className="text-sm font-semibold" icon={IdentificationIcon}>
-          Identity
-        </CardTitle>
-        <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">Resource name</dt>
-          <dd>
-            <CopyableId value={collection.name} label="resource name" />
-          </dd>
+      <Card>
+        <CardHeader>
+          <CardTitle
+            className="text-sm font-semibold"
+            icon={IdentificationIcon}
+          >
+            Identity
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
+            <dt className="text-muted-foreground">Resource name</dt>
+            <dd>
+              <CopyableId value={collection.name} label="resource name" />
+            </dd>
 
-          <dt className="text-muted-foreground">Tenant ID</dt>
-          <dd>
-            <CopyableId value={collection.tenantId} label="tenant ID" />
-          </dd>
+            <dt className="text-muted-foreground">Tenant ID</dt>
+            <dd>
+              <CopyableId value={collection.tenantId} label="tenant ID" />
+            </dd>
 
-          <dt className="text-muted-foreground">Collection</dt>
-          <dd className="font-mono text-xs">{collection.collection}</dd>
+            <dt className="text-muted-foreground">Collection</dt>
+            <dd className="font-mono text-xs">{collection.collection}</dd>
 
-          <dt className="text-muted-foreground">Completion mode</dt>
-          <dd>
-            <Badge variant="outline" className={T.code}>
-              {completionModeLabel(collection.completionMode)}
-            </Badge>
-          </dd>
+            <dt className="text-muted-foreground">Completion mode</dt>
+            <dd>
+              <Badge variant="outline" className={T.code}>
+                {completionModeLabel(collection.completionMode)}
+              </Badge>
+            </dd>
 
-          <dt className="text-muted-foreground">Access</dt>
-          <dd className="flex items-center gap-2">
-            {isPublic ? (
-              <PublicReadBadge />
-            ) : (
-              <span className="text-xs text-muted-foreground">private</span>
+            <dt className="text-muted-foreground">Access</dt>
+            <dd className="flex items-center gap-2">
+              {isPublic ? (
+                <PublicReadBadge />
+              ) : (
+                <span className="text-xs text-muted-foreground">private</span>
+              )}
+              <HelpTip topic="publicRead" />
+            </dd>
+
+            {isPublic && (
+              <>
+                <dt className="text-muted-foreground">Cache-Control</dt>
+                <dd className="font-mono text-xs">{collection.cacheControl}</dd>
+              </>
             )}
-            <HelpTip topic="publicRead" />
-          </dd>
 
-          {isPublic && (
-            <>
-              <dt className="text-muted-foreground">Cache-Control</dt>
-              <dd className="font-mono text-xs">{collection.cacheControl}</dd>
-            </>
-          )}
+            <dt className="text-muted-foreground">Resource version</dt>
+            <dd className="font-mono text-xs">
+              {collection.resourceVersion || "—"}
+            </dd>
 
-          <dt className="text-muted-foreground">Resource version</dt>
-          <dd className="font-mono text-xs">
-            {collection.resourceVersion || "—"}
-          </dd>
+            <dt className="text-muted-foreground">Created</dt>
+            <dd className="font-mono text-xs">
+              <Timestamp ts={collection.createdAt} />
+            </dd>
 
-          <dt className="text-muted-foreground">Created</dt>
-          <dd className="font-mono text-xs">
-            <Timestamp ts={collection.createdAt} />
-          </dd>
+            <dt className="text-muted-foreground">Updated</dt>
+            <dd className="font-mono text-xs">
+              <Timestamp ts={collection.updatedAt} />
+            </dd>
+          </dl>
 
-          <dt className="text-muted-foreground">Updated</dt>
-          <dd className="font-mono text-xs">
-            <Timestamp ts={collection.updatedAt} />
-          </dd>
-        </dl>
-
-        <div className="space-y-1.5 pt-2">
-          <Label htmlFor="collection-display-name">Display name</Label>
-          <div className="flex gap-2">
-            <Input
-              id="collection-display-name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Production assets"
-            />
-            <Button
-              size="sm"
-              onClick={handleSaveDisplayName}
-              disabled={
-                Boolean(changesBlocked) ||
-                savingMeta ||
-                displayName === collection.displayName
-              }
-              title={changesBlocked ?? undefined}
-            >
-              {savingMeta ? "Saving…" : "Save"}
-            </Button>
+          <div className="space-y-1.5 pt-2">
+            <Label htmlFor="collection-display-name">Display name</Label>
+            <div className="flex gap-2">
+              <Input
+                id="collection-display-name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Production assets"
+              />
+              <Button
+                size="sm"
+                onClick={handleSaveDisplayName}
+                disabled={
+                  Boolean(changesBlocked) ||
+                  savingMeta ||
+                  displayName === collection.displayName
+                }
+                title={changesBlocked ?? undefined}
+              >
+                {savingMeta ? "Saving…" : "Save"}
+              </Button>
+            </div>
           </div>
-        </div>
+        </CardContent>
       </Card>
 
       {/* ─── Bucket binding ──────────────────────────────────────────── */}
-      <Card className="space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <LinkIcon className="size-4 text-muted-foreground" />
+      <Card>
+        <CardHeader className="flex items-center gap-2">
           <CardTitle
             className="text-sm font-semibold"
             icon={LinkIcon}
@@ -244,76 +250,78 @@ export default function CollectionOverviewPage() {
           >
             Bucket binding
           </CardTitle>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {isPublic
-            ? "A public Collection stays in its bucket: its objects' URLs name it."
-            : "Re-binding triggers an audit entry — pick a destination bucket and confirm. Existing objects keep their physical location until migrated."}
-        </p>
-        <div className="space-y-1">
-          <Label className="text-xs">Current</Label>
-          <p className="break-all font-mono text-xs">
-            {collection.bucket || (
-              <span className="italic text-muted-foreground">(unbound)</span>
-            )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {isPublic
+              ? "A public Collection stays in its bucket: its objects' URLs name it."
+              : "Re-binding triggers an audit entry — pick a destination bucket and confirm. Existing objects keep their physical location until migrated."}
           </p>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="collection-bucket-binding">Bind to bucket</Label>
-          {/* A failed read opened a select with nothing in it, and Bind
+          <div className="space-y-1">
+            <Label className="text-xs">Current</Label>
+            <p className="break-all font-mono text-xs">
+              {collection.bucket || (
+                <span className="italic text-muted-foreground">(unbound)</span>
+              )}
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="collection-bucket-binding">Bind to bucket</Label>
+            {/* A failed read opened a select with nothing in it, and Bind
               could never enable — as if there were no bucket to bind to. */}
-          {bucketsError ? (
-            <ListLoadError
-              variant="inline"
-              what="Buckets"
-              reason={bucketsError}
-              onRetry={() => void fetchBuckets()}
-            />
-          ) : null}
-          <SelectRoot
-            value={bucketSelection}
-            onValueChange={setBucketSelection}
-            disabled={isPublic}
-          >
-            <SelectTrigger id="collection-bucket-binding" className="w-full">
-              <SelectValue placeholder="Pick a bucket…" />
-            </SelectTrigger>
-            <SelectContent>
-              {buckets.map((b) => {
-                const value = `storageBackends/${b.backendId}/buckets/${b.bucketId}`;
-                return (
-                  <SelectItem key={value} value={value}>
-                    <span className="font-mono text-xs">
-                      {b.backendId}/{b.bucketId}
-                    </span>
-                    {b.displayName ? (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        — {b.displayName}
+            {bucketsError ? (
+              <ListLoadError
+                variant="inline"
+                what="Buckets"
+                reason={bucketsError}
+                onRetry={() => void fetchBuckets()}
+              />
+            ) : null}
+            <SelectRoot
+              value={bucketSelection}
+              onValueChange={setBucketSelection}
+              disabled={isPublic}
+            >
+              <SelectTrigger id="collection-bucket-binding" className="w-full">
+                <SelectValue placeholder="Pick a bucket…" />
+              </SelectTrigger>
+              <SelectContent>
+                {buckets.map((b) => {
+                  const value = `storageBackends/${b.backendId}/buckets/${b.bucketId}`;
+                  return (
+                    <SelectItem key={value} value={value}>
+                      <span className="font-mono text-xs">
+                        {b.backendId}/{b.bucketId}
                       </span>
-                    ) : null}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </SelectRoot>
-        </div>
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            onClick={handleBind}
-            disabled={
-              Boolean(changesBlocked) ||
-              isPublic ||
-              binding ||
-              !bucketSelection ||
-              bucketSelection === collection.bucket
-            }
-            title={changesBlocked ?? undefined}
-          >
-            {binding ? "Binding…" : "Re-bind"}
-          </Button>
-        </div>
+                      {b.displayName ? (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — {b.displayName}
+                        </span>
+                      ) : null}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </SelectRoot>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={handleBind}
+              disabled={
+                Boolean(changesBlocked) ||
+                isPublic ||
+                binding ||
+                !bucketSelection ||
+                bucketSelection === collection.bucket
+              }
+              title={changesBlocked ?? undefined}
+            >
+              {binding ? "Binding…" : "Re-bind"}
+            </Button>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

@@ -6,7 +6,7 @@ import { ClipboardIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { cn } from "@/lib/utils";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
@@ -70,116 +70,122 @@ export function ObjectSpecsPanel({
   const stateColors = stateColorClasses(object.state);
   return (
     <aside className="space-y-4">
-      <Card className="space-y-3 p-4">
-        <CardTitle
-          className="text-sm font-semibold"
-          icon={DocumentTextIcon}
-          tone={IconTone.Info}
-        >
-          Specs
-        </CardTitle>
-        <dl className="space-y-3">
-          <SpecRow label="Object UUID">
-            <span className="break-all font-mono text-xs">
-              {object.objectId || collection}
-            </span>
-            <IdentifierCopy
-              value={object.objectId || collection}
-              label="Object UUID"
-              iconOnly
-            />
-          </SpecRow>
-
-          <SpecRow label="Storage Path">
-            <span className="break-all font-mono text-xs" title={object.key}>
-              {object.key}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => onCopy(object.key, "Storage path")}
-              aria-label="Copy storage path"
-            >
-              <ClipboardIcon className="size-3.5" />
-            </Button>
-          </SpecRow>
-
-          {/* ADR-0027: where anyone reads it, unsigned — the address a
-              consumer stores. Only an object in a public collection has one. */}
-          {object.publicUrl && (
-            <SpecRow label="Public URL">
-              <span
-                className="break-all font-mono text-xs"
-                title={object.publicUrl}
-              >
-                {object.publicUrl}
+      <Card>
+        <CardHeader>
+          <CardTitle
+            className="text-sm font-semibold"
+            icon={DocumentTextIcon}
+            tone={IconTone.Info}
+          >
+            Specs
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <dl className="space-y-3">
+            <SpecRow label="Object UUID">
+              <span className="break-all font-mono text-xs">
+                {object.objectId || collection}
               </span>
               <IdentifierCopy
-                value={object.publicUrl}
-                label="Public URL"
+                value={object.objectId || collection}
+                label="Object UUID"
                 iconOnly
               />
             </SpecRow>
-          )}
 
-          <SpecRow label="Collection">
-            {/* A Collection lives under its tenant; /collections/<name> is no
+            <SpecRow label="Storage Path">
+              <span className="break-all font-mono text-xs" title={object.key}>
+                {object.key}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => onCopy(object.key, "Storage path")}
+                aria-label="Copy storage path"
+              >
+                <ClipboardIcon className="size-3.5" />
+              </Button>
+            </SpecRow>
+
+            {/* ADR-0027: where anyone reads it, unsigned — the address a
+              consumer stores. Only an object in a public collection has one. */}
+            {object.publicUrl && (
+              <SpecRow label="Public URL">
+                <span
+                  className="break-all font-mono text-xs"
+                  title={object.publicUrl}
+                >
+                  {object.publicUrl}
+                </span>
+                <IdentifierCopy
+                  value={object.publicUrl}
+                  label="Public URL"
+                  iconOnly
+                />
+              </SpecRow>
+            )}
+
+            <SpecRow label="Collection">
+              {/* A Collection lives under its tenant; /collections/<name> is no
                 page, and the link led to a 404. */}
-            <Link
-              href={`/tenants/${encodeURIComponent(object.tenantId)}/collections/${encodeURIComponent(object.collection)}`}
-              className="break-all font-mono text-xs text-primary hover:underline"
-            >
-              {object.collection}
-            </Link>
-          </SpecRow>
+              <Link
+                href={`/tenants/${encodeURIComponent(object.tenantId)}/collections/${encodeURIComponent(object.collection)}`}
+                className="break-all font-mono text-xs text-primary hover:underline"
+              >
+                {object.collection}
+              </Link>
+            </SpecRow>
 
-          <Separator />
+            <Separator />
 
-          <SpecRow label="Size">
-            <span className="font-mono text-xs">
-              <Bytes value={object.sizeBytes} />
-            </span>
-          </SpecRow>
+            <SpecRow label="Size">
+              <span className="font-mono text-xs">
+                <Bytes value={object.sizeBytes} />
+              </span>
+            </SpecRow>
 
-          <SpecRow label="Type">
-            <span className="break-all font-mono text-xs">
-              {object.contentType || "—"}
-            </span>
-          </SpecRow>
+            <SpecRow label="Type">
+              <span className="break-all font-mono text-xs">
+                {object.contentType || "—"}
+              </span>
+            </SpecRow>
 
-          <SpecRow label="State">
-            <span className={cn(T.pill, stateColors.text)}>
-              <span className={cn(T.pillDot, stateColors.dot)} />
-              {ObjectState[object.state]}
-            </span>
-          </SpecRow>
+            <SpecRow label="State">
+              <span className={cn(T.pill, stateColors.text)}>
+                <span className={cn(T.pillDot, stateColors.dot)} />
+                {ObjectState[object.state]}
+              </span>
+            </SpecRow>
 
-          {/* Classification = the reserved `object_tag` key inside the same
+            {/* Classification = the reserved `object_tag` key inside the same
               `tags` map the Tags card edits. One-of, not bag-of, so it lives
               here rather than in the Tags card (which filters it out so the
               same value never renders twice). */}
-          <SpecRow label="Classification">
-            {object.tags?.object_tag ? (
+            <SpecRow label="Classification">
+              {object.tags?.object_tag ? (
+                <span className="font-mono text-xs">
+                  {object.tags.object_tag}
+                </span>
+              ) : (
+                <span className="font-mono text-xs text-muted-foreground">
+                  —
+                </span>
+              )}
+            </SpecRow>
+
+            <SpecRow label="Expires">
               <span className="font-mono text-xs">
-                {object.tags.object_tag}
+                {formatExpiresAt(object.presignExpiresAt?.seconds)}
               </span>
-            ) : (
-              <span className="font-mono text-xs text-muted-foreground">—</span>
-            )}
-          </SpecRow>
+            </SpecRow>
 
-          <SpecRow label="Expires">
-            <span className="font-mono text-xs">
-              {formatExpiresAt(object.presignExpiresAt?.seconds)}
-            </span>
-          </SpecRow>
-
-          <SpecRow label="External Ref">
-            <span className="break-all font-mono text-xs">
-              {object.externalRef || "—"}
-            </span>
-          </SpecRow>
-        </dl>
+            <SpecRow label="External Ref">
+              <span className="break-all font-mono text-xs">
+                {object.externalRef || "—"}
+              </span>
+            </SpecRow>
+          </dl>
+        </CardContent>
       </Card>
     </aside>
   );

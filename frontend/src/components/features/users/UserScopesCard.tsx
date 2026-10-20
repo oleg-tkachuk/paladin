@@ -9,7 +9,7 @@
 import { FingerPrintIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,8 +103,8 @@ export function UserScopesCard({
   }
 
   return (
-    <Card className="space-y-4 p-5">
-      <div className="space-y-1">
+    <Card>
+      <CardHeader>
         <CardTitle className="text-sm font-semibold" icon={FingerPrintIcon}>
           Scopes
         </CardTitle>
@@ -112,101 +112,102 @@ export function UserScopesCard({
           Narrow what the user&apos;s roles reach. Tokens already issued keep
           their scopes until they expire.
         </p>
-      </div>
-
-      {user.scopes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No scopes: the roles reach everything the tenant allows.
-        </p>
-      ) : (
-        <ul className="divide-y rounded-md border">
-          {user.scopes.map((s) => {
-            const wire = scopeWire(s);
-            return (
-              <li
-                key={wire}
-                className="flex items-center justify-between gap-3 px-3 py-2"
-              >
-                <span className="min-w-0 break-all font-mono text-xs">
-                  {wire}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  aria-label={`Revoke ${wire}`}
-                  onClick={() => setRevoking(s)}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {user.scopes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No scopes: the roles reach everything the tenant allows.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-md border">
+            {user.scopes.map((s) => {
+              const wire = scopeWire(s);
+              return (
+                <li
+                  key={wire}
+                  className="flex items-center justify-between gap-3 px-3 py-2"
                 >
-                  Revoke
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                  <span className="min-w-0 break-all font-mono text-xs">
+                    {wire}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    aria-label={`Revoke ${wire}`}
+                    onClick={() => setRevoking(s)}
+                  >
+                    Revoke
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-      <ConfirmModal
-        isOpen={revoking !== null}
-        onClose={() => setRevoking(null)}
-        onConfirm={async () => {
-          if (revoking) await revoke(revoking);
-          setRevoking(null);
-        }}
-        title="Revoke scope"
-        message={
-          revoking === null
-            ? ""
-            : user.scopes.length === 1
-              ? `${scopeWire(revoking)} is the user's last scope. Without it they are unscoped: their roles reach everything the tenant allows.`
-              : `The user loses ${scopeWire(revoking)}; their other scopes still limit them.`
-        }
-        confirmText="Revoke"
-        loading={busy}
-      />
+        <ConfirmModal
+          isOpen={revoking !== null}
+          onClose={() => setRevoking(null)}
+          onConfirm={async () => {
+            if (revoking) await revoke(revoking);
+            setRevoking(null);
+          }}
+          title="Revoke scope"
+          message={
+            revoking === null
+              ? ""
+              : user.scopes.length === 1
+                ? `${scopeWire(revoking)} is the user's last scope. Without it they are unscoped: their roles reach everything the tenant allows.`
+                : `The user loses ${scopeWire(revoking)}; their other scopes still limit them.`
+          }
+          confirmText="Revoke"
+          loading={busy}
+        />
 
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!grantBlocked) void grant();
-        }}
-      >
-        <label className="space-y-1">
-          <span className={T.label}>Type</span>
-          <SelectRoot
-            value={String(type)}
-            onValueChange={(v) => setType(Number(v) as ScopeType)}
-          >
-            <SelectTrigger aria-label="Scope type" className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GRANTABLE_SCOPE_TYPES.map((t) => (
-                <SelectItem key={t} value={String(t)}>
-                  {scopeTypeName(t)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </SelectRoot>
-        </label>
-        <label className="min-w-48 flex-1 space-y-1">
-          <span className={T.label}>Value</span>
-          <Input
-            aria-label="Scope value"
-            className="font-mono text-xs"
-            placeholder={`${SCOPE_VALUE_EXAMPLES[type]}, or ${SCOPE_WILDCARD}`}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-        </label>
-        <Button
-          type="submit"
-          disabled={Boolean(grantBlocked) || busy}
-          title={grantBlocked ?? undefined}
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!grantBlocked) void grant();
+          }}
         >
-          Grant
-        </Button>
-      </form>
+          <label className="space-y-1">
+            <span className={T.label}>Type</span>
+            <SelectRoot
+              value={String(type)}
+              onValueChange={(v) => setType(Number(v) as ScopeType)}
+            >
+              <SelectTrigger aria-label="Scope type" className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GRANTABLE_SCOPE_TYPES.map((t) => (
+                  <SelectItem key={t} value={String(t)}>
+                    {scopeTypeName(t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </SelectRoot>
+          </label>
+          <label className="min-w-48 flex-1 space-y-1">
+            <span className={T.label}>Value</span>
+            <Input
+              aria-label="Scope value"
+              className="font-mono text-xs"
+              placeholder={`${SCOPE_VALUE_EXAMPLES[type]}, or ${SCOPE_WILDCARD}`}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </label>
+          <Button
+            type="submit"
+            disabled={Boolean(grantBlocked) || busy}
+            title={grantBlocked ?? undefined}
+          >
+            Grant
+          </Button>
+        </form>
+      </CardContent>
     </Card>
   );
 }

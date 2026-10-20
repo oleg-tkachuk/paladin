@@ -30,7 +30,7 @@ import {
   ScaleIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LimitInput } from "@/components/ui/LimitInput";
@@ -282,9 +282,9 @@ export default function TenantQuotasPage() {
       </Card>
 
       {/* Set form */}
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+      <Card>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <CardHeader>
             <CardTitle
               level={3}
               className="text-base font-medium"
@@ -296,75 +296,79 @@ export default function TenantQuotasPage() {
               Enter raw integers (no SI suffixes). 0 allows nothing; Unlimited
               sets no cap.
             </p>
-          </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <CapInput
+                id="max-total-bytes"
+                label="Max total bytes"
+                hint={`Hard cap on storage. ${fmtCap(caps.maxTotalBytes ?? undefined, formatBytes)}`}
+                value={maxTotalBytes}
+                onChange={setMaxTotalBytes}
+              />
+              <CapInput
+                id="max-object-count"
+                label="Max object count"
+                hint="Hard cap on number of live objects."
+                value={maxObjectCount}
+                onChange={setMaxObjectCount}
+              />
+              <CapInput
+                id="max-bytes-per-day"
+                label="Max bytes / day"
+                hint={`Daily upload byte budget. ${fmtCap(caps.maxBytesPerDay ?? undefined, formatBytes)}`}
+                value={maxBytesPerDay}
+                onChange={setMaxBytesPerDay}
+              />
+              <CapInput
+                id="max-objects-per-day"
+                label="Max objects / day"
+                hint="Daily upload object-count budget."
+                value={maxObjectsPerDay}
+                onChange={setMaxObjectsPerDay}
+              />
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <CapInput
-              id="max-total-bytes"
-              label="Max total bytes"
-              hint={`Hard cap on storage. ${fmtCap(caps.maxTotalBytes ?? undefined, formatBytes)}`}
-              value={maxTotalBytes}
-              onChange={setMaxTotalBytes}
-            />
-            <CapInput
-              id="max-object-count"
-              label="Max object count"
-              hint="Hard cap on number of live objects."
-              value={maxObjectCount}
-              onChange={setMaxObjectCount}
-            />
-            <CapInput
-              id="max-bytes-per-day"
-              label="Max bytes / day"
-              hint={`Daily upload byte budget. ${fmtCap(caps.maxBytesPerDay ?? undefined, formatBytes)}`}
-              value={maxBytesPerDay}
-              onChange={setMaxBytesPerDay}
-            />
-            <CapInput
-              id="max-objects-per-day"
-              label="Max objects / day"
-              hint="Daily upload object-count budget."
-              value={maxObjectsPerDay}
-              onChange={setMaxObjectsPerDay}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={Boolean(changesBlocked) || resetting || !quota}
-              title={changesBlocked ?? undefined}
-              onClick={() => setConfirmReset(true)}
-            >
-              {resetting ? "Resetting…" : "Reset daily counters"}
-            </Button>
-            {/* Disabled while the quota is still loading, not just while
+            <div className="flex items-center justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={Boolean(changesBlocked) || resetting || !quota}
+                title={changesBlocked ?? undefined}
+                onClick={() => setConfirmReset(true)}
+              >
+                {resetting ? "Resetting…" : "Reset daily counters"}
+              </Button>
+              {/* Disabled while the quota is still loading, not just while
                 submitting. The form's resource_version comes from the fetched
                 quota; before it arrives the state is null and the request
                 would carry "0" — which asserts "no quota row exists" and is
                 refused with a version mismatch if one does. The user sees
                 "Update failed" for a click that was simply too early. */}
-            <Button
-              type="submit"
-              disabled={
-                Boolean(changesBlocked) || submitting || loading || capsInvalid
-              }
-              title={changesBlocked ?? undefined}
-            >
-              {submitting ? (
-                "Updating…"
-              ) : loading ? (
-                "Loading…"
-              ) : (
-                <>
-                  <CheckCircleIcon className="size-4" />
-                  {notFound ? "Create quota" : "Apply changes"}
-                </>
-              )}
-            </Button>
-          </div>
+              <Button
+                type="submit"
+                disabled={
+                  Boolean(changesBlocked) ||
+                  submitting ||
+                  loading ||
+                  capsInvalid
+                }
+                title={changesBlocked ?? undefined}
+              >
+                {submitting ? (
+                  "Updating…"
+                ) : loading ? (
+                  "Loading…"
+                ) : (
+                  <>
+                    <CheckCircleIcon className="size-4" />
+                    {notFound ? "Create quota" : "Apply changes"}
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
         </form>
       </Card>
       <ConfirmModal

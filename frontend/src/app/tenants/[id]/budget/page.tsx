@@ -30,7 +30,7 @@ import {
 import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -378,154 +378,156 @@ export default function TenantBudgetPage() {
       </Card>
 
       {/* Set form */}
-      <Card className="p-6">
-        <form onSubmit={handleSubmit}>
-          {/* Not shown until the first snapshot lands. Rendered early, it
+      <Card>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* The heading says what the form does, so it stands while the
+              budget loads; only the fields wait for it. */}
+          <CardHeader>
+            <CardTitle
+              level={3}
+              className="text-base font-medium"
+              icon={BanknotesIcon}
+            >
+              Update budget
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Set a new cap. Capabilities issued under this tenant see the new
+              limit on their next charge attempt.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {/* Not shown until the first snapshot lands. Rendered early, it
               showed a new budget's defaults — Unlimited on, no cap — for a
               budget that had one, and a click on that toggle as the snapshot
               arrived flipped the loaded cap off. Earlier still, a value typed
               before the snapshot marked the form edited, which kept the
               snapshot and its version from seeding, so Apply sent version
               "0" and the server refused it as a conflict. */}
-          {initialising ? (
-            <div
-              aria-busy="true"
-              aria-label="Loading budget"
-              className="space-y-4"
-            >
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-9 w-full" />
-            </div>
-          ) : (
-            <fieldset className="space-y-4">
-              <div>
-                <CardTitle
-                  level={3}
-                  className="text-base font-medium"
-                  icon={BanknotesIcon}
-                >
-                  Update budget
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Set a new cap. Capabilities issued under this tenant see the
-                  new limit on their next charge attempt.
-                </p>
+            {initialising ? (
+              <div
+                aria-busy="true"
+                aria-label="Loading budget"
+                className="space-y-4"
+              >
+                <Skeleton className="h-9 w-full" />
               </div>
+            ) : (
+              <fieldset className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="max-budget">Max budget</Label>
+                    <LimitInput
+                      id="max-budget"
+                      // Amounts are exact to the nano; a coarser step would have
+                      // the browser refuse a finer one before handleSubmit sees it.
+                      step="any"
+                      placeholder="0 allows no spend"
+                      value={maxBudget}
+                      onChange={(v) => {
+                        setEdited(true);
+                        setMaxBudget(v);
+                      }}
+                      unlimited={unlimited}
+                      onUnlimitedChange={(next) => {
+                        setEdited(true);
+                        setUnlimited(next);
+                      }}
+                    />
+                    <p className={T.hint}>
+                      Unlimited keeps the counter accumulating without
+                      rejecting; 0 rejects every charge.
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="max-budget">Max budget</Label>
-                  <LimitInput
-                    id="max-budget"
-                    // Amounts are exact to the nano; a coarser step would have
-                    // the browser refuse a finer one before handleSubmit sees it.
-                    step="any"
-                    placeholder="0 allows no spend"
-                    value={maxBudget}
-                    onChange={(v) => {
-                      setEdited(true);
-                      setMaxBudget(v);
-                    }}
-                    unlimited={unlimited}
-                    onUnlimitedChange={(next) => {
-                      setEdited(true);
-                      setUnlimited(next);
-                    }}
-                  />
-                  <p className={T.hint}>
-                    Unlimited keeps the counter accumulating without rejecting;
-                    0 rejects every charge.
-                  </p>
-                </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="unit-code">Currency / Unit</Label>
+                    <Select
+                      id="unit-code"
+                      options={UNIT_CODES.map((u) => ({
+                        value: u,
+                        label: u,
+                      }))}
+                      value={shownUnit}
+                      placeholder="Platform currency"
+                      onChange={(v) => {
+                        setEdited(true);
+                        setUnitCode(v);
+                      }}
+                      className="w-full"
+                    />
+                    <p className={T.hint}>
+                      ISO 4217 fiat, or XXX for metering that is not money. Left
+                      alone, a new budget is in the platform&apos;s currency
+                      {platformCurrency ? ` (${platformCurrency})` : ""}.
+                    </p>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="unit-code">Currency / Unit</Label>
-                  <Select
-                    id="unit-code"
-                    options={UNIT_CODES.map((u) => ({
-                      value: u,
-                      label: u,
-                    }))}
-                    value={shownUnit}
-                    placeholder="Platform currency"
-                    onChange={(v) => {
-                      setEdited(true);
-                      setUnitCode(v);
-                    }}
-                    className="w-full"
-                  />
-                  <p className={T.hint}>
-                    ISO 4217 fiat, or XXX for metering that is not money. Left
-                    alone, a new budget is in the platform&apos;s currency
-                    {platformCurrency ? ` (${platformCurrency})` : ""}.
-                  </p>
-                </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Period</Label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={resetSpend}
+                        onChange={(e) => {
+                          setEdited(true);
+                          setResetSpend(e.target.checked);
+                        }}
+                        className="size-4 accent-primary"
+                      />
+                      <span>
+                        Reset spend (roll the period — typical at billing
+                        close).
+                      </span>
+                    </label>
+                    <p className={T.hint}>
+                      Off: change the cap mid-cycle without affecting
+                      accumulated spend.
+                    </p>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Period</Label>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={resetSpend}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="period-end">Period close</Label>
+                    <Input
+                      id="period-end"
+                      type="date"
+                      value={periodEnd}
                       onChange={(e) => {
                         setEdited(true);
-                        setResetSpend(e.target.checked);
+                        setPeriodEnd(e.target.value);
                       }}
-                      className="size-4 accent-primary"
+                      className="w-full"
                     />
-                    <span>
-                      Reset spend (roll the period — typical at billing close).
-                    </span>
-                  </label>
-                  <p className={T.hint}>
-                    Off: change the cap mid-cycle without affecting accumulated
-                    spend.
-                  </p>
+                    <p className={T.hint}>
+                      Optional. Pins when the billing window closes; blank
+                      leaves the server default.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="period-end">Period close</Label>
-                  <Input
-                    id="period-end"
-                    type="date"
-                    value={periodEnd}
-                    onChange={(e) => {
-                      setEdited(true);
-                      setPeriodEnd(e.target.value);
-                    }}
-                    className="w-full"
-                  />
-                  <p className={T.hint}>
-                    Optional. Pins when the billing window closes; blank leaves
-                    the server default.
-                  </p>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    title={changesBlocked ?? undefined}
+                    disabled={
+                      Boolean(changesBlocked) ||
+                      submitting ||
+                      budgetQuery.isError ||
+                      (!unlimited && !maxBudget.trim())
+                    }
+                  >
+                    {submitting ? (
+                      "Updating…"
+                    ) : (
+                      <>
+                        <CheckCircleIcon className="size-4" />
+                        {notFound ? "Create budget" : "Apply changes"}
+                      </>
+                    )}
+                  </Button>
                 </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  title={changesBlocked ?? undefined}
-                  disabled={
-                    Boolean(changesBlocked) ||
-                    submitting ||
-                    budgetQuery.isError ||
-                    (!unlimited && !maxBudget.trim())
-                  }
-                >
-                  {submitting ? (
-                    "Updating…"
-                  ) : (
-                    <>
-                      <CheckCircleIcon className="size-4" />
-                      {notFound ? "Create budget" : "Apply changes"}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </fieldset>
-          )}
+              </fieldset>
+            )}
+          </CardContent>
         </form>
       </Card>
     </div>

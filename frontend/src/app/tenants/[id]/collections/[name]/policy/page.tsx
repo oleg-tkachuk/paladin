@@ -16,7 +16,7 @@ import {
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -93,8 +93,8 @@ export default function CollectionPolicyPage() {
   }, [collection, policyText, setCollection, showNotification, confirmSaved]);
 
   return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-center justify-between">
+    <Card>
+      <CardHeader className="flex items-center justify-between">
         <CardTitle className="text-sm font-semibold" icon={ShieldCheckIcon}>
           Cedar policy{" "}
           <Link
@@ -123,52 +123,54 @@ export default function CollectionPolicyPage() {
             {saving ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-      {collection.resourceVersion === "" ? (
-        <Skeleton className="h-48 w-full" />
-      ) : (
-        <Textarea
-          value={policyText}
-          onChange={(e) => setPolicyText(e.target.value)}
-          placeholder="// permit ( principal, action, resource );"
-          className="min-h-55 font-mono text-xs leading-relaxed"
-          spellCheck={false}
-        />
-      )}
-      {diagnostics !== null && diagnostics.length === 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-sm text-success">
-          <CheckCircleIcon className="size-4" />
-          Policy parses cleanly.
-        </div>
-      )}
-      {diagnostics !== null && diagnostics.length > 0 && (
-        <div className="space-y-1">
-          {diagnostics.map((d, i) => {
-            const isError = d.severity.toLowerCase() === "error";
-            return (
-              <div
-                key={i}
-                className={cn(
-                  "flex items-start gap-2 rounded-md border p-2 text-sm",
-                  isError
-                    ? "border-destructive/40 bg-destructive/10 text-destructive"
-                    : "border-warning/40 bg-warning/10 text-warning",
-                )}
-              >
-                <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
-                <div>
-                  <p>{d.message}</p>
-                  {(d.line > 0 || d.column > 0) && (
-                    <p className="font-mono text-xs opacity-70">
-                      line {d.line}, col {d.column}
-                    </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {collection.resourceVersion === "" ? (
+          <Skeleton className="h-48 w-full" />
+        ) : (
+          <Textarea
+            value={policyText}
+            onChange={(e) => setPolicyText(e.target.value)}
+            placeholder="// permit ( principal, action, resource );"
+            className="min-h-55 font-mono text-xs leading-relaxed"
+            spellCheck={false}
+          />
+        )}
+        {diagnostics !== null && diagnostics.length === 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success/10 p-2 text-sm text-success">
+            <CheckCircleIcon className="size-4" />
+            Policy parses cleanly.
+          </div>
+        )}
+        {diagnostics !== null && diagnostics.length > 0 && (
+          <div className="space-y-1">
+            {diagnostics.map((d, i) => {
+              const isError = d.severity.toLowerCase() === "error";
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-start gap-2 rounded-md border p-2 text-sm",
+                    isError
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-warning/40 bg-warning/10 text-warning",
                   )}
+                >
+                  <ExclamationTriangleIcon className="mt-0.5 size-4 shrink-0" />
+                  <div>
+                    <p>{d.message}</p>
+                    {(d.line > 0 || d.column > 0) && (
+                      <p className="font-mono text-xs opacity-70">
+                        line {d.line}, col {d.column}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }
