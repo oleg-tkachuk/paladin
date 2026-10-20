@@ -139,7 +139,7 @@ implementation of the vocabulary to drift from it:
 
 ```go
 narrowed, err := paladin.Attenuate(biscuit, paladin.Attenuation{
-    Ops:              []string{paladin.OpGet},
+    Ops:              []paladin.Op{paladin.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
     Planes:           []string{"data"}, // the data plane
     ExpiresAt:        time.Now().Add(10 * time.Minute),
@@ -155,8 +155,11 @@ token can be bound. `MaxRequests` and `MaxBudgetNanos` (in nanos, billionths
 of the capability's unit) give the copy limits of its own, counted apart from other
 copies and within every limit already in force; spending past them answers
 `ResourceExhausted`. A limit of 0 freezes the copy without revoking it. A token that is no Paladin Biscuit wraps `ErrInvalidArgument`. The
-operations a capability names are this package's `OpGet`, `OpPut`, `OpList`,
-`OpDelete`, `OpShare`, `OpManage`, `OpObjectPresign` and `OpObjectTag`.
+operations a capability names are this package's `Op` constants: `OpGet`,
+`OpPut`, `OpList`, `OpDelete`, `OpShare`, `OpManage`, `OpObjectPresign` and
+`OpObjectTag`, so a misspelt one fails to compile. `OpNames` spells them for
+`CapabilityCaveats.ops`, and `Op.Validate` refuses, wrapping
+`ErrInvalidArgument`, a name the server refuses, such as a bare `presign`.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
 force on it with what has been counted against it. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),

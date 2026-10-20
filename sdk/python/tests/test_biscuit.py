@@ -148,7 +148,7 @@ def test_checked_in_frozen_fixture_is_a_frozen_seed() -> None:
 
 @needs_biscuit
 def test_attenuations_chain() -> None:
-    once = paladin.attenuate(_seed(), ops=["get", "list"])
+    once = paladin.attenuate(_seed(), ops=[paladin.Op.GET, paladin.Op.LIST])
     twice = paladin.attenuate(once, resource_uris=["paladin://t/c/k"])
     assert _blocks(twice).block_count() == AUTHORITY_BLOCKS + 2
     assert _facts(twice, AUTHORITY_BLOCKS + 1) == {f'{pb.FACT_RESOURCE_URI}("paladin://t/c/k")'}
@@ -167,7 +167,7 @@ def test_expiry_is_kept_to_the_second_in_utc() -> None:
 @pytest.mark.parametrize("token", ["AAAA", "not base64 at all!"])
 def test_refuses_what_is_not_a_paladin_biscuit(token: str) -> None:
     with pytest.raises(ValueError, match="not a Paladin Biscuit"):
-        paladin.attenuate(token, ops=["get"])
+        paladin.attenuate(token, ops=[paladin.Op.GET])
 
 
 @needs_biscuit
@@ -177,13 +177,16 @@ def test_refuses_a_token_whose_chain_is_broken() -> None:
     mid = len(seed) // 2
     flipped = seed[:mid] + ("A" if seed[mid] != "A" else "B") + seed[mid + 1 :]
     with pytest.raises(ValueError, match="not a Paladin Biscuit"):
-        paladin.attenuate(flipped, ops=["get"])
+        paladin.attenuate(flipped, ops=[paladin.Op.GET])
 
 
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
         ({"ops": "get"}, TypeError, "list of strings"),
+        # A bare name limes does not define, and a misspelt one.
+        ({"ops": ["presign"]}, ValueError, "'presign' is no operation"),
+        ({"ops": ["Get"]}, ValueError, "is no operation"),
         ({"planes": [1]}, TypeError, "strings"),
         ({"resource_prefixes": [""]}, ValueError, "non-empty"),
         ({"resource_uris": [""]}, ValueError, "non-empty"),
@@ -208,10 +211,10 @@ def test_refuses_malformed_arguments(
 @pytest.mark.parametrize("token", ["", "header.claims.signature"])
 def test_refuses_a_jwt_or_nothing(token: str) -> None:
     with pytest.raises(ValueError, match="not a Biscuit token"):
-        paladin.attenuate(token, ops=["get"])
+        paladin.attenuate(token, ops=[paladin.Op.GET])
 
 
 @pytest.mark.skipif(HAS_BISCUIT, reason="the biscuit extra is installed")
 def test_names_the_extra_without_it() -> None:
     with pytest.raises(ImportError, match=r"paladin-sdk\[biscuit\]"):
-        paladin.attenuate("AAAA", ops=["get"])
+        paladin.attenuate("AAAA", ops=[paladin.Op.GET])

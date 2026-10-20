@@ -158,7 +158,7 @@ from datetime import datetime, timedelta, timezone
 
 narrowed = paladin.attenuate(
     issued.biscuit,
-    ops=["get"],
+    ops=[paladin.Op.GET],
     resource_prefixes=["corpus/public/"],
     planes=["data"],  # the capability planes: "data", "admin", "mcp"
     expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
@@ -174,8 +174,11 @@ client = paladin.Client(data_url, capability=narrowed)
 The block holds only the facts the server reads
 ([`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json));
 the server's tests verify a token this SDK attenuated. The operations a
-capability names are `OP_GET`, `OP_PUT`, `OP_LIST`, `OP_DELETE`, `OP_SHARE`,
-`OP_MANAGE`, `OP_OBJECT_PRESIGN` and `OP_OBJECT_TAG`.
+capability names are the members of `Op`, a `StrEnum`: `Op.GET`, `Op.PUT`,
+`Op.LIST`, `Op.DELETE`, `Op.SHARE`, `Op.MANAGE`, `Op.OBJECT_PRESIGN` and
+`Op.OBJECT_TAG`, also exported as `OP_GET` … `OP_OBJECT_TAG`. A member is a
+`str`, so it goes into `CapabilityCaveats(ops=[...])` as it is; `attenuate`
+raises `ValueError` for an op that is no member, such as a bare `"presign"`.
 
 `CapabilityService.revoke_biscuit` revokes one copy: the token sent and every
 copy attenuated from it. The copy it came from, its siblings and the

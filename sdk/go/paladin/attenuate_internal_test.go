@@ -18,7 +18,7 @@ func TestToLimes(t *testing.T) {
 	expires := time.Date(2026, 1, 1, 0, 30, 0, 0, time.UTC)
 	r, n := requests, nanos
 	got := toLimes(Attenuation{
-		Ops: []string{OpGet}, ResourcePrefixes: []string{"corpus/"}, ResourceURIs: []string{"paladin://x"},
+		Ops: []Op{OpGet}, ResourcePrefixes: []string{"corpus/"}, ResourceURIs: []string{"paladin://x"},
 		Planes: []string{"data"}, ExpiresAt: expires, BindJKT: "jkt", MaxRequests: &r, MaxBudgetNanos: &n,
 	})
 	want := limes.Attenuation{

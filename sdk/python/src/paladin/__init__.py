@@ -21,6 +21,7 @@ from paladin.auth import (
     OP_SHARE,
     TOKEN_REFRESH_MARGIN,
     AsyncSession,
+    Op,
     Session,
     StaticToken,
 )
@@ -237,6 +238,7 @@ __all__ = [
     "ObjectReader",
     "ObjectURI",
     "ObjectVersionName",
+    "Op",
     "OperationFailed",
     "Paladin",
     "PaladinError",

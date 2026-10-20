@@ -56,6 +56,10 @@ copy with limits of its own is counted against `copy_ceiling`.
 - `BISCUIT_STATUS_NOT_SHAREABLE` is deprecated and never sent, and
   `require_biscuit` no longer refuses a capability for lacking `share`.
 - `Delegate` still requires `share` on the parent.
+- The operations are typed. Go: `paladin.Op`, with `Attenuation.Ops []Op`,
+  `paladin.OpNames(…)` for `CapabilityCaveats.ops`, and `Op.Validate`. Python:
+  `paladin.Op`, a `StrEnum`, whose members `OP_GET` … `OP_OBJECT_TAG` now are;
+  `attenuate` raises `ValueError` for an op that is no member.
 
 ## sdk/go/v0.96.0 — the SDKs need no limes
 

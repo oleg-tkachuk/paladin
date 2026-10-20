@@ -12,10 +12,10 @@ import (
 const (
 	// OpPresign mints a presigned URL for an object. The URL's own method is
 	// asserted beside it (OpGet or OpPut), so presign itself only reads.
-	OpPresign limes.Op = paladin.OpObjectPresign
+	OpPresign = limes.Op(paladin.OpObjectPresign)
 	// OpTag reads or changes an object's tags; left undeclared, it is held
 	// to the caveats that tighten writes.
-	OpTag limes.Op = paladin.OpObjectTag
+	OpTag = limes.Op(paladin.OpObjectTag)
 )
 
 // opEffects is the effect declared for each of the data plane's own

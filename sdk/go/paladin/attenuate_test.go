@@ -20,7 +20,7 @@ func TestAttenuate(t *testing.T) {
 		t.Fatal(err)
 	}
 	seed := strings.TrimSpace(string(raw))
-	narrowed, err := paladin.Attenuate(seed, paladin.Attenuation{Ops: []string{paladin.OpGet}})
+	narrowed, err := paladin.Attenuate(seed, paladin.Attenuation{Ops: []paladin.Op{paladin.OpGet}})
 	if err != nil || narrowed == "" || narrowed == seed {
 		t.Fatalf("attenuate the seed: %q, %v", narrowed, err)
 	}
