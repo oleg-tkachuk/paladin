@@ -49,7 +49,9 @@ export function TenantDeleteDialog({
 
   // DeleteTenant only ever moves a tenant to the trash (see
   // docs/deletion-semantics.md); the copy says so rather than describing a
-  // cascade that only PurgeTenant, from the Trash page, performs.
+  // cascade that only PurgeTenant, from the Trash page, performs. For the
+  // same reason nothing is typed here: a restore undoes this, and the purge
+  // that cannot be undone asks for the slug.
   return (
     <ConfirmModal
       isOpen={!!deleteTarget}

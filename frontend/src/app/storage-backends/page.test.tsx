@@ -363,6 +363,33 @@ describe("StorageBackendsPage", () => {
     expect(h.setBackendEnabled).toHaveBeenCalledWith("b", false, "2");
   });
 
+  // The confirmation names the backends that stop serving, not only how many
+  // were ticked: one already disabled is skipped, so it is not listed.
+  it("lists the backends a bulk disable reaches, by id", async () => {
+    h.backends = [
+      makeBackend({ backendId: "a", enabled: true, resourceVersion: "1" }),
+      makeBackend({ backendId: "b", enabled: false, resourceVersion: "2" }),
+      makeBackend({ backendId: "c", enabled: true, resourceVersion: "3" }),
+    ];
+    render(<StorageBackendsPage />);
+    for (const id of ["a", "b", "c"]) {
+      await userEvent.click(screen.getByLabelText(`Select ${id}`));
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Bulk disable" }));
+
+    const dialog = screen.getByRole("alertdialog");
+    const listed = within(dialog).getByRole("list", {
+      name: "2 backends to disable",
+    });
+    expect(
+      within(listed)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["a", "c"]);
+    // Enabling undoes it, so nothing is typed.
+    expect(within(dialog).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
   it("bulk-enables without asking", async () => {
     h.backends = [
       makeBackend({ backendId: "a", enabled: false, resourceVersion: "1" }),

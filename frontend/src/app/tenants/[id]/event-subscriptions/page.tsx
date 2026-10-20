@@ -548,6 +548,10 @@ export default function EventsPage() {
             : ""
         }
         confirmText="Delete"
+        // Nothing restores a subscription, and its subscriber hears nothing
+        // of it: the deliveries just stop. Typed as the verb, since a
+        // subscription has no name of its own, only its sink.
+        typeToConfirm="delete"
         loading={deleting}
       />
     </div>

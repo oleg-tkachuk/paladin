@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@/test/utils";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  typeToConfirm,
+} from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the capabilities Issue dialog. The page talks
@@ -333,6 +340,7 @@ describe("CapabilitiesPage", () => {
       await screen.findByText("Actions for capability cap-1"),
     );
     await userEvent.click(screen.getByText("Revoke"));
+    await typeToConfirm("revoke");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() =>
       expect(h.revoke).toHaveBeenCalledWith(

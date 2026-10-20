@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, waitFor, typeToConfirm } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 const h = vi.hoisted(() => ({
@@ -49,6 +49,7 @@ describe("RevokeTokenDialog", () => {
   it("revokes only once confirmed", async () => {
     const { onRevoked } = open();
     expect(h.revoke).not.toHaveBeenCalled();
+    await typeToConfirm("revoke");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() =>
       expect(h.revoke).toHaveBeenCalledWith({ name: TOKEN.name }),

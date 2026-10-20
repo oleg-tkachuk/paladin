@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@/test/utils";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  typeToConfirm,
+} from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the m2m-tokens page (consts, then the create
@@ -142,6 +148,7 @@ describe("M2MTokensPage", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /Revoke ci-uploader/i }),
     );
+    await typeToConfirm("revoke");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() =>
       expect(h.revoke).toHaveBeenCalledWith(

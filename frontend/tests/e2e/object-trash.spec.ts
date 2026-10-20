@@ -120,6 +120,9 @@ test.describe("Object trash — holds its collection", () => {
       .getByRole("button", { name: `Actions for ${collection}` })
       .click();
     await page.getByRole("menuitem", { name: /Delete Collection/i }).click();
+    await page
+      .getByRole("textbox", { name: `Type ${collection} to confirm` })
+      .fill(collection);
     await page.getByRole("button", { name: /^Delete Collection$/ }).click();
 
     await expect(page.getByText(/1 object in its trash/)).toBeVisible();

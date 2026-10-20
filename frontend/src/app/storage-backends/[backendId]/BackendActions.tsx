@@ -7,7 +7,7 @@
 //   • TestBackend        — probe connectivity and S3 features on demand
 //   • UpdateBackend      — edit mutable metadata (OCC-guarded)
 //   • RotateCredentials  — point at a new secret ref with a grace window
-//   • DeleteBackend      — remove the backend (force past bucket refs)
+//   • DeleteBackend      — remove the backend (refused while buckets use it)
 //
 // Enable / drain / maintenance keep their own toggles on the list page; those
 // are per-row bulk-friendly actions, whereas these four are single-backend,
@@ -42,14 +42,7 @@ import {
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { errorMessage } from "@/hooks/errorContract";
 
 export function BackendActions({
@@ -183,27 +176,34 @@ export function BackendActions({
         }}
       />
 
-      <DeleteBackendDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        backendId={bid}
-        onSubmit={async () => {
-          try {
-            await deleteBackend(bid, backend.resourceVersion);
-            showNotification({
-              type: "success",
-              title: "Backend deleted",
-              message: bid,
-            });
-            router.push("/storage-backends");
-          } catch (err) {
-            showNotification({
-              type: "error",
-              title: "Could not delete backend",
-              message: errorMessage(err),
-            });
-          }
+      {/* The shared typed confirmation, where this page used to carry its
+          own: the same field, label and Enter behaviour as every other
+          delete nothing restores. A refusal (buckets still on it) stays in
+          the dialog, beside the id the operator typed. */}
+      <ConfirmModal
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={async () => {
+          await deleteBackend(bid, backend.resourceVersion);
+          showNotification({
+            type: "success",
+            title: "Backend deleted",
+            message: bid,
+          });
+          router.push("/storage-backends");
         }}
+        type="danger"
+        title="Delete this backend?"
+        message={
+          <p>
+            Removes Paladin&apos;s registration of{" "}
+            <span className="font-mono text-foreground">{bid}</span>. The object
+            storage it points at is not touched.
+          </p>
+        }
+        warning="A backend that still has buckets cannot be deleted: delete the buckets first. There is no override; the constraint is a foreign key."
+        confirmText="Delete backend"
+        typeToConfirm={bid}
       />
     </div>
   );
@@ -604,87 +604,5 @@ function RotateCredentialsForm({
         </FormField>
       </FormSection>
     </FormDialog>
-  );
-}
-
-function DeleteBackendDialog({
-  open,
-  onOpenChange,
-  backendId,
-  onSubmit,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  backendId: string;
-  onSubmit: () => Promise<void>;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete backend</DialogTitle>
-          <DialogDescription>
-            This removes <span className="font-mono">{backendId}</span>. Type
-            the id to confirm.
-          </DialogDescription>
-        </DialogHeader>
-        <DeleteBackendForm
-          backendId={backendId}
-          onCancel={() => onOpenChange(false)}
-          onSubmit={onSubmit}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DeleteBackendForm({
-  backendId,
-  onCancel,
-  onSubmit,
-}: {
-  backendId: string;
-  onCancel: () => void;
-  onSubmit: () => Promise<void>;
-}) {
-  const [confirm, setConfirm] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const submit = async () => {
-    setBusy(true);
-    try {
-      await onSubmit();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="space-y-3">
-        <Input
-          aria-label="confirm backend id"
-          placeholder={backendId}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-        />
-        <p className="text-xs text-muted-foreground">
-          A backend that still has buckets cannot be deleted — delete the
-          buckets first. There is no override: the constraint is a foreign key.
-        </p>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={() => void submit()}
-          disabled={busy || confirm !== backendId}
-        >
-          {busy ? "Deleting…" : "Delete backend"}
-        </Button>
-      </DialogFooter>
-    </>
   );
 }

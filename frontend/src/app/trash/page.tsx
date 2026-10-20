@@ -35,6 +35,22 @@ function byDeletedAt(a: Tenant, b: Tenant): number {
 
 const COLUMN_COUNT = 4;
 
+// What a purge deletes along with the tenant row, without asking again: the
+// ON DELETE CASCADE children of `tenants`, and the capabilities pgstore
+// erases in the same transaction (docs/deletion-semantics.md). Kinds rather
+// than rows: the trash does not read each tenant's tokens and subscriptions.
+const PURGE_CASCADE: Affected = {
+  heading: "Removed with it",
+  items: [
+    "API tokens: integrations using them stop at once",
+    "Event subscriptions: deliveries stop, silently",
+    "Capabilities, with their counters and charges",
+    "Quotas, rate limits and slug history",
+    "Operations, object locks and upload sessions",
+  ],
+  mono: false,
+};
+
 // Which trashed tenants show, by where they stand in the retention window.
 type RetentionFilter = "all" | "past" | "within";
 const RETENTION_FILTERS: readonly ToolbarFilterOption<RetentionFilter>[] = [
@@ -78,7 +94,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { SortableHead } from "@/components/ui/SortHeader";
 import {
   TableToolbar,
@@ -449,12 +465,18 @@ export default function TrashPage() {
           confirmText="Restore tenant"
         />
 
+        {/* Purge is the one delete of a tenant nothing undoes, and it takes
+            the CASCADE column of docs/deletion-semantics.md with it, so it
+            asks for the slug and names what goes. Restore, above, puts
+            things back and asks for nothing typed. */}
         <ConfirmModal
           isOpen={pending?.kind === "purge"}
           onClose={() => setPending(null)}
           onConfirm={() => (pending ? handlePurge(pending.tenant) : undefined)}
           loading={busyId !== null}
           type="danger"
+          typeToConfirm={pending?.tenant.slug || pending?.tenant.tenantId}
+          affected={PURGE_CASCADE}
           title="Purge this tenant?"
           message={
             <p>

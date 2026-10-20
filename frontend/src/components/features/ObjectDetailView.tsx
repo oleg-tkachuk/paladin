@@ -273,6 +273,9 @@ export function ObjectDetailView({
         message="This action is irreversible. The object and all its data will be permanently destroyed."
         type="danger"
         confirmText="Delete Forever"
+        // Typed as the verb, as on the object list: the bytes go for good,
+        // and a key can run to a long path.
+        typeToConfirm="purge"
         loading={isConfirming}
       />
       <ConfirmModal

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, typeToConfirm, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 import { ScopeType } from "@/gen/paladin/common/v1/scope_pb";
@@ -108,6 +108,7 @@ describe("UserDetailPage", () => {
       await screen.findByRole("button", { name: "Actions for alice" }),
     );
     await userEvent.click(screen.getByText("Delete"));
+    await typeToConfirm("alice");
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(h.push).toHaveBeenCalledWith("/users"));
   });

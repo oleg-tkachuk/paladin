@@ -89,20 +89,14 @@ export function UserRowActions({
     onResetPassword({ subject: user.subject, password: res.password ?? "" });
   }
 
+  // A refusal is thrown for the confirmation to show, beside the login the
+  // operator typed, rather than closing it behind a toast.
   async function doDelete() {
     const res = await deleteUser({
       name: user.name,
       resourceVersion: user.resourceVersion,
     });
-    setConfirmDelete(false);
-    if (!res.ok) {
-      showNotification({
-        type: "error",
-        title: "Could not delete user",
-        message: res.error ?? "",
-      });
-      return;
-    }
+    if (!res.ok) throw new Error(res.error ?? "");
     showNotification({
       type: "success",
       title: "User deleted",
@@ -153,27 +147,21 @@ export function UserRowActions({
         loading={busy}
       />
 
-      <Modal
+      {/* Users have no trash: the login is typed, so the account deleted is
+          the one meant. The subject, not the display name, since it is
+          what the user signs in with and is unique in the tenant. */}
+      <ConfirmModal
         isOpen={confirmDelete}
         onClose={() => setConfirmDelete(false)}
+        onConfirm={doDelete}
+        type="danger"
         title="Delete user"
-        description={`${label} loses access immediately. Audit entries they produced are kept.`}
-        size="sm"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={doDelete} disabled={busy}>
-              {busy ? "Deleting…" : "Delete"}
-            </Button>
-          </div>
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          This cannot be undone from the console.
-        </p>
-      </Modal>
+        message={`${label} loses access immediately. Audit entries they produced are kept.`}
+        warning="This cannot be undone from the console."
+        confirmText="Delete"
+        typeToConfirm={user.subject}
+        loading={busy}
+      />
     </>
   );
 }

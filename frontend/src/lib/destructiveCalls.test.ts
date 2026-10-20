@@ -37,7 +37,7 @@ const GUARDED: Record<string, string> = {
     "ConfirmModal",
   "app/collections/page.tsx::deleteCollection": "AlertDialog on the page",
   "app/storage-backends/[backendId]/BackendActions.tsx::deleteBackend":
-    "DeleteBackendDialog",
+    "ConfirmModal, the backend's id typed",
   "app/storage-backends/[backendId]/BackendActions.tsx::rotateCredentials":
     "RotateCredentialsDialog",
   "app/tenants/TenantDeleteDialog.tsx::deleteTenant":
@@ -65,14 +65,91 @@ const GUARDED: Record<string, string> = {
   "app/operations/page.tsx::cancelOperation":
     "CancelOperationButton's ConfirmModal on each row",
   "components/features/ObjectDetailView.tsx::purgeObject": "ConfirmModal",
-  "components/features/users/UserRowActions.tsx::deleteUser": "Modal",
+  "components/features/users/UserRowActions.tsx::deleteUser":
+    "ConfirmModal, the user's login typed",
   "components/features/users/UserScopesCard.tsx::revokeScopes":
     "ConfirmModal, which says when the last scope leaves the user unscoped",
   "components/features/users/UserScopesCard.tsx::revoke": "ConfirmModal",
   "components/features/users/UserRowActions.tsx::resetPassword": "ConfirmModal",
 };
 
+// Of those, the calls nothing in the console undoes: a purge, a delete, a
+// revoke. Each one asks for something typed before it goes (ConfirmModal's
+// typeToConfirm, as Argo CD asks for an application's name), or says here
+// why it need not. A new one fails until it is in TYPED or UNTYPED.
+const IRREVERSIBLE =
+  /^(delete|purge|revoke|permanentlyDelete|hardDelete|emptyTrash)([A-Z][A-Za-z]*)?$/;
+
+/** "file::callee" → the file whose ConfirmModal passes typeToConfirm. */
+const TYPED: Record<string, string> = {
+  "app/trash/page.tsx::purgeTenant": "app/trash/page.tsx",
+  "components/features/buckets/BucketDeleteDialog.tsx::deleteBucket":
+    "components/features/buckets/BucketDeleteDialog.tsx",
+  "app/collections/page.tsx::deleteCollection":
+    "components/features/collections/CollectionDeleteDialog.tsx",
+  "app/tenants/[id]/collections/page.tsx::deleteCollection":
+    "components/features/collections/CollectionDeleteDialog.tsx",
+  "app/storage-backends/[backendId]/BackendActions.tsx::deleteBackend":
+    "app/storage-backends/[backendId]/BackendActions.tsx",
+  "app/tenants/[id]/collections/[name]/objects/page.tsx::purgeObject":
+    "app/tenants/[id]/collections/[name]/objects/page.tsx",
+  "app/tenants/[id]/collections/[name]/trash/page.tsx::purgeObject":
+    "app/tenants/[id]/collections/[name]/trash/page.tsx",
+  "components/features/ObjectDetailView.tsx::purgeObject":
+    "components/features/ObjectDetailView.tsx",
+  "components/features/users/UserRowActions.tsx::deleteUser":
+    "components/features/users/UserRowActions.tsx",
+  "components/features/mcp/MCPAuthorization.tsx::deleteOAuthClient":
+    "components/features/mcp/MCPAuthorization.tsx",
+  "app/tenants/[id]/event-subscriptions/page.tsx::deleteSubscription":
+    "app/tenants/[id]/event-subscriptions/page.tsx",
+  "app/tenants/[id]/capabilities/RevokeCapabilityDialog.tsx::revoke":
+    "app/tenants/[id]/capabilities/RevokeCapabilityDialog.tsx",
+  "app/tenants/[id]/m2m-tokens/RevokeTokenDialog.tsx::revoke":
+    "app/tenants/[id]/m2m-tokens/RevokeTokenDialog.tsx",
+};
+
+/** "file::callee" → why nothing is typed before it. */
+const UNTYPED: Record<string, string> = {
+  "app/tenants/TenantDeleteDialog.tsx::deleteTenant":
+    "it moves the tenant to the trash, and a restore undoes it",
+  "app/tenants/[id]/capabilities/RevokeBiscuitCopyDialog.tsx::revokeBiscuit":
+    "the copy itself is pasted, which is more than a typed name asks",
+  "components/features/buckets/BucketGrantsCard.tsx::revokeBucketGrant":
+    "a grant can be given again, the same as before",
+  "components/features/oauth/ConnectedApplications.tsx::revokeOAuthGrant":
+    "the user's own consent; the application asks for it again",
+  "components/features/users/UserScopesCard.tsx::revokeScopes":
+    "scopes can be granted again, the same as before",
+  "components/features/users/UserScopesCard.tsx::revoke":
+    "scopes can be granted again, the same as before",
+};
+
 const SRC = join(__dirname, "..");
+
+/** Whether a file gives some ConfirmModal a typeToConfirm. */
+function passesTypeToConfirm(rel: string): boolean {
+  const file = join(SRC, rel);
+  const sf = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const visit = (node: ts.Node): boolean => {
+    if (
+      (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
+      node.tagName.getText(sf) === "ConfirmModal" &&
+      node.attributes.properties.some(
+        (a) => ts.isJsxAttribute(a) && a.name.getText(sf) === "typeToConfirm",
+      )
+    ) {
+      return true;
+    }
+    return ts.forEachChild(node, visit) ?? false;
+  };
+  return visit(sf);
+}
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -135,6 +212,31 @@ describe("destructive calls", () => {
 
   it("every GUARDED entry still names a call", () => {
     const stale = Object.keys(GUARDED).filter((k) => !calls.has(k));
+    expect(stale, "remove entries whose call is gone").toEqual([]);
+  });
+
+  it("every irreversible call asks for something typed, or says why not", () => {
+    const callee = (c: string) => c.slice(c.lastIndexOf("::") + 2);
+    const undecided = [...calls].filter(
+      (c) => IRREVERSIBLE.test(callee(c)) && !(c in TYPED) && !(c in UNTYPED),
+    );
+    expect(
+      undecided,
+      "pass typeToConfirm to its ConfirmModal and add it to TYPED, or say in UNTYPED why it need not",
+    ).toEqual([]);
+  });
+
+  it("every TYPED call's confirmation passes typeToConfirm", () => {
+    const untyped = Object.entries(TYPED)
+      .filter(([, file]) => !passesTypeToConfirm(file))
+      .map(([call]) => call);
+    expect(untyped).toEqual([]);
+  });
+
+  it("every TYPED and UNTYPED entry still names a call", () => {
+    const stale = [...Object.keys(TYPED), ...Object.keys(UNTYPED)].filter(
+      (k) => !calls.has(k),
+    );
     expect(stale, "remove entries whose call is gone").toEqual([]);
   });
 });

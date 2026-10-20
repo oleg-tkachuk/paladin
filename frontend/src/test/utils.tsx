@@ -1,6 +1,8 @@
 import type { ReactElement, ReactNode } from "react";
 import {
+  fireEvent,
   render as rtlRender,
+  screen,
   type RenderOptions,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -35,4 +37,16 @@ export function render(
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return rtlRender(ui, { wrapper: Wrapper, ...options });
+}
+
+/**
+ * Types what an open confirmation asks for (ConfirmModal's typeToConfirm),
+ * finding the field by the text its label names, so a suite fails when the
+ * dialog asks for something other than what it expects.
+ */
+export async function typeToConfirm(text: string) {
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: `Type ${text} to confirm` }),
+    { target: { value: text } },
+  );
 }

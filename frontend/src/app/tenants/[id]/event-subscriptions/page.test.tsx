@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, typeToConfirm, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the event-subscriptions page (helpers/form
@@ -172,6 +172,7 @@ describe("EventsPage", () => {
       await screen.findByText("Actions for subscription sub-1"),
     );
     await userEvent.click(screen.getByText("Delete"));
+    await typeToConfirm("delete");
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(h.del).toHaveBeenCalledWith(
@@ -300,6 +301,7 @@ describe("EventsPage optimistic changes", () => {
     render(<EventsPage />);
     await openMenu();
     await userEvent.click(screen.getByText("Delete"));
+    await typeToConfirm("delete");
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(screen.queryByText("Actions for subscription sub-1")).toBeNull(),

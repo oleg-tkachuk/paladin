@@ -85,6 +85,9 @@ export function BucketDeleteDialog({
       }
       warning="Buckets have no trash: the registration goes at once and cannot be restored."
       confirmText="Delete bucket"
+      // No trash and no undo, and with the checkbox the S3 bucket goes too,
+      // so the operator types the name of the one they mean.
+      typeToConfirm={deleteTarget?.bucketId}
     >
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-left text-sm has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
         <Checkbox

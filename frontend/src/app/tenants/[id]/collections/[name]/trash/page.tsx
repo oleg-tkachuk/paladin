@@ -50,7 +50,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -180,6 +180,16 @@ export default function CollectionTrashPage() {
     pendingCount === 1
       ? (itemsFor(pending!.ids)[0]?.key ?? pending!.ids[0])
       : null;
+  // A selection is listed by key, so the operator reads which objects it
+  // holds rather than how many; one row is named in the message already.
+  const pendingAffected: Affected | undefined =
+    pending && pendingCount > 1
+      ? {
+          heading: `${pendingCount} objects`,
+          items: itemsFor(pending.ids).map((o) => o.key),
+          total: pendingCount,
+        }
+      : undefined;
   const pendingSubject = pendingName ? (
     <span className="font-mono text-foreground break-all">{pendingName}</span>
   ) : (
@@ -529,6 +539,7 @@ export default function CollectionTrashPage() {
           </p>
         }
         warning="A restore is refused for an object that changed after this list loaded; refresh and try again."
+        affected={pendingAffected}
         confirmText={
           pendingCount === 1
             ? "Restore object"
@@ -554,6 +565,10 @@ export default function CollectionTrashPage() {
           </p>
         }
         warning="This cannot be undone: a purged object cannot be restored."
+        affected={pendingAffected}
+        // A purge destroys the bytes, so it is typed out; as the verb, since
+        // a key can run to a long path and a selection has no one name.
+        typeToConfirm="purge"
         confirmText={
           pendingCount === 1
             ? "Purge permanently"

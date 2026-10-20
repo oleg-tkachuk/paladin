@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@/test/utils";
+import {
+  render,
+  screen,
+  fireEvent,
+  typeToConfirm,
+  waitFor,
+} from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the tenant buckets page. No decomposition yet — this
@@ -205,6 +211,7 @@ describe("TenantBucketsPage", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /Delete bucket/i }),
     );
+    await typeToConfirm("my-bucket");
     await user.click(
       await screen.findByRole("button", { name: "Delete bucket" }),
     );

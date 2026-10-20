@@ -151,7 +151,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
 
     // Confirm in the dialog. The dialog footer has a
     // destructive-styled confirm button; matched by role +
-    // accessible name.
+    // accessible name, once the verb is typed: a revoke cannot be undone.
+    await page
+      .getByRole("textbox", { name: "Type revoke to confirm" })
+      .fill("revoke");
     await page.getByRole("button", { name: /^Revoke$/ }).click();
 
     // The list defaults to includeRevoked=false, so the row would DISAPPEAR
