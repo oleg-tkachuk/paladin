@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantDetailQuery } from "@/lib/queries/details";
+import { IntentTableRow } from "@/components/ui/IntentTableRow";
 import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
@@ -232,7 +234,11 @@ export default function TenantsPage() {
               const handle = tenant.slug || tenant.tenantId;
               const detailHref = `/tenants/${encodeURIComponent(handle)}`;
               return (
-                <TableRow key={tenant.tenantId} className="group">
+                <IntentTableRow
+                  key={tenant.tenantId}
+                  className="group"
+                  query={tenantDetailQuery(handle)}
+                >
                   <TableCell>
                     <Link
                       href={detailHref}
@@ -344,7 +350,7 @@ export default function TenantsPage() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
-                </TableRow>
+                </IntentTableRow>
               );
             })}
           </ListBody>

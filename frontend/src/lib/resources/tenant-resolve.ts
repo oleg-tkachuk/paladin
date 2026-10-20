@@ -15,10 +15,12 @@
 // the audit_log; tracked in BACKLOG.
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { useQuery } from "@tanstack/react-query";
 
-import { tenantClient } from "@/lib/connect/client";
+import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
+import { tenantDetailQuery } from "@/lib/queries/details";
 
 /**
  * Resolved tenant view used by route handlers. Tenant ID is always
@@ -77,6 +79,33 @@ function canonicalPath(id: string, slug: string): string | null {
   return url.pathname + url.search + url.hash;
 }
 
+/** The resource-name prefix GetTenant answers with. */
+const TENANT_NAME_PREFIX = "tenants/";
+/** The physical layout a tenant has when it names none (ADR-0015). */
+const DEFAULT_STORAGE_LAYOUT = "shared";
+
+/** resolvedTenant is the view of `res` route handlers read, `id` as asked. */
+export function resolvedTenant(res: Tenant, id: string): ResolvedTenant {
+  const name = res.name ?? "";
+  const tenantId = name.startsWith(TENANT_NAME_PREFIX)
+    ? name.slice(TENANT_NAME_PREFIX.length)
+    : res.tenantId || id;
+  // The slug column is NOT NULL (001_initial_schema.sql); the UUID stands in
+  // so the breadcrumb renders rather than going blank if one comes back empty.
+  const slug = res.slug || tenantId;
+  return {
+    tenantId,
+    slug,
+    displayName: res.displayName || slug,
+    storageLayout: res.storageLayout || DEFAULT_STORAGE_LAYOUT,
+    trashed: res.deletedAt !== undefined,
+  };
+}
+
+/**
+ * Reads through tenantDetailQuery, the query a tenants row warms on hover and
+ * a tenant hover card answers from, so the page opens on what is cached.
+ */
 export function useTenantResolve(id: string): {
   tenant: ResolvedTenant | null;
   loading: boolean;
@@ -85,88 +114,28 @@ export function useTenantResolve(id: string): {
   retry: () => void;
 } {
   const router = useRouter();
-  const [state, setState] = useState<{
-    tenant: ResolvedTenant | null;
-    loading: boolean;
-    error: Error | null;
-    errorIsNotFound: boolean;
-  }>({ tenant: null, loading: true, error: null, errorIsNotFound: false });
-  // Bumped by the Retry callback to re-fire the effect without
-  // changing `id` (which would also reset the URL canonicaliser).
-  const [retryNonce, setRetryNonce] = useState(0);
-  const retry = useCallback(() => setRetryNonce((n) => n + 1), []);
+  const query = useQuery({
+    ...tenantDetailQuery(id),
+    select: (res) => resolvedTenant(res, id),
+  });
+  const tenant = query.data ?? null;
+  // Auto-canonicalise: the caller landed via a UUID and the slug differs. Stay
+  // loading while it lands: a different value in the [id] segment is a
+  // different route subtree to the app router, so the replace remounts this
+  // layout and every page under it, and a page rendered first would lose an
+  // open dialog or a policy being typed. The e2e suite caught it against a
+  // cluster, where the replace lands mid-test.
+  const canonical = tenant ? canonicalPath(id, tenant.slug) : null;
   useEffect(() => {
-    let cancelled = false;
-    // Synchronously reset to loading on id/retry change so the
-    // skeleton renders immediately while the new tenant is fetched.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState({
-      tenant: null,
-      loading: true,
-      error: null,
-      errorIsNotFound: false,
-    });
-    tenantClient
-      .getTenant({ name: `tenants/${id}` })
-      .then((res) => {
-        if (cancelled) return;
-        const name = res.name ?? "";
-        const tenantId = name.startsWith("tenants/")
-          ? name.slice("tenants/".length)
-          : (res.tenantId ?? id);
-        // Tenant proto carries `slug` (UNIQUE kebab-case handle,
-        // populated by the server from `tenants.slug`). Empty
-        // shouldn't happen — `001_initial_schema.sql` makes the
-        // column NOT NULL — but fall back to the UUID so the breadcrumb still
-        // renders rather than going blank if it does.
-        const slug = res.slug || tenantId;
-        const tenant: ResolvedTenant = {
-          tenantId,
-          slug,
-          displayName: res.displayName || slug,
-          storageLayout: res.storageLayout || "shared",
-          trashed: res.deletedAt !== undefined,
-        };
+    if (canonical) router.replace(canonical);
+  }, [canonical, router]);
 
-        // Auto-canonicalise: caller landed via UUID but slug differs.
-        // window.location is the only reliable source of the FULL
-        // current path here (router params don't expose it cleanly
-        // from a layout). Replace just the `[id]` segment, keep the
-        // rest verbatim — including query string and hash.
-        //
-        // And stay loading while it lands. A different value in the [id]
-        // segment is a different route subtree to the app router, so the
-        // replace remounts this layout and every page under it. Resolving
-        // first rendered the page, then threw it away: a dialog the operator
-        // had opened closed, a policy being typed was cleared. The e2e suite
-        // caught it against a cluster, where the replace lands mid-test.
-        const canonical = canonicalPath(id, slug);
-        if (canonical) {
-          router.replace(canonical);
-          return;
-        }
-        setState({
-          tenant,
-          loading: false,
-          error: null,
-          errorIsNotFound: false,
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const isNotFound =
-          err instanceof ConnectError && err.code === Code.NotFound;
-        setState({
-          tenant: null,
-          loading: false,
-          error: err instanceof Error ? err : new Error(String(err)),
-          errorIsNotFound: isNotFound,
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, router, retryNonce]);
-
-  return { ...state, retry };
+  const err = query.error;
+  return {
+    tenant: canonical ? null : tenant,
+    loading: query.isPending || canonical !== null,
+    error: err ? (err instanceof Error ? err : new Error(String(err))) : null,
+    errorIsNotFound: err instanceof ConnectError && err.code === Code.NotFound,
+    retry: () => void query.refetch(),
+  };
 }

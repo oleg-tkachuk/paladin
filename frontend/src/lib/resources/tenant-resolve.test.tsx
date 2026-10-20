@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type React from "react";
 
 // The hook canonicalises a UUID URL to the tenant's slug with router.replace.
 // A different value in the [id] segment is a different route subtree to the
@@ -24,7 +26,15 @@ vi.mock("@/lib/connect/client", () => ({
   tenantClient: { getTenant: (...args: unknown[]) => getTenant(...args) },
 }));
 
+import { tenantDetailQuery } from "@/lib/queries/details";
+
 import { useTenantResolve } from "./tenant-resolve";
+
+// A client of its own per test, so no read is answered from another's cache.
+let client: QueryClient;
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <QueryClientProvider client={client}>{children}</QueryClientProvider>
+);
 
 const TENANT_UUID = "01a0f51c-2918-7c6b-8eac-41bc39e65888";
 const TENANT_SLUG = "platform";
@@ -40,6 +50,7 @@ function resolvesTo(uuid: string, slug: string) {
 
 describe("useTenantResolve", () => {
   beforeEach(() => {
+    client = new QueryClient();
     getTenant.mockReset();
     replace.mockReset();
     resolvesTo(TENANT_UUID, TENANT_SLUG);
@@ -52,7 +63,9 @@ describe("useTenantResolve", () => {
       "",
       `/tenants/${TENANT_UUID}/buckets/primary/b1/policy`,
     );
-    const { result } = renderHook(() => useTenantResolve(TENANT_UUID));
+    const { result } = renderHook(() => useTenantResolve(TENANT_UUID), {
+      wrapper,
+    });
 
     await waitFor(() => expect(replace).toHaveBeenCalledOnce());
     expect(replace).toHaveBeenCalledWith(
@@ -71,7 +84,9 @@ describe("useTenantResolve", () => {
       "",
       `/tenants/${TENANT_SLUG}/buckets/primary/b1/policy`,
     );
-    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG));
+    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.tenant?.tenantId).toBe(TENANT_UUID);
@@ -81,6 +96,7 @@ describe("useTenantResolve", () => {
   it("resolves a different tenant afresh", async () => {
     const { result, rerender } = renderHook(({ id }) => useTenantResolve(id), {
       initialProps: { id: TENANT_SLUG },
+      wrapper,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -92,10 +108,26 @@ describe("useTenantResolve", () => {
   });
 
   it("refetches on retry even for the same tenant", async () => {
-    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG));
+    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG), {
+      wrapper,
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => result.current.retry());
     await waitFor(() => expect(getTenant).toHaveBeenCalledTimes(2));
+  });
+
+  // The tenants row and the tenant hover card warm this same query, so the
+  // page opens on the tenant they read instead of a skeleton.
+  it("opens on a tenant a row or a hover card already read", async () => {
+    window.history.pushState({}, "", `/tenants/${TENANT_SLUG}`);
+    await client.prefetchQuery(tenantDetailQuery(TENANT_SLUG));
+    expect(getTenant).toHaveBeenCalledOnce();
+
+    const { result } = renderHook(() => useTenantResolve(TENANT_SLUG), {
+      wrapper,
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.tenant?.displayName).toBe("Platform");
   });
 });

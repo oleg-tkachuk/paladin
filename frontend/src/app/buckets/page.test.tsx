@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Monolith list-page smoke pattern: mock the data hooks + the shell pieces

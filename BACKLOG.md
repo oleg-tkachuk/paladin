@@ -819,20 +819,6 @@ order they are being taken up.
 - **Blockers:** the cross-tenant read limes is growing — see "Billing has no
   view across tenants".
 
-#### Detail pages read through shared query options
-
-- **Status:** Aspirational.
-- **Reason:** every list reads through the query cache now, and the changes
-  whose answer is known show at once and roll back on a refusal
-  (`lib/optimistic`); a bucket's create and delete settle in the reconciler,
-  so they read again instead. The detail pages of a tenant, a bucket and a
-  backend still read with their own queries, so a row cannot warm its page's
-  read on hover the way the users and collections rows do.
-- **Definition of Done:** those detail pages read through query options in
-  `lib/queries/details`, their rows take `IntentTableRow`, and a test shows a
-  hover warming the page's query.
-- **Blockers:** none.
-
 #### Motion: view transitions and micro-animations
 
 - **Status:** Deferred (owner decision 2026-10-19: animations are not wanted).

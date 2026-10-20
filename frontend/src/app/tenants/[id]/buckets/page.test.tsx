@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the tenant buckets page. No decomposition yet — this

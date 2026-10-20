@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@/test/utils";
 import { create } from "@bufbuild/protobuf";
 
 import { BucketSchema } from "@/gen/paladin/admin/v1/types_pb";
@@ -136,5 +136,40 @@ describe("BucketTable long names", () => {
     const shared = screen.getAllByText(long).find((el) => el !== owner)!;
     expect(shared.className).toMatch(/\btruncate\b/);
     expect(shared).toHaveAttribute("title", long);
+  });
+});
+
+// A bucket's row warms the query its page reads, so the page opens on the
+// bucket instead of a skeleton.
+describe("BucketTable row intent", () => {
+  it("warms the bucket's detail query when pointed at", async () => {
+    const { render: rtlRender, fireEvent } =
+      await import("@testing-library/react");
+    const { QueryClient, QueryClientProvider } =
+      await import("@tanstack/react-query");
+    const { bucketDetailQuery } = await import("@/lib/queries/details");
+    const client = new QueryClient();
+    const prefetch = vi
+      .spyOn(client, "prefetchQuery")
+      .mockResolvedValue(undefined);
+    rtlRender(
+      <QueryClientProvider client={client}>
+        <BucketTable
+          buckets={[bucket()]}
+          tenants={tenants}
+          loading={false}
+          error={null}
+          onRetry={vi.fn()}
+          empty="none here"
+        />
+      </QueryClientProvider>,
+    );
+    const row = screen.getByRole("link", { name: /b1/ }).closest("tr")!;
+    fireEvent.mouseEnter(row);
+    expect(prefetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: bucketDetailQuery("primary", "b1").queryKey,
+      }),
+    );
   });
 });

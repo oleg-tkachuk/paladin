@@ -49,6 +49,7 @@ export const USERS_LIST_QUERY_KEY = ["users"] as const;
 export function tenantDetailQuery(handle: string) {
   return queryOptions({
     queryKey: ["tenantDetail", handle] as const,
+    retry: false, // NotFound: no tenant has the handle; a retry won't help.
     queryFn: ({ signal }) =>
       tenantClient.getTenant({ name: `tenants/${handle}` }, { signal }),
   });
@@ -57,6 +58,7 @@ export function tenantDetailQuery(handle: string) {
 export function bucketDetailQuery(backendId: string, bucketId: string) {
   return queryOptions({
     queryKey: ["bucketDetail", backendId, bucketId] as const,
+    retry: false, // NotFound short-circuits to notFound(); a retry won't help.
     queryFn: ({ signal }) =>
       bucketClient.getBucket(
         { name: `storageBackends/${backendId}/buckets/${bucketId}` },
