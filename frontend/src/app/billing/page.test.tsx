@@ -10,13 +10,19 @@ const h = vi.hoisted(() => ({
   showNotification: vi.fn(),
   replace: vi.fn(),
   search: "",
+  roles: [] as string[],
+  spend: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
   billingClient: {
     getTenantSummary: h.summary,
     getTenantTimeSeries: h.series,
     getBillingSettings: () => Promise.resolve({ currencyCode: "EUR" }),
+    listTenantSpend: h.spend,
   },
+}));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { roles: h.roles } }),
 }));
 vi.mock("@/context/ScopeContext", () => ({
   useScope: () => ({ tenantId: "t-1" }),
@@ -68,6 +74,8 @@ describe("BillingPage", () => {
     h.replace.mockReset();
     h.search = "";
     h.tenantsError = null;
+    h.roles = [];
+    h.spend.mockReset();
   });
 
   const emptySummary = {
@@ -348,5 +356,76 @@ describe("BillingPage", () => {
     h.series.mockResolvedValue({ buckets: [] });
     render(<BillingPage />);
     expect(await screen.findByText("€2.0000")).toBeInTheDocument();
+  });
+
+  describe("for a platform admin", () => {
+    const spendRows = {
+      truncated: false,
+      tenants: [
+        {
+          tenantId: "t-2",
+          slug: "globex",
+          displayName: "Globex",
+          deleted: false,
+          spent: usd(2_500_000_000n),
+          chargeCount: 3n,
+        },
+        {
+          tenantId: "t-3",
+          slug: "smoke",
+          displayName: "Smoke",
+          deleted: true,
+          spent: usd(400_000_000n),
+          chargeCount: 1n,
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      h.roles = ["platform.admin"];
+      h.spend.mockResolvedValue(spendRows);
+    });
+
+    it("opens on every tenant's spend, the server's order kept", async () => {
+      render(<BillingPage />);
+      await screen.findByRole("button", { name: "Globex" });
+      const card = screen
+        .getByText("Tenants by spend")
+        .closest("[data-slot=card]") as HTMLElement;
+      const rows = within(card).getAllByRole("row").slice(1);
+      expect(
+        rows.map((r) => within(r).getByRole("button").textContent),
+      ).toEqual(["Globex", "Smoke · in trash"]);
+      expect(h.summary).not.toHaveBeenCalled();
+      expect(h.spend).toHaveBeenCalledTimes(1);
+    });
+
+    it("leads a row to that tenant's billing", async () => {
+      render(<BillingPage />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Globex" }),
+      );
+      expect(h.replace).toHaveBeenCalledWith("?tenant=t-2");
+    });
+
+    it("says when no tenant spent anything", async () => {
+      h.spend.mockResolvedValue({ truncated: false, tenants: [] });
+      render(<BillingPage />);
+      expect(
+        await screen.findByText("No tenant spent anything in this period."),
+      ).toBeInTheDocument();
+    });
+
+    it("goes back to every tenant from one tenant's view", async () => {
+      h.search = "tenant=t-2";
+      h.summary.mockResolvedValue(emptySummary);
+      h.series.mockResolvedValue({ buckets: [] });
+      render(<BillingPage />);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "All tenants" }),
+      );
+      expect(h.replace).toHaveBeenCalledWith("?");
+      expect(h.spend).not.toHaveBeenCalled();
+    });
   });
 });
