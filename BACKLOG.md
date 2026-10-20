@@ -609,17 +609,16 @@ open deliberately — each notes why._
 
 ## CI/CD
 
-### release.yaml still runs shell scripts
+### Workflows install their tools with inline shell
 
-- **Status:** In-Progress (follow-up pull request).
-- **Reason:** The move to the TypeScript in `.github/ci` lands in two steps:
-  release.yaml is not run by a pull request's CI, so its scripts move in a
-  change of their own, checked against the dev build the merge publishes.
-- **Definition of Done:** every script release.yaml runs from
-  `.github/scripts` — the release and head checks, the tag reading, the
-  publish plan and version check, the GHCR cleanup plan, the SDK notes, the Go
-  proxy warm-up, the upgrade sections, and the image and chart signing — is a
-  `.github/ci` command with `node --test` tests, and their shell tests are gone.
+- **Status:** Deferred.
+- **Reason:** The scripts the workflows run are TypeScript under
+  `.github/ci`; what is left in `run:` blocks is one-line invocations and the
+  curl-and-checksum installers of yq, hadolint, trivy, promtool and crane,
+  which hold no decision worth a test of its own.
+- **Definition of Done:** one `.github/ci` command installs a pinned tool by
+  name from a table of URLs and checksum files, tested, and each installer
+  step calls it.
 - **Blockers:** none.
 
 ## Database

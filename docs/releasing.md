@@ -13,7 +13,7 @@ release workflow.
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
 The SDK release's notes list only their own `feat`, `fix`, `perf`,
-`security` and `revert` commits (`.github/scripts/stream-release-notes.sh`), and
+`security` and `revert` commits ([`sdk-release.ts`](../.github/ci/sdk-release.ts)), and
 none is marked latest: that stays the product's release.
 
 A commit counts for every stream whose files it touches, and its type
@@ -39,7 +39,7 @@ The product is released by hand, as a train
 ([ADR-0034](adr/0034-the-product-releases-as-a-train.md)). Run
 [`release.yaml`](../.github/workflows/release.yaml) from the Actions tab, or
 `gh workflow run release.yaml`: it tags main's head once CI passed on that
-commit ([`release-ci-check.sh`](../.github/scripts/release-ci-check.sh)), and
+commit ([`release-head.ts`](../.github/ci/release-head.ts)), and
 refuses an untested one. semantic-release computes the version from every
 commit since the last release (see
 [`release.config.cjs`](../.github/release/release.config.cjs)), so a train of
@@ -80,11 +80,11 @@ untagged commit, `<next patch>-dev.<committer time>.g<sha>`. Such a version
 sorts after the last release and before the next one, so a deployment that
 follows prereleases takes each dev build as it lands and the release that
 follows it. A dev build gets no GitHub release and moves no floating tag;
-[`publish-version-check.sh`](../.github/scripts/publish-version-check.sh) refuses
+[`publish-target.ts`](../.github/ci/publish-target.ts) refuses
 one that derived a release version. Once it is pushed and signed, the same job
 deletes that component's older dev builds — image and chart, with their
 platform manifests, signatures and attestations — from GHCR, keeping only the
-newest ([`ghcr-cleanup-plan.sh`](../.github/scripts/ghcr-cleanup-plan.sh),
+newest ([`ghcr-cleanup.ts`](../.github/ci/ghcr-cleanup.ts),
 run through `dataaxiom/ghcr-cleanup-action`). Only versions carrying the
 `-dev.` mark are matched, so a release is never deleted.
 
@@ -117,9 +117,8 @@ repository's release workflow and know what is inside it.
 - **Charts too.** Each chart is signed by digest with the same identity, and
   verified in the same job.
 
-The logic is [`.github/scripts/release-sign.sh`](../.github/scripts/release-sign.sh) and
-[`.github/scripts/release-sign-chart.sh`](../.github/scripts/release-sign-chart.sh);
-`task -t Taskfile.dev.yaml verify:release-signing` runs both with a throwaway
+The logic is [`.github/ci/sign.ts`](../.github/ci/sign.ts);
+`task -t Taskfile.dev.yaml verify:release-signing` runs it for an image and a chart with a throwaway
 key against a local registry.
 
 Signing starts with the first release after 4.11.5; earlier images are
@@ -158,7 +157,7 @@ scope. One version covers both languages: the Go module resolves
 through hatch-vcs, so neither carries a version to edit. A release is the
 tag; nothing else is published, and the Python package is not on PyPI yet.
 The release workflow asks the Go module proxy for each new module tag
-([`.github/scripts/warm-go-proxy.sh`](../.github/scripts/warm-go-proxy.sh)), so `go get
+([`.github/ci/sdk-release.ts`](../.github/ci/sdk-release.ts)), so `go get
 …@latest` and the README's SDK badge see it at once rather than when the
 proxy next refreshes.
 
@@ -170,7 +169,7 @@ commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section in
 [upgrading.md](upgrading.md) headed `## vX.Y.Z — …` for the release that
 ships it. Pre-1.0 such a release is only a minor, so its notes list these
 commits first, under *Behaviour changes*, with a link to that section
-([`.github/scripts/stream-release-notes.sh`](../.github/scripts/stream-release-notes.sh)).
+([`.github/ci/sdk-release.ts`](../.github/ci/sdk-release.ts)).
 
 ### Which servers an SDK release works with
 

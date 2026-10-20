@@ -1,0 +1,52 @@
+// What a dev publish removes from GHCR afterwards.
+//
+// Usage: PACKAGE=<image package> CHART_PACKAGE=<chart package> node ghcr-cleanup.ts
+//
+// Every green merge to main publishes a dev build: an image and a chart, each
+// with its platform manifests, signatures and SBOM attestations. Nothing
+// removed them, and GitHub has no retention setting for its container
+// registry. So the publish that adds a dev build deletes the older ones,
+// keeping only the newest — the one the dev cluster runs. Releases are never
+// matched: their versions carry no dev mark.
+//
+// Set as step outputs for dataaxiom/ghcr-cleanup-action, which deletes a
+// version with its children and keeps those of what it keeps.
+
+import { setOutput } from "./lib/actions.ts";
+import { requireEnv } from "./lib/env.ts";
+import { runMain } from "./lib/main.ts";
+import { DEV_MARK } from "./lib/versions.ts";
+
+// DEV_BUILDS_KEPT is how many dev builds each package keeps: the newest,
+// which the dev cluster follows.
+export const DEV_BUILDS_KEPT = 1;
+// DRY_RUN is false: the first dry run's list was read against the registry —
+// only dev builds and their children, no release, the newest kept.
+export const DRY_RUN = false;
+
+// Output names the step outputs, which the cleanup action's inputs read.
+export const Output = { Packages: "packages", DeleteTags: "delete_tags", Keep: "keep", DryRun: "dry_run" } as const;
+
+// cleanupPlan is the action's inputs for the two packages.
+export function cleanupPlan(image: string, chart: string): Record<string, string> {
+  if (image === "" || chart === "") {
+    throw new Error("both the image and the chart package are needed");
+  }
+  return {
+    [Output.Packages]: `${image},${chart}`,
+    // The action matches tags with shell-style wildcards.
+    [Output.DeleteTags]: `*${DEV_MARK}*`,
+    [Output.Keep]: String(DEV_BUILDS_KEPT),
+    [Output.DryRun]: String(DRY_RUN),
+  };
+}
+
+async function main(): Promise<void> {
+  for (const [name, value] of Object.entries(cleanupPlan(requireEnv("PACKAGE"), requireEnv("CHART_PACKAGE")))) {
+    setOutput(name, value);
+  }
+}
+
+if (import.meta.main) {
+  await runMain(main);
+}

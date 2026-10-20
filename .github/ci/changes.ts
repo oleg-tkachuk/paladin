@@ -53,7 +53,6 @@ export const SHARED: readonly string[] = [
   "Taskfile*.yaml",
   ".task/**",
   "scripts/**",
-  ".github/scripts/**",
   ".github/ci/**",
   ".github/actions/**",
   ".github/workflows/ci.yaml",

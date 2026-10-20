@@ -7,7 +7,7 @@
 // a push GITHUB_TOKEN made; repository_dispatch is one of the documented
 // exceptions that always create a run. The payload names the commit and this
 // run; release.yaml releases that commit only while it is main's head
-// (release-head-check). Octokit tries a transient failure again, so one 5xx
+// (release-head.ts). Octokit tries a transient failure again, so one 5xx
 // does not lose the release.
 
 import { info } from "./lib/actions.ts";

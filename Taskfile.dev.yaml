@@ -252,16 +252,9 @@ tasks:
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:publish-target
-      - task: verify:new-release-tag
-      - task: verify:release-retry
-      - task: verify:stream-release-notes
-      - task: verify:propose-upgrade-sections
       - task: verify:postgres-version
       - task: verify:release-age
       - task: verify:compose-images
-      - task: verify:warm-go-proxy
-      - task: verify:release-head
-      - task: verify:publish-plan
       - task: verify:release-rules
       - task: verify:go-module-paths
       - task: verify:image-uid
@@ -392,12 +385,14 @@ tasks:
       - node --test {{.CLI_ARGS}}
 
   ci:deps:
-    desc: "Install the CI scripts' locked dependencies, no install script run"
+    desc: "Install the CI scripts' and the release tooling's locked dependencies, no install script run"
+    # The release commands import the release tooling's commit analyzer.
     dir: .github/ci
     status:
       - test -d node_modules/typescript
+      - test -d ../release/node_modules/@semantic-release/commit-analyzer
     cmds:
-      - node install.ts .
+      - node install.ts . ../release
 
   verify:workflows:
     desc: "actionlint and zizmor over the workflows, at the versions CI pins"
@@ -410,9 +405,14 @@ tasks:
     desc: "Sign and verify an image (with per-platform SBOMs) and a chart the way release.yaml does, against a throwaway registry"
     # Not part of verify-all: it needs Docker, cosign, syft, crane, helm and network
     # to ghcr.io. Keyless signing needs a CI OIDC token, so release.yaml's own
-    # verify step covers that path; this covers the rest of the same script.
+    # verify step covers that path; this covers the rest of the same code.
+    dir: .github/ci
+    deps: [ci:deps]
+    env:
+      PALADIN_SIGN_TEST: "1"
+      PALADIN_CI_ANNOTATIONS: "off"
     cmds:
-      - ./.github/scripts/release-sign.test.sh
+      - node --test sign.integration.test.ts
 
   verify:live:
     desc: "Check the deployed release's contracts end to end against the cluster (KUBE_CONTEXT, NAMESPACE)"
@@ -537,10 +537,9 @@ tasks:
       - ./scripts/image-uid.test.sh
 
   verify:release-rules:
-    desc: "Fail when a commit cuts, or an upgrade section is named for, a different release than it should"
+    desc: "Fail when a commit cuts a different release than it should"
     cmds:
       - node .github/release/release-rules.test.mjs
-      - node .github/release/name-upgrade-sections.test.mjs
 
   verify:image-sources:
     desc: "Fail when the backend image does not copy a directory the server imports"
@@ -573,25 +572,6 @@ tasks:
     cmds:
       - ./scripts/go-module-paths.test.sh
 
-  verify:release-retry:
-    desc: "Fail when the release scripts would give up on a service's passing failure, or retry forever"
-    # One 409 from the Sigstore transparency log failed a signing, and the
-    # image never reached the dev cluster.
-    cmds:
-      - ./.github/scripts/release-retry.test.sh
-
-  verify:new-release-tag:
-    desc: "Fail when release.yaml would take an earlier run's tag for its own"
-    # Two dispatches to one commit made the second publish a release that
-    # already existed, and fail.
-    cmds:
-      - ./.github/scripts/new-release-tag.test.sh
-
-  verify:warm-go-proxy:
-    desc: "Fail when a module tag would ask the Go proxy for another module or version"
-    cmds:
-      - ./.github/scripts/warm-go-proxy.test.sh
-
   verify:postgres-version:
     desc: "Fail when the compose stacks and the Go test suites run different Postgres versions"
     cmds:
@@ -607,38 +587,12 @@ tasks:
     cmds:
       - ./scripts/release-age.test.sh
 
-  verify:propose-upgrade-sections:
-    desc: "Fail when release.yaml would push the renamed upgrade sections wrongly, or twice"
-    cmds:
-      - ./.github/scripts/propose-upgrade-sections.test.sh
-
-  verify:stream-release-notes:
-    desc: "Fail when an SDK release lists commits that are not its own"
-    cmds:
-      - ./.github/scripts/stream-release-notes.test.sh
-
   verify:security-scans:
     desc: "The backend's security scan scripts fail when their scanner did not run"
     # Each ended its scanner with `|| true`, and reported a scan that never ran
     # as complete.
     cmds:
       - ./scripts/security-scans.test.sh
-
-  verify:release-head:
-    desc: "Fail when release.yaml would tag a commit CI has not passed"
-    # v4.12.0 was tagged on a merge whose own CI was still running.
-    cmds:
-      - ./.github/scripts/release-head-check.test.sh
-      - ./.github/scripts/release-ci-check.test.sh
-
-  verify:publish-plan:
-    desc: "Fail when release.yaml would publish a dev build as a release, or a release off its tag"
-    # Every tested commit on main is published as a dev build for the dev
-    # cluster; a release only at the tag a release run cut.
-    cmds:
-      - ./.github/scripts/publish-plan.test.sh
-      - ./.github/scripts/publish-version-check.test.sh
-      - ./.github/scripts/ghcr-cleanup-plan.test.sh
 
   verify:publish-target:
     desc: "Fail when release.yaml, Taskfile.yaml and the charts name different image paths"

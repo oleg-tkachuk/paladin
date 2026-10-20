@@ -109,3 +109,40 @@ describe("globs", async () => {
     assert.ok(matchesAny("LICENSE", ["NOTICE", "LICENSE"]));
   });
 });
+
+describe("retry", async () => {
+  const { retry, RETRY_ATTEMPTS } = await import("./retry.ts");
+  const flaky = (failures: number) => {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      if (calls <= failures) throw new Error(`failure ${calls}`);
+      return calls;
+    };
+    return { fn, calls: () => calls };
+  };
+  test("a call that succeeds runs once", async () => {
+    const f = flaky(0);
+    assert.equal(await retry("x", f.fn, { delayMs: 0 }), 1);
+    assert.equal(f.calls(), 1);
+  });
+  test("one that succeeds on the last attempt is a success", async () => {
+    const f = flaky(RETRY_ATTEMPTS - 1);
+    assert.equal(await retry("x", f.fn, { delayMs: 0 }), RETRY_ATTEMPTS);
+  });
+  test("one failing every attempt fails with its own last error", async () => {
+    const f = flaky(99);
+    await assert.rejects(retry("x", f.fn, { attempts: 3, delayMs: 0 }), /failure 3/);
+    assert.equal(f.calls(), 3);
+  });
+  test("each wait doubles the one before", async () => {
+    const waits: number[] = [];
+    await assert.rejects(retry("x", flaky(99).fn, { attempts: 4, delayMs: 5, sleep: async (ms) => void waits.push(ms) }));
+    assert.deepEqual(waits, [5, 10, 20]);
+  });
+  test("one attempt is one call", async () => {
+    const f = flaky(99);
+    await assert.rejects(retry("x", f.fn, { attempts: 1, delayMs: 0 }));
+    assert.equal(f.calls(), 1);
+  });
+});

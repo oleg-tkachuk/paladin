@@ -32,7 +32,7 @@ build** of that commit — both images and both charts at
 the SDK. The dev cluster follows the dev builds, so it runs every change as it
 lands. Each dev publish then deletes the older dev builds of that component's
 image and chart from GHCR, keeping only the newest
-([`ghcr-cleanup-plan.sh`](../.github/scripts/ghcr-cleanup-plan.sh)); releases
+([`ghcr-cleanup.ts`](../.github/ci/ghcr-cleanup.ts)); releases
 are never deleted.
 
 The product is **released by hand**, as a train ([ADR-0034](adr/0034-the-product-releases-as-a-train.md)):
