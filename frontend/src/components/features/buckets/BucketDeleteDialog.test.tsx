@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { typeToConfirm } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 const h = vi.hoisted(() => ({ showNotification: vi.fn() }));
@@ -37,8 +38,19 @@ beforeEach(() => {
 });
 
 describe("BucketDeleteDialog", () => {
+  // No trash, and the S3 bucket may go too: the name is typed first.
+  it("holds the delete until the bucket's name is typed", async () => {
+    const { deleteBucket } = dialog();
+    const button = screen.getByRole("button", { name: "Delete bucket" });
+    expect(button).toBeDisabled();
+    await typeToConfirm("paladin-a");
+    expect(button).toBeEnabled();
+    expect(deleteBucket).not.toHaveBeenCalled();
+  });
+
   it("deletes the record only, at the bucket's version, and closes", async () => {
     const { deleteBucket, onClose } = dialog();
+    await typeToConfirm("paladin-a");
     await userEvent.click(
       screen.getByRole("button", { name: "Delete bucket" }),
     );
@@ -56,6 +68,7 @@ describe("BucketDeleteDialog", () => {
     await userEvent.click(
       screen.getByRole("checkbox", { name: /physical S3 bucket/ }),
     );
+    await typeToConfirm("paladin-a");
     await userEvent.click(
       screen.getByRole("button", { name: "Delete bucket" }),
     );
@@ -69,6 +82,7 @@ describe("BucketDeleteDialog", () => {
 
   it("says why a deletion failed", async () => {
     dialog(vi.fn().mockRejectedValue(new Error("collections still bound")));
+    await typeToConfirm("paladin-a");
     await userEvent.click(
       screen.getByRole("button", { name: "Delete bucket" }),
     );
@@ -94,6 +108,7 @@ describe("BucketDeleteDialog", () => {
     expect(
       screen.getByText(/Paladin did not create this bucket/),
     ).toBeInTheDocument();
+    await typeToConfirm("paladin-a");
     await userEvent.click(
       screen.getByRole("button", { name: "Delete bucket" }),
     );

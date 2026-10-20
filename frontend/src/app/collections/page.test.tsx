@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { typeToConfirm } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the cross-tenant collections page. Mock the three
@@ -297,6 +298,7 @@ describe("CollectionsPage delete refused", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /Delete Collection/i }),
     );
+    await typeToConfirm("c1");
     await user.click(
       await screen.findByRole("button", { name: /^Delete Collection$/ }),
     );
