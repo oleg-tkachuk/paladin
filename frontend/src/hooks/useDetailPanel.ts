@@ -80,3 +80,8 @@ export function useDetailPanel<T extends string = string>(
     rowProps,
   };
 }
+
+/** What a row of a list with a detail panel takes. */
+export type DetailRowProps = ReturnType<
+  ReturnType<typeof useDetailPanel>["rowProps"]
+>;
