@@ -98,3 +98,33 @@ export function nodeMatches(node: TopologyNode, query: string): boolean {
     node.status?.label ?? "",
   ].some((s) => s.toLowerCase().includes(q));
 }
+
+/** An edge's key: the same in the drawing and in a neighbourhood. */
+export function edgeKey(edge: TopologyEdge): string {
+  return `${edge.from}>${edge.to}`;
+}
+
+/** A node with its parents and children, and the edges that join them. */
+export interface Neighbourhood {
+  nodes: ReadonlySet<string>;
+  edges: ReadonlySet<string>;
+}
+
+/**
+ * The node `id` with what holds or serves it and what it holds or serves:
+ * the nodes one edge away either side, and those edges. What hovering a node
+ * lights up, so its place in the graph reads among the crossing curves.
+ */
+export function neighbourhood(
+  graph: Pick<TopologyGraph, "edges">,
+  id: string,
+): Neighbourhood {
+  const nodes = new Set([id]);
+  const edges = new Set<string>();
+  for (const e of graph.edges) {
+    if (e.from !== id && e.to !== id) continue;
+    nodes.add(e.from === id ? e.to : e.from);
+    edges.add(edgeKey(e));
+  }
+  return { nodes, edges };
+}

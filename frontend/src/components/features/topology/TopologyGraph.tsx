@@ -7,6 +7,8 @@
 // takes focus in the order the columns read, opens on Enter, and carries the
 // same StatusIcon as every list. Colours are theme tokens alone, so it reads
 // in every palette, and nothing moves: zoom and grouping redraw in place.
+// Pointing at a node, or focusing it, lights its parents, its children and
+// the curves to them, and lets the rest of the graph recede.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -40,6 +42,8 @@ import {
 } from "@/lib/topology/layout";
 import {
   KIND_NOUN,
+  edgeKey,
+  neighbourhood,
   nodeMatches,
   type NodeKind,
   type TopologyGraph as Graph,
@@ -83,6 +87,9 @@ const NODE_BOX =
   "absolute flex items-center gap-2.5 rounded-md border bg-card px-3 text-left text-card-foreground shadow-raised";
 const ORPHAN_BOX = "border-dashed bg-muted text-muted-foreground shadow-none";
 const DIMMED = "opacity-40";
+// The node pointed at, and the curves to its parents and children.
+const ACTIVE_BOX = "border-primary";
+const LIT_EDGE = "stroke-primary";
 
 export function TopologyGraph({
   graph,
@@ -96,6 +103,8 @@ export function TopologyGraph({
   const [grouped, setGrouped] = useState(true);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [zoom, setZoom] = useState(1);
+  // The node under the pointer or holding focus, whose neighbourhood is lit.
+  const [active, setActive] = useState<string | null>(null);
   const viewport = useRef<HTMLDivElement>(null);
 
   const shown = useMemo(
@@ -111,6 +120,21 @@ export function TopologyGraph({
     [shown, query],
   );
   const filtering = query.trim() !== "";
+  const lit = useMemo(
+    () => (active ? neighbourhood(shown, active) : null),
+    [shown, active],
+  );
+  // The lit curves are drawn last, so no unlit one crosses over them.
+  const edges = useMemo(
+    () =>
+      lit
+        ? [
+            ...layout.edges.filter((e) => !lit.edges.has(edgeKey(e))),
+            ...layout.edges.filter((e) => lit.edges.has(edgeKey(e))),
+          ]
+        : layout.edges,
+    [layout, lit],
+  );
   const tones = useMemo(() => {
     const present = new Set(shown.nodes.map((n) => n.status?.tone));
     return STATUS_ORDER.filter((t) => present.has(t));
@@ -240,25 +264,37 @@ export function TopologyGraph({
                 height={layout.height}
                 className="pointer-events-none absolute inset-0"
               >
-                {layout.edges.map((e) => (
-                  <path
-                    key={`${e.from}>${e.to}`}
-                    d={e.path}
-                    strokeWidth={1.5}
-                    className={cn(
-                      "fill-none stroke-border",
-                      filtering &&
-                        !(matching.has(e.from) && matching.has(e.to)) &&
-                        DIMMED,
-                    )}
-                  />
-                ))}
+                {edges.map((e) => {
+                  const key = edgeKey(e);
+                  const on = lit?.edges.has(key) ?? false;
+                  return (
+                    <path
+                      key={key}
+                      d={e.path}
+                      strokeWidth={on ? 2 : 1.5}
+                      data-lit={on || undefined}
+                      className={cn(
+                        "fill-none stroke-border",
+                        on && LIT_EDGE,
+                        ((filtering &&
+                          !(matching.has(e.from) && matching.has(e.to))) ||
+                          (lit && !on)) &&
+                          DIMMED,
+                      )}
+                    />
+                  );
+                })}
               </svg>
               {layout.nodes.map((p) => (
                 <TopologyNodeBox
                   key={p.node.id}
                   placed={p}
-                  dimmed={filtering && !matching.has(p.node.id)}
+                  dimmed={
+                    (filtering && !matching.has(p.node.id)) ||
+                    (lit !== null && !lit.nodes.has(p.node.id))
+                  }
+                  active={active === p.node.id}
+                  onActivate={setActive}
                   onExpand={expand}
                 />
               ))}
@@ -302,10 +338,15 @@ export function TopologyGraph({
 function TopologyNodeBox({
   placed,
   dimmed,
+  active,
+  onActivate,
   onExpand,
 }: {
   placed: PlacedNode;
   dimmed: boolean;
+  active: boolean;
+  /** The node pointed at or focused; null when the pointer or focus leaves. */
+  onActivate: (id: string | null) => void;
   onExpand: (id: string) => void;
 }) {
   const { node, x, y } = placed;
@@ -339,8 +380,20 @@ function TopologyNodeBox({
     HOVER_SURFACE,
     FOCUS_RING,
     node.orphan && ORPHAN_BOX,
+    active && ACTIVE_BOX,
     dimmed && DIMMED,
   );
+  // On the box itself, so its menu button keeps it lit; focus leaving the
+  // box for its own menu keeps it too.
+  const activation = {
+    onMouseEnter: () => onActivate(node.id),
+    onMouseLeave: () => onActivate(null),
+    onFocus: () => onActivate(node.id),
+    onBlur: (e: React.FocusEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+        onActivate(null);
+    },
+  };
 
   if (isGroup(node)) {
     return (
@@ -351,6 +404,7 @@ function TopologyNodeBox({
         aria-label={`Show the ${node.label} one by one`}
         onClick={() => onExpand(node.id)}
         data-node={node.id}
+        {...activation}
       >
         {body}
       </button>
@@ -359,7 +413,13 @@ function TopologyNodeBox({
 
   const links = node.links ?? [];
   return (
-    <div style={box} className="absolute" data-node={node.id}>
+    <div
+      style={box}
+      className="absolute"
+      data-node={node.id}
+      data-active={active || undefined}
+      {...activation}
+    >
       {node.href ? (
         <Link
           href={node.href}
