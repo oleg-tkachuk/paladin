@@ -1,0 +1,5 @@
+{
+  "_comment": "Operation names a caveat may carry, and ones the server refuses: limes's rule, which the Go SDK checks with limes itself and the Python SDK's fake reproduces. A name is valid when it is built in, or namespaced as ns:name with neither side empty and no character outside printable ASCII or a space.",
+  "valid": ["get", "put", "list", "delete", "share", "manage", "object:presign", "object:tag", "tool:search", "mcp:github/create_issue", "a:b:c"],
+  "invalid": ["presign", "tag", "search", "Get", "", "object:", ":presign", "object: presign", "object:pre\tsign", "object:présign"]
+}

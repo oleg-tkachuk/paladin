@@ -102,7 +102,8 @@ func requireBiscuit(status adminv1.BiscuitStatus) error {
 		"require_biscuit: the capability cannot be sealed as a Biscuit (%s): %s", status, biscuitRefusals[status]))
 }
 
-// validOps refuses an operation the server refuses in a caveat.
+// validOps refuses an operation the server refuses in a caveat. Caveats
+// that name none are refused before, by the contract's own rule.
 func validOps(ops []string) error {
 	for _, op := range ops {
 		if err := paladin.Op(op).Validate(); err != nil {

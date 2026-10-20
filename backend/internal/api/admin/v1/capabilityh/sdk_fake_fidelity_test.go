@@ -35,6 +35,7 @@ func TestTheSDKFakeIssuesAsTheServerDoes(t *testing.T) {
 		"past expiry": func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore = pastExpiry },
 		"bare op":     func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats(limes.OpGet, "presign") },
 		"misspelt op": func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats("Get") },
+		"no ops":      func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats() },
 		"a data-plane op": func(r *adminv1.CapabilityServiceIssueRequest) {
 			r.Caveats = openCaveats(limes.OpGet, limes.Op("object:presign"))
 		},
@@ -94,6 +95,7 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 		"a parent without share": {[]limes.Op{limes.OpGet}, keep},
 		"narrowed off share":     {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo(limes.OpGet)},
 		"an op the parent lacks": {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo(limes.OpPut)},
+		"narrowed to a bare op":  {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo("presign")},
 		"a key-bound child, required": {[]limes.Op{limes.OpGet, limes.OpShare}, func(r *adminv1.CapabilityServiceDelegateRequest) {
 			r.ConfirmationJkt, r.RequireBiscuit = testJKT, true
 		}},

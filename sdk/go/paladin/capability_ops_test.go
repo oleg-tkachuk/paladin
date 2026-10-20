@@ -41,15 +41,30 @@ func TestCapabilityOpsMatchTheSharedTable(t *testing.T) {
 	}
 }
 
+// opNames is sdk/testdata/capability_op_names.json, which the Python SDK's
+// fake is held to as well.
+const opNames = "../../testdata/capability_op_names.json"
+
 // Validate refuses what the server refuses in a caveat, in this package's
 // terms: a bare name that is neither built in nor namespaced.
 func TestOpValidate(t *testing.T) {
-	for _, op := range []paladin.Op{paladin.OpGet, paladin.OpShare, paladin.OpObjectPresign, paladin.OpObjectTag, "tool:search"} {
+	raw, err := os.ReadFile(opNames)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names struct {
+		Valid   []paladin.Op `json:"valid"`
+		Invalid []paladin.Op `json:"invalid"`
+	}
+	if err := json.Unmarshal(raw, &names); err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range names.Valid {
 		if err := op.Validate(); err != nil {
 			t.Errorf("%q: %v, want valid", op, err)
 		}
 	}
-	for _, op := range []paladin.Op{"presign", "tag", "", "object:", ":presign", "object: presign"} {
+	for _, op := range names.Invalid {
 		if err := op.Validate(); !errors.Is(err, paladin.ErrInvalidArgument) {
 			t.Errorf("%q: %v, want ErrInvalidArgument", op, err)
 		}
