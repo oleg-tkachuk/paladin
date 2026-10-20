@@ -19,7 +19,6 @@ import {
   moneyToNanos,
   unitOf,
 } from "@/lib/format/money";
-import { compatibilityBadge } from "@/lib/storageFeatures";
 import { lifecycleState } from "@/app/storage-backends/backendView";
 import { StatusTone } from "@/lib/ui/status";
 
@@ -310,30 +309,6 @@ export function backendLifecycleStatus(
       ? "It serves reads and refuses new writes."
       : "It serves reads and writes.";
   return { tone, value: label, detail };
-}
-
-const COMPATIBILITY_TONE = {
-  destructive: StatusTone.Danger,
-  warning: StatusTone.Warning,
-  success: StatusTone.Success,
-  secondary: StatusTone.Unknown,
-} as const;
-
-/** What the last feature probe found, as one fact. */
-export function compatibilityStatus(
-  backend: Pick<StorageBackend, "features" | "compatibility">,
-): StatusFact {
-  const badge = compatibilityBadge(backend);
-  const tone = COMPATIBILITY_TONE[badge.variant];
-  const detail =
-    tone === StatusTone.Danger
-      ? "A feature Paladin relies on is unsupported."
-      : tone === StatusTone.Warning
-        ? "An optional feature is unsupported; what it enables is off."
-        : tone === StatusTone.Success
-          ? "Every feature Paladin relies on is supported."
-          : "Not every required feature has been probed.";
-  return { tone, value: badge.label, detail };
 }
 
 /** The advisory maintenance flag: a pause an operator chose, not a gate. */

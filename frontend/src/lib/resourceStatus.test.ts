@@ -4,20 +4,12 @@ import { describe, expect, it } from "vitest";
 import { MoneySchema } from "@/gen/google/type/money_pb";
 import { PolicyLayerSchema } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { TenantBudgetSchema } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
-import {
-  BucketSchema,
-  FeatureSupport,
-  QuotaSchema,
-  StorageCompatibility,
-  StorageFeature,
-  StorageFeatureSupportSchema,
-} from "@/gen/paladin/admin/v1/types_pb";
+import { BucketSchema, QuotaSchema } from "@/gen/paladin/admin/v1/types_pb";
 
 import {
   backendLifecycleStatus,
   bucketPolicyStatus,
   budgetStanding,
-  compatibilityStatus,
   maintenanceStatus,
   policyStanding,
   protectionStatus,
@@ -189,34 +181,6 @@ describe("bucket settings", () => {
 });
 
 describe("backend facts", () => {
-  const feature = (required: boolean, support: FeatureSupport) =>
-    create(StorageFeatureSupportSchema, {
-      feature: StorageFeature.CONDITIONAL_PUT,
-      required,
-      support,
-    });
-
-  it("reads the probe's compatibility in the status tones", () => {
-    expect(
-      compatibilityStatus({
-        compatibility: StorageCompatibility.INCOMPATIBLE,
-        features: [feature(true, FeatureSupport.UNSUPPORTED)],
-      }).tone,
-    ).toBe("danger");
-    expect(
-      compatibilityStatus({
-        compatibility: StorageCompatibility.COMPATIBLE,
-        features: [feature(false, FeatureSupport.UNSUPPORTED)],
-      }),
-    ).toMatchObject({ tone: "warning", value: "Limited" });
-    expect(
-      compatibilityStatus({
-        compatibility: StorageCompatibility.UNVERIFIED,
-        features: [],
-      }).tone,
-    ).toBe("unknown");
-  });
-
   it("reads maintenance as a pause, not a fault", () => {
     expect(maintenanceStatus(true).tone).toBe("suspended");
     expect(maintenanceStatus(false).tone).toBe("success");

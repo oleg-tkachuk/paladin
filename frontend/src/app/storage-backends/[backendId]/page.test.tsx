@@ -194,11 +194,15 @@ describe("StorageBackendDetailPage status panel", () => {
     expect(connectivity).toHaveAttribute("data-tone", "danger");
     expect(connectivity).toHaveTextContent("dial tcp: refused");
     expect(await card("Maintenance")).toHaveAttribute("data-tone", "suspended");
-    const features = await card("S3 features");
-    expect(features).toHaveAttribute("data-tone", "unknown");
-    expect(within(features).getByRole("link")).toHaveAttribute(
-      "href",
-      "/storage-backends/primary/features",
-    );
+  });
+
+  // The S3 features tab says it in full; a card would only repeat it.
+  it("leaves the S3 features to their tab", async () => {
+    render(<StorageBackendDetailPage />);
+    const panel = await screen.findByRole("region", { name: "Backend status" });
+    expect(within(panel).queryByText("S3 features")).toBeNull();
+    expect(
+      screen.getByRole("tab", { name: "S3 features" }),
+    ).toBeInTheDocument();
   });
 });
