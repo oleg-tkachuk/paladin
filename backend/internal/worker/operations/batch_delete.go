@@ -167,6 +167,10 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 			// A permanent delete still has work to do on a trashed object.
 			logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyDeleted)
 			resp.AlreadyApplied++
+		case !args.Permanent && obj.State != statemachine.StateAvailable:
+			// Only an AVAILABLE object moves to the trash; the state machine
+			// would report anything else as a version conflict.
+			derr = objecth.SoftDeleteRefusal(obj.State)
 		case !args.Permanent && obj.PublicURL != "":
 			// A public collection has no trash: its bytes would stay served
 			// (ADR-0027).
