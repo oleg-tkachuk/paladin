@@ -19,9 +19,9 @@ import {
  * reports trouble, and the numeric detail (components, latency) moves
  * into the tooltip so the bar carries a single word, not a dashboard.
  *
- * Colours come from the theme tokens (success / warning / destructive /
- * muted) so the pill stays on-brand instead of importing a second,
- * clashing palette.
+ * Colours come from the status tokens (success / warning / destructive /
+ * unknown, lib/ui/status) so the pill stays on-brand instead of importing a
+ * second, clashing palette.
  */
 
 type Tone = "live" | "checking" | "unknown" | "degraded" | "down";
@@ -38,8 +38,8 @@ const TONE: Record<
   },
   checking: {
     label: "Checking",
-    dot: "bg-muted-foreground",
-    text: "text-muted-foreground",
+    dot: "bg-unknown",
+    text: "text-unknown",
     pulse: false,
   },
   degraded: {
@@ -53,8 +53,8 @@ const TONE: Record<
     // Saying "Down" for an unreachable probe is the same lie in the other
     // direction as saying "Live" for one.
     label: "Unknown",
-    dot: "bg-muted-foreground",
-    text: "text-muted-foreground",
+    dot: "bg-unknown",
+    text: "text-unknown",
     pulse: false,
   },
   down: {

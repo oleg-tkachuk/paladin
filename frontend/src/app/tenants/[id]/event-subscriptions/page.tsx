@@ -434,10 +434,10 @@ export default function EventsPage() {
                         </span>
                       ) : (
                         <span
-                          className={cn(T.pill, "text-chart-2")}
+                          className={cn(T.pill, "text-success")}
                           aria-label="active"
                         >
-                          <span className={cn(T.pillDot, "bg-chart-2")} />
+                          <span className={cn(T.pillDot, "bg-success")} />
                           active
                         </span>
                       )}

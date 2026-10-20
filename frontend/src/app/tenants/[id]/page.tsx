@@ -530,7 +530,7 @@ function BudgetTile({
                           ? "bg-destructive"
                           : pct > 80
                             ? "bg-warning"
-                            : "bg-chart-2",
+                            : "bg-success",
                       )}
                       style={{ width: `${pct}%` }}
                     />
@@ -564,7 +564,7 @@ function AuditRow({ entry }: { entry: AuditLogEntry }) {
       <span
         className={cn(
           "mt-1.5 size-1.5 shrink-0 rounded-full",
-          failed ? "bg-destructive" : "bg-chart-2",
+          failed ? "bg-destructive" : "bg-success",
         )}
         aria-hidden
       />

@@ -598,7 +598,7 @@ function StatusPill({
   }
   if (status === "pass") {
     return (
-      <span className={cn(T.pill, "text-chart-2 text-xs")}>
+      <span className={cn(T.pill, "text-success text-xs")}>
         <CheckCircleIcon className="size-3.5" /> allow
       </span>
     );

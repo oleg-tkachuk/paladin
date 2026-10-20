@@ -3,6 +3,7 @@
 // without rendering the page.
 
 import type { StorageBackend } from "@/gen/paladin/admin/v1/types_pb";
+import { StatusTone } from "@/lib/ui/status";
 
 type BackendFlags = Pick<StorageBackend, "enabled" | "readOnly">;
 type BackendHealth = Pick<StorageBackend, "healthStatus" | "healthMessage">;
@@ -46,51 +47,48 @@ export function allOf(...conjuncts: string[]): string {
   return conjuncts.filter((c) => c !== "").join(" && ");
 }
 
-export type StateVariant = "success" | "warning" | "destructive";
-
 /**
  * The one lifecycle state a row leads with. Disabled outranks draining: a
  * disabled backend refuses everything, so whether it would also refuse writes
- * says nothing more.
+ * says nothing more. Disabled is a pause an operator chose, not a fault, and
+ * draining is a change under way, not a warning.
  */
 export function lifecycleState(b: BackendFlags): {
   label: string;
-  variant: StateVariant;
+  tone: StatusTone;
 } {
-  if (!b.enabled) return { label: "Disabled", variant: "destructive" };
-  if (b.readOnly) return { label: "Draining", variant: "warning" };
-  return { label: "Enabled", variant: "success" };
+  if (!b.enabled) return { label: "Disabled", tone: StatusTone.Suspended };
+  if (b.readOnly) return { label: "Draining", tone: StatusTone.Progress };
+  return { label: "Enabled", tone: StatusTone.Success };
 }
 
 /** The values healthStatus carries for a probed backend. */
 export const HEALTH_OK = "ok";
 export const HEALTH_ERROR = "error";
 
-export type HealthTone = "ok" | "error" | "unknown";
-
 /** What the last connectivity probe found, and the text a hover explains it with. */
 export function healthView(b: BackendHealth): {
   label: string;
-  tone: HealthTone;
+  tone: StatusTone;
   title: string;
 } {
   switch (b.healthStatus) {
     case HEALTH_OK:
       return {
         label: "Healthy",
-        tone: "ok",
+        tone: StatusTone.Success,
         title: "The last probe succeeded",
       };
     case HEALTH_ERROR:
       return {
         label: "Probe failed",
-        tone: "error",
+        tone: StatusTone.Danger,
         title: b.healthMessage || "The last probe failed",
       };
     default:
       return {
         label: "Untested",
-        tone: "unknown",
+        tone: StatusTone.Unknown,
         title: "Not probed yet: run Test connectivity on the backend",
       };
   }

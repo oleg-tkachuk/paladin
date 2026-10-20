@@ -262,7 +262,7 @@ export default function TrashPage() {
             <p className={cn(T.helper, "tabular-nums")}>
               {trashed.length} {trashed.length === 1 ? "tenant" : "tenants"}
               {" · "}
-              <span className={pastRetention > 0 ? "text-chart-3" : undefined}>
+              <span className={pastRetention > 0 ? "text-warning" : undefined}>
                 {pastRetention} past retention
               </span>
               {windowDays !== null && <> · {windowDays}-day retention</>}

@@ -27,9 +27,9 @@ export function SharedBucketNotice() {
   return (
     <div
       role="note"
-      className="flex items-start gap-2 rounded-md border border-chart-3/40 bg-chart-3/10 p-3 text-sm text-foreground"
+      className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground"
     >
-      <UsersIcon className="mt-0.5 size-4 shrink-0 text-chart-3" />
+      <UsersIcon className="mt-0.5 size-4 shrink-0 text-warning" />
       <span>{sharedSettingsMessage(count, ownerName)}</span>
     </div>
   );

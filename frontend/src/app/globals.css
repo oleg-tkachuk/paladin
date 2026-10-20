@@ -34,6 +34,9 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
+  --color-progress: var(--progress);
+  --color-suspended: var(--suspended);
+  --color-unknown: var(--unknown);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -95,8 +98,9 @@
    * .light below, since :root is also what the dark palettes start from.
    *
    * The accent and the status colours are the scheme's own hues made darker,
-   * so that as text on the ground and the cards, and under white text, they
-   * reach 4.5:1 (themeContrast.test.ts); the scheme's values sat at 3.2–3.7.
+   * so that as text on the ground and the cards, under white text, and on a
+   * status badge's own tint over a card, they reach 4.5:1
+   * (themeContrast.test.ts); the scheme's values sat at 3.2–3.7.
    * Text on a warning fill is white for the same reason. */
   /* Three planes: the sidebar a step below the ground, the cards a step
    * above it, what floats above the cards (depthPlanes in
@@ -119,10 +123,18 @@
   --accent-foreground: #1d1720;
   --destructive: #ca2a3b;
   --destructive-foreground: #ffffff;
-  --success: #0c7953;
-  --warning: #93600c;
+  --success: #0a6e4b;
+  --warning: #865709;
   --warning-foreground: #ffffff;
-  --info: #1f6db3;
+  --info: #1b64a5;
+  /* Three states beside the four above, after Argo CD's vocabulary: a
+   * change under way (provisioning, draining, a migration), a deliberate
+   * pause (maintenance, disabled, frozen) and a state nobody has reported.
+   * A pause is not a fault, so it is not warning's amber; under way is not
+   * news, so it is not info's blue. */
+  --progress: #07707f;
+  --suspended: #6a5a9e;
+  --unknown: #57636d;
   --border: #d9cfc2;
   --input: #d3c8ba;
   --ring: #b74616;
@@ -190,6 +202,9 @@
   /* Text on a solid warning fill: amber is light, so the text is dark. */
   --warning-foreground: oklch(0.19 0.02 232);
   --info: oklch(0.72 0.09 232);
+  --progress: oklch(0.8 0.11 208);
+  --suspended: oklch(0.74 0.09 295);
+  --unknown: oklch(0.72 0.012 240);
 
   --border: oklch(1 0 0 / 13%);
   --input: oklch(1 0 0 / 14%);
@@ -251,6 +266,9 @@
   --warning: #f5b14c;
   --warning-foreground: #160f09;
   --info: #59b6ea;
+  --progress: #4fd4e0;
+  --suspended: #b9a2f2;
+  --unknown: #a39dab;
 
   --border: #3a3345;
   --input: #3d3648;

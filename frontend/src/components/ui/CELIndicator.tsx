@@ -42,7 +42,7 @@ export function CELIndicator({
 
   if (state.status === "valid") {
     return (
-      <div className={cn(T.hint, "flex items-center gap-1.5 text-chart-2")}>
+      <div className={cn(T.hint, "flex items-center gap-1.5 text-success")}>
         <CheckCircleIcon className="size-3.5" aria-hidden />
         <span>Valid CEL</span>
       </div>

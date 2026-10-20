@@ -55,7 +55,7 @@ export function UploadQueue({
             </span>
           )}
           {counts.done > 0 && (
-            <span className="font-mono text-chart-2">{counts.done} done</span>
+            <span className="font-mono text-success">{counts.done} done</span>
           )}
           {counts.failed > 0 && (
             <span className="font-mono text-destructive">
@@ -114,7 +114,7 @@ function QueueRow({ item }: { item: UploadTask }) {
     completed: {
       icon: <CheckCircleIcon className="size-5" />,
       label: "Complete",
-      color: "text-chart-2",
+      color: "text-success",
     },
     error: {
       icon: <ExclamationCircleIcon className="size-5" />,

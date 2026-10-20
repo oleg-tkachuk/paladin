@@ -90,10 +90,11 @@ import {
   healthView,
   lifecycleState,
   stateFilter,
-  type HealthTone,
   type StateFilter,
 } from "./backendView";
 import { TableScope } from "@/components/ui/TableScope";
+import { StatusDot } from "@/components/ui/StatusIcon";
+import { STATUS_BADGE } from "@/lib/ui/status";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "storageBackends";
@@ -102,12 +103,6 @@ const TABLE_ID = "storageBackends";
 const COLUMN_COUNT = 7;
 // Trails the search box so a refetch does not fire per keystroke.
 const SEARCH_DEBOUNCE_MS = 300;
-
-const HEALTH_DOT: Record<HealthTone, string> = {
-  ok: "bg-chart-2",
-  error: "bg-destructive",
-  unknown: "bg-muted-foreground/50",
-};
 
 type Action =
   "enable" | "disable" | "drain" | "undrain" | "maintenance" | "unmaintenance";
@@ -642,9 +637,9 @@ function BackendRow({
 
       <TableCell>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={state.variant}>{state.label}</Badge>
+          <Badge variant={STATUS_BADGE[state.tone]}>{state.label}</Badge>
           {b.maintenance && (
-            <Badge variant="warning">
+            <Badge variant="suspended">
               <WrenchScrewdriverIcon />
               Maintenance
             </Badge>
@@ -663,10 +658,7 @@ function BackendRow({
             className="inline-flex items-center gap-1.5 text-sm"
             title={health.title}
           >
-            <span
-              aria-hidden
-              className={cn("size-2 rounded-full", HEALTH_DOT[health.tone])}
-            />
+            <StatusDot tone={health.tone} />
             {health.label}
           </span>
           {compat.variant !== COMPATIBLE_VARIANT && (

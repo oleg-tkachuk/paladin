@@ -46,26 +46,26 @@ describe("allOf", () => {
 describe("lifecycleState", () => {
   it.each([
     [{ enabled: true, readOnly: false }, "Enabled", "success"],
-    [{ enabled: true, readOnly: true }, "Draining", "warning"],
-    [{ enabled: false, readOnly: false }, "Disabled", "destructive"],
+    [{ enabled: true, readOnly: true }, "Draining", "progress"],
+    [{ enabled: false, readOnly: false }, "Disabled", "suspended"],
     // A disabled backend refuses everything; draining adds nothing.
-    [{ enabled: false, readOnly: true }, "Disabled", "destructive"],
-  ])("%o → %s", (flags, label, variant) => {
-    expect(lifecycleState(flags)).toEqual({ label, variant });
+    [{ enabled: false, readOnly: true }, "Disabled", "suspended"],
+  ])("%o → %s", (flags, label, tone) => {
+    expect(lifecycleState(flags)).toEqual({ label, tone });
   });
 });
 
 describe("healthView", () => {
   it("is healthy after a successful probe", () => {
     expect(healthView({ healthStatus: HEALTH_OK, healthMessage: "" })).toEqual(
-      expect.objectContaining({ label: "Healthy", tone: "ok" }),
+      expect.objectContaining({ label: "Healthy", tone: "success" }),
     );
   });
 
   it("carries the probe's error as its explanation", () => {
     expect(
       healthView({ healthStatus: HEALTH_ERROR, healthMessage: "refused" }),
-    ).toEqual({ label: "Probe failed", tone: "error", title: "refused" });
+    ).toEqual({ label: "Probe failed", tone: "danger", title: "refused" });
   });
 
   it("falls back to a generic explanation when the probe left none", () => {

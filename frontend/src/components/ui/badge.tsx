@@ -22,13 +22,21 @@ const badgeVariants = cva(
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:
           "bg-destructive/10 text-destructive ring-1 ring-destructive/30 dark:bg-destructive/20 [a]:hover:bg-destructive/20",
-        // Tinted color variants — surfaces tinted ~15% with full text colour
-        // at chart-N. Read well on bg-card in dark mode.
+        // Tinted status variants: the status token's ink on a tenth of
+        // itself, the same tokens a StatusIcon and a StatusBar use
+        // (lib/ui/status). themeContrast.test.ts holds the ink to 4.5:1 on
+        // its tint over a card.
         success:
-          "bg-chart-2/15 text-chart-2 ring-1 ring-chart-2/30 [a]:hover:bg-chart-2/25",
+          "bg-success/10 text-success ring-1 ring-success/30 [a]:hover:bg-success/20",
         warning:
-          "bg-chart-3/15 text-chart-3 ring-1 ring-chart-3/30 [a]:hover:bg-chart-3/25",
-        info: "bg-chart-5/15 text-chart-5 ring-1 ring-chart-5/30 [a]:hover:bg-chart-5/25",
+          "bg-warning/10 text-warning ring-1 ring-warning/30 [a]:hover:bg-warning/20",
+        info: "bg-info/10 text-info ring-1 ring-info/30 [a]:hover:bg-info/20",
+        progress:
+          "bg-progress/10 text-progress ring-1 ring-progress/30 [a]:hover:bg-progress/20",
+        suspended:
+          "bg-suspended/10 text-suspended ring-1 ring-suspended/30 [a]:hover:bg-suspended/20",
+        unknown:
+          "bg-unknown/10 text-unknown ring-1 ring-unknown/30 [a]:hover:bg-unknown/20",
         accent:
           "bg-primary/15 text-primary ring-1 ring-primary/30 [a]:hover:bg-primary/25",
         outline:

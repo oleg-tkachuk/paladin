@@ -19,6 +19,8 @@ import { LiveToggle } from "@/components/ui/LiveToggle";
 import { liveState } from "@/lib/live";
 
 import { cn } from "@/lib/utils";
+import { STATUS_TONE, StatusTone } from "@/lib/ui/status";
+import { StatusDot, StatusLabel } from "@/components/ui/StatusIcon";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -59,49 +61,46 @@ const ROLE_ORDER = [
 
 type StateKey = ComponentStatus | "unknown";
 
+// Each state's words, its tone in the shared status vocabulary (its ink and
+// dot) and the chip its card title wears. Disabled is a pause an operator
+// chose, not a fault.
 const META: Record<
   StateKey,
   {
     label: string;
     icon: React.ElementType;
-    color: string;
-    dot: string;
+    status: StatusTone;
     tone: IconTone;
   }
 > = {
   healthy: {
     label: "Healthy",
     icon: CheckCircleIcon,
-    color: "text-chart-2",
-    dot: "bg-chart-2",
+    status: StatusTone.Success,
     tone: IconTone.Success,
   },
   degraded: {
     label: "Degraded",
     icon: ExclamationTriangleIcon,
-    color: "text-chart-3",
-    dot: "bg-chart-3",
+    status: StatusTone.Warning,
     tone: IconTone.Warning,
   },
   unhealthy: {
     label: "Unhealthy",
     icon: XCircleIcon,
-    color: "text-destructive",
-    dot: "bg-destructive",
+    status: StatusTone.Danger,
     tone: IconTone.Danger,
   },
   disabled: {
     label: "Disabled",
     icon: MinusCircleIcon,
-    color: "text-muted-foreground",
-    dot: "bg-muted-foreground/40",
+    status: StatusTone.Suspended,
     tone: IconTone.Neutral,
   },
   unknown: {
     label: "Unknown",
     icon: ShieldCheckIcon,
-    color: "text-muted-foreground",
-    dot: "bg-muted-foreground",
+    status: StatusTone.Unknown,
     tone: IconTone.Neutral,
   },
 };
@@ -121,23 +120,7 @@ function rollupOf(snaps: Snapshot[]): StateKey {
 
 function StatusPill({ status }: { status: StateKey }) {
   const m = META[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 text-sm font-medium",
-        m.color,
-      )}
-    >
-      <span
-        className={cn(
-          "size-2 rounded-full",
-          m.dot,
-          status !== "healthy" && "animate-pulse",
-        )}
-      />
-      {m.label}
-    </span>
-  );
+  return <StatusLabel tone={m.status}>{m.label}</StatusLabel>;
 }
 
 // ─── Component row — one per dependency ─────────────────────────────────────
@@ -188,7 +171,7 @@ function ComponentRow({ c }: { c: Component }) {
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <span className={cn("size-2 shrink-0 rounded-full", m.dot)} />
+          <StatusDot tone={m.status} />
           <span
             className={cn(
               "truncate font-mono text-sm",
@@ -217,7 +200,7 @@ function ComponentRow({ c }: { c: Component }) {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span
-            className={cn("text-xs font-medium", m.color)}
+            className={cn("text-xs font-medium", STATUS_TONE[m.status].ink)}
             aria-label={`status: ${c.status}`}
           >
             {c.statusLabel ?? m.label}
@@ -534,7 +517,9 @@ export default function HealthPage() {
       <Card>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
           <div className="flex items-center gap-2.5">
-            <RollupIcon className={cn("size-6", META[rollup].color)} />
+            <RollupIcon
+              className={cn("size-6", STATUS_TONE[META[rollup].status].ink)}
+            />
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground">
                 Rollup
