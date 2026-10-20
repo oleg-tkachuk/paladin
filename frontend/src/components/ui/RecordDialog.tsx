@@ -224,6 +224,9 @@ const ROW_CONTROLS =
   "a, button, input, select, textarea, [role=button], [role=menuitem], [role=checkbox]";
 
 function onControl(ev: React.SyntheticEvent): boolean {
+  // React bubbles an event out of a portal along the component tree, so a
+  // click in a row's menu or dialog reaches the row though it is not in it.
+  if (!ev.currentTarget.contains(ev.target as Node)) return true;
   const control = (ev.target as Element).closest(ROW_CONTROLS);
   return (
     control !== null &&
