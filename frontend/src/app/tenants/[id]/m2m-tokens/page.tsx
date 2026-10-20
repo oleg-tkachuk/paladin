@@ -52,12 +52,13 @@ import { isRevoked, listFlagsFor, tokenLifecycle } from "./_constants";
 import { CreateTokenDialog } from "./CreateTokenDialog";
 import { RevokeTokenDialog } from "./RevokeTokenDialog";
 import {
-  TokenRecordDialog,
+  TokenRecordPanel,
   TokenStatus,
   TokenUsage,
   type UsageSnap,
-} from "./TokenRecordDialog";
+} from "./TokenRecordPanel";
 import { openableRow } from "@/components/ui/RecordDialog";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
 
@@ -240,7 +241,10 @@ export default function M2MTokensPage() {
       : null,
   );
   const [revokeTarget, setRevokeTarget] = useState<APIToken | null>(null);
-  const [opened, setOpened] = useState<APIToken | null>(null);
+  // The open token is in the URL, so its panel is a link and survives a
+  // reload; it opens beside the list.
+  const detail = useDetailPanel();
+  const opened = tokens.find((t) => t.id === detail.openId) ?? null;
 
   const inState = useMemo(
     () => tokens.filter((t) => keepsLifecycle(stateFilter, tokenLifecycle(t))),
@@ -398,11 +402,12 @@ export default function M2MTokensPage() {
           >
             {visibleTokens.map((t) => {
               const revoked = isRevoked(t);
-              const row = openableRow(() => setOpened(t));
+              const row = openableRow(() => detail.open(t.id));
               return (
                 <TableRow
                   key={t.id}
                   {...row}
+                  {...detail.rowProps(t.id)}
                   className={cn(row.className, "group")}
                 >
                   <TableCell className={COL_PREFIX}>
@@ -492,11 +497,12 @@ export default function M2MTokensPage() {
         </Table>
       </ListPage>
 
-      <TokenRecordDialog
+      <TokenRecordPanel
         token={opened}
         usage={opened ? usage.get(opened.id) : undefined}
         readAtMs={readAtMs}
-        onClose={() => setOpened(null)}
+        onClose={detail.close}
+        onRevoke={setRevokeTarget}
       />
 
       {/* ─── Create dialog ───────────────────────────────────────────── */}

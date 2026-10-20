@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@/test/utils";
+import { render, screen, fireEvent, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Protective net for decomposing the m2m-tokens page (consts, then the create
@@ -56,6 +56,7 @@ const makeToken = (id: string, displayName: string) => ({
 });
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/tenants/t-1/m2m-tokens");
   h.list.mockResolvedValue({ apiTokens: [] });
   h.getUsage.mockResolvedValue({
     limitRpm: undefined,
@@ -166,6 +167,21 @@ describe("M2MTokensPage token record", () => {
     expect(dialog).toHaveTextContent("Rolesuploader");
     expect(dialog).toHaveTextContent("Rate limitunlimited");
     expect(dialog).toHaveTextContent("by user:ops");
+    // The open token is in the address, so the panel is a link to it.
+    expect(window.location.search).toBe("?id=tok-1");
+  });
+
+  it("revokes from the token's panel through the same confirmation", async () => {
+    h.list.mockResolvedValue({
+      apiTokens: [makeToken("tok-1", "ci-uploader")],
+    });
+    render(<M2MTokensPage />);
+    fireEvent.click(await screen.findByRole("row", { name: /ci-uploader/ }));
+    const panel = await screen.findByRole("dialog", { name: "ci-uploader" });
+    await userEvent.click(
+      within(panel).getByRole("button", { name: "Revoke" }),
+    );
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
   });
 
   it("leaves the row's revoke action to itself", async () => {
