@@ -21,6 +21,7 @@ import { liveState } from "@/lib/live";
 import { cn } from "@/lib/utils";
 import { STATUS_TONE, StatusTone } from "@/lib/ui/status";
 import { StatusDot, StatusLabel } from "@/components/ui/StatusIcon";
+import { StatusBar, type StatusSegment } from "@/components/ui/StatusBar";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -116,6 +117,18 @@ function rollupOf(snaps: Snapshot[]): StateKey {
     if (s.status === "degraded") worst = "degraded";
   }
   return worst;
+}
+
+/**
+ * How a set of components or roles splits by state, for a StatusBar: the
+ * states in META's order, each in its tone.
+ */
+function segmentsOf(states: readonly StateKey[]): StatusSegment[] {
+  return (Object.keys(META) as StateKey[]).map((k) => ({
+    tone: META[k].status,
+    label: META[k].label.toLowerCase(),
+    count: states.filter((s) => s === k).length,
+  }));
 }
 
 function StatusPill({ status }: { status: StateKey }) {
@@ -546,6 +559,14 @@ export default function HealthPage() {
               {orderedRoles.length}
             </div>
           </div>
+          {/* How the components split by state, after Argo CD's status
+              bar: a fault among many shows before the rollup turns. */}
+          <StatusBar
+            segments={segmentsOf(
+              cards.flatMap((s) => s.components.map((c) => c.status)),
+            )}
+            className="w-64 max-w-full"
+          />
           <Separator orientation="vertical" className="h-8" />
           {/* Backend + UI build-info as two stacked label/value pairs.
               Stacked rather than four side-by-side cells so the

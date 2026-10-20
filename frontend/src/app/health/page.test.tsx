@@ -337,3 +337,29 @@ describe("HealthPage component message", () => {
     expect(row.querySelector("svg")).not.toBeNull(); // the chevron
   });
 });
+
+// After Argo CD's status bar: how the components split by state, so one
+// failing among many shows before the rollup turns.
+describe("HealthPage status bar", () => {
+  it("tallies the components by state, the most urgent first", async () => {
+    payload = {
+      roles: [
+        {
+          role: "api",
+          status: "degraded",
+          components: [
+            component("postgres", true),
+            { ...component("rabbitmq"), status: "unhealthy" },
+            { ...component("nats"), status: "disabled" },
+          ],
+        },
+      ],
+    };
+    render(<HealthPage />);
+    expect(
+      await screen.findByRole("img", {
+        name: "1 unhealthy · 1 disabled · 1 healthy",
+      }),
+    ).toBeInTheDocument();
+  });
+});

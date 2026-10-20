@@ -24,6 +24,7 @@ export const FEATURES_TAB = "features";
 const TABS = [
   { slug: "", label: "Overview" },
   { slug: FEATURES_TAB, label: "S3 features" },
+  { slug: "history", label: "History" },
 ] as const;
 
 /** The backend's kind, as the console names it. */
@@ -39,9 +40,9 @@ export function backendSummary(backend: StorageBackend | undefined): string {
 }
 
 /**
- * A backend page's header and tabs: Overview (identity, actions, buckets)
- * and S3 features (the probe), which an operator reads when a capability is
- * in question, not on every visit.
+ * A backend page's header and tabs: Overview (identity, actions, buckets),
+ * S3 features (the probe), which an operator reads when a capability is in
+ * question, not on every visit, and History, the changes made to it.
  */
 export function BackendHeader({
   backendId,

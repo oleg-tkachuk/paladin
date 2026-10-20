@@ -11,6 +11,7 @@ export const PREFERENCE_KEYS = {
   hideResourceLinks: "console.hideResourceLinks",
   tables: "console.tables",
   diff: "console.diff",
+  collapseStatusPanels: "console.collapseStatusPanels",
 } as const;
 
 export type PreferenceKey =

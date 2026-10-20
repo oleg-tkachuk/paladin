@@ -2,14 +2,18 @@
 // use: the row warms the cache on hover or focus with exactly the query the
 // page will then answer from it.
 import { queryOptions } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   bucketClient,
   capabilityClient,
   collectionClient,
+  policyClient,
+  quotaClient,
   tenantClient,
   userClient,
 } from "@/lib/connect/client";
+import { notFoundIsAnswer } from "@/lib/connect/expected";
 
 /** A collection's resource name, as GetCollection takes it. */
 export const collectionResourceName = (tenantId: string, collection: string) =>
@@ -64,5 +68,47 @@ export function bucketDetailQuery(backendId: string, bucketId: string) {
         { name: `storageBackends/${backendId}/buckets/${bucketId}` },
         { signal },
       ),
+  });
+}
+
+/** A tenant's quota, as GetQuota names it. */
+export const tenantQuotaName = (tenantId: string) =>
+  `tenants/${tenantId}/quota`;
+
+/**
+ * A tenant's quota, or none: a tenant that never had one set has no row, and
+ * NotFound is that answer, not a failure. Shared by the quotas tab and the
+ * overview's status panel.
+ */
+export async function fetchTenantQuota(name: string, signal?: AbortSignal) {
+  try {
+    const quota = await quotaClient.getQuota(
+      { name },
+      notFoundIsAnswer({ signal }),
+    );
+    return { quota, notFound: false };
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.NotFound) {
+      return { quota: null, notFound: true };
+    }
+    throw err;
+  }
+}
+
+export function tenantQuotaQuery(tenantId: string) {
+  const name = tenantQuotaName(tenantId);
+  return queryOptions({
+    queryKey: ["tenantQuota", name] as const,
+    retry: false,
+    queryFn: ({ signal }) => fetchTenantQuota(name, signal),
+  });
+}
+
+/** The policy layers the authorizer evaluates for a resource, in order. */
+export function effectivePolicyQuery(resourceName: string) {
+  return queryOptions({
+    queryKey: ["effective-policy", resourceName] as const,
+    queryFn: ({ signal }) =>
+      policyClient.getEffectivePolicy({ resourceName }, { signal }),
   });
 }

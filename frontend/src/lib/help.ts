@@ -54,6 +54,30 @@ export const HELP = {
     doc: "deletion-semantics.md",
     docLabel: "Deletion semantics",
   },
+  quota: {
+    term: "Quota",
+    text: "Hard caps on what a tenant stores: total bytes, object count, and bytes and objects a day. An upload past a cap is refused; a bucket's own caps limit every tenant in it at once.",
+    doc: "adr/0025-bucket-quotas-are-platform-configuration.md",
+    docLabel: "ADR-0025",
+  },
+  policyLayers: {
+    term: "Policy layers",
+    text: "The built-in, tenant, bucket and collection policies are joined in that order, and a forbid in any layer wins. A layer that does not compile freezes its scope until it is replaced.",
+    doc: "security-model.md",
+    docLabel: "the security model",
+  },
+  bucketProvisioning: {
+    term: "Provisioning",
+    text: "Paladin records a bucket first and creates or removes it on its backend afterwards. Until the bucket is ready, nothing binds to it or uploads into it.",
+    doc: "adr/0003-transactional-outbox.md",
+    docLabel: "ADR-0003",
+  },
+  storageFeatures: {
+    term: "S3 features",
+    text: "Test connectivity probes the backend for each S3 feature Paladin uses. A required feature it lacks makes the backend incompatible; an optional one turns off what it enables.",
+    doc: "adr/0026-storage-backend-features-are-probed.md",
+    docLabel: "ADR-0026",
+  },
 } as const satisfies Record<string, HelpEntry>;
 
 export type HelpTopic = keyof typeof HELP;
