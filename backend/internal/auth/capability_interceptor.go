@@ -443,13 +443,10 @@ func (i *capabilityInterceptor) enforceCaveats(
 	subject := verified.MeterSubject()
 	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil || len(subject.Copies()) > 0) {
 		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), meter.BumpRequest{Subject: subject}); err != nil {
-			if errors.Is(err, limes.ErrRequestLimitExceeded) {
-				return capabilityError(connect.CodeResourceExhausted, err)
-			}
-			// DB-side error: fail closed. A capability with a
-			// request ceiling that can't be incremented atomically
+			// A store failure fails closed, as Unavailable: a capability
+			// with a request ceiling that can't be incremented atomically
 			// is safer to reject than to allow unbounded use.
-			return capabilityError(connect.CodeUnavailable, err)
+			return meterError(err)
 		}
 	}
 	return nil
@@ -705,7 +702,7 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 		default:
 			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeError, 0)
 		}
-		return chargeError(err)
+		return meterError(err)
 	}
 	metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeCharged, amount.Float64())
 	stampLastCharge(ctx, receipt.ChargeID)
@@ -767,10 +764,10 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 		req = meter.RefundRequest{ChargeID: chargeID, Remaining: true}
 	}
 	if _, err := store.Refund(ledgerContext(ctx, cap), req); err != nil {
-		if errors.Is(err, meter.ErrRefundExceedsCharge) || errors.Is(err, limes.ErrInvalidRequest) {
+		if errors.Is(err, meter.ErrRefundExceedsCharge) {
 			return capabilityError(connect.CodeInvalidArgument, err)
 		}
-		return capabilityError(connect.CodeUnavailable, err)
+		return meterError(err)
 	}
 	return nil
 }
@@ -801,7 +798,7 @@ func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duratio
 		Actor:   cap.Subject.Subject,
 	})
 	if err != nil {
-		return uuid.Nil, chargeError(err)
+		return uuid.Nil, meterError(err)
 	}
 	return r.ID, nil
 }
@@ -828,7 +825,7 @@ func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount lime
 		if errors.Is(err, meter.ErrReservationNotFound) {
 			return capabilityError(connect.CodeFailedPrecondition, err)
 		}
-		return chargeError(err)
+		return meterError(err)
 	}
 	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
@@ -851,27 +848,44 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 		Subject:       verified.MeterSubject(),
 		ReservationID: reservationID,
 	}); err != nil {
-		return capabilityError(connect.CodeUnavailable, err)
+		return meterError(err)
 	}
 	return nil
 }
 
-// chargeError maps a metering rejection to its transport status: both
-// exhaustion sentinels are ResourceExhausted, an invalid amount is the
-// caller's mistake, a unit other than the counters', a counter with no room
-// and a capability no longer on record are preconditions no retry meets, and
-// anything else is the store being unavailable.
-func chargeError(err error) error {
+// meterError maps a metering refusal to its transport status, by the limes
+// family it belongs to, so a refusal no retry mends never reads as one to
+// retry:
+//
+//   - a limit exhausted — the capability's requests, budget or copies, or its
+//     tenant's budget — is ResourceExhausted;
+//   - a capability revoked or expired, or its tenant erased, is
+//     PermissionDenied with its reason, as a verifier's refusal is;
+//   - a malformed request is InvalidArgument;
+//   - a unit other than the counters', a counter with no room and a record
+//     no longer there are FailedPrecondition;
+//   - a request that disagrees with what is on record — a reservation settled
+//     for another amount, an external reference naming another charge — is
+//     Aborted;
+//   - anything else is the store failing, Unavailable.
+//
+// ErrUnitCodeMismatch is an ErrConflict too, so it is matched first.
+func meterError(err error) error {
 	switch {
-	case errors.Is(err, limes.ErrBudgetExceeded), errors.Is(err, limes.ErrTenantBudgetExceeded):
+	case errors.Is(err, limes.ErrRequestLimitExceeded),
+		errors.Is(err, limes.ErrBudgetExceeded),
+		errors.Is(err, limes.ErrTenantBudgetExceeded):
 		return capabilityError(connect.CodeResourceExhausted, err)
+	case errors.Is(err, limes.ErrRevoked), errors.Is(err, limes.ErrExpired):
+		return capabilityError(connect.CodePermissionDenied, err)
 	case errors.Is(err, limes.ErrInvalidRequest):
 		return capabilityError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, limes.ErrUnitCodeMismatch), errors.Is(err, meter.ErrCounterOverflow):
+	case errors.Is(err, limes.ErrUnitCodeMismatch),
+		errors.Is(err, meter.ErrCounterOverflow),
+		errors.Is(err, limes.ErrNotFound):
 		return capabilityError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, limes.ErrNotFound):
-		// The capability is no longer on record: purged after expiry.
-		return capabilityError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, limes.ErrConflict):
+		return capabilityError(connect.CodeAborted, err)
 	}
 	return capabilityError(connect.CodeUnavailable, err)
 }
