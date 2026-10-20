@@ -60,6 +60,10 @@ export function RevokeTokenDialog({
       }
       warning="A revoke cannot be undone. Whatever uses this token needs a new one to keep working."
       confirmText="Revoke"
+      // A revoke cannot be undone, and whatever runs on the token stops at
+      // once. Typed as the verb: a display name is optional and the prefix
+      // is opaque.
+      typeToConfirm="revoke"
     />
   );
 }

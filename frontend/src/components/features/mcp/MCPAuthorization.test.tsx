@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  typeToConfirm,
+  waitFor,
+  within,
+} from "@/test/utils";
 
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { MCPAuthorization } from "./MCPAuthorization";
@@ -216,10 +223,11 @@ describe("deleting a client", () => {
     const confirm = await screen.findByRole("alertdialog");
     expect(confirm).toHaveTextContent("every tenant");
     expect(h.deleteOAuthClient).not.toHaveBeenCalled();
+    const del = within(confirm).getByRole("button", { name: "Delete client" });
+    expect(del).toBeDisabled();
 
-    fireEvent.click(
-      within(confirm).getByRole("button", { name: "Delete client" }),
-    );
+    await typeToConfirm("delete");
+    fireEvent.click(del);
     await waitFor(() =>
       expect(h.deleteOAuthClient).toHaveBeenCalledWith({
         clientId: REGISTERED.clientId,

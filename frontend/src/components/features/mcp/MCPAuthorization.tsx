@@ -372,6 +372,9 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
         message={`${deleting?.clientId ?? "The client"} is removed with every grant issued to it, in every tenant.`}
         warning="Agents using it must register and authorize again. An access token one already holds keeps working for a few minutes."
         confirmText="Delete client"
+        // Every grant in every tenant goes with it, so it is typed out; as
+        // the verb, since a registered client's id is a generated string.
+        typeToConfirm="delete"
       />
     </div>
   );
