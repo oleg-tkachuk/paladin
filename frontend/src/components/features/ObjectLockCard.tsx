@@ -4,7 +4,7 @@ import { HelpTip } from "@/components/ui/HelpTip";
 import React from "react";
 import { LockClosedIcon, ScaleIcon } from "@heroicons/react/24/outline";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -93,11 +93,10 @@ export function ObjectLockCard({ objectName }: { objectName: string }) {
   return (
     <Card className="space-y-4 p-4">
       <div className="flex items-center justify-between">
-        <h3 className={`${T.cardTitleProse} flex items-center gap-2`}>
-          <LockClosedIcon className="size-4" aria-hidden="true" />
+        <CardTitle level={3} className={T.cardTitleProse} icon={LockClosedIcon}>
           Object Lock
           <HelpTip topic="objectLock" />
-        </h3>
+        </CardTitle>
         {retained && (
           <Badge
             variant={lock?.mode === "COMPLIANCE" ? "destructive" : "secondary"}

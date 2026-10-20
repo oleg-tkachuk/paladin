@@ -5,10 +5,12 @@
 // the object data-plane honours it (soft-deletes preserve prior versions); this
 // page is the operator switch + retention option.
 
+import { IconTone } from "@/components/ui/IconChip";
+import { RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
 import { Switch } from "@/components/ui/switch";
@@ -57,7 +59,13 @@ export default function BucketVersioningPage() {
   return (
     <Card className="max-w-2xl space-y-6 p-6">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Versioning</h2>
+        <CardTitle
+          className="text-lg font-semibold"
+          icon={RectangleStackIcon}
+          tone={IconTone.Info}
+        >
+          Versioning
+        </CardTitle>
         <p className="mt-1 text-sm text-muted-foreground">
           When enabled, overwrites and deletes preserve prior object versions
           instead of replacing them in place.

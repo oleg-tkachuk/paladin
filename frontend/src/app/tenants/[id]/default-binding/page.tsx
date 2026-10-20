@@ -5,6 +5,8 @@
 // naming a bucket) lands. Backed by TenantService.{Get,Set,Clear}
 // TenantDefaultBinding.
 
+import { IconTone } from "@/components/ui/IconChip";
+import { ArchiveBoxIcon } from "@heroicons/react/24/outline";
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useState } from "react";
 import {
@@ -20,7 +22,7 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { tenantClient } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -142,7 +144,13 @@ export default function DefaultBindingPage() {
     <div className="space-y-4">
       <Card className="space-y-4 p-5">
         <div>
-          <h2 className="text-base font-semibold">Default bucket</h2>
+          <CardTitle
+            className="text-base font-semibold"
+            icon={ArchiveBoxIcon}
+            tone={IconTone.Info}
+          >
+            Default bucket
+          </CardTitle>
           <p className="text-sm text-muted-foreground">
             Where a bare collection name (created without naming a bucket) lands
             for this tenant. Creating a collection with no bucket and no default

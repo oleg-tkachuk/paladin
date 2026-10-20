@@ -10,12 +10,14 @@
 // works, and what Paladin uses it for. What the probe actually saw — often a
 // multi-line SDK error — stays folded under the row until asked for.
 
+import { IconTone } from "@/components/ui/IconChip";
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
   QuestionMarkCircleIcon,
   XCircleIcon,
+  PuzzlePieceIcon,
 } from "@heroicons/react/24/outline";
 
 import {
@@ -126,7 +128,11 @@ export function BackendFeatures({ backend }: { backend: Backend }) {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-          <CardTitle className="text-sm font-semibold tracking-tight">
+          <CardTitle
+            className="text-sm font-semibold tracking-tight"
+            icon={PuzzlePieceIcon}
+            tone={IconTone.Info}
+          >
             S3 features
           </CardTitle>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">

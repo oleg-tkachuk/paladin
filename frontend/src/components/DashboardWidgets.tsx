@@ -20,7 +20,7 @@
 // Server load is minimal: small page sizes, no polling — only
 // re-fetch on tenant context refresh from RefreshContext.
 
-import { IconChip, alertTone } from "@/components/ui/IconChip";
+import { alertTone, IconTone } from "@/components/ui/IconChip";
 import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -145,7 +145,13 @@ function RecentActivityWidget() {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm">Recent activity</CardTitle>
+          <CardTitle
+            className="text-sm"
+            icon={ClipboardDocumentListIcon}
+            tone={IconTone.Info}
+          >
+            Recent activity
+          </CardTitle>
           <Link
             href="/audit"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -238,11 +244,11 @@ function FailedOpsWidget() {
       )}
     >
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <IconChip
-            icon={ExclamationTriangleIcon}
-            tone={alertTone(ops.length)}
-          />
+        <CardTitle
+          className="text-sm"
+          icon={ExclamationTriangleIcon}
+          tone={alertTone(ops.length)}
+        >
           Failed operations
           {ops.length > 0 && <Badge variant="destructive">{ops.length}</Badge>}
         </CardTitle>
@@ -314,8 +320,11 @@ function BudgetAlertsWidget() {
       )}
     >
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <IconChip icon={BoltIcon} tone={alertTone(overCap)} />
+        <CardTitle
+          className="text-sm"
+          icon={BoltIcon}
+          tone={alertTone(overCap)}
+        >
           Budget alerts
           {rows.length > 0 && (
             <Badge variant={overCap > 0 ? "destructive" : "secondary"}>

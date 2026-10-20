@@ -1,16 +1,19 @@
 "use client";
 
+import { IconTone } from "@/components/ui/IconChip";
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
+  GlobeAltIcon,
+  CommandLineIcon,
 } from "@heroicons/react/24/outline";
 
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { MCPInspectResponse } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
 import { SECTION } from "@/lib/navigation/sections";
@@ -195,7 +198,11 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
         </p>
       </Card>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TransportCard name="Streamable HTTP" enabled={!!http?.enabled}>
+        <TransportCard
+          name="Streamable HTTP"
+          icon={GlobeAltIcon}
+          enabled={!!http?.enabled}
+        >
           <ConnectField
             label="Endpoint"
             value={`POST ${endpoint}`}
@@ -218,7 +225,11 @@ export function MCPConnect({ inspect }: { inspect: MCPInspectResponse }) {
             idle and belong to the principal that opened them.
           </p>
         </TransportCard>
-        <TransportCard name="stdio" enabled={!!stdio?.enabled}>
+        <TransportCard
+          name="stdio"
+          icon={CommandLineIcon}
+          enabled={!!stdio?.enabled}
+        >
           <ConnectField
             label="Command"
             value={STDIO_COMMAND}
@@ -243,17 +254,26 @@ const STDIO_TOKEN_ENV = "PALADIN_MCP_TOKEN";
 
 function TransportCard({
   name,
+  icon,
   enabled,
   children,
 }: {
   name: string;
+  icon: React.ElementType;
   enabled: boolean;
   children: React.ReactNode;
 }) {
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center gap-2">
-        <h3 className={T.cardTitleProse}>{name}</h3>
+        <CardTitle
+          level={3}
+          className={T.cardTitleProse}
+          icon={icon}
+          tone={enabled ? IconTone.Success : IconTone.Neutral}
+        >
+          {name}
+        </CardTitle>
         <Badge variant={enabled ? "success" : "outline"}>
           {enabled ? "enabled" : "disabled"}
         </Badge>

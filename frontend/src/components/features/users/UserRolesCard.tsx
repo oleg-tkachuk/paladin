@@ -6,11 +6,12 @@
  * role it offers away, but not one it would never grant.
  */
 
+import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { Confirmation } from "@/components/ui/Confirmation";
 import { useConfirmation } from "@/hooks/useConfirmation";
 import { useState } from "react";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,7 +86,9 @@ export function UserRolesCard({
   return (
     <Card className="space-y-4 p-5">
       <div className="space-y-1">
-        <h2 className="text-sm font-semibold">Roles</h2>
+        <CardTitle className="text-sm font-semibold" icon={UserGroupIcon}>
+          Roles
+        </CardTitle>
         <p className={T.hint}>
           What the user may do, as Cedar policy reads it. Tokens already issued
           keep their roles until they expire.

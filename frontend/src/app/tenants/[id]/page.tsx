@@ -31,6 +31,7 @@ import {
   ServerStackIcon,
   ShieldCheckIcon,
   TagIcon,
+  BuildingOffice2Icon,
 } from "@heroicons/react/24/outline";
 
 import { IdentityField } from "@/components/IdentityField";
@@ -148,7 +149,10 @@ function IdentityCard({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-baseline justify-between gap-3">
-          <CardTitle className="text-lg leading-tight">
+          <CardTitle
+            className="text-lg leading-tight"
+            icon={BuildingOffice2Icon}
+          >
             {tenant.displayName || (
               <span className="text-muted-foreground italic">(unnamed)</span>
             )}
@@ -363,8 +367,11 @@ export default function TenantOverviewPage() {
       {/* ─── Recent activity ───────────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <IconChip icon={ClipboardDocumentListIcon} tone={IconTone.Info} />
+          <CardTitle
+            className="text-base"
+            icon={ClipboardDocumentListIcon}
+            tone={IconTone.Info}
+          >
             Recent activity
           </CardTitle>
           <Link

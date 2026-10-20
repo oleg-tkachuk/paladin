@@ -79,3 +79,29 @@ describe("Card", () => {
     );
   });
 });
+
+describe("CardTitle icon", () => {
+  const Glyph = () => <svg data-testid="glyph" />;
+
+  it("puts the icon on a chip before the title, named by the title alone", () => {
+    render(
+      <CardTitle icon={Glyph} tone="info">
+        Specs
+      </CardTitle>,
+    );
+    const heading = screen.getByRole("heading", { name: "Specs" });
+    const chip = heading.querySelector('[data-slot="icon-chip"]');
+    expect(chip).toHaveAttribute("data-tone", "info");
+    expect(chip).toContainElement(screen.getByTestId("glyph"));
+    expect(heading.firstElementChild).toBe(chip);
+  });
+
+  it("draws no chip without an icon", () => {
+    render(<CardTitle>Specs</CardTitle>);
+    expect(
+      screen
+        .getByRole("heading", { name: "Specs" })
+        .querySelector('[data-slot="icon-chip"]'),
+    ).toBeNull();
+  });
+});

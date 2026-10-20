@@ -1,5 +1,7 @@
 "use client";
 
+import { IconTone } from "@/components/ui/IconChip";
+import { ArrowsRightLeftIcon } from "@heroicons/react/24/outline";
 import { useTenantChangesBlocked } from "./tenant-context";
 import { useCallback, useEffect, useState } from "react";
 import { parseBucketResourceName } from "@/lib/resources/bucket-name";
@@ -113,7 +115,11 @@ export function StorageMigrationCard({
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">
+          <CardTitle
+            className="text-sm font-medium"
+            icon={ArrowsRightLeftIcon}
+            tone={IconTone.Info}
+          >
             Storage migration
           </CardTitle>
         </CardHeader>
@@ -168,7 +174,11 @@ export function StorageMigrationCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium">
+        <CardTitle
+          className="text-sm font-medium"
+          icon={ArrowsRightLeftIcon}
+          tone={IconTone.Info}
+        >
           Storage migration
           <Badge variant={variant}>{mig.state}</Badge>
         </CardTitle>

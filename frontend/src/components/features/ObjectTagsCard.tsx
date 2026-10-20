@@ -1,7 +1,13 @@
 import React from "react";
-import { CheckIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { IconTone } from "@/components/ui/IconChip";
+import {
+  CheckIcon,
+  PlusIcon,
+  TrashIcon,
+  TagIcon,
+} from "@heroicons/react/24/outline";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -81,7 +87,13 @@ export function ObjectTagsCard({
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Tags</h2>
+        <CardTitle
+          className="text-sm font-semibold"
+          icon={TagIcon}
+          tone={IconTone.Info}
+        >
+          Tags
+        </CardTitle>
         <Button
           variant="outline"
           size="sm"

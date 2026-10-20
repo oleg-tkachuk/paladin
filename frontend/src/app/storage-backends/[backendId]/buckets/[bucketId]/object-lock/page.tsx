@@ -7,10 +7,11 @@
 // backend persists ObjectLockConfig on the bucket row and the data plane
 // enforces it on delete/overwrite; this page is the operator switch.
 
+import { LockClosedIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNotification } from "@/components/ui/Notification";
@@ -103,7 +104,9 @@ export default function BucketObjectLockPage() {
   return (
     <Card className="max-w-2xl space-y-6 p-6">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Object lock</h2>
+        <CardTitle className="text-lg font-semibold" icon={LockClosedIcon}>
+          Object lock
+        </CardTitle>
         <p className="mt-1 text-sm text-muted-foreground">
           Write-once-read-many retention. Objects can&apos;t be deleted or
           overwritten until their retention expires.

@@ -9,6 +9,7 @@
  * generated descriptor); the server remains the authority.
  */
 
+import { KeyIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
 
@@ -83,7 +84,9 @@ export function ChangePasswordCard() {
   return (
     <Card className="h-full">
       <CardHeader className="px-6">
-        <CardTitle className="text-base">Password</CardTitle>
+        <CardTitle className="text-base" icon={KeyIcon}>
+          Password
+        </CardTitle>
         <CardDescription>
           Requires the current one. Other sessions stay signed in until their
           tokens expire.

@@ -11,6 +11,8 @@
 // running, or this deployment doesn't run one) — we say so plainly rather
 // than rendering a misleading all-zeroes rollup.
 
+import { IconTone } from "@/components/ui/IconChip";
+import { SignalIcon } from "@heroicons/react/24/outline";
 import { useQuery } from "@tanstack/react-query";
 
 import { adminSystemClient } from "@/lib/connect/client";
@@ -44,7 +46,9 @@ export function DispatcherStatsCard() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-        <CardTitle className="text-base">Event dispatcher</CardTitle>
+        <CardTitle className="text-base" icon={SignalIcon} tone={IconTone.Info}>
+          Event dispatcher
+        </CardTitle>
         {data && (
           <Badge
             variant="outline"
