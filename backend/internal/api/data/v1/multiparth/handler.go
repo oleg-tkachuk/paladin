@@ -533,7 +533,7 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	// Presigned part URL grants Put on the underlying object; gate on
 	// both OpPresign (the act of issuing a URL) and OpPut (the op the
 	// URL ultimately authorises). Either failure short-circuits.
-	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, auth.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {

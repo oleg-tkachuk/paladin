@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/metertest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
@@ -31,7 +31,7 @@ WITH unhooked AS (
 DELETE FROM limes.capabilities WHERE id = $1`
 
 // newLedger is the server's reader of the charges ledger over pool.
-func newLedger(t *testing.T, pool *pgxpool.Pool, opts ...capstore.Option) limes.LedgerReader {
+func newLedger(t *testing.T, pool *pgxpool.Pool, opts ...capstore.Option) meter.LedgerReader {
 	t.Helper()
 	l, err := capstore.NewLedger(pool, opts...)
 	if err != nil {
@@ -43,7 +43,7 @@ func newLedger(t *testing.T, pool *pgxpool.Pool, opts ...capstore.Option) limes.
 // The module's Meter contract, on the app role under row-level security, as
 // the server runs the store, on a clock the suite moves.
 func TestMeterContract(t *testing.T) {
-	metertest.Run(t, func(t *testing.T) metertest.Env[pgx.Tx] {
+	metertest.Run(t, func(t *testing.T) metertest.Env {
 		t.Helper()
 		ctx := context.Background()
 		admin := startPostgres(t)
@@ -54,7 +54,7 @@ func TestMeterContract(t *testing.T) {
 		// Every capability of one Env expires together, so a child never
 		// outlives its parent.
 		expires := clock.Now().Add(contractTTL)
-		return metertest.Env[pgx.Tx]{
+		return metertest.Env{
 			Ctx:    auth.WithActingTenant(ctx, tenant),
 			Usage:  newUsageStore(t, pool, capstore.WithClock(clock.Now)),
 			Tenant: tenant,
@@ -79,6 +79,11 @@ func TestMeterContract(t *testing.T) {
 				c.ParentID = spec.Parent
 				c.Caveats.Requests = spec.Requests
 				c.Caveats.Budget = spec.Budget
+				// A spec with no quota of copies is unlimited (metertest).
+				c.Caveats.Copies = limes.CopyQuota{Unlimited: true}
+				if spec.Copies != nil {
+					c.Caveats.Copies = *spec.Copies
+				}
 				return c.ID, records.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer})
 			},
 			// As Store.Purge removes an expired record: the meter's rows stay

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -58,18 +59,18 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 		t.Fatalf("the copy carries %d limits, want 1", len(subject.Copies()))
 	}
 
-	if _, err := usage.SetTenantBudget(acting, limes.SetTenantBudgetRequest{
-		TenantID: tenant, Ceiling: limes.BudgetCeiling{Unlimited: true},
+	if _, err := usage.SetTenantBudget(acting, meter.SetTenantBudgetRequest{
+		TenantID: tenant, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: testUnit},
 	}); err != nil {
 		t.Fatalf("set budget: %v", err)
 	}
-	if _, err := usage.Bump(acting, limes.BumpRequest{Subject: subject}); err != nil {
+	if _, err := usage.Bump(acting, meter.BumpRequest{Subject: subject}); err != nil {
 		t.Fatalf("bump: %v", err)
 	}
-	if _, err := usage.Charge(acting, limes.ChargeRequest{Subject: subject, Amount: limes.NanosPerUnit}, nil); err != nil {
+	if _, err := usage.Charge(acting, meter.ChargeRequest{Subject: subject, Amount: limes.NanosPerUnit}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
-	if _, err := usage.Reserve(acting, limes.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {
+	if _, err := usage.Reserve(acting, meter.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
 	if err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {
@@ -79,6 +80,11 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 		t.Fatalf("revoke: %v", err)
 	}
 }
+
+// limesEraseMarks is the limes table an erase writes a tenant into rather
+// than out of: the mark that refuses metering a tenant whose usage is gone
+// until the purger finds none of its records left.
+const limesEraseMarks = "erased_tenants"
 
 // limesRows counts tenant's rows in each of limesTenantTables, past RLS.
 func limesRows(t *testing.T, ctx context.Context, admin *pgxpool.Pool, tenant uuid.UUID) map[string]int {
@@ -128,8 +134,10 @@ func TestPurgingATenantErasesItsCapabilityRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(tables, limesTenantTables) {
-		t.Fatalf("the limes schema keeps tenants' rows in %v; this test seeds %v — seed the new table and check Purge erases it", tables, limesTenantTables)
+	want := append(slices.Clone(limesTenantTables), limesEraseMarks)
+	slices.Sort(want)
+	if !slices.Equal(tables, want) {
+		t.Fatalf("the limes schema keeps tenants' rows in %v; this test knows %v — seed the new table and check Purge erases it", tables, want)
 	}
 
 	f := newBiscuitFixture(t, admin)

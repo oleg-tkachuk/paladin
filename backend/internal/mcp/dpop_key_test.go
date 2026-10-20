@@ -27,6 +27,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	datav1connect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -163,7 +164,7 @@ func newCapabilityPlane(t *testing.T) *capabilityPlane {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,12 +199,12 @@ func (p *capabilityPlane) issue(t *testing.T, jkt string) string {
 	t.Helper()
 	res, err := p.issuer.Issue(context.Background(), limes.IssueRequest{
 		IssuedBy: limes.Principal{Subject: "op"},
-		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: uuid.New(), Subject: "agent"},
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: uuid.New(), Subject: "agent"},
 		Audience: []string{auth.TokenPlaneData},
 		Caveats: limes.Caveats{
 			Ops:      []limes.Op{limes.OpGet, limes.OpShare},
 			Requests: limes.RequestCeiling{Unlimited: true},
-			Budget:   limes.BudgetCeiling{Unlimited: true},
+			Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: captest.Unit},
 		},
 		TTL:             time.Hour,
 		ConfirmationJKT: jkt,
@@ -218,7 +219,7 @@ func (p *capabilityPlane) issue(t *testing.T, jkt string) string {
 // possession signed by holderKey, the key the token is bound to.
 func (p *capabilityPlane) verifyHeld(t *testing.T, token string, holderKey crypto.Signer) limes.VerifiedCapability {
 	t.Helper()
-	proof, err := dpop.Sign(context.Background(), holderKey, dpop.ProofRequest{
+	proof, err := dpop.Sign(context.Background(), holderKey, dpop.SignRequest{
 		Method: http.MethodPost, URL: delegateProofURL, Token: token, IssuedAt: time.Now(),
 	})
 	if err != nil {

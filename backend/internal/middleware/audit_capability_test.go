@@ -27,7 +27,7 @@ func TestCapabilityID_Absent(t *testing.T) {
 func TestCapabilityID_Present(t *testing.T) {
 	t.Parallel()
 	verified := captest.Verified(t, limes.Capability{
-		Subject: limes.Principal{Type: limes.PrincipalAgent},
+		Subject: limes.Principal{Type: limes.PrincipalTypeAgent},
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 	})
 	want := verified.Capability().ID

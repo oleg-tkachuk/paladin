@@ -30,6 +30,10 @@ const TTL = time.Hour
 // none.
 const Subject = "captest-agent"
 
+// Unit is the currency a minted budget that names none is in: limes assumes
+// no unit for an empty one.
+const Unit = "USD"
+
 // Minter issues and verifies capabilities over an in-memory store.
 type Minter struct {
 	Issuer   *limes.Issuer
@@ -57,13 +61,13 @@ func NewMinter(tb testing.TB) *Minter {
 	if err != nil {
 		tb.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		tb.Fatal(err)
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: store, TrustedIssuers: []string{Issuer},
-		AcceptBiscuit: true, BiscuitRevocations: store, MeterCopies: true,
+		Biscuit: &limes.BiscuitConfig{Revocations: store, MeterCopies: true},
 	})
 	if err != nil {
 		tb.Fatal(err)
@@ -76,16 +80,22 @@ func NewMinter(tb testing.TB) *Minter {
 // the issuer; what the template leaves out is filled in: a tenant, an agent
 // subject, Audience, and the get operation. A ceiling the template leaves at
 // its zero value is unlimited — a ceiling of nothing is set by asking for it
-// with MintExact. A key-bound template is refused: verifying one needs a
-// proof of its key.
+// with MintExact — and a budget that names no unit is in Unit. A key-bound
+// template is refused: verifying one needs a proof of its key.
 func (m *Minter) Mint(tb testing.TB, template limes.Capability) (limes.VerifiedCapability, string) {
 	tb.Helper()
 	c := template
 	if c.Caveats.Requests == (limes.RequestCeiling{}) {
 		c.Caveats.Requests = limes.RequestCeiling{Unlimited: true}
 	}
-	if c.Caveats.Budget == (limes.BudgetCeiling{}) {
-		c.Caveats.Budget = limes.BudgetCeiling{Unlimited: true}
+	if c.Caveats.Budget.Max == 0 && !c.Caveats.Budget.Unlimited {
+		c.Caveats.Budget.Unlimited = true
+	}
+	if c.Caveats.Budget.UnitCode == "" {
+		c.Caveats.Budget.UnitCode = Unit
+	}
+	if c.Caveats.Copies == (limes.CopyQuota{}) {
+		c.Caveats.Copies = limes.CopyQuota{Unlimited: true}
 	}
 	return m.MintExact(tb, c)
 }
@@ -100,8 +110,8 @@ func (m *Minter) MintExact(tb testing.TB, template limes.Capability) (limes.Veri
 	if subject.TenantID == uuid.Nil {
 		subject.TenantID = uuid.New()
 	}
-	if subject.Type == limes.PrincipalUnspecified {
-		subject.Type = limes.PrincipalAgent
+	if subject.Type == limes.PrincipalTypeUnspecified {
+		subject.Type = limes.PrincipalTypeAgent
 	}
 	if subject.Subject == "" {
 		subject.Subject = Subject
@@ -116,7 +126,7 @@ func (m *Minter) MintExact(tb testing.TB, template limes.Capability) (limes.Veri
 	}
 	res, err := m.Issuer.Issue(context.Background(), limes.IssueRequest{
 		Subject:  subject,
-		IssuedBy: limes.Principal{Type: limes.PrincipalUser, TenantID: subject.TenantID, Subject: Subject},
+		IssuedBy: limes.Principal{Type: limes.PrincipalTypeUser, TenantID: subject.TenantID, Subject: Subject},
 		Audience: audience,
 		Caveats:  caveats,
 		TTL:      TTL,
@@ -151,7 +161,8 @@ func (m *Minter) Delegate(tb testing.TB, parent limes.VerifiedCapability, caveat
 	return m.Verify(tb, res.Token, p.Audience[0]), res.Token
 }
 
-// Attenuated seals v as a Biscuit, narrows it by a and verifies the copy.
+// Attenuated seals v as a Biscuit, narrows it by a and verifies the copy. v
+// must allow limes.OpShare: limes seals no other.
 func (m *Minter) Attenuated(tb testing.TB, v limes.VerifiedCapability, a limes.Attenuation) (limes.VerifiedCapability, string) {
 	tb.Helper()
 	b, err := m.Issuer.Biscuit(context.Background(), limes.BiscuitRequest{Capability: v})

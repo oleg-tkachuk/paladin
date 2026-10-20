@@ -30,11 +30,15 @@ const (
 
 // ─── protoToPrincipalKind ──────────────────────────────────────────────────
 
+// platformUnit is the platform currency these tests issue in, as
+// capability.currency names it.
+const platformUnit = "USD"
+
 func TestProtoToPrincipalKind(t *testing.T) {
 	cases := map[adminv1.PrincipalKind]limes.PrincipalType{
-		adminv1.PrincipalKind_PRINCIPAL_KIND_USER:    limes.PrincipalUser,
-		adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT:   limes.PrincipalAgent,
-		adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE: limes.PrincipalService,
+		adminv1.PrincipalKind_PRINCIPAL_KIND_USER:    limes.PrincipalTypeUser,
+		adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT:   limes.PrincipalTypeAgent,
+		adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE: limes.PrincipalTypeService,
 		// Unknown must map to the empty type so downstream validation rejects
 		// it, rather than silently defaulting to a real principal kind.
 		adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED: limes.PrincipalType(""),
@@ -64,7 +68,7 @@ func TestProtoToPrincipalUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("protoToPrincipal: %v", err)
 	}
-	if got.Type != limes.PrincipalUser || got.TenantID != convTenant || got.Subject != "alice" {
+	if got.Type != limes.PrincipalTypeUser || got.TenantID != convTenant || got.Subject != "alice" {
 		t.Errorf("principal = %+v", got)
 	}
 	// Agent detail must stay nil for a non-agent principal.
@@ -89,15 +93,15 @@ func TestProtoToPrincipalAgent(t *testing.T) {
 	parentID := uuid.New()
 
 	got, err := protoToPrincipal(&adminv1.CapabilityPrincipal{
-		Kind:          adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
-		TenantId:      convTenant.String(),
-		Subject:       "agent-1",
-		AgentType:     convAgentType,
-		AgentVersion:  convAgentVersion,
-		Model:         convModel,
-		McpClient:     convMCPClient,
-		RunId:         runID.String(),
-		ParentAgentId: parentID.String(),
+		Kind:         adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
+		TenantId:     convTenant.String(),
+		Subject:      "agent-1",
+		AgentType:    convAgentType,
+		AgentVersion: convAgentVersion,
+		Model:        convModel,
+		McpClient:    convMCPClient,
+		RunId:        runID.String(),
+		ParentRunId:  parentID.String(),
 	})
 	if err != nil {
 		t.Fatalf("protoToPrincipal: %v", err)
@@ -110,8 +114,8 @@ func TestProtoToPrincipalAgent(t *testing.T) {
 		t.Errorf("agent metadata = %+v", got.Agent)
 	}
 	// The run/parent lineage is what makes delegated agent calls attributable.
-	if got.Agent.RunID != runID || got.Agent.ParentAgentID != parentID {
-		t.Errorf("lineage = %v / %v", got.Agent.RunID, got.Agent.ParentAgentID)
+	if got.Agent.RunID != runID || got.Agent.ParentRunID != parentID {
+		t.Errorf("lineage = %v / %v", got.Agent.RunID, got.Agent.ParentRunID)
 	}
 }
 
@@ -124,7 +128,7 @@ func TestProtoToPrincipalAgentWithoutLineage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("protoToPrincipal: %v", err)
 	}
-	if got.Agent.RunID != uuid.Nil || got.Agent.ParentAgentID != uuid.Nil {
+	if got.Agent.RunID != uuid.Nil || got.Agent.ParentRunID != uuid.Nil {
 		t.Errorf("unset lineage must stay zero, got %+v", got.Agent)
 	}
 }
@@ -141,10 +145,10 @@ func TestProtoToPrincipalRejectsBadLineage(t *testing.T) {
 			t.Fatal("want an error")
 		}
 	})
-	t.Run("parent_agent_id", func(t *testing.T) {
+	t.Run("parent_run_id", func(t *testing.T) {
 		_, err := protoToPrincipal(&adminv1.CapabilityPrincipal{
 			Kind:     adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
-			TenantId: convTenant.String(), ParentAgentId: "nope",
+			TenantId: convTenant.String(), ParentRunId: "nope",
 		})
 		if err == nil {
 			t.Fatal("want an error")
@@ -173,7 +177,7 @@ func TestProtoToPrincipalIgnoresAgentFieldsForUser(t *testing.T) {
 
 func TestProtoToCaveatsNil(t *testing.T) {
 	got := mustCaveats(t, nil)
-	if got.UnitCode != "" {
+	if got.Budget.UnitCode != "" {
 		t.Errorf("a nil caveats message must yield the zero value, got %+v", got)
 	}
 }
@@ -182,8 +186,8 @@ func TestProtoToCaveatsNil(t *testing.T) {
 // blank one.
 func TestProtoToCaveatsDefaultsUnitCode(t *testing.T) {
 	got := mustCaveats(t, openCaveats())
-	if got.UnitCode != limes.DefaultUnitCode {
-		t.Errorf("UnitCode = %q, want the %q default", got.UnitCode, limes.DefaultUnitCode)
+	if got.Budget.UnitCode != platformUnit {
+		t.Errorf("UnitCode = %q, want the %q default", got.Budget.UnitCode, platformUnit)
 	}
 }
 
@@ -192,14 +196,14 @@ func TestProtoToCaveatsKeepsExplicitUnitCode(t *testing.T) {
 		"a limit":   {BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "EUR"}}},
 		"unlimited": {BudgetCeiling: unlimitedBudget("EUR")},
 	} {
-		if got := mustCaveats(t, c); got.UnitCode != "EUR" {
-			t.Errorf("%s: UnitCode = %q, want EUR", name, got.UnitCode)
+		if got := mustCaveats(t, c); got.Budget.UnitCode != "EUR" {
+			t.Errorf("%s: UnitCode = %q, want EUR", name, got.Budget.UnitCode)
 		}
 	}
 }
 
 func TestProtoToCaveatsRefusesAnUnknownUnlimitedCurrency(t *testing.T) {
-	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("XYZ")}, nil, limes.DefaultUnitCode)
+	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("XYZ")}, nil, platformUnit)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
@@ -223,8 +227,8 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 	if len(got.ResourceURIs) != 1 || got.ResourceURIs[0] != "paladin://x" {
 		t.Errorf("ResourceURIs = %v", got.ResourceURIs)
 	}
-	if got.Requests != (limes.RequestCeiling{Max: 10}) || got.Budget != (limes.BudgetCeiling{Max: 250 * limes.NanosPerUnit}) || got.UnitCode != "UAH" {
-		t.Errorf("limits = %s / %s %s", got.Requests, got.Budget, got.UnitCode)
+	if got.Requests != (limes.RequestCeiling{Max: 10}) || got.Budget != (limes.BudgetCeiling{Max: 250 * limes.NanosPerUnit, UnitCode: "UAH"}) {
+		t.Errorf("limits = %s / %s %s", got.Requests, got.Budget, got.Budget.UnitCode)
 	}
 	// These three are the security-relevant caveats; a dropped flag widens the
 	// capability beyond what the issuer asked for.
@@ -241,7 +245,7 @@ func TestProtoToCaveatsProjectsEveryField(t *testing.T) {
 
 func mustCaveats(t *testing.T, c *adminv1.CapabilityCaveats) limes.Caveats {
 	t.Helper()
-	got, err := protoToCaveats(c, nil, limes.DefaultUnitCode)
+	got, err := protoToCaveats(c, nil, platformUnit)
 	if err != nil {
 		t.Fatalf("protoToCaveats: %v", err)
 	}
@@ -253,12 +257,12 @@ func TestProtoToCaveatsBudgetMoney(t *testing.T) {
 	got := mustCaveats(t, &adminv1.CapabilityCaveats{BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{
 		MaxBudget: &money.Money{CurrencyCode: "USD", Units: 19, Nanos: 990_000_000},
 	}})
-	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("19.99")}); got.Budget != want {
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("19.99"), UnitCode: "USD"}); got.Budget != want {
 		t.Errorf("budget = %s, want %s", got.Budget, want)
 	}
 	_, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: &adminv1.CapabilityCaveats_MaxBudget{
 		MaxBudget: &money.Money{CurrencyCode: "USD", Units: -1},
-	}}, nil, limes.DefaultUnitCode)
+	}}, nil, platformUnit)
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("negative: err = %v, want InvalidArgument", err)
 	}
@@ -278,7 +282,7 @@ func TestProtoToCaveatsRefusesTheRemovedDouble(t *testing.T) {
 	if err := proto.Unmarshal(raw, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := protoToCaveats(old, nil, limes.DefaultUnitCode); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := protoToCaveats(old, nil, platformUnit); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
 }
@@ -297,6 +301,7 @@ func TestProtoToCaveatsCeilings(t *testing.T) {
 				RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 0},
 				BudgetCeiling:  &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "USD"}},
 			},
+			budget: limes.BudgetCeiling{UnitCode: "USD"},
 		},
 		"a limit": {
 			c: &adminv1.CapabilityCaveats{
@@ -304,12 +309,12 @@ func TestProtoToCaveatsCeilings(t *testing.T) {
 				BudgetCeiling:  &adminv1.CapabilityCaveats_MaxBudget{MaxBudget: &money.Money{CurrencyCode: "USD", Units: 2}},
 			},
 			requests: limes.RequestCeiling{Max: 7},
-			budget:   limes.BudgetCeiling{Max: 2 * limes.NanosPerUnit},
+			budget:   limes.BudgetCeiling{Max: 2 * limes.NanosPerUnit, UnitCode: "USD"},
 		},
 		"unlimited": {
 			c:        openCaveats(),
 			requests: limes.RequestCeiling{Unlimited: true},
-			budget:   limes.BudgetCeiling{Unlimited: true},
+			budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: platformUnit},
 		},
 	} {
 		got := mustCaveats(t, tc.c)
@@ -324,20 +329,19 @@ func TestProtoToCaveatsCeilings(t *testing.T) {
 func TestProtoToCaveatsInheritsUnsetCeilings(t *testing.T) {
 	parent := limes.Caveats{
 		Requests: limes.RequestCeiling{Max: 9},
-		Budget:   limes.BudgetCeiling{Max: limes.NanosPerUnit},
-		UnitCode: "EUR",
+		Budget:   limes.BudgetCeiling{Max: limes.NanosPerUnit, UnitCode: "EUR"},
 	}
-	got, err := protoToCaveats(&adminv1.CapabilityCaveats{}, &parent, limes.DefaultUnitCode)
+	got, err := protoToCaveats(&adminv1.CapabilityCaveats{}, &parent, platformUnit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Requests != parent.Requests || got.Budget != parent.Budget || got.UnitCode != parent.UnitCode {
+	if got.Requests != parent.Requests || got.Budget != parent.Budget || got.Budget.UnitCode != parent.Budget.UnitCode {
 		t.Errorf("unset: %s / %s %s, want the parent's %s / %s %s",
-			got.Requests, got.Budget, got.UnitCode, parent.Requests, parent.Budget, parent.UnitCode)
+			got.Requests, got.Budget, got.Budget.UnitCode, parent.Requests, parent.Budget, parent.Budget.UnitCode)
 	}
 	got, err = protoToCaveats(&adminv1.CapabilityCaveats{
 		RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 0},
-	}, &parent, limes.DefaultUnitCode)
+	}, &parent, platformUnit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,12 +369,12 @@ func TestRequireCeilings(t *testing.T) {
 // from "nothing allowed".
 func TestCaveatsToProtoCeilings(t *testing.T) {
 	open := caveatsToProto(limes.Caveats{
-		Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true}, UnitCode: "EUR",
+		Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: "EUR"},
 	})
 	if !open.GetUnlimitedRequests() || open.GetUnlimitedBudget().GetCurrencyCode() != "EUR" {
 		t.Errorf("unlimited: %v / %v", open.GetRequestCeiling(), open.GetBudgetCeiling())
 	}
-	frozen := caveatsToProto(limes.Caveats{UnitCode: "EUR"})
+	frozen := caveatsToProto(limes.Caveats{Budget: limes.BudgetCeiling{UnitCode: "EUR"}})
 	if _, ok := frozen.GetRequestCeiling().(*adminv1.CapabilityCaveats_MaxRequests); !ok || frozen.GetMaxRequests() != 0 {
 		t.Errorf("zero requests: %v", frozen.GetRequestCeiling())
 	}
@@ -380,7 +384,7 @@ func TestCaveatsToProtoCeilings(t *testing.T) {
 }
 
 func TestCaveatsToProtoBudgetMoney(t *testing.T) {
-	out := caveatsToProto(limes.Caveats{Budget: limes.BudgetCeiling{Max: limes.MustParseAmount("0.3")}, UnitCode: "EUR"})
+	out := caveatsToProto(limes.Caveats{Budget: limes.BudgetCeiling{Max: limes.MustParseAmount("0.3"), UnitCode: "EUR"}})
 	if want := (&money.Money{CurrencyCode: "EUR", Nanos: 300_000_000}); !proto.Equal(out.GetMaxBudget(), want) {
 		t.Errorf("budget = %v, want %v", out.GetMaxBudget(), want)
 	}
@@ -397,9 +401,9 @@ func TestProtoToCaveatsNoOps(t *testing.T) {
 
 func TestPrincipalKindToProto(t *testing.T) {
 	cases := map[limes.PrincipalType]adminv1.PrincipalKind{
-		limes.PrincipalUser:          adminv1.PrincipalKind_PRINCIPAL_KIND_USER,
-		limes.PrincipalAgent:         adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
-		limes.PrincipalService:       adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE,
+		limes.PrincipalTypeUser:      adminv1.PrincipalKind_PRINCIPAL_KIND_USER,
+		limes.PrincipalTypeAgent:     adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
+		limes.PrincipalTypeService:   adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE,
 		limes.PrincipalType(""):      adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED,
 		limes.PrincipalType("weird"): adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED,
 	}
@@ -414,7 +418,7 @@ func TestPrincipalKindToProto(t *testing.T) {
 // round trip must be lossless for every real kind.
 func TestPrincipalKindRoundTrip(t *testing.T) {
 	for _, k := range []limes.PrincipalType{
-		limes.PrincipalUser, limes.PrincipalAgent, limes.PrincipalService,
+		limes.PrincipalTypeUser, limes.PrincipalTypeAgent, limes.PrincipalTypeService,
 	} {
 		if got := protoToPrincipalKind(principalKindToProto(k)); got != k {
 			t.Errorf("round trip of %q gave %q", k, got)
@@ -424,7 +428,7 @@ func TestPrincipalKindRoundTrip(t *testing.T) {
 
 func TestPrincipalToProtoUser(t *testing.T) {
 	got := principalToProto(limes.Principal{
-		Type: limes.PrincipalUser, TenantID: convTenant, Subject: "alice",
+		Type: limes.PrincipalTypeUser, TenantID: convTenant, Subject: "alice",
 	})
 	if got.GetKind() != adminv1.PrincipalKind_PRINCIPAL_KIND_USER {
 		t.Errorf("Kind = %v", got.GetKind())
@@ -441,18 +445,18 @@ func TestPrincipalToProtoUser(t *testing.T) {
 func TestPrincipalToProtoAgent(t *testing.T) {
 	runID, parentID := uuid.New(), uuid.New()
 	got := principalToProto(limes.Principal{
-		Type: limes.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
+		Type: limes.PrincipalTypeAgent, TenantID: convTenant, Subject: "agent-1",
 		Agent: &limes.AgentPrincipal{
 			AgentType: convAgentType, AgentVersion: convAgentVersion, Model: convModel, MCPClient: convMCPClient,
-			RunID: runID, ParentAgentID: parentID,
+			RunID: runID, ParentRunID: parentID,
 		},
 	})
 	if got.GetAgentType() != convAgentType || got.GetAgentVersion() != convAgentVersion ||
 		got.GetModel() != convModel || got.GetMcpClient() != convMCPClient {
 		t.Errorf("agent metadata = %+v", got)
 	}
-	if got.GetRunId() != runID.String() || got.GetParentAgentId() != parentID.String() {
-		t.Errorf("lineage = %q / %q", got.GetRunId(), got.GetParentAgentId())
+	if got.GetRunId() != runID.String() || got.GetParentRunId() != parentID.String() {
+		t.Errorf("lineage = %q / %q", got.GetRunId(), got.GetParentRunId())
 	}
 }
 
@@ -460,11 +464,11 @@ func TestPrincipalToProtoAgent(t *testing.T) {
 // UUID, which a client would read as a real parent.
 func TestPrincipalToProtoOmitsZeroLineage(t *testing.T) {
 	got := principalToProto(limes.Principal{
-		Type:  limes.PrincipalAgent,
+		Type:  limes.PrincipalTypeAgent,
 		Agent: &limes.AgentPrincipal{AgentType: "x"},
 	})
-	if got.GetRunId() != "" || got.GetParentAgentId() != "" {
-		t.Errorf("zero lineage must be omitted, got %q / %q", got.GetRunId(), got.GetParentAgentId())
+	if got.GetRunId() != "" || got.GetParentRunId() != "" {
+		t.Errorf("zero lineage must be omitted, got %q / %q", got.GetRunId(), got.GetParentRunId())
 	}
 }
 
@@ -472,7 +476,7 @@ func TestPrincipalToProtoOmitsZeroLineage(t *testing.T) {
 func TestPrincipalRoundTrip(t *testing.T) {
 	runID := uuid.New()
 	in := limes.Principal{
-		Type: limes.PrincipalAgent, TenantID: convTenant, Subject: "agent-1",
+		Type: limes.PrincipalTypeAgent, TenantID: convTenant, Subject: "agent-1",
 		Agent: &limes.AgentPrincipal{AgentType: convAgentType, RunID: runID},
 	}
 
@@ -514,24 +518,24 @@ func TestProtoToCaveatsResolvesAnUnnamedUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if root.UnitCode != limes.AbstractUnitCode {
-		t.Errorf("root unit = %q, want the platform's %q", root.UnitCode, limes.AbstractUnitCode)
+	if root.Budget.UnitCode != limes.AbstractUnitCode {
+		t.Errorf("root unit = %q, want the platform's %q", root.Budget.UnitCode, limes.AbstractUnitCode)
 	}
 
-	parent := limes.Caveats{Budget: limes.BudgetCeiling{Unlimited: true}, UnitCode: "EUR"}
+	parent := limes.Caveats{Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: "EUR"}}
 	child, err := protoToCaveats(unnamed, &parent, limes.AbstractUnitCode)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if child.UnitCode != "EUR" {
-		t.Errorf("delegate unit = %q, want the parent's EUR", child.UnitCode)
+	if child.Budget.UnitCode != "EUR" {
+		t.Errorf("delegate unit = %q, want the parent's EUR", child.Budget.UnitCode)
 	}
 
 	named, err := protoToCaveats(&adminv1.CapabilityCaveats{BudgetCeiling: unlimitedBudget("JPY")}, nil, limes.AbstractUnitCode)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if named.UnitCode != "JPY" {
-		t.Errorf("named unit = %q, want JPY", named.UnitCode)
+	if named.Budget.UnitCode != "JPY" {
+		t.Errorf("named unit = %q, want JPY", named.Budget.UnitCode)
 	}
 }

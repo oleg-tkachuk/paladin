@@ -3,6 +3,7 @@ package mcp
 import (
 	"testing"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -168,3 +169,18 @@ var agentSafeWrites = func() map[string]bool {
 	}
 	return m
 }()
+
+// A tool's capability operation is one a capability can name: a built-in
+// limes operation or a namespaced one of the data plane's own. A bare name
+// limes no longer defines would gate the tool on an operation no capability
+// can be issued with.
+func TestCatalogNamesValidCapabilityOps(t *testing.T) {
+	for _, tool := range DefaultCatalog {
+		if tool.CapabilityOp == "" {
+			continue
+		}
+		if err := limes.Op(tool.CapabilityOp).Validate(); err != nil {
+			t.Errorf("%s: capability op %q: %v", tool.Name, tool.CapabilityOp, err)
+		}
+	}
+}

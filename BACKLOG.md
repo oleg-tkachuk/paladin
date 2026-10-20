@@ -111,8 +111,8 @@ the same commit. Treat this file like a runtime invariant.
 - **Status:** Deferred.
 - **Reason:** the bridge signs every forwarded call with one key, and
   `capability/postgres.ReplayCache` keeps at most
-  `limes.DefaultReplayEntriesPerKey` (1000) live proofs per key, each live for
-  `limes.DefaultDPoPWindow` (one minute). Past that the store refuses the
+  `dpop.DefaultReplayEntriesPerHolder` (1000) live proofs per key, each live
+  for `dpop.DefaultWindow` (one minute). Past that the store refuses the
   proof, so key-bound calls through the bridge stop at roughly 1000 a minute
   across all its replicas. Unbound capabilities are not counted. No
   deployment is near it today.
@@ -415,19 +415,17 @@ open deliberately — each notes why._
 
 ### Billing has no view across tenants
 
-- **Status:** Blocked.
+- **Status:** Ready.
 - **Reason:** `/billing` reads one tenant at a time, opening on the console's
   own tenant, which is usually billed nothing. A summary of every tenant's
-  spend over a period needs the ledger to sum across tenants, and
-  `limes.SumChargesRequest` requires one tenant per request by design; summing
-  tenant by tenant would cost a ledger query per tenant and sort by spend only
-  within a page.
+  spend over a period needs the ledger to sum across tenants, which
+  `meter.SumChargesRequest` does since limes v0.102 (`AllTenants`, grouped by
+  `ChargeDimensionTenant`).
 - **Definition of Done:** a BillingService RPC lists tenants by their spend
   over a period, from one ledger query, with a test for its ordering and its
   authorization; `/billing` opens on that list, and choosing a tenant leads to
   the view it has now.
-- **Blockers:** the cross-tenant sum in the limes ledger API, which is being
-  reworked.
+- **Blockers:** none.
 
 ### Ingest acts on the first record of a batched S3 notification only
 

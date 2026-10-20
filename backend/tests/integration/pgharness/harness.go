@@ -336,5 +336,10 @@ func applyMigrations(dsn string) error {
 		return err
 	}
 	goose.SetBaseFS(migrations.FS)
-	return goose.Up(db, ".")
+	if err := goose.Up(db, "."); err != nil {
+		return err
+	}
+	// And the limes schema granted to the roles 002 created, as the migrate
+	// step does after goose: pgstore's functions run for those roles alone.
+	return postgres.MigrateLimes(context.Background(), cc, postgres.RuntimeRoles...)
 }

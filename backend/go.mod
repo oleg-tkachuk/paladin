@@ -40,8 +40,8 @@ require (
 	github.com/nats-io/nkeys v0.4.16
 	github.com/oasdiff/yaml3 v0.0.14
 	// limes is the capability primitive the auth planes run on.
-	github.com/oleg-tkachuk/limes v0.69.0
-	github.com/oleg-tkachuk/limes/pgstore v0.11.1
+	github.com/oleg-tkachuk/limes v0.109.0
+	github.com/oleg-tkachuk/limes/pgstore v0.30.1
 	github.com/oleg-tkachuk/paladin/sdk/go v0.72.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
@@ -206,6 +206,7 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-sqlite3 v0.32.0 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
+	github.com/oleg-tkachuk/limes/otelmetric v0.3.12 // indirect
 	github.com/openai/openai-go/v3 v3.52.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect

@@ -178,7 +178,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
-	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpTag); err != nil {
+	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, auth.OpTag); err != nil {
 		return uuid.Nil, err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject); err != nil {

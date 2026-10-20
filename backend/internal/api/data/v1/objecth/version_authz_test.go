@@ -125,7 +125,7 @@ func TestVersionRPCsAskCedarForTheObjectActions(t *testing.T) {
 func TestReadOnlyCapabilityCannotRestoreAVersion(t *testing.T) {
 	f := newVersionFixture(t, allowAll{})
 	f.ctx = auth.WithCapability(f.ctx, captest.Verified(t, limes.Capability{
-		Subject: limes.Principal{TenantID: f.tenantID, Type: limes.PrincipalAgent},
+		Subject: limes.Principal{TenantID: f.tenantID, Type: limes.PrincipalTypeAgent},
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpList}},
 	}))
 	if err := f.get(); err != nil {

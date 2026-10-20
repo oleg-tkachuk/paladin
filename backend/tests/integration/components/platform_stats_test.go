@@ -270,11 +270,11 @@ func TestCollectRLSSiblings(t *testing.T) {
 
 	// ─── capabilities ───────────────────────────────────────────────────
 	now := time.Now()
-	active := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(48*time.Hour), uuid.Nil)
-	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(-time.Hour), uuid.Nil)
-	revoked := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalUser, now.Add(48*time.Hour), uuid.Nil)
+	active := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(48*time.Hour), uuid.Nil)
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(-time.Hour), uuid.Nil)
+	revoked := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeUser, now.Add(48*time.Hour), uuid.Nil)
 	// Delegated child of the active one, expiring inside the 24h window.
-	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(time.Hour), active)
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(time.Hour), active)
 	seedRevocation(t, ctx, pool, revoked)
 
 	// ─── api tokens ─────────────────────────────────────────────────────
@@ -354,7 +354,7 @@ func TestCollectRLSSiblings(t *testing.T) {
 	}
 	// by_principal_kind counts ACTIVE rows only — the expired
 	// service_account and the revoked user must not appear.
-	if c.ByPrincipalKind[string(limes.PrincipalService)] != 2 || c.ByPrincipalKind[string(limes.PrincipalUser)] != 0 {
+	if c.ByPrincipalKind[string(limes.PrincipalTypeService)] != 2 || c.ByPrincipalKind[string(limes.PrincipalTypeUser)] != 0 {
 		t.Errorf("capabilities by kind = %v, want service:2 only",
 			c.ByPrincipalKind)
 	}
@@ -410,8 +410,8 @@ func TestCollectRLSCountsAChildOfARevokedCapabilityAsRevoked(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 	now := time.Now()
-	parent := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalService, now.Add(48*time.Hour), uuid.Nil)
-	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalAgent, now.Add(time.Hour), parent)
+	parent := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(48*time.Hour), uuid.Nil)
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeAgent, now.Add(time.Hour), parent)
 	seedRevocation(t, ctx, pool, parent)
 
 	got, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})

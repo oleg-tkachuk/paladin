@@ -81,7 +81,7 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 	now := time.Now()
 	capability := func(tenant uuid.UUID, expiresIn time.Duration, revoked bool) {
 		t.Helper()
-		id := seedCapability(t, ctx, pool, tenant, limes.PrincipalService, now.Add(expiresIn), uuid.Nil)
+		id := seedCapability(t, ctx, pool, tenant, limes.PrincipalTypeService, now.Add(expiresIn), uuid.Nil)
 		if revoked {
 			seedRevocation(t, ctx, pool, id)
 		}

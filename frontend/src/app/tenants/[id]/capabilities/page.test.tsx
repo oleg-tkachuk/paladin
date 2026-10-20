@@ -209,7 +209,6 @@ describe("CapabilitiesPage", () => {
           idempotencyKeyRequired: false,
         },
         subject: { kind: 2, tenantId: "t-1", subject: "agent-x" },
-        generation: 0n,
       },
     });
     render(<CapabilitiesPage />);
@@ -235,7 +234,6 @@ describe("CapabilitiesPage", () => {
     id,
     issuer: "iss",
     parentId: "",
-    generation: 0n,
     subject: { kind: 2, tenantId: "t-1", subject: "agent-x" },
     audience: ["data"],
     caveats: {

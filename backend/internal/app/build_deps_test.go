@@ -35,7 +35,10 @@ func (notAPgxPool) QueryRow(context.Context, string, ...any) pgx.Row {
 	panic("QueryRow on a stub pool")
 }
 func (notAPgxPool) Begin(context.Context) (pgx.Tx, error) { panic("Begin on a stub pool") }
-func (notAPgxPool) Ping(context.Context) error            { panic("Ping on a stub pool") }
+func (notAPgxPool) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) {
+	panic("BeginTx on a stub pool")
+}
+func (notAPgxPool) Ping(context.Context) error { panic("Ping on a stub pool") }
 func (notAPgxPool) SendBatch(context.Context, *pgx.Batch) pgx.BatchResults {
 	panic("SendBatch on a stub pool")
 }

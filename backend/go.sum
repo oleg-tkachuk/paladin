@@ -379,10 +379,12 @@ github.com/ncruces/julianday v1.0.0 h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt
 github.com/ncruces/julianday v1.0.0/go.mod h1:Dusn2KvZrrovOMJuOt0TNXL6tB7U2E8kvza5fFc9G7g=
 github.com/oasdiff/yaml3 v0.0.14 h1:aLJee3hxBK2H5wdXd9iPcIXb93Nty1Ge0pT171eHtkw=
 github.com/oasdiff/yaml3 v0.0.14/go.mod h1:csto2xfDjYccdUn/yw/bPjj/cYTdp6HtFA0J4TWG+gg=
-github.com/oleg-tkachuk/limes v0.69.0 h1:o0h2dqynrfpPRhGxkAOHuwANXAooH4ZWrPTetBddr50=
-github.com/oleg-tkachuk/limes v0.69.0/go.mod h1:e1JWN3u2fXAX2rpUNiFcolbT58Nivc/Fnzwlz0PeBOM=
-github.com/oleg-tkachuk/limes/pgstore v0.11.1 h1:u12/2ouFOkHiL3ooYs98m1t0me1RWkJ2Sn+M25bie34=
-github.com/oleg-tkachuk/limes/pgstore v0.11.1/go.mod h1:A7U/3Vi6nwTlc83W3GTISWrJ2zADgXmsh0uzxrtL9Ew=
+github.com/oleg-tkachuk/limes v0.109.0 h1:OUJbh626sSM2O+mvmeQ0RPcMXbJgnMsCWQHttCuy6ow=
+github.com/oleg-tkachuk/limes v0.109.0/go.mod h1:UgClS3VTfXbODA2P7HHOP8GHK1Nuj1d1EWrzxTYiSKI=
+github.com/oleg-tkachuk/limes/otelmetric v0.3.12 h1:kzPAUZ18CN84Hr8TmTW14vjQH3P5LPTFX/lwnNyNjyk=
+github.com/oleg-tkachuk/limes/otelmetric v0.3.12/go.mod h1:HEEalUcRBQgPjAzy/IrHTARa3hKX2eVy/B2Yblpthmo=
+github.com/oleg-tkachuk/limes/pgstore v0.30.1 h1:6eOQEpAHpjZwpNIHLMtzZyxBWjC7vEbDrbK+oF3KWUQ=
+github.com/oleg-tkachuk/limes/pgstore v0.30.1/go.mod h1:WoX78FRN1JNthw0D1arXwcdXn0WY7nzejm9nf6Y63zM=
 github.com/onsi/ginkgo/v2 v2.32.1 h1:6tlvcDm/3sE8lGJbZ4+d4mO3RLy24/tQWOFzVSQNIfw=
 github.com/onsi/ginkgo/v2 v2.32.1/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/gomega v1.42.1 h1:iN1rCUX+44NZ1Dc97MPoeFYbFR0vh8zxoxMFwKdyZ6I=

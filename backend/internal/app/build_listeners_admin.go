@@ -7,14 +7,12 @@ import (
 
 	"google.golang.org/protobuf/reflect/protoregistry"
 
-	"github.com/jackc/pgx/v5"
-
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 	"connectrpc.com/otelconnect"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/apitokenh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/capabilityh"
@@ -285,7 +283,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	paladinadminv1connect.RegisterQuotaServiceHandler(adminServer, admin.NewQuotaServer(quotaH))
 
 	{
-		var usageStore limes.UsageStore[pgx.Tx]
+		var usageStore meter.UsageStore
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
 		}

@@ -28,7 +28,7 @@ func TestAssertCapabilityOp_NoCapability(t *testing.T) {
 func TestAssertCapabilityOp_AllowedOp(t *testing.T) {
 	t.Parallel()
 	cap := limes.Capability{
-		Subject:  limes.Principal{Type: limes.PrincipalAgent},
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent},
 		Audience: []string{TokenPlaneData},
 		Caveats: limes.Caveats{
 			Ops:              []limes.Op{limes.OpGet, limes.OpList},

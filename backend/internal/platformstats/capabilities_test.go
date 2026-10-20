@@ -13,13 +13,13 @@ import (
 // only the active records.
 func TestFoldCapabilities(t *testing.T) {
 	got := foldCapabilities([]limes.RecordCount{
-		{PrincipalType: limes.PrincipalAgent, Total: 6, Active: 3, Expired: 1, Revoked: 2, Delegated: 2, ExpiringSoon: 1},
-		{PrincipalType: limes.PrincipalUser, Total: 2, Expired: 2},
-		{PrincipalType: limes.PrincipalService, Total: 1, Active: 1},
+		{PrincipalType: limes.PrincipalTypeAgent, Total: 6, Active: 3, Expired: 1, Revoked: 2, Delegated: 2, ExpiringSoon: 1},
+		{PrincipalType: limes.PrincipalTypeUser, Total: 2, Expired: 2},
+		{PrincipalType: limes.PrincipalTypeService, Total: 1, Active: 1},
 	})
 	want := CapabilityCensus{
 		Total: 9, Active: 4, Expired: 3, Revoked: 2, Delegated: 2, ExpiringSoon: 1,
-		ByPrincipalKind: map[string]int64{string(limes.PrincipalAgent): 3, string(limes.PrincipalService): 1},
+		ByPrincipalKind: map[string]int64{string(limes.PrincipalTypeAgent): 3, string(limes.PrincipalTypeService): 1},
 	}
 	if got.Total != want.Total || got.Active != want.Active || got.Expired != want.Expired ||
 		got.Revoked != want.Revoked || got.Delegated != want.Delegated || got.ExpiringSoon != want.ExpiringSoon {

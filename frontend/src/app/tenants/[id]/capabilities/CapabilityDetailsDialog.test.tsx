@@ -25,7 +25,6 @@ const CAP = {
   id: "cap-1",
   issuer: "paladin",
   audience: ["data"],
-  generation: 1n,
   parentId: "",
   subject: { kind: PrincipalKind.AGENT, subject: "agent:1", tenantId: "t-1" },
   caveats: {

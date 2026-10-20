@@ -1,6 +1,7 @@
 package apiutil
 
 import (
+	"errors"
 	"math"
 	"testing"
 
@@ -21,8 +22,8 @@ func TestMoneyRoundTripIsExact(t *testing.T) {
 			t.Errorf("%s → %v → %s %s, %v", n, m, got, unit, err)
 		}
 	}
-	if m := MoneyOf("", limes.NanosPerUnit); m.GetCurrencyCode() != limes.DefaultUnitCode {
-		t.Errorf("MoneyOf with no unit = %v, want %s", m, limes.DefaultUnitCode)
+	if m := MoneyOf("", limes.NanosPerUnit); m.GetCurrencyCode() != NoUnit {
+		t.Errorf("MoneyOf with no unit = %v, want %s", m, NoUnit)
 	}
 	// An amount that names no currency leaves the unit to the caller.
 	if n, unit, err := NanosOf("max_budget", &money.Money{Units: 3}); err != nil || n != 3*limes.NanosPerUnit || unit != "" {
@@ -30,6 +31,21 @@ func TestMoneyRoundTripIsExact(t *testing.T) {
 	}
 	if n, unit, err := NanosOf("max_budget", nil); err != nil || n != 0 || unit != "" {
 		t.Errorf("an absent field = %s %q, %v; want zero and no unit", n, unit, err)
+	}
+}
+
+// A currency code is read in limes's canonical upper case, and one that is no
+// ISO 4217 code — or none at all — is refused rather than assumed.
+func TestNormalizeUnitCode(t *testing.T) {
+	for in, want := range map[string]string{"usd": "USD", " Eur ": "EUR", "UAH": "UAH", "xxx": "XXX"} {
+		if got, err := NormalizeUnitCode(in); err != nil || got != want {
+			t.Errorf("NormalizeUnitCode(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "US", "DOLLARS", "ZZZ"} {
+		if got, err := NormalizeUnitCode(in); !errors.Is(err, ErrUnknownUnitCode) {
+			t.Errorf("NormalizeUnitCode(%q) = %q, %v; want ErrUnknownUnitCode", in, got, err)
+		}
 	}
 }
 

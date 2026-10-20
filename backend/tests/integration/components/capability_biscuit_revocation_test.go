@@ -56,13 +56,13 @@ func newBiscuitFixture(t *testing.T, admin *pgxpool.Pool) *biscuitFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: store, TrustedIssuers: []string{biscuitIssuerName}, Now: clock.Now,
-		AcceptBiscuit: true, BiscuitRevocations: store, MeterCopies: true,
+		Biscuit: &limes.BiscuitConfig{Revocations: store, MeterCopies: true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -75,12 +75,15 @@ func newBiscuitFixture(t *testing.T, admin *pgxpool.Pool) *biscuitFixture {
 func (f *biscuitFixture) seal(t *testing.T, tenant uuid.UUID, subject string) (string, limes.Capability) {
 	t.Helper()
 	ctx := context.Background()
-	principal := limes.Principal{Type: limes.PrincipalAgent, TenantID: tenant, Subject: subject}
+	principal := limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: subject}
 	res, err := f.issuer.Issue(ctx, limes.IssueRequest{
 		Subject: principal, IssuedBy: seedIssuer, Audience: []string{biscuitAudience},
 		Caveats: limes.Caveats{
-			Ops:      []limes.Op{limes.OpGet, limes.OpList},
-			Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true},
+			// A Biscuit is sealed only for a capability that may be shared,
+			// and a copy with limits of its own needs a quota to be counted.
+			Ops:      []limes.Op{limes.OpGet, limes.OpList, limes.OpShare},
+			Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: testUnit},
+			Copies: limes.CopyQuota{Unlimited: true},
 		},
 		TTL: time.Hour,
 	})
@@ -159,7 +162,7 @@ func TestBiscuitCopyRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	if revokedCap, err := verifier.IsRevoked(ctx, c.ID); err != nil || revokedCap {
 		t.Errorf("revoking a copy revoked the capability: %v, %v", revokedCap, err)
 	}
-	got, err := f.store.GetBiscuitRevocation(ctx, revoked.RevocationID())
+	got, err := f.store.GetBiscuitRevocation(ctx, revoked)
 	if err != nil || got.CapabilityID != c.ID || got.Note != "leak" {
 		t.Errorf("revocation read back = %+v, %v", got, err)
 	}
@@ -220,7 +223,7 @@ func TestBiscuitCopyRevocationNotifies(t *testing.T) {
 	copied := f.copyOf(t, attenuate(t, sealed, limes.OpGet))
 
 	replica := newCapStore(t, rlsPool(t, ctx, admin))
-	cache, err := limes.NewCachedBiscuitRevocationChecker(limes.BiscuitRevocationCacheConfig{Upstream: replica, TTL: time.Hour})
+	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{Capabilities: replica, Biscuits: replica, TTL: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // The cross-language Biscuit case. limes mints seed.biscuit from its golden
@@ -155,14 +156,12 @@ func crossLangVerifier(t *testing.T) *limes.Verifier {
 		t.Fatalf("proof verifier: %v", err)
 	}
 	v, err := limes.NewVerifier(limes.VerifierConfig{
-		Keys:               keys,
-		Revocations:        noBiscuitRevocations{},
-		BiscuitRevocations: noBiscuitRevocations{},
-		TrustedIssuers:     []string{crossLangIssuer},
-		Now:                crossLangClock,
-		AcceptBiscuit:      true,
-		MeterCopies:        true,
-		DPoP:               proofs,
+		Keys:           keys,
+		Revocations:    noBiscuitRevocations{},
+		Biscuit:        &limes.BiscuitConfig{Revocations: noBiscuitRevocations{}, MeterCopies: true},
+		TrustedIssuers: []string{crossLangIssuer},
+		Now:            crossLangClock,
+		DPoP:           proofs,
 	})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)
@@ -192,7 +191,7 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	seed := seedVerified.Capability()
 	token := readShared(t, pythonBiscuit)
 	// The copy is bound, so it is accepted only with a proof from its key.
-	proof, err := dpop.Sign(ctx, bindKey, dpop.ProofRequest{
+	proof, err := dpop.Sign(ctx, bindKey, dpop.SignRequest{
 		Method: http.MethodPost, URL: crossLangProofURL, Token: token, IssuedAt: crossLangClock(),
 	})
 	if err != nil {
@@ -226,10 +225,10 @@ func TestPythonAttenuationVerifies(t *testing.T) {
 	if got.ConfirmationJKT != want.ConfirmationJKT {
 		t.Errorf("ConfirmationJKT = %q, want %q", got.ConfirmationJKT, want.ConfirmationJKT)
 	}
-	if len(got.Copies) != 1 || got.Copies[0].Requests == nil || got.Copies[0].Budget == nil ||
-		*got.Copies[0].Requests != (limes.RequestCeiling{Max: want.CopyMaxRequests}) ||
-		*got.Copies[0].Budget != (limes.BudgetCeiling{Max: limes.Nanos(want.CopyMaxBudget)}) {
-		t.Errorf("Copies = %+v, want one with %d requests and %d nanos", got.Copies, want.CopyMaxRequests, want.CopyMaxBudget)
+	if len(verified.Copies()) != 1 || verified.Copies()[0].Requests == nil || verified.Copies()[0].Budget == nil ||
+		*verified.Copies()[0].Requests != (limes.RequestCeiling{Max: want.CopyMaxRequests}) ||
+		*verified.Copies()[0].Budget != (limes.BudgetCeiling{Max: limes.Nanos(want.CopyMaxBudget), UnitCode: seed.Caveats.Budget.UnitCode}) {
+		t.Errorf("Copies = %+v, want one with %d requests and %d nanos", verified.Copies(), want.CopyMaxRequests, want.CopyMaxBudget)
 	}
 	if _, err := v.Verify(ctx, limes.VerifyRequest{Token: token, Audience: TokenPlaneMCP}); err == nil {
 		t.Error("the plane the attenuation dropped is still accepted")
@@ -250,9 +249,9 @@ func TestPythonFrozenCopyIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the frozen copy is refused at verification: %v", err)
 	}
-	copies := frozen.Capability().Copies
+	copies := frozen.Copies()
 	if len(copies) != 1 || copies[0].Requests == nil || copies[0].Budget == nil ||
-		*copies[0].Requests != (limes.RequestCeiling{}) || *copies[0].Budget != (limes.BudgetCeiling{}) {
+		*copies[0].Requests != (limes.RequestCeiling{}) || *copies[0].Budget != (limes.BudgetCeiling{UnitCode: seed.Capability().Caveats.Budget.UnitCode}) {
 		t.Fatalf("Copies = %+v, want one with ceilings of 0 requests and 0 nanos", copies)
 	}
 
@@ -263,23 +262,23 @@ func TestPythonFrozenCopyIsRefused(t *testing.T) {
 	if err := records.Insert(ctx, limes.InsertRequest{Capability: seed.Capability(), IssuedBy: seed.Capability().Subject}); err != nil {
 		t.Fatalf("record the seed: %v", err)
 	}
-	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig[struct{}]{Records: records, Now: crossLangClock})
+	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig{Records: records, Now: crossLangClock})
 	if err != nil {
 		t.Fatalf("usage: %v", err)
 	}
 	// The smallest charge there is: a ceiling of 0 refuses even that.
 	const smallestCharge limes.Nanos = 1
 
-	if _, err := usage.Bump(ctx, limes.BumpRequest{Subject: frozen.MeterSubject()}); !errors.Is(err, limes.ErrRequestLimitExceeded) {
+	if _, err := usage.Bump(ctx, meter.BumpRequest{Subject: frozen.MeterSubject()}); !errors.Is(err, limes.ErrRequestLimitExceeded) {
 		t.Errorf("first request on the frozen copy: err = %v, want ErrRequestLimitExceeded", err)
 	}
-	if _, err := usage.Charge(ctx, limes.ChargeRequest{Subject: frozen.MeterSubject(), Amount: smallestCharge}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
+	if _, err := usage.Charge(ctx, meter.ChargeRequest{Subject: frozen.MeterSubject(), Amount: smallestCharge}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Errorf("first charge on the frozen copy: err = %v, want ErrBudgetExceeded", err)
 	}
-	if _, err := usage.Bump(ctx, limes.BumpRequest{Subject: seed.MeterSubject()}); err != nil {
+	if _, err := usage.Bump(ctx, meter.BumpRequest{Subject: seed.MeterSubject()}); err != nil {
 		t.Errorf("a request on the seed after its copy froze: %v", err)
 	}
-	if _, err := usage.Charge(ctx, limes.ChargeRequest{Subject: seed.MeterSubject(), Amount: smallestCharge}, nil); err != nil {
+	if _, err := usage.Charge(ctx, meter.ChargeRequest{Subject: seed.MeterSubject(), Amount: smallestCharge}, nil); err != nil {
 		t.Errorf("a charge on the seed after its copy froze: %v", err)
 	}
 }

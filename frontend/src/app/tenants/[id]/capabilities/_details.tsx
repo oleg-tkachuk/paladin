@@ -64,7 +64,6 @@ export function DetailsBody({
           mono
           breakAll
         />
-        <DetailRow label="Generation" value={cap.generation.toString()} mono />
       </DetailsSection>
 
       <DetailsSection title="Principal">

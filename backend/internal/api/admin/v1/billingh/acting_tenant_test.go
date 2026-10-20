@@ -6,12 +6,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
@@ -37,12 +36,12 @@ func TestAuthorizeActsOnTheRequestedTenant(t *testing.T) {
 // budgetReader answers GetTenantBudget with err; the rest of the store is
 // never reached.
 type budgetReader struct {
-	limes.UsageStore[pgx.Tx]
-	budget limes.TenantBudget
+	meter.UsageStore
+	budget meter.TenantBudget
 	err    error
 }
 
-func (b budgetReader) GetTenantBudget(context.Context, uuid.UUID) (limes.TenantBudget, error) {
+func (b budgetReader) GetTenantBudget(context.Context, uuid.UUID) (meter.TenantBudget, error) {
 	return b.budget, b.err
 }
 
@@ -55,7 +54,7 @@ func TestTenantBudgetLogsAnUnreadableBudget(t *testing.T) {
 		wantLog bool
 	}{
 		"read":         {nil, true, false},
-		"no budget":    {limes.ErrTenantBudgetNotFound, false, false},
+		"no budget":    {meter.ErrTenantBudgetNotFound, false, false},
 		"store failed": {errors.New("connection reset"), false, true},
 	}
 	for name, c := range cases {
@@ -63,7 +62,7 @@ func TestTenantBudgetLogsAnUnreadableBudget(t *testing.T) {
 			core, logs := observer.New(zapcore.WarnLevel)
 			ctx := logger.WithContext(context.Background(), zap.New(core))
 			tenant := uuid.New()
-			h := NewHandler(nil, budgetReader{budget: limes.TenantBudget{TenantID: tenant}, err: c.err}, allowAuthorizer{})
+			h := NewHandler(nil, budgetReader{budget: meter.TenantBudget{TenantID: tenant}, err: c.err}, allowAuthorizer{})
 			if _, ok := h.tenantBudget(ctx, tenant); ok != c.wantOK {
 				t.Errorf("ok = %v, want %v", ok, c.wantOK)
 			}

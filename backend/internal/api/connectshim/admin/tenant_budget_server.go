@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
@@ -25,7 +27,7 @@ import (
 // `tenants/{tenant}/budget`, as its quota is `tenants/{tenant}/quota`.
 const budgetSegment = "/budget"
 
-// TenantBudgetServer is the Connect adapter for limes.TenantBudgets —
+// TenantBudgetServer is the Connect adapter for meter.TenantBudgets —
 // the tenant-ceiling half of the usage store. It depends on nothing that
 // meters, so it cannot charge or refund. A thin pass-through that does shape
 // conversion + error mapping.
@@ -36,7 +38,7 @@ const budgetSegment = "/budget"
 // platform.admin (cross-tenant) and tenant.admin (own-tenant only).
 type TenantBudgetServer struct {
 	paladinadminv1connect.UnimplementedTenantBudgetServiceHandler
-	Usage limes.TenantBudgets
+	Usage meter.TenantBudgets
 	// Tenants names the tenants a summary lists: the budget rows carry
 	// their ids alone.
 	Tenants tenanth.Names
@@ -47,7 +49,7 @@ type TenantBudgetServer struct {
 // every RPC returns CodeUnavailable so the operator notices the
 // misconfig immediately rather than getting silent NULL responses.
 // tenants is required with usage: Summarize names each row's tenant.
-func NewTenantBudgetServer(usage limes.TenantBudgets, tenants tenanth.Names) *TenantBudgetServer {
+func NewTenantBudgetServer(usage meter.TenantBudgets, tenants tenanth.Names) *TenantBudgetServer {
 	return &TenantBudgetServer{Usage: usage, Tenants: tenants}
 }
 
@@ -68,7 +70,7 @@ func (s *TenantBudgetServer) Get(
 	// as the tenant is what makes the read see it.
 	tb, err := s.Usage.GetTenantBudget(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		if errors.Is(err, limes.ErrTenantBudgetNotFound) {
+		if errors.Is(err, meter.ErrTenantBudgetNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -100,10 +102,10 @@ func (s *TenantBudgetServer) Set(
 	if err := apiutil.RefuseRemovedFields(m); err != nil {
 		return nil, err
 	}
-	// An unlimited budget that names no unit leaves the unit to the existing
-	// row (or DEFAULT 'USD' on first insert): unit stays "". A zero limit
-	// allows no spend.
-	ceiling, unit, set, err := apiutil.BudgetCeilingOf(fieldBudgetCeiling, m.GetMaxBudget(), m.GetUnlimitedBudget())
+	// A budget that names no unit leaves the unit to the existing row, or to
+	// the platform's currency on the first one (capabilitypg.UsageStore). A
+	// zero limit allows no spend.
+	ceiling, _, set, err := apiutil.BudgetCeilingOf(fieldBudgetCeiling, m.GetMaxBudget(), m.GetUnlimitedBudget())
 	if err != nil {
 		return nil, err
 	}
@@ -111,10 +113,9 @@ func (s *TenantBudgetServer) Set(
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fieldBudgetCeiling+": set max_budget, or unlimited_budget for no limit")
 	}
-	args := limes.SetTenantBudgetRequest{
+	args := meter.SetTenantBudgetRequest{
 		TenantID:        tenantID,
 		Ceiling:         ceiling,
-		UnitCode:        unit,
 		ResetSpend:      m.GetResetSpend(),
 		ExpectedVersion: expected,
 	}
@@ -133,7 +134,7 @@ func (s *TenantBudgetServer) Set(
 		// A version mismatch is the caller's to resolve — re-read and retry —
 		// not a server fault, so it must not read as Internal.
 		switch {
-		case errors.Is(err, limes.ErrTenantBudgetVersionMismatch):
+		case errors.Is(err, meter.ErrTenantBudgetVersionMismatch):
 			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
 		// Re-denominating a tenant that still counts spend or holds in its
 		// unit: no retry meets it until they are reset or released.
@@ -210,15 +211,25 @@ func (s *TenantBudgetServer) Summarize(
 // budgetListRequest is the store's listing for a summary request: the
 // unlimited tenants, the tenants at or past a threshold, or all of them —
 // threshold_pct 0 lists every tenant, as it always has.
-func budgetListRequest(m *pb.TenantBudgetServiceSummarizeRequest) limes.ListTenantBudgetsRequest {
-	req := limes.ListTenantBudgetsRequest{Filter: limes.TenantBudgetsAll, Limit: int(m.GetLimit()), Cursor: m.GetPageToken()}
+func budgetListRequest(m *pb.TenantBudgetServiceSummarizeRequest) meter.ListTenantBudgetsRequest {
+	req := meter.ListTenantBudgetsRequest{Filter: meter.TenantBudgetFilterAll, Limit: int(m.GetLimit()), Cursor: m.GetPageToken()}
 	switch {
 	case m.GetUnlimitedOnly():
-		req.Filter = limes.TenantBudgetsUnlimited
+		req.Filter = meter.TenantBudgetFilterUnlimited
 	case m.GetThresholdPct() > 0:
-		req.Filter, req.ThresholdPct = limes.TenantBudgetsAtOrPast, m.GetThresholdPct()
+		req.Filter, req.ThresholdBasisPoints = meter.TenantBudgetFilterAtOrPast, basisPointsOf(m.GetThresholdPct())
 	}
 	return req
+}
+
+// basisPointsPerPercent is how many of limes's basis points one percent of
+// threshold_pct is.
+const basisPointsPerPercent = meter.BasisPointsPerWhole / 100
+
+// basisPointsOf is a threshold_pct, a percentage, in the basis points limes
+// compares in, to the nearest one: 29 is 2900, 1.1 is 110.
+func basisPointsOf(pct float64) int {
+	return int(math.Round(pct * basisPointsPerPercent))
 }
 
 var _ paladinadminv1connect.TenantBudgetServiceHandler = (*TenantBudgetServer)(nil)
@@ -229,13 +240,13 @@ const fieldBudgetCeiling = "budget_ceiling"
 // tenantBudgetToProto converts the internal snapshot to the wire shape.
 // Times that are zero come back as nil so the wire payload is tighter
 // (Connect-JSON doesn't need to ship the epoch timestamp).
-func tenantBudgetToProto(tb limes.TenantBudget) *pb.TenantBudget {
+func tenantBudgetToProto(tb meter.TenantBudget) *pb.TenantBudget {
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
-		Spent:           apiutil.MoneyOf(tb.UnitCode, tb.SpentAmount),
+		Spent:           apiutil.MoneyOf(tb.Ceiling.UnitCode, tb.SpentAmount),
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
-	limit, unlimited := apiutil.BudgetCeilingArms(tb.Ceiling, tb.UnitCode)
+	limit, unlimited := apiutil.BudgetCeilingArms(tb.Ceiling, tb.Ceiling.UnitCode)
 	if unlimited != nil {
 		out.BudgetCeiling = &pb.TenantBudget_UnlimitedBudget{UnlimitedBudget: unlimited}
 	} else {

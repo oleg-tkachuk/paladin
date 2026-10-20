@@ -132,7 +132,7 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	// Presigned GET URL grants OpGet on the underlying object; gate
 	// on both OpPresign (the act of issuing a URL) and OpGet (the op
 	// the URL ultimately authorises).
-	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, auth.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
@@ -231,7 +231,7 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 			"object was registered without a size and checksum; start a new upload")
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
-	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, auth.OpPresign, objectURI); err != nil {
 		return UploadURL{}, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {

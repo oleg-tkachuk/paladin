@@ -45,7 +45,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// The "other replica": its own pool, its own cache, its own watcher.
 	replica := newCapStore(t, rlsPool(t, ctx, f.pool))
-	cache, err := limes.NewCachedRevocationChecker(limes.RevocationCacheConfig{Upstream: replica, TTL: time.Hour})
+	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{Capabilities: replica, TTL: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}

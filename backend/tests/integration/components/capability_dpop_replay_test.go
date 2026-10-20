@@ -106,17 +106,17 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	}
 	tenant := uuid.New()
 	res, err := issuer.Issue(ctx, limes.IssueRequest{
-		IssuedBy:        limes.Principal{Type: limes.PrincipalUser, TenantID: tenant, Subject: "op"},
-		Subject:         limes.Principal{Type: limes.PrincipalAgent, TenantID: tenant, Subject: "agent"},
+		IssuedBy:        limes.Principal{Type: limes.PrincipalTypeUser, TenantID: tenant, Subject: "op"},
+		Subject:         limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
 		Audience:        []string{auth.TokenPlaneData},
-		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}, Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true}},
+		Caveats:         limes.Caveats{Ops: []limes.Op{limes.OpGet}, Requests: limes.RequestCeiling{Unlimited: true}, Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: testUnit}},
 		TTL:             time.Hour,
 		ConfirmationJKT: jkt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{signing.KeyID: signing.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{signing.KeyID: signing.Public()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	}
 	first, second := replica(), replica()
 
-	proof, err := dpop.Sign(ctx, key, dpop.ProofRequest{
+	proof, err := dpop.Sign(ctx, key, dpop.SignRequest{
 		Method: http.MethodPost, URL: dpopReplayURL, Token: res.Token, IssuedAt: time.Now(),
 	})
 	if err != nil {

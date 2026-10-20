@@ -22,14 +22,14 @@ func TestBudgetCeilingOf(t *testing.T) {
 		set       bool
 	}{
 		"neither":             {},
-		"zero allows nothing": {limit: &money.Money{CurrencyCode: "EUR"}, unit: "EUR", set: true},
+		"zero allows nothing": {limit: &money.Money{CurrencyCode: "EUR"}, ceiling: limes.BudgetCeiling{UnitCode: "EUR"}, unit: "EUR", set: true},
 		"a limit": {
 			limit:   &money.Money{CurrencyCode: "USD", Units: 2},
-			ceiling: limes.BudgetCeiling{Max: 2 * limes.NanosPerUnit}, unit: "USD", set: true,
+			ceiling: limes.BudgetCeiling{Max: 2 * limes.NanosPerUnit, UnitCode: "USD"}, unit: "USD", set: true,
 		},
 		"unlimited in a unit": {
 			unlimited: &adminv1.UnlimitedBudget{CurrencyCode: "UAH"},
-			ceiling:   limes.BudgetCeiling{Unlimited: true}, unit: "UAH", set: true,
+			ceiling:   limes.BudgetCeiling{Unlimited: true, UnitCode: "UAH"}, unit: "UAH", set: true,
 		},
 		"unlimited, no unit": {
 			unlimited: &adminv1.UnlimitedBudget{},
@@ -61,14 +61,19 @@ func TestBudgetCeilingOfRefusesMalformedArms(t *testing.T) {
 	}
 }
 
-// Each ceiling writes back on its own arm, the default unit filling a blank.
+// Each ceiling writes back on its own arm: in the unit given, else in the
+// ceiling's own, else in NoUnit.
 func TestBudgetCeilingArms(t *testing.T) {
-	limit, open := BudgetCeilingArms(limes.BudgetCeiling{}, "EUR")
+	limit, open := BudgetCeilingArms(limes.BudgetCeiling{UnitCode: "USD"}, "EUR")
 	if open != nil || !proto.Equal(limit, &money.Money{CurrencyCode: "EUR"}) {
 		t.Errorf("zero: %v / %v, want a limit of 0 EUR", limit, open)
 	}
+	limit, open = BudgetCeilingArms(limes.BudgetCeiling{Unlimited: true, UnitCode: "UAH"}, "")
+	if limit != nil || open.GetCurrencyCode() != "UAH" {
+		t.Errorf("unlimited: %v / %v, want unlimited in the ceiling's UAH", limit, open)
+	}
 	limit, open = BudgetCeilingArms(limes.BudgetCeiling{Unlimited: true}, "")
-	if limit != nil || open.GetCurrencyCode() != limes.DefaultUnitCode {
-		t.Errorf("unlimited: %v / %v, want unlimited in %s", limit, open, limes.DefaultUnitCode)
+	if limit != nil || open.GetCurrencyCode() != NoUnit {
+		t.Errorf("unlimited in no unit: %v / %v, want unlimited in %s", limit, open, NoUnit)
 	}
 }

@@ -19,19 +19,18 @@ export const TTL_OPTIONS: {
   { label: "Server default", value: "default", seconds: null },
 ];
 
-// Capability ops vocabulary mirrored from internal/capability/caveats.go.
-// Keep the list curated rather than free-form so operators can't typo.
+// Capability ops: the ones limes defines, then the data plane's own, as
+// backend/internal/auth/capability_ops.go names them. Curated rather than
+// free-form so operators can't typo.
 export const OP_CHOICES = [
   "get",
   "put",
   "list",
   "delete",
-  "presign",
-  "tag",
-  "search",
-  "embed",
   "share",
   "manage",
+  "object:presign",
+  "object:tag",
 ];
 
 export const AUDIENCE_CHOICES = ["data", "admin", "iam", "mcp"];

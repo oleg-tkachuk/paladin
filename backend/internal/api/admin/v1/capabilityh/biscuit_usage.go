@@ -12,6 +12,7 @@ import (
 	"google.golang.org/genproto/googleapis/type/money"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -19,7 +20,7 @@ import (
 
 // WithCopyUsage wires GetBiscuitUsage, beside WithBiscuitCopies. Without it
 // the RPC answers Unavailable.
-func (h *Handler) WithCopyUsage(reader limes.CopyUsageReader) *Handler {
+func (h *Handler) WithCopyUsage(reader meter.CopyUsageReader) *Handler {
 	h.copyUsage = reader
 	return h
 }
@@ -55,13 +56,13 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	}
 
 	copies := c.Copies()
-	byID := map[string]limes.CopyUsage{}
+	byID := map[string]meter.CopyUsage{}
 	if len(copies) > 0 {
 		ids := make([][]byte, 0, len(copies))
 		for _, l := range copies {
 			ids = append(ids, l.RevocationID)
 		}
-		counted, err := h.copyUsage.CopyUsage(ctx, limes.CopyUsageRequest{RevocationIDs: ids})
+		counted, err := h.copyUsage.CopyUsage(ctx, meter.CopyUsageRequest{CapabilityID: c.CapabilityID(), RevocationIDs: ids})
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
@@ -71,7 +72,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	}
 
 	// A copy's amounts are in its capability's unit.
-	unit := record.Capability.Caveats.UnitCode
+	unit := record.Capability.Caveats.Budget.UnitCode
 	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(copies))
 	for _, l := range copies {
 		u := byID[string(l.RevocationID)] // a copy never used counts zero
