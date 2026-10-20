@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
+  entries: [] as unknown[],
   useAuditLogs: vi.fn((..._args: unknown[]) => ({
-    entries: [],
+    entries: h.entries,
     loading: false,
     error: null,
     nextCursor: "",
@@ -15,6 +16,12 @@ vi.mock("@/hooks/useAuditLogs", () => ({ useAuditLogs: h.useAuditLogs }));
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: "t-1", displayName: "Acme" }),
+}));
+
+vi.mock("@/components/features/audit/AuditEntryPanel", () => ({
+  AUDIT_ENTRY_TABS: ["summary", "changes"],
+  AuditEntryPanel: ({ entryId }: { entryId: string | null }) =>
+    entryId ? <div role="dialog">{entryId}</div> : null,
 }));
 
 import TenantAuditLogPage from "./page";
@@ -47,5 +54,29 @@ describe("TenantAuditLogPage", () => {
     expect(lastSort()).toEqual({ column: "action", direction: "desc" });
     fireEvent.click(action);
     expect(lastSort()).toEqual({ column: null, direction: null });
+  });
+});
+
+// A row opens its entry beside the trail, as on /audit, and the open entry
+// is in the URL.
+describe("TenantAuditLogPage rows", () => {
+  it("opens an entry's details from its row", () => {
+    window.history.replaceState(null, "", "/tenants/t-1/audit-log");
+    h.entries = [
+      {
+        entryId: "entry-9",
+        action: "admin.BucketService.UpdateBucket",
+        actorSubject: "user:ops",
+        resourceName: "buckets/b9",
+        errorMessage: "",
+      },
+    ];
+    render(<TenantAuditLogPage />);
+    const row = screen.getByRole("row", { name: /buckets\/b9/ });
+    expect(row).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(row);
+    expect(screen.getByRole("dialog")).toHaveTextContent("entry-9");
+    expect(window.location.search).toBe("?id=entry-9");
+    h.entries = [];
   });
 });

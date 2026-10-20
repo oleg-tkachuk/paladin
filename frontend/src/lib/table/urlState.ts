@@ -13,6 +13,8 @@ export const TABLE_PARAMS = {
   filter: "filter",
   /** The row a link points at: opened, highlighted and scrolled to. */
   row: "id",
+  /** The tab the open row's detail panel shows; its first tab is no tab. */
+  tab: "tab",
 } as const;
 
 export type TableParam = keyof typeof TABLE_PARAMS;
