@@ -175,6 +175,27 @@ describe("TenantBilling", () => {
     ).toHaveAttribute("href", "/tenants/globex/budget");
   });
 
+  it("keeps a tile's action beside its label, and the value's qualifier on its line", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      total: usd(1_000_000_000n),
+      budgetCeiling: { case: "maxBudget", value: usd(4_000_000_000n) },
+      chargeCount: 1n,
+    });
+    render(<Harness />);
+    const tile = await screen.findByRole("group", { name: "Budget" });
+    const link = within(tile).getByRole("link", { name: "Change the budget" });
+    expect(link.parentElement).toBe(
+      within(tile).getByRole("heading", { name: "Budget" }).parentElement,
+    );
+    const left = within(tile).getByText("left");
+    expect(left.parentElement?.textContent).toBe("US$3.0000left");
+    expect(within(tile).getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "25",
+    );
+  });
+
   it("names the actors, not their subjects only", async () => {
     h.summary.mockResolvedValue({
       ...emptySummary,
