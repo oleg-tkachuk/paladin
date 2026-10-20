@@ -44,6 +44,10 @@ export function BuildVersion({ fallback }: BuildVersionProps) {
   const label = formatBuildLabel(backend.version, backend.commit);
   const skew = isBuildSkew(backend.commit, ui.commit);
   const builtAt = formatTimestamp(backend.buildTime);
+  // A development build's label drops the version's time-and-commit
+  // suffix; the tooltip keeps the version whole, to quote or match.
+  const fullVersion = backend.version.trim();
+  const shortened = fullVersion !== "" && !label.includes(fullVersion);
 
   return (
     <TooltipRoot>
@@ -69,6 +73,12 @@ export function BuildVersion({ fallback }: BuildVersionProps) {
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           <dt className="text-muted-foreground">Backend</dt>
           <dd className="font-mono">{label}</dd>
+          {shortened ? (
+            <>
+              <dt className="text-muted-foreground">Version</dt>
+              <dd className="font-mono break-all">{fullVersion}</dd>
+            </>
+          ) : null}
           {builtAt !== NO_TIMESTAMP ? (
             <>
               <dt className="text-muted-foreground">Built</dt>

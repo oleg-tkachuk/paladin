@@ -21,7 +21,8 @@ vi.mock("@/context/AuthContext", () => ({
 vi.mock("@/context/StatsContext", () => ({
   useStats: () => ({ stats: h.stats }),
 }));
-vi.mock("@/lib/ui/build-info", () => ({
+vi.mock("@/lib/ui/build-info", async (orig) => ({
+  ...(await orig<typeof import("@/lib/ui/build-info")>()),
   uiBuildInfo: () => ({ version: "1.2.0", commit: "abc1234", buildTime: "" }),
 }));
 vi.mock("@/components/layout/PageHeader", () => ({
@@ -65,20 +66,19 @@ describe("DashboardPage", () => {
     expect(screen.queryByRole("link", { name: /upload/i })).toBeNull();
   });
 
-  it("names the build once when the backend and UI match", () => {
+  // The release is the sidebar's to show; the strip speaks only of a skew.
+  it("names no build when the console and the backend match", () => {
     h.stats = { version: { version: "1.2.0", commit: "abc1234ffff" } };
     render(<DashboardPage />);
-    expect(screen.getByText("build")).toBeInTheDocument();
-    expect(screen.queryByText("backend")).toBeNull();
-    expect(screen.getAllByText("1.2.0")).toHaveLength(1);
+    expect(screen.queryByText("1.2.0")).toBeNull();
+    expect(screen.queryByText(/different commits/)).toBeNull();
   });
 
-  it("names both builds when they differ", () => {
+  it("says so when they were built from different commits", () => {
     h.stats = { version: { version: "1.3.0", commit: "def5678" } };
     render(<DashboardPage />);
-    expect(screen.getByText("backend")).toBeInTheDocument();
-    expect(screen.getByText("ui")).toBeInTheDocument();
-    expect(screen.getByText("1.3.0")).toBeInTheDocument();
-    expect(screen.getByText("1.2.0")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /built from different commits/ }),
+    ).toHaveAttribute("href", "/health");
   });
 });
