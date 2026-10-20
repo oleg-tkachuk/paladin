@@ -9,12 +9,12 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -84,7 +84,7 @@ func newMinter(t *testing.T, store limes.Store) *captest.Minter {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func newMinter(t *testing.T, store limes.Store) *captest.Minter {
 
 // mkHandler builds a Handler over store, with an issuer and a verifier that
 // accept each other's tokens.
-func mkHandler(t *testing.T, store limes.Store, usage limes.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
+func mkHandler(t *testing.T, store limes.Store, usage meter.UsageStore, policy cedar.Authorizer) *Handler {
 	t.Helper()
 	m := newMinter(t, store)
 	return NewHandler(m.Issuer, m.Verifier, store, usage, policy)
@@ -135,15 +135,14 @@ func mkParent(tenantID uuid.UUID, ops ...limes.Op) limes.Capability {
 		ID:     uuid.New(),
 		Issuer: captest.Issuer,
 		Subject: limes.Principal{
-			Type:     limes.PrincipalAgent,
+			Type:     limes.PrincipalTypeAgent,
 			TenantID: tenantID,
 			Subject:  "agent-42",
 		},
-		Audience:   []string{auth.TokenPlaneData},
-		IssuedAt:   now,
-		ExpiresAt:  now.Add(time.Hour),
-		Generation: 1,
-		Caveats:    limes.Caveats{Ops: ops},
+		Audience:  []string{auth.TokenPlaneData},
+		IssuedAt:  now,
+		ExpiresAt: now.Add(time.Hour),
+		Caveats:   limes.Caveats{Ops: ops},
 	}
 }
 
@@ -279,11 +278,10 @@ func TestDelegate_UnsetCeilingKeepsTheParents(t *testing.T) {
 	parent, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
 		Ops:      []limes.Op{limes.OpGet, limes.OpShare},
 		Requests: limes.RequestCeiling{Max: parentMaxRequests},
-		Budget:   limes.BudgetCeiling{Max: parentBudgetUnits * limes.NanosPerUnit},
-		UnitCode: limes.DefaultUnitCode,
+		Budget:   limes.BudgetCeiling{Max: parentBudgetUnits * limes.NanosPerUnit, UnitCode: platformUnit},
 	}})
 	h := delegateHandler(m, &denyAuthorizer{})
-	parentBudget := &money.Money{CurrencyCode: limes.DefaultUnitCode, Units: parentBudgetUnits}
+	parentBudget := &money.Money{CurrencyCode: platformUnit, Units: parentBudgetUnits}
 
 	limit := func(n int64) *int64 { return &n }
 	cases := map[string]struct {
@@ -322,8 +320,7 @@ func TestDelegate_UnlimitedUnderABoundedParentIsRefused(t *testing.T) {
 	parent, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
 		Ops:      []limes.Op{limes.OpGet, limes.OpShare},
 		Requests: limes.RequestCeiling{Max: parentMaxRequests},
-		Budget:   limes.BudgetCeiling{Unlimited: true},
-		UnitCode: limes.DefaultUnitCode,
+		Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: platformUnit},
 	}})
 	h := delegateHandler(m, &denyAuthorizer{})
 	req := delegateReq(parent)

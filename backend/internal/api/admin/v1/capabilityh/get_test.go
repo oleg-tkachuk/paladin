@@ -43,7 +43,7 @@ func TestGetReturnsTheRecord(t *testing.T) {
 	owner := uuid.New()
 	c := mkParent(owner, limes.OpGet)
 	revokedAt := time.Unix(1_800_000_000, 0).UTC()
-	issuer := limes.Principal{Type: limes.PrincipalUser, TenantID: owner, Subject: "operator"}
+	issuer := limes.Principal{Type: limes.PrincipalTypeUser, TenantID: owner, Subject: "operator"}
 	store := &recordStore{rec: limes.Record{
 		Capability: c, IssuedBy: issuer,
 		Revocation: &limes.Revocation{RevokedAt: revokedAt, Note: "leak", Actor: "sec", Cascaded: true},

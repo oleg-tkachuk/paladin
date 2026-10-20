@@ -239,7 +239,7 @@ func TestPresignGet(t *testing.T) {
 
 	t.Run("capability has presign but lacks get op → permission denied", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, &fakeStorage{}, allowPolicy(), cfg)
-		ctx := authedCtxWithCap(t, tid, limes.OpPresign) // missing OpGet
+		ctx := authedCtxWithCap(t, tid, auth.OpPresign) // missing OpGet
 		_, _, _, err := h.PresignGet(ctx, "obj", validObjectID, 0, "", false)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
@@ -397,7 +397,7 @@ func TestRegenerateUploadURL(t *testing.T) {
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
 		h := NewHandler(pendingRepo(), &fakeStorage{}, allowPolicy(), cfg)
-		ctx := authedCtxWithCap(t, tid, limes.OpPresign) // missing OpPut
+		ctx := authedCtxWithCap(t, tid, auth.OpPresign) // missing OpPut
 		_, err := h.RegenerateUploadURL(ctx, "obj", validObjectID, 0)
 		wantCode(t, err, connect.CodePermissionDenied)
 	})

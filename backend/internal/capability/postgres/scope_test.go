@@ -32,9 +32,18 @@ type recordingTx struct {
 	set []setting
 }
 
+// Exec records each name and value pair of a set_config statement.
 func (r *recordingTx) Exec(_ context.Context, _ string, args ...any) (pgconn.CommandTag, error) {
-	r.set = append(r.set, setting{args[0].(string), args[1].(string)})
+	for i := 0; i+1 < len(args); i += 2 {
+		r.set = append(r.set, setting{args[i].(string), args[i+1].(string)})
+	}
 	return pgconn.CommandTag{}, nil
+}
+
+// scoped is the settings of a scope: pgstore sets both every time, the one
+// the scope does not use to nothing, so no default can widen it.
+func scoped(tenant, all string) []setting {
+	return []setting{{settingTenant, tenant}, {settingAllTenants, all}}
 }
 
 func TestScope(t *testing.T) {
@@ -46,21 +55,21 @@ func TestScope(t *testing.T) {
 		want []setting
 	}{
 		{"acting on a tenant", auth.WithActingTenant(context.Background(), tenant),
-			[]setting{{settingTenant, tenant.String()}}},
+			scoped(tenant.String(), "")},
 		// A platform-wide read reads every tenant and writes none, as
 		// paladin.cross_tenant widens only reads.
 		{"platform-wide read", auth.WithCrossTenantRead(context.Background()),
-			[]setting{{settingAllTenants, allTenantsRead}}},
+			scoped("", allTenantsRead)},
 		{"platform-wide read while acting on a tenant",
 			auth.WithCrossTenantRead(auth.WithActingTenant(context.Background(), tenant)),
-			[]setting{{settingAllTenants, allTenantsRead}}},
+			scoped("", allTenantsRead)},
 		// Housekeeping carries no principal; its pgstore scope decides.
 		{"housekeeping", pgstore.WithAllTenants(context.Background()),
-			[]setting{{settingAllTenants, allTenantsWrite}}},
+			scoped("", allTenantsWrite)},
 		// The request's tenant wins over a pgstore scope it also carries.
 		{"acting on a tenant with a pgstore scope", pgstore.WithTenant(auth.WithActingTenant(context.Background(), tenant), other),
-			[]setting{{settingTenant, tenant.String()}}},
-		{"no scope", context.Background(), nil},
+			scoped(tenant.String(), "")},
+		{"no scope", context.Background(), scoped("", "")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -77,7 +78,7 @@ func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
 	m, usage := newMeteredMinter(t)
 	v, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
-		Ops: []limes.Op{limes.OpGet}, Budget: limes.BudgetCeiling{Max: limes.NanosPerUnit},
+		Ops: []limes.Op{limes.OpGet}, Budget: limes.BudgetCeiling{Max: limes.NanosPerUnit, UnitCode: captest.Unit},
 	}})
 	ctx := WithChargeStore(WithCapability(context.Background(), v), usage)
 

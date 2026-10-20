@@ -14,46 +14,47 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// fakeUsageStore is a minimal in-memory limes.TenantBudgets — the
+// fakeUsageStore is a minimal in-memory meter.TenantBudgets — the
 // only part of the usage store TenantBudgetServer depends on.
 type fakeUsageStore struct {
-	budgets map[uuid.UUID]limes.TenantBudget
+	budgets map[uuid.UUID]meter.TenantBudget
 	getErr  error
 	// lastSet is the last SetTenantBudget's arguments.
-	lastSet limes.SetTenantBudgetRequest
+	lastSet meter.SetTenantBudgetRequest
 	// lastList is the last ListTenantBudgets' arguments; listOut, listNext
 	// and listErr are what it answers.
-	lastList limes.ListTenantBudgetsRequest
-	listOut  []limes.TenantBudget
+	lastList meter.ListTenantBudgetsRequest
+	listOut  []meter.TenantBudget
 	listNext string
 	listErr  error
 	// setErr, when set, is what SetTenantBudget answers.
 	setErr error
 }
 
-func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (limes.TenantBudget, error) {
+func (f *fakeUsageStore) GetTenantBudget(_ context.Context, id uuid.UUID) (meter.TenantBudget, error) {
 	if f.getErr != nil {
-		return limes.TenantBudget{}, f.getErr
+		return meter.TenantBudget{}, f.getErr
 	}
 	tb, ok := f.budgets[id]
 	if !ok {
-		return limes.TenantBudget{}, limes.ErrTenantBudgetNotFound
+		return meter.TenantBudget{}, meter.ErrTenantBudgetNotFound
 	}
 	return tb, nil
 }
 
-func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args limes.SetTenantBudgetRequest) (limes.TenantBudget, error) {
+func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args meter.SetTenantBudgetRequest) (meter.TenantBudget, error) {
 	f.lastSet = args
 	if f.setErr != nil {
-		return limes.TenantBudget{}, f.setErr
+		return meter.TenantBudget{}, f.setErr
 	}
 	if f.budgets == nil {
-		f.budgets = map[uuid.UUID]limes.TenantBudget{}
+		f.budgets = map[uuid.UUID]meter.TenantBudget{}
 	}
 	// Mirror the store's OCC contract, or the handler test would pass against
 	// a fake that accepts writes production refuses.
@@ -63,19 +64,20 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args limes.SetTenant
 		want = prev.ResourceVersion
 	}
 	if args.ExpectedVersion != want {
-		return limes.TenantBudget{}, limes.ErrTenantBudgetVersionMismatch
+		return meter.TenantBudget{}, meter.ErrTenantBudgetVersionMismatch
 	}
-	unit := args.UnitCode
-	if unit == "" {
-		unit = f.budgets[args.TenantID].UnitCode
+	// As capabilitypg.UsageStore does: a ceiling with no unit keeps the
+	// tenant's, or takes the platform's on the first one.
+	ceiling := args.Ceiling
+	if ceiling.UnitCode == "" {
+		ceiling.UnitCode = f.budgets[args.TenantID].Ceiling.UnitCode
 	}
-	if unit == "" {
-		unit = limes.DefaultUnitCode
+	if ceiling.UnitCode == "" {
+		ceiling.UnitCode = fakePlatformUnit
 	}
-	tb := limes.TenantBudget{
+	tb := meter.TenantBudget{
 		TenantID: args.TenantID,
-		Ceiling:  args.Ceiling,
-		UnitCode: unit,
+		Ceiling:  ceiling,
 		// SpentAmount: ResetSpend semantics aren't unit-tested
 		// here — the postgres impl owns the SQL that zeroes it.
 		SpentAmount:     f.budgets[args.TenantID].SpentAmount,
@@ -88,12 +90,16 @@ func (f *fakeUsageStore) SetTenantBudget(_ context.Context, args limes.SetTenant
 	return tb, nil
 }
 
-func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req limes.ListTenantBudgetsRequest) (limes.Page[limes.TenantBudget], error) {
+// fakePlatformUnit is the platform currency the fake writes a first budget
+// with no unit in.
+const fakePlatformUnit = "USD"
+
+func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req meter.ListTenantBudgetsRequest) (limes.Page[meter.TenantBudget], error) {
 	f.lastList = req
 	if f.listErr != nil {
-		return limes.Page[limes.TenantBudget]{}, f.listErr
+		return limes.Page[meter.TenantBudget]{}, f.listErr
 	}
-	return limes.Page[limes.TenantBudget]{Items: f.listOut, Next: f.listNext}, nil
+	return limes.Page[meter.TenantBudget]{Items: f.listOut, Next: f.listNext}, nil
 }
 
 // fakeNames is a tenanth.Names over a fixed map; a tenant absent from it
@@ -119,7 +125,7 @@ func (f *fakeNames) TenantNames(_ context.Context, ids []uuid.UUID) (map[uuid.UU
 }
 
 // newServer is a TenantBudgetServer over store with no tenant named.
-func newServer(store limes.TenantBudgets) *TenantBudgetServer {
+func newServer(store meter.TenantBudgets) *TenantBudgetServer {
 	return NewTenantBudgetServer(store, &fakeNames{})
 }
 
@@ -179,7 +185,7 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: limes.DefaultUnitCode, Units: 100}); !proto.Equal(got, want) {
+	if got, want := setRes.GetBudget().GetMaxBudget(), (&money.Money{CurrencyCode: fakePlatformUnit, Units: 100}); !proto.Equal(got, want) {
 		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 
@@ -353,7 +359,7 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 // on; only a failure that refuses nothing is Internal.
 func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
 	cases := map[error]connect.Code{
-		limes.ErrTenantBudgetVersionMismatch: connect.CodeAborted,
+		meter.ErrTenantBudgetVersionMismatch: connect.CodeAborted,
 		limes.ErrUnitCodeMismatch:            connect.CodeFailedPrecondition,
 		limes.ErrInvalidAmount:               connect.CodeInvalidArgument,
 		errors.New("store down"):             connect.CodeInternal,
@@ -370,20 +376,24 @@ func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
 	}
 }
 
-// summaryThresholdPct is a utilisation threshold a summary asks for.
-const summaryThresholdPct = 80
+// summaryThresholdPct is a utilisation threshold a summary asks for, and
+// summaryThresholdBasisPoints the same threshold as limes compares it.
+const (
+	summaryThresholdPct         = 80
+	summaryThresholdBasisPoints = 8000
+)
 
 // Summarize asks the store for the rows the request names: the unlimited
 // tenants, the tenants at or past a threshold, or every tenant.
 func TestTenantBudgetServer_Summarize_PicksTheFilter(t *testing.T) {
 	cases := map[string]struct {
 		req           *pb.TenantBudgetServiceSummarizeRequest
-		wantFilter    limes.TenantBudgetFilter
-		wantThreshold float64
+		wantFilter    meter.TenantBudgetFilter
+		wantThreshold int
 	}{
-		"unlimited only": {&pb.TenantBudgetServiceSummarizeRequest{UnlimitedOnly: true}, limes.TenantBudgetsUnlimited, 0},
-		"a threshold":    {&pb.TenantBudgetServiceSummarizeRequest{ThresholdPct: summaryThresholdPct}, limes.TenantBudgetsAtOrPast, summaryThresholdPct},
-		"no filter":      {&pb.TenantBudgetServiceSummarizeRequest{}, limes.TenantBudgetsAll, 0},
+		"unlimited only": {&pb.TenantBudgetServiceSummarizeRequest{UnlimitedOnly: true}, meter.TenantBudgetFilterUnlimited, 0},
+		"a threshold":    {&pb.TenantBudgetServiceSummarizeRequest{ThresholdPct: summaryThresholdPct}, meter.TenantBudgetFilterAtOrPast, summaryThresholdBasisPoints},
+		"no filter":      {&pb.TenantBudgetServiceSummarizeRequest{}, meter.TenantBudgetFilterAll, 0},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -391,9 +401,9 @@ func TestTenantBudgetServer_Summarize_PicksTheFilter(t *testing.T) {
 			if _, err := newServer(store).Summarize(context.Background(), tc.req); err != nil {
 				t.Fatal(err)
 			}
-			if store.lastList.Filter != tc.wantFilter || store.lastList.ThresholdPct != tc.wantThreshold {
-				t.Errorf("store asked for %v at %v%%, want %v at %v%%",
-					store.lastList.Filter, store.lastList.ThresholdPct, tc.wantFilter, tc.wantThreshold)
+			if store.lastList.Filter != tc.wantFilter || store.lastList.ThresholdBasisPoints != tc.wantThreshold {
+				t.Errorf("store asked for %v at %d bp, want %v at %d bp",
+					store.lastList.Filter, store.lastList.ThresholdBasisPoints, tc.wantFilter, tc.wantThreshold)
 			}
 		})
 	}
@@ -419,16 +429,15 @@ type summaryFixture struct {
 
 func newSummaryFixture() summaryFixture {
 	f := summaryFixture{bounded: uuid.New(), unlimited: uuid.New(), trashed: uuid.New(), unknown: uuid.New()}
-	f.store = &fakeUsageStore{listOut: []limes.TenantBudget{
+	f.store = &fakeUsageStore{listOut: []meter.TenantBudget{
 		{
 			TenantID:    f.bounded,
-			Ceiling:     limes.BudgetCeiling{Max: boundedCeilingUnits * limes.NanosPerUnit},
+			Ceiling:     limes.BudgetCeiling{Max: boundedCeilingUnits * limes.NanosPerUnit, UnitCode: fakePlatformUnit},
 			SpentAmount: boundedSpentUnits * limes.NanosPerUnit,
-			UnitCode:    limes.DefaultUnitCode,
 		},
-		{TenantID: f.unlimited, Ceiling: limes.BudgetCeiling{Unlimited: true}, UnitCode: limes.DefaultUnitCode},
-		{TenantID: f.trashed, Ceiling: limes.BudgetCeiling{Unlimited: true}, UnitCode: limes.DefaultUnitCode},
-		{TenantID: f.unknown, Ceiling: limes.BudgetCeiling{Unlimited: true}, UnitCode: limes.DefaultUnitCode},
+		{TenantID: f.unlimited, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: fakePlatformUnit}},
+		{TenantID: f.trashed, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: fakePlatformUnit}},
+		{TenantID: f.unknown, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: fakePlatformUnit}},
 	}}
 	f.names = &fakeNames{names: map[uuid.UUID]tenanth.Name{
 		f.bounded:   {Slug: boundedSlug, DisplayName: boundedDisplayName},
@@ -463,7 +472,7 @@ func TestTenantBudgetServer_Summarize_JoinsTenantNames(t *testing.T) {
 	if b.GetUtilisationPct() != boundedUtilisationPct {
 		t.Errorf("bounded utilisation = %v, want %v", b.GetUtilisationPct(), boundedUtilisationPct)
 	}
-	if want := (&money.Money{CurrencyCode: limes.DefaultUnitCode, Units: boundedCeilingUnits}); !proto.Equal(b.GetBudget().GetMaxBudget(), want) {
+	if want := (&money.Money{CurrencyCode: fakePlatformUnit, Units: boundedCeilingUnits}); !proto.Equal(b.GetBudget().GetMaxBudget(), want) {
 		t.Errorf("bounded max_budget = %v, want %v", b.GetBudget().GetMaxBudget(), want)
 	}
 	if u := got[f.unlimited.String()]; u.GetUtilisationPct() != 0 {
@@ -515,11 +524,13 @@ func TestTenantBudgetServer_Set_Ceilings(t *testing.T) {
 		ceiling *pb.TenantBudgetServiceSetRequest
 		want    limes.BudgetCeiling
 	}{
-		"zero allows nothing": {&pb.TenantBudgetServiceSetRequest{BudgetCeiling: limitOf(&money.Money{CurrencyCode: limes.DefaultUnitCode})}, limes.BudgetCeiling{}},
+		"zero allows nothing": {&pb.TenantBudgetServiceSetRequest{BudgetCeiling: limitOf(&money.Money{CurrencyCode: fakePlatformUnit})}, limes.BudgetCeiling{UnitCode: fakePlatformUnit}},
 		"bounded": {
-			&pb.TenantBudgetServiceSetRequest{BudgetCeiling: limitOf(&money.Money{CurrencyCode: limes.DefaultUnitCode, Units: boundedCeilingUnits})},
-			limes.BudgetCeiling{Max: boundedCeilingUnits * limes.NanosPerUnit},
+			&pb.TenantBudgetServiceSetRequest{BudgetCeiling: limitOf(&money.Money{CurrencyCode: fakePlatformUnit, Units: boundedCeilingUnits})},
+			limes.BudgetCeiling{Max: boundedCeilingUnits * limes.NanosPerUnit, UnitCode: fakePlatformUnit},
 		},
+		// A ceiling that names no unit reaches the store without one, which
+		// keeps the tenant's (capabilitypg.UsageStore).
 		"unlimited": {&pb.TenantBudgetServiceSetRequest{BudgetCeiling: unlimitedIn("")}, limes.BudgetCeiling{Unlimited: true}},
 	}
 	for name, tc := range cases {
@@ -564,8 +575,8 @@ func TestTenantBudgetServer_Set_UnlimitedUnit(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("%q: %v", unit, err)
 		}
-		if store.lastSet.UnitCode != want {
-			t.Errorf("%q: unit = %q, want %q", unit, store.lastSet.UnitCode, want)
+		if store.lastSet.Ceiling.UnitCode != want {
+			t.Errorf("%q: unit = %q, want %q", unit, store.lastSet.Ceiling.UnitCode, want)
 		}
 	}
 }
@@ -578,4 +589,13 @@ func limitOf(m *money.Money) *pb.TenantBudgetServiceSetRequest_MaxBudget {
 // unlimitedIn is a Set request's unlimited budget in unit.
 func unlimitedIn(unit string) *pb.TenantBudgetServiceSetRequest_UnlimitedBudget {
 	return &pb.TenantBudgetServiceSetRequest_UnlimitedBudget{UnlimitedBudget: &pb.UnlimitedBudget{CurrencyCode: unit}}
+}
+
+// A percentage threshold reaches limes in basis points, to the nearest one.
+func TestBasisPointsOf(t *testing.T) {
+	for pct, want := range map[float64]int{0: 0, 1.1: 110, 29: 2900, 33.33: 3333, 100: meter.BasisPointsPerWhole} {
+		if got := basisPointsOf(pct); got != want {
+			t.Errorf("basisPointsOf(%v) = %d, want %d", pct, got, want)
+		}
+	}
 }

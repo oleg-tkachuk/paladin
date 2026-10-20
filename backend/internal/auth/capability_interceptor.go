@@ -18,6 +18,8 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -57,6 +59,11 @@ type verifiedEntry struct {
 // or nil when none was supplied / verified. Handlers gate on caveats
 // (op set, resource prefix, budget) by calling this and switching on
 // the result.
+// errChargeWithoutTx is a charge whose store put no transaction in the
+// context onCharged receives: the charge events could not join it, so the
+// charge is refused rather than written without them.
+var errChargeWithoutTx = errors.New("capability: the usage store passed no transaction to onCharged")
+
 func CapabilityFromContext(ctx context.Context) (*limes.Capability, bool) {
 	e, ok := ctx.Value(capabilityKey{}).(verifiedEntry)
 	return e.cap, ok && e.cap != nil
@@ -114,7 +121,7 @@ func WithCapability(ctx context.Context, v limes.VerifiedCapability) context.Con
 func CapabilityInterceptor(
 	verifier *limes.Verifier,
 	audience string,
-	usage limes.UsageStore[pgx.Tx],
+	usage meter.UsageStore,
 	chargePerRequestAmount limes.Nanos,
 	opts ...CapabilityOption,
 ) connect.ServerInterceptor {
@@ -133,7 +140,7 @@ type CapabilityOption func(*capabilityInterceptor)
 func CapabilityInterceptorWithEvents(
 	verifier *limes.Verifier,
 	audience string,
-	usage limes.UsageStore[pgx.Tx],
+	usage meter.UsageStore,
 	chargePerRequestAmount limes.Nanos,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -150,7 +157,7 @@ func CapabilityInterceptorWithEvents(
 func newCapabilityInterceptor(
 	verifier *limes.Verifier,
 	audience string,
-	usage limes.UsageStore[pgx.Tx],
+	usage meter.UsageStore,
 	chargePerRequestAmount limes.Nanos,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -184,7 +191,7 @@ func newCapabilityInterceptor(
 func CapabilityEstablishingInterceptor(
 	verifier *limes.Verifier,
 	audience string,
-	usage limes.UsageStore[pgx.Tx],
+	usage meter.UsageStore,
 	chargePerRequestAmount limes.Nanos,
 	emitter ChargeEventEmitter,
 	opts ...CapabilityOption,
@@ -226,7 +233,7 @@ type capabilityInterceptor struct {
 	// An existing principal always wins: a capability presented alongside a
 	// JWT or API token stays additive, exactly as before.
 	establishPrincipal     bool
-	usage                  limes.UsageStore[pgx.Tx]
+	usage                  meter.UsageStore
 	chargePerRequestAmount limes.Nanos
 	emitter                ChargeEventEmitter
 	taintLookup            TaintLookup
@@ -435,7 +442,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 	// A Biscuit copy with limits of its own is counted the same way.
 	subject := verified.MeterSubject()
 	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil || len(subject.Copies()) > 0) {
-		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), limes.BumpRequest{Subject: subject}); err != nil {
+		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), meter.BumpRequest{Subject: subject}); err != nil {
 			if errors.Is(err, limes.ErrRequestLimitExceeded) {
 				return capabilityError(connect.CodeResourceExhausted, err)
 			}
@@ -596,7 +603,7 @@ type chargeAmount struct {
 // WithChargeStore stamps the UsageStore onto a context. Wired by the
 // capability interceptor at request time; tests can preset for unit
 // coverage of charging handlers.
-func WithChargeStore(ctx context.Context, s limes.UsageStore[pgx.Tx]) context.Context {
+func WithChargeStore(ctx context.Context, s meter.UsageStore) context.Context {
 	if s == nil {
 		return ctx
 	}
@@ -629,7 +636,7 @@ func WithChargeAmount(ctx context.Context, amount limes.Nanos) context.Context {
 //   - No capability on context (JWT auth) → no-op, returns nil.
 //   - Capability with an unlimited budget AND tenant without aggregate
 //     cap → records spend on both counters but never rejects
-//     (operator audits via limes.UsageStore[pgx.Tx].GetUsage / GetTenantBudget).
+//     (operator audits via meter.UsageStore.GetUsage / GetTenantBudget).
 //   - Capability, ancestor or tenant ceiling crossed → CodeResourceExhausted;
 //     nothing is mutated, so the handler can decide to refund / log / retry.
 //   - UsageStore not wired → no-op (operator opted out).
@@ -642,7 +649,7 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 		return nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
+	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
 	if !ok || store == nil {
 		return nil
 	}
@@ -666,13 +673,18 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 	// on the same tx), so the event outbox rows are atomic with the spend —
 	// no dual-write window. nil ⇒ the store commits counters + ledger
 	// with no fan-out.
-	var onCharged func(ctx context.Context, c limes.Charged[pgx.Tx]) error
+	var onCharged func(ctx context.Context, c meter.Charged) error
 	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
-		onCharged = func(ctx context.Context, c limes.Charged[pgx.Tx]) error {
-			return emitter.EmitChargedTx(ctx, c.Tx, tenantID.String(), cap.ID.String(), string(op), actor, amount, subject.UnitCode())
+		onCharged = func(ctx context.Context, _ meter.Charged) error {
+			// The store hands its transaction over in the context.
+			tx, ok := pgstore.TxFrom(ctx)
+			if !ok {
+				return errChargeWithoutTx
+			}
+			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), string(op), actor, amount, subject.UnitCode())
 		}
 	}
-	receipt, err := store.Charge(ledgerContext(ctx, cap), limes.ChargeRequest{
+	receipt, err := store.Charge(ledgerContext(ctx, cap), meter.ChargeRequest{
 		Subject: subject,
 		Amount:  amount,
 		Op:      op,
@@ -742,7 +754,7 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	if !ok {
 		return nil
 	}
-	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
+	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
 	if !ok || store == nil {
 		return nil
 	}
@@ -750,12 +762,12 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	if chargeID == uuid.Nil {
 		return nil
 	}
-	req := limes.RefundRequest{ChargeID: chargeID, Amount: amount}
+	req := meter.RefundRequest{ChargeID: chargeID, Amount: amount}
 	if amount == 0 {
-		req = limes.RefundRequest{ChargeID: chargeID, Remaining: true}
+		req = meter.RefundRequest{ChargeID: chargeID, Remaining: true}
 	}
 	if _, err := store.Refund(ledgerContext(ctx, cap), req); err != nil {
-		if errors.Is(err, limes.ErrRefundExceedsCharge) || errors.Is(err, limes.ErrInvalidRequest) {
+		if errors.Is(err, meter.ErrRefundExceedsCharge) || errors.Is(err, limes.ErrInvalidRequest) {
 			return capabilityError(connect.CodeInvalidArgument, err)
 		}
 		return capabilityError(connect.CodeUnavailable, err)
@@ -777,11 +789,11 @@ func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duratio
 		return uuid.Nil, nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
+	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
 	if !ok || store == nil {
 		return uuid.Nil, nil
 	}
-	r, err := store.Reserve(ledgerContext(ctx, cap), limes.ReserveRequest{
+	r, err := store.Reserve(ledgerContext(ctx, cap), meter.ReserveRequest{
 		Subject: verified.MeterSubject(),
 		Amount:  amount,
 		TTL:     ttl,
@@ -803,17 +815,17 @@ func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount lime
 		return nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
+	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
 	if !ok || store == nil {
 		return nil
 	}
-	receipt, err := store.Settle(ledgerContext(ctx, cap), limes.SettleRequest{
+	receipt, err := store.Settle(ledgerContext(ctx, cap), meter.SettleRequest{
 		Subject:       verified.MeterSubject(),
 		ReservationID: reservationID,
 		Amount:        amount,
 	}, nil)
 	if err != nil {
-		if errors.Is(err, limes.ErrReservationNotFound) {
+		if errors.Is(err, meter.ErrReservationNotFound) {
 			return capabilityError(connect.CodeFailedPrecondition, err)
 		}
 		return chargeError(err)
@@ -831,11 +843,11 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 		return nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(limes.UsageStore[pgx.Tx])
+	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
 	if !ok || store == nil {
 		return nil
 	}
-	if err := store.Release(ledgerContext(ctx, cap), limes.ReleaseRequest{
+	if err := store.Release(ledgerContext(ctx, cap), meter.ReleaseRequest{
 		Subject:       verified.MeterSubject(),
 		ReservationID: reservationID,
 	}); err != nil {
@@ -855,7 +867,7 @@ func chargeError(err error) error {
 		return capabilityError(connect.CodeResourceExhausted, err)
 	case errors.Is(err, limes.ErrInvalidRequest):
 		return capabilityError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, limes.ErrUnitCodeMismatch), errors.Is(err, limes.ErrCounterOverflow):
+	case errors.Is(err, limes.ErrUnitCodeMismatch), errors.Is(err, meter.ErrCounterOverflow):
 		return capabilityError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, limes.ErrNotFound):
 		// The capability is no longer on record: purged after expiry.
@@ -922,6 +934,7 @@ func assertCapabilityOp(ctx context.Context, op limes.Op, resourceURI string, ta
 	}
 	req := limes.CheckRequest{
 		Op:                op,
+		Effect:            opEffects[op],
 		Resource:          resourceURI,
 		HasIdempotencyKey: idempotencyKeyPresent(ctx),
 	}

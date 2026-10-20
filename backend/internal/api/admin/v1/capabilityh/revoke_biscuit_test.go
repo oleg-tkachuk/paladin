@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -36,7 +37,7 @@ type copyStore struct {
 }
 
 func (s *copyStore) IsBiscuitRevoked(context.Context, [][]byte) (bool, error) { return false, nil }
-func (s *copyStore) GetBiscuitRevocation(context.Context, []byte) (limes.BiscuitRevocation, error) {
+func (s *copyStore) GetBiscuitRevocation(context.Context, limes.BiscuitCopy) (limes.BiscuitRevocation, error) {
 	return limes.BiscuitRevocation{}, limes.ErrNotFound
 }
 func (s *copyStore) RevokeBiscuit(ctx context.Context, args limes.RevokeBiscuitRequest) error {
@@ -53,6 +54,13 @@ func mintCopy(t *testing.T, owner uuid.UUID, template limes.Capability, as ...li
 	ctx := context.Background()
 	m := captest.NewMinter(t)
 	template.Subject.TenantID = owner
+	// limes seals a Biscuit only for a capability that may be shared.
+	if len(template.Caveats.Ops) == 0 {
+		template.Caveats.Ops = []limes.Op{limes.OpGet}
+	}
+	if !slices.Contains(template.Caveats.Ops, limes.OpShare) {
+		template.Caveats.Ops = append(template.Caveats.Ops, limes.OpShare)
+	}
 	v, _ := m.Mint(t, template)
 	b, err := m.Issuer.Biscuit(ctx, limes.BiscuitRequest{Capability: v})
 	if err != nil {

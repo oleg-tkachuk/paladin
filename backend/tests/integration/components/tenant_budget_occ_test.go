@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // SetTenantBudget upserted the cap with no version guard, so two operators
@@ -24,23 +25,23 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 	const unsetVersion = 5
 	ctx, f := newUsageFixture(t)
 	ceiling := func(amount string) limes.BudgetCeiling {
-		return limes.BudgetCeiling{Max: limes.MustParseAmount(amount)}
+		return limes.BudgetCeiling{Max: limes.MustParseAmount(amount), UnitCode: testUnit}
 	}
 
 	t.Run("a non-zero version on a missing row is a conflict", func(t *testing.T) {
-		_, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		_, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID: f.tenant, Ceiling: ceiling("100"), ExpectedVersion: unsetVersion,
 		})
-		if !errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
+		if !errors.Is(err, meter.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch — the caller read a row that is not there", err)
 		}
-		if _, err := f.usage.GetTenantBudget(ctx, f.tenant); !errors.Is(err, limes.ErrTenantBudgetNotFound) {
+		if _, err := f.usage.GetTenantBudget(ctx, f.tenant); !errors.Is(err, meter.ErrTenantBudgetNotFound) {
 			t.Errorf("the refused write created the row: err = %v", err)
 		}
 	})
 
 	t.Run("first write creates at version 0", func(t *testing.T) {
-		got, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		got, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID: f.tenant, Ceiling: ceiling("100"),
 		})
 		if err != nil {
@@ -52,10 +53,10 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 	})
 
 	t.Run("creating twice at version 0 is a conflict", func(t *testing.T) {
-		_, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		_, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID: f.tenant, Ceiling: ceiling("999"),
 		})
-		if !errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
+		if !errors.Is(err, meter.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch — 0 asserts the row does not exist", err)
 		}
 		after, _ := f.usage.GetTenantBudget(ctx, f.tenant)
@@ -69,7 +70,7 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		got, err := f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		got, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID: f.tenant, Ceiling: ceiling("200"), ExpectedVersion: cur.ResourceVersion,
 		})
 		if err != nil {
@@ -89,12 +90,12 @@ func TestTenantBudgetSetOCC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
-		_, err = f.usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		_, err = f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID:        f.tenant,
 			Ceiling:         ceiling("400"),
 			ExpectedVersion: cur.ResourceVersion - 1, // what a concurrent writer held
 		})
-		if !errors.Is(err, limes.ErrTenantBudgetVersionMismatch) {
+		if !errors.Is(err, meter.ErrTenantBudgetVersionMismatch) {
 			t.Fatalf("err = %v, want ErrTenantBudgetVersionMismatch", err)
 		}
 		after, _ := f.usage.GetTenantBudget(ctx, f.tenant)

@@ -109,7 +109,10 @@ message CapabilityPrincipal {
   string agent_type = 10;
   string agent_version = 11;
   string run_id = 12;
-  string parent_agent_id = 13;
+  // parent_run_id is the run_id of the agent a delegated agent capability
+  // was delegated from. The server sets it on Delegate; a request naming
+  // another run is refused.
+  string parent_run_id = 13;
   string model = 14;
   string mcp_client = 15;
 }
@@ -120,8 +123,9 @@ message CapabilityPrincipal {
 // unlimited. Issue refuses caveats that set neither; Delegate reads an unset
 // ceiling as the parent's own.
 message CapabilityCaveats {
-  // ops is the set of authorised operations (get / put / list / delete /
-  // presign / tag / search / embed / share / manage). Required.
+  // ops is the set of authorised operations: get / put / list / delete /
+  // share / manage, and the data plane's own object:presign and object:tag.
+  // Required.
   repeated string ops = 1 [(buf.validate.field).repeated.min_items = 1];
 
   repeated string resource_prefixes = 2;
@@ -159,8 +163,20 @@ message CapabilityCaveats {
       message: "an amount is not negative, and its nanos are 0 to 999999999"
       expression: "this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999"
     }];
-    // unlimited_budget sets no limit; an empty currency_code is USD.
+    // unlimited_budget sets no limit; an empty currency_code is the
+    // parent's unit on Delegate and the platform's currency on Issue.
     UnlimitedBudget unlimited_budget = 14;
+  }
+  // copy_ceiling is how many Biscuit copies of the capability, and of every
+  // capability delegated from it, set limits of their own and are counted.
+  // Unset is unlimited_copies on Issue and the parent's ceiling on Delegate;
+  // the server counts at most its own bound per capability either way.
+  oneof copy_ceiling {
+    // max_copies is the limit; 0 allows no copy with limits of its own.
+    int64 max_copies = 15 [(buf.validate.field).int64.gte = 0];
+    // unlimited_copies lifts the limit to the server's bound. Only true is
+    // meaningful.
+    bool unlimited_copies = 16 [(buf.validate.field).bool.const = true];
   }
 }
 
@@ -177,7 +193,9 @@ message Capability {
   google.protobuf.Timestamp not_before = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp expires_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
   string parent_id = 9;
-  int64 generation = 10;
+  // generation, which nothing read.
+  reserved 10;
+  reserved "generation";
   // confirmation_jkt binds the capability to a key (RFC 9449 DPoP): the
   // base64url SHA-256 JWK thumbprint (RFC 7638) of the public key whose
   // holder alone may present it. Every request must then carry a DPoP
@@ -209,8 +227,9 @@ message CapabilityServiceIssueResponse {
   // biscuit is the same capability as a Biscuit v3 token, which its holder
   // can narrow offline — fewer operations, resources or planes, an earlier
   // expiry, a key binding — with no call to the issuer. Present it like
-  // token. Empty when the server does not issue Biscuits. Returned once,
-  // never persisted.
+  // token. Empty when the server does not issue Biscuits, and for a
+  // capability without the share operation — a Biscuit is handed on offline
+  // — a key-bound one or one not valid yet. Returned once, never persisted.
   string biscuit = 3 [debug_redact = true];
 }
 

@@ -46,7 +46,7 @@ import {
 
 import { ToggleRow } from "./_form-fields";
 import { LimitInput } from "@/components/ui/LimitInput";
-import { requestCeiling } from "./_ceilings";
+import { copyCeiling, requestCeiling, wholeNumber } from "./_ceilings";
 import { budgetCeiling } from "@/lib/format/budgetCeiling";
 import {
   TTL_OPTIONS,
@@ -105,6 +105,8 @@ export function IssueCapabilityDialog({
   const [issueMaxRequests, setIssueMaxRequests] = useState("");
   const [issueMaxRequestsUnlimited, setIssueMaxRequestsUnlimited] =
     useState(true);
+  const [issueMaxCopies, setIssueMaxCopies] = useState("");
+  const [issueMaxCopiesUnlimited, setIssueMaxCopiesUnlimited] = useState(true);
   const [issueMaxBudget, setIssueMaxBudget] = useState("");
   const [issueMaxBudgetUnlimited, setIssueMaxBudgetUnlimited] = useState(true);
   // The unit the operator chose, or null for the platform's currency
@@ -132,6 +134,8 @@ export function IssueCapabilityDialog({
     setIssueSourceCidr([]);
     setIssueMaxRequests("");
     setIssueMaxRequestsUnlimited(true);
+    setIssueMaxCopies("");
+    setIssueMaxCopiesUnlimited(true);
     setIssueMaxBudget("");
     setIssueMaxBudgetUnlimited(true);
     setIssueUnitCode(null);
@@ -155,9 +159,8 @@ export function IssueCapabilityDialog({
   // Unlimited is its own value on the wire; 0 is a limit that allows none.
   // With Unlimited off the operator must have entered a whole number, held
   // otherwise, so the dialog never sends a limit nobody typed.
-  const maxRequests = /^\d+$/.test(issueMaxRequests.trim())
-    ? BigInt(issueMaxRequests.trim())
-    : null;
+  const maxRequests = wholeNumber(issueMaxRequests);
+  const maxCopies = wholeNumber(issueMaxCopies);
   // Parsed straight to Money, never through a float: "0.1" is 100000000
   // nanos.
   const maxBudget = moneyFromDecimal(issueMaxBudget, sentUnit);
@@ -166,6 +169,10 @@ export function IssueCapabilityDialog({
     issueMaxRequests !== "" &&
     maxRequests === null
       ? "A whole number (0 allows none), or Unlimited."
+      : null;
+  const maxCopiesError =
+    !issueMaxCopiesUnlimited && issueMaxCopies !== "" && maxCopies === null
+      ? "A whole number (0 allows no copy with limits of its own), or Unlimited."
       : null;
   const maxBudgetError =
     !issueMaxBudgetUnlimited && issueMaxBudget !== "" && maxBudget === null
@@ -186,7 +193,10 @@ export function IssueCapabilityDialog({
             : !issueMaxBudgetUnlimited &&
                 (maxBudgetError !== null || issueMaxBudget === "")
               ? "Set max budget, or make it Unlimited."
-              : null;
+              : !issueMaxCopiesUnlimited &&
+                  (maxCopiesError !== null || issueMaxCopies === "")
+                ? "Set max Biscuit copies, or make it Unlimited."
+                : null;
 
   const handleIssue = async () => {
     const ttlSeconds = TTL_OPTIONS.find((o) => o.value === issueTtl)?.seconds;
@@ -212,6 +222,10 @@ export function IssueCapabilityDialog({
             issueMaxBudgetUnlimited,
             maxBudget ?? create(MoneySchema, { currencyCode: sentUnit }),
             sentUnit,
+          ),
+          copyCeiling: copyCeiling(
+            issueMaxCopiesUnlimited,
+            maxCopies ?? BigInt(0),
           ),
           allowTaintedRead: false,
           idempotencyKeyRequired: false,
@@ -471,6 +485,24 @@ export function IssueCapabilityDialog({
                 value={issueUnitCode ?? platformCurrency}
                 placeholder="Platform currency"
                 onChange={setIssueUnitCode}
+              />
+            )}
+          </FormField>
+        </FormRow>
+        <FormRow>
+          <FormField
+            label="Max Biscuit copies"
+            error={maxCopiesError}
+            hint="Copies whose holders set limits of their own, counted with those of every capability delegated from this one. A Biscuit is issued only with the share op."
+          >
+            {(control) => (
+              <LimitInput
+                {...control}
+                value={issueMaxCopies}
+                onChange={setIssueMaxCopies}
+                unlimited={issueMaxCopiesUnlimited}
+                onUnlimitedChange={setIssueMaxCopiesUnlimited}
+                placeholder="e.g. 10"
               />
             )}
           </FormField>

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // smallPoolConns is a pool smaller than the burst of charges below.
@@ -35,7 +36,7 @@ func TestRefusedChargesDoNotDrainThePool(t *testing.T) {
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
 	records := newCapStore(t, admin)
 	c := mkCap(tenant, "agent:burst", time.Now().Add(time.Hour))
-	c.Caveats.Budget = limes.BudgetCeiling{}
+	c.Caveats.Budget = limes.BudgetCeiling{UnitCode: testUnit}
 	if err := records.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +60,7 @@ func TestRefusedChargesDoNotDrainThePool(t *testing.T) {
 	errs := make(chan error, refusedBurst)
 	for range refusedBurst {
 		wg.Go(func() {
-			_, err := usage.Charge(burstCtx, limes.ChargeRequest{
+			_, err := usage.Charge(burstCtx, meter.ChargeRequest{
 				Subject: subject, Amount: limes.NanosPerUnit, ExternalRef: uuid.NewString(),
 			}, nil)
 			errs <- err

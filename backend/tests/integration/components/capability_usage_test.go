@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
@@ -48,7 +49,7 @@ type usageFixture struct {
 // tenant's, an ancestor's or a copy's can bind.
 func unlimitedCeilings(c *limes.Caveats) {
 	c.Requests = limes.RequestCeiling{Unlimited: true}
-	c.Budget = limes.BudgetCeiling{Unlimited: true}
+	c.Budget = limes.BudgetCeiling{Unlimited: true, UnitCode: testUnit}
 }
 
 // storedSubject is the meter subject of a capability on record.
@@ -132,7 +133,7 @@ func TestChargeFanOutFailureRollsBackEverything(t *testing.T) {
 	ctx, f := newUsageFixture(t)
 
 	boom := errors.New("outbox unavailable")
-	_, err := f.usage.Charge(ctx, limes.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("3"), Op: "op", Actor: "actor"}, func(context.Context, limes.Charged[pgx.Tx]) error { return boom })
+	_, err := f.usage.Charge(ctx, meter.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("3"), Op: "op", Actor: "actor"}, func(context.Context, meter.Charged) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("want the fan-out error, got %v", err)
 	}
@@ -160,8 +161,12 @@ func TestChargeFanOutRunsOnTheChargeTransaction(t *testing.T) {
 
 	const countCounters = `SELECT count(*) FROM limes.usage WHERE capability_id = $1`
 	var onTx, elsewhere int
-	_, err := f.usage.Charge(ctx, limes.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("4"), Op: "op", Actor: "actor"}, func(c context.Context, ch limes.Charged[pgx.Tx]) error {
-		if err := ch.Tx.QueryRow(c, countCounters, f.capID).Scan(&onTx); err != nil {
+	_, err := f.usage.Charge(ctx, meter.ChargeRequest{Subject: f.subject, Amount: limes.MustParseAmount("4"), Op: "op", Actor: "actor"}, func(c context.Context, _ meter.Charged) error {
+		tx, ok := pgstore.TxFrom(c)
+		if !ok {
+			return errors.New("onCharged ran with no transaction in its context")
+		}
+		if err := tx.QueryRow(c, countCounters, f.capID).Scan(&onTx); err != nil {
 			return err
 		}
 		return f.pool.QueryRow(c, countCounters, f.capID).Scan(&elsewhere)
@@ -182,9 +187,10 @@ const (
 )
 
 // TestTenantBudgetIsFirstWrittenInThePlatformCurrency pins WithDefaultUnit: a
-// first budget that names no unit is written in the platform's currency rather
-// than limes's default, a named unit is kept, and a later write that names
-// none keeps whichever the budget has — a cap change never re-denominates it.
+// first budget that names no unit is written in the platform's currency, a
+// named unit is kept, and a later write that names none keeps whichever the
+// budget has — a cap change never re-denominates it. With no platform currency
+// a budget in no unit is refused: limes assumes none.
 func TestTenantBudgetIsFirstWrittenInThePlatformCurrency(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -199,23 +205,22 @@ func TestTenantBudgetIsFirstWrittenInThePlatformCurrency(t *testing.T) {
 	}{
 		"no unit, a platform currency": {[]capstore.Option{capstore.WithDefaultUnit(platformCurrency)}, "", platformCurrency},
 		"a named unit":                 {[]capstore.Option{capstore.WithDefaultUnit(platformCurrency)}, namedBudgetUnit, namedBudgetUnit},
-		"no unit, no currency":         {nil, "", limes.DefaultUnitCode},
 	} {
 		t.Run(name, func(t *testing.T) {
 			usage := newUsageStore(t, pool, tc.opts...)
 			tenant, _ := mkTenant(t, ctx, pool, "shared")
 
-			first, err := usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
-				TenantID: tenant, Ceiling: ceiling, UnitCode: tc.firstUnit,
+			first, err := usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
+				TenantID: tenant, Ceiling: limes.BudgetCeiling{Max: ceiling.Max, UnitCode: tc.firstUnit},
 			})
 			if err != nil {
 				t.Fatalf("first set: %v", err)
 			}
-			if first.UnitCode != tc.want {
-				t.Errorf("first budget in %q, want %q", first.UnitCode, tc.want)
+			if first.Ceiling.UnitCode != tc.want {
+				t.Errorf("first budget in %q, want %q", first.Ceiling.UnitCode, tc.want)
 			}
 
-			if _, err := usage.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+			if _, err := usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 				TenantID: tenant, Ceiling: raised, ExpectedVersion: first.ResourceVersion,
 			}); err != nil {
 				t.Fatalf("later set: %v", err)
@@ -224,12 +229,18 @@ func TestTenantBudgetIsFirstWrittenInThePlatformCurrency(t *testing.T) {
 			if err != nil {
 				t.Fatalf("get: %v", err)
 			}
-			if got.Ceiling != raised || got.UnitCode != tc.want {
-				t.Errorf("after a cap change with no unit: %s in %q, want %s in %q",
-					got.Ceiling, got.UnitCode, raised, tc.want)
+			if got.Ceiling.Max != raised.Max || got.Ceiling.UnitCode != tc.want {
+				t.Errorf("after a cap change with no unit: %s, want %s in %q", got.Ceiling, raised, tc.want)
 			}
 		})
 	}
+	t.Run("no unit, no currency", func(t *testing.T) {
+		usage := newUsageStore(t, pool)
+		tenant, _ := mkTenant(t, ctx, pool, "shared")
+		if _, err := usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{TenantID: tenant, Ceiling: ceiling}); !errors.Is(err, limes.ErrInvalidRequest) {
+			t.Errorf("a budget in no unit = %v, want ErrInvalidRequest", err)
+		}
+	})
 }
 
 // Counters that hold only requests are in the capability's unit: the admin
@@ -238,7 +249,7 @@ func TestTenantBudgetIsFirstWrittenInThePlatformCurrency(t *testing.T) {
 func TestRequestsOnlyUsageIsInTheCapabilitysUnit(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	if _, err := f.usage.Bump(ctx, limes.BumpRequest{Subject: f.subject}); err != nil {
+	if _, err := f.usage.Bump(ctx, meter.BumpRequest{Subject: f.subject}); err != nil {
 		t.Fatalf("bump: %v", err)
 	}
 	u, err := f.usage.GetUsage(ctx, f.capID)

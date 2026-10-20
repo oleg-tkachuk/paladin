@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -436,8 +437,8 @@ func (r *TenantRepo) Purge(ctx context.Context, args tenanth.PurgeTenantArgs) er
 	}
 	ctx = auth.WithActingTenant(ctx, args.TenantID)
 	_, err = records.EraseTenant(ctx, limes.EraseTenantRequest{TenantID: args.TenantID, Note: purgeNote, Actor: args.Actor},
-		func(ctx context.Context, tx pgx.Tx) error {
-			return r.hardDeleteWith(ctx, r.q.WithTx(tx), args.TenantID, 0)
+		func(ctx context.Context, e pgstore.Erased) error {
+			return r.hardDeleteWith(ctx, r.q.WithTx(e.Tx), args.TenantID, 0)
 		})
 	return err
 }

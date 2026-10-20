@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
@@ -29,10 +30,10 @@ const daysPerWeek = 7
 // ledgerBuckets is the ledger's bucket each granularity is read in, cut at
 // UTC boundaries; a week starts on Monday, as PostgreSQL's date_trunc('week')
 // cuts it.
-var ledgerBuckets = map[string]limes.ChargeBucket{
-	granularityHour: limes.ChargeBucketHour,
-	granularityDay:  limes.ChargeBucketDay,
-	granularityWeek: limes.ChargeBucketWeek,
+var ledgerBuckets = map[string]meter.ChargeBucket{
+	granularityHour: meter.ChargeBucketHour,
+	granularityDay:  meter.ChargeBucketDay,
+	granularityWeek: meter.ChargeBucketWeek,
 }
 
 // granularitySteps is each granularity's bucket width.
@@ -47,7 +48,7 @@ const ledgerPage = limes.MaxListLimit
 
 // sumCharges reads req's sums page by page, handing each to keep until keep
 // returns false or the pages end.
-func (h *Handler) sumCharges(ctx context.Context, req limes.SumChargesRequest, keep func(limes.ChargeSum) bool) error {
+func (h *Handler) sumCharges(ctx context.Context, req meter.SumChargesRequest, keep func(meter.ChargeSum) bool) error {
 	req.Limit = ledgerPage
 	for {
 		page, err := h.ledger.SumCharges(ctx, req)
@@ -67,13 +68,13 @@ func (h *Handler) sumCharges(ctx context.Context, req limes.SumChargesRequest, k
 }
 
 // net is what a group's charges took less what was refunded from them.
-func net(s limes.ChargeSum) limes.Nanos { return s.Charged - s.Refunded }
+func net(s meter.ChargeSum) limes.Nanos { return s.Charged - s.Refunded }
 
 // dominant is the sum of the unit with the most charges among sums, which
 // hold one unit each and no other grouping; ties go to the lower unit code,
 // so the answer does not depend on the order the ledger returns them in.
 // ok is false when sums is empty.
-func dominant(sums []limes.ChargeSum) (best limes.ChargeSum, ok bool) {
+func dominant(sums []meter.ChargeSum) (best meter.ChargeSum, ok bool) {
 	for _, s := range sums {
 		if !ok || s.Charges > best.Charges || (s.Charges == best.Charges && s.UnitCode < best.UnitCode) {
 			best, ok = s, true
@@ -84,8 +85,8 @@ func dominant(sums []limes.ChargeSum) (best limes.ChargeSum, ok bool) {
 
 // series is the time series of the unit with the most charges among sums —
 // the ledger's sums by bucket and unit — in time order.
-func series(sums []limes.ChargeSum) (string, []TimeBucket) {
-	byUnit := map[string]limes.ChargeSum{}
+func series(sums []meter.ChargeSum) (string, []TimeBucket) {
+	byUnit := map[string]meter.ChargeSum{}
 	for _, s := range sums {
 		u := byUnit[s.UnitCode]
 		u.UnitCode = s.UnitCode

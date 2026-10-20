@@ -15,6 +15,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
@@ -52,13 +53,13 @@ func newCopyMinter(t *testing.T, records *pgstore.Store) *copyMinter {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: records, TrustedIssuers: []string{copyMinterIssuer},
-		AcceptBiscuit: true, BiscuitRevocations: records, MeterCopies: true,
+		Biscuit: &limes.BiscuitConfig{Revocations: records, MeterCopies: true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -71,14 +72,15 @@ func newCopyMinter(t *testing.T, records *pgstore.Store) *copyMinter {
 func (m *copyMinter) issue(t *testing.T, ctx context.Context, tenant uuid.UUID) limes.VerifiedCapability {
 	t.Helper()
 	res, err := m.issuer.Issue(ctx, limes.IssueRequest{
-		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: tenant, Subject: "agent:copies"},
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent:copies"},
 		IssuedBy: seedIssuer,
 		Audience: []string{copyMinterAudience},
 		Caveats: limes.Caveats{
-			Ops:      []limes.Op{limes.OpGet},
+			// A Biscuit is sealed only for a capability that may be shared.
+			Ops:      []limes.Op{limes.OpGet, limes.OpShare},
 			Requests: lineageRequests,
 			Budget:   lineageRootBudget,
-			UnitCode: "USD",
+			Copies:   limes.CopyQuota{Unlimited: true},
 		},
 		TTL: copyMinterTTL,
 	})
@@ -151,7 +153,7 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	bump := func(s limes.MeterSubject) error {
-		_, err := f.usage.Bump(ledgerCtx, limes.BumpRequest{Subject: s})
+		_, err := f.usage.Bump(ledgerCtx, meter.BumpRequest{Subject: s})
 		return err
 	}
 	one := m.copyOf(t, ctx, root, limes.Attenuation{Requests: copyRequests(1)})
@@ -234,13 +236,13 @@ func TestCopyUsageIsReadBackPerTenant(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	c := m.copyOf(t, ctx, root, limes.Attenuation{Requests: copyRequests(lineageRequests.Max), Budget: copyBudget("2")})
-	if _, err := f.usage.Bump(ledgerCtx, limes.BumpRequest{Subject: c}); err != nil {
+	if _, err := f.usage.Bump(ledgerCtx, meter.BumpRequest{Subject: c}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.usage.Charge(ledgerCtx, limes.ChargeRequest{Subject: c, Amount: limes.MustParseAmount("0.5")}, nil); err != nil {
+	if _, err := f.usage.Charge(ledgerCtx, meter.ChargeRequest{Subject: c, Amount: limes.MustParseAmount("0.5")}, nil); err != nil {
 		t.Fatal(err)
 	}
-	req := limes.CopyUsageRequest{RevocationIDs: [][]byte{copyID(c), []byte("never")}}
+	req := meter.CopyUsageRequest{CapabilityID: root.Capability().ID, RevocationIDs: [][]byte{copyID(c), []byte("never")}}
 	res, err := f.usage.CopyUsage(ledgerCtx, req)
 	if err != nil {
 		t.Fatal(err)

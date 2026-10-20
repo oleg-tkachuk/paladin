@@ -346,11 +346,11 @@ const (
 	roomyBudget      = 10 * chargePerRequest
 )
 
-func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget limes.Nanos) (context.Context, uuid.UUID, *memstore.UsageStore[pgx.Tx]) {
+func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget limes.Nanos) (context.Context, uuid.UUID, *memstore.UsageStore) {
 	t.Helper()
 	m := captest.NewMinter(t)
 	verified, _ := m.Mint(t, limes.Capability{
-		Subject: limes.Principal{TenantID: tenantID, Type: limes.PrincipalAgent, Subject: "agent:a"},
+		Subject: limes.Principal{TenantID: tenantID, Type: limes.PrincipalTypeAgent, Subject: "agent:a"},
 		// Ops must name put or the gate refuses before the charge is
 		// reached; no prefixes means every URI is in scope.
 		Caveats: limes.Caveats{
@@ -358,7 +358,7 @@ func budgetedCtx(t *testing.T, tenantID uuid.UUID, maxBudget limes.Nanos) (conte
 			Budget: limes.BudgetCeiling{Max: maxBudget},
 		},
 	})
-	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig[pgx.Tx]{Records: m.Store})
+	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig{Records: m.Store})
 	if err != nil {
 		t.Fatal(err)
 	}

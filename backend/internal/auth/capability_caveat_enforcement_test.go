@@ -21,6 +21,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 )
@@ -32,9 +33,9 @@ type erroringUsage struct {
 	err error
 }
 
-func (e erroringUsage) Bump(ctx context.Context, req limes.BumpRequest) (limes.BumpReceipt, error) {
+func (e erroringUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
 	if e.err != nil {
-		return limes.BumpReceipt{}, e.err
+		return meter.BumpReceipt{}, e.err
 	}
 	return e.usageStore.Bump(ctx, req)
 }
@@ -123,7 +124,7 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 				t.Fatalf("call %d refused under an unlimited ceiling: %v", n, err)
 			}
 		}
-		if _, err := usage.GetUsage(context.Background(), c.Capability().ID); !errors.Is(err, limes.ErrUsageNotFound) {
+		if _, err := usage.GetUsage(context.Background(), c.Capability().ID); !errors.Is(err, meter.ErrUsageNotFound) {
 			t.Errorf("an unlimited capability was counted (err = %v); the bump must not run", err)
 		}
 	})
@@ -135,7 +136,7 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		i := &capabilityInterceptor{usage: usage}
 		c, _ := m.MintExact(t, limes.Capability{Caveats: limes.Caveats{
 			Requests: limes.RequestCeiling{},
-			Budget:   limes.BudgetCeiling{Unlimited: true},
+			Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: captest.Unit},
 		}})
 		err := i.enforceCaveats(context.Background(), c)
 		if connect.CodeOf(err) != connect.CodeResourceExhausted || !errors.Is(err, limes.ErrRequestLimitExceeded) {

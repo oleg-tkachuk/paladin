@@ -26,14 +26,14 @@ PRINCIPAL_KIND_AGENT: PrincipalKind
 PRINCIPAL_KIND_SERVICE: PrincipalKind
 
 class CapabilityPrincipal(_message.Message):
-    __slots__ = ("kind", "tenant_id", "subject", "agent_type", "agent_version", "run_id", "parent_agent_id", "model", "mcp_client")
+    __slots__ = ("kind", "tenant_id", "subject", "agent_type", "agent_version", "run_id", "parent_run_id", "model", "mcp_client")
     KIND_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     AGENT_TYPE_FIELD_NUMBER: _ClassVar[int]
     AGENT_VERSION_FIELD_NUMBER: _ClassVar[int]
     RUN_ID_FIELD_NUMBER: _ClassVar[int]
-    PARENT_AGENT_ID_FIELD_NUMBER: _ClassVar[int]
+    PARENT_RUN_ID_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     MCP_CLIENT_FIELD_NUMBER: _ClassVar[int]
     kind: PrincipalKind
@@ -42,13 +42,13 @@ class CapabilityPrincipal(_message.Message):
     agent_type: str
     agent_version: str
     run_id: str
-    parent_agent_id: str
+    parent_run_id: str
     model: str
     mcp_client: str
-    def __init__(self, kind: _Optional[_Union[PrincipalKind, str]] = ..., tenant_id: _Optional[str] = ..., subject: _Optional[str] = ..., agent_type: _Optional[str] = ..., agent_version: _Optional[str] = ..., run_id: _Optional[str] = ..., parent_agent_id: _Optional[str] = ..., model: _Optional[str] = ..., mcp_client: _Optional[str] = ...) -> None: ...
+    def __init__(self, kind: _Optional[_Union[PrincipalKind, str]] = ..., tenant_id: _Optional[str] = ..., subject: _Optional[str] = ..., agent_type: _Optional[str] = ..., agent_version: _Optional[str] = ..., run_id: _Optional[str] = ..., parent_run_id: _Optional[str] = ..., model: _Optional[str] = ..., mcp_client: _Optional[str] = ...) -> None: ...
 
 class CapabilityCaveats(_message.Message):
-    __slots__ = ("ops", "resource_prefixes", "resource_uris", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "max_requests", "unlimited_requests", "max_budget", "unlimited_budget")
+    __slots__ = ("ops", "resource_prefixes", "resource_uris", "allow_tainted_read", "idempotency_key_required", "source_ip_cidr", "max_requests", "unlimited_requests", "max_budget", "unlimited_budget", "max_copies", "unlimited_copies")
     OPS_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_PREFIXES_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_URIS_FIELD_NUMBER: _ClassVar[int]
@@ -59,6 +59,8 @@ class CapabilityCaveats(_message.Message):
     UNLIMITED_REQUESTS_FIELD_NUMBER: _ClassVar[int]
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
     UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
+    MAX_COPIES_FIELD_NUMBER: _ClassVar[int]
+    UNLIMITED_COPIES_FIELD_NUMBER: _ClassVar[int]
     ops: _containers.RepeatedScalarFieldContainer[str]
     resource_prefixes: _containers.RepeatedScalarFieldContainer[str]
     resource_uris: _containers.RepeatedScalarFieldContainer[str]
@@ -69,10 +71,12 @@ class CapabilityCaveats(_message.Message):
     unlimited_requests: bool
     max_budget: _money_pb2.Money
     unlimited_budget: _types_pb2.UnlimitedBudget
-    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ...) -> None: ...
+    max_copies: int
+    unlimited_copies: bool
+    def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., max_copies: _Optional[int] = ..., unlimited_copies: _Optional[bool] = ...) -> None: ...
 
 class Capability(_message.Message):
-    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "generation", "confirmation_jkt")
+    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "confirmation_jkt")
     ID_FIELD_NUMBER: _ClassVar[int]
     ISSUER_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -82,7 +86,6 @@ class Capability(_message.Message):
     NOT_BEFORE_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     PARENT_ID_FIELD_NUMBER: _ClassVar[int]
-    GENERATION_FIELD_NUMBER: _ClassVar[int]
     CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
     id: str
     issuer: str
@@ -93,9 +96,8 @@ class Capability(_message.Message):
     not_before: _timestamp_pb2.Timestamp
     expires_at: _timestamp_pb2.Timestamp
     parent_id: str
-    generation: int
     confirmation_jkt: str
-    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., generation: _Optional[int] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceIssueRequest(_message.Message):
     __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt")

@@ -1,0 +1,8 @@
+{
+  "_comment": "The operations a capability names in its caveats, which both SDKs, the server and the console are held to. limes defines the shared ones; the data plane's own are namespaced, as limes requires of a consumer's.",
+  "limes": ["get", "put", "list", "delete", "share", "manage"],
+  "data_plane": {
+    "object_presign": "object:presign",
+    "object_tag": "object:tag"
+  }
+}

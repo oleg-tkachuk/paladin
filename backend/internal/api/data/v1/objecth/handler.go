@@ -1492,7 +1492,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	// Download issues a presigned URL — capability needs OpPresign and
 	// OpGet (the underlying op the URL grants). Two assertions, one per
 	// caveat axis; either failure short-circuits.
-	if err := auth.AssertCapabilityOp(ctx, limes.OpPresign, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, auth.OpPresign, objectURI); err != nil {
 		return nil, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {

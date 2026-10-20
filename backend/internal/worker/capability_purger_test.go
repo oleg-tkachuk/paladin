@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
@@ -163,18 +164,18 @@ func TestCapabilityPurgerReportsAFailedRecordPurge(t *testing.T) {
 // sweepingUsage answers the two sweeps the purger makes; any other method
 // panics through the nil embedded interface.
 type sweepingUsage struct {
-	limes.UsageStore[pgx.Tx]
+	meter.UsageStore
 	release, orphans batches
 }
 
-func (u *sweepingUsage) ReleaseExpired(context.Context, limes.ReleaseExpiredRequest) (limes.ReleaseExpiredResult, error) {
+func (u *sweepingUsage) ReleaseExpired(context.Context, meter.ReleaseExpiredRequest) (meter.ReleaseExpiredResult, error) {
 	n, err := u.release.next()
-	return limes.ReleaseExpiredResult{Released: n}, err
+	return meter.ReleaseExpiredResult{Released: n}, err
 }
 
-func (u *sweepingUsage) PurgeOrphans(context.Context, limes.PurgeOrphansRequest) (limes.PurgeOrphansResult, error) {
+func (u *sweepingUsage) PurgeOrphans(context.Context, meter.PurgeOrphansRequest) (meter.PurgeOrphansResult, error) {
 	n, err := u.orphans.next()
-	return limes.PurgeOrphansResult{Purged: n}, err
+	return meter.PurgeOrphansResult{Purged: n}, err
 }
 
 // Both usage sweeps loop while a batch fills the limit and stop on the first
@@ -257,8 +258,11 @@ type settingsTx struct {
 	set map[string]string
 }
 
+// Exec records each name and value pair of a set_config statement.
 func (s *settingsTx) Exec(_ context.Context, _ string, args ...any) (pgconn.CommandTag, error) {
-	s.set[args[0].(string)] = args[1].(string)
+	for i := 0; i+1 < len(args); i += 2 {
+		s.set[args[i].(string)] = args[i+1].(string)
+	}
 	return pgconn.CommandTag{}, nil
 }
 

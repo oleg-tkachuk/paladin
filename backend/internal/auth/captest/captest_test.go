@@ -12,7 +12,7 @@ func TestMintFillsTheDefaults(t *testing.T) {
 	v := Verified(t, limes.Capability{Caveats: limes.Caveats{Ops: []limes.Op{limes.OpPut}}})
 	c := v.Capability()
 	switch {
-	case c.Subject.TenantID == [16]byte{}, c.Subject.Type != limes.PrincipalAgent, c.Subject.Subject != Subject:
+	case c.Subject.TenantID == [16]byte{}, c.Subject.Type != limes.PrincipalTypeAgent, c.Subject.Subject != Subject:
 		t.Errorf("subject = %+v", c.Subject)
 	case len(c.Audience) != 1 || c.Audience[0] != Audience:
 		t.Errorf("audience = %v", c.Audience)
@@ -29,7 +29,7 @@ func TestMintFillsTheDefaults(t *testing.T) {
 // MintExact keeps a ceiling of nothing, which Mint would lift.
 func TestMintExactKeepsAZeroCeiling(t *testing.T) {
 	v, _ := NewMinter(t).MintExact(t, limes.Capability{Caveats: limes.Caveats{
-		Requests: limes.RequestCeiling{}, Budget: limes.BudgetCeiling{Unlimited: true},
+		Requests: limes.RequestCeiling{}, Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: Unit},
 	}})
 	if got := v.Capability().Caveats.Requests; got != (limes.RequestCeiling{}) {
 		t.Errorf("requests = %s, want 0", got)

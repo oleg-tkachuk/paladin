@@ -39,6 +39,28 @@ func requestCeilingOf(c *adminv1.CapabilityCaveats) (limes.RequestCeiling, bool)
 	}
 }
 
+// copyQuotaOf is the quota of Biscuit copies c sets, and false when it sets
+// none.
+func copyQuotaOf(c *adminv1.CapabilityCaveats) (limes.CopyQuota, bool) {
+	switch q := c.GetCopyCeiling().(type) {
+	case *adminv1.CapabilityCaveats_MaxCopies:
+		return limes.CopyQuota{Max: q.MaxCopies}, true
+	case *adminv1.CapabilityCaveats_UnlimitedCopies:
+		return limes.CopyQuota{Unlimited: true}, true
+	default:
+		return limes.CopyQuota{}, false
+	}
+}
+
+// setCopyQuota writes a quota of Biscuit copies onto c.
+func setCopyQuota(c *adminv1.CapabilityCaveats, q limes.CopyQuota) {
+	if q.Unlimited {
+		c.CopyCeiling = &adminv1.CapabilityCaveats_UnlimitedCopies{UnlimitedCopies: true}
+		return
+	}
+	c.CopyCeiling = &adminv1.CapabilityCaveats_MaxCopies{MaxCopies: q.Max}
+}
+
 // budgetCeilingOf is the budget ceiling c sets, and false when it sets none.
 // A budget that names no currency comes back with an empty unit; the caller
 // decides what it means (protoToCaveats).

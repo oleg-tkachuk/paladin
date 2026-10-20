@@ -49,10 +49,10 @@ func TestCapabilityKeyGeneratedWithoutPath(t *testing.T) {
 	if !generated {
 		t.Error("generated = false for a key made with no signing_key_path")
 	}
-	if len(key.Private) != ed25519.PrivateKeySize || len(key.Public) != ed25519.PublicKeySize {
-		t.Fatalf("key sizes = %d/%d, want an Ed25519 pair", len(key.Private), len(key.Public))
+	if key.Private.IsZero() || len(key.Public()) != ed25519.PublicKeySize {
+		t.Fatalf("key sealed = %v, public size = %d, want an Ed25519 pair", !key.Private.IsZero(), len(key.Public()))
 	}
-	if want := jwks.KeyID(key.Public); key.KeyID != want {
+	if want := jwks.KeyID(key.Public()); key.KeyID != want {
 		t.Errorf("KeyID = %q, want the derived %q", key.KeyID, want)
 	}
 }
@@ -91,7 +91,7 @@ func TestCapabilityKeyLoadedFromPath(t *testing.T) {
 			if generated {
 				t.Error("generated = true for a key loaded from signing_key_path")
 			}
-			if !key.Public.Equal(pub) {
+			if !key.Public().Equal(pub) {
 				t.Error("the loaded key is not the one at signing_key_path")
 			}
 			if key.KeyID != tc.wantKID {
@@ -109,7 +109,7 @@ func TestCapabilityKeyRefusesAnUnreadablePath(t *testing.T) {
 	if err == nil {
 		t.Fatal("a missing key file was accepted")
 	}
-	if generated || key.Private != nil {
-		t.Errorf("generated = %v, key set = %v after a failed load", generated, key.Private != nil)
+	if generated || !key.Private.IsZero() {
+		t.Errorf("generated = %v, key set = %v after a failed load", generated, !key.Private.IsZero())
 	}
 }
