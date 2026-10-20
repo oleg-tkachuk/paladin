@@ -1,5 +1,6 @@
 "use client";
 
+import { IconChip, IconTone } from "@/components/ui/IconChip";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
@@ -60,37 +61,48 @@ type StateKey = ComponentStatus | "unknown";
 
 const META: Record<
   StateKey,
-  { label: string; icon: React.ElementType; color: string; dot: string }
+  {
+    label: string;
+    icon: React.ElementType;
+    color: string;
+    dot: string;
+    tone: IconTone;
+  }
 > = {
   healthy: {
     label: "Healthy",
     icon: CheckCircleIcon,
     color: "text-chart-2",
     dot: "bg-chart-2",
+    tone: IconTone.Success,
   },
   degraded: {
     label: "Degraded",
     icon: ExclamationTriangleIcon,
     color: "text-chart-3",
     dot: "bg-chart-3",
+    tone: IconTone.Warning,
   },
   unhealthy: {
     label: "Unhealthy",
     icon: XCircleIcon,
     color: "text-destructive",
     dot: "bg-destructive",
+    tone: IconTone.Danger,
   },
   disabled: {
     label: "Disabled",
     icon: MinusCircleIcon,
     color: "text-muted-foreground",
     dot: "bg-muted-foreground/40",
+    tone: IconTone.Neutral,
   },
   unknown: {
     label: "Unknown",
     icon: ShieldCheckIcon,
     color: "text-muted-foreground",
     dot: "bg-muted-foreground",
+    tone: IconTone.Neutral,
   },
 };
 
@@ -377,7 +389,6 @@ function tally(components: Component[]): { ok: number; total: number } {
 
 function RoleCard({ snap }: { snap: Snapshot }) {
   const m = META[snap.status];
-  const Icon = m.icon;
   const { ok, total } = tally(snap.components);
   return (
     // gap-0 py-0: the header and the rows carry their own padding, and the
@@ -385,7 +396,7 @@ function RoleCard({ snap }: { snap: Snapshot }) {
     <Card className="flex flex-col gap-0 py-0">
       <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Icon className={cn("size-5 shrink-0", m.color)} />
+          <IconChip icon={m.icon} tone={m.tone} size="md" />
           <CardTitle className="font-mono text-base">{snap.role}</CardTitle>
         </div>
         <div className="flex items-center gap-2">

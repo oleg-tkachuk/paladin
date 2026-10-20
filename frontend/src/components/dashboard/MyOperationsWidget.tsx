@@ -2,6 +2,7 @@
 
 // The signed-in user's own latest operations, as the shell already polls
 // them (ShellContext) — no request of its own.
+import { IconChip } from "@/components/ui/IconChip";
 import Link from "next/link";
 import { QueueListIcon } from "@heroicons/react/24/outline";
 
@@ -26,7 +27,7 @@ export function MyOperationsWidget() {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <QueueListIcon className="size-4 text-muted-foreground" />
+          <IconChip icon={QueueListIcon} />
           My operations
           <Link
             href={SECTION.operations}
