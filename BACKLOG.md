@@ -813,3 +813,37 @@ order they are being taken up.
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
 
+#### Facets and pages for the remaining lists
+
+- **Status:** Aspirational.
+- **Reason:** counted facets (useTableFacets) and pages (useTablePage) came
+  to the lists loaded whole that are visited most: storage backends,
+  tenants, buckets, users and M2M tokens, and the connected applications
+  card takes facets. The rest do not yet. Operations, trash, MCP
+  authorization, configuration and objects keep their single-choice
+  toolbar filter; the capabilities page browses by kind, subject and two
+  server-side flags of its own; the tenant's and the backend's bucket lists
+  show every row. Audit, operations and collections page on the server with
+  Load more, so a count beside an answer would describe only the rows read
+  so far.
+- **Definition of Done:** every list either filters through facets and
+  pages through the shared hooks, or this entry names it and says why not;
+  no page keeps a single-choice filter beside facets; a list paged on the
+  server shows counts the API gives, not counts of what it loaded.
+- **Blockers:** per-answer counts for the server-paged lists, which no List
+  RPC returns today.
+
+#### Facet choices remembered between visits
+
+- **Status:** Deferred (needs an owner decision).
+- **Reason:** Argo CD keeps a list's filters across visits. Here they live
+  in the URL alone: a reload or a shared link keeps them, but a visit from
+  the sidebar opens the list on its initial choice. Remembering them would
+  open a list narrowed by a choice made weeks ago, which reads as rows gone
+  missing, so it was left out until it is asked for.
+- **Definition of Done:** if wanted, a table's choices saved per table in
+  console.tables beside its page size, applied only when the URL names no
+  facet, with the toolbar showing they are on and Clear filters clearing the
+  saved ones too.
+- **Blockers:** the owner's decision.
+
