@@ -135,10 +135,12 @@ func rlsPool(t *testing.T, ctx context.Context, admin *pgxpool.Pool) *pgxpool.Po
 	mustExec(t, ctx, admin, `GRANT EXECUTE ON FUNCTION list_object_prefixes TO `+ident)
 	// What migration 086 grants paladin_app: ListAuditLog reads through it.
 	mustExec(t, ctx, admin, `GRANT EXECUTE ON FUNCTION list_audit_entry_ids TO `+ident)
-	// What migration 076 grants paladin_app: the capabilities, their meter and
-	// the tenant budgets are pgstore's, in the limes schema.
-	mustExec(t, ctx, admin, `GRANT USAGE ON SCHEMA limes TO `+ident)
-	mustExec(t, ctx, admin, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA limes TO `+ident)
+	// The capabilities, their meter and the tenant budgets are pgstore's, in
+	// the limes schema: granted as the migrate step grants paladin_app, by
+	// pgstore itself — its tables and the functions its policies call.
+	if err := postgres.MigrateLimes(ctx, admin.Config().ConnConfig, role); err != nil {
+		t.Fatalf("grant limes to %s: %v", role, err)
+	}
 
 	cfg := admin.Config().Copy()
 	cfg.ConnConfig.User = role

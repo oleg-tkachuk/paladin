@@ -88,10 +88,13 @@ type CapabilityPrincipal struct {
 	TenantId string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	Subject  string                 `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
 	// Optional agent context — populated for kind=PRINCIPAL_KIND_AGENT.
-	AgentType     string `protobuf:"bytes,10,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
-	AgentVersion  string `protobuf:"bytes,11,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
-	RunId         string `protobuf:"bytes,12,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ParentAgentId string `protobuf:"bytes,13,opt,name=parent_agent_id,json=parentAgentId,proto3" json:"parent_agent_id,omitempty"`
+	AgentType    string `protobuf:"bytes,10,opt,name=agent_type,json=agentType,proto3" json:"agent_type,omitempty"`
+	AgentVersion string `protobuf:"bytes,11,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
+	RunId        string `protobuf:"bytes,12,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// parent_run_id is the run_id of the agent a delegated agent capability
+	// was delegated from. The server sets it on Delegate; a request naming
+	// another run is refused.
+	ParentRunId   string `protobuf:"bytes,13,opt,name=parent_run_id,json=parentRunId,proto3" json:"parent_run_id,omitempty"`
 	Model         string `protobuf:"bytes,14,opt,name=model,proto3" json:"model,omitempty"`
 	McpClient     string `protobuf:"bytes,15,opt,name=mcp_client,json=mcpClient,proto3" json:"mcp_client,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -170,9 +173,9 @@ func (x *CapabilityPrincipal) GetRunId() string {
 	return ""
 }
 
-func (x *CapabilityPrincipal) GetParentAgentId() string {
+func (x *CapabilityPrincipal) GetParentRunId() string {
 	if x != nil {
-		return x.ParentAgentId
+		return x.ParentRunId
 	}
 	return ""
 }
@@ -198,8 +201,9 @@ func (x *CapabilityPrincipal) GetMcpClient() string {
 // ceiling as the parent's own.
 type CapabilityCaveats struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// ops is the set of authorised operations (get / put / list / delete /
-	// presign / tag / search / embed / share / manage). Required.
+	// ops is the set of authorised operations: get / put / list / delete /
+	// share / manage, and the data plane's own object:presign and object:tag.
+	// Required.
 	Ops                    []string `protobuf:"bytes,1,rep,name=ops,proto3" json:"ops,omitempty"`
 	ResourcePrefixes       []string `protobuf:"bytes,2,rep,name=resource_prefixes,json=resourcePrefixes,proto3" json:"resource_prefixes,omitempty"`
 	ResourceUris           []string `protobuf:"bytes,3,rep,name=resource_uris,json=resourceUris,proto3" json:"resource_uris,omitempty"`
@@ -223,6 +227,16 @@ type CapabilityCaveats struct {
 	//	*CapabilityCaveats_MaxBudget
 	//	*CapabilityCaveats_UnlimitedBudget
 	BudgetCeiling isCapabilityCaveats_BudgetCeiling `protobuf_oneof:"budget_ceiling"`
+	// copy_ceiling is how many Biscuit copies of the capability, and of every
+	// capability delegated from it, set limits of their own and are counted.
+	// Unset is unlimited_copies on Issue and the parent's ceiling on Delegate;
+	// the server counts at most its own bound per capability either way.
+	//
+	// Types that are valid to be assigned to CopyCeiling:
+	//
+	//	*CapabilityCaveats_MaxCopies
+	//	*CapabilityCaveats_UnlimitedCopies
+	CopyCeiling   isCapabilityCaveats_CopyCeiling `protobuf_oneof:"copy_ceiling"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -349,6 +363,31 @@ func (x *CapabilityCaveats) GetUnlimitedBudget() *UnlimitedBudget {
 	return nil
 }
 
+func (x *CapabilityCaveats) GetCopyCeiling() isCapabilityCaveats_CopyCeiling {
+	if x != nil {
+		return x.CopyCeiling
+	}
+	return nil
+}
+
+func (x *CapabilityCaveats) GetMaxCopies() int64 {
+	if x != nil {
+		if x, ok := x.CopyCeiling.(*CapabilityCaveats_MaxCopies); ok {
+			return x.MaxCopies
+		}
+	}
+	return 0
+}
+
+func (x *CapabilityCaveats) GetUnlimitedCopies() bool {
+	if x != nil {
+		if x, ok := x.CopyCeiling.(*CapabilityCaveats_UnlimitedCopies); ok {
+			return x.UnlimitedCopies
+		}
+	}
+	return false
+}
+
 type isCapabilityCaveats_RequestCeiling interface {
 	isCapabilityCaveats_RequestCeiling()
 }
@@ -378,7 +417,8 @@ type CapabilityCaveats_MaxBudget struct {
 }
 
 type CapabilityCaveats_UnlimitedBudget struct {
-	// unlimited_budget sets no limit; an empty currency_code is USD.
+	// unlimited_budget sets no limit; an empty currency_code is the
+	// parent's unit on Delegate and the platform's currency on Issue.
 	UnlimitedBudget *UnlimitedBudget `protobuf:"bytes,14,opt,name=unlimited_budget,json=unlimitedBudget,proto3,oneof"`
 }
 
@@ -386,21 +426,39 @@ func (*CapabilityCaveats_MaxBudget) isCapabilityCaveats_BudgetCeiling() {}
 
 func (*CapabilityCaveats_UnlimitedBudget) isCapabilityCaveats_BudgetCeiling() {}
 
+type isCapabilityCaveats_CopyCeiling interface {
+	isCapabilityCaveats_CopyCeiling()
+}
+
+type CapabilityCaveats_MaxCopies struct {
+	// max_copies is the limit; 0 allows no copy with limits of its own.
+	MaxCopies int64 `protobuf:"varint,15,opt,name=max_copies,json=maxCopies,proto3,oneof"`
+}
+
+type CapabilityCaveats_UnlimitedCopies struct {
+	// unlimited_copies lifts the limit to the server's bound. Only true is
+	// meaningful.
+	UnlimitedCopies bool `protobuf:"varint,16,opt,name=unlimited_copies,json=unlimitedCopies,proto3,oneof"`
+}
+
+func (*CapabilityCaveats_MaxCopies) isCapabilityCaveats_CopyCeiling() {}
+
+func (*CapabilityCaveats_UnlimitedCopies) isCapabilityCaveats_CopyCeiling() {}
+
 // Capability is the typed metadata view of an issued or stored
 // capability. Returned by every RPC; the compact JWT is delivered
 // separately as `token` so handlers can choose whether to surface it.
 type Capability struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Issuer     string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
-	Subject    *CapabilityPrincipal   `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
-	Audience   []string               `protobuf:"bytes,4,rep,name=audience,proto3" json:"audience,omitempty"`
-	Caveats    *CapabilityCaveats     `protobuf:"bytes,5,opt,name=caveats,proto3" json:"caveats,omitempty"`
-	IssuedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
-	NotBefore  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
-	ExpiresAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	ParentId   string                 `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	Generation int64                  `protobuf:"varint,10,opt,name=generation,proto3" json:"generation,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Issuer    string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Subject   *CapabilityPrincipal   `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
+	Audience  []string               `protobuf:"bytes,4,rep,name=audience,proto3" json:"audience,omitempty"`
+	Caveats   *CapabilityCaveats     `protobuf:"bytes,5,opt,name=caveats,proto3" json:"caveats,omitempty"`
+	IssuedAt  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	NotBefore *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ParentId  string                 `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// confirmation_jkt binds the capability to a key (RFC 9449 DPoP): the
 	// base64url SHA-256 JWK thumbprint (RFC 7638) of the public key whose
 	// holder alone may present it. Every request must then carry a DPoP
@@ -501,13 +559,6 @@ func (x *Capability) GetParentId() string {
 		return x.ParentId
 	}
 	return ""
-}
-
-func (x *Capability) GetGeneration() int64 {
-	if x != nil {
-		return x.Generation
-	}
-	return 0
 }
 
 func (x *Capability) GetConfirmationJkt() string {
@@ -614,8 +665,9 @@ type CapabilityServiceIssueResponse struct {
 	// biscuit is the same capability as a Biscuit v3 token, which its holder
 	// can narrow offline — fewer operations, resources or planes, an earlier
 	// expiry, a key binding — with no call to the issuer. Present it like
-	// token. Empty when the server does not issue Biscuits. Returned once,
-	// never persisted.
+	// token. Empty when the server does not issue Biscuits, and for a
+	// capability without the share operation — a Biscuit is handed on offline
+	// — a key-bound one or one not valid yet. Returned once, never persisted.
 	Biscuit       string `protobuf:"bytes,3,opt,name=biscuit,proto3" json:"biscuit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1594,7 +1646,7 @@ var File_paladin_admin_v1_capability_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
-	")paladin/admin/v1/capability_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\x1a\x1cpaladin/admin/v1/types.proto\"\xd8\x02\n" +
+	")paladin/admin/v1/capability_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\x1a\x1cpaladin/admin/v1/types.proto\"\xd4\x02\n" +
 	"\x13CapabilityPrincipal\x12?\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12%\n" +
@@ -1604,11 +1656,11 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"agent_type\x18\n" +
 	" \x01(\tR\tagentType\x12#\n" +
 	"\ragent_version\x18\v \x01(\tR\fagentVersion\x12\x15\n" +
-	"\x06run_id\x18\f \x01(\tR\x05runId\x12&\n" +
-	"\x0fparent_agent_id\x18\r \x01(\tR\rparentAgentId\x12\x14\n" +
+	"\x06run_id\x18\f \x01(\tR\x05runId\x12\"\n" +
+	"\rparent_run_id\x18\r \x01(\tR\vparentRunId\x12\x14\n" +
 	"\x05model\x18\x0e \x01(\tR\x05model\x12\x1d\n" +
 	"\n" +
-	"mcp_client\x18\x0f \x01(\tR\tmcpClient\"\x86\x06\n" +
+	"mcp_client\x18\x0f \x01(\tR\tmcpClient\"\xf6\x06\n" +
 	"\x11CapabilityCaveats\x12\x1a\n" +
 	"\x03ops\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\x03ops\x12+\n" +
 	"\x11resource_prefixes\x18\x02 \x03(\tR\x10resourcePrefixes\x12#\n" +
@@ -1621,11 +1673,15 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\n" +
 	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyB\x98\x01\xbaH\x94\x01\xba\x01\x90\x01\n" +
 	"\x12money.non_negative\x12;an amount is not negative, and its nanos are 0 to 999999999\x1a=this.units >= 0 && this.nanos >= 0 && this.nanos <= 999999999H\x01R\tmaxBudget\x12N\n" +
-	"\x10unlimited_budget\x18\x0e \x01(\v2!.paladin.admin.v1.UnlimitedBudgetH\x01R\x0funlimitedBudgetB\x11\n" +
+	"\x10unlimited_budget\x18\x0e \x01(\v2!.paladin.admin.v1.UnlimitedBudgetH\x01R\x0funlimitedBudget\x12(\n" +
+	"\n" +
+	"max_copies\x18\x0f \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x02R\tmaxCopies\x124\n" +
+	"\x10unlimited_copies\x18\x10 \x01(\bB\a\xbaH\x04j\x02\b\x01H\x02R\x0funlimitedCopiesB\x11\n" +
 	"\x0frequest_ceilingB\x10\n" +
-	"\x0ebudget_ceilingJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\t\x10\n" +
+	"\x0ebudget_ceilingB\x0e\n" +
+	"\fcopy_ceilingJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vR\x11max_budget_amountR\tunit_codeR\x11max_budget_micros\"\x80\x04\n" +
+	"\x10\vR\x11max_budget_amountR\tunit_codeR\x11max_budget_micros\"\xf2\x03\n" +
 	"\n" +
 	"Capability\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12\x1b\n" +
@@ -1638,12 +1694,10 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"not_before\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\tnotBefore\x12>\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\texpiresAt\x12\x1b\n" +
-	"\tparent_id\x18\t \x01(\tR\bparentId\x12\x1e\n" +
-	"\n" +
-	"generation\x18\n" +
-	" \x01(\x03R\n" +
-	"generation\x12)\n" +
-	"\x10confirmation_jkt\x18\v \x01(\tR\x0fconfirmationJkt\"\x84\x03\n" +
+	"\tparent_id\x18\t \x01(\tR\bparentId\x12)\n" +
+	"\x10confirmation_jkt\x18\v \x01(\tR\x0fconfirmationJktJ\x04\b\n" +
+	"\x10\vR\n" +
+	"generation\"\x84\x03\n" +
 	"\x1dCapabilityServiceIssueRequest\x12G\n" +
 	"\asubject\x18\x01 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalB\x06\xbaH\x03\xc8\x01\x01R\asubject\x12$\n" +
 	"\baudience\x18\x02 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\baudience\x12E\n" +
@@ -1849,6 +1903,8 @@ func file_paladin_admin_v1_capability_service_proto_init() {
 		(*CapabilityCaveats_UnlimitedRequests)(nil),
 		(*CapabilityCaveats_MaxBudget)(nil),
 		(*CapabilityCaveats_UnlimitedBudget)(nil),
+		(*CapabilityCaveats_MaxCopies)(nil),
+		(*CapabilityCaveats_UnlimitedCopies)(nil),
 	}
 	file_paladin_admin_v1_capability_service_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}

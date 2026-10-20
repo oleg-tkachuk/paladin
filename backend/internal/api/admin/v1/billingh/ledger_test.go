@@ -12,21 +12,24 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // fakeLedger answers SumCharges from sums, pageSize at a time, and records
 // each request.
 type fakeLedger struct {
-	sums     func(limes.SumChargesRequest) []limes.ChargeSum
+	sums     func(meter.SumChargesRequest) []meter.ChargeSum
 	pageSize int
 	err      error
-	requests []limes.SumChargesRequest
+	requests []meter.SumChargesRequest
+	// ctx is the context of the last request.
+	ctx context.Context
 }
 
-func (f *fakeLedger) SumCharges(_ context.Context, req limes.SumChargesRequest) (limes.Page[limes.ChargeSum], error) {
-	f.requests = append(f.requests, req)
+func (f *fakeLedger) SumCharges(ctx context.Context, req meter.SumChargesRequest) (limes.Page[meter.ChargeSum], error) {
+	f.requests, f.ctx = append(f.requests, req), ctx
 	if f.err != nil {
-		return limes.Page[limes.ChargeSum]{}, f.err
+		return limes.Page[meter.ChargeSum]{}, f.err
 	}
 	all := f.sums(req)
 	from := 0
@@ -38,7 +41,7 @@ func (f *fakeLedger) SumCharges(_ context.Context, req limes.SumChargesRequest) 
 		size = req.Limit
 	}
 	to := min(from+size, len(all))
-	page := limes.Page[limes.ChargeSum]{Items: all[from:to]}
+	page := limes.Page[meter.ChargeSum]{Items: all[from:to]}
 	if to < len(all) {
 		page.Next = strconv.Itoa(to)
 	}
@@ -58,20 +61,20 @@ func units(n int64) limes.Nanos { return limes.Nanos(n) * limes.NanosPerUnit }
 // the ledger returns ahead of them.
 func TestSummaryIsInTheDominantUnit(t *testing.T) {
 	capA, capB := uuid.New(), uuid.New()
-	ledger := &fakeLedger{pageSize: 1, sums: func(r limes.SumChargesRequest) []limes.ChargeSum {
+	ledger := &fakeLedger{pageSize: 1, sums: func(r meter.SumChargesRequest) []meter.ChargeSum {
 		switch {
-		case r.ByCapability:
-			return []limes.ChargeSum{
+		case r.Groups(meter.ChargeDimensionCapability):
+			return []meter.ChargeSum{
 				{UnitCode: eur, CapabilityID: capB, Charged: units(50), Charges: 2},
 				{UnitCode: usd, CapabilityID: capA, Charged: units(7), Refunded: units(1), Charges: 4},
 				{UnitCode: usd, CapabilityID: capB, Charged: units(2), Charges: 1},
 			}
-		case r.ByActor:
-			return []limes.ChargeSum{{UnitCode: usd, Actor: "agent", Charged: units(9), Refunded: units(1), Charges: 5}}
-		case r.ByOp:
-			return []limes.ChargeSum{{UnitCode: usd, Op: limes.OpGet, Charged: units(9), Refunded: units(1), Charges: 5}}
+		case r.Groups(meter.ChargeDimensionActor):
+			return []meter.ChargeSum{{UnitCode: usd, Actor: "agent", Charged: units(9), Refunded: units(1), Charges: 5}}
+		case r.Groups(meter.ChargeDimensionOp):
+			return []meter.ChargeSum{{UnitCode: usd, Op: limes.OpGet, Charged: units(9), Refunded: units(1), Charges: 5}}
 		}
-		return []limes.ChargeSum{
+		return []meter.ChargeSum{
 			{UnitCode: eur, Charged: units(50), Charges: 2},
 			{UnitCode: usd, Charged: units(9), Refunded: units(1), Charges: 5},
 		}
@@ -100,13 +103,13 @@ func TestSummaryIsInTheDominantUnit(t *testing.T) {
 
 // A top list stops reading the ledger once it holds topN groups.
 func TestTopListStopsAtTopN(t *testing.T) {
-	many := make([]limes.ChargeSum, 0, 3*topN)
+	many := make([]meter.ChargeSum, 0, 3*topN)
 	for i := range 3 * topN {
-		many = append(many, limes.ChargeSum{UnitCode: usd, Actor: strconv.Itoa(i), Charged: units(1), Charges: 1})
+		many = append(many, meter.ChargeSum{UnitCode: usd, Actor: strconv.Itoa(i), Charged: units(1), Charges: 1})
 	}
-	ledger := &fakeLedger{pageSize: topN, sums: func(limes.SumChargesRequest) []limes.ChargeSum { return many }}
+	ledger := &fakeLedger{pageSize: topN, sums: func(meter.SumChargesRequest) []meter.ChargeSum { return many }}
 	h := NewHandler(ledger, nil, allowAuthorizer{})
-	got, err := h.topBy(context.Background(), limes.SumChargesRequest{ByActor: true}, usd, func(s limes.ChargeSum) string { return s.Actor })
+	got, err := h.topBy(context.Background(), meter.SumChargesRequest{GroupBy: []meter.ChargeDimension{meter.ChargeDimensionActor}}, usd, func(s meter.ChargeSum) string { return s.Actor })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +121,7 @@ func TestTopListStopsAtTopN(t *testing.T) {
 // A period with no charge reads no top list, and is in the platform's
 // currency when the tenant has no budget either.
 func TestSummaryOfAnEmptyPeriod(t *testing.T) {
-	ledger := &fakeLedger{sums: func(limes.SumChargesRequest) []limes.ChargeSum { return nil }}
+	ledger := &fakeLedger{sums: func(meter.SumChargesRequest) []meter.ChargeSum { return nil }}
 	s, err := NewHandler(ledger, nil, allowAuthorizer{}).WithCurrency(eur).GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{})
 	if err != nil {
 		t.Fatal(err)
@@ -143,8 +146,8 @@ func TestSummaryOfAFailedLedgerIsInternal(t *testing.T) {
 func TestTimeSeriesByWeek(t *testing.T) {
 	week1 := time.Date(2025, 12, 29, 0, 0, 0, 0, time.UTC) // a Monday
 	week2 := week1.AddDate(0, 0, daysPerWeek)
-	ledger := &fakeLedger{pageSize: 1, sums: func(limes.SumChargesRequest) []limes.ChargeSum {
-		return []limes.ChargeSum{
+	ledger := &fakeLedger{pageSize: 1, sums: func(meter.SumChargesRequest) []meter.ChargeSum {
+		return []meter.ChargeSum{
 			{BucketStart: week1, UnitCode: usd, Charged: units(2), Charges: 1},
 			{BucketStart: week1, UnitCode: eur, Charged: units(99), Charges: 1},
 			{BucketStart: week2, UnitCode: usd, Charged: units(8), Refunded: units(1), Charges: 3},
@@ -161,7 +164,7 @@ func TestTimeSeriesByWeek(t *testing.T) {
 	if ts.UnitCode != usd || !slices.Equal(ts.Buckets, want) {
 		t.Errorf("series = %s %+v, want USD %+v", ts.UnitCode, ts.Buckets, want)
 	}
-	if ledger.requests[0].Bucket != limes.ChargeBucketWeek {
+	if ledger.requests[0].Bucket != meter.ChargeBucketWeek {
 		t.Errorf("weeks read in %s buckets, want weeks", ledger.requests[0].Bucket)
 	}
 }

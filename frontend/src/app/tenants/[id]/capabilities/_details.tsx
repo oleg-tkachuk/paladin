@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Money } from "@/gen/google/type/money_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
-import { requestLimit } from "./_ceilings";
+import { copyLimit, requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
 import { Timestamp } from "@/components/Timestamp";
@@ -45,6 +45,7 @@ export function DetailsBody({
   // USD — the bare "$" would imply currency where none is pinned.
   const unit = budgetUnit(cap.caveats?.budgetCeiling) ?? ABSTRACT_UNIT_CODE;
   const maxRequests = requestLimit(cap.caveats);
+  const maxCopies = copyLimit(cap.caveats);
   const maxBudget = budgetLimit(cap.caveats?.budgetCeiling);
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
@@ -64,7 +65,6 @@ export function DetailsBody({
           mono
           breakAll
         />
-        <DetailRow label="Generation" value={cap.generation.toString()} mono />
       </DetailsSection>
 
       <DetailsSection title="Principal">
@@ -181,6 +181,11 @@ export function DetailsBody({
         <DetailRow
           label="Max requests"
           value={maxRequests === null ? "unlimited" : maxRequests.toString()}
+          mono
+        />
+        <DetailRow
+          label="Max Biscuit copies"
+          value={maxCopies === null ? "unlimited" : maxCopies.toString()}
           mono
         />
         <DetailRow

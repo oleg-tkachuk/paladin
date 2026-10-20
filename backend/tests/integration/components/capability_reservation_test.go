@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
@@ -31,8 +32,8 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 
 	child, sibling := f.subject(t, ctx, f.child), f.subject(t, ctx, f.sibling)
-	reserve := func(s limes.MeterSubject, amount string) (limes.Reservation, error) {
-		return f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
+	reserve := func(s limes.MeterSubject, amount string) (meter.Reservation, error) {
+		return f.usage.Reserve(ledgerCtx, meter.ReserveRequest{
 			Subject: s, Amount: limes.MustParseAmount(amount), Op: "llm", Actor: "agent",
 		})
 	}
@@ -46,7 +47,7 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 		t.Fatalf("sibling hold past the parent: err = %v, want ErrBudgetExceeded", err)
 	}
 	// Nor can it charge into the held room.
-	if _, err := f.usage.Charge(ledgerCtx, limes.ChargeRequest{
+	if _, err := f.usage.Charge(ledgerCtx, meter.ChargeRequest{
 		Subject: sibling, Amount: limes.MustParseAmount("15"),
 	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("sibling charge into held room: err = %v, want ErrBudgetExceeded", err)
@@ -54,20 +55,20 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 
 	// Only the capability that made the hold settles it: another one's
 	// subject finds no reservation, and the hold survives it.
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: sibling, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
+	if _, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: sibling, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil); !errors.Is(err, meter.ErrReservationNotFound) {
 		t.Fatalf("settle by another capability: err = %v, want ErrReservationNotFound", err)
 	}
 
 	// Settling above what the child's own ceiling allows is refused, and the
 	// hold survives it.
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("21")}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
+	if _, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("21")}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("settle past the ceiling: err = %v, want ErrBudgetExceeded", err)
 	}
 	if u, _ := f.usage.GetUsage(ledgerCtx, f.root); u.ReservedAmount != limes.MustParseAmount("15") {
 		t.Fatalf("parent hold after a refused settle = %v, want 15", u.ReservedAmount)
 	}
 
-	receipt, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil)
+	receipt, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil)
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -82,9 +83,14 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if op != "llm" || actor != "agent" {
 		t.Errorf("ledger row op=%q actor=%q, want the reservation's", op, actor)
 	}
-	again, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil)
+	// Settling again for the same amount is a replay; for another it is a
+	// conflict, not a quiet answer with the first receipt.
+	again, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("4")}, nil)
 	if err != nil || !again.Replayed || again.ChargeID != receipt.ChargeID || again.SpentAmount != limes.MustParseAmount("4") {
 		t.Errorf("second settle = %+v, %v; want a replay of %s at spend 4", again, err, receipt.ChargeID)
+	}
+	if _, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, meter.ErrSettleConflict) {
+		t.Errorf("a settle for another amount = %v, want ErrSettleConflict", err)
 	}
 
 	// Release is idempotent and frees the room — for the capability that
@@ -93,14 +99,14 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reserve after settle: %v", err)
 	}
-	if err := f.usage.Release(ledgerCtx, limes.ReleaseRequest{Subject: child, ReservationID: r2.ID}); err != nil {
+	if err := f.usage.Release(ledgerCtx, meter.ReleaseRequest{Subject: child, ReservationID: r2.ID}); err != nil {
 		t.Fatalf("release by another capability: %v", err)
 	}
 	if u, _ := f.usage.GetUsage(ledgerCtx, f.root); u.ReservedAmount != limes.MustParseAmount("10") {
 		t.Fatalf("parent hold after another capability's release = %v, want 10", u.ReservedAmount)
 	}
 	for range 2 {
-		if err := f.usage.Release(ledgerCtx, limes.ReleaseRequest{Subject: sibling, ReservationID: r2.ID}); err != nil {
+		if err := f.usage.Release(ledgerCtx, meter.ReleaseRequest{Subject: sibling, ReservationID: r2.ID}); err != nil {
 			t.Fatalf("release: %v", err)
 		}
 	}
@@ -125,7 +131,7 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 
 	child := f.subject(t, ctx, f.child)
-	r, err := f.usage.Reserve(ledgerCtx, limes.ReserveRequest{
+	r, err := f.usage.Reserve(ledgerCtx, meter.ReserveRequest{
 		Subject: child, Amount: limes.MustParseAmount("20"), TTL: shortHoldTTL,
 	})
 	if err != nil {
@@ -133,17 +139,17 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 	}
 	time.Sleep(holdLapse)
 
-	if _, err := f.usage.Settle(ledgerCtx, limes.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, limes.ErrReservationNotFound) {
+	if _, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, meter.ErrReservationNotFound) {
 		t.Fatalf("settle after expiry: err = %v, want ErrReservationNotFound", err)
 	}
-	if res, err := f.usage.ReleaseExpired(ctx, limes.ReleaseExpiredRequest{}); err != nil || res.Released != 0 {
+	if res, err := f.usage.ReleaseExpired(ctx, meter.ReleaseExpiredRequest{}); err != nil || res.Released != 0 {
 		t.Fatalf("ReleaseExpired on a bare context = %d, %v; want 0 — the scope is not engaging", res.Released, err)
 	}
-	if _, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), limes.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
+	if _, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), meter.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
 		t.Fatalf("ReleaseExpired under a read-only scope: err = %v, want ErrScopeMismatch", err)
 	}
 	// Housekeeping, as the purger scopes it.
-	res, err := f.usage.ReleaseExpired(pgstore.WithAllTenants(ctx), limes.ReleaseExpiredRequest{})
+	res, err := f.usage.ReleaseExpired(pgstore.WithAllTenants(ctx), meter.ReleaseExpiredRequest{})
 	if err != nil || res.Released != 1 {
 		t.Fatalf("ReleaseExpired = %d, %v; want 1", res.Released, err)
 	}

@@ -45,7 +45,7 @@ func mkCap(tenant uuid.UUID, subject string, expires time.Time) limes.Capability
 		ID:     uuid.New(),
 		Issuer: "paladin-core/test",
 		Subject: limes.Principal{
-			Type:     limes.PrincipalUser,
+			Type:     limes.PrincipalTypeUser,
 			TenantID: tenant,
 			Subject:  subject,
 		},
@@ -54,20 +54,18 @@ func mkCap(tenant uuid.UUID, subject string, expires time.Time) limes.Capability
 			Ops:                    []limes.Op{limes.OpGet, limes.OpList},
 			ResourceURIs:           []string{"paladin://docs/"},
 			Requests:               limes.RequestCeiling{Max: 42},
-			Budget:                 limes.BudgetCeiling{Max: limes.MustParseAmount("12.5")},
-			UnitCode:               "USD",
+			Budget:                 limes.BudgetCeiling{Max: limes.MustParseAmount("12.5"), UnitCode: "USD"},
 			AllowTaintedRead:       true,
 			IdempotencyKeyRequired: true,
 			SourceIPCIDR:           []string{"10.0.0.0/8"},
 		},
-		IssuedAt:   now,
-		NotBefore:  now.Add(-time.Minute),
-		ExpiresAt:  expires.UTC().Truncate(time.Microsecond),
-		Generation: 7,
+		IssuedAt:  now,
+		NotBefore: now.Add(-time.Minute),
+		ExpiresAt: expires.UTC().Truncate(time.Microsecond),
 	}
 }
 
-var seedIssuer = limes.Principal{Type: limes.PrincipalService, Subject: "svc:seed"}
+var seedIssuer = limes.Principal{Type: limes.PrincipalTypeService, Subject: "svc:seed"}
 
 // purgeRetention is how long past its expiry the purge tests keep a record.
 const purgeRetention = 24 * time.Hour

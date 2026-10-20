@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
@@ -34,10 +35,10 @@ type lineageFixture struct {
 
 // The lineage fixture's ceilings: the root's budget and request count, and
 // each child's, which narrows the root's on its own while the two children
-// together do not.
+// together do not. A lineage counts in one unit.
 var (
-	lineageRootBudget  = limes.BudgetCeiling{Max: limes.MustParseAmount("25")}
-	lineageChildBudget = limes.BudgetCeiling{Max: limes.MustParseAmount("20")}
+	lineageRootBudget  = limes.BudgetCeiling{Max: limes.MustParseAmount("25"), UnitCode: testUnit}
+	lineageChildBudget = limes.BudgetCeiling{Max: limes.MustParseAmount("20"), UnitCode: testUnit}
 	lineageRequests    = limes.RequestCeiling{Max: 3}
 )
 
@@ -85,7 +86,7 @@ func (f lineageFixture) subject(t *testing.T, ctx context.Context, id uuid.UUID)
 func (f lineageFixture) spent(t *testing.T, ctx context.Context, id uuid.UUID) limes.Nanos {
 	t.Helper()
 	u, err := f.usage.GetUsage(ctx, id)
-	if errors.Is(err, limes.ErrUsageNotFound) {
+	if errors.Is(err, meter.ErrUsageNotFound) {
 		return 0
 	}
 	if err != nil {
@@ -108,19 +109,19 @@ func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 	records := newCapStore(t, pool)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 
-	receipt, err := usage.Charge(ledgerCtx, limes.ChargeRequest{
+	receipt, err := usage.Charge(ledgerCtx, meter.ChargeRequest{
 		Subject: f.subject(t, ctx, f.child), Amount: limes.MustParseAmount("20"),
 	}, nil)
 	if err != nil {
 		t.Fatalf("child charge under RLS: %v", err)
 	}
-	if _, err := usage.Charge(ledgerCtx, limes.ChargeRequest{
+	if _, err := usage.Charge(ledgerCtx, meter.ChargeRequest{
 		Subject: f.subject(t, ctx, f.sibling), Amount: limes.MustParseAmount("20"),
 	}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Fatalf("sibling past the parent's ceiling under RLS: err = %v, want ErrBudgetExceeded", err)
 	}
 
-	if got, err := usage.Refund(ledgerCtx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5")}); err != nil || got.Amount != limes.MustParseAmount("5") {
+	if got, err := usage.Refund(ledgerCtx, meter.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5")}); err != nil || got.Amount != limes.MustParseAmount("5") {
 		t.Fatalf("refund under RLS = %v, %v; want 5", got, err)
 	}
 	if got := f.spent(t, ctx, f.root); got != limes.MustParseAmount("15") {

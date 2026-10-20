@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
@@ -34,10 +35,10 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-charge")
 	capID := uuid.New()
-	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")})
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Max: limes.MustParseAmount("10.0"), UnitCode: seedUnitCode})
 
 	// First charge: 4. Cap allows 10, tenant allows 5. Both fit.
-	spent, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("4.0")}, nil)
+	spent, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("4.0")}, nil)
 	if err != nil {
 		t.Fatalf("first charge: %v", err)
 	}
@@ -55,9 +56,9 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read tenant budget: %v", err)
 	}
-	if _, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+	if _, err := store.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		Ceiling:         limes.BudgetCeiling{Max: limes.MustParseAmount("5.0")},
+		Ceiling:         limes.BudgetCeiling{Max: limes.MustParseAmount("5.0"), UnitCode: seedUnitCode},
 		ResetSpend:      false, // keep the 4 we already charged
 		ExpectedVersion: cur.ResourceVersion,
 	}); err != nil {
@@ -66,7 +67,7 @@ func TestCharge_TwoPhase_TenantCapCompensatesCapability(t *testing.T) {
 
 	// Second charge: 4. Cap accepts (8 ≤ 10). Tenant rejects (8 > 5).
 	// Inner store should compensate the per-cap counter.
-	_, err = store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("4.0")}, nil)
+	_, err = store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("4.0")}, nil)
 	if !errors.Is(err, limes.ErrTenantBudgetExceeded) {
 		t.Fatalf("second charge: want ErrTenantBudgetExceeded, got %v", err)
 	}
@@ -105,16 +106,16 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 	capID := uuid.New()
 	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Unlimited: true})
 
-	receipt, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil)
+	receipt, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil)
 	if err != nil {
 		t.Fatalf("seed charge: %v", err)
 	}
 	// Refund more than was charged — refused, and nothing moves.
-	if _, err := store.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5.0")}); !errors.Is(err, limes.ErrRefundExceedsCharge) {
+	if _, err := store.Refund(ctx, meter.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5.0")}); !errors.Is(err, meter.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
 	// Refund the whole charge — both counters back to 0.
-	if _, err := store.Refund(ctx, limes.RefundRequest{ChargeID: receipt.ChargeID, Remaining: true}); err != nil {
+	if _, err := store.Refund(ctx, meter.RefundRequest{ChargeID: receipt.ChargeID, Remaining: true}); err != nil {
 		t.Fatalf("refund: %v", err)
 	}
 
@@ -146,9 +147,9 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-period")
 
 	// Initial cap 10, charge 7 against an unrelated capability.
-	initial, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+	initial, err := store.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 		TenantID:   tenantID,
-		Ceiling:    limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")},
+		Ceiling:    limes.BudgetCeiling{Max: limes.MustParseAmount("10.0"), UnitCode: seedUnitCode},
 		ResetSpend: true,
 	})
 	if err != nil {
@@ -156,7 +157,7 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	}
 	capID := uuid.New()
 	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Unlimited: true})
-	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("7.0")}, nil); err != nil {
+	if _, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("7.0")}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
@@ -168,9 +169,9 @@ func TestCharge_PeriodRollResetsSpend(t *testing.T) {
 	// Roll the period: same cap (10), reset_spend=true. The roll carries the
 	// version the create returned — Charge() does not bump it, so the caller's
 	// read is still current.
-	if _, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+	if _, err := store.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 		TenantID:        tenantID,
-		Ceiling:         limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")},
+		Ceiling:         limes.BudgetCeiling{Max: limes.MustParseAmount("10.0"), UnitCode: seedUnitCode},
 		ResetSpend:      true,
 		ExpectedVersion: initial.ResourceVersion,
 	}); err != nil {
@@ -195,9 +196,9 @@ func TestCharge_LedgerRowAppearsAfterCharge(t *testing.T) {
 	capID := uuid.New()
 
 	// The meter refuses a capability not on record.
-	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")})
+	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Max: limes.MustParseAmount("10.0"), UnitCode: seedUnitCode})
 
-	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, nil); err != nil {
+	if _, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 
@@ -225,14 +226,14 @@ func TestCharge_RefusesCapabilityNoLongerOnRecord(t *testing.T) {
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-gone")
 	capID := uuid.New()
 	subject := seedCapRecord(t, h, capID, tenantID, limes.BudgetCeiling{Unlimited: true})
-	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); err != nil {
+	if _, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); err != nil {
 		t.Fatalf("charge on record: %v", err)
 	}
 	if _, err := h.PoolMigrate.Exec(ctx, `DELETE FROM limes.capabilities WHERE id = $1`, capID); err != nil {
 		t.Fatalf("drop record: %v", err)
 	}
 
-	if _, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); !errors.Is(err, limes.ErrNotFound) {
+	if _, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("1.0")}, nil); !errors.Is(err, limes.ErrNotFound) {
 		t.Fatalf("charge off record: err = %v, want ErrNotFound", err)
 	}
 	if got := countCharges(t, h, tenantID); got != 1 {

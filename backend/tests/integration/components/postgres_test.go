@@ -133,6 +133,11 @@ func startShared() error {
 	if err := sqlDB.Close(); err != nil {
 		return fmt.Errorf("close template connection: %w", err)
 	}
+	// And the limes schema granted to the roles 002 created, as the migrate
+	// step does after goose: pgstore's functions run for those roles alone.
+	if err := postgres.MigrateLimes(ctx, cfg, postgres.RuntimeRoles...); err != nil {
+		return err
+	}
 
 	shared.maintenance, err = poolOn(ctx, maintenanceDB)
 	if err != nil {
@@ -241,5 +246,18 @@ func startPostgresAt(tb testing.TB, version int64) *pgxpool.Pool {
 	if err := goose.UpTo(db, ".", version); err != nil {
 		tb.Fatalf("migrate up to %d: %v", version, err)
 	}
+	if version >= rolesMigration {
+		if err := postgres.MigrateLimes(ctx, pool.Config().ConnConfig, postgres.RuntimeRoles...); err != nil {
+			tb.Fatalf("grant limes: %v", err)
+		}
+	}
 	return pool
 }
+
+// testUnit is the unit this package's budgets are in: limes assumes none for
+// a budget that names no unit.
+const testUnit = "USD"
+
+// rolesMigration is the migration that creates the runtime roles
+// (002_roles_and_rls.sql), which the limes schema is granted to once it ran.
+const rolesMigration = 2

@@ -12,22 +12,28 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// fakeCopyUsage serves fixed counters and records what it was asked.
+// fakeCopyUsage serves fixed counters and records what it was asked. It
+// refuses a request a store refuses, as every store does.
 type fakeCopyUsage struct {
-	out []limes.CopyUsage
+	out []meter.CopyUsage
 	err error
 	ids [][]byte
+	cap uuid.UUID
 	ctx context.Context
 }
 
-func (f *fakeCopyUsage) CopyUsage(ctx context.Context, req limes.CopyUsageRequest) (limes.CopyUsageResult, error) {
-	f.ids, f.ctx = req.RevocationIDs, ctx
-	return limes.CopyUsageResult{Copies: f.out}, f.err
+func (f *fakeCopyUsage) CopyUsage(ctx context.Context, req meter.CopyUsageRequest) (meter.CopyUsageResult, error) {
+	if err := req.Validate(); err != nil {
+		return meter.CopyUsageResult{}, err
+	}
+	f.ids, f.cap, f.ctx = req.RevocationIDs, req.CapabilityID, ctx
+	return meter.CopyUsageResult{Copies: f.out}, f.err
 }
 
 // The limits two attenuations set on a copy, the outer first, and the
@@ -51,7 +57,7 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	owner := uuid.New()
 	outerBudget := limes.BudgetCeiling{Max: outerBudgetUnits * limes.NanosPerUnit}
 	innerRequests := limes.RequestCeiling{Max: innerMaxRequests}
-	target, copied := mintCopy(t, owner, limes.Capability{Caveats: limes.Caveats{UnitCode: copyUnit}},
+	target, copied := mintCopy(t, owner, limes.Capability{Caveats: limes.Caveats{Budget: limes.BudgetCeiling{UnitCode: copyUnit}}},
 		limes.Attenuation{Budget: &outerBudget}, limes.Attenuation{Requests: &innerRequests})
 	limits := copied.Copies()
 	if len(limits) != 2 {
@@ -60,7 +66,7 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	inner, outer := limits[0].RevocationID, limits[1].RevocationID
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
 	copier := &fakeCopier{copy: copied}
-	reader := &fakeCopyUsage{out: []limes.CopyUsage{{
+	reader := &fakeCopyUsage{out: []meter.CopyUsage{{
 		RevocationID: outer, CapabilityID: target.ID, RequestCount: outerRequestCount,
 		SpentAmount: limes.MustParseAmount(outerSpentAmount), ReservedAmount: limes.MustParseAmount(outerReservedAmount),
 	}}}
@@ -73,6 +79,11 @@ func TestGetBiscuitUsageReportsEachLimit(t *testing.T) {
 	}
 	if resp.GetCapabilityId() != target.ID.String() {
 		t.Errorf("capability %q", resp.GetCapabilityId())
+	}
+	// The counters are read under the copy's own capability: a copy's
+	// revocation id alone can turn up on another capability's chain.
+	if reader.cap != target.ID {
+		t.Errorf("copy usage read under capability %s, want %s", reader.cap, target.ID)
 	}
 	got := resp.GetCopies()
 	if len(got) != 2 {
@@ -136,7 +147,7 @@ func TestGetBiscuitUsageRefusals(t *testing.T) {
 // none.
 func TestGetBiscuitUsageReportsAFrozenCopy(t *testing.T) {
 	zeroRequests, zeroBudget := limes.RequestCeiling{}, limes.BudgetCeiling{}
-	target, copied := mintCopy(t, uuid.New(), limes.Capability{Caveats: limes.Caveats{UnitCode: copyUnit}},
+	target, copied := mintCopy(t, uuid.New(), limes.Capability{Caveats: limes.Caveats{Budget: limes.BudgetCeiling{UnitCode: copyUnit}}},
 		limes.Attenuation{Requests: &zeroRequests, Budget: &zeroBudget})
 	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
 	h := mkHandler(t, store, nil, &allowAuthorizer{}).

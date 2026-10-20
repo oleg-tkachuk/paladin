@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
@@ -19,6 +17,8 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -67,14 +67,14 @@ func (s *recordingStore) ListByPrincipal(_ context.Context, args limes.ListByPri
 // method the handler might start calling panics loudly instead of silently
 // returning a zero value.
 type fakeUsage struct {
-	limes.UsageStore[pgx.Tx]
-	out limes.Usage
+	meter.UsageStore
+	out meter.Usage
 	err error
 	got uuid.UUID
 	ctx context.Context
 }
 
-func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (limes.Usage, error) {
+func (u *fakeUsage) GetUsage(ctx context.Context, id uuid.UUID) (meter.Usage, error) {
 	u.got = id
 	u.ctx = ctx
 	return u.out, u.err
@@ -128,7 +128,7 @@ func TestIssueMintsAToken(t *testing.T) {
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: 300,
-		Caveats:    openCaveats(limes.OpGet),
+		Caveats:    openCaveats(limes.OpGet, limes.OpShare),
 	})
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
@@ -144,6 +144,26 @@ func TestIssueMintsAToken(t *testing.T) {
 		t.Error("want a Biscuit beside the token")
 	} else if _, err := limes.Attenuate(b, limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
 		t.Errorf("the returned Biscuit does not attenuate: %v", err)
+	}
+}
+
+// A Biscuit is handed on offline, so a capability that may not be shared is
+// issued as its token alone.
+func TestIssueSealsNoBiscuitWithoutShare(t *testing.T) {
+	h := mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{})
+	resp, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
+		Subject: &adminv1.CapabilityPrincipal{
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "alice",
+		},
+		Audience:   []string{"paladin-data"},
+		TtlSeconds: 300,
+		Caveats:    openCaveats(limes.OpGet),
+	})
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	if resp.GetToken() == "" || resp.GetBiscuit() != "" {
+		t.Errorf("token %t, biscuit %q: want a token and no Biscuit", resp.GetToken() != "", resp.GetBiscuit())
 	}
 }
 
@@ -329,7 +349,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		t.Fatal("store.ListByPrincipal was not called")
 	}
 	a := store.listArgs
-	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != limes.PrincipalAgent {
+	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != limes.PrincipalTypeAgent {
 		t.Errorf("filters = %+v", a)
 	}
 	// Include flags widen the result set; dropping one silently hides revoked
@@ -426,7 +446,7 @@ func TestGetUsageUnwiredIsUnavailable(t *testing.T) {
 func TestGetUsageReturnsCounters(t *testing.T) {
 	id := uuid.New()
 	store := &fakeStore{}
-	usage := &fakeUsage{out: limes.Usage{
+	usage := &fakeUsage{out: meter.Usage{
 		CapabilityID: id, RequestCount: 7, SpentAmount: limes.MustParseAmount("42"), UnitCode: "EUR",
 	}}
 	h := mkHandler(t, store, usage, &allowAuthorizer{})
@@ -445,11 +465,11 @@ func TestGetUsageReturnsCounters(t *testing.T) {
 	}
 }
 
-// A row written before the currency rename carries no unit; the response must
-// still name one so clients never render a bare number.
-func TestGetUsageDefaultsUnitCode(t *testing.T) {
+// A row in no unit is answered in apiutil.NoUnit, so clients never render a
+// bare number and none is passed off as the platform's currency.
+func TestGetUsageAnswersNoUnitAsNoUnit(t *testing.T) {
 	store := &fakeStore{}
-	usage := &fakeUsage{out: limes.Usage{CapabilityID: uuid.New()}}
+	usage := &fakeUsage{out: meter.Usage{CapabilityID: uuid.New()}}
 	h := mkHandler(t, store, usage, &allowAuthorizer{})
 
 	resp, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
@@ -458,14 +478,14 @@ func TestGetUsageDefaultsUnitCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
-	if got := resp.GetSpent().GetCurrencyCode(); got != limes.DefaultUnitCode {
-		t.Errorf("unit = %q, want the %q default", got, limes.DefaultUnitCode)
+	if got := resp.GetSpent().GetCurrencyCode(); got != apiutil.NoUnit {
+		t.Errorf("unit = %q, want %q", got, apiutil.NoUnit)
 	}
 }
 
 func TestGetUsageNotFound(t *testing.T) {
 	store := &fakeStore{}
-	usage := &fakeUsage{err: limes.ErrUsageNotFound}
+	usage := &fakeUsage{err: meter.ErrUsageNotFound}
 	h := mkHandler(t, store, usage, &allowAuthorizer{})
 
 	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
@@ -659,7 +679,7 @@ func TestRevokeAndGetUsageActOnTheCapabilitysTenant(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
-			usage := &fakeUsage{out: limes.Usage{CapabilityID: target.ID}}
+			usage := &fakeUsage{out: meter.Usage{CapabilityID: target.ID}}
 			h := mkHandler(t, store, usage, cedartest.Engine(tc.tenantPolicy))
 
 			if _, err := h.Revoke(tc.ctx, &adminv1.CapabilityServiceRevokeRequest{

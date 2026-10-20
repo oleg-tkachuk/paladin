@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -119,9 +120,9 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_list_versions", Audience: "data", Description: "List versions of one object.", CapabilityOp: "list"},
 	{Name: "paladin_get_version", Audience: "data", Description: "Read one version's metadata.", CapabilityOp: "get"},
 	{Name: "paladin_restore_version", Audience: "data", Description: "Promote an older version as current.", CapabilityOp: "put", Mutates: true, Destructive: true},
-	{Name: "paladin_get_object_tags", Audience: "data", Description: "Read object tags.", CapabilityOp: "tag"},
-	{Name: "paladin_set_object_tags", Audience: "data", Description: "Update object tags.", CapabilityOp: "tag", Mutates: true, Destructive: true},
-	{Name: "paladin_presign_download", Audience: "data", Description: "Mint a signed GET URL.", CapabilityOp: "presign"},
+	{Name: "paladin_get_object_tags", Audience: "data", Description: "Read object tags.", CapabilityOp: string(auth.OpTag)},
+	{Name: "paladin_set_object_tags", Audience: "data", Description: "Update object tags.", CapabilityOp: string(auth.OpTag), Mutates: true, Destructive: true},
+	{Name: "paladin_presign_download", Audience: "data", Description: "Mint a signed GET URL.", CapabilityOp: string(auth.OpPresign)},
 	{Name: "paladin_upload_object", Audience: "data", Description: "Initiate object upload (presigned PUT).", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_complete_object", Audience: "data", Description: "Finalise upload + commit object metadata.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_delete_object", Audience: "data", Description: "Delete an object (soft by default; permanent on request).", CapabilityOp: "delete", Mutates: true, Destructive: true},
@@ -133,12 +134,12 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_get_operation", Audience: "data", Description: "Read one operation's status + progress."},
 	{Name: "paladin_cancel_operation", Audience: "data", Description: "Request cancellation of a running operation.", Mutates: true, Destructive: true},
 	{Name: "paladin_update_object", Audience: "data", Description: "Patch object metadata/tags/content-type via field mask (not the body).", CapabilityOp: "put", Mutates: true, Destructive: true},
-	{Name: "paladin_delete_object_tags", Audience: "data", Description: "Remove specific tag keys from an object.", CapabilityOp: "tag", Mutates: true, Destructive: true},
+	{Name: "paladin_delete_object_tags", Audience: "data", Description: "Remove specific tag keys from an object.", CapabilityOp: string(auth.OpTag), Mutates: true, Destructive: true},
 	{Name: "paladin_list_distinct_tags", Audience: "data", Description: "List distinct tag keys/values in use under a collection.", CapabilityOp: "list"},
-	{Name: "paladin_batch_update_tags", Audience: "data", Description: "Async bulk tag merge/replace across a collection; returns an Operation.", CapabilityOp: "tag", Mutates: true, Destructive: true},
+	{Name: "paladin_batch_update_tags", Audience: "data", Description: "Async bulk tag merge/replace across a collection; returns an Operation.", CapabilityOp: string(auth.OpTag), Mutates: true, Destructive: true},
 	{Name: "paladin_regenerate_upload_url", Audience: "data", Description: "Re-mint a presigned PUT URL for an in-progress (not completed) upload.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_initiate_multipart_upload", Audience: "data", Description: "Begin a multipart upload for a large object.", CapabilityOp: "put", Mutates: true},
-	{Name: "paladin_presign_part", Audience: "data", Description: "Mint a presigned PUT URL for one part of a multipart upload.", CapabilityOp: "presign"},
+	{Name: "paladin_presign_part", Audience: "data", Description: "Mint a presigned PUT URL for one part of a multipart upload.", CapabilityOp: string(auth.OpPresign)},
 	{Name: "paladin_complete_multipart_upload", Audience: "data", Description: "Finalise a multipart upload from the ordered part list.", CapabilityOp: "put", Mutates: true},
 	{Name: "paladin_abort_multipart_upload", Audience: "data", Description: "Abort an in-progress multipart upload and discard its parts.", CapabilityOp: "put", Mutates: true, Destructive: true},
 	{Name: "paladin_list_parts", Audience: "data", Description: "List parts uploaded so far for a multipart upload.", CapabilityOp: "list"},

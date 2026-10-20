@@ -23,13 +23,12 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
-	"github.com/jackc/pgx/v5"
-
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -48,14 +47,14 @@ type Handler struct {
 	issuer   *limes.Issuer
 	verifier TokenVerifier
 	store    limes.Store
-	usage    limes.UsageStore[pgx.Tx]
+	usage    meter.UsageStore
 	policy   cedar.Authorizer
 
 	// copier and copies serve RevokeBiscuit; see WithBiscuitCopies.
 	copier BiscuitCopier
 	copies limes.BiscuitRevocationStore
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
-	copyUsage limes.CopyUsageReader
+	copyUsage meter.CopyUsageReader
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
@@ -63,7 +62,7 @@ type Handler struct {
 }
 
 // WithCurrency sets the platform's currency, capability.currency. Without it
-// a budget that names none is in limes.DefaultUnitCode, as limes reads one.
+// a budget that names none is in platformUnit, as limes reads one.
 func (h *Handler) WithCurrency(unit string) *Handler {
 	h.currency = unit
 	return h
@@ -77,13 +76,13 @@ func NewHandler(
 	issuer *limes.Issuer,
 	verifier TokenVerifier,
 	store limes.Store,
-	usage limes.UsageStore[pgx.Tx],
+	usage meter.UsageStore,
 	policy cedar.Authorizer,
 ) *Handler {
 	if issuer == nil || verifier == nil || store == nil || policy == nil {
 		panic("capabilityh: issuer / verifier / store / policy are required")
 	}
-	return &Handler{issuer: issuer, verifier: verifier, store: store, usage: usage, policy: policy, currency: limes.DefaultUnitCode}
+	return &Handler{issuer: issuer, verifier: verifier, store: store, usage: usage, policy: policy, currency: apiutil.NoUnit}
 }
 
 // hasOp reports whether the caveat op-set includes the requested op.
@@ -211,7 +210,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		IssuedBy: limes.Principal{
 			TenantID: caller.TenantID,
 			Subject:  caller.Subject,
-			Type:     limes.PrincipalUser,
+			Type:     limes.PrincipalTypeUser,
 		},
 		Audience:        req.GetAudience(),
 		Caveats:         caveats,
@@ -474,7 +473,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGe
 	}
 	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
-		if errors.Is(err, limes.ErrUsageNotFound) {
+		if errors.Is(err, meter.ErrUsageNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -518,12 +517,12 @@ func protoToPrincipal(p *adminv1.CapabilityPrincipal) (limes.Principal, error) {
 			}
 			out.Agent.RunID = parsed
 		}
-		if pid := p.GetParentAgentId(); pid != "" {
+		if pid := p.GetParentRunId(); pid != "" {
 			parsed, err := uuid.Parse(pid)
 			if err != nil {
-				return limes.Principal{}, fmt.Errorf("subject.parent_agent_id: %w", err)
+				return limes.Principal{}, fmt.Errorf("subject.parent_run_id: %w", err)
 			}
-			out.Agent.ParentAgentID = parsed
+			out.Agent.ParentRunID = parsed
 		}
 	}
 	return out, nil
@@ -532,11 +531,11 @@ func protoToPrincipal(p *adminv1.CapabilityPrincipal) (limes.Principal, error) {
 func protoToPrincipalKind(k adminv1.PrincipalKind) limes.PrincipalType {
 	switch k {
 	case adminv1.PrincipalKind_PRINCIPAL_KIND_USER:
-		return limes.PrincipalUser
+		return limes.PrincipalTypeUser
 	case adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT:
-		return limes.PrincipalAgent
+		return limes.PrincipalTypeAgent
 	case adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE:
-		return limes.PrincipalService
+		return limes.PrincipalTypeService
 	default:
 		return ""
 	}
@@ -577,13 +576,15 @@ func (h *Handler) issued(ctx context.Context, res limes.IssueResult) (*adminv1.C
 }
 
 // seal is the capability just minted as a Biscuit its holder can narrow
-// offline, or "" for a key-bound one or one not valid yet. Issuer.Biscuit seals only a capability
-// a verifier accepted, so the token is verified first, for an audience it
-// names; a key-bound capability verifies only with a proof of its holder's
-// key, which the server does not have — its holder presents the JWT.
+// offline, or "" for one without OpShare, a key-bound one or one not valid
+// yet. A Biscuit is handed on offline, so limes seals only a capability that
+// may be shared. Issuer.Biscuit seals only a capability a verifier accepted,
+// so the token is verified first, for an audience it names; a key-bound
+// capability verifies only with a proof of its holder's key, which the server
+// does not have — its holder presents the JWT.
 func (h *Handler) seal(ctx context.Context, res limes.IssueResult) (string, error) {
 	c := res.Capability
-	if c.ConfirmationJKT != "" || len(c.Audience) == 0 {
+	if !hasOp(c.Caveats.Ops, limes.OpShare) || c.ConfirmationJKT != "" || len(c.Audience) == 0 {
 		return "", nil
 	}
 	verified, err := h.verifier.Verify(ctx, limes.VerifyRequest{Token: res.Token, Audience: c.Audience[0]})
@@ -626,12 +627,20 @@ func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currenc
 		return limes.Caveats{}, err
 	}
 	if !ok {
-		budget = budgetCeiling{ceiling: inherited.Budget, unit: inherited.UnitCode}
+		budget = budgetCeiling{ceiling: inherited.Budget, unit: inherited.Budget.UnitCode}
 	}
 	if budget.unit == "" {
 		budget.unit = currency
-		if parent != nil && parent.UnitCode != "" {
-			budget.unit = parent.UnitCode
+		if parent != nil && parent.Budget.UnitCode != "" {
+			budget.unit = parent.Budget.UnitCode
+		}
+	}
+	budget.ceiling.UnitCode = budget.unit
+	copies, ok := copyQuotaOf(c)
+	if !ok {
+		copies = limes.CopyQuota{Unlimited: true}
+		if parent != nil {
+			copies = parent.Copies
 		}
 	}
 	out := limes.Caveats{
@@ -639,7 +648,7 @@ func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currenc
 		ResourceURIs:           c.GetResourceUris(),
 		Requests:               requests,
 		Budget:                 budget.ceiling,
-		UnitCode:               budget.unit,
+		Copies:                 copies,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
 		IdempotencyKeyRequired: c.GetIdempotencyKeyRequired(),
 		SourceIPCIDR:           c.GetSourceIpCidr(),
@@ -664,8 +673,8 @@ func principalToProto(p limes.Principal) *adminv1.CapabilityPrincipal {
 		if p.Agent.RunID != uuid.Nil {
 			out.RunId = p.Agent.RunID.String()
 		}
-		if p.Agent.ParentAgentID != uuid.Nil {
-			out.ParentAgentId = p.Agent.ParentAgentID.String()
+		if p.Agent.ParentRunID != uuid.Nil {
+			out.ParentRunId = p.Agent.ParentRunID.String()
 		}
 	}
 	return out
@@ -673,11 +682,11 @@ func principalToProto(p limes.Principal) *adminv1.CapabilityPrincipal {
 
 func principalKindToProto(t limes.PrincipalType) adminv1.PrincipalKind {
 	switch t {
-	case limes.PrincipalUser:
+	case limes.PrincipalTypeUser:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_USER
-	case limes.PrincipalAgent:
+	case limes.PrincipalTypeAgent:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT
-	case limes.PrincipalService:
+	case limes.PrincipalTypeService:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_SERVICE
 	default:
 		return adminv1.PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED
@@ -693,7 +702,8 @@ func caveatsToProto(c limes.Caveats) *adminv1.CapabilityCaveats {
 		SourceIpCidr:           c.SourceIPCIDR,
 	}
 	setRequestCeiling(out, c.Requests)
-	setBudgetCeiling(out, c.Budget, c.UnitCode)
+	setBudgetCeiling(out, c.Budget, c.Budget.UnitCode)
+	setCopyQuota(out, c.Copies)
 	for _, op := range c.Ops {
 		out.Ops = append(out.Ops, string(op))
 	}
@@ -709,7 +719,6 @@ func capabilityToProto(c *limes.Capability) *adminv1.Capability {
 		Caveats:         caveatsToProto(c.Caveats),
 		IssuedAt:        timestamppb.New(c.IssuedAt),
 		ExpiresAt:       timestamppb.New(c.ExpiresAt),
-		Generation:      c.Generation,
 		ConfirmationJkt: c.ConfirmationJKT,
 	}
 	if !c.NotBefore.IsZero() {

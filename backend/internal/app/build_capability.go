@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
-
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/limes/otelmetric"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
@@ -27,8 +27,8 @@ type CapabilityBundle struct {
 	// Copies records revoked copies of a capability's Biscuit.
 	Copies limes.BiscuitRevocationStore
 	// CopyUsage reads the counters of Biscuit copies with limits of their own.
-	CopyUsage limes.CopyUsageReader
-	Usage     limes.UsageStore[pgx.Tx]
+	CopyUsage meter.CopyUsageReader
+	Usage     meter.UsageStore
 	Issuer    *limes.Issuer
 	Verifier  *limes.Verifier
 	Keys      *jwks.Static
@@ -125,7 +125,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability issuer: %w", err)
 	}
 
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability keys: %w", err)
 	}
@@ -135,15 +135,12 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		trusted = []string{cfg.IssuerName}
 	}
 
-	cache, err := limes.NewCachedRevocationChecker(limes.RevocationCacheConfig{Upstream: store, TTL: cfg.RevocationCacheTTL})
-	if err != nil {
-		return nil, fmt.Errorf("app: capability revocation cache: %w", err)
-	}
-	copies, err := limes.NewCachedBiscuitRevocationChecker(limes.BiscuitRevocationCacheConfig{
-		Upstream: store, TTL: cfg.RevocationCacheTTL,
+	// One cache answers for capabilities and for Biscuit copies alike.
+	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{
+		Capabilities: store, Biscuits: store, TTL: cfg.RevocationCacheTTL,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("app: capability Biscuit revocation cache: %w", err)
+		return nil, fmt.Errorf("app: capability revocation cache: %w", err)
 	}
 
 	// Revocations made on any replica clear this one's caches at once; the
@@ -156,7 +153,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	watchLog := deps.Logger.Named("capability-revocation-watch")
 	watcher := capabilitypg.NewRevocationWatcher(deps.Pool, func(err error) {
 		watchLog.Warn("revocation watch reconnecting; caches clear on reconnect", zap.Error(err))
-	}, cache, copies)
+	}, cache)
 	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
 	replay, err := capabilitypg.NewReplayCache(capabilitypg.ReplayCacheConfig{
@@ -186,12 +183,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Leeway:         cfg.VerifierLeeway,
 		// Every capability is also handed out as a Biscuit its holder can
 		// narrow offline (CapabilityService.Issue), so every plane takes one.
-		AcceptBiscuit:      true,
-		BiscuitRevocations: copies,
 		// The capability interceptor passes a copy's own limits to the usage
 		// store, which counts them (limes.copy_usage).
-		MeterCopies: true,
-		DPoP:        proofs,
+		Biscuit: &limes.BiscuitConfig{Revocations: cache, MeterCopies: true},
+		DPoP:    proofs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
@@ -202,15 +197,15 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
 	// Labelled by tenant, as every Paladin meter of tenant activity is.
-	meter, err := capabilitypg.NewUsageStore(deps.Pool, capabilitypg.WithDefaultUnit(cfg.Currency))
+	usageStore, err := capabilitypg.NewUsageStore(deps.Pool, capabilitypg.WithDefaultUnit(cfg.Currency))
 	if err != nil {
 		return nil, fmt.Errorf("app: capability usage store: %w", err)
 	}
-	usage, err := limes.Instrument[pgx.Tx](meter, limes.WithTenantAttribute())
+	usage, err := otelmetric.Instrument(usageStore, otelmetric.WithTenantAttribute())
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
-	copyUsage, ok := usage.(limes.CopyUsageReader)
+	copyUsage, ok := usage.(meter.CopyUsageReader)
 	if !ok {
 		return nil, errors.New("app: the capability usage store reads no Biscuit copy counters")
 	}
@@ -224,7 +219,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Verifier:     verifier,
 		Keys:         keys,
 		Replay:       replay,
-		PublicKeys:   map[string]ed25519.PublicKey{key.KeyID: key.Public},
+		PublicKeys:   map[string]ed25519.PublicKey{key.KeyID: key.Public()},
 		IssuerName:   cfg.IssuerName,
 		EphemeralKey: generated,
 	}, nil
@@ -270,7 +265,7 @@ func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (dpop.Nonces,
 		log.Warn("capability: ephemeral DPoP nonce key (no dpop_nonce.key); only one replica can check its nonces",
 			zap.String("env", env))
 	}
-	nonces, err := dpop.NewHMACNonces(dpop.HMACNoncesConfig{Keys: [][]byte{key}, Lifetime: cfg.Lifetime})
+	nonces, err := dpop.NewHMACNonces(dpop.HMACNoncesConfig{Keys: dpop.SealNonceKeys(key), Lifetime: cfg.Lifetime})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP nonces: %w", err)
 	}

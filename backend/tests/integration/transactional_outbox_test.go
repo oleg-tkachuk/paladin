@@ -22,6 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -38,8 +40,14 @@ import (
 // have been seeded by the caller, on a pool the transaction can see.
 // onTx is fn as the usage store's onCharged hook, which runs it on the
 // charge's transaction.
-func onTx(fn func(context.Context, pgx.Tx) error) func(context.Context, limes.Charged[pgx.Tx]) error {
-	return func(ctx context.Context, c limes.Charged[pgx.Tx]) error { return fn(ctx, c.Tx) }
+func onTx(fn func(context.Context, pgx.Tx) error) func(context.Context, meter.Charged) error {
+	return func(ctx context.Context, _ meter.Charged) error {
+		tx, ok := pgstore.TxFrom(ctx)
+		if !ok {
+			return errors.New("onCharged ran with no transaction in its context")
+		}
+		return fn(ctx, tx)
+	}
 }
 
 func insertOutboxOnTx(tenantID, subID uuid.UUID) func(context.Context, pgx.Tx) error {
@@ -76,7 +84,7 @@ func newUsageStore(t *testing.T, pool *pgxpool.Pool, opts ...capabilitypg.Option
 }
 
 // newLedger is the server's reader of the charges ledger over pool.
-func newLedger(t *testing.T, pool *pgxpool.Pool) limes.LedgerReader {
+func newLedger(t *testing.T, pool *pgxpool.Pool) meter.LedgerReader {
 	t.Helper()
 	l, err := capabilitypg.NewLedger(pool)
 	if err != nil {
@@ -87,11 +95,11 @@ func newLedger(t *testing.T, pool *pgxpool.Pool) limes.LedgerReader {
 
 // ledgerSums is the tenant's charges as pgstore's Ledger sums them, by
 // operation and actor, over every time a test charges at.
-func ledgerSums(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) []limes.ChargeSum {
+func ledgerSums(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) []meter.ChargeSum {
 	t.Helper()
-	page, err := newLedger(t, h.PoolMigrate).SumCharges(context.Background(), limes.SumChargesRequest{
+	page, err := newLedger(t, h.PoolMigrate).SumCharges(context.Background(), meter.SumChargesRequest{
 		TenantID: tenantID, From: time.Unix(0, 0), To: time.Now().Add(time.Hour),
-		ByOp: true, ByActor: true, Limit: limes.MaxListLimit,
+		GroupBy: []meter.ChargeDimension{meter.ChargeDimensionOp, meter.ChargeDimensionActor}, Limit: limes.MaxListLimit,
 	})
 	if err != nil {
 		t.Fatalf("sum charges: %v", err)
@@ -111,7 +119,7 @@ func countCharges(t *testing.T, h *pgharness.Harness, tenantID uuid.UUID) int64 
 
 // seedUnitCode is the unit every seeded capability, charge and tenant budget
 // in this package counts in.
-const seedUnitCode = limes.DefaultUnitCode
+const seedUnitCode = "USD"
 
 // seedCapLifetime is how long a seeded capability stays live: past any test.
 const seedCapLifetime = time.Hour
@@ -136,18 +144,17 @@ func seedCapability(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUI
 	c := limes.Capability{
 		ID:       capID,
 		Issuer:   "test-issuer",
-		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: tenantID, Subject: subject},
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenantID, Subject: subject},
 		Audience: []string{"admin"},
 		Caveats: limes.Caveats{
 			Ops:      []limes.Op{limes.OpGet},
 			Requests: limes.RequestCeiling{Unlimited: true},
-			Budget:   budget,
-			UnitCode: unit,
+			Budget:   limes.BudgetCeiling{Max: budget.Max, Unlimited: budget.Unlimited, UnitCode: unit},
 		},
 		IssuedAt:  now,
 		ExpiresAt: now.Add(seedCapLifetime),
 	}
-	issuer := limes.Principal{Type: limes.PrincipalService, Subject: "test-issuer"}
+	issuer := limes.Principal{Type: limes.PrincipalTypeService, Subject: "test-issuer"}
 	if err := records.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: issuer}); err != nil {
 		t.Fatalf("seed capability record: %v", err)
 	}
@@ -167,7 +174,7 @@ func seedCapRecord(t *testing.T, h *pgharness.Harness, capID, tenantID uuid.UUID
 
 // outboxCapBudget bounds the capability the outbox tests charge; the charge
 // fits under it.
-var outboxCapBudget = limes.BudgetCeiling{Max: limes.MustParseAmount("10.0")}
+var outboxCapBudget = limes.BudgetCeiling{Max: limes.MustParseAmount("10.0"), UnitCode: seedUnitCode}
 
 // TestCharge_FanoutCommitsOnSameTx: a successful Charge with a fan-out
 // hook lands ALL of it atomically — the running-total counters, the
@@ -181,7 +188,7 @@ func TestCharge_FanoutCommitsOnSameTx(t *testing.T) {
 	capID := uuid.New()
 	subject := seedCapRecord(t, h, capID, tenantID, outboxCapBudget)
 
-	spent, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, onTx(insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID))))
+	spent, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, onTx(insertOutboxOnTx(tenantID, seedSubscriptionRow(t, h.PoolMigrate, tenantID))))
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
@@ -221,13 +228,13 @@ func TestCharge_FanoutErrorRollsBackEverything(t *testing.T) {
 	subject := seedCapRecord(t, h, capID, tenantID, outboxCapBudget)
 
 	boom := errors.New("fan-out down")
-	_, err := store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, func(context.Context, limes.Charged[pgx.Tx]) error { return boom })
+	_, err := store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: limes.MustParseAmount("2.5"), Op: "presign.put", Actor: "agent-1"}, func(context.Context, meter.Charged) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("charge err = %v, want it to wrap the fan-out error", err)
 	}
 
 	// Counter never committed → no usage row at all.
-	if _, err := store.GetUsage(ctx, capID); !errors.Is(err, limes.ErrUsageNotFound) {
+	if _, err := store.GetUsage(ctx, capID); !errors.Is(err, meter.ErrUsageNotFound) {
 		t.Errorf("usage after rollback: err = %v, want ErrUsageNotFound (counter must not have committed)", err)
 	}
 	// Ledger row rolled back.

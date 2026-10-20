@@ -27,12 +27,12 @@ const CAP = {
   id: "cap-1",
   issuer: "paladin",
   audience: ["data"],
-  generation: 1n,
   parentId: "",
   subject: { kind: PrincipalKind.AGENT, subject: "agent:1", tenantId: "t-1" },
   caveats: {
     ops: ["get"],
     requestCeiling: { case: "maxRequests", value: 0n },
+    copyCeiling: { case: "maxCopies", value: 0n },
     budgetCeiling: {
       case: "unlimitedBudget",
       value: { currencyCode: "USD" },
@@ -97,6 +97,7 @@ describe("CapabilityDetailsPanel", () => {
     const value = (label: string) =>
       screen.getByText(label).nextElementSibling?.textContent;
     expect(value("Max requests")).toBe("0");
+    expect(value("Max Biscuit copies")).toBe("0");
     expect(value("Max budget")).toBe("unlimited");
   });
 

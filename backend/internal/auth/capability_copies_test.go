@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // copiesUsage records the copies each metering call was handed.
@@ -18,18 +17,18 @@ type copiesUsage struct {
 	bumps                     int
 }
 
-func (u *copiesUsage) Bump(ctx context.Context, req limes.BumpRequest) (limes.BumpReceipt, error) {
+func (u *copiesUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
 	u.bumps++
 	u.bumped = req.Subject.Copies()
 	return u.usageStore.Bump(ctx, req)
 }
 
-func (u *copiesUsage) Charge(ctx context.Context, req limes.ChargeRequest, on func(context.Context, limes.Charged[pgx.Tx]) error) (limes.ChargeReceipt, error) {
+func (u *copiesUsage) Charge(ctx context.Context, req meter.ChargeRequest, on func(context.Context, meter.Charged) error) (meter.ChargeReceipt, error) {
 	u.charged = req.Subject.Copies()
 	return u.usageStore.Charge(ctx, req, on)
 }
 
-func (u *copiesUsage) Reserve(ctx context.Context, req limes.ReserveRequest) (limes.Reservation, error) {
+func (u *copiesUsage) Reserve(ctx context.Context, req meter.ReserveRequest) (meter.Reservation, error) {
 	u.reserved = req.Subject.Copies()
 	return u.usageStore.Reserve(ctx, req)
 }
@@ -45,14 +44,14 @@ func TestCopiesReachTheMeter(t *testing.T) {
 		chargeAndHoldNanos = limes.NanosPerUnit / 4
 	)
 	m, store := newMeteredMinter(t)
-	root, _ := m.Mint(t, limes.Capability{})
+	root, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpShare}}})
 	_, inner := m.Attenuated(t, root, limes.Attenuation{Requests: &limes.RequestCeiling{Max: copyRequests}})
 	outer, err := limes.Attenuate(inner, limes.Attenuation{Budget: &limes.BudgetCeiling{Max: copyBudget}})
 	if err != nil {
 		t.Fatalf("attenuate: %v", err)
 	}
 	v := m.Verify(t, outer, root.Capability().Audience[0])
-	copies := v.Capability().Copies
+	copies := v.Copies()
 	if len(copies) != wantCopies {
 		t.Fatalf("the verified copy carries %d limits, want %d", len(copies), wantCopies)
 	}

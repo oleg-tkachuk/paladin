@@ -44,6 +44,39 @@ tree with itself and passes without checking anything.
 
 
 
+## v39.0.0, sdk/go/v0.93.0 — capabilities run on limes v0.109
+
+The capability layer moves from limes v0.69.0 to v0.109.0 and pgstore from
+v0.11.1 to v0.30.1. What an operator or a client sees:
+
+- **Every capability is reissued.** A verifier accepts `limes-cap-v6+jwt`
+  alone; a token issued before the upgrade is refused as invalid. Issue the
+  capabilities in flight again once the release is deployed.
+- **The data plane's own operations are namespaced.** `presign` is
+  `object:presign` and `tag` is `object:tag`; `search` and `embed`, which no
+  handler checked, are gone, and a caveat naming any of the four bare names is
+  refused. limes defines only `get`, `put`, `list`, `delete`, `share` and
+  `manage`.
+- **A Biscuit needs `share`.** `CapabilityService.Issue` returns `biscuit`
+  only for a capability whose ops include `share`, since a Biscuit is handed
+  on offline; the rest get their token alone.
+- **Biscuit copies have a quota.** `CapabilityCaveats.copy_ceiling` —
+  `max_copies` or `unlimited_copies` — bounds how many copies that set limits
+  of their own are counted, across the capability and every one delegated from
+  it. Left unset it is unlimited on Issue, within the server's own bound per
+  capability, and the parent's on Delegate.
+- **`CapabilityPrincipal.parent_agent_id` (13) is `parent_run_id`**, the run
+  of the agent a capability was delegated from, which the server sets on
+  Delegate. **`Capability.generation` (10) is gone**: nothing read it.
+- **A budget names its unit.** limes assumes none for an empty one: a ceiling
+  that lets anything be spent is in the platform's currency on Issue, the
+  parent's on Delegate, and the tenant's existing unit on a budget update. An
+  amount on record in no unit is answered in `XXX`.
+- **The database role matters.** pgstore's migrations 009–013 run with the
+  migrate step and take EXECUTE on the `limes` schema's functions from every
+  role but the runtime ones (`paladin_app`, `paladin_reaper`), which the step
+  grants it to.
+
 ## sdk/go/v0.92.0 — BatchCopyObjects takes a key prefix, as it always ran
 
 `BatchCopyObjectsRequest.destination_key_template` is now
@@ -58,7 +91,7 @@ The wire number is unchanged, so a binary client that sent a plain prefix
 keeps working; a JSON client, and any client that sent an expression, has to
 change.
 
-## Unreleased — the console names the storage origins it uploads to
+## v39.0.0 — the console names the storage origins it uploads to
 
 The console's Content-Security-Policy allowed only its own origin, so the
 browser refused every upload PUT and image preview on a presigned URL, which

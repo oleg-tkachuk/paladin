@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
@@ -39,21 +40,21 @@ func TestPlatformCurrency_IsWhatAnUnnamedUnitMeans(t *testing.T) {
 
 	t.Run("a first tenant budget that names no unit", func(t *testing.T) {
 		tenant := mustCreateTenant(t, h.PoolMigrate, "cur-budget")
-		b, err := store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		b, err := store.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID: tenant, Ceiling: limes.BudgetCeiling{Unlimited: true},
 		})
 		if err != nil {
 			t.Fatalf("SetTenantBudget: %v", err)
 		}
-		if b.UnitCode != platformCurrency {
-			t.Errorf("unit = %q, want the platform's %q", b.UnitCode, platformCurrency)
+		if b.Ceiling.UnitCode != platformCurrency {
+			t.Errorf("unit = %q, want the platform's %q", b.Ceiling.UnitCode, platformCurrency)
 		}
 		// A later set that names none keeps the unit the budget has.
-		b, err = store.SetTenantBudget(ctx, limes.SetTenantBudgetRequest{
+		b, err = store.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 			TenantID: tenant, Ceiling: limes.BudgetCeiling{Unlimited: true}, ExpectedVersion: b.ResourceVersion,
 		})
-		if err != nil || b.UnitCode != platformCurrency {
-			t.Errorf("second set: unit = %q, %v; want it kept", b.UnitCode, err)
+		if err != nil || b.Ceiling.UnitCode != platformCurrency {
+			t.Errorf("second set: unit = %q, %v; want it kept", b.Ceiling.UnitCode, err)
 		}
 	})
 }

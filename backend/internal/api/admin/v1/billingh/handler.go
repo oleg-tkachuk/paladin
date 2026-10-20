@@ -1,5 +1,5 @@
 // Package billingh implements the admin BillingService — read-only
-// aggregation over the charges ledger, read through limes.LedgerReader
+// aggregation over the charges ledger, read through meter.LedgerReader
 // (pgstore's Ledger) rather than the ledger's table, whose columns are
 // pgstore's own.
 package billingh
@@ -12,10 +12,10 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -33,8 +33,8 @@ const topN = 10
 // Handler is the BillingService backend: the charges ledger, the Cedar gate,
 // and a UsageStore for the tenant budget cap join.
 type Handler struct {
-	ledger limes.LedgerReader
-	usage  limes.UsageStore[pgx.Tx]
+	ledger meter.LedgerReader
+	usage  meter.UsageStore
 	policy cedar.Authorizer
 	// currency is the platform's (capability.currency): what a summary with
 	// no charge and no budget to take a unit from is in. See WithCurrency.
@@ -42,7 +42,7 @@ type Handler struct {
 }
 
 // WithCurrency sets the platform's currency, capability.currency. Without it
-// an empty summary is in limes.DefaultUnitCode.
+// an empty summary is in apiutil.NoUnit.
 func (h *Handler) WithCurrency(unit string) *Handler {
 	h.currency = unit
 	return h
@@ -52,11 +52,11 @@ func (h *Handler) WithCurrency(unit string) *Handler {
 // be nil only when the capability subsystem is disabled (the listener
 // builder still needs to register a stub so the BFF allowlist doesn't
 // 404).
-func NewHandler(ledger limes.LedgerReader, usage limes.UsageStore[pgx.Tx], policy cedar.Authorizer) *Handler {
+func NewHandler(ledger meter.LedgerReader, usage meter.UsageStore, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("billingh: policy authorizer is required")
 	}
-	return &Handler{ledger: ledger, usage: usage, policy: policy, currency: limes.DefaultUnitCode}
+	return &Handler{ledger: ledger, usage: usage, policy: policy, currency: apiutil.NoUnit}
 }
 
 // authorize gates the RPC against Cedar. Resource is the Tenant
@@ -93,17 +93,17 @@ func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) (context.Co
 // is logged rather than returned, since the ledger figures stand without
 // it, but a summary that shows no cap for a tenant that has one must leave
 // a trace of why.
-func (h *Handler) tenantBudget(ctx context.Context, tenantID uuid.UUID) (limes.TenantBudget, bool) {
+func (h *Handler) tenantBudget(ctx context.Context, tenantID uuid.UUID) (meter.TenantBudget, bool) {
 	if h.usage == nil {
-		return limes.TenantBudget{}, false
+		return meter.TenantBudget{}, false
 	}
 	tb, err := h.usage.GetTenantBudget(ctx, tenantID)
 	if err != nil {
-		if !errors.Is(err, limes.ErrTenantBudgetNotFound) {
+		if !errors.Is(err, meter.ErrTenantBudgetNotFound) {
 			logger.FromContext(ctx).Warn("billing: tenant budget unreadable; summary shows no cap",
 				zap.String("tenant_id", tenantID.String()), zap.Error(err))
 		}
-		return limes.TenantBudget{}, false
+		return meter.TenantBudget{}, false
 	}
 	return tb, true
 }
@@ -168,9 +168,9 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 
 	out := &Summary{}
 	if start.Before(end) {
-		period := limes.SumChargesRequest{TenantID: tenantID, From: start, To: end}
-		var totals []limes.ChargeSum
-		if err := h.sumCharges(ctx, period, func(s limes.ChargeSum) bool {
+		period := meter.SumChargesRequest{TenantID: tenantID, From: start, To: end}
+		var totals []meter.ChargeSum
+		if err := h.sumCharges(ctx, period, func(s meter.ChargeSum) bool {
 			totals = append(totals, s)
 			return true
 		}); err != nil {
@@ -180,15 +180,15 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 			out.UnitCode, out.TotalAmount, out.ChargeCount = total.UnitCode, net(total), total.Charges
 			for _, top := range []struct {
 				into  *[]TopEntry
-				group func(*limes.SumChargesRequest)
-				label func(limes.ChargeSum) string
+				group func(*meter.SumChargesRequest)
+				label func(meter.ChargeSum) string
 			}{
-				{&out.TopCapabilities, func(r *limes.SumChargesRequest) { r.ByCapability = true },
-					func(s limes.ChargeSum) string { return s.CapabilityID.String() }},
-				{&out.TopActors, func(r *limes.SumChargesRequest) { r.ByActor = true },
-					func(s limes.ChargeSum) string { return s.Actor }},
-				{&out.TopOps, func(r *limes.SumChargesRequest) { r.ByOp = true },
-					func(s limes.ChargeSum) string { return string(s.Op) }},
+				{&out.TopCapabilities, func(r *meter.SumChargesRequest) { r.GroupBy = []meter.ChargeDimension{meter.ChargeDimensionCapability} },
+					func(s meter.ChargeSum) string { return s.CapabilityID.String() }},
+				{&out.TopActors, func(r *meter.SumChargesRequest) { r.GroupBy = []meter.ChargeDimension{meter.ChargeDimensionActor} },
+					func(s meter.ChargeSum) string { return s.Actor }},
+				{&out.TopOps, func(r *meter.SumChargesRequest) { r.GroupBy = []meter.ChargeDimension{meter.ChargeDimensionOp} },
+					func(s meter.ChargeSum) string { return string(s.Op) }},
 			} {
 				req := period
 				top.group(&req)
@@ -203,9 +203,9 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	// nil, which the frontend renders as "no cap configured".
 	if tb, ok := h.tenantBudget(ctx, tenantID); ok {
 		ceiling := tb.Ceiling
-		out.Ceiling, out.CeilingUnit = &ceiling, tb.UnitCode
+		out.Ceiling, out.CeilingUnit = &ceiling, tb.Ceiling.UnitCode
 		if out.UnitCode == "" {
-			out.UnitCode = tb.UnitCode
+			out.UnitCode = tb.Ceiling.UnitCode
 		}
 	}
 	if out.UnitCode == "" {
@@ -217,9 +217,9 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 // topBy is the topN groups req asks for in unit, the largest first, each
 // named by label. The ledger hands the groups of every unit back largest
 // first, so the first topN in unit are its top.
-func (h *Handler) topBy(ctx context.Context, req limes.SumChargesRequest, unit string, label func(limes.ChargeSum) string) ([]TopEntry, error) {
+func (h *Handler) topBy(ctx context.Context, req meter.SumChargesRequest, unit string, label func(meter.ChargeSum) string) ([]TopEntry, error) {
 	out := make([]TopEntry, 0, topN)
-	err := h.sumCharges(ctx, req, func(s limes.ChargeSum) bool {
+	err := h.sumCharges(ctx, req, func(s meter.ChargeSum) bool {
 		if s.UnitCode == unit {
 			out = append(out, TopEntry{Label: label(s), Amount: net(s), ChargeCount: s.Charges})
 		}
@@ -294,9 +294,9 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 
 	out := &TimeSeries{Buckets: make([]TimeBucket, 0)}
 	if start.Before(end) {
-		var sums []limes.ChargeSum
-		req := limes.SumChargesRequest{TenantID: tenantID, From: start, To: end, Bucket: ledgerBuckets[granularity]}
-		if err := h.sumCharges(ctx, req, func(s limes.ChargeSum) bool {
+		var sums []meter.ChargeSum
+		req := meter.SumChargesRequest{TenantID: tenantID, From: start, To: end, Bucket: ledgerBuckets[granularity]}
+		if err := h.sumCharges(ctx, req, func(s meter.ChargeSum) bool {
 			sums = append(sums, s)
 			return true
 		}); err != nil {
@@ -306,7 +306,7 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	}
 	if out.UnitCode == "" {
 		if tb, ok := h.tenantBudget(ctx, tenantID); ok {
-			out.UnitCode = tb.UnitCode
+			out.UnitCode = tb.Ceiling.UnitCode
 		}
 	}
 	if out.UnitCode == "" {

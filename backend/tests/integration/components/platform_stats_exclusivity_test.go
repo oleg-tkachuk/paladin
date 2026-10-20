@@ -59,12 +59,12 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 	month, hour := now.Add(30*24*time.Hour), now.Add(time.Hour)
 	lapsed := now.Add(-time.Hour)
 
-	live := issue(limes.PrincipalAgent, month, uuid.Nil)  // active, not expiring soon
-	issue(limes.PrincipalAgent, hour, uuid.Nil)           // active AND expiring within 24h
-	issue(limes.PrincipalAgent, lapsed, uuid.Nil)         // expired, never revoked
-	revoke(issue(limes.PrincipalAgent, month, uuid.Nil))  // revoked while still valid
-	revoke(issue(limes.PrincipalAgent, lapsed, uuid.Nil)) // revoked AND expired — revocation wins
-	issue(limes.PrincipalService, month, live)            // active, delegated from `live`
+	live := issue(limes.PrincipalTypeAgent, month, uuid.Nil)  // active, not expiring soon
+	issue(limes.PrincipalTypeAgent, hour, uuid.Nil)           // active AND expiring within 24h
+	issue(limes.PrincipalTypeAgent, lapsed, uuid.Nil)         // expired, never revoked
+	revoke(issue(limes.PrincipalTypeAgent, month, uuid.Nil))  // revoked while still valid
+	revoke(issue(limes.PrincipalTypeAgent, lapsed, uuid.Nil)) // revoked AND expired — revocation wins
+	issue(limes.PrincipalTypeService, month, live)            // active, delegated from `live`
 
 	// ─── api tokens ─────────────────────────────────────────────────────
 	tok := func(expires string, lastUsed, revoked bool) {
@@ -102,9 +102,9 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 	// ByPrincipalKind covers ACTIVE rows only, which is what the three
 	// non-active "agent" rows above are there to prove.
 	assertDelta(t, "capabilities.by_kind[agent]",
-		bc.ByPrincipalKind[string(limes.PrincipalAgent)], c.ByPrincipalKind[string(limes.PrincipalAgent)], 2)
+		bc.ByPrincipalKind[string(limes.PrincipalTypeAgent)], c.ByPrincipalKind[string(limes.PrincipalTypeAgent)], 2)
 	assertDelta(t, "capabilities.by_kind[service]",
-		bc.ByPrincipalKind[string(limes.PrincipalService)], c.ByPrincipalKind[string(limes.PrincipalService)], 1)
+		bc.ByPrincipalKind[string(limes.PrincipalTypeService)], c.ByPrincipalKind[string(limes.PrincipalTypeService)], 1)
 
 	a, ba := got.APITokens, base.APITokens
 	assertDelta(t, "api_tokens.total", ba.Total, a.Total, 5)

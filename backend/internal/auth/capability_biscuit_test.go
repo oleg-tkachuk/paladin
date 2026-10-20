@@ -20,9 +20,9 @@ import (
 func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 	m := captest.NewMinter(t)
 	v, _ := m.Mint(t, limes.Capability{
-		Subject:  limes.Principal{Type: limes.PrincipalAgent, Subject: "agent"},
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, Subject: "agent"},
 		Audience: []string{TokenPlaneData},
-		Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpDelete}, ResourcePrefixes: []string{"corpus/"}},
+		Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpDelete, limes.OpShare}, ResourcePrefixes: []string{"corpus/"}},
 	})
 	sealed, err := m.Issuer.Biscuit(context.Background(), limes.BiscuitRequest{Capability: v})
 	if err != nil {

@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
 // tenantRecordingUsage records the tenant each store call would bind to
@@ -31,17 +32,17 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) Bump(ctx context.Context, req limes.BumpRequest) (limes.BumpReceipt, error) {
+func (u *tenantRecordingUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
 	u.record(ctx, "Bump")
 	return u.usageStore.Bump(ctx, req)
 }
 
-func (u *tenantRecordingUsage) Charge(ctx context.Context, req limes.ChargeRequest, onCharged func(context.Context, limes.Charged[pgx.Tx]) error) (limes.ChargeReceipt, error) {
+func (u *tenantRecordingUsage) Charge(ctx context.Context, req meter.ChargeRequest, onCharged func(context.Context, meter.Charged) error) (meter.ChargeReceipt, error) {
 	u.record(ctx, "Charge")
 	return u.usageStore.Charge(ctx, req, onCharged)
 }
 
-func (u *tenantRecordingUsage) Refund(ctx context.Context, req limes.RefundRequest) (limes.RefundReceipt, error) {
+func (u *tenantRecordingUsage) Refund(ctx context.Context, req meter.RefundRequest) (meter.RefundReceipt, error) {
 	u.record(ctx, "Refund")
 	return u.usageStore.Refund(ctx, req)
 }
@@ -71,7 +72,7 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 				Subject: limes.Principal{TenantID: capTenant, Subject: "agent:a"},
 				Caveats: limes.Caveats{
 					Requests: limes.RequestCeiling{Max: maxRequests},
-					Budget:   limes.BudgetCeiling{Max: maxBudget},
+					Budget:   limes.BudgetCeiling{Max: maxBudget, UnitCode: captest.Unit},
 				},
 			})
 			i := &capabilityInterceptor{usage: usage}

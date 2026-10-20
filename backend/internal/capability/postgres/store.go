@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -91,8 +92,8 @@ type UsageStore struct {
 }
 
 var (
-	_ limes.UsageStore[pgx.Tx] = (*UsageStore)(nil)
-	_ limes.CopyUsageReader    = (*UsageStore)(nil)
+	_ meter.UsageStore      = (*UsageStore)(nil)
+	_ meter.CopyUsageReader = (*UsageStore)(nil)
 )
 
 // NewUsageStore is the meter: the counters, holds and charges of every
@@ -109,12 +110,21 @@ func NewUsageStore(pool *pgxpool.Pool, opts ...Option) (*UsageStore, error) {
 	return &UsageStore{UsageStore: u, defaultUnit: o.defaultUnit}, nil
 }
 
-// SetTenantBudget implements limes.UsageStore. A first budget — expected at
+// SetTenantBudget implements meter.UsageStore. A first budget — expected at
 // version 0, so none is on record — that names no unit is written in the
-// default unit; a later one with no unit keeps the unit it has.
-func (s *UsageStore) SetTenantBudget(ctx context.Context, req limes.SetTenantBudgetRequest) (limes.TenantBudget, error) {
-	if req.UnitCode == "" && req.ExpectedVersion == 0 {
-		req.UnitCode = s.defaultUnit
+// default unit; a later one with no unit keeps the unit it has, which limes
+// needs named for any ceiling that lets something be spent.
+func (s *UsageStore) SetTenantBudget(ctx context.Context, req meter.SetTenantBudgetRequest) (meter.TenantBudget, error) {
+	if req.Ceiling.UnitCode == "" {
+		if req.ExpectedVersion == 0 {
+			req.Ceiling.UnitCode = s.defaultUnit
+		} else {
+			current, err := s.GetTenantBudget(ctx, req.TenantID)
+			if err != nil {
+				return meter.TenantBudget{}, err
+			}
+			req.Ceiling.UnitCode = current.Ceiling.UnitCode
+		}
 	}
 	return s.UsageStore.SetTenantBudget(ctx, req)
 }

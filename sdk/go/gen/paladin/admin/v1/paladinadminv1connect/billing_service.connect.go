@@ -31,6 +31,9 @@ const (
 	// BillingServiceGetTenantTimeSeriesProcedure is the procedure name of the BillingService's
 	// GetTenantTimeSeries RPC.
 	BillingServiceGetTenantTimeSeriesProcedure = "/paladin.admin.v1.BillingService/GetTenantTimeSeries"
+	// BillingServiceListTenantSpendProcedure is the procedure name of the BillingService's
+	// ListTenantSpend RPC.
+	BillingServiceListTenantSpendProcedure = "/paladin.admin.v1.BillingService/ListTenantSpend"
 	// BillingServiceGetBillingSettingsProcedure is the procedure name of the BillingService's
 	// GetBillingSettings RPC.
 	BillingServiceGetBillingSettingsProcedure = "/paladin.admin.v1.BillingService/GetBillingSettings"
@@ -53,6 +56,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	billingServiceListTenantSpendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods().ByName("ListTenantSpend"),
+			Procedure:        BillingServiceListTenantSpendProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 	billingServiceGetBillingSettingsSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -72,6 +83,11 @@ type BillingServiceClient interface {
 	// GetTenantTimeSeries returns time-bucketed spend for a chart.
 	// granularity ∈ {hour, day, week} — server validates.
 	GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error)
+	// ListTenantSpend lists the tenants that spent anything over the period,
+	// the most first, from one sum of the charges ledger across tenants.
+	// Defaults to the last 30 days, as GetTenantSummary does. Gated by
+	// ReadBilling on the caller's own tenant and the platform.admin role.
+	ListTenantSpend(context.Context, *v1.ListTenantSpendRequest) (*v1.ListTenantSpendResponse, error)
 	// GetBillingSettings returns the platform's billing settings, so a client
 	// can show and default to them: the currency an amount is in when it names
 	// none. Gated by ReadBilling on the caller's own tenant.
@@ -93,6 +109,11 @@ type BillingServiceHandler interface {
 	// GetTenantTimeSeries returns time-bucketed spend for a chart.
 	// granularity ∈ {hour, day, week} — server validates.
 	GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error)
+	// ListTenantSpend lists the tenants that spent anything over the period,
+	// the most first, from one sum of the charges ledger across tenants.
+	// Defaults to the last 30 days, as GetTenantSummary does. Gated by
+	// ReadBilling on the caller's own tenant and the platform.admin role.
+	ListTenantSpend(context.Context, *v1.ListTenantSpendRequest) (*v1.ListTenantSpendResponse, error)
 	// GetBillingSettings returns the platform's billing settings, so a client
 	// can show and default to them: the currency an amount is in when it names
 	// none. Gated by ReadBilling on the caller's own tenant.
@@ -106,6 +127,7 @@ func RegisterBillingServiceHandler(server *connect.Server, svc BillingServiceHan
 	server.Register(
 		connect.Method{Spec: billingServiceGetTenantSummarySpec(), Handler: adapter.getTenantSummary},
 		connect.Method{Spec: billingServiceGetTenantTimeSeriesSpec(), Handler: adapter.getTenantTimeSeries},
+		connect.Method{Spec: billingServiceListTenantSpendSpec(), Handler: adapter.listTenantSpend},
 		connect.Method{Spec: billingServiceGetBillingSettingsSpec(), Handler: adapter.getBillingSettings},
 	)
 }
@@ -119,6 +141,10 @@ func (UnimplementedBillingServiceHandler) GetTenantSummary(context.Context, *v1.
 
 func (UnimplementedBillingServiceHandler) GetTenantTimeSeries(context.Context, *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.GetTenantTimeSeries is not implemented")
+}
+
+func (UnimplementedBillingServiceHandler) ListTenantSpend(context.Context, *v1.ListTenantSpendRequest) (*v1.ListTenantSpendResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.ListTenantSpend is not implemented")
 }
 
 func (UnimplementedBillingServiceHandler) GetBillingSettings(context.Context, *v1.GetBillingSettingsRequest) (*v1.GetBillingSettingsResponse, error) {
@@ -140,6 +166,14 @@ func (c *billingServiceClient) GetTenantSummary(ctx context.Context, req *v1.Get
 func (c *billingServiceClient) GetTenantTimeSeries(ctx context.Context, req *v1.GetTenantTimeSeriesRequest) (*v1.GetTenantTimeSeriesResponse, error) {
 	var res v1.GetTenantTimeSeriesResponse
 	if err := c.client.CallUnary(ctx, billingServiceGetTenantTimeSeriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ListTenantSpend(ctx context.Context, req *v1.ListTenantSpendRequest) (*v1.ListTenantSpendResponse, error) {
+	var res v1.ListTenantSpendResponse
+	if err := c.client.CallUnary(ctx, billingServiceListTenantSpendSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -173,6 +207,18 @@ func (h billingServiceHandler) getTenantTimeSeries(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.GetTenantTimeSeries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) listTenantSpend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTenantSpendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTenantSpend(ctx, &req)
 	if err != nil {
 		return err
 	}

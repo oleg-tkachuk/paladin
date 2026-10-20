@@ -688,7 +688,7 @@ func TestPresignPart(t *testing.T) {
 	})
 
 	t.Run("capability lacks put op → permission denied", func(t *testing.T) {
-		ctx := authedCtxWithCap(t, tid, limes.OpPresign) // has presign, not put
+		ctx := authedCtxWithCap(t, tid, auth.OpPresign) // has presign, not put
 		_, _, _, err := newHandler(okSession(), &fakeStorage{}, allow()).
 			PresignPart(ctx, "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
 		wantCode(t, err, connect.CodePermissionDenied)

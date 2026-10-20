@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -88,7 +89,7 @@ func newDPoPFixture(t *testing.T) *dpopFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public}})
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,13 +125,13 @@ func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 	t.Helper()
 	tenant := uuid.New()
 	res, err := f.issuer.Issue(context.Background(), limes.IssueRequest{
-		IssuedBy: limes.Principal{Type: limes.PrincipalUser, TenantID: tenant, Subject: "op"},
-		Subject:  limes.Principal{Type: limes.PrincipalAgent, TenantID: tenant, Subject: "agent"},
+		IssuedBy: limes.Principal{Type: limes.PrincipalTypeUser, TenantID: tenant, Subject: "op"},
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
 		Audience: []string{TokenPlaneData},
 		Caveats: limes.Caveats{
 			Ops:      []limes.Op{limes.OpGet},
 			Requests: limes.RequestCeiling{Unlimited: true},
-			Budget:   limes.BudgetCeiling{Unlimited: true},
+			Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: captest.Unit},
 		},
 		TTL:             time.Hour,
 		ConfirmationJKT: jkt,
@@ -143,7 +144,7 @@ func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 
 func (f *dpopFixture) proof(t *testing.T, url, token string) string {
 	t.Helper()
-	p, err := dpop.Sign(context.Background(), f.key, dpop.ProofRequest{
+	p, err := dpop.Sign(context.Background(), f.key, dpop.SignRequest{
 		Method: http.MethodPost, URL: url, Token: token, IssuedAt: time.Now(),
 	})
 	if err != nil {
@@ -343,7 +344,7 @@ func TestCapabilityDPoP_GoSDKAnswersANonceChallenge(t *testing.T) {
 	f := newDPoPFixture(t)
 	const nonceLifetime = time.Minute
 	hmac, err := dpop.NewHMACNonces(dpop.HMACNoncesConfig{
-		Keys:     [][]byte{[]byte(strings.Repeat("n", dpop.HMACNonceKeyBytes))},
+		Keys:     dpop.SealNonceKeys([]byte(strings.Repeat("n", dpop.HMACNonceKeyBytes))),
 		Lifetime: nonceLifetime,
 	})
 	if err != nil {

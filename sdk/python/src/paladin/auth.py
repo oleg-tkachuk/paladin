@@ -32,6 +32,14 @@ AUDIENCE_DATA = "paladin-data"
 AUDIENCE_ADMIN = "paladin-admin"
 AUDIENCE_IAM = "paladin-iam"
 
+# The data plane's own capability operations, as a capability names them in
+# its caveats; the others are limes's (get, put, list, delete, share, manage).
+# tests/test_capability_ops.py keeps them equal to sdk/testdata/capability_ops.json.
+OP_OBJECT_PRESIGN = "object:presign"
+"""Mint a presigned URL for an object; the URL's own method needs get or put."""
+OP_OBJECT_TAG = "object:tag"
+"""Read or change an object's tags."""
+
 TOKEN_REFRESH_MARGIN = 30.0
 """Seconds before expiry at which a cached access token is replaced."""
 

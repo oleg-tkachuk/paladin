@@ -74,6 +74,10 @@ readonly COLLECTION=docs
 # Every upload is bound to its checksum; the smoke object uses SHA-256.
 readonly CHECKSUM_ALGORITHM=CHECKSUM_ALGORITHM_SHA256
 # Connect error codes, as the JSON protocol spells them.
+# The data plane's own operation for minting a presigned URL, as
+# sdk/testdata/capability_ops.json names it; limes defines no bare "presign".
+readonly OP_OBJECT_PRESIGN=object:presign
+readonly OP_BARE_PRESIGN=presign
 readonly CODE_INVALID_ARGUMENT=invalid_argument
 readonly CODE_PERMISSION_DENIED=permission_denied
 readonly CODE_NOT_FOUND=not_found
@@ -272,9 +276,11 @@ issue() {
         --argjson ttl "$CAPABILITY_TTL_SECONDS" --argjson max "$CAPABILITY_MAX_REQUESTS" \
         '{subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:$s,agentType:"live-smoke"},audience:["data"],caveats:{ops:$ops,maxRequests:$max,unlimitedBudget:{}},ttlSeconds:$ttl}')"
 }
-r=$(issue live-smoke-writer '["put","get","list","presign","delete"]')
+r=$(issue live-smoke-writer "[\"put\",\"get\",\"list\",\"$OP_OBJECT_PRESIGN\",\"delete\"]")
 writer=$(printf %s "$r" | jq -r '.token // empty')
 capabilities+=("$(printf %s "$r" | jq -r '.capability.id // empty')")
+r=$(issue live-smoke-bare-op "[\"$OP_BARE_PRESIGN\"]")
+expect "an operation limes no longer defines is refused" "$r" test "$(code_of "$r")" = "$CODE_INVALID_ARGUMENT"
 r=$(issue live-smoke-reader '["get","list"]')
 reader=$(printf %s "$r" | jq -r '.token // empty')
 capabilities+=("$(printf %s "$r" | jq -r '.capability.id // empty')")
@@ -446,6 +452,9 @@ for g in "${BILLING_GRANULARITIES[@]}"; do
         "{\"tenantId\":\"$tenant\",\"periodStart\":\"$from\",\"periodEnd\":\"$to\",\"granularity\":\"$g\"}")
     expect "billing series by $g" "$r" test "$(code_of "$r")" = ok
 done
+r=$(admin_rpc BillingService/ListTenantSpend "{\"periodStart\":\"$from\",\"periodEnd\":\"$to\"}")
+expect "billing lists every tenant's spend" "$r" \
+    test "$(code_of "$r")" = ok -a "$(printf %s "$r" | jq -r '(.tenants // []) | type')" = array
 
 # ── a purged tenant's token is refused as revoked ───────────────────────────
 # A tenant of its own, with nothing that would hold its purge back.

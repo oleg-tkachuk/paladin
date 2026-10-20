@@ -6,16 +6,16 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/memstore"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
 // usageStore is the reference Meter the caveat tests charge against, typed
 // with the transaction handle the interceptor's store takes.
-type usageStore = memstore.UsageStore[pgx.Tx]
+type usageStore = memstore.UsageStore
 
 // newMeteredMinter is a Minter and a usage store over its records. A Meter
 // refuses a capability it cannot find on record, so every capability a test
@@ -23,7 +23,7 @@ type usageStore = memstore.UsageStore[pgx.Tx]
 func newMeteredMinter(t *testing.T) (*captest.Minter, *usageStore) {
 	t.Helper()
 	m := captest.NewMinter(t)
-	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig[pgx.Tx]{Records: m.Store})
+	usage, err := memstore.NewUsageStore(memstore.UsageStoreConfig{Records: m.Store})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,14 +32,14 @@ func newMeteredMinter(t *testing.T) (*captest.Minter, *usageStore) {
 
 // budgeted is a capability template with a budget ceiling of ceiling.
 func budgeted(ceiling limes.Nanos) limes.Capability {
-	return limes.Capability{Caveats: limes.Caveats{Budget: limes.BudgetCeiling{Max: ceiling}}}
+	return limes.Capability{Caveats: limes.Caveats{Budget: limes.BudgetCeiling{Max: ceiling, UnitCode: captest.Unit}}}
 }
 
 // spentOf is the capability's recorded spend; zero when nothing was recorded.
 func spentOf(t *testing.T, usage *usageStore, v limes.VerifiedCapability) limes.Nanos {
 	t.Helper()
 	u, err := usage.GetUsage(context.Background(), v.Capability().ID)
-	if errors.Is(err, limes.ErrUsageNotFound) {
+	if errors.Is(err, meter.ErrUsageNotFound) {
 		return 0
 	}
 	if err != nil {
@@ -108,7 +108,7 @@ func TestChargeCapability_UnlimitedBudget_NeverRejects(t *testing.T) {
 	const charges = 100
 	charge := limes.MustParseAmount("100.0")
 	m, usage := newMeteredMinter(t)
-	v, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Budget: limes.BudgetCeiling{Unlimited: true}}})
+	v, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: captest.Unit}}})
 	ctx := WithChargeStore(WithCapability(context.Background(), v), usage)
 
 	for i := range charges {
@@ -124,7 +124,7 @@ func TestChargeCapability_ZeroBudget_RefusesAnyCharge(t *testing.T) {
 	m, usage := newMeteredMinter(t)
 	v, _ := m.MintExact(t, limes.Capability{Caveats: limes.Caveats{
 		Requests: limes.RequestCeiling{Unlimited: true},
-		Budget:   limes.BudgetCeiling{},
+		Budget:   limes.BudgetCeiling{UnitCode: captest.Unit},
 	}})
 	ctx := WithChargeStore(WithCapability(context.Background(), v), usage)
 
@@ -159,8 +159,7 @@ func TestChargeCapability_ChargesInTheCapabilitysUnit(t *testing.T) {
 	const unit = "EUR"
 	m, usage := newMeteredMinter(t)
 	v, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
-		Budget:   limes.BudgetCeiling{Max: oneUnit},
-		UnitCode: unit,
+		Budget: limes.BudgetCeiling{Max: oneUnit, UnitCode: unit},
 	}})
 	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), v), usage))
 
@@ -265,7 +264,7 @@ func TestRefundLastCharge_CannotExceedTheCharge(t *testing.T) {
 	ctx := chargedContext(t, v, usage, tenthOfUnit)
 
 	err := RefundLastCharge(ctx, oneUnit)
-	if connect.CodeOf(err) != connect.CodeInvalidArgument || !errors.Is(err, limes.ErrRefundExceedsCharge) {
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !errors.Is(err, meter.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want InvalidArgument wrapping ErrRefundExceedsCharge", err)
 	}
 	if err := RefundLastCharge(ctx, 0); err != nil {

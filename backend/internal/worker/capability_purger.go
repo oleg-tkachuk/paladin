@@ -17,11 +17,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 )
 
@@ -43,7 +42,7 @@ const DefaultCapabilityExpiredFor = 24 * time.Hour
 // when Interval <= 0.
 type CapabilityPurger struct {
 	Store      limes.Store
-	Usage      limes.UsageStore[pgx.Tx]
+	Usage      meter.UsageStore
 	Replay     ReplayPurger
 	Interval   time.Duration
 	ExpiredFor time.Duration
@@ -93,7 +92,7 @@ func (p *CapabilityPurger) tick(ctx context.Context) error {
 		// Expired reservations first: their holds keep counting against
 		// every ceiling until released.
 		for {
-			res, err := p.Usage.ReleaseExpired(ctx, limes.ReleaseExpiredRequest{})
+			res, err := p.Usage.ReleaseExpired(ctx, meter.ReleaseExpiredRequest{})
 			if err != nil {
 				p.log().Warn("failed to release expired capability reservations", zap.Error(err))
 				tickErr = err
@@ -109,7 +108,7 @@ func (p *CapabilityPurger) tick(ctx context.Context) error {
 		// Then what the meter keeps for the capabilities just purged: their
 		// holds go back to their ancestors and tenants, their rows go.
 		for {
-			res, err := p.Usage.PurgeOrphans(ctx, limes.PurgeOrphansRequest{})
+			res, err := p.Usage.PurgeOrphans(ctx, meter.PurgeOrphansRequest{})
 			if err != nil {
 				p.log().Warn("failed to purge capability usage orphans", zap.Error(err))
 				tickErr = err

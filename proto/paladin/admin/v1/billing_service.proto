@@ -15,7 +15,8 @@ import "paladin/admin/v1/types.proto";
 // that one manages the cap; this one renders the spend.
 //
 // Authorization: platform-admin / tenant-admin only. Cedar action
-// `ReadBilling` on the tenant resource gates every RPC.
+// `ReadBilling` on the tenant resource gates every RPC; ListTenantSpend,
+// which reads every tenant, also needs the platform.admin role.
 service BillingService {
   // GetTenantSummary returns aggregate spend + top-N breakdowns for
   // the supplied period. Defaults to last 30 days when period_start
@@ -30,12 +31,51 @@ service BillingService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // ListTenantSpend lists the tenants that spent anything over the period,
+  // the most first, from one sum of the charges ledger across tenants.
+  // Defaults to the last 30 days, as GetTenantSummary does. Gated by
+  // ReadBilling on the caller's own tenant and the platform.admin role.
+  rpc ListTenantSpend(ListTenantSpendRequest) returns (ListTenantSpendResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // GetBillingSettings returns the platform's billing settings, so a client
   // can show and default to them: the currency an amount is in when it names
   // none. Gated by ReadBilling on the caller's own tenant.
   rpc GetBillingSettings(GetBillingSettingsRequest) returns (GetBillingSettingsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+}
+
+message ListTenantSpendRequest {
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+  // limit is how many tenants to return, the most spent first; 0 is the
+  // server's default, and more than its maximum is refused.
+  int32 limit = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message ListTenantSpendResponse {
+  // tenants that spent anything over the period: a tenant with no charge in
+  // it is not listed. Ordered by unit — the platform's currency first, then
+  // the others by code, since amounts in different units do not compare —
+  // then by spend, the most first.
+  repeated TenantSpend tenants = 1;
+  // truncated is true when more tenants spent than limit let through.
+  bool truncated = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// TenantSpend is what one tenant's charges came to over a period, net of
+// refunds, in the unit most of them are in.
+message TenantSpend {
+  string tenant_id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string slug = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string display_name = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // deleted is true for a tenant in the trash, which still spent in the
+  // period.
+  bool deleted = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.type.Money spent = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  int64 charge_count = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message GetBillingSettingsRequest {}

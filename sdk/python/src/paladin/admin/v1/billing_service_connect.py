@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse
+from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse, ListTenantSpendRequest, ListTenantSpendResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -41,7 +41,8 @@ class BillingService(Protocol):
     that one manages the cap; this one renders the spend.
 
     Authorization: platform-admin / tenant-admin only. Cedar action
-    `ReadBilling` on the tenant resource gates every RPC.
+    `ReadBilling` on the tenant resource gates every RPC; ListTenantSpend,
+    which reads every tenant, also needs the platform.admin role.
     """
     async def get_tenant_summary(self, request: GetTenantSummaryRequest, ctx: RequestContext[GetTenantSummaryRequest, GetTenantSummaryResponse], /) -> GetTenantSummaryResponse:
         """
@@ -55,6 +56,15 @@ class BillingService(Protocol):
         """
         GetTenantTimeSeries returns time-bucketed spend for a chart.
         granularity ∈ {hour, day, week} — server validates.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_tenant_spend(self, request: ListTenantSpendRequest, ctx: RequestContext[ListTenantSpendRequest, ListTenantSpendResponse], /) -> ListTenantSpendResponse:
+        """
+        ListTenantSpend lists the tenants that spent anything over the period,
+        the most first, from one sum of the charges ledger across tenants.
+        Defaults to the last 30 days, as GetTenantSummary does. Gated by
+        ReadBilling on the caller's own tenant and the platform.admin role.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -100,6 +110,16 @@ class BillingServiceASGIApplication(ConnectASGIApplication[BillingService]):
                     ),
                     function=svc.get_tenant_time_series,
                 ),
+                "/paladin.admin.v1.BillingService/ListTenantSpend": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListTenantSpend",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=ListTenantSpendRequest,
+                        output=ListTenantSpendResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_tenant_spend,
+                ),
                 "/paladin.admin.v1.BillingService/GetBillingSettings": Endpoint.unary(
                     method=MethodInfo(
                         name="GetBillingSettings",
@@ -130,7 +150,8 @@ class BillingServiceClient(ConnectClient):
     that one manages the cap; this one renders the spend.
 
     Authorization: platform-admin / tenant-admin only. Cedar action
-    `ReadBilling` on the tenant resource gates every RPC.
+    `ReadBilling` on the tenant resource gates every RPC; ListTenantSpend,
+    which reads every tenant, also needs the platform.admin role.
     """
     def __init__(
         self,
@@ -209,6 +230,34 @@ class BillingServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def list_tenant_spend(
+        self,
+        request: ListTenantSpendRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListTenantSpendResponse:
+        """
+        ListTenantSpend lists the tenants that spent anything over the period,
+        the most first, from one sum of the charges ledger across tenants.
+        Defaults to the last 30 days, as GetTenantSummary does. Gated by
+        ReadBilling on the caller's own tenant and the platform.admin role.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListTenantSpend",
+                service_name="paladin.admin.v1.BillingService",
+                input=ListTenantSpendRequest,
+                output=ListTenantSpendResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def get_billing_settings(
         self,
         request: GetBillingSettingsRequest,
@@ -243,7 +292,8 @@ class BillingServiceSync(Protocol):
     that one manages the cap; this one renders the spend.
 
     Authorization: platform-admin / tenant-admin only. Cedar action
-    `ReadBilling` on the tenant resource gates every RPC.
+    `ReadBilling` on the tenant resource gates every RPC; ListTenantSpend,
+    which reads every tenant, also needs the platform.admin role.
     """
     def get_tenant_summary(self, request: GetTenantSummaryRequest, ctx: RequestContext[GetTenantSummaryRequest, GetTenantSummaryResponse], /) -> GetTenantSummaryResponse:
         """
@@ -257,6 +307,15 @@ class BillingServiceSync(Protocol):
         """
         GetTenantTimeSeries returns time-bucketed spend for a chart.
         granularity ∈ {hour, day, week} — server validates.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_tenant_spend(self, request: ListTenantSpendRequest, ctx: RequestContext[ListTenantSpendRequest, ListTenantSpendResponse], /) -> ListTenantSpendResponse:
+        """
+        ListTenantSpend lists the tenants that spent anything over the period,
+        the most first, from one sum of the charges ledger across tenants.
+        Defaults to the last 30 days, as GetTenantSummary does. Gated by
+        ReadBilling on the caller's own tenant and the platform.admin role.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -300,6 +359,16 @@ class BillingServiceWSGIApplication(ConnectWSGIApplication):
                     ),
                     function=service.get_tenant_time_series,
                 ),
+                "/paladin.admin.v1.BillingService/ListTenantSpend": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListTenantSpend",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=ListTenantSpendRequest,
+                        output=ListTenantSpendResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_tenant_spend,
+                ),
                 "/paladin.admin.v1.BillingService/GetBillingSettings": EndpointSync.unary(
                     method=MethodInfo(
                         name="GetBillingSettings",
@@ -330,7 +399,8 @@ class BillingServiceClientSync(ConnectClientSync):
     that one manages the cap; this one renders the spend.
 
     Authorization: platform-admin / tenant-admin only. Cedar action
-    `ReadBilling` on the tenant resource gates every RPC.
+    `ReadBilling` on the tenant resource gates every RPC; ListTenantSpend,
+    which reads every tenant, also needs the platform.admin role.
     """
     def __init__(
         self,
@@ -401,6 +471,33 @@ class BillingServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.BillingService",
                 input=GetTenantTimeSeriesRequest,
                 output=GetTenantTimeSeriesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def list_tenant_spend(
+        self,
+        request: ListTenantSpendRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListTenantSpendResponse:
+        """
+        ListTenantSpend lists the tenants that spent anything over the period,
+        the most first, from one sum of the charges ledger across tenants.
+        Defaults to the last 30 days, as GetTenantSummary does. Gated by
+        ReadBilling on the caller's own tenant and the platform.admin role.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListTenantSpend",
+                service_name="paladin.admin.v1.BillingService",
+                input=ListTenantSpendRequest,
+                output=ListTenantSpendResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

@@ -624,7 +624,7 @@ func TestBatchOverOneCollectionChecksEachObject(t *testing.T) {
 			_, err := h.BatchDelete(ctx, BatchDeleteArgs{Collection: scopedCollection, ObjectIDs: ids})
 			return err
 		}},
-		"BatchUpdateTags": {limes.OpTag, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
+		"BatchUpdateTags": {auth.OpTag, func(h *Handler, ctx context.Context, ids []uuid.UUID) error {
 			_, err := h.BatchUpdateTags(ctx, BatchUpdateTagsArgs{Collection: scopedCollection, ObjectIDs: ids})
 			return err
 		}},

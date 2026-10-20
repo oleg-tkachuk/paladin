@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	connectshim "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
@@ -93,13 +94,12 @@ func (f *billingFixture) seedCapability(t *testing.T, tenant uuid.UUID, subject 
 func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max limes.Nanos, unit string) {
 	t.Helper()
 	cur, err := f.store.GetTenantBudget(context.Background(), tenant)
-	if err != nil && !errors.Is(err, limes.ErrTenantBudgetNotFound) {
+	if err != nil && !errors.Is(err, meter.ErrTenantBudgetNotFound) {
 		t.Fatalf("read budget: %v", err)
 	}
-	if _, err := f.store.SetTenantBudget(context.Background(), limes.SetTenantBudgetRequest{
+	if _, err := f.store.SetTenantBudget(context.Background(), meter.SetTenantBudgetRequest{
 		TenantID:        tenant,
-		Ceiling:         limes.BudgetCeiling{Max: max},
-		UnitCode:        unit,
+		Ceiling:         limes.BudgetCeiling{Max: max, UnitCode: unit},
 		ResetSpend:      true,
 		ExpectedVersion: cur.ResourceVersion,
 	}); err != nil {
@@ -124,7 +124,7 @@ func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nano
 	if subject.UnitCode() != unit || subject.TenantID() != tenant {
 		t.Fatalf("capability %s counts in (%s, %s), want (%s, %s)", capID, subject.UnitCode(), subject.TenantID(), unit, tenant)
 	}
-	if _, err := f.store.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
+	if _, err := f.store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 }
@@ -149,7 +149,7 @@ func (f *billingFixture) chargeAt(t *testing.T, capID uuid.UUID, tenant uuid.UUI
 		t.Fatalf("capability %s counts in (%s, %s), want (%s, %s)", capID, subject.UnitCode(), subject.TenantID(), unit, tenant)
 	}
 	usage := newUsageStore(t, f.h.PoolMigrate, clock)
-	if _, err := usage.Charge(ctx, limes.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
+	if _, err := usage.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
 		t.Fatalf("charge at %v: %v", when, err)
 	}
 }
@@ -253,7 +253,7 @@ func TestBilling_GetTenantSummary_AggregatesCorrectly(t *testing.T) {
 	if s.UnitCode != "USD" {
 		t.Errorf("unit = %q, want USD", s.UnitCode)
 	}
-	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("500")}); s.Ceiling == nil || *s.Ceiling != want {
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("500"), UnitCode: seedUnitCode}); s.Ceiling == nil || *s.Ceiling != want {
 		t.Errorf("ceiling = %v, want %s", s.Ceiling, want)
 	}
 
@@ -444,7 +444,7 @@ func TestBilling_EmptyPeriod_ReturnsZeros(t *testing.T) {
 	if s.UnitCode != "USD" {
 		t.Errorf("unit = %q, want USD (from budget fallback)", s.UnitCode)
 	}
-	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("50")}); s.Ceiling == nil || *s.Ceiling != want {
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("50"), UnitCode: seedUnitCode}); s.Ceiling == nil || *s.Ceiling != want {
 		t.Errorf("ceiling = %v, want %s", s.Ceiling, want)
 	}
 	if len(s.TopCapabilities) != 0 || len(s.TopActors) != 0 || len(s.TopOps) != 0 {
@@ -498,7 +498,7 @@ func TestBilling_MoneyIsExact(t *testing.T) {
 	}
 	f.charge(t, capID, limes.MustParseAmount("0.2"), "USD", "put", "agent-M", tenant)
 
-	srv := connectshim.NewBillingServer(f.handler)
+	srv := connectshim.NewBillingServer(f.handler, nil)
 	end := time.Now().UTC().Add(time.Hour)
 	resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{
 		TenantId:    tenant.String(),
@@ -556,7 +556,7 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 	if sum.TotalAmount != limes.MustParseAmount("0.3") || sum.ChargeCount != 1 {
 		t.Errorf("summary of another tenant = %s over %d charges, want 0.3 over 1", sum.TotalAmount, sum.ChargeCount)
 	}
-	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("12.000000001")}); sum.Ceiling == nil || *sum.Ceiling != want {
+	if want := (limes.BudgetCeiling{Max: limes.MustParseAmount("12.000000001"), UnitCode: seedUnitCode}); sum.Ceiling == nil || *sum.Ceiling != want {
 		t.Errorf("summary budget = %v, want %s", sum.Ceiling, want)
 	}
 	ts, err := handler.GetTenantTimeSeries(ctx, other, start, end, "day")
@@ -577,7 +577,7 @@ func TestBilling_AdminReadsAnotherTenantUnderRLS(t *testing.T) {
 func TestBilling_SummaryCeilingArms(t *testing.T) {
 	t.Parallel()
 	f := setupBilling(t)
-	srv := connectshim.NewBillingServer(f.handler)
+	srv := connectshim.NewBillingServer(f.handler, nil)
 	summary := func(tenant uuid.UUID) *pb.GetTenantSummaryResponse {
 		t.Helper()
 		resp, err := srv.GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{TenantId: tenant.String()})
@@ -593,12 +593,56 @@ func TestBilling_SummaryCeilingArms(t *testing.T) {
 	}
 
 	open := mustCreateTenant(t, f.h.PoolMigrate, "bil-unlimited")
-	if _, err := f.store.SetTenantBudget(context.Background(), limes.SetTenantBudgetRequest{
-		TenantID: open, Ceiling: limes.BudgetCeiling{Unlimited: true}, UnitCode: "EUR",
+	if _, err := f.store.SetTenantBudget(context.Background(), meter.SetTenantBudgetRequest{
+		TenantID: open, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: "EUR"},
 	}); err != nil {
 		t.Fatalf("seed budget: %v", err)
 	}
 	if got := summary(open).GetUnlimitedBudget().GetCurrencyCode(); got != "EUR" {
 		t.Errorf("unlimited: currency = %q, want EUR", got)
+	}
+}
+
+// A platform admin lists every tenant's spend through the pool the server
+// uses, row-level security and all, from one sum across tenants: the read
+// must be scoped to every tenant, read-only, or the policies hide the other
+// tenants' rows and the list holds the caller's alone. Other tests charge
+// the same ledger, so only these tenants' rows and order are checked.
+func TestBilling_AdminListsEveryTenantsSpendUnderRLS(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+	handler := billingh.NewHandler(newLedger(t, f.h.PoolApp), newUsageStore(t, f.h.PoolApp), allowAuth{}).WithCurrency(seedUnitCode)
+
+	home := mustCreateTenant(t, f.h.PoolMigrate, "bil-spend-home")
+	more := mustCreateTenant(t, f.h.PoolMigrate, "bil-spend-more")
+	less := mustCreateTenant(t, f.h.PoolMigrate, "bil-spend-less")
+	f.charge(t, f.seedCapability(t, more, "agent-more"), limes.MustParseAmount("2.5"), seedUnitCode, "get", "agent-more", more)
+	f.charge(t, f.seedCapability(t, less, "agent-less"), limes.MustParseAmount("0.4"), seedUnitCode, "get", "agent-less", less)
+
+	end := time.Now().UTC().Add(time.Hour)
+	spend, _, err := handler.ListTenantSpend(ctxAdmin(t, home), end.Add(-24*time.Hour), end, billingh.MaxSpendLimit)
+	if err != nil {
+		t.Fatalf("list tenant spend: %v", err)
+	}
+	at := map[uuid.UUID]int{}
+	for i, s := range spend {
+		at[s.TenantID] = i
+		switch s.TenantID {
+		case more:
+			if s.Amount != limes.MustParseAmount("2.5") || s.ChargeCount != 1 || s.UnitCode != seedUnitCode {
+				t.Errorf("the tenant that spent more = %+v", s)
+			}
+		case less:
+			if s.Amount != limes.MustParseAmount("0.4") || s.ChargeCount != 1 {
+				t.Errorf("the tenant that spent less = %+v", s)
+			}
+		case home:
+			t.Error("the caller's tenant, which spent nothing, is listed")
+		}
+	}
+	iMore, okMore := at[more]
+	iLess, okLess := at[less]
+	if !okMore || !okLess || iMore > iLess {
+		t.Errorf("positions: more %d (%v), less %d (%v); want both listed, the larger first", iMore, okMore, iLess, okLess)
 	}
 }
