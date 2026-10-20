@@ -11,15 +11,16 @@
 // tab: on success, push the returned resource into context so
 // sibling tabs see fresh data without a refetch.
 
+import { IconTone } from "@/components/ui/IconChip";
 import { CopyableId } from "@/components/ui/CopyableId";
 import { HelpTip } from "@/components/ui/HelpTip";
 import { useTenantChangesBlocked } from "../../tenant-context";
 import { PublicReadBadge } from "@/components/features/buckets/PublicReadBadge";
 import { useCallback, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { LinkIcon } from "@heroicons/react/24/outline";
+import { LinkIcon, IdentificationIcon } from "@heroicons/react/24/outline";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,7 +151,9 @@ export default function CollectionOverviewPage() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* ─── Identity ────────────────────────────────────────────────── */}
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Identity</h2>
+        <CardTitle className="text-sm font-semibold" icon={IdentificationIcon}>
+          Identity
+        </CardTitle>
         <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 text-sm">
           <dt className="text-muted-foreground">Resource name</dt>
           <dd>
@@ -234,7 +237,13 @@ export default function CollectionOverviewPage() {
       <Card className="space-y-3 p-4">
         <div className="flex items-center gap-2">
           <LinkIcon className="size-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Bucket binding</h2>
+          <CardTitle
+            className="text-sm font-semibold"
+            icon={LinkIcon}
+            tone={IconTone.Info}
+          >
+            Bucket binding
+          </CardTitle>
         </div>
         <p className="text-xs text-muted-foreground">
           {isPublic

@@ -30,7 +30,7 @@ import {
   ScaleIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LimitInput } from "@/components/ui/LimitInput";
@@ -285,7 +285,13 @@ export default function TenantQuotasPage() {
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <h3 className="text-base font-medium">Update caps</h3>
+            <CardTitle
+              level={3}
+              className="text-base font-medium"
+              icon={ScaleIcon}
+            >
+              Update caps
+            </CardTitle>
             <p className="text-sm text-muted-foreground">
               Enter raw integers (no SI suffixes). 0 allows nothing; Unlimited
               sets no cap.

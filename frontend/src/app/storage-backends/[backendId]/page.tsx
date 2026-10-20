@@ -15,6 +15,7 @@ import {
   ArrowPathIcon,
   CloudIcon,
   PlusIcon,
+  ServerStackIcon,
 } from "@heroicons/react/24/outline";
 
 import { useBackends } from "@/hooks/useBackends";
@@ -77,7 +78,10 @@ export default function StorageBackendDetailPage() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-baseline justify-between gap-3">
-              <CardTitle className="text-lg leading-tight">
+              <CardTitle
+                className="text-lg leading-tight"
+                icon={ServerStackIcon}
+              >
                 {backend.displayName || (
                   <span className="text-muted-foreground italic">
                     (unnamed)

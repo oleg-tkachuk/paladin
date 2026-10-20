@@ -1,14 +1,19 @@
 "use client";
 
+import { IconTone } from "@/components/ui/IconChip";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  ChartBarIcon,
+  TableCellsIcon,
+} from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -430,7 +435,13 @@ function BillingView() {
 
           <Card className="space-y-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className={T.cardTitleProse}>Spend over time</h3>
+              <CardTitle
+                level={3}
+                className={T.cardTitleProse}
+                icon={ChartBarIcon}
+              >
+                Spend over time
+              </CardTitle>
               <Segmented
                 label="Granularity"
                 options={GRANULARITIES.map((g) => ({
@@ -640,7 +651,14 @@ function BreakdownCard({
   const sortProps = { current: sort, onSort: toggleSort };
   return (
     <Card className="space-y-3 p-4">
-      <h3 className={T.cardTitleProse}>{title}</h3>
+      <CardTitle
+        level={3}
+        className={T.cardTitleProse}
+        icon={TableCellsIcon}
+        tone={IconTone.Neutral}
+      >
+        {title}
+      </CardTitle>
       {entries.length === 0 ? (
         <div className={T.helper}>{emptyHint}</div>
       ) : (

@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   CheckCircleIcon,
   QuestionMarkCircleIcon,
+  RocketLaunchIcon,
 } from "@heroicons/react/24/outline";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -25,7 +26,7 @@ export function FirstRunChecklist() {
   return (
     <Card data-testid="first-run">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">
+        <CardTitle className="text-sm" icon={RocketLaunchIcon}>
           Getting started · {done} of {steps.length}
         </CardTitle>
       </CardHeader>

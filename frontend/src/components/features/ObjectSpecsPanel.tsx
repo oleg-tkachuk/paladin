@@ -1,11 +1,12 @@
 import React from "react";
+import { IconTone } from "@/components/ui/IconChip";
 import Link from "next/link";
 
-import { ClipboardIcon } from "@heroicons/react/24/outline";
+import { ClipboardIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
@@ -70,7 +71,13 @@ export function ObjectSpecsPanel({
   return (
     <aside className="space-y-4">
       <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Specs</h2>
+        <CardTitle
+          className="text-sm font-semibold"
+          icon={DocumentTextIcon}
+          tone={IconTone.Info}
+        >
+          Specs
+        </CardTitle>
         <dl className="space-y-3">
           <SpecRow label="Object UUID">
             <span className="break-all font-mono text-xs">

@@ -7,7 +7,11 @@ import { ResourceLinksField } from "@/components/features/ResourceLinksField";
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircleIcon, KeyIcon } from "@heroicons/react/24/outline";
+import {
+  CheckCircleIcon,
+  KeyIcon,
+  AdjustmentsHorizontalIcon,
+} from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SettingsPage } from "@/components/layout/templates/SettingsPage";
@@ -314,7 +318,9 @@ function PreferencesCard() {
   return (
     <Card className="h-full">
       <CardHeader className="px-6">
-        <CardTitle className="text-base">Preferences</CardTitle>
+        <CardTitle className="text-base" icon={AdjustmentsHorizontalIcon}>
+          Preferences
+        </CardTitle>
         <CardDescription>
           Saved to your account, so every browser you sign in from shows the
           same.

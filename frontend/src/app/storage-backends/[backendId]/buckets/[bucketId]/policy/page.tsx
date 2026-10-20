@@ -13,9 +13,10 @@ import Link from "next/link";
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -94,7 +95,7 @@ export default function BucketPolicyPage() {
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">
+        <CardTitle className="text-sm font-semibold" icon={ShieldCheckIcon}>
           Cedar policy{" "}
           <Link
             href="/policies"
@@ -102,7 +103,7 @@ export default function BucketPolicyPage() {
           >
             open in editor →
           </Link>
-        </h2>
+        </CardTitle>
         <div className="flex gap-2">
           <Confirmation shown={saved}>Saved</Confirmation>
           <Button

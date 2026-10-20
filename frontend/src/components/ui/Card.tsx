@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { IconChip, type IconTone } from "@/components/ui/IconChip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -91,18 +92,31 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
 function CardTitle({
   className,
   level = 2,
+  icon,
+  tone,
+  children,
   ...props
-}: React.ComponentProps<"h2"> & { level?: 1 | 2 | 3 | 4 | 5 | 6 }) {
+}: React.ComponentProps<"h2"> & {
+  level?: 1 | 2 | 3 | 4 | 5 | 6;
+  /** The section's icon, drawn on a tinted chip before the title. */
+  icon?: React.ElementType;
+  /** The chip's tone; the accent unless the card says otherwise. */
+  tone?: IconTone;
+}) {
   const Heading = `h${level}` as const;
   return (
     <Heading
       data-slot="card-title"
       className={cn(
         "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        icon && "flex items-center gap-2",
         className,
       )}
       {...props}
-    />
+    >
+      {icon && <IconChip icon={icon} tone={tone} />}
+      {children}
+    </Heading>
   );
 }
 

@@ -6,9 +6,10 @@
  * roles and tenant allow; a scope narrows that.
  */
 
+import { FingerPrintIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -104,7 +105,9 @@ export function UserScopesCard({
   return (
     <Card className="space-y-4 p-5">
       <div className="space-y-1">
-        <h2 className="text-sm font-semibold">Scopes</h2>
+        <CardTitle className="text-sm font-semibold" icon={FingerPrintIcon}>
+          Scopes
+        </CardTitle>
         <p className={T.hint}>
           Narrow what the user&apos;s roles reach. Tokens already issued keep
           their scopes until they expire.

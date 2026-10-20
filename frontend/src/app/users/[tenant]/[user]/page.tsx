@@ -10,12 +10,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLeftIcon, IdentificationIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DetailPage } from "@/components/layout/templates/DetailPage";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { RelativeTime } from "@/components/RelativeTime";
 import {
@@ -126,7 +126,12 @@ export default function UserDetailPage() {
         {user ? (
           <>
             <Card className="space-y-2 p-5">
-              <h2 className="text-sm font-semibold">Identity</h2>
+              <CardTitle
+                className="text-sm font-semibold"
+                icon={IdentificationIcon}
+              >
+                Identity
+              </CardTitle>
               <dl className="space-y-1.5">
                 <Fact label="Subject">
                   <span className="font-mono text-xs">{user.subject}</span>

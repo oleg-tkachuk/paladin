@@ -8,9 +8,10 @@ import {
   ClockIcon,
   FolderIcon,
   ShieldCheckIcon,
+  IdentificationIcon,
 } from "@heroicons/react/24/outline";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { BucketGrantsCard } from "@/components/features/buckets/BucketGrantsCard";
 import { ProvisionStateBadge } from "@/components/features/buckets/ProvisionStateBadge";
@@ -44,7 +45,12 @@ export default function BucketOverviewPage() {
       <Card className="p-6">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Identity</h2>
+            <CardTitle
+              className="text-lg font-semibold"
+              icon={IdentificationIcon}
+            >
+              Identity
+            </CardTitle>
             <ProvisionStateBadge state={bucket.provisionState} />
           </div>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">

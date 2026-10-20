@@ -30,7 +30,7 @@ import {
 import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
-import { Card } from "@/components/ui/Card";
+import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -400,7 +400,13 @@ export default function TenantBudgetPage() {
           ) : (
             <fieldset className="space-y-4">
               <div>
-                <h3 className="text-base font-medium">Update budget</h3>
+                <CardTitle
+                  level={3}
+                  className="text-base font-medium"
+                  icon={BanknotesIcon}
+                >
+                  Update budget
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Set a new cap. Capabilities issued under this tenant see the
                   new limit on their next charge attempt.
