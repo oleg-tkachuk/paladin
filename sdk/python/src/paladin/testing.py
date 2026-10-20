@@ -6,7 +6,8 @@
 
 It serves ObjectService (upload, complete, get, lookup, list, download,
 delete), MultipartUploadService, ListParts included, PresignService
-(RegenerateUploadUrl, PresignDownload) and StorageBootstrapService, with presigned URLs on its own storage; every other
+(RegenerateUploadUrl, PresignDownload) and StorageBootstrapService, with presigned URLs on its own storage, and
+CapabilityService (Issue, Delegate, Revoke, Get) to the server's rules; every other
 RPC answers Unimplemented, as a server that lacks it does. Like the server it
 runs protovalidate on every request, after authentication, and checks
 DeleteObject's ``resource_version``; ListObjects refuses a filter or an
@@ -37,7 +38,7 @@ import json
 import secrets
 import threading
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
@@ -51,10 +52,16 @@ from connectrpc.code import Code
 from connectrpc.errors import ConnectError
 from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
-from google.protobuf import descriptor_pool
+from google.protobuf import descriptor_pool, timestamp_pb2
 from google.protobuf.message import Message
 from google.rpc import error_details_pb2
 
+from paladin.admin.v1 import capability_service_pb2
+from paladin.admin.v1.capability_service_connect import (
+    CapabilityServiceSync,
+    CapabilityServiceWSGIApplication,
+)
+from paladin.auth import Op
 from paladin.client import (
     HEADER_API_TOKEN,
     HEADER_AUTHORIZATION,
@@ -267,6 +274,7 @@ _SERVED_SERVICES = (
     "paladin.data.v1.MultipartUploadService",
     "paladin.data.v1.PresignService",
     "paladin.data.v1.StorageBootstrapService",
+    "paladin.admin.v1.CapabilityService",
 )
 """The services the fake mounts; ``fail_rpc`` takes a procedure of any of them,
 one the fake answers UNIMPLEMENTED included."""
@@ -369,11 +377,14 @@ _KEY_REUSED = (
 @dataclass
 class _Credential:
     """One the fake issued: its kind (its prefix), its tenant, and whether it
-    was revoked."""
+    was revoked; for one CapabilityService issued, the capability it presents
+    and whether it is that capability's Biscuit."""
 
     prefix: str
     tenant: str
     revoked: bool = False
+    capability: str = ""
+    biscuit: bool = False
 
 
 def _api_token(x_header: str, authz: str) -> str:
@@ -425,6 +436,245 @@ class _Quiet(WSGIRequestHandler):
         return None
 
 
+# ─── CapabilityService ────────────────────────────────────────────────────────
+#
+# Issue, Delegate, Revoke and Get, to the server's rules where a consumer's
+# tests meet them: an operation the server refuses — a bare "presign" — is
+# INVALID_ARGUMENT; a capability is answered with a Biscuit unless it is bound
+# to a key (KEY_BOUND) or valid only from a later not_before (NOT_YET_VALID),
+# share or no share; require_biscuit refuses the others before anything is
+# issued; Delegate narrows only the capability presented in the capability
+# header, which must allow share, be the parent_id named and not be a Biscuit
+# copy, and grants no operation the parent lacks. The fake checks only that:
+# its token and its Biscuit are its own credentials — ``attenuate`` refuses
+# its Biscuit — and it checks no audience, resource, plane or copy quota, and
+# of the lifetime only that a not_before falls before the expiry.
+
+DEFAULT_CAPABILITY_TTL = timedelta(minutes=15)
+"""How long a capability lives when Issue names no TTL: the server's
+``capability.default_ttl``."""
+_BISCUIT_PREFIX = "paladintest_biscuit_"
+"""Marks the fake's stand-in for a capability's Biscuit."""
+_CAPABILITY_ISSUER = "paladintest"
+_BUILTIN_OPS = (Op.GET, Op.PUT, Op.LIST, Op.DELETE, Op.SHARE, Op.MANAGE)
+"""limes's own operations; any other must be namespaced, as ``ns:name``."""
+_OP_NAMESPACE = ":"
+_ASCII_PRINTABLE_FIRST = 0x21
+_ASCII_PRINTABLE_LAST = 0x7E
+"""The printable ASCII characters but the space: what a namespaced op holds."""
+
+# The server's answers, word for word, where the fake gives them.
+_NO_REQUEST_CEILING = (
+    "caveats.request_ceiling: set max_requests, or unlimited_requests for no limit"
+)
+_NO_BUDGET_CEILING = "caveats.budget_ceiling: set max_budget, or unlimited_budget for no limit"
+_ISSUE_ELSEWHERE = (
+    "issuing a capability for another tenant requires platform.admin or platform.capability-issuer"
+)
+_NOT_PRESENTED = f"capability: delegation narrows a presented capability; send it in the {HEADER_CAPABILITY} header"
+_LACKS_SHARE = "capability: caller lacks OpShare"
+_NOT_OWN_PARENT = "capability: parent_id must equal caller's own capability id"
+_BISCUIT_DELEGATES = "capability: a Biscuit copy cannot delegate; attenuate it instead"
+_BISCUIT_REFUSALS = {
+    capability_service_pb2.BISCUIT_STATUS_KEY_BOUND: "it is bound to a key, and only its holder can prove it; present the token",
+    capability_service_pb2.BISCUIT_STATUS_NOT_YET_VALID: "it is valid only from a later not_before",
+}
+"""Why, for ``require_biscuit``, each status leaves a capability without its
+Biscuit, as the server says it."""
+
+
+@dataclass
+class _CapabilityRecord:
+    """One capability the fake issued: its message, its token and Biscuit, and
+    the capabilities delegated from it."""
+
+    msg: capability_service_pb2.Capability
+    credentials: list[str]
+    children: list[str] = field(default_factory=list)
+
+
+def _op_refusal(op: str) -> str | None:
+    """The server's refusal of ``op`` in a caveat, None when it accepts it:
+    limes's rule, which sdk/testdata/capability_op_names.json holds both SDKs
+    to."""
+    if op in _BUILTIN_OPS:
+        return None
+    ns, sep, name = op.partition(_OP_NAMESPACE)
+    if not sep or not ns or not name:
+        builtin = ", ".join(_BUILTIN_OPS)
+        return (
+            f"limes: invalid caveats: unknown op {json.dumps(op)}: the built-in ops are {builtin}; "
+            'a custom op is namespaced, e.g. "tool:search"'
+        )
+    if any(not _ASCII_PRINTABLE_FIRST <= ord(c) <= _ASCII_PRINTABLE_LAST for c in op):
+        return f"limes: invalid caveats: op {json.dumps(op)} contains a non-printable or space character"
+    return None
+
+
+def _check_ops(ops: Iterable[str]) -> None:
+    """Raise the server's refusal of an operation in ``ops``. Caveats that
+    name none are refused before, by the contract's own rule."""
+    for op in ops:
+        refusal = _op_refusal(op)
+        if refusal is not None:
+            raise _with_reason(Code.INVALID_ARGUMENT, refusal)
+
+
+def _biscuit_status(jkt: str, nbf: datetime | None, now: datetime) -> int:
+    """The server's: a key-bound capability and one valid only later go
+    without a Biscuit; its ops play no part."""
+    if jkt:
+        return capability_service_pb2.BISCUIT_STATUS_KEY_BOUND
+    if nbf is not None and nbf > now:
+        return capability_service_pb2.BISCUIT_STATUS_NOT_YET_VALID
+    return capability_service_pb2.BISCUIT_STATUS_ISSUED
+
+
+def _require_biscuit(status: int) -> None:
+    """``require_biscuit``'s refusal of a capability ``status`` leaves without
+    its Biscuit."""
+    if status != capability_service_pb2.BISCUIT_STATUS_ISSUED:
+        name = capability_service_pb2.BiscuitStatus.Name(status)
+        raise _with_reason(
+            Code.FAILED_PRECONDITION,
+            f"require_biscuit: the capability cannot be sealed as a Biscuit ({name}): {_BISCUIT_REFUSALS[status]}",
+        )
+
+
+def _lifetime(
+    now: datetime, nbf: timestamp_pb2.Timestamp | None, ttl_seconds: int
+) -> tuple[datetime | None, datetime]:
+    """When a capability issued at ``now`` for ``ttl_seconds`` — the default
+    when 0 — is valid, as the server reckons it: it expires ttl after it is
+    issued, and a not-before that is not before then is INVALID_ARGUMENT."""
+    until = now + (timedelta(seconds=ttl_seconds) if ttl_seconds > 0 else DEFAULT_CAPABILITY_TTL)
+    if nbf is None:
+        return None, until
+    start = nbf.ToDatetime(tzinfo=UTC)
+    if start >= until:
+        raise _with_reason(
+            Code.INVALID_ARGUMENT,
+            f"limes: invalid request: NotBefore {start} is not before ExpiresAt {until}",
+        )
+    return start, until
+
+
+def _timestamp(t: datetime) -> timestamp_pb2.Timestamp:
+    ts = timestamp_pb2.Timestamp()
+    ts.FromDatetime(t)
+    return ts
+
+
+class _CapabilityService(CapabilityServiceSync):
+    """CapabilityService on the fake: a class of its own, since
+    ``FakePaladin.revoke`` revokes a credential by its token."""
+
+    def __init__(self, fake: FakePaladin) -> None:
+        self._fake = fake
+
+    def issue(
+        self, request: capability_service_pb2.CapabilityServiceIssueRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceIssueResponse:
+        fake = self._fake
+        tenant = request.subject.tenant_id
+        if fake.strict_auth:
+            caller = fake._principal_tenant(dict(ctx.request_headers.items()))
+            if caller != tenant:
+                raise _with_reason(Code.PERMISSION_DENIED, _ISSUE_ELSEWHERE)
+        caveats = request.caveats
+        if not caveats.HasField("request_ceiling"):
+            raise _with_reason(Code.INVALID_ARGUMENT, _NO_REQUEST_CEILING)
+        if not caveats.HasField("budget_ceiling"):
+            raise _with_reason(Code.INVALID_ARGUMENT, _NO_BUDGET_CEILING)
+        _check_ops(caveats.ops)
+        now = datetime.now(UTC)
+        nbf, expires = _lifetime(
+            now, request.not_before if request.HasField("not_before") else None, request.ttl_seconds
+        )
+        status = _biscuit_status(request.confirmation_jkt, nbf, now)
+        if request.require_biscuit:
+            _require_biscuit(status)
+        c = capability_service_pb2.Capability(
+            subject=request.subject,
+            audience=list(request.audience),
+            caveats=caveats,
+            confirmation_jkt=request.confirmation_jkt,
+        )
+        return fake._mint_capability(c, now, nbf, expires, status, "")
+
+    def delegate(
+        self, request: capability_service_pb2.CapabilityServiceDelegateRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceIssueResponse:
+        fake = self._fake
+        headers = dict(ctx.request_headers.items())
+        presented = _capability_token(
+            headers.get(HEADER_CAPABILITY.lower(), ""),
+            headers.get(HEADER_AUTHORIZATION.lower(), ""),
+        )
+        if not presented:
+            raise _with_reason(Code.FAILED_PRECONDITION, _NOT_PRESENTED)
+        with fake._lock:
+            credential = fake._credentials.get(presented)
+            parent = fake._capabilities.get(credential.capability) if credential else None
+        if credential is None or parent is None:
+            raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_INVALID)
+        if credential.revoked:
+            raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_REVOKED)
+        parent_ops = list(parent.msg.caveats.ops)
+        if Op.SHARE not in parent_ops:
+            raise _with_reason(Code.PERMISSION_DENIED, _LACKS_SHARE)
+        if parent.msg.id != request.parent_id:
+            raise _with_reason(Code.PERMISSION_DENIED, _NOT_OWN_PARENT)
+        if credential.biscuit:
+            raise _with_reason(Code.FAILED_PRECONDITION, _BISCUIT_DELEGATES)
+        caveats = parent.msg.caveats
+        if request.HasField("caveats"):
+            _check_ops(request.caveats.ops)
+            for op in request.caveats.ops:
+                if op not in parent_ops:
+                    raise _with_reason(
+                        Code.PERMISSION_DENIED,
+                        f"limes: delegation too wide: op {json.dumps(op)} is not granted to the parent",
+                    )
+            caveats = request.caveats
+        jkt = request.confirmation_jkt or parent.msg.confirmation_jkt
+        now = datetime.now(UTC)
+        nbf, expires = _lifetime(
+            now, request.not_before if request.HasField("not_before") else None, request.ttl_seconds
+        )
+        status = _biscuit_status(jkt, nbf, now)
+        if request.require_biscuit:
+            _require_biscuit(status)
+        c = capability_service_pb2.Capability(
+            subject=request.subject if request.HasField("subject") else parent.msg.subject,
+            audience=list(request.audience) or list(parent.msg.audience),
+            caveats=caveats,
+            confirmation_jkt=jkt,
+        )
+        return fake._mint_capability(c, now, nbf, expires, status, parent.msg.id)
+
+    def revoke(
+        self, request: capability_service_pb2.CapabilityServiceRevokeRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceRevokeResponse:
+        fake = self._fake
+        with fake._lock:
+            if request.id not in fake._capabilities:
+                raise _with_reason(Code.NOT_FOUND, f"limes: capability {request.id}: not found")
+            fake._revoke_capability(request.id, cascade=request.cascade_children)
+        return capability_service_pb2.CapabilityServiceRevokeResponse()
+
+    def get(
+        self, request: capability_service_pb2.CapabilityServiceGetRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceGetResponse:
+        with self._fake._lock:
+            record = self._fake._capabilities.get(request.id)
+            if record is None:
+                raise _with_reason(Code.NOT_FOUND, f"limes: capability {request.id}: not found")
+            out = capability_service_pb2.Capability()
+            out.CopyFrom(record.msg)
+        return capability_service_pb2.CapabilityServiceGetResponse(capability=out)
+
+
 class FakePaladin(
     ObjectServiceSync, MultipartUploadServiceSync, PresignServiceSync, StorageBootstrapServiceSync
 ):
@@ -454,6 +704,7 @@ class FakePaladin(
         self._storage_ops: list[StorageOp] = []
         self._rpc_faults: dict[str, list[_RPCFault]] = {}
         self._credentials: dict[str, _Credential] = {}
+        self._capabilities: dict[str, _CapabilityRecord] = {}
         # Responses memoised per (procedure, idempotency key), with the
         # fingerprint of the request each answered — as the server keeps.
         self._replays: dict[tuple[str, str], tuple[bytes, Any]] = {}
@@ -468,6 +719,7 @@ class FakePaladin(
             MultipartUploadServiceWSGIApplication(self, interceptors=faults),
             PresignServiceWSGIApplication(self, interceptors=faults),
             StorageBootstrapServiceWSGIApplication(self, interceptors=faults),
+            CapabilityServiceWSGIApplication(_CapabilityService(self), interceptors=faults),
         ]
 
         def route(environ, start_response):  # type: ignore[no-untyped-def]
@@ -681,11 +933,59 @@ class FakePaladin(
         issued it, did not revoke it, and that it names the tenant."""
         return self._issue(_CAPABILITY_PREFIX, tenant)
 
-    def _issue(self, prefix: str, tenant: str) -> str:
-        token = prefix + uuid.uuid4().hex
+    def _issue(self, prefix: str, tenant: str, *, token_prefix: str = "") -> str:
+        """A credential of the kind ``prefix`` names for ``tenant``, its token
+        starting with ``token_prefix`` when given and ``prefix`` otherwise."""
+        token = (token_prefix or prefix) + uuid.uuid4().hex
         with self._lock:
             self._credentials[token] = _Credential(prefix, tenant)
         return token
+
+    def _mint_capability(
+        self,
+        c: capability_service_pb2.Capability,
+        now: datetime,
+        nbf: datetime | None,
+        expires: datetime,
+        status: int,
+        parent: str,
+    ) -> capability_service_pb2.CapabilityServiceIssueResponse:
+        """Record ``c``, issued at ``now`` and valid from ``nbf`` until
+        ``expires``, and answer it with its token and, when ``status`` is
+        ISSUED, its Biscuit."""
+        c.id = str(uuid.uuid4())
+        c.issuer = _CAPABILITY_ISSUER
+        c.parent_id = parent
+        c.issued_at.CopyFrom(_timestamp(now))
+        c.expires_at.CopyFrom(_timestamp(expires))
+        if nbf is not None:
+            c.not_before.CopyFrom(_timestamp(nbf))
+        tenant = c.subject.tenant_id
+        res = capability_service_pb2.CapabilityServiceIssueResponse(biscuit_status=status)
+        res.token = self._issue(_CAPABILITY_PREFIX, tenant)
+        tokens = [res.token]
+        if status == capability_service_pb2.BISCUIT_STATUS_ISSUED:
+            res.biscuit = self._issue(_CAPABILITY_PREFIX, tenant, token_prefix=_BISCUIT_PREFIX)
+            tokens.append(res.biscuit)
+        with self._lock:
+            for token in tokens:
+                credential = self._credentials[token]
+                credential.capability, credential.biscuit = c.id, token == res.biscuit
+            self._capabilities[c.id] = _CapabilityRecord(c, tokens)
+            if parent in self._capabilities:
+                self._capabilities[parent].children.append(c.id)
+        res.capability.CopyFrom(c)
+        return res
+
+    def _revoke_capability(self, capability: str, *, cascade: bool) -> None:
+        """Revoke ``capability``'s token and Biscuit, and its children's when
+        ``cascade``. The caller holds the lock."""
+        record = self._capabilities[capability]
+        for token in record.credentials:
+            self._credentials[token].revoked = True
+        if cascade:
+            for child in record.children:
+                self._revoke_capability(child, cascade=cascade)
 
     def revoke(self, token: str) -> None:
         """Revoke a credential the fake issued: with ``strict_auth``, a call

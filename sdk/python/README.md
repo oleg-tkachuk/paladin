@@ -435,7 +435,8 @@ with FakePaladin() as fake:
 
 It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`regenerate_upload_url`,
-`presign_download`) and `StorageBootstrapService`; every other RPC answers
+`presign_download`), `StorageBootstrapService` and `CapabilityService`
+(`issue`, `delegate`, `revoke`, `get`); every other RPC answers
 `UNIMPLEMENTED`. Like the server it runs protovalidate on every request,
 after authentication, so a request the contract's rules refuse is
 `InvalidArgumentError`; it checks `delete_object`'s `resource_version` —
@@ -523,6 +524,24 @@ the tenant the call names. It verifies no signature, Biscuit, caveat,
 scope, audience or expiry, and has no platform admin acting in another
 tenant. A refused call is in `requests()`, and is refused before
 `fail_rpc`'s failures, which it does not spend.
+
+Its `CapabilityService` holds a capability to the server's rules where a
+consumer's tests meet them, as the Go SDK's fake does, and the server's tests
+hold that fake to the same answers:
+
+| Request | Answer |
+| --- | --- |
+| An operation limes does not define and that is not namespaced, such as a bare `presign` | `INVALID_ARGUMENT` |
+| No request or no budget ceiling, or a `not_before` past the expiry | `INVALID_ARGUMENT` |
+| A key-bound capability, or one valid only from a later `not_before` | Its token alone, `biscuit_status` `KEY_BOUND` or `NOT_YET_VALID`; with `require_biscuit`, `FAILED_PRECONDITION` |
+| Any other, `share` or no `share` | Its token and its Biscuit, `ISSUED` |
+| `delegate` with no capability presented, or from a Biscuit copy | `FAILED_PRECONDITION` |
+| `delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PERMISSION_DENIED` |
+
+The token and the Biscuit are the fake's own credentials — `attenuate`
+refuses its Biscuit — and both are accepted with `strict_auth` until the
+capability is revoked; `revoke` with `cascade_children` revokes its children
+too. It checks no audience, resource, plane or copy quota.
 
 ### Concurrency and asyncio
 
