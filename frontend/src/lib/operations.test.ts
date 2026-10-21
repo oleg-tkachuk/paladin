@@ -13,7 +13,9 @@ import {
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 
 import {
+  hasFailures,
   isActive,
+  OP_STATUS_BADGE,
   operationElapsedMs,
   operationId,
   operationLabel,
@@ -43,6 +45,20 @@ describe("operationStatus", () => {
     [OperationState.CANCELLED, "cancelled"],
   ] as const)("reads state %s as %s", (state, want) => {
     expect(operationStatus(op({ state }))).toBe(want);
+  });
+
+  // A batch that ran to its end is SUCCEEDED whatever it left behind; the
+  // objects it could not act on make it partly failed.
+  it("reads a succeeded batch that left objects behind as partial", () => {
+    const left = op({ state: OperationState.SUCCEEDED, failedCount: 1n });
+    expect(operationStatus(left)).toBe("partial");
+    expect(OP_STATUS_BADGE.partial.label).toBe("partly failed");
+    expect(hasFailures(operationStatus(left))).toBe(true);
+    expect(hasFailures("failed")).toBe(true);
+    expect(hasFailures("succeeded")).toBe(false);
+    expect(operationStatus(op({ done: true, failedCount: 2n }))).toBe(
+      "partial",
+    );
   });
 
   // A server that sends no state is read the old way.
@@ -160,8 +176,9 @@ describe("operationsFilter", () => {
   it.each([
     ["all", ""],
     ["active", 'state in ["PENDING", "RUNNING"]'],
-    ["failed", 'state in ["FAILED"]'],
-    ["done", 'state in ["SUCCEEDED", "CANCELLED"]'],
+    // A failed operation has failures, so has_failures is the view whole.
+    ["failed", "has_failures"],
+    ["done", 'state in ["SUCCEEDED", "CANCELLED"] && !has_failures'],
   ] as const)("%s → %s", (view, want) => {
     expect(operationsFilter(view)).toBe(want);
   });
@@ -169,6 +186,9 @@ describe("operationsFilter", () => {
   it("asks the server for exactly what the view keeps", () => {
     expect(OP_VIEW_KEEPS.done("failed")).toBe(false);
     expect(OP_VIEW_KEEPS.active("pending")).toBe(true);
+    // A partly failed batch is a failure to look at, not a finished one.
+    expect(OP_VIEW_KEEPS.failed("partial")).toBe(true);
+    expect(OP_VIEW_KEEPS.done("partial")).toBe(false);
   });
 });
 

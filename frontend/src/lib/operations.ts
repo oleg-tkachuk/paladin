@@ -16,8 +16,12 @@ import {
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 import { StatusTone } from "@/lib/ui/status";
 
+/**
+ * Where an operation stands. partial is a batch that ran to its end, so the
+ * server calls it succeeded, but left objects it could not act on.
+ */
 export type OpStatus =
-  "pending" | "running" | "succeeded" | "failed" | "cancelled";
+  "pending" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
 
 const FROM_STATE: Partial<Record<OperationState, OpStatus>> = {
   [OperationState.PENDING]: "pending",
@@ -33,11 +37,17 @@ const FROM_STATE: Partial<Record<OperationState, OpStatus>> = {
  * cancelled operation from a failed one, or a pending one from a running one.
  */
 export function operationStatus(op: Operation): OpStatus {
-  const s = FROM_STATE[op.state];
-  if (s) return s;
+  const s = FROM_STATE[op.state] ?? fromDone(op);
+  return s === "succeeded" && op.failedCount > 0n ? "partial" : s;
+}
+
+function fromDone(op: Operation): OpStatus {
   if (!op.done) return "running";
   return op.result.case === "error" ? "failed" : "succeeded";
 }
+
+/** Whether s left something undone: it failed, or left objects behind. */
+export const hasFailures = (s: OpStatus) => s === "failed" || s === "partial";
 
 /** Whether op may still be stopped. */
 export const isActive = (s: OpStatus) => s === "pending" || s === "running";
@@ -47,6 +57,7 @@ export const OP_STATUS_BADGE = {
   pending: { label: "queued", variant: "secondary" },
   running: { label: "running", variant: "warning" },
   succeeded: { label: "done", variant: "success" },
+  partial: { label: "partly failed", variant: "warning" },
   failed: { label: "failed", variant: "destructive" },
   cancelled: { label: "cancelled", variant: "outline" },
 } as const satisfies Record<
@@ -58,10 +69,10 @@ export const OP_STATUS_BADGE = {
 >;
 
 // The batch operation types, as the server names them (batchh.Op*).
-const OP_BATCH_DELETE = "BatchDelete";
-const OP_BATCH_COPY = "BatchCopy";
-const OP_BATCH_UPDATE_TAGS = "BatchUpdateTags";
-const OP_BATCH_RESTORE = "BatchRestoreObjects";
+export const OP_BATCH_DELETE = "BatchDelete";
+export const OP_BATCH_COPY = "BatchCopy";
+export const OP_BATCH_UPDATE_TAGS = "BatchUpdateTags";
+export const OP_BATCH_RESTORE = "BatchRestoreObjects";
 
 /** What op does, in words: the type, sharpened by what its request asked. */
 /** The collection an operation's resource name sits in: operations/{id}. */
@@ -112,6 +123,7 @@ export const OP_STATUS_TONE: Record<OpStatus, StatusTone> = {
   pending: StatusTone.Progress,
   running: StatusTone.Progress,
   succeeded: StatusTone.Success,
+  partial: StatusTone.Warning,
   failed: StatusTone.Danger,
   cancelled: StatusTone.Suspended,
 };
@@ -238,30 +250,27 @@ export const OP_VIEWS: readonly { value: OpView; label: string }[] = [
 export const OP_VIEW_KEEPS: Record<OpView, (s: OpStatus) => boolean> = {
   all: () => true,
   active: isActive,
-  failed: (s) => s === "failed",
+  failed: hasFailures,
   done: (s) => s === "succeeded" || s === "cancelled",
 };
 
-// The states as the server's filter names them (filter/cel OperationState*).
-const CEL_STATE: Record<OpStatus, string> = {
-  pending: "PENDING",
-  running: "RUNNING",
-  succeeded: "SUCCEEDED",
-  failed: "FAILED",
-  cancelled: "CANCELLED",
+/**
+ * The server's CEL filter for each view, "" for all: what OP_VIEW_KEEPS keeps,
+ * in the terms the filter has (filter/cel OperationSchema). A partly failed
+ * batch is SUCCEEDED there with has_failures, and a failed operation has
+ * failures too, so `has_failures` is the failed view whole. Each is a
+ * conjunction the server pushes into its query, so every page is full.
+ */
+const OP_VIEW_FILTER: Record<OpView, string> = {
+  all: "",
+  active: 'state in ["PENDING", "RUNNING"]',
+  failed: "has_failures",
+  done: 'state in ["SUCCEEDED", "CANCELLED"] && !has_failures',
 };
 
-/**
- * The server's CEL filter for a view, "" for all. Read off OP_VIEW_KEEPS, so
- * the list the server returns and the one a client narrows cannot disagree;
- * `state in [...]` is pushed into the query, so every page is full.
- */
+/** The server's CEL filter for a view, "" for all. */
 export function operationsFilter(view: OpView): string {
-  const states = (Object.keys(CEL_STATE) as OpStatus[]).filter(
-    OP_VIEW_KEEPS[view],
-  );
-  if (states.length === Object.keys(CEL_STATE).length) return "";
-  return `state in [${states.map((s) => JSON.stringify(CEL_STATE[s])).join(", ")}]`;
+  return OP_VIEW_FILTER[view];
 }
 
 /**
