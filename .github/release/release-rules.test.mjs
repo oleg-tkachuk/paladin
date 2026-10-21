@@ -20,6 +20,7 @@ const SDK = ["sdk/go/paladin/client.go"];
 const PYTHON_SDK = ["sdk/python/src/paladin/client.py"];
 const PROTO = ["proto/paladin/data/v1/object_service.proto"];
 const UPGRADING = ["docs/upgrading.md"];
+const SHARED_TABLE = ["sdk/testdata/planes.json"];
 
 // [stream, commit message, files it changed, release wanted]
 const cases = [
@@ -47,16 +48,27 @@ const cases = [
   ["product", "feat(sdk)!: the Python SDK breaks, with its notes", [...PYTHON_SDK, ...UPGRADING, "sdk/python/README.md"], null],
   ["product", "feat(api)!: the server breaks, with its notes", [...BACKEND, ...UPGRADING], "major"],
   ["product", "docs: documentation alone releases nothing", UPGRADING, null],
-  ["sdk", "feat(sdk)!: a break with its notes is still the SDK's", [...SDK, ...UPGRADING], "minor"],
+  ["go-sdk", "feat(sdk)!: a break with its notes is still the SDK's", [...SDK, ...UPGRADING], "minor"],
 
-  ["sdk", "feat(sdk): add a helper", SDK, "minor"],
-  ["sdk", "fix(sdk): a Python fix", PYTHON_SDK, "patch"],
-  ["sdk", "fix(sdk): repair a helper", SDK, "patch"],
-  ["sdk", "security(sdk): stop logging a token", SDK, "patch"],
-  ["sdk", "feat(events): a new RPC changes the stubs", PROTO, "minor"],
-  ["sdk", "feat(sdk)!: before 1.0 a break is a minor", SDK, "minor"],
-  ["sdk", "feat(api): only the server", BACKEND, null],
-  ["sdk", "docs(sdk): explain a helper", SDK, null],
+  ["go-sdk", "feat(sdk): add a helper", SDK, "minor"],
+  ["go-sdk", "fix(sdk): repair a helper", SDK, "patch"],
+  ["go-sdk", "security(sdk): stop logging a token", SDK, "patch"],
+  ["go-sdk", "feat(events): a new RPC changes the stubs", PROTO, "minor"],
+  ["go-sdk", "feat(sdk)!: before 1.0 a break is a minor", SDK, "minor"],
+  ["go-sdk", "feat(api): only the server", BACKEND, null],
+  ["go-sdk", "docs(sdk): explain a helper", SDK, null],
+  ["go-sdk", "feat(sdk): a table both SDKs are held to", SHARED_TABLE, "minor"],
+  // Each SDK releases for its own code alone: a release of the other's is
+  // one its consumers read to find nothing in it.
+  ["go-sdk", "fix(sdk): a Python fix", PYTHON_SDK, null],
+  ["python-sdk", "fix(sdk): a Python fix", PYTHON_SDK, "patch"],
+  ["python-sdk", "feat(sdk): a Go helper", SDK, null],
+  ["python-sdk", "feat(events): a new RPC changes the stubs", PROTO, "minor"],
+  ["python-sdk", "feat(sdk): a table both SDKs are held to", SHARED_TABLE, "minor"],
+  ["python-sdk", "feat(sdk)!: before 1.0 a break is a minor", PYTHON_SDK, "minor"],
+  ["python-sdk", "security(sdk): stop logging a token", PYTHON_SDK, "patch"],
+  ["python-sdk", "feat(api): only the server", BACKEND, null],
+  ["python-sdk", "docs(sdk): explain a helper", PYTHON_SDK, null],
 
   // The capability primitive moved to its own repository (limes): a go.mod
   // bump that takes a new limes is a backend change like any other.

@@ -72,6 +72,16 @@ here.
 
 
 
+
+## Unreleased — the Python SDK has tags of its own
+
+The Python SDK releases as `sdk/python/vX.Y.Z`, versioned by its own commits
+and those to `proto/` and `sdk/testdata/`, rather than by the Go SDK's tag.
+Both share `0.102.0`; from there each moves when its own code does. Move a
+pin from `@sdk/go/vX.Y.Z#subdirectory=sdk/python` to
+`@sdk/python/vX.Y.Z#subdirectory=sdk/python`. A pin to a Go tag keeps
+installing what it pointed at, but no later Python release has one.
+
 ## Unreleased — the SDKs type the planes; refusals no longer name limes
 
 - **`Attenuation.Planes` takes `[]paladin.Plane`** (Go), and Python's

@@ -21,7 +21,7 @@ SDK = Path(__file__).resolve().parents[1]
 ROOT = SDK.parents[1]
 ARCHIVAL = ROOT / ".git_archival.txt"
 ATTRIBUTES = ROOT / ".gitattributes"
-TAG = "sdk/go/v0.23.0"
+TAG = "sdk/python/v0.23.0"
 RELEASE = "0.23.0"
 UNKNOWN = "0.0.0" + UNKNOWN_VERSION_LABEL
 COMMIT = "19d4c8f6e586bd5e1a71c5ef471e2db7caa93904"
@@ -81,7 +81,8 @@ def _direct_url(revision: str | None) -> str:
         (_direct_url(TAG), RELEASE),
         (_direct_url("main"), None),
         (_direct_url(COMMIT), None),
-        (_direct_url("sdk/go/v0.23"), None),
+        (_direct_url("sdk/python/v0.23"), None),
+        (_direct_url("sdk/go/v0.23.0"), None),
         (_direct_url("v0.23.0"), None),
         (_direct_url(None), None),
         (json.dumps({"url": "file:///src/sdk/python", "dir_info": {}}), None),
@@ -95,6 +96,7 @@ def _direct_url(revision: str | None) -> str:
         "a branch",
         "a commit",
         "a partial tag",
+        "the Go SDK's tag",
         "the product's tag",
         "no revision",
         "a local directory",

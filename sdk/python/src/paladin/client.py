@@ -65,7 +65,7 @@ _DEVEL_VERSION = "devel"
 UNKNOWN_VERSION_LABEL = "+unknown"
 # An SDK release tag, as tag_regex in pyproject.toml reads it; the test checks
 # the two are the same pattern.
-RELEASE_TAG = re.compile(r"^sdk/go/v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$")
+RELEASE_TAG = re.compile(r"^sdk/python/v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)$")
 _TAG_VERSION_GROUP = "version"
 # PEP 610: where an installer records the URL and revision it installed from.
 _DIRECT_URL = "direct_url.json"

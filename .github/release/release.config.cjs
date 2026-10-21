@@ -2,13 +2,15 @@
 // nothing else. Run by .github/workflows/release.yaml, which ci.yaml dispatches
 // once every check on a push to main has passed.
 //
-// Two release streams, one tag format each, chosen by RELEASE_STREAM:
+// Three release streams, one tag format each, chosen by RELEASE_STREAM:
 //
-//   product     v<version>            backend and frontend images and charts
-//   sdk         sdk/go/v<version>     the Go and Python SDKs (Go needs the prefix)
+//   product     v<version>                backend and frontend images and charts
+//   go-sdk      sdk/go/v<version>         the Go SDK (the Go proxy needs the prefix)
+//   python-sdk  sdk/python/v<version>     the Python SDK, which hatch-vcs reads
 //
 // Each releases from the commits that touch its own files, read by
-// paths-analyzer.mjs: the SDK for a change under sdk/ or proto/, the product
+// paths-analyzer.mjs: an SDK for a change under its own directory, proto/ or
+// the tables both SDKs are tested against (sdk/testdata/), the product
 // for any commit that changes what its images are built from — which is all
 // of it but the Python SDK: the backend compiles sdk/go/ through `replace`,
 // and its Dockerfile copies it. A commit that touches both streams releases
@@ -31,7 +33,10 @@ const PRESET = "conventionalcommits";
 const SECURITY_IS_A_PATCH = { type: "security", release: "patch" };
 const BREAKING_IS_A_MINOR_BEFORE_1_0 = { breaking: true, release: "minor" };
 
-const SDK_PATHS = ["sdk/", "proto/"];
+// What both SDKs are generated from and held to.
+const SHARED_SDK_PATHS = ["proto/", "sdk/testdata/"];
+const GO_SDK_PATHS = ["sdk/go/", ...SHARED_SDK_PATHS];
+const PYTHON_SDK_PATHS = ["sdk/python/", ...SHARED_SDK_PATHS];
 // The Go module the backend compiles in: its API is its own, not the product's.
 const MODULE_PATHS = ["sdk/go/"];
 // Files that do not decide which stream a commit belongs to, when it changed
@@ -52,11 +57,21 @@ const streams = {
       documentation: DOCUMENTATION,
     },
   },
-  sdk: {
+  "go-sdk": {
     tagFormat: "sdk/go/v${version}",
     analyzer: {
       releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
-      include: SDK_PATHS,
+      include: GO_SDK_PATHS,
+      documentation: DOCUMENTATION,
+    },
+  },
+  // Its first tag was cut by hand at the Go SDK's last shared version
+  // (docs/releasing.md): with no tag of its own, semantic-release starts at 1.0.0.
+  "python-sdk": {
+    tagFormat: "sdk/python/v${version}",
+    analyzer: {
+      releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
+      include: PYTHON_SDK_PATHS,
       documentation: DOCUMENTATION,
     },
   },

@@ -1,11 +1,11 @@
 # Paladin Python SDK
 
-Not published to PyPI. Install from the repository, pinned to an SDK release
-— a `sdk/go/vX.Y.Z` tag from the
+Not published to PyPI. Install from the repository, pinned to a release of
+this package — a `sdk/python/vX.Y.Z` tag from the
 [releases](https://github.com/oleg-tkachuk/paladin/releases):
 
 ```bash
-pip install "paladin-sdk @ git+https://github.com/oleg-tkachuk/paladin@sdk/go/vX.Y.Z#subdirectory=sdk/python"
+uv add "paladin-sdk @ git+https://github.com/oleg-tkachuk/paladin@sdk/python/vX.Y.Z#subdirectory=sdk/python"
 ```
 
 In a `requirements.txt` or `pyproject.toml`, the same `paladin-sdk @ git+…`
@@ -20,7 +20,7 @@ Where the build has no git — a slim image, a vendored copy — install the
 tag's source archive instead; `git archive` records the version in it:
 
 ```bash
-pip install "paladin-sdk @ https://github.com/oleg-tkachuk/paladin/archive/refs/tags/sdk/go/vX.Y.Z.tar.gz#subdirectory=sdk/python"
+uv add "paladin-sdk @ https://github.com/oleg-tkachuk/paladin/archive/refs/tags/sdk/python/vX.Y.Z.tar.gz#subdirectory=sdk/python"
 ```
 
 Two parts, both imported as `paladin`:
@@ -698,8 +698,9 @@ the stubs, the declared floor and the matrix disagree.
 
 ## Versioning
 
-The package version is the SDK's tag, `sdk/go/vX.Y.Z`, cut automatically from
-the commits that touch `sdk/` or `proto/`; hatch-vcs reads it at build time
+The package version is its tag, `sdk/python/vX.Y.Z`, cut automatically from
+the commits that touch `sdk/python/`, `proto/` or `sdk/testdata/`, and
+apart from the Go SDK's; hatch-vcs reads it at build time
 (a source archive of a tag reads it from `.git_archival.txt`; a tree with
 neither builds as `0.0.0+unknown`). An install from the git tag whose build
 had no git — Poetry fetches through Dulwich — records `0.0.0+unknown`, and

@@ -104,19 +104,6 @@ the same commit. Treat this file like a runtime invariant.
   where the fake changed.
 - **Blockers:** none.
 
-### The Python SDK is versioned by the Go SDK's tag
-
-- **Status:** Deferred.
-- **Reason:** both SDKs release as `sdk/go/vX.Y.Z`, so a Go-only change
-  gives Python a release with nothing in it, and the reverse; a Python
-  consumer installs from git at a Go tag.
-- **Definition of Done:** the Python SDK has a stream of its own
-  (`sdk/python/vX.Y.Z`), versioned by the commits under `sdk/python/` and
-  `proto/`, with its own notes, and `docs/releasing.md` and the README say
-  how to install a version.
-- **Blockers:** whether the Python SDK is published to an index, which
-  decides what its tag has to look like.
-
 ### A comment-only proto change still releases the SDK
 
 - **Status:** Deferred.
