@@ -62,10 +62,9 @@ interface IssueCapabilityDialogProps {
   // Called when the dialog is dismissed (after the reveal panel is
   // acknowledged, if shown). The page closes it + refetches the list.
   onClose: () => void;
-  // Called once a capability is successfully issued so the page can sync its
-  // browse filter (principal kind + subject) and seed the list with the new
-  // row — List is principal-scoped, so this keeps the just-minted capability
-  // visible after the reveal panel closes.
+  // Called once a capability is successfully issued so the page can move its
+  // filters (principal kind + subject) to it, which keeps the just-minted
+  // capability on the list after the reveal panel closes.
   onIssued: (
     capability: Capability,
     principalKind: string,
