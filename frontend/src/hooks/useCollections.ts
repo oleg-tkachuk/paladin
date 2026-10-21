@@ -241,21 +241,6 @@ export function useCollections({
     [actingTenantId, optimistic, settle],
   );
 
-  const getCollectionStats = useCallback(
-    async (
-      _collection: string,
-    ): Promise<{
-      totalObjects: number;
-      totalSizeBytes: number;
-      countByState: Record<string, number>;
-    }> => ({
-      totalObjects: 0,
-      totalSizeBytes: 0,
-      countByState: {},
-    }),
-    [],
-  );
-
   return {
     collections,
     loading: query.isFetching,
@@ -265,6 +250,5 @@ export function useCollections({
     deleteCollection,
     getCollection,
     updateCollection,
-    getCollectionStats,
   };
 }
