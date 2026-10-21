@@ -44,7 +44,7 @@ tree with itself and passes without checking anything.
 
 
 
-## Unreleased — the audit log names the client a call came from
+## sdk/go/v0.100.0 — the audit log names the client a call came from
 
 Migration `092` adds `audit_log.user_agent`, and `AuditLogEntry` gains
 `user_agent`: the User-Agent the call arrived with, cut to 256 bytes. The
