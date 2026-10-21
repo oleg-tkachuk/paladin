@@ -15,7 +15,12 @@ To land a deliberate breaking change:
 2. Decide it is worth it. The common case is a field rename that keeps the
    number — gRPC clients survive that, JSON clients do not, and nothing at
    runtime will tell you which you broke.
-3. Note it here, under a heading for the release.
+3. Note it here, under `## Unreleased — <title>`, in the commit that makes
+   the change. The release renames the heading to the tags that shipped it,
+   reading which streams it belongs to from the commit that wrote it
+   ([`.github/ci/upgrade-sections.ts`](../.github/ci/upgrade-sections.ts)): a
+   section written in a commit of documentation alone reads as the product's
+   and stays Unreleased through every SDK release.
 4. Cut the next baseline once the change is merged:
 
    ```
@@ -58,6 +63,12 @@ compiles, it runs, and it reads the wrong thing. So:
 
 ### Server and SDK
 
+The Go and the Python SDK version apart (`sdk/go/vX.Y.Z`, `sdk/python/vX.Y.Z`)
+and the server on its own (`vX.Y.Z`): a number in one says nothing of the
+others. A section is headed by the tags of every release that carries its
+change, and one whose change the server makes says, in a **Server:** line,
+which server release a client sees it from.
+
 Most server releases work with any SDK of the same contract. These need at
 least the SDK named, and their sections say why:
 
@@ -74,6 +85,8 @@ here.
 
 
 ## sdk/go/v0.103.0, sdk/python/v0.104.0 — an audit entry records its request, not before and after
+
+**Server:** v39.3.0 or later; so far released as v39.3.0-rc.1, so a v39.2.x server still answers as before.
 
 `AuditLogEntry.before_json` and `after_json` were documented as the
 resource's state before and after an action. Nothing recorded the state:
@@ -94,12 +107,18 @@ the storage event behind an ingest.
 
 The Python SDK releases as `sdk/python/vX.Y.Z`, versioned by its own commits
 and those to `proto/` and `sdk/testdata/`, rather than by the Go SDK's tag.
-Both share `0.102.0`; from there each moves when its own code does. Move a
+Both share `0.102.0`; from there each moves when its own code does, and the
+numbers say nothing of each other: `sdk/go/v0.103.0` and `sdk/python/v0.104.0`
+were cut from the same commit, and a Go and a Python release of one number need
+not carry the same change. Move a
 pin from `@sdk/go/vX.Y.Z#subdirectory=sdk/python` to
 `@sdk/python/vX.Y.Z#subdirectory=sdk/python`. A pin to a Go tag keeps
 installing what it pointed at, but no later Python release has one.
 
-## Unreleased — the SDKs type the planes; refusals no longer name limes
+## sdk/go/v0.102.0, sdk/python/v0.102.0 — the SDKs type the planes; refusals no longer name limes
+
+The SDK changes are in these tags. The refusals' text is the server's:
+**Server:** v39.3.0 or later; so far released as v39.3.0-rc.1, so a v39.2.x server still answers as before.
 
 - **`Attenuation.Planes` takes `[]paladin.Plane`** (Go), and Python's
   `attenuate(planes=…)` takes `Plane` members. A plane's label — `PlaneData`,
@@ -113,8 +132,15 @@ installing what it pointed at, but no later Python release has one.
   issued; `CredentialOf` still prefers the Biscuit.
 - **`UnlimitedCaveats(ops...)`** and **`ValidateIssueCaveats`** (Go),
   `unlimited_caveats` and `validate_issue_caveats` (Python): caveats with
-  both ceilings set, and the check Issue makes on their shape, made before
-  the call.
+  both ceilings set, and a check before the call of what Issue refuses in
+  their shape — no operation, an operation the server does not know, a
+  request or budget ceiling left unset. It checks no more than that: not the
+  resources, where an empty `resource_prefixes` and `resource_uris` grant
+  every resource of the tenant rather than none, nor anything Issue decides
+  by the caller or the tenant. The unlimited budget is in the platform's
+  currency (`capability.currency`); a capability that is charged in another
+  unit sets `unlimited_budget.currency_code`, and one that is never charged
+  is unaffected.
 - **A `Credential` logs by name.** Go's `CredentialForm` writes `"token"` or
   `"biscuit"` through slog and encoding/json; `Credential` logs its form and
   `biscuit_status` and never its value. Python's `Credential` leaves the
@@ -128,7 +154,9 @@ installing what it pointed at, but no later Python release has one.
 The Go SDK still depends on limes, for `Attenuate` and `Op.Validate`; no
 exported type of it names one, so a client never imports it.
 
-## Unreleased — the audit log sorts by client
+## sdk/go/v0.101.0 — the audit log sorts by client
+
+**Server:** v39.3.0 or later; so far released as v39.3.0-rc.1, so a v39.2.x server still answers as before.
 
 `ListAuditLog` takes `order_by: "user_agent"` (migration `093`); a call that
 sent no User-Agent sorts as empty. The console's Client column sorts by it.

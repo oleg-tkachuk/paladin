@@ -60,7 +60,10 @@ def unlimited_caveats(*ops: Op | str) -> capability_service_pb2.CapabilityCaveat
 def validate_issue_caveats(caveats: capability_service_pb2.CapabilityCaveats) -> None:
     """Raise ``ValueError`` naming everything Issue would refuse in
     ``caveats`` for their shape: no operation, an operation the server does
-    not know, or a request or budget ceiling left unset. Delegate takes an
+    not know, or a request or budget ceiling left unset. It checks nothing
+    else: not the resources, where empty ``resource_prefixes`` and
+    ``resource_uris`` grant every resource of the tenant rather than none,
+    nor what Issue decides by the caller or the tenant. Delegate takes an
     unset ceiling as the parent's, so this is for Issue alone."""
     problems: list[str] = []
     if not caveats.ops:

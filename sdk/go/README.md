@@ -145,7 +145,7 @@ implementation of the vocabulary to drift from it:
 narrowed, err := paladin.Attenuate(biscuit, paladin.Attenuation{
     Ops:              []paladin.Op{paladin.OpGet},
     ResourcePrefixes: []string{"corpus/public/"},
-    Planes:           []string{"data"}, // the data plane
+    Planes:           []paladin.Plane{paladin.PlaneData},
     ExpiresAt:        time.Now().Add(10 * time.Minute),
 })
 client, err := paladin.New(dataURL, paladin.WithCapability(narrowed))
@@ -164,6 +164,27 @@ operations a capability names are this package's `Op` constants: `OpGet`,
 `OpObjectTag`, so a misspelt one fails to compile. `OpNames` spells them for
 `CapabilityCaveats.ops`, and `Op.Validate` refuses, wrapping
 `ErrInvalidArgument`, a name the server refuses, such as a bare `presign`.
+The planes are `Plane` constants — `PlaneData`, `PlaneAdmin`, `PlaneIAM`,
+`PlaneMCP` — and `PlaneNames` spells them for
+`CapabilityServiceIssueRequest.audience`. A plane's label is not its bearer
+audience: a capability issued for `AudienceData` (`"paladin-data"`) rather
+than `PlaneData` (`"data"`) is refused as an audience mismatch, and
+`Plane.Audience` maps the one to the other.
+
+`paladin.UnlimitedCaveats(ops...)` is caveats with no request and no budget
+limit, the least `Issue` takes; set a ceiling on the result to limit one. Its
+budget is in the platform's currency (`capability.currency`): a capability
+charged in another unit sets `UnlimitedBudget.CurrencyCode`.
+`paladin.ValidateIssueCaveats` refuses before the call, wrapping
+`ErrInvalidArgument`, what `Issue` refuses in the caveats' shape: no operation,
+one `Op.Validate` refuses, a request or budget ceiling left unset. It checks
+nothing else — not the resources, where empty `ResourcePrefixes` and
+`ResourceURIs` grant every resource of the tenant rather than none.
+
+`paladin.TokenOf(issued)` is the token whatever Biscuit came beside it, for a
+client that presents the capability as issued and never narrows it. A
+`Credential` logs its `Form` and `BiscuitStatus` by name through slog, and
+never its `Value`.
 `CapabilityService.GetBiscuitUsage` takes a copy and reports each limit in
 force on it with what has been counted against it. The facts it writes are listed in
 [`sdk/testdata/biscuit_vocabulary.json`](../testdata/biscuit_vocabulary.json),
@@ -513,6 +534,14 @@ The token and the Biscuit are the fake's own credentials — `Attenuate`
 refuses its Biscuit — and both are accepted under `WithStrictAuth` until the
 capability is revoked; `Revoke` with `cascade_children` revokes its children
 too. It checks no audience, resource, plane or copy quota.
+
+Where it is checked against the server: a backend test
+(`capabilityh/sdk_fake_fidelity_test.go`) runs every `Issue` and `Delegate`
+case above through the server's handler and through this fake, in every CI
+run, and requires the same code. The data-plane calls are not run against it
+that way yet; the shared scenarios (`sdk/testdata/scenarios.json`) run
+against a real server only. See BACKLOG.md, "The shared SDK scenarios run
+against the server only".
 
 ### Concurrency
 

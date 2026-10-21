@@ -160,7 +160,7 @@ narrowed = paladin.attenuate(
     issued.biscuit,
     ops=[paladin.Op.GET],
     resource_prefixes=["corpus/public/"],
-    planes=["data"],  # the capability planes: "data", "admin", "mcp"
+    planes=[paladin.Plane.DATA],
     expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
 )
 client = paladin.Client(data_url, capability=narrowed)
@@ -169,6 +169,9 @@ client = paladin.Client(data_url, capability=narrowed)
 | Name | Does |
 | --- | --- |
 | `credential_of(resp)` | What to present for the capability an Issue or Delegate answer carries: a `Credential` whose `value` is the Biscuit when `biscuit_status` is `ISSUED` and the token otherwise, with its `form` (`CredentialForm.BISCUIT` or `.TOKEN`) and the `biscuit_status` that says why. Both forms go to `capability=` alike, so a client that only presents the capability needs nothing more. Raises `NoCredentialError` for an answer that carries neither. |
+| `token_of(resp)` | The token an Issue or Delegate answer carries, whatever Biscuit came beside it: for a client that presents the capability as issued and never narrows it. Raises `NoCredentialError` for an answer without one. |
+| `unlimited_caveats(*ops)` | Caveats granting `ops` with no request and no budget limit, the least Issue takes; set a ceiling on the result to limit one. The budget is in the platform's currency (`capability.currency`): a capability charged in another unit sets `unlimited_budget.currency_code`. |
+| `validate_issue_caveats(caveats)` | Raises `ValueError` naming what Issue would refuse in the caveats' shape — no operation, one the server does not know, a request or budget ceiling left unset — before the call. It checks nothing else: not the resources, where empty `resource_prefixes` and `resource_uris` grant every resource of the tenant rather than none. |
 | `biscuit_of(resp)` | The Biscuit an Issue or Delegate answer carries. Every capability is sealed as one but a key-bound one and one not valid yet; raises `NoBiscuitError`, whose `status` is the answer's `biscuit_status`, when it carries none. `require_biscuit` on the request refuses one that could not be sealed before anything is issued. |
 | `attenuate(token, *, ops=None, resource_prefixes=None, resource_uris=None, planes=None, expires_at=None, bind_jkt=None, max_requests=None, max_budget_nanos=None)` | `token` with one more block appended, as a new token; `token` keeps working. An argument left `None` leaves that dimension as it is; a set one replaces it and must be within what the token allows, or the server refuses the whole token. Setting `resource_prefixes` or `resource_uris` replaces both. `expires_at` is timezone-aware and kept to the second. `bind_jkt` (`dpop_thumbprint(key.public_key())`) binds the token to a key, and only an unbound token can be bound. `max_requests` and `max_budget_nanos` (non-negative `int`s; nanos are billionths of the capability's unit) give the copy limits of its own, counted apart from other copies and within every limit already in force; 0 freezes the copy without revoking it, so its first request and first charge are refused; `CapabilityService.get_biscuit_usage` reports each limit in force on a copy with what has been counted against it. Raises `ValueError` for a JWT or anything else that is not a Paladin Biscuit, `ImportError` without the extra. |
 
@@ -177,7 +180,13 @@ The block holds only the facts the server reads
 the server's tests verify a token this SDK attenuated. The operations a
 capability names are the members of `Op`, a `StrEnum`: `Op.GET`, `Op.PUT`,
 `Op.LIST`, `Op.DELETE`, `Op.SHARE`, `Op.MANAGE`, `Op.OBJECT_PRESIGN` and
-`Op.OBJECT_TAG`, also exported as `OP_GET` … `OP_OBJECT_TAG`. A member is a
+`Op.OBJECT_TAG`, also exported as `OP_GET` … `OP_OBJECT_TAG`. The planes are
+the members of `Plane`: `Plane.DATA`, `Plane.ADMIN`, `Plane.IAM`,
+`Plane.MCP`. A plane's label is not its bearer audience — a capability issued
+for `AUDIENCE_DATA` (`"paladin-data"`) rather than `Plane.DATA` (`"data"`) is
+refused as an audience mismatch — and `Plane.audience` maps the one to the
+other. A `Credential`'s repr leaves out its `value`, so logging one whole does
+not log the capability. A member is a
 `str`, so it goes into `CapabilityCaveats(ops=[...])` as it is; `attenuate`
 raises `ValueError` for an op that is no member, such as a bare `"presign"`.
 
@@ -542,6 +551,14 @@ The token and the Biscuit are the fake's own credentials — `attenuate`
 refuses its Biscuit — and both are accepted with `strict_auth` until the
 capability is revoked; `revoke` with `cascade_children` revokes its children
 too. It checks no audience, resource, plane or copy quota.
+
+Where it is checked against the server: the Go SDK's fake is run against the
+server's handler for every case above in every CI run, and this fake is held
+to the Go fake only by tests that mirror the same cases. The data-plane calls
+are not run against either fake that way yet; the shared scenarios
+(`sdk/testdata/scenarios.json`) run against a real server only. See
+BACKLOG.md, "The Python fake's CapabilityService is held to the server only
+by mirror" and "The shared SDK scenarios run against the server only".
 
 ### Concurrency and asyncio
 

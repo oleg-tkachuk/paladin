@@ -25,8 +25,11 @@ func UnlimitedCaveats(ops ...Op) *adminv1.CapabilityCaveats {
 // ValidateIssueCaveats refuses, before anything is sent, caveats Issue
 // refuses for their shape: no operation, an operation Op.Validate refuses,
 // or a request or budget ceiling left unset. Each wraps ErrInvalidArgument;
-// all of them are returned together. Delegate takes an unset ceiling as the
-// parent's, so this is for Issue alone.
+// all of them are returned together. It checks nothing else: not the
+// resources, where empty ResourcePrefixes and ResourceURIs grant every
+// resource of the tenant rather than none, nor what Issue decides by the
+// caller or the tenant. Delegate takes an unset ceiling as the parent's, so
+// this is for Issue alone.
 func ValidateIssueCaveats(c *adminv1.CapabilityCaveats) error {
 	var errs []error
 	if len(c.GetOps()) == 0 {
