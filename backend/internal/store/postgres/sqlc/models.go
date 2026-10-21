@@ -597,6 +597,7 @@ type Operation struct {
 	Progress         []byte             `json:"progress"`
 	InitiatorSubject string             `json:"initiator_subject"`
 	DismissedAt      pgtype.Timestamptz `json:"dismissed_at"`
+	FailedCount      int64              `json:"failed_count"`
 }
 
 type PendingMultipartAbort struct {

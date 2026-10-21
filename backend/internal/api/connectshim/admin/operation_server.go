@@ -111,6 +111,7 @@ func operationToProto(o *operationh.Operation) *pb.Operation {
 		State:             convx.OperationState(o.State),
 		InitiatorSubject:  o.InitiatorSubject,
 		Target:            convx.OperationTarget(o.Type, o.Metadata),
+		FailedCount:       o.FailedCount,
 	}
 	// The API's metadata is the operation's progress (AIP-151). The executor's
 	// arguments stay internal: they are the worker's input, not a report.

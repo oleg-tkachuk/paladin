@@ -15,7 +15,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Operation(_message.Message):
-    __slots__ = ("name", "type", "metadata", "done", "error", "response", "created_at", "updated_at", "done_at", "state", "target", "initiator_subject", "dismissed_at", "expire_time")
+    __slots__ = ("name", "type", "metadata", "done", "error", "response", "created_at", "updated_at", "done_at", "state", "target", "initiator_subject", "dismissed_at", "expire_time", "failed_count")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
@@ -30,6 +30,7 @@ class Operation(_message.Message):
     INITIATOR_SUBJECT_FIELD_NUMBER: _ClassVar[int]
     DISMISSED_AT_FIELD_NUMBER: _ClassVar[int]
     EXPIRE_TIME_FIELD_NUMBER: _ClassVar[int]
+    FAILED_COUNT_FIELD_NUMBER: _ClassVar[int]
     name: str
     type: str
     metadata: _any_pb2.Any
@@ -44,7 +45,8 @@ class Operation(_message.Message):
     initiator_subject: str
     dismissed_at: _timestamp_pb2.Timestamp
     expire_time: _timestamp_pb2.Timestamp
-    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., metadata: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., done: _Optional[bool] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., response: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., done_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[_operation_pb2.OperationState, str]] = ..., target: _Optional[_Union[_operation_pb2.OperationTarget, _Mapping]] = ..., initiator_subject: _Optional[str] = ..., dismissed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    failed_count: int
+    def __init__(self, name: _Optional[str] = ..., type: _Optional[str] = ..., metadata: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., done: _Optional[bool] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., response: _Optional[_Union[_any_pb2.Any, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., done_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[_operation_pb2.OperationState, str]] = ..., target: _Optional[_Union[_operation_pb2.OperationTarget, _Mapping]] = ..., initiator_subject: _Optional[str] = ..., dismissed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., failed_count: _Optional[int] = ...) -> None: ...
 
 class ObjectSelector(_message.Message):
     __slots__ = ("names", "filter")

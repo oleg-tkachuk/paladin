@@ -76,14 +76,10 @@ type ErasureLookup interface {
 // success. Polling clients render this directly. Counts + per-failure
 // detail; no per-success row to keep payload small at scale.
 type BatchDeleteResponse struct {
-	Total     int `json:"total"`
-	Succeeded int `json:"succeeded"`
-	// AlreadyApplied counts the succeeded items this run found deleted
-	// already — by an earlier run of the same batch, typically one whose
-	// worker died (see applied.go).
-	AlreadyApplied int                  `json:"already_applied,omitempty"`
-	Failed         int                  `json:"failed"`
-	Failures       []BatchDeleteFailure `json:"failures,omitempty"`
+	// AlreadyApplied counts the items this run found deleted already — by an
+	// earlier run of the same batch, typically one whose worker died.
+	BatchCounts
+	Failures []BatchDeleteFailure `json:"failures,omitempty"`
 }
 
 // BatchDeleteFailure carries one per-object error so a client can
@@ -119,7 +115,7 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		return nil, errors.New("BatchDeleteExecutor: permanent delete requested but no PermanentDeleter / ErasureLookup wired")
 	}
 
-	resp := BatchDeleteResponse{Total: len(args.ObjectIDs)}
+	resp := BatchDeleteResponse{BatchCounts: BatchCounts{Total: len(args.ObjectIDs)}}
 
 	// Read phase is one batched query: each row's CURRENT
 	// ResourceVersion feeds the optimistic-concurrency check in

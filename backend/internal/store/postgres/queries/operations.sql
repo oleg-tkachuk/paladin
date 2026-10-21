@@ -24,6 +24,9 @@ SET state         = sqlc.arg('state')::operation_state,
     response      = COALESCE(sqlc.narg('response'),      response),
     error_code    = COALESCE(sqlc.narg('error_code'),    error_code),
     error_message = COALESCE(sqlc.narg('error_message'), error_message),
+    -- The objects a batch's result says it could not act on (096); 0 for
+    -- every other transition.
+    failed_count  = sqlc.arg('failed_count')::bigint,
     done_at       = CASE WHEN sqlc.arg('state')::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
@@ -55,6 +58,10 @@ WHERE tenant_id = $1
   AND (sqlc.narg('state_in')::text[] IS NULL OR state::text = ANY(sqlc.narg('state_in')::text[]))
   -- `done` is what the domain derives from done_at (operationh.handler).
   AND (sqlc.narg('done')::bool IS NULL OR (done_at IS NOT NULL) = sqlc.narg('done')::bool)
+  -- `has_failures`, as operationh derives it: failed, or a batch that left
+  -- objects behind (096).
+  AND (sqlc.narg('has_failures')::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = sqlc.narg('has_failures')::bool)
   AND (sqlc.narg('error_message_neq')::text IS NULL
        OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
@@ -90,6 +97,10 @@ WHERE tenant_id = $1
   AND (sqlc.narg('state_in')::text[] IS NULL OR state::text = ANY(sqlc.narg('state_in')::text[]))
   -- `done` is what the domain derives from done_at (operationh.handler).
   AND (sqlc.narg('done')::bool IS NULL OR (done_at IS NOT NULL) = sqlc.narg('done')::bool)
+  -- `has_failures`, as operationh derives it: failed, or a batch that left
+  -- objects behind (096).
+  AND (sqlc.narg('has_failures')::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = sqlc.narg('has_failures')::bool)
   AND (sqlc.narg('error_message_neq')::text IS NULL
        OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to

@@ -124,13 +124,14 @@ func (r *OperationRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (oper
 	return operationFromSQLC(row.Operation), nil
 }
 
-func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newState operationh.State, response []byte, errCode, errMsg string) error {
+func (r *OperationRepo) UpdateState(ctx context.Context, opID uuid.UUID, newState operationh.State, response []byte, failedCount int64, errCode, errMsg string) error {
 	rows, err := r.q.UpdateOperationState(ctx,
 		pgUUID(opID),
 		sqlc.OperationState(string(newState)),
 		response,
 		strPtr(errCode),
 		strPtr(errMsg),
+		failedCount,
 	)
 	if err != nil {
 		return fmt.Errorf("update operation: %w", err)
@@ -205,6 +206,7 @@ func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]o
 	errorCodeIn, _ := pd.StringHint("error_code")
 	stateIn, _ := pd.StringHint("state")
 	done := pd.BoolHint("done")
+	hasFailures := pd.BoolHint("has_failures")
 	// `error_message != ""` is how a caller asks for "operations that failed"
 	// — the dashboard's failed-ops widget does exactly that. Without the hint
 	// the predicate only narrowed the page it was handed, so a page of five
@@ -218,7 +220,7 @@ func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]o
 	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
 		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
-			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
+			typeIn, typeLike, errorCodeIn, stateIn, done, hasFailures, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
@@ -228,7 +230,7 @@ func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]o
 		}
 	} else {
 		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
-			typeIn, typeLike, errorCodeIn, stateIn, done, errorMessageNeq,
+			typeIn, typeLike, errorCodeIn, stateIn, done, hasFailures, errorMessageNeq,
 			createdGTE, createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
@@ -288,6 +290,7 @@ func operationFromSQLC(o sqlc.Operation) operationh.Operation {
 		Metadata:         o.Metadata,
 		Progress:         o.Progress,
 		Response:         o.Response,
+		FailedCount:      o.FailedCount,
 		ErrorCode:        derefStr(o.ErrorCode),
 		ErrorMessage:     derefStr(o.ErrorMessage),
 		CreatedAt:        timeFrom(o.CreatedAt),

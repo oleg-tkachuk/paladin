@@ -46,10 +46,8 @@ type BatchUpdateTagsExecutor struct {
 
 // BatchUpdateTagsResponse mirrors the BatchDelete shape.
 type BatchUpdateTagsResponse struct {
-	Total     int                      `json:"total"`
-	Succeeded int                      `json:"succeeded"`
-	Failed    int                      `json:"failed"`
-	Failures  []BatchUpdateTagsFailure `json:"failures,omitempty"`
+	BatchCounts
+	Failures []BatchUpdateTagsFailure `json:"failures,omitempty"`
 }
 
 type BatchUpdateTagsFailure struct {
@@ -75,7 +73,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 			args.TenantID, op.TenantID)
 	}
 
-	resp := BatchUpdateTagsResponse{Total: len(args.ObjectIDs)}
+	resp := BatchUpdateTagsResponse{BatchCounts: BatchCounts{Total: len(args.ObjectIDs)}}
 
 	// One batched read supplies each row's ResourceVersion for the OCC
 	// check in UpdateMetadata; per-id not-found reporting is preserved.

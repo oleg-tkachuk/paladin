@@ -83,6 +83,25 @@ here.
 
 
 
+## Unreleased — an operation says how many objects it left behind
+
+**Server:** the first release that carries this section.
+
+A batch that runs to its end is `SUCCEEDED` whatever it could not do, so a
+`done` operation could hold failures that only its response named.
+
+- **`Operation.failed_count`** (admin 16, data 15) is how many objects the
+  batch could not act on, each with its reason in the response's failures;
+  0 for a clean batch and for any other operation.
+- **The operations filter takes `failed_count` and `has_failures`**: failed,
+  or a batch that left objects behind. `has_failures` is pushed into the
+  query, so a list of them pages through them alone.
+- **Migrations `096`–`097`** add the column, a change of the catalog alone,
+  and count it for the batches that finished before it from their response.
+- **A batch tries an object again when another write changed it** between
+  its read and its write, up to three times on a fresh read, before it
+  reports a version conflict.
+
 ## sdk/go/v0.107.0, sdk/python/v0.107.0 — Get gives a capability its disposition
 
 `CapabilityService.Get` sets `Capability.disposition` (12), by the same rules

@@ -94,13 +94,10 @@ type OperationLiveness interface {
 
 // BatchCopyResponse mirrors the BatchDelete shape.
 type BatchCopyResponse struct {
-	Total     int `json:"total"`
-	Succeeded int `json:"succeeded"`
-	// AlreadyApplied counts the succeeded items whose destination this run
-	// found holding the source's content already (see applied.go).
-	AlreadyApplied int                `json:"already_applied,omitempty"`
-	Failed         int                `json:"failed"`
-	Failures       []BatchCopyFailure `json:"failures,omitempty"`
+	// AlreadyApplied counts the items whose destination this run found holding
+	// the source's content already.
+	BatchCounts
+	Failures []BatchCopyFailure `json:"failures,omitempty"`
 }
 
 // errAlreadyCopied is copyOne's report that the destination key already
@@ -157,7 +154,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
 	dstPolicy := uploadpolicy.For(e.Limits, dstMeta.Constraints)
 
-	resp := BatchCopyResponse{Total: len(args.ObjectIDs)}
+	resp := BatchCopyResponse{BatchCounts: BatchCounts{Total: len(args.ObjectIDs)}}
 
 	// One batched read replaces a per-id FindByName round-trip inside
 	// copyOne; missing ids surface as per-row "not found" failures.

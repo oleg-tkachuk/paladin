@@ -179,3 +179,12 @@ func TestOperationProjection_StateTargetAndFinish(t *testing.T) {
 		t.Errorf("a running operation of an unknown type: done_at %v, target %v", running.GetDoneAt(), running.GetTarget())
 	}
 }
+
+// A batch that left objects behind says how many, so a client tells it from a
+// clean one without decoding its response.
+func TestOperationToProtoCarriesTheFailedCount(t *testing.T) {
+	got := operationToProto(&operationh.Operation{OperationID: uuid.New(), State: operationh.StateSucceeded, FailedCount: 3})
+	if got.GetFailedCount() != 3 {
+		t.Errorf("failed_count = %d, want 3", got.GetFailedCount())
+	}
+}

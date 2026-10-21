@@ -197,3 +197,11 @@ func TestListDistinctTagsNextPage(t *testing.T) {
 		t.Error("the last page names a next one")
 	}
 }
+
+// As on the admin plane: a batch that left objects behind says how many.
+func TestDataOperationToProtoCarriesTheFailedCount(t *testing.T) {
+	got := dataOperationToProto(&operationh.Operation{State: operationh.StateSucceeded, FailedCount: 3})
+	if got.GetFailedCount() != 3 {
+		t.Errorf("failed_count = %d, want 3", got.GetFailedCount())
+	}
+}
