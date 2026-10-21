@@ -10,6 +10,7 @@ import {
   DEFAULT_STATUSES,
   STATUS_FILTERS,
   capabilityStatus,
+  isCapabilityRevoked,
   toggleStatus,
 } from "./_disposition";
 
@@ -62,5 +63,27 @@ describe("toggleStatus", () => {
       EXPIRED,
       REVOKED,
     ]);
+  });
+});
+
+describe("isCapabilityRevoked", () => {
+  it("follows the disposition the list names", () => {
+    expect(
+      isCapabilityRevoked(create(CapabilitySchema, { disposition: REVOKED })),
+    ).toBe(true);
+    // A listed active one is active, whatever a record says.
+    expect(
+      isCapabilityRevoked(
+        create(CapabilitySchema, { disposition: ACTIVE }),
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("reads one Get answered by its own revocation", () => {
+    const got = create(CapabilitySchema, { disposition: UNSPECIFIED });
+    expect(isCapabilityRevoked(got, true)).toBe(true);
+    expect(isCapabilityRevoked(got)).toBe(false);
+    expect(capabilityStatus(got, true).label).toBe("revoked");
   });
 });

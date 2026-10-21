@@ -55,16 +55,36 @@ const STATUS_BADGES: Record<
 };
 
 /**
- * The badge a capability's status reads as. A capability read by Get carries
- * no disposition; its expiry is all it says of one.
+ * Whether a capability is revoked: as the list names it, or, for one read by
+ * Get, which names no disposition, by its own revocation on record
+ * (revokedOnRecord). One stopped only through an ancestor Get cannot tell.
  */
-export function capabilityStatus(c: Capability): StatusBadge {
+export function isCapabilityRevoked(
+  c: Capability,
+  revokedOnRecord = false,
+): boolean {
+  // No disposition is UNSPECIFIED, the zero value: Get's answer.
+  return c.disposition
+    ? c.disposition === CapabilityDisposition.REVOKED
+    : revokedOnRecord;
+}
+
+/**
+ * The badge a capability's status reads as. A capability read by Get carries
+ * no disposition; its own revocation (revokedOnRecord) and its expiry are
+ * what it says of one.
+ */
+export function capabilityStatus(
+  c: Capability,
+  revokedOnRecord = false,
+): StatusBadge {
   switch (c.disposition) {
     case CapabilityDisposition.ACTIVE:
     case CapabilityDisposition.EXPIRED:
     case CapabilityDisposition.REVOKED:
       return STATUS_BADGES[c.disposition];
     default:
+      if (revokedOnRecord) return STATUS_BADGES[CapabilityDisposition.REVOKED];
       return STATUS_BADGES[
         isExpired(c)
           ? CapabilityDisposition.EXPIRED
