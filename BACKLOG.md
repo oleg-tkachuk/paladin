@@ -976,6 +976,21 @@ order they are being taken up.
   saved ones too.
 - **Blockers:** the owner's decision.
 
+#### A tenant's capabilities list only by principal
+
+- **Status:** Blocked.
+- **Reason:** the Capabilities page lists nothing until a principal kind and
+  a subject are typed and Browse is pressed, so an operator who does not
+  already know a subject sees none of the tenant's capabilities.
+  `CapabilityService.List` requires both, because limes's `Store` can list
+  only `ListByPrincipal`; `RecordCensus` counts a tenant's records but lists
+  none.
+- **Definition of Done:** `CapabilityService.List` takes a tenant alone, with
+  the principal kind and subject as optional filters and an active, expired
+  or revoked filter that agrees with the census; the page opens on the
+  tenant's active capabilities, newest first, with tests on both sides.
+- **Blockers:** a tenant-wide listing in limes and pgstore.
+
 #### A tenant purge names what it takes by row, not by kind
 
 - **Status:** Deferred.
