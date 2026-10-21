@@ -105,9 +105,9 @@ class CapabilityService(Protocol):
 
     async def get(self, request: CapabilityServiceGetRequest, ctx: RequestContext[CapabilityServiceGetRequest, CapabilityServiceGetResponse], /) -> CapabilityServiceGetResponse:
         """
-        Get returns one capability as it is on record: the capability, who
-        asked for it, and its own revocation if it has one. NOT_FOUND when no
-        capability has the id, or the caller cannot see it.
+        Get returns one capability as it is on record: the capability with its
+        disposition, who asked for it, and its own revocation if it has one.
+        NOT_FOUND when no capability has the id, or the caller cannot see it.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -424,9 +424,9 @@ class CapabilityServiceClient(ConnectClient):
         use_get: bool = False,
     ) -> CapabilityServiceGetResponse:
         """
-        Get returns one capability as it is on record: the capability, who
-        asked for it, and its own revocation if it has one. NOT_FOUND when no
-        capability has the id, or the caller cannot see it.
+        Get returns one capability as it is on record: the capability with its
+        disposition, who asked for it, and its own revocation if it has one.
+        NOT_FOUND when no capability has the id, or the caller cannot see it.
         """
         return await self.execute_unary(
             request=request,
@@ -568,9 +568,9 @@ class CapabilityServiceSync(Protocol):
 
     def get(self, request: CapabilityServiceGetRequest, ctx: RequestContext[CapabilityServiceGetRequest, CapabilityServiceGetResponse], /) -> CapabilityServiceGetResponse:
         """
-        Get returns one capability as it is on record: the capability, who
-        asked for it, and its own revocation if it has one. NOT_FOUND when no
-        capability has the id, or the caller cannot see it.
+        Get returns one capability as it is on record: the capability with its
+        disposition, who asked for it, and its own revocation if it has one.
+        NOT_FOUND when no capability has the id, or the caller cannot see it.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -880,9 +880,9 @@ class CapabilityServiceClientSync(ConnectClientSync):
         use_get: bool = False,
     ) -> CapabilityServiceGetResponse:
         """
-        Get returns one capability as it is on record: the capability, who
-        asked for it, and its own revocation if it has one. NOT_FOUND when no
-        capability has the id, or the caller cannot see it.
+        Get returns one capability as it is on record: the capability with its
+        disposition, who asked for it, and its own revocation if it has one.
+        NOT_FOUND when no capability has the id, or the caller cannot see it.
         """
         return self.execute_unary(
             request=request,

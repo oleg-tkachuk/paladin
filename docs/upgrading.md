@@ -83,6 +83,13 @@ here.
 
 
 
+## Unreleased — Get gives a capability its disposition
+
+`CapabilityService.Get` sets `Capability.disposition` (12), by the same rules
+as `List`: revoked — itself or through a revoked ancestor — over expired over
+active. A capability stopped only through its parent has no `revocation` of
+its own, so read `disposition`, not `revocation`, for whether it still works.
+Additive: no action needed.
 
 ## sdk/go/v0.106.0, sdk/python/v0.106.0 — a tenant's capabilities list without a principal
 

@@ -69,9 +69,9 @@ service CapabilityService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
-  // Get returns one capability as it is on record: the capability, who
-  // asked for it, and its own revocation if it has one. NOT_FOUND when no
-  // capability has the id, or the caller cannot see it.
+  // Get returns one capability as it is on record: the capability with its
+  // disposition, who asked for it, and its own revocation if it has one.
+  // NOT_FOUND when no capability has the id, or the caller cannot see it.
   rpc Get(CapabilityServiceGetRequest) returns (CapabilityServiceGetResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -204,8 +204,8 @@ message Capability {
   // holder alone may present it. Every request must then carry a DPoP
   // proof signed by that key. Empty = an unbound bearer capability.
   string confirmation_jkt = 11;
-  // disposition is what the capability is now. List sets it; the other
-  // RPCs leave it unspecified.
+  // disposition is what the capability is now. List and Get set it; the
+  // other RPCs leave it unspecified.
   CapabilityDisposition disposition = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 

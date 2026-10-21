@@ -143,9 +143,9 @@ type CapabilityServiceClient interface {
 	// from — with what has been counted against each. A copy gets limits only
 	// by attenuation; one under none returns no copies.
 	GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error)
-	// Get returns one capability as it is on record: the capability, who
-	// asked for it, and its own revocation if it has one. NOT_FOUND when no
-	// capability has the id, or the caller cannot see it.
+	// Get returns one capability as it is on record: the capability with its
+	// disposition, who asked for it, and its own revocation if it has one.
+	// NOT_FOUND when no capability has the id, or the caller cannot see it.
 	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
 	// List pages through a tenant's capabilities, each with its disposition:
 	// every one of them, or those of a principal kind, a subject and the
@@ -197,9 +197,9 @@ type CapabilityServiceHandler interface {
 	// from — with what has been counted against each. A copy gets limits only
 	// by attenuation; one under none returns no copies.
 	GetBiscuitUsage(context.Context, *v1.CapabilityServiceGetBiscuitUsageRequest) (*v1.CapabilityServiceGetBiscuitUsageResponse, error)
-	// Get returns one capability as it is on record: the capability, who
-	// asked for it, and its own revocation if it has one. NOT_FOUND when no
-	// capability has the id, or the caller cannot see it.
+	// Get returns one capability as it is on record: the capability with its
+	// disposition, who asked for it, and its own revocation if it has one.
+	// NOT_FOUND when no capability has the id, or the caller cannot see it.
 	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
 	// List pages through a tenant's capabilities, each with its disposition:
 	// every one of them, or those of a principal kind, a subject and the

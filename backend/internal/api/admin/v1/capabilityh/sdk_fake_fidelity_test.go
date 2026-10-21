@@ -297,3 +297,65 @@ func listAll(t *testing.T, list func(*adminv1.CapabilityServiceListRequest) (*ad
 		r.PageToken = resp.GetNextPageToken()
 	}
 }
+
+// The SDK's fake gives Get the disposition this handler gives it: active,
+// revoked itself, and revoked only through the parent it was delegated from,
+// which holds no revocation of its own.
+func TestTheSDKFakeGetsTheDispositionAsTheServerDoes(t *testing.T) {
+	ctx := context.Background()
+	m := captest.NewMinter(t)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, &allowAuthorizer{})
+	active := mintParent(t, m, limes.OpGet)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	child, err := h.Delegate(auth.WithCapability(ctx, parent), delegateReq(parent))
+	if err != nil {
+		t.Fatalf("server Delegate: %v", err)
+	}
+	if _, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: parent.Capability().ID.String()}); err != nil {
+		t.Fatalf("server Revoke: %v", err)
+	}
+
+	srv := paladintest.New(t)
+	fake := srv.Connect().Admin.Capability
+	issue := func(ops ...limes.Op) *adminv1.CapabilityServiceIssueResponse {
+		resp, err := fake.Issue(ctx, &adminv1.CapabilityServiceIssueRequest{
+			Subject:  &adminv1.CapabilityPrincipal{Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: srv.Tenant(), Subject: "agent:parent"},
+			Audience: []string{"paladin-data"},
+			Caveats:  openCaveats(ops...),
+		})
+		if err != nil {
+			t.Fatalf("fake Issue: %v", err)
+		}
+		return resp
+	}
+	fakeActive := issue(limes.OpGet)
+	fakeParent := issue(limes.OpGet, limes.OpShare)
+	fakeChild, err := srv.Connect(paladin.WithCapability(fakeParent.GetToken())).Admin.Capability.Delegate(ctx,
+		&adminv1.CapabilityServiceDelegateRequest{ParentId: fakeParent.GetCapability().GetId(), TtlSeconds: delegateTTLSeconds})
+	if err != nil {
+		t.Fatalf("fake Delegate: %v", err)
+	}
+	if _, err := fake.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: fakeParent.GetCapability().GetId()}); err != nil {
+		t.Fatalf("fake Revoke: %v", err)
+	}
+
+	for name, ids := range map[string][2]string{
+		"active":                     {active.Capability().ID.String(), fakeActive.GetCapability().GetId()},
+		"revoked":                    {parent.Capability().ID.String(), fakeParent.GetCapability().GetId()},
+		"revoked through its parent": {child.GetCapability().GetId(), fakeChild.GetCapability().GetId()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			server, err := h.Get(adminCtx(), &adminv1.CapabilityServiceGetRequest{Id: ids[0]})
+			if err != nil {
+				t.Fatalf("server Get: %v", err)
+			}
+			faked, err := fake.Get(ctx, &adminv1.CapabilityServiceGetRequest{Id: ids[1]})
+			if err != nil {
+				t.Fatalf("fake Get: %v", err)
+			}
+			if s, f := server.GetCapability().GetDisposition(), faked.GetCapability().GetDisposition(); s != f || s == adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_UNSPECIFIED {
+				t.Errorf("the server answers %v, the fake %v", s, f)
+			}
+		})
+	}
+}

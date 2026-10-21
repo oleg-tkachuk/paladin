@@ -262,7 +262,8 @@ func (s *Server) revokeCapability(id string, cascade bool) {
 	}
 }
 
-// Get answers a capability the fake issued; any other id is NotFound.
+// Get answers a capability the fake issued, with its disposition as List
+// gives it; any other id is NotFound.
 func (s capabilityService) Get(_ context.Context, req *adminv1.CapabilityServiceGetRequest) (*adminv1.CapabilityServiceGetResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -270,7 +271,9 @@ func (s capabilityService) Get(_ context.Context, req *adminv1.CapabilityService
 	if !ok {
 		return nil, withReason(connect.Errorf(connect.CodeNotFound, "capability %s: not found", req.GetId()))
 	}
-	return &adminv1.CapabilityServiceGetResponse{Capability: proto.CloneOf(rec.msg)}, nil
+	c := proto.CloneOf(rec.msg)
+	c.Disposition = s.dispositionOf(rec, time.Now())
+	return &adminv1.CapabilityServiceGetResponse{Capability: c}, nil
 }
 
 // lifetime is when a capability issued at now for ttlSeconds — the default

@@ -587,8 +587,8 @@ type Capability struct {
 	// holder alone may present it. Every request must then carry a DPoP
 	// proof signed by that key. Empty = an unbound bearer capability.
 	ConfirmationJkt string `protobuf:"bytes,11,opt,name=confirmation_jkt,json=confirmationJkt,proto3" json:"confirmation_jkt,omitempty"`
-	// disposition is what the capability is now. List sets it; the other
-	// RPCs leave it unspecified.
+	// disposition is what the capability is now. List and Get set it; the
+	// other RPCs leave it unspecified.
 	Disposition   CapabilityDisposition `protobuf:"varint,12,opt,name=disposition,proto3,enum=paladin.admin.v1.CapabilityDisposition" json:"disposition,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

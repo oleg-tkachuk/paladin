@@ -22,6 +22,13 @@ type recordStore struct {
 	rec    limes.Record
 	err    error
 	getCtx context.Context
+	// revoked and revokedErr answer IsRevoked, as for c or an ancestor.
+	revoked    bool
+	revokedErr error
+}
+
+func (s *recordStore) IsRevoked(context.Context, uuid.UUID) (bool, error) {
+	return s.revoked, s.revokedErr
 }
 
 func (s *recordStore) GetRecord(ctx context.Context, id uuid.UUID) (limes.Record, error) {
@@ -109,5 +116,69 @@ func TestGetActsOnTheCapabilitysTenant(t *testing.T) {
 	}
 	if acting, ok := auth.ActingTenant(store.getCtx); !ok || acting != owner {
 		t.Errorf("GetRecord ran acting on %v (set=%v), want the owner %v", acting, ok, owner)
+	}
+}
+
+// Get gives a capability its disposition, as List does: revoked through an
+// ancestor too, though the record holds no entry of its own.
+func TestGetGivesTheDisposition(t *testing.T) {
+	owner := uuid.New()
+	live := mkParent(owner, limes.OpGet)
+	live.ExpiresAt = time.Now().Add(time.Hour)
+	cases := map[string]struct {
+		expires time.Time
+		revoked bool
+		want    adminv1.CapabilityDisposition
+	}{
+		"active":                     {live.ExpiresAt, false, adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_ACTIVE},
+		"expired":                    {time.Now().Add(-time.Minute), false, adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_EXPIRED},
+		"revoked through its parent": {live.ExpiresAt, true, adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED},
+		"revoked and expired":        {time.Now().Add(-time.Minute), true, adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := live
+			c.ExpiresAt = tc.expires
+			h := mkHandler(t, &recordStore{rec: limes.Record{Capability: c}, revoked: tc.revoked}, nil, &allowAuthorizer{})
+			resp, err := h.Get(adminCtx(), getReq(c.ID.String()))
+			if err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if got := resp.GetCapability().GetDisposition(); got != tc.want {
+				t.Errorf("disposition = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A revocation check that fails is no answer: Get does not guess one.
+func TestGetFailsWhenTheRevocationCheckDoes(t *testing.T) {
+	c := mkParent(uuid.New(), limes.OpGet)
+	store := &recordStore{rec: limes.Record{Capability: c}, revokedErr: errors.New("db down")}
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
+	if _, err := h.Get(adminCtx(), getReq(c.ID.String())); connect.CodeOf(err) != connect.CodeInternal {
+		t.Fatalf("code = %v, want Internal", connect.CodeOf(err))
+	}
+}
+
+// The census's rule, at its boundary: an expiry at now is expired, and a
+// capability with none counts as expired, not active.
+func TestRecordDisposition(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	cases := []struct {
+		name    string
+		expires time.Time
+		revoked bool
+		want    limes.RecordDisposition
+	}{
+		{"after now", now.Add(time.Second), false, limes.RecordDispositionActive},
+		{"at now", now, false, limes.RecordDispositionExpired},
+		{"no expiry", time.Time{}, false, limes.RecordDispositionExpired},
+		{"revoked", now.Add(time.Hour), true, limes.RecordDispositionRevoked},
+	}
+	for _, tc := range cases {
+		if got := recordDisposition(limes.Capability{ExpiresAt: tc.expires}, tc.revoked, now); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
