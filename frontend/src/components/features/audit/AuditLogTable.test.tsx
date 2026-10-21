@@ -9,6 +9,7 @@ vi.mock("./ActorName", () => ({
 }));
 
 import { AUDIT_ORDER } from "@/lib/auditOrder";
+import { SHOWN_IN_CARD } from "@/components/ui/table";
 
 import { AuditLogTable } from "./AuditLogTable";
 
@@ -69,6 +70,18 @@ describe("AuditLogTable", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("rag-api/2.1")).toBeInTheDocument();
     expect(screen.getByText("Go SDK 0.97.0")).toBeInTheDocument();
+  });
+
+  // A phone's card has room for the client and the resource the narrow
+  // table hides, so they are on it.
+  it("puts the client and the resource on a phone's card", () => {
+    table();
+    expect(screen.getByText("rag-api/2.1").closest("td")).toHaveClass(
+      SHOWN_IN_CARD,
+    );
+    expect(screen.getByTitle(RESOURCE).closest("td")).toHaveClass(
+      SHOWN_IN_CARD,
+    );
   });
 
   // The tenant takes most of a resource's width and the actor already says
