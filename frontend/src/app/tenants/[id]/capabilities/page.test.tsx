@@ -47,6 +47,11 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 
 import { LINKED_ROW_ATTR } from "@/components/ui/table";
+import {
+  CapabilityDisposition,
+  PrincipalKind,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 
 import CapabilitiesPage from "./page";
 
@@ -55,6 +60,32 @@ const dialogSubject = () =>
   within(screen.getByRole("dialog")).getByLabelText(/Subject/);
 const issueButtons = () =>
   screen.getAllByRole("button", { name: /Issue capability/i });
+
+// A listed capability, its subject an agent of the page's tenant.
+const makeCap = (id: string) => ({
+  id,
+  issuer: "iss",
+  parentId: "",
+  subject: { kind: 2, tenantId: "t-1", subject: "agent-x" },
+  audience: ["data"],
+  caveats: {
+    ops: ["get"],
+    resourcePrefixes: [],
+    resourceUris: [],
+    sourceIpCidr: [],
+    requestCeiling: { case: "unlimitedRequests", value: true },
+    copyCeiling: { case: "unlimitedCopies", value: true },
+    budgetCeiling: {
+      case: "unlimitedBudget",
+      value: { currencyCode: "XXX" },
+    },
+    allowTaintedRead: false,
+    idempotencyKeyRequired: false,
+  },
+  issuedAt: undefined,
+  notBefore: undefined,
+  expiresAt: undefined,
+});
 
 beforeEach(() => {
   h.list.mockResolvedValue({ capabilities: [] });
@@ -65,7 +96,6 @@ beforeEach(() => {
   h.issue.mockReset();
   h.revoke.mockReset();
   h.showNotification.mockReset();
-  localStorage.clear();
 });
 
 describe("CapabilitiesPage", () => {
@@ -77,21 +107,54 @@ describe("CapabilitiesPage", () => {
     expect(issueButtons().length).toBeGreaterThan(0);
   });
 
-  // react-query's refetch ignores `enabled`: with no principal chosen, closing
-  // the issue dialog or submitting the filter sent List an empty subject,
-  // which the server refuses, and the page showed the refusal as a load error.
-  it("never lists without a principal", async () => {
+  // The page opens on the tenant's capabilities still in force, newest
+  // first: an operator who knows no subject sees them all the same.
+  it("lists the tenant's active capabilities, newest first, on opening", async () => {
     render(<CapabilitiesPage />);
-    await userEvent.click(issueButtons()[0]);
-    await userEvent.keyboard("{Escape}");
-    fireEvent.submit(
-      screen.getByRole("button", { name: /^Browse$/i }).closest("form")!,
-    );
+    await waitFor(() => expect(h.list).toHaveBeenCalled());
+    expect(h.list.mock.calls[0][0]).toMatchObject({
+      tenantId: "t-1",
+      principalKind: PrincipalKind.UNSPECIFIED,
+      subject: "",
+      dispositions: [CapabilityDisposition.ACTIVE],
+      sortOrder: SortOrder.DESC,
+      pageToken: "",
+    });
+  });
+
+  it("lists the revoked ones too once their box is checked", async () => {
+    render(<CapabilitiesPage />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "revoked" }));
     await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      expect(h.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          dispositions: [
+            CapabilityDisposition.ACTIVE,
+            CapabilityDisposition.REVOKED,
+          ],
+        }),
+        expect.anything(),
+      ),
     );
-    expect(h.list).not.toHaveBeenCalled();
-    expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+  });
+
+  // No status would ask the server for its default instead.
+  it("keeps the last status checked", () => {
+    render(<CapabilitiesPage />);
+    expect(screen.getByRole("checkbox", { name: "active" })).toBeDisabled();
+  });
+
+  it("shows each capability's status as the list names it", async () => {
+    h.list.mockResolvedValue({
+      capabilities: [
+        { ...makeCap("cap-1"), disposition: CapabilityDisposition.REVOKED },
+      ],
+    });
+    render(<CapabilitiesPage />);
+    const row = (
+      await screen.findByText("Actions for capability cap-1")
+    ).closest("tr") as HTMLElement;
+    expect(within(row).getByText("revoked")).toBeInTheDocument();
   });
 
   it("opens the copy-revocation dialog from the header action", async () => {
@@ -261,40 +324,7 @@ describe("CapabilitiesPage", () => {
   });
 
   // ── row-menu flows (Details + Revoke) ─────────────────────────────────
-  // Seed the last-browsed principal so the page hydrates + lists on mount,
-  // giving us a row to drive the kebab menu against.
-  const makeCap = (id: string) => ({
-    id,
-    issuer: "iss",
-    parentId: "",
-    subject: { kind: 2, tenantId: "t-1", subject: "agent-x" },
-    audience: ["data"],
-    caveats: {
-      ops: ["get"],
-      resourcePrefixes: [],
-      resourceUris: [],
-      sourceIpCidr: [],
-      requestCeiling: { case: "unlimitedRequests", value: true },
-      copyCeiling: { case: "unlimitedCopies", value: true },
-      budgetCeiling: {
-        case: "unlimitedBudget",
-        value: { currencyCode: "XXX" },
-      },
-      allowTaintedRead: false,
-      idempotencyKeyRequired: false,
-    },
-    issuedAt: undefined,
-    notBefore: undefined,
-    expiresAt: undefined,
-  });
-  const seedBrowse = () =>
-    localStorage.setItem(
-      "paladin:capabilities:lastBrowse:t-1",
-      JSON.stringify({ kind: "2", subject: "agent-x" }),
-    );
-
   it("opens the details dialog from the row menu", async () => {
-    seedBrowse();
     h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
     render(<CapabilitiesPage />);
     await userEvent.click(
@@ -305,7 +335,6 @@ describe("CapabilitiesPage", () => {
   });
 
   it("opens the details beside the list from the row itself", async () => {
-    seedBrowse();
     h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
     render(<CapabilitiesPage />);
     const row = (
@@ -321,7 +350,6 @@ describe("CapabilitiesPage", () => {
   });
 
   it("puts the capability open in details in the address", async () => {
-    seedBrowse();
     h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
     render(<CapabilitiesPage />);
     await userEvent.click(
@@ -336,7 +364,6 @@ describe("CapabilitiesPage", () => {
   // The audit log links here by ?id=.
   it("opens the details of the capability a link names, marking its row", async () => {
     window.history.replaceState(null, "", "/tenants/t-1/capabilities?id=cap-2");
-    seedBrowse();
     h.list.mockResolvedValue({
       capabilities: [makeCap("cap-1"), makeCap("cap-2")],
     });
@@ -361,7 +388,6 @@ describe("CapabilitiesPage", () => {
 
   it("reads a listed linked capability's record once, page and dialog together", async () => {
     window.history.replaceState(null, "", "/tenants/t-1/capabilities?id=cap-1");
-    seedBrowse();
     h.get.mockReset();
     h.get.mockResolvedValue({ capability: makeCap("cap-1") });
     h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
@@ -373,7 +399,6 @@ describe("CapabilitiesPage", () => {
   });
 
   it("revokes a capability from the row menu", async () => {
-    seedBrowse();
     h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
     h.revoke.mockResolvedValue({});
     render(<CapabilitiesPage />);
@@ -391,20 +416,15 @@ describe("CapabilitiesPage", () => {
   });
 });
 
-// A failed browse said "No capabilities for this principal".
+// A failed list said there were no capabilities.
 describe("CapabilitiesPage failed list", () => {
   it("says the list could not be loaded, not that there are none", async () => {
-    window.localStorage.setItem(
-      "paladin:capabilities:lastBrowse:t-1",
-      JSON.stringify({ subject: "agent-1" }),
-    );
     h.list.mockRejectedValue(new Error("unavailable"));
     render(<CapabilitiesPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Capabilities could not be loaded/,
     );
-    expect(screen.queryByText(/No capabilities for this principal/)).toBeNull();
-    window.localStorage.clear();
+    expect(screen.queryByText(/No capabilities match/)).toBeNull();
   });
 });
 
@@ -415,9 +435,11 @@ describe("CapabilitiesPage table layout", () => {
   const VIEWPORT_BREAKPOINT = /(^|\s)(sm|md|lg|xl|2xl):/;
   const headers = () => Array.from(document.querySelectorAll("thead th"));
 
-  it("spans every column with the placeholder row", () => {
+  it("spans every column with the placeholder row", async () => {
     render(<CapabilitiesPage />);
-    const cell = screen.getByText(/Pick a principal/).closest("td")!;
+    const cell = (await screen.findByText(/No capabilities match/)).closest(
+      "td",
+    )!;
     expect(cell.colSpan).toBe(headers().length);
   });
 
@@ -446,20 +468,27 @@ describe("CapabilitiesPage table layout", () => {
 });
 
 describe("CapabilitiesPage paging", () => {
-  // A principal's capabilities past the first hundred were not listed, so
-  // they could not be revoked from the page.
-  it("reads every page of a principal's capabilities", async () => {
+  // A tenant's capabilities past the first page are a click away, so they
+  // can be revoked from the page.
+  it("reads the next page on Load more", async () => {
     h.list
-      .mockResolvedValueOnce({ capabilities: [], nextPageToken: "p2" })
-      .mockResolvedValueOnce({ capabilities: [], nextPageToken: "" });
+      .mockResolvedValueOnce({
+        capabilities: [makeCap("cap-1")],
+        nextPageToken: "p2",
+      })
+      .mockResolvedValueOnce({
+        capabilities: [makeCap("cap-2")],
+        nextPageToken: "",
+      });
     render(<CapabilitiesPage />);
-    fireEvent.change(screen.getByPlaceholderText(/agent-id, user subject/), {
-      target: { value: "agent-1" },
-    });
-    fireEvent.submit(
-      screen.getByRole("button", { name: /^Browse$/i }).closest("form")!,
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Load more" }),
     );
-    await waitFor(() => expect(h.list).toHaveBeenCalledTimes(2));
+    await screen.findByText("Actions for capability cap-2");
     expect(h.list.mock.calls[1][0].pageToken).toBe("p2");
+    expect(
+      screen.getByText("Actions for capability cap-1"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 });

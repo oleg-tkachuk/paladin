@@ -11,7 +11,8 @@ import type { Money } from "@/gen/google/type/money_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import { copyLimit, requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
-import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
+import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS } from "./_constants";
+import { capabilityStatus } from "./_disposition";
 import { Timestamp } from "@/components/Timestamp";
 
 type UsageEntry =
@@ -50,7 +51,7 @@ export function DetailsBody({
   const principalKindLabel =
     PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
       ?.label ?? `kind:${cap.subject?.kind}`;
-  const expired = isExpired(cap);
+  const status = capabilityStatus(cap);
 
   return (
     // CSS multi-column layout (columns-2 on md+) with `break-inside-avoid` on
@@ -232,8 +233,8 @@ export function DetailsBody({
         <DetailRow
           label="Status"
           value={
-            <Badge variant={expired ? "outline" : "success"} className={T.code}>
-              {expired ? "expired" : "active"}
+            <Badge variant={status.variant} className={T.code}>
+              {status.label}
             </Badge>
           }
         />

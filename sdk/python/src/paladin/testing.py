@@ -7,7 +7,7 @@
 It serves ObjectService (upload, complete, get, lookup, list, download,
 delete), MultipartUploadService, ListParts included, PresignService
 (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService, with presigned URLs on its own storage, and
-CapabilityService (Issue, Delegate, Revoke, Get) to the server's rules; every other
+CapabilityService (Issue, Delegate, Revoke, Get, List) to the server's rules; every other
 RPC answers Unimplemented, as a server that lacks it does. Like the server it
 runs protovalidate on every request, after authentication, and checks
 DeleteObject's ``resource_version``; ListObjects refuses a filter or an
@@ -439,7 +439,7 @@ class _Quiet(WSGIRequestHandler):
 
 # ─── CapabilityService ────────────────────────────────────────────────────────
 #
-# Issue, Delegate, Revoke and Get, to the server's rules where a consumer's
+# Issue, Delegate, Revoke, Get and List, to the server's rules where a consumer's
 # tests meet them: an operation the server refuses — a bare "presign" — is
 # INVALID_ARGUMENT; a capability is answered with a Biscuit unless it is bound
 # to a key (KEY_BOUND) or valid only from a later not_before (NOT_YET_VALID),
@@ -474,6 +474,20 @@ _BISCUIT_REFUSALS = {
 }
 """Why, for ``require_biscuit``, each status leaves a capability without its
 Biscuit, as the server says it."""
+_LIST_ELSEWHERE = (
+    "listing another tenant's capabilities requires platform.admin or platform.capability-issuer"
+)
+_ASCENDING_CURSOR = "paladintest_asc_"
+_DESCENDING_CURSOR = "paladintest_desc_"
+"""Prefixes of List's page tokens, by the order each was handed out for: a
+token of the other order is refused, as the server refuses one."""
+DEFAULT_LIST_LIMIT = 50
+"""List's page size when the request names none: limes's ``DefaultListLimit``."""
+MAX_LIST_LIMIT = 500
+"""The largest page List serves: limes's ``MaxListLimit``."""
+_ACTIVE = capability_service_pb2.CAPABILITY_DISPOSITION_ACTIVE
+_EXPIRED = capability_service_pb2.CAPABILITY_DISPOSITION_EXPIRED
+_REVOKED = capability_service_pb2.CAPABILITY_DISPOSITION_REVOKED
 
 
 @dataclass
@@ -650,6 +664,73 @@ class _CapabilityService(CapabilityServiceSync):
             out = capability_service_pb2.Capability()
             out.CopyFrom(record.msg)
         return capability_service_pb2.CapabilityServiceGetResponse(capability=out)
+
+    def list(
+        self, request: capability_service_pb2.CapabilityServiceListRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceListResponse:
+        """A tenant's capabilities as the server lists them: of a principal
+        kind and a subject when the request names them, of the dispositions
+        it names — the active ones and those the deprecated include flags add
+        when it names none — in issue order, each with its disposition.
+        Revoked is a capability revoked itself or through an ancestor, over
+        expired, over active."""
+        fake = self._fake
+        if fake.strict_auth:
+            caller = fake._principal_tenant(dict(ctx.request_headers.items()))
+            if caller != request.tenant_id:
+                raise _with_reason(Code.PERMISSION_DENIED, _LIST_ELSEWHERE)
+        descending = request.sort_order == pagination_pb2.SORT_ORDER_DESC
+        prefix = _DESCENDING_CURSOR if descending else _ASCENDING_CURSOR
+        wanted = _list_dispositions(request)
+        now = datetime.now(UTC)
+        with fake._lock:
+            # The records are kept in the order they were issued.
+            ids = [*fake._capabilities]
+            if descending:
+                ids.reverse()
+            if request.page_token:
+                after = request.page_token.removeprefix(prefix)
+                if after == request.page_token or after not in fake._capabilities:
+                    raise _with_reason(
+                        Code.INVALID_ARGUMENT,
+                        f"invalid request: record list cursor {json.dumps(request.page_token)}",
+                    )
+                ids = ids[ids.index(after) + 1 :]
+            listed: list[capability_service_pb2.Capability] = []
+            for capability in ids:
+                record = fake._capabilities[capability]
+                subject = record.msg.subject
+                if (
+                    subject.tenant_id != request.tenant_id
+                    or (request.principal_kind and subject.kind != request.principal_kind)
+                    or (request.subject and subject.subject != request.subject)
+                ):
+                    continue
+                disposition = fake._disposition(record, now)
+                if disposition not in wanted:
+                    continue
+                out = capability_service_pb2.Capability()
+                out.CopyFrom(record.msg)
+                out.disposition = disposition
+                listed.append(out)
+        limit = min(request.page_size or DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT)
+        response = capability_service_pb2.CapabilityServiceListResponse(capabilities=listed[:limit])
+        if len(listed) > limit:
+            response.next_page_token = prefix + listed[limit - 1].id
+        return response
+
+
+def _list_dispositions(request: capability_service_pb2.CapabilityServiceListRequest) -> set[int]:
+    """What ``request`` lists: its dispositions, or, when it names none, the
+    active capabilities and those its deprecated include flags add."""
+    if request.dispositions:
+        return set(request.dispositions)
+    wanted = {_ACTIVE}
+    if request.include_expired:
+        wanted.add(_EXPIRED)
+    if request.include_revoked:
+        wanted.add(_REVOKED)
+    return wanted
 
 
 class FakePaladin(
@@ -953,6 +1034,17 @@ class FakePaladin(
                 self._capabilities[parent].children.append(c.id)
         res.capability.CopyFrom(c)
         return res
+
+    def _disposition(self, record: _CapabilityRecord, now: datetime) -> int:
+        """``record``'s disposition at ``now``. The caller holds the lock."""
+        r: _CapabilityRecord | None = record
+        while r is not None:
+            if self._credentials[r.credentials[0]].revoked:
+                return _REVOKED
+            r = self._capabilities.get(r.msg.parent_id)
+        if record.msg.expires_at.ToDatetime(tzinfo=UTC) <= now:
+            return _EXPIRED
+        return _ACTIVE
 
     def _revoke_capability(self, capability: str, *, cascade: bool) -> None:
         """Revoke ``capability``'s token and Biscuit, and its children's when

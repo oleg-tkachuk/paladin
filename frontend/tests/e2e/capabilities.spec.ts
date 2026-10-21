@@ -27,12 +27,10 @@ import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 import { seedCapability } from "./fixtures/seed";
 
-// /tenants/<id>/capabilities is browse-scoped (CapabilityService.List is
-// principal-scoped at the SQL level): it lists nothing until you pick a
-// (principal_kind, subject). principalKind defaults to AGENT — the kind
-// seedCapability uses — so filling the subject filter is enough to list the
-// seeded principal's capabilities. The result table shows the capability ID
-// (there is no subject column), so assertions match on cap.id, not cap.subject.
+// /tenants/<id>/capabilities lists the tenant's active capabilities, of any
+// principal kind; filling the subject filter narrows them to the seeded
+// principal's. The result table shows the capability ID (there is no subject
+// column), so assertions match on cap.id, not cap.subject.
 async function browseCapabilities(
   page: import("@playwright/test").Page,
   subject: string,
@@ -157,10 +155,10 @@ test.describe("US4 — Capability lifecycle + FR-008 idempotency", () => {
       .fill("revoke");
     await page.getByRole("button", { name: /^Revoke$/ }).click();
 
-    // The list defaults to includeRevoked=false, so the row would DISAPPEAR
-    // after revoke without an explicit toggle. Flip the filter so we can
-    // assert the row remains AND its status is "revoked" (US4 scenario 3).
-    // The checkbox's accessible name is its label text — "revoked".
+    // The list shows the active capabilities alone, so the row would
+    // DISAPPEAR after revoke without an explicit toggle. Check the revoked
+    // ones too so we can assert the row remains AND its status is "revoked"
+    // (US4 scenario 3). The checkbox's accessible name is its label text.
     await page.getByRole("checkbox", { name: /^revoked$/i }).check();
 
     // The row is still present, now in revoked state — match on the ID

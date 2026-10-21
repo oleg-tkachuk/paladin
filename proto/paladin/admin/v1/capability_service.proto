@@ -9,6 +9,7 @@ import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
 import "google/type/money.proto";
 import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/pagination.proto";
 
 // CapabilityService manages capability tokens — short-lived, signed,
 // delegable, individually revocable authorisation primitives for agent
@@ -75,7 +76,9 @@ service CapabilityService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
-  // List enumerates capabilities issued to a principal. Cursor-paginated.
+  // List pages through a tenant's capabilities, each with its disposition:
+  // every one of them, or those of a principal kind, a subject and the
+  // dispositions asked for. Cursor-paginated.
   rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -201,6 +204,19 @@ message Capability {
   // holder alone may present it. Every request must then carry a DPoP
   // proof signed by that key. Empty = an unbound bearer capability.
   string confirmation_jkt = 11;
+  // disposition is what the capability is now. List sets it; the other
+  // RPCs leave it unspecified.
+  CapabilityDisposition disposition = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// CapabilityDisposition is what a capability is now, as the platform's
+// capability counts count it: revoked — itself or an ancestor — over
+// expired over active. Each capability is exactly one.
+enum CapabilityDisposition {
+  CAPABILITY_DISPOSITION_UNSPECIFIED = 0;
+  CAPABILITY_DISPOSITION_ACTIVE = 1;
+  CAPABILITY_DISPOSITION_EXPIRED = 2;
+  CAPABILITY_DISPOSITION_REVOKED = 3;
 }
 
 message CapabilityServiceIssueRequest {
@@ -340,12 +356,25 @@ message CapabilityServiceGetBiscuitUsageResponse {
 
 message CapabilityServiceListRequest {
   string tenant_id = 1 [(buf.validate.field).string.uuid = true];
-  PrincipalKind principal_kind = 2 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
-  string subject = 3 [(buf.validate.field).string.min_len = 1];
-  bool include_expired = 4;
-  bool include_revoked = 5;
+  // principal_kind lists the capabilities of principals of that kind;
+  // unspecified, of every kind.
+  PrincipalKind principal_kind = 2 [(buf.validate.field).enum.defined_only = true];
+  // subject lists the capabilities issued to that subject exactly; empty,
+  // to every subject.
+  string subject = 3;
+  // include_expired and include_revoked widen a listing that names no
+  // dispositions from the active capabilities. Use dispositions.
+  bool include_expired = 4 [deprecated = true];
+  bool include_revoked = 5 [deprecated = true];
   int32 page_size = 6 [(buf.validate.field).int32.gte = 0];
   string page_token = 7;
+  // dispositions lists the capabilities of any of these. Empty, the active
+  // ones, and those include_expired and include_revoked add.
+  repeated CapabilityDisposition dispositions = 8 [(buf.validate.field).repeated.items.enum = {defined_only: true, not_in: [0]}];
+  // sort_order is by id, which is by issue time: ascending, oldest first,
+  // when unspecified; descending, newest first. A page token holds the
+  // order it was handed out for.
+  paladin.common.v1.SortOrder sort_order = 9;
 }
 
 message CapabilityServiceListResponse {

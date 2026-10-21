@@ -3,11 +3,9 @@
 import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { HelpTip } from "@/components/ui/HelpTip";
-import { listAllPages } from "@/lib/listAllPages";
-import { API_PAGE_SIZE_MAX } from "@/constants";
 import { useTenantChangesBlocked } from "../tenant-context";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   EllipsisVerticalIcon,
@@ -18,8 +16,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { ConnectError, Code } from "@connectrpc/connect";
 
-import { z } from "zod";
-import { safeParseJson } from "@/lib/parseJson";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +41,13 @@ import { openableRow } from "@/components/ui/RecordDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
-import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS, isExpired } from "./_constants";
+import { PRINCIPAL_KIND_FILTER_OPTIONS, SPEND_DIGITS } from "./_constants";
+import {
+  DEFAULT_STATUSES,
+  STATUS_FILTERS,
+  capabilityStatus,
+  toggleStatus,
+} from "./_disposition";
 import { requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { capabilityClient } from "@/lib/connect/client";
@@ -53,7 +55,11 @@ import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
-import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
+import {
+  CapabilityDisposition,
+  PrincipalKind,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import type { Money } from "@/gen/google/type/money_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
@@ -82,20 +88,8 @@ const COL_ISSUED = "hidden @6xl:table-cell";
 // Every header column, hidden ones included: a full-width row must span them all.
 const COLUMN_COUNT = 8;
 
-// Tenant-scoped "last browsed principal", persisted across reloads.
-function readLastBrowse(
-  key: string,
-): { kind?: string; subject?: string } | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return safeParseJson(
-      z.object({ kind: z.string().optional(), subject: z.string().optional() }),
-      window.localStorage.getItem(key),
-    );
-  } catch {
-    return null;
-  }
-}
+/** Capabilities per page of the list; Load more reads the next. */
+const CAPABILITIES_PAGE_SIZE = 100;
 
 // /capabilities — agent-runtime authorisation primitive.
 //
@@ -107,10 +101,9 @@ function readLastBrowse(
 //
 // This page is the operator surface:
 //
-//   • Browse — pick (principal_kind, subject) and List enumerates
-//     the capabilities issued to that principal. The List RPC is
-//     principal-scoped, not tenant-wide, by design — capabilities
-//     of an unknown agent are never enumerable in bulk.
+//   • List — the tenant's capabilities, newest first, the active ones
+//     until the filter asks for expired or revoked too; a principal
+//     kind and a subject narrow it.
 //   • Issue   — opens a dialog that builds CapabilityServiceIssue
 //     Request {subject, audience, caveats, ttl}. The compact JWT is
 //     returned exactly once and shown in a "save now" reveal panel.
@@ -139,75 +132,45 @@ export default function CapabilitiesPage() {
   const tenantId = tenant.tenantId;
   const { showNotification } = useNotification();
 
-  // ── browse filters ──────────────────────────────────────────────────
-  // CapabilityService.List is principal-scoped at the SQL level —
-  // (tenant_id, principal_kind, principal_subject) is the lookup key.
-  // The protocol has no "show all caps in this tenant" path. So when
-  // an operator navigates back to /capabilities they need the
-  // browse filter pre-filled with whatever they last looked at,
-  // otherwise the page renders empty and reads as "the capabilities
-  // I just issued aren't there." Persist the last (kind, subject) in
-  // localStorage and auto-restore on mount; the matching useEffect
-  // below kicks fetchList once the restore completes.
-  //
-  // Tenant-scoped key so two tenants on the same browser profile
-  // don't bleed each other's last-used principal.
-  const lastBrowseKey = `paladin:capabilities:lastBrowse:${tenantId || "_"}`;
-  // Lazy-init from localStorage so a return visit pre-fills the last browsed
-  // principal — replaces the old hydrate effect. tenantId is available
-  // synchronously here (the page renders inside the resolved TenantLayout).
+  // ── filters ─────────────────────────────────────────────────────────
+  // List takes the tenant alone; the kind, the subject and the statuses
+  // narrow it. Each is part of the query key, so changing one lists again.
   const [principalKind, setPrincipalKind] = useState<string>(
-    () => readLastBrowse(lastBrowseKey)?.kind ?? String(PrincipalKind.AGENT),
+    String(PrincipalKind.UNSPECIFIED),
   );
-  const [subject, setSubject] = useState(
-    () => readLastBrowse(lastBrowseKey)?.subject ?? "",
-  );
-  const [includeExpired, setIncludeExpired] = useState(false);
-  const [includeRevoked, setIncludeRevoked] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [statuses, setStatuses] =
+    useState<readonly CapabilityDisposition[]>(DEFAULT_STATUSES);
 
-  const browseQuery = useQuery({
+  const browseQuery = useInfiniteQuery({
     queryKey: [
       "capabilities",
       tenantId,
       principalKind,
       subject.trim(),
-      includeExpired,
-      includeRevoked,
+      statuses,
     ],
-    // Only browse once a principal is chosen — List is principal-scoped.
-    enabled: !!tenantId && !!subject.trim(),
+    enabled: !!tenantId,
     retry: false, // queryFn toasts real failures.
-    queryFn: async ({ signal }) => {
+    initialPageParam: "",
+    queryFn: async ({ pageParam, signal }) => {
       try {
-        // Every page of the principal's capabilities, not the first hundred.
-        const capabilities = await listAllPages((pageToken) =>
-          capabilityClient
-            .list(
-              {
-                tenantId,
-                principalKind: Number(principalKind),
-                subject: subject.trim(),
-                includeExpired,
-                includeRevoked,
-                pageSize: API_PAGE_SIZE_MAX,
-                pageToken,
-              },
-              { signal },
-            )
-            .then((r) => ({ items: r.capabilities, next: r.nextPageToken })),
+        const page = await capabilityClient.list(
+          {
+            tenantId,
+            principalKind: Number(principalKind),
+            subject: subject.trim(),
+            dispositions: [...statuses],
+            sortOrder: SortOrder.DESC,
+            pageSize: CAPABILITIES_PAGE_SIZE,
+            pageToken: pageParam,
+          },
+          { signal },
         );
-        // Persist the successful browse so a return visit pre-fills it.
-        try {
-          window.localStorage.setItem(
-            lastBrowseKey,
-            JSON.stringify({ kind: principalKind, subject: subject.trim() }),
-          );
-        } catch {
-          // private-mode / quota — non-fatal.
-        }
+        const capabilities = page.capabilities;
         // Fan-out usage fetches in parallel — each is a single index hit, so
-        // 100 in flight is fine. NotFound ⇒ "never" sentinel. The shared
-        // signal cancels them all if the browse is superseded.
+        // a page in flight is fine. NotFound ⇒ "never" sentinel. The shared
+        // signal cancels them all if the list is superseded.
         const entries = await Promise.all(
           capabilities.map(async (c) => {
             try {
@@ -238,7 +201,7 @@ export default function CapabilitiesPage() {
             (e): e is readonly [string, UsageSnap | "never"] => e !== null,
           ),
         );
-        return { items: capabilities, usage };
+        return { items: capabilities, usage, next: page.nextPageToken };
       } catch (err) {
         showNotification({
           type: "error",
@@ -248,26 +211,23 @@ export default function CapabilitiesPage() {
         throw err;
       }
     },
+    getNextPageParam: (last) => last.next || undefined,
   });
   const items = useMemo(
-    () => browseQuery.data?.items ?? [],
+    () => browseQuery.data?.pages.flatMap((p) => p.items) ?? [],
     [browseQuery.data],
   );
-  const usage = browseQuery.data?.usage ?? EMPTY_USAGE;
+  const usage = useMemo(
+    () =>
+      browseQuery.data
+        ? new Map(browseQuery.data.pages.flatMap((p) => [...p.usage]))
+        : EMPTY_USAGE,
+    [browseQuery.data],
+  );
   const loading = browseQuery.isFetching;
-  const hasFetched = browseQuery.isFetched;
-  // refetch() runs even while the query is disabled, so guard it the same
-  // way: with no principal chosen there is nothing to list, and List refuses
-  // an empty subject.
   const fetchList = async () => {
-    if (subject.trim()) await browseQuery.refetch();
+    await browseQuery.refetch();
   };
-
-  // Browse filter + persistence are now driven by the query itself: the
-  // (kind, subject, filters) tuple is the queryKey, so changing any of them
-  // refetches automatically (and the signal cancels a superseded browse);
-  // the queryFn persists the last successful browse to localStorage. Initial
-  // restore happens via the lazy useState initializers above — no effects.
 
   // ── issue dialog ────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -287,20 +247,17 @@ export default function CapabilitiesPage() {
   // The Issue dialog owns its form + reveal state. The page keeps only the
   // open flag (above) + the two callbacks the dialog needs:
 
-  // onIssued — sync the browse filter to the just-issued (kind, subject) and
-  // seed the list so the capability is visible after the reveal panel closes;
-  // List is principal-scoped, so without this the page reads empty. Persist
-  // the principal so a reload / navigation back restores it.
+  // onIssued — show the just-issued capability: the filters move to its
+  // principal and take in the active ones, so it is on the list, newest
+  // first, when the reveal panel closes.
   const handleIssued = (
     _capability: Capability,
     kind: string,
     subj: string,
   ) => {
-    // Switching the browse filter to the just-issued principal changes the
-    // query key → the list refetches and shows the new capability (List is
-    // principal-scoped). The queryFn persists the new (kind, subject).
     setPrincipalKind(kind);
     setSubject(subj);
+    setStatuses((s) => toggleStatus(s, CapabilityDisposition.ACTIVE, true));
   };
 
   // onClose — close the dialog and refetch so the list reflects the server
@@ -349,7 +306,7 @@ export default function CapabilitiesPage() {
             variant="outline"
             size="sm"
             onClick={() => void fetchList()}
-            disabled={loading || !subject.trim()}
+            disabled={loading}
           >
             <ArrowPathIcon
               className={cn("size-4", loading && "animate-spin")}
@@ -384,20 +341,14 @@ export default function CapabilitiesPage() {
         </div>
       </div>
 
-      {/* ─── Browse filters ──────────────────────────────────────────── */}
+      {/* ─── Filters ───────────────────────────────────────────────── */}
       <Card className="p-4">
-        <form
-          className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr_auto_auto]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void fetchList();
-          }}
-        >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr_auto]">
           <div className="space-y-1.5">
             <Label className="text-xs">Principal kind</Label>
             <Select
               aria-label="Principal kind"
-              options={PRINCIPAL_KIND_OPTIONS}
+              options={PRINCIPAL_KIND_FILTER_OPTIONS}
               value={principalKind}
               onChange={setPrincipalKind}
               className="w-full"
@@ -414,36 +365,33 @@ export default function CapabilitiesPage() {
               onChange={(e) => setSubject(e.target.value)}
             />
           </div>
-          <div className="flex items-end">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={loading || !subject.trim()}
-            >
-              Browse
-            </Button>
-          </div>
-          <div className="flex items-end gap-3 text-sm">
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={includeExpired}
-                onChange={(e) => setIncludeExpired(e.target.checked)}
-                className="size-4 accent-primary"
-              />
-              <span className="text-muted-foreground">expired</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={includeRevoked}
-                onChange={(e) => setIncludeRevoked(e.target.checked)}
-                className="size-4 accent-primary"
-              />
-              <span className="text-muted-foreground">revoked</span>
-            </label>
-          </div>
-        </form>
+          <fieldset className="flex items-end gap-3 text-sm">
+            <legend className="sr-only">Status</legend>
+            {STATUS_FILTERS.map((f) => {
+              const checked = statuses.includes(f.disposition);
+              return (
+                <label
+                  key={f.disposition}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    // The last status stays on: none would list the default.
+                    disabled={checked && statuses.length === 1}
+                    onChange={(e) =>
+                      setStatuses((s) =>
+                        toggleStatus(s, f.disposition, e.target.checked),
+                      )
+                    }
+                    className="size-4 accent-primary"
+                  />
+                  <span className="text-muted-foreground">{f.label}</span>
+                </label>
+              );
+            })}
+          </fieldset>
+        </div>
       </Card>
 
       {/* ─── Result table ────────────────────────────────────────────── */}
@@ -474,18 +422,6 @@ export default function CapabilitiesPage() {
                   </TableCell>
                 </TableRow>
               ))
-            ) : !hasFetched ? (
-              <TableRow>
-                <TableCell colSpan={COLUMN_COUNT} className="h-40 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <KeyIcon className="size-8 opacity-40" />
-                    <p className="text-sm">
-                      Pick a principal and click <em>Browse</em> to list its
-                      capabilities.
-                    </p>
-                  </div>
-                </TableCell>
-              </TableRow>
             ) : browseQuery.isError && !browseQuery.data ? (
               // "No capabilities for this principal" for a failed list hides live grants.
               <TableRow>
@@ -503,7 +439,7 @@ export default function CapabilitiesPage() {
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <KeyIcon className="size-8 opacity-40" />
                     <p className="text-sm">
-                      No capabilities for this principal.
+                      No capabilities match these filters.
                     </p>
                     <Button
                       size="sm"
@@ -520,7 +456,7 @@ export default function CapabilitiesPage() {
               </TableRow>
             ) : (
               visibleItems.map((c) => {
-                const expired = isExpired(c);
+                const status = capabilityStatus(c);
                 const row = openableRow(() => linked.open(c.id));
                 return (
                   <TableRow
@@ -656,15 +592,9 @@ export default function CapabilitiesPage() {
                       })()}
                     </TableCell>
                     <TableCell>
-                      {expired ? (
-                        <Badge variant="outline" className={T.code}>
-                          expired
-                        </Badge>
-                      ) : (
-                        <Badge variant="success" className={T.code}>
-                          active
-                        </Badge>
-                      )}
+                      <Badge variant={status.variant} className={T.code}>
+                        {status.label}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       {/* Kebab menu — View details + Revoke. The row
@@ -710,6 +640,18 @@ export default function CapabilitiesPage() {
             )}
           </TableBody>
         </Table>
+        {browseQuery.hasNextPage && (
+          <div className="flex justify-center border-t p-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void browseQuery.fetchNextPage()}
+              disabled={loading}
+            >
+              Load more
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* ─── Issue dialog ────────────────────────────────────────────── */}

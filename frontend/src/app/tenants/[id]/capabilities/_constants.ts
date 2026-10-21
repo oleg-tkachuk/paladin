@@ -42,6 +42,12 @@ export const PRINCIPAL_KIND_OPTIONS = [
   { value: String(PrincipalKind.SERVICE), label: "service" },
 ];
 
+// The list's kind filter: every kind, then each one.
+export const PRINCIPAL_KIND_FILTER_OPTIONS = [
+  { value: String(PrincipalKind.UNSPECIFIED), label: "any kind" },
+  ...PRINCIPAL_KIND_OPTIONS,
+];
+
 // SPEND_DIGITS is how many decimals spend is shown to, so a sub-cent charge
 // does not read as nothing.
 export const SPEND_DIGITS = 4;

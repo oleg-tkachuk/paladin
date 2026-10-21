@@ -992,20 +992,18 @@ order they are being taken up.
   saved ones too.
 - **Blockers:** the owner's decision.
 
-#### A tenant's capabilities list only by principal
+#### A capability read by Get carries no disposition
 
-- **Status:** Blocked.
-- **Reason:** the Capabilities page lists nothing until a principal kind and
-  a subject are typed and Browse is pressed, so an operator who does not
-  already know a subject sees none of the tenant's capabilities.
-  `CapabilityService.List` requires both, because limes's `Store` can list
-  only `ListByPrincipal`; `RecordCensus` counts a tenant's records but lists
-  none.
-- **Definition of Done:** `CapabilityService.List` takes a tenant alone, with
-  the principal kind and subject as optional filters and an active, expired
-  or revoked filter that agrees with the census; the page opens on the
-  tenant's active capabilities, newest first, with tests on both sides.
-- **Blockers:** a tenant-wide listing in limes and pgstore.
+- **Status:** Deferred.
+- **Reason:** `CapabilityService.List` sets `Capability.disposition`, but
+  `Get` leaves it unspecified, so the console's details of a capability opened
+  from an audit link and not on the current list read its status from the
+  expiry alone: a revoked one shows as active there while the list shows it
+  revoked.
+- **Definition of Done:** `Get` sets `disposition` by the census's rules —
+  revoked through an ancestor too — with the SDK fakes' `Get` doing the same,
+  held to the handler by the fidelity test.
+- **Blockers:** none.
 
 #### A tenant purge names what it takes by row, not by kind
 

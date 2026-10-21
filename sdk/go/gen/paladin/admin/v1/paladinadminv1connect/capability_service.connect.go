@@ -147,7 +147,9 @@ type CapabilityServiceClient interface {
 	// asked for it, and its own revocation if it has one. NOT_FOUND when no
 	// capability has the id, or the caller cannot see it.
 	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
-	// List enumerates capabilities issued to a principal. Cursor-paginated.
+	// List pages through a tenant's capabilities, each with its disposition:
+	// every one of them, or those of a principal kind, a subject and the
+	// dispositions asked for. Cursor-paginated.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
 	// request_count (vs Caveats.max_requests) and spent
@@ -199,7 +201,9 @@ type CapabilityServiceHandler interface {
 	// asked for it, and its own revocation if it has one. NOT_FOUND when no
 	// capability has the id, or the caller cannot see it.
 	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
-	// List enumerates capabilities issued to a principal. Cursor-paginated.
+	// List pages through a tenant's capabilities, each with its disposition:
+	// every one of them, or those of a principal kind, a subject and the
+	// dispositions asked for. Cursor-paginated.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
 	// request_count (vs Caveats.max_requests) and spent

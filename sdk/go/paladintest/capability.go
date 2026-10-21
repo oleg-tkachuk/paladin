@@ -16,7 +16,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// CapabilityService, as the fake serves it: Issue, Delegate, Revoke and Get.
+// CapabilityService, as the fake serves it: Issue, Delegate, Revoke, Get and
+// List.
 //
 // It holds a capability to the server's rules where a consumer's tests meet
 // them: an operation the server refuses — a bare "presign" — is
@@ -299,7 +300,8 @@ func notBefore(t *timestamppb.Timestamp) time.Time {
 // mint records c, issued at now and valid from nbf until expires, and
 // answers it with its token and, when status is ISSUED, its Biscuit.
 func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status adminv1.BiscuitStatus, parent string) *adminv1.CapabilityServiceIssueResponse {
-	c.Id = uuid.NewString()
+	// A UUIDv7, as the server's: List pages in id order, which is issue order.
+	c.Id = uuid.Must(uuid.NewV7()).String()
 	c.Issuer = capabilityIssuer
 	c.ParentId = parent
 	c.IssuedAt = timestamppb.New(now)

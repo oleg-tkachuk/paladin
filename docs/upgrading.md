@@ -84,6 +84,31 @@ here.
 
 
 
+## Unreleased — a tenant's capabilities list without a principal
+
+**Server:** the first release that carries this section; an older one still
+requires `principal_kind` and `subject` and answers as before.
+
+`CapabilityService.List` pages through a tenant's capabilities, read from
+limes's record listing (limes v0.111.0, pgstore v0.31.0):
+
+- **`principal_kind` and `subject` are optional filters.** A request with the
+  tenant alone lists all of it.
+- **`dispositions` (8)** lists the capabilities of any of active, expired and
+  revoked, by the same rules as the platform's capability counts; revoked
+  includes one stopped through a revoked ancestor. `include_expired` and
+  `include_revoked` are deprecated: a request naming no dispositions lists the
+  active ones and those the flags add, as before — except that an active
+  capability under a revoked ancestor now counts as revoked, not active.
+- **`sort_order` (9)**: `SORT_ORDER_DESC` lists newest first; unspecified is
+  oldest first, as before. A page token holds the order it was handed out
+  for, and one from before this release is refused as `INVALID_ARGUMENT`.
+- **`Capability.disposition` (12)** is each listed capability's disposition;
+  the other RPCs leave it unspecified.
+- **limes migration `014`** adds the indexes the listing reads. It builds them
+  without `CONCURRENTLY`, so on a large `limes.capabilities` the first start
+  of this release holds writes to it until they are built.
+
 ## sdk/go/v0.105.0, sdk/python/v0.105.0 — a collection says what it holds
 
 `Collection.usage` (14) is what a collection holds now — its available
