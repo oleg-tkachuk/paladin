@@ -21,6 +21,11 @@ import { listAllCollections } from "@/lib/listAllCollections";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
+import {
+  UsageCells,
+  UsageHeads,
+} from "@/components/features/collections/CollectionUsage";
+import { USAGE_SORT_COLUMNS, collectionSortValue } from "@/lib/collectionSort";
 import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { useTableSort } from "@/hooks/useTableSort";
@@ -47,11 +52,14 @@ import { useBucket } from "../bucket-context";
 /** How many skeleton cards stand in while the first read is in flight. */
 const SKELETON_CARDS = 2;
 
-const SORT_COLUMNS = ["collection", "display"] as const;
+const SORT_COLUMNS = ["collection", "display", ...USAGE_SORT_COLUMNS] as const;
 type CollectionColumn = (typeof SORT_COLUMNS)[number];
 const COLLECTION_SORT: SortAccessors<Collection, CollectionColumn> = {
   collection: (c) => c.collection,
   display: (c) => c.displayName || undefined,
+  objects: (c) => collectionSortValue(c, "objects"),
+  size: (c) => collectionSortValue(c, "size"),
+  lastUpload: (c) => collectionSortValue(c, "lastUpload"),
 };
 
 interface TenantCollections {
@@ -224,6 +232,7 @@ export default function BucketCollectionsPage() {
                       column="display"
                       {...sortProps}
                     />
+                    <UsageHeads {...sortProps} />
                     <StaticHead className="@md:w-45 text-right">
                       Browse
                     </StaticHead>
@@ -248,6 +257,7 @@ export default function BucketCollectionsPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        <UsageCells collection={c} />
                         <TableCell className="text-right">
                           <Button
                             variant="ghost"

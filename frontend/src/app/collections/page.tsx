@@ -55,6 +55,12 @@ import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
+import {
+  UsageCells,
+  UsageHeads,
+  USAGE_COLUMNS,
+} from "@/components/features/collections/CollectionUsage";
+import { COLLECTION_SORT_COLUMNS, sortCollections } from "@/lib/collectionSort";
 import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
 import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
@@ -62,11 +68,11 @@ import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards"
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "collections";
 
-const SORT_COLUMNS = ["name", "displayName", "bucket"] as const;
+const SORT_COLUMNS = COLLECTION_SORT_COLUMNS;
 type SortColumn = (typeof SORT_COLUMNS)[number];
 
-/** Collection, tenant, display name, bucket, actions. */
-const COLUMNS = 5;
+/** Collection, tenant, display name, bucket, the usage columns, actions. */
+const COLUMNS = 5 + USAGE_COLUMNS;
 
 export default function CollectionsPage() {
   // The search is the server's filter; the list follows it through the cache.
@@ -143,28 +149,10 @@ export default function CollectionsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const sorted = useMemo(() => {
-    const list = [...collections];
-    if (sort.column && sort.direction) {
-      const dir = sort.direction === "asc" ? 1 : -1;
-      list.sort((a, b) => {
-        const va =
-          sort.column === "name"
-            ? a.collection
-            : sort.column === "displayName"
-              ? a.displayName || ""
-              : a.bucket || "";
-        const vb =
-          sort.column === "name"
-            ? b.collection
-            : sort.column === "displayName"
-              ? b.displayName || ""
-              : b.bucket || "";
-        return va < vb ? -dir : va > vb ? dir : 0;
-      });
-    }
-    return list;
-  }, [collections, sort]);
+  const sorted = useMemo(
+    () => sortCollections(collections, sort.column, sort.direction),
+    [collections, sort],
+  );
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -243,7 +231,7 @@ export default function CollectionsPage() {
               />
               <StaticHead>Tenant</StaticHead>
               <SortableHead
-                className="hidden @xs:table-cell"
+                className="hidden @3xl:table-cell"
                 label="Display name"
                 column="displayName"
                 current={sort}
@@ -256,6 +244,7 @@ export default function CollectionsPage() {
                 current={sort}
                 onSort={handleSort}
               />
+              <UsageHeads current={sort} onSort={handleSort} />
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -301,7 +290,7 @@ export default function CollectionsPage() {
                     </div>
                     <Link
                       href={collectionHref(ok.tenantId, ok.collection)}
-                      className="font-mono text-xs hover:text-primary hover:underline"
+                      className="block max-w-48 truncate font-mono text-xs hover:text-primary hover:underline"
                       title={ok.collection}
                     >
                       {ok.collection}
@@ -322,14 +311,17 @@ export default function CollectionsPage() {
                     </Link>
                   </TenantHoverCard>
                 </TableCell>
-                <TableCell className="hidden @xs:table-cell">
+                <TableCell className="hidden @3xl:table-cell">
                   {ok.displayName || (
                     <span className="text-muted-foreground italic">—</span>
                   )}
                 </TableCell>
-                <TableCell className="hidden @md:table-cell">
+                {/* The one column that gives: it takes what the others leave and
+                    truncates there, so no width overflows the card. */}
+                <TableCell className="hidden w-full max-w-0 @md:table-cell">
                   <BucketNameLink bucket={ok.bucket} />
                 </TableCell>
+                <UsageCells collection={ok} />
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

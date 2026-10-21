@@ -299,7 +299,16 @@ func collectionDomainToProto(o *objectkey.Collection) *pb.Collection {
 		UpdatedAt:       convx.TsProto(o.UpdatedAt),
 		Access:          collectionAccessToProto(o.PublicRead),
 		CacheControl:    o.CacheControl,
+		Usage:           collectionUsageToProto(o.Usage),
 	}
+}
+
+func collectionUsageToProto(u objectkey.CollectionUsage) *pb.CollectionUsage {
+	out := &pb.CollectionUsage{ObjectCount: u.ObjectCount, TotalBytes: u.TotalBytes}
+	if u.LastCommittedAt != nil {
+		out.LastCommittedAt = convx.TsProto(*u.LastCommittedAt)
+	}
+	return out
 }
 
 func collectionAccessToProto(publicRead bool) pb.CollectionAccess {

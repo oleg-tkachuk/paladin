@@ -61,6 +61,12 @@ import { useTenant } from "../tenant-context";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
+import {
+  UsageCells,
+  UsageHeads,
+  USAGE_COLUMNS,
+} from "@/components/features/collections/CollectionUsage";
+import { COLLECTION_SORT_COLUMNS, sortCollections } from "@/lib/collectionSort";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 import { TableScope } from "@/components/ui/TableScope";
@@ -68,7 +74,7 @@ import { TableScope } from "@/components/ui/TableScope";
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "tenantCollections";
 
-const SORT_COLUMNS = ["name", "displayName", "bucket"] as const;
+const SORT_COLUMNS = COLLECTION_SORT_COLUMNS;
 type SortColumn = (typeof SORT_COLUMNS)[number];
 
 export default function TenantCollectionsPage() {
@@ -163,28 +169,10 @@ export default function TenantCollectionsPage() {
   // nothing, if a search had just changed the query — and sent an empty one.
   const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
 
-  const sorted = useMemo(() => {
-    const arr = [...list];
-    if (sort.column && sort.direction) {
-      const dir = sort.direction === "asc" ? 1 : -1;
-      arr.sort((a, b) => {
-        const va =
-          sort.column === "name"
-            ? a.collection
-            : sort.column === "displayName"
-              ? a.displayName || ""
-              : a.bucket || "";
-        const vb =
-          sort.column === "name"
-            ? b.collection
-            : sort.column === "displayName"
-              ? b.displayName || ""
-              : b.bucket || "";
-        return va < vb ? -dir : va > vb ? dir : 0;
-      });
-    }
-    return arr;
-  }, [list, sort]);
+  const sorted = useMemo(
+    () => sortCollections(list, sort.column, sort.direction),
+    [list, sort],
+  );
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -283,13 +271,14 @@ export default function TenantCollectionsPage() {
                 current={sort}
                 onSort={handleSort}
               />
+              <UsageHeads current={sort} onSort={handleSort} />
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <ListBody
-            colSpan={4}
+            colSpan={4 + USAGE_COLUMNS}
             loading={loading && list.length === 0}
             // "No Collections yet" for a failed list invites a duplicate.
             error={
@@ -332,7 +321,7 @@ export default function TenantCollectionsPage() {
                     </div>
                     <Link
                       href={detailHref(ok.collection)}
-                      className="font-mono text-xs hover:text-primary hover:underline"
+                      className="block max-w-48 truncate font-mono text-xs hover:text-primary hover:underline"
                       title={ok.collection}
                     >
                       {ok.collection}
@@ -347,9 +336,12 @@ export default function TenantCollectionsPage() {
                     <span className="text-muted-foreground italic">—</span>
                   )}
                 </TableCell>
-                <TableCell className="hidden @md:table-cell">
+                {/* The one column that gives: it takes what the others leave and
+                    truncates there, so no width overflows the card. */}
+                <TableCell className="hidden w-full max-w-0 @md:table-cell">
                   <BucketNameLink bucket={ok.bucket} />
                 </TableCell>
+                <UsageCells collection={ok} />
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

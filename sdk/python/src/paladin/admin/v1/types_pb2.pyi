@@ -373,7 +373,7 @@ class Tenant(_message.Message):
     def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., display_name: _Optional[str] = ..., labels: _Optional[_Mapping[str, str]] = ..., inherited_cedar_policy: _Optional[str] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., slug: _Optional[str] = ..., deleted_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., default_bucket: _Optional[str] = ..., storage_layout: _Optional[str] = ..., purge_eligible_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Collection(_message.Message):
-    __slots__ = ("name", "tenant_id", "collection", "display_name", "bucket", "completion_mode", "cedar_policy", "constraints", "resource_version", "created_at", "updated_at", "access", "cache_control")
+    __slots__ = ("name", "tenant_id", "collection", "display_name", "bucket", "completion_mode", "cedar_policy", "constraints", "resource_version", "created_at", "updated_at", "access", "cache_control", "usage")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     COLLECTION_FIELD_NUMBER: _ClassVar[int]
@@ -387,6 +387,7 @@ class Collection(_message.Message):
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     ACCESS_FIELD_NUMBER: _ClassVar[int]
     CACHE_CONTROL_FIELD_NUMBER: _ClassVar[int]
+    USAGE_FIELD_NUMBER: _ClassVar[int]
     name: str
     tenant_id: str
     collection: str
@@ -400,7 +401,18 @@ class Collection(_message.Message):
     updated_at: _timestamp_pb2.Timestamp
     access: CollectionAccess
     cache_control: str
-    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., display_name: _Optional[str] = ..., bucket: _Optional[str] = ..., completion_mode: _Optional[_Union[_resource_pb2.CompletionMode, str]] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., access: _Optional[_Union[CollectionAccess, str]] = ..., cache_control: _Optional[str] = ...) -> None: ...
+    usage: CollectionUsage
+    def __init__(self, name: _Optional[str] = ..., tenant_id: _Optional[str] = ..., collection: _Optional[str] = ..., display_name: _Optional[str] = ..., bucket: _Optional[str] = ..., completion_mode: _Optional[_Union[_resource_pb2.CompletionMode, str]] = ..., cedar_policy: _Optional[str] = ..., constraints: _Optional[_Union[BucketConstraints, _Mapping]] = ..., resource_version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., access: _Optional[_Union[CollectionAccess, str]] = ..., cache_control: _Optional[str] = ..., usage: _Optional[_Union[CollectionUsage, _Mapping]] = ...) -> None: ...
+
+class CollectionUsage(_message.Message):
+    __slots__ = ("object_count", "total_bytes", "last_committed_at")
+    OBJECT_COUNT_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_BYTES_FIELD_NUMBER: _ClassVar[int]
+    LAST_COMMITTED_AT_FIELD_NUMBER: _ClassVar[int]
+    object_count: int
+    total_bytes: int
+    last_committed_at: _timestamp_pb2.Timestamp
+    def __init__(self, object_count: _Optional[int] = ..., total_bytes: _Optional[int] = ..., last_committed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Quota(_message.Message):
     __slots__ = ("name", "max_total_bytes", "max_object_count", "max_bytes_per_day", "max_objects_per_day", "usage", "resource_version", "updated_at")

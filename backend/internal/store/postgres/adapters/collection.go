@@ -358,28 +358,52 @@ func decodeCollectionCursor(tok string, fallback uuid.UUID) (uuid.UUID, string) 
 
 // Stats runs a single grouped aggregation. Returning (AVAILABLE, PENDING,
 // DELETED) counts keeps the row count O(1) regardless of collection size.
-func (r *CollectionRepo) Stats(ctx context.Context, tenantID uuid.UUID, collection string) (objectkey.CollectionStats, error) {
+func (r *CollectionRepo) Usage(ctx context.Context, keys []objectkey.CollectionKey) (map[objectkey.CollectionKey]objectkey.CollectionUsage, error) {
+	// One row per collection with an available object, from
+	// objects_collection_available_usage_idx (095); the pairs are unnested
+	// so a page across tenants is still one query.
 	const q = `
-		SELECT
-			COALESCE(SUM(CASE WHEN o.state = 'AVAILABLE' THEN 1 ELSE 0 END), 0) AS available,
-			COALESCE(SUM(CASE WHEN o.state = 'PENDING'   THEN 1 ELSE 0 END), 0) AS pending,
-			COALESCE(SUM(CASE WHEN o.state = 'DELETED'   THEN 1 ELSE 0 END), 0) AS deleted,
-			COALESCE(SUM(CASE WHEN o.state = 'AVAILABLE' THEN o.size_bytes ELSE 0 END), 0) AS size_bytes
-		FROM objects o
-		JOIN collections c ON c.id = o.collection_id
-		WHERE o.tenant_id = $1 AND c.name = $2
+		SELECT c.tenant_id, c.name, COUNT(*), COALESCE(SUM(o.size_bytes), 0), MAX(o.committed_at)
+		FROM unnest($1::uuid[], $2::text[]) AS k(tenant_id, name)
+		JOIN collections c ON c.tenant_id = k.tenant_id AND c.name = k.name
+		JOIN objects o ON o.collection_id = c.id AND o.state = 'AVAILABLE'
+		GROUP BY c.tenant_id, c.name
 	`
-	var s objectkey.CollectionStats
-	err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(
-		&s.ObjectCountAvailable,
-		&s.ObjectCountPending,
-		&s.ObjectCountDeleted,
-		&s.SizeBytesAvailable,
-	)
-	if err != nil {
-		return objectkey.CollectionStats{}, fmt.Errorf("collection stats: %w", err)
+	out := make(map[objectkey.CollectionKey]objectkey.CollectionUsage, len(keys))
+	if len(keys) == 0 {
+		return out, nil
 	}
-	return s, nil
+	tenants := make([]pgtype.UUID, len(keys))
+	names := make([]string, len(keys))
+	for i, k := range keys {
+		tenants[i] = pgUUID(k.TenantID)
+		names[i] = k.Collection
+	}
+	rows, err := r.pool.Query(ctx, q, tenants, names)
+	if err != nil {
+		return nil, fmt.Errorf("collection usage: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			tenant pgtype.UUID
+			name   string
+			u      objectkey.CollectionUsage
+			last   pgtype.Timestamptz
+		)
+		if err := rows.Scan(&tenant, &name, &u.ObjectCount, &u.TotalBytes, &last); err != nil {
+			return nil, fmt.Errorf("collection usage: %w", err)
+		}
+		if last.Valid {
+			t := last.Time
+			u.LastCommittedAt = &t
+		}
+		out[objectkey.CollectionKey{TenantID: uuidFrom(tenant), Collection: name}] = u
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("collection usage: %w", err)
+	}
+	return out, nil
 }
 
 // Named for what it converts, not for what it used to: backend and bucket
