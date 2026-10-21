@@ -1,5 +1,5 @@
 // The GitHub release beside each SDK tag this run cut, and the Go proxy told
-// of it.
+// of a Go SDK's.
 //
 // Usage: GH_TOKEN=… GITHUB_REPOSITORY=… node sdk-release.ts <tags-before file>
 //
@@ -28,13 +28,16 @@ import { git, lines } from "./lib/git.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
 import { retry } from "./lib/retry.ts";
-import { SDK, streamOf, streams, tagPrefix } from "./lib/release-config.ts";
+import { GO_SDK, PYTHON_SDK, streamOf, streams, tagPrefix } from "./lib/release-config.ts";
 import { readBefore, streamTags } from "./release-tags.ts";
 import { HEADING, UPGRADING } from "./upgrade-sections.ts";
 
 // TITLES are the streams that get notes of their own, by the name a release
 // is titled with.
-const TITLES: Readonly<Record<string, string>> = { [SDK]: "SDK" };
+const TITLES: Readonly<Record<string, string>> = { [GO_SDK]: "Go SDK", [PYTHON_SDK]: "Python SDK" };
+// GO_MODULE_STREAMS are the streams whose tags are Go module versions, which
+// the Go proxy is told of.
+const GO_MODULE_STREAMS: ReadonlySet<string> = new Set([GO_SDK]);
 // The released commit types, as the stream's bump counts them; the rest
 // (docs, ci, chore, …) release nothing and are left out.
 const FEATURES = /^feat(\([^)]*\))?!?: /;
@@ -166,11 +169,16 @@ export async function warmGoProxy(url: string, pauseMs: number = PROXY_PAUSE_MS)
   );
 }
 
-// publishStream publishes the release of one stream tag and tells the proxy.
+// publishStream publishes the release of one stream tag and, for a Go
+// module's, tells the proxy.
 export async function publishStream(github: GitHub, tag: string, root: string, repository: string, proxy: string = GO_PROXY, pauseMs?: number): Promise<void> {
   const notes = await streamNotes(tag, root, repository);
   await github.publishRelease({ tag, title: notes.title, notes: { text: notes.body }, latest: false, assets: [] });
   info(`released ${tag}`);
+  const stream = streamOf(tag, streams());
+  if (stream === undefined || !GO_MODULE_STREAMS.has(stream)) {
+    return;
+  }
   try {
     info(await warmGoProxy(moduleInfoUrl(tag, repository, proxy), pauseMs));
   } catch (err) {

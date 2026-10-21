@@ -7,8 +7,8 @@ name: Release
 # announces them. A commit that passed CI and cut no tag is published too, as a
 # dev build at the version the library derives for it, <next patch>-dev.<…>:
 # the dev cluster follows those, so it runs every change as it lands. A dev
-# build is not announced and moves no floating tag. The SDK releases too, as a tag of its own (sdk/go/v*), when
-# a commit touched it. The announcement comes last and only when every component
+# build is not announced and moves no floating tag. Each SDK releases too, as a
+# tag of its own (sdk/go/v*, sdk/python/v*), when a commit touched it. The announcement comes last and only when every component
 # published: a release whose charts are missing is not announced. Nothing is
 # published when no tag was due.
 #
@@ -25,7 +25,7 @@ name: Release
 #
 # Two triggers, two jobs to do (ADR-0034):
 #
-#   repository_dispatch  CI, after every green push to main: the SDK's tag when
+#   repository_dispatch  CI, after every green push to main: each SDK's tag when
 #                        one is due, and a dev build of the product for the
 #                        dev cluster. No product tag.
 #   workflow_dispatch    an operator, when the product is to be released: the
@@ -177,17 +177,34 @@ jobs:
         if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'prerelease'
         run: node .github/ci/prerelease.ts
 
-      # The SDK versions on its own, from the commits that touch it
+      # Each SDK versions on its own, from the commits that touch it
       # (.github/release/release.config.cjs). Its tag is the release: the Go
       # proxy and pip read the tag, so nothing is published here, and the
       # product's publish below keys on its own tag alone.
-      - name: Compute and push the SDK tag
+      - name: Compute and push the Go SDK tag
         if: steps.head.outputs.release == 'true' && github.event_name == 'repository_dispatch'
         working-directory: .github/release
         run: npx semantic-release --no-ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_STREAM: sdk
+          RELEASE_STREAM: go-sdk
+
+      # A stream with no tag would start at 1.0.0, a tag the ruleset then
+      # keeps for good; its first is cut by hand. See .github/ci/stream-seeded.ts.
+      - name: Check the Python SDK stream has a tag
+        id: python-seeded
+        if: steps.head.outputs.release == 'true' && github.event_name == 'repository_dispatch'
+        run: node .github/ci/stream-seeded.ts
+        env:
+          RELEASE_STREAM: python-sdk
+
+      - name: Compute and push the Python SDK tag
+        if: steps.head.outputs.release == 'true' && github.event_name == 'repository_dispatch' && steps.python-seeded.outputs.seeded == 'true'
+        working-directory: .github/release
+        run: npx semantic-release --no-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_STREAM: python-sdk
 
       # The upgrade guide's Unreleased sections this run shipped, named with
       # its tags (.github/ci/upgrade-sections.ts). Before the SDK's notes,
@@ -201,10 +218,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/ci/upgrade-sections.ts name "$RUNNER_TEMP/tags-before"
 
-      # A GitHub release beside the SDK tag this run cut, if any, with notes of
-      # the stream's own commits, and the Go proxy told of the tag. Never the
+      # A GitHub release beside each SDK tag this run cut, if any, with notes of
+      # the stream's own commits, and the Go proxy told of a Go SDK tag. Never the
       # latest release: that stays the product's. See .github/ci/sdk-release.ts.
-      - name: Publish the SDK release
+      - name: Publish the SDK releases
         if: steps.head.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

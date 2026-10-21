@@ -16,24 +16,30 @@ import { BRANCH_PREFIX, UPGRADING, nameGuide, nameSections, proposalTitle, propo
 const all = streams();
 const PRODUCT_TAG = "v27.0.0";
 const SDK_TAG = "sdk/go/v0.60.0";
+const PYTHON_TAG = "sdk/python/v0.60.0";
 const BOTH = [SDK_TAG, PRODUCT_TAG];
+const EVERY = [PYTHON_TAG, SDK_TAG, PRODUCT_TAG];
 const BACKEND = "backend/internal/api/handler.go";
 const GO_SDK = "sdk/go/paladin/client.go";
 const PYTHON_SDK = "sdk/python/pyproject.toml";
 
 describe("tagsFor", () => {
   const cases: [string, string[], string[]][] = [
-    ["the Python SDK and its notes", [PYTHON_SDK, UPGRADING], [SDK_TAG]],
+    ["the Python SDK and its notes, in a run without its tag", [PYTHON_SDK, UPGRADING], []],
     ["the backend and its notes", [BACKEND, UPGRADING], [PRODUCT_TAG]],
     ["the Go SDK, which the product compiles in", [GO_SDK, UPGRADING], [PRODUCT_TAG, SDK_TAG]],
     ["the notes alone read as the product's", [UPGRADING], [PRODUCT_TAG]],
   ];
   for (const [name, files, want] of cases) test(name, () => assert.deepEqual(tagsFor(files, BOTH, all), want));
+  test("the Python SDK is its own stream's", () => assert.deepEqual(tagsFor([PYTHON_SDK, UPGRADING], EVERY, all), [PYTHON_TAG]));
+  test("the contract is every stream's, product first", () =>
+    assert.deepEqual(tagsFor(["proto/paladin/x.proto", UPGRADING], EVERY, all), [PRODUCT_TAG, SDK_TAG, PYTHON_TAG]));
   test("a run that cut no SDK tag", () => assert.deepEqual(tagsFor([PYTHON_SDK, UPGRADING], [PRODUCT_TAG], all), []));
   test("not a release tag", () => assert.deepEqual(tagsFor([BACKEND], ["api/v1.2.0"], all), []));
   test("each tag's stream", () => {
     assert.equal(streamOf(PRODUCT_TAG, all), "product");
-    assert.equal(streamOf(SDK_TAG, all), "sdk");
+    assert.equal(streamOf(SDK_TAG, all), "go-sdk");
+    assert.equal(streamOf(PYTHON_TAG, all), "python-sdk");
     assert.equal(streamOf("sdk/go/vnext", all), undefined);
   });
 });
@@ -61,10 +67,10 @@ test("nameGuide reads each section's stream from the commit that wrote it", asyn
     repo.write(UPGRADING, "# Upgrading\n\n## Unreleased — server\n\n## Unreleased — python\n");
     repo.write(BACKEND, "x");
     await repo.commit("feat(api): server");
-    assert.equal(await nameGuide(repo.dir, BOTH), true);
+    assert.equal(await nameGuide(repo.dir, EVERY), true);
     assert.equal(await repo.run("diff", "--name-only"), `${UPGRADING}\n`);
-    assert.match(await repo.run("diff"), new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${SDK_TAG.replaceAll("/", "\\/")} — python`));
-    assert.equal(await nameGuide(repo.dir, BOTH), false, "a named guide is left as it is");
+    assert.match(await repo.run("diff"), new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${PYTHON_TAG.replaceAll("/", "\\/")} — python`));
+    assert.equal(await nameGuide(repo.dir, EVERY), false, "a named guide is left as it is");
   } finally {
     repo.cleanup();
   }

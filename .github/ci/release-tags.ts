@@ -17,8 +17,8 @@
 // with its release is a finished release and stays out, so a second dispatch
 // to the same commit still publishes nothing.
 //
-// The SDK's tags are the stream tags (sdk/go/v*), read the same way by
-// pendingStreamTags. The api/vX.Y.Z proto baselines can point at the same
+// The SDKs' tags are the stream tags (sdk/go/v*, sdk/python/v*), read the
+// same way by streamTags. The api/vX.Y.Z proto baselines can point at the same
 // commit and are not releases; nor are the capability/v* tags of a module
 // that moved to its own repository.
 
@@ -29,7 +29,7 @@ import { requireEnv } from "./lib/env.ts";
 import { git, lines } from "./lib/git.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
-import { PRODUCT, SDK, streams, tagPrefix } from "./lib/release-config.ts";
+import { PRODUCT, sdkStreams, streams, tagPrefix } from "./lib/release-config.ts";
 
 // OUTPUT_TAG is the step output product sets.
 export const OUTPUT_TAG = "tag";
@@ -79,13 +79,18 @@ export async function productTag(github: GitHub, before: readonly string[], cwd?
   return (await pendingTags(github, await tagsOnHead(cwd), before, tagPrefix(product)))[0];
 }
 
-// streamTags are the SDK tags this run pushed.
+// streamTags are the SDK tags this run pushed, of every SDK stream.
 export async function streamTags(github: GitHub, before: readonly string[], cwd?: string): Promise<string[]> {
-  const sdk = streams()[SDK];
-  if (sdk === undefined) {
-    throw new Error(`release.config.cjs has no ${SDK} stream`);
+  const all = streams();
+  const onHead = await tagsOnHead(cwd);
+  const tags: string[] = [];
+  for (const name of sdkStreams(all)) {
+    const stream = all[name];
+    if (stream !== undefined) {
+      tags.push(...(await pendingTags(github, onHead, before, tagPrefix(stream))));
+    }
   }
-  return pendingTags(github, await tagsOnHead(cwd), before, tagPrefix(sdk));
+  return tags;
 }
 
 async function main(): Promise<void> {

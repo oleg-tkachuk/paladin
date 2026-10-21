@@ -35,6 +35,7 @@ test("each run reports the tags it pushed, or the ones left unpublished", async 
     data.released.add("v4.2.1");
 
     await repo.run("tag", "sdk/go/v0.3.0");
+    await repo.run("tag", "sdk/python/v0.3.0");
     // The capability module released here as capability/v* before it moved to
     // its own repository; those tags are history, never a stream this run cut.
     await repo.run("tag", "capability/v0.2.0");
@@ -42,12 +43,14 @@ test("each run reports the tags it pushed, or the ones left unpublished", async 
     await repo.run("tag", "vnext");
     await repo.run("tag", "sdk/go/vlatest");
     assert.equal(await product(), "v4.2.1", "a module tag is not the product's");
-    assert.deepEqual(await sdk(), ["sdk/go/v0.3.0"], "every new module tag, and no product tag");
+    assert.deepEqual(await sdk(), ["sdk/go/v0.3.0", "sdk/python/v0.3.0"], "every new SDK tag, and no product tag");
 
     before = await tagsOnHead(repo.dir);
-    assert.deepEqual(await sdk(), ["sdk/go/v0.3.0"], "a module tag an earlier run pushed and never published");
+    assert.deepEqual(await sdk(), ["sdk/go/v0.3.0", "sdk/python/v0.3.0"], "SDK tags an earlier run pushed and never published");
 
     data.released.add("sdk/go/v0.3.0");
+    assert.deepEqual(await sdk(), ["sdk/python/v0.3.0"], "one SDK published, the other not");
+    data.released.add("sdk/python/v0.3.0");
     assert.deepEqual(await sdk(), [], "module tags an earlier run pushed and published");
   } finally {
     repo.cleanup();

@@ -32,17 +32,17 @@ describe("streamNotes: only what the stream released", () => {
 
   test("the first tag", async () => {
     const notes = await streamNotes("sdk/go/v0.1.0", repo.dir, REPO);
-    assert.equal(notes.title, "SDK 0.1.0");
+    assert.equal(notes.title, "Go SDK 0.1.0");
     assert.match(notes.body, /first release/);
   });
 
   test("the stream's own commits since its previous tag", async () => {
     const { title, body } = await streamNotes("sdk/go/v0.2.0", repo.dir, REPO);
-    assert.equal(title, "SDK 0.2.0");
-    for (const want of ["feat(sdk): a second helper", "feat(events): a new RPC", "fix(sdk): a python fix", "compare/sdk/go/v0.1.0...sdk/go/v0.2.0"]) {
+    assert.equal(title, "Go SDK 0.2.0");
+    for (const want of ["feat(sdk): a second helper", "feat(events): a new RPC", "compare/sdk/go/v0.1.0...sdk/go/v0.2.0"]) {
       assert.ok(body.includes(want), want);
     }
-    for (const unwanted of ["a server feature", "explain it", "a limes fix", "the first helper", "Behaviour changes"]) {
+    for (const unwanted of ["a server feature", "explain it", "a limes fix", "the first helper", "a python fix", "Behaviour changes"]) {
       assert.ok(!body.includes(unwanted), unwanted);
     }
   });
@@ -123,9 +123,37 @@ describe("the Go proxy", () => {
       misses = 0;
       assert.deepEqual(
         data.published.map((r) => [r.tag, r.title, r.latest]),
-        [["sdk/go/v0.1.0", "SDK 0.1.0", false]],
+        [["sdk/go/v0.1.0", "Go SDK 0.1.0", false]],
       );
       assert.ok(asked.length > 0 && asked.every((u) => u === "/github.com/o/r/sdk/go/@v/v0.1.0.info"));
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  // A Python SDK tag is no Go module version: its release asks the proxy
+  // nothing, and its notes are the Python SDK's commits alone.
+  test("a Python SDK release is its own, and no Go module", async () => {
+    const data = fakeData();
+    const repo = await tempRepo();
+    try {
+      repo.write("sdk/python/a.py", "a");
+      await repo.commit("feat(sdk): a");
+      await repo.run("tag", "sdk/python/v0.1.0");
+      repo.write("sdk/go/a.go", "a");
+      await repo.commit("feat(sdk): a Go helper");
+      repo.write("sdk/python/a.py", "b");
+      await repo.commit("fix(sdk): a Python fix");
+      await repo.run("tag", "sdk/python/v0.1.1");
+      asked.length = 0;
+      await publishStream(fakeGitHub(data), "sdk/python/v0.1.1", repo.dir, REPO, base, 0);
+      assert.deepEqual(
+        data.published.map((r) => [r.tag, r.title, r.latest]),
+        [["sdk/python/v0.1.1", "Python SDK 0.1.1", false]],
+      );
+      assert.deepEqual(asked, []);
+      const { body } = await streamNotes("sdk/python/v0.1.1", repo.dir, REPO);
+      assert.ok(body.includes("a Python fix") && !body.includes("a Go helper"), body);
     } finally {
       repo.cleanup();
     }
