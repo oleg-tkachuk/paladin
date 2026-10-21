@@ -121,3 +121,30 @@ while IFS=$'\t' read -r python with tls; do
     fi
 done <<<"$cells"
 echo "python sdk: py-sdk-compat.sh runs all $got cells"
+
+# The lines --matrix prints about each cell: how long it took, and what it
+# came to — pytest's counts, or the error a cell that never reached pytest
+# stopped on. A bash of its own: the script declares the readonly names this
+# one does.
+bash -s -- "$root/scripts/py-sdk-compat.sh" <<'SH'
+set -euo pipefail
+# shellcheck source=SCRIPTDIR/py-sdk-compat.sh
+source "$1"
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+check() {
+    if [[ $2 != "$3" ]]; then
+        echo "!!! py-sdk-compat.sh: $1 is \"$2\", want \"$3\"" >&2
+        exit 1
+    fi
+}
+check "elapsed 42" "$(elapsed 42)" "42s"
+check "elapsed 65" "$(elapsed 65)" "1m05s"
+printf 'collected\n===== 553 passed, 29 skipped in 149.64s (0:02:29) =====\n' >"$log"
+check "a passing cell" "$(summary_of "$log")" "553 passed, 29 skipped"
+printf 'error: No solution found\n  cause: protobuf==0.0.1\nlast\n' >"$log"
+check "a cell that never installed" "$(summary_of "$log")" "error: No solution found"
+printf 'step one\n    ModuleNotFoundError: No module named paladin\n' >"$log"
+check "a cell with no error line" "$(summary_of "$log")" "ModuleNotFoundError: No module named paladin"
+SH
+echo "python sdk: py-sdk-compat.sh reports each cell's time and result"
