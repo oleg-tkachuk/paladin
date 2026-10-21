@@ -408,10 +408,16 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 		}
 		return nil, apiutil.MapError(err)
 	}
+	// Revoked through an ancestor too: the record holds only its own entry.
+	revoked, err := h.store.IsRevoked(ctx, id)
+	if err != nil {
+		return nil, apiutil.MapError(err)
+	}
 	out := &adminv1.CapabilityServiceGetResponse{
 		Capability: capabilityToProto(&rec.Capability),
 		IssuedBy:   principalToProto(rec.IssuedBy),
 	}
+	out.Capability.Disposition = dispositionToProto(recordDisposition(rec.Capability, revoked, time.Now()))
 	if r := rec.Revocation; r != nil {
 		out.Revocation = &adminv1.CapabilityRevocation{
 			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Note, Actor: r.Actor, Cascade: r.Cascaded,

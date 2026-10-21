@@ -75,3 +75,42 @@ func TestCapabilityListingIsTenantScoped(t *testing.T) {
 		t.Errorf("another tenant's listing: err = %v, want ErrScopeMismatch", err)
 	}
 }
+
+// CapabilityService.Get reads a capability's disposition through IsRevoked,
+// under the operator's scope for the capability's tenant: a child delegated
+// from a revoked parent is revoked, though it holds no revocation of its own.
+func TestCapabilityRevokedThroughItsParentUnderTheTenantScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	platform, _ := mkTenant(t, ctx, admin, "shared")
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+
+	seed := newCapStore(t, admin)
+	parent := mkCap(tenant, "agent:parent", time.Now().Add(time.Hour))
+	// No wider than its parent: within its expiry and its caveats.
+	child := mkCap(tenant, "agent:child", parent.ExpiresAt)
+	child.ParentID = parent.ID
+	child.Caveats = parent.Caveats
+	for _, c := range []limes.Capability{parent, child} {
+		if err := seed.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
+			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
+		}
+	}
+	if err := seed.Revoke(auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant}), limes.RevokeRequest{
+		CapabilityID: parent.ID, Note: "leaked", Actor: "user:operator",
+	}); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	scoped := newCapStore(t, rlsPool(t, ctx, admin))
+	operator := auth.WithActingTenant(auth.WithPrincipal(ctx, &auth.Principal{TenantID: platform}), tenant)
+	revoked, err := scoped.IsRevoked(operator, child.ID)
+	if err != nil || !revoked {
+		t.Fatalf("IsRevoked(child) = %v, %v; want revoked through its parent", revoked, err)
+	}
+	rec, err := scoped.GetRecord(operator, child.ID)
+	if err != nil || rec.Revocation != nil {
+		t.Fatalf("child's record = %+v, %v; want no revocation of its own", rec.Revocation, err)
+	}
+}

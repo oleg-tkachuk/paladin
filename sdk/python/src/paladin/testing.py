@@ -657,12 +657,15 @@ class _CapabilityService(CapabilityServiceSync):
     def get(
         self, request: capability_service_pb2.CapabilityServiceGetRequest, ctx: Any, /
     ) -> capability_service_pb2.CapabilityServiceGetResponse:
+        """A capability the fake issued, with its disposition as ``list``
+        gives it; any other id is NOT_FOUND."""
         with self._fake._lock:
             record = self._fake._capabilities.get(request.id)
             if record is None:
                 raise _with_reason(Code.NOT_FOUND, f"capability {request.id}: not found")
             out = capability_service_pb2.Capability()
             out.CopyFrom(record.msg)
+            out.disposition = self._fake._disposition(record, datetime.now(UTC))
         return capability_service_pb2.CapabilityServiceGetResponse(capability=out)
 
     def list(

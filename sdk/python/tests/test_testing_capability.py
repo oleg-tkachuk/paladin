@@ -361,3 +361,23 @@ def test_strict_list_stays_in_the_callers_tenant(strict: FakePaladin) -> None:
     admin.list(pb.CapabilityServiceListRequest(tenant_id=strict.tenant))
     other = pb.CapabilityServiceListRequest(tenant_id=str(uuid.uuid4()))
     assert _code(lambda: admin.list(other)) == Code.PERMISSION_DENIED
+
+
+def test_get_gives_the_disposition_as_the_server_does(fake: FakePaladin) -> None:
+    """The cases capabilityh/sdk_fake_fidelity_test.go holds the Go fake's Get
+    to: active, revoked itself, and revoked only through its parent."""
+    admin = fake.connect().admin.capability
+    active = admin.issue(_issue_request(fake, Op.GET))
+    parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
+    child = fake.connect(capability=parent.token).admin.capability.delegate(
+        pb.CapabilityServiceDelegateRequest(parent_id=parent.capability.id)
+    )
+    admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id))
+
+    def disposition(c: pb.Capability) -> int:
+        got = admin.get(pb.CapabilityServiceGetRequest(id=c.id)).capability
+        return got.disposition
+
+    assert disposition(active.capability) == _A
+    assert disposition(parent.capability) == _R
+    assert disposition(child.capability) == _R

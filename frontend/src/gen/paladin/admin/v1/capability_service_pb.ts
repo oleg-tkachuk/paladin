@@ -316,8 +316,8 @@ export type Capability = Message<"paladin.admin.v1.Capability"> & {
   confirmationJkt: string;
 
   /**
-   * disposition is what the capability is now. List sets it; the other
-   * RPCs leave it unspecified.
+   * disposition is what the capability is now. List and Get set it; the
+   * other RPCs leave it unspecified.
    *
    * @generated from field: paladin.admin.v1.CapabilityDisposition disposition = 12;
    */
@@ -1159,9 +1159,9 @@ export const CapabilityService: GenService<{
     output: typeof CapabilityServiceGetBiscuitUsageResponseSchema;
   };
   /**
-   * Get returns one capability as it is on record: the capability, who
-   * asked for it, and its own revocation if it has one. NOT_FOUND when no
-   * capability has the id, or the caller cannot see it.
+   * Get returns one capability as it is on record: the capability with its
+   * disposition, who asked for it, and its own revocation if it has one.
+   * NOT_FOUND when no capability has the id, or the caller cannot see it.
    *
    * @generated from rpc paladin.admin.v1.CapabilityService.Get
    */

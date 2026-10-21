@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -101,6 +102,20 @@ func listOrder(o commonv1.SortOrder) limes.ListOrder {
 		return limes.ListOrderDescending
 	}
 	return limes.ListOrderAscending
+}
+
+// recordDisposition is c's disposition at now by the census's rules, revoked
+// being whether c or an ancestor is: revoked over expired — no expiry, or
+// none after now — over active.
+func recordDisposition(c limes.Capability, revoked bool, now time.Time) limes.RecordDisposition {
+	switch {
+	case revoked:
+		return limes.RecordDispositionRevoked
+	case c.ExpiresAt.IsZero() || !c.ExpiresAt.After(now):
+		return limes.RecordDispositionExpired
+	default:
+		return limes.RecordDispositionActive
+	}
 }
 
 func protoToDisposition(d adminv1.CapabilityDisposition) limes.RecordDisposition {
