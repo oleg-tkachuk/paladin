@@ -122,9 +122,8 @@ const cursorSeparator = "_"
 func listFilters(req *adminv1.CapabilityServiceListRequest) string {
 	ds := slices.Clone(listDispositions(req))
 	slices.Sort(ds)
-	h := sha256.New()
-	fmt.Fprintf(h, "%d\x00%s\x00%v", req.GetPrincipalKind(), req.GetSubject(), ds)
-	return hex.EncodeToString(h.Sum(nil))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%d\x00%s\x00%v", req.GetPrincipalKind(), req.GetSubject(), ds))
+	return hex.EncodeToString(sum[:])
 }
 
 // listCursor is the id a page token resumes after, empty for none. A token
