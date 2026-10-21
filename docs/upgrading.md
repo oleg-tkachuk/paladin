@@ -84,7 +84,7 @@ here.
 
 
 
-## Unreleased — a tenant's capabilities list without a principal
+## sdk/go/v0.106.0, sdk/python/v0.106.0 — a tenant's capabilities list without a principal
 
 **Server:** the first release that carries this section; an older one still
 requires `principal_kind` and `subject` and answers as before.
