@@ -70,8 +70,9 @@ export type ListAuditLogRequest =
     tenantId: string;
 
     /**
-     * order_by is the field the log sorts by: at, action, actor_subject or
-     * resource_name; any other is refused. Empty is newest first. Text sorts
+     * order_by is the field the log sorts by: at, action, actor_subject,
+     * resource_name or user_agent (empty when none was sent); any other is
+     * refused. Empty is newest first. Text sorts
      * bytewise. The page_token of a sorted list resumes only that order and
      * direction.
      *

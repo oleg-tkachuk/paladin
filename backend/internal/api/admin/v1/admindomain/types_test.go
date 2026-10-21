@@ -62,6 +62,7 @@ func TestCompareAuditEntries(t *testing.T) {
 		{"earlier first", keyset.Order{Field: AuditOrderByAt}, AuditEntry{At: t0}, AuditEntry{At: t0.Add(time.Second)}, -1},
 		{"newest first", DefaultAuditOrder, AuditEntry{At: t0}, AuditEntry{At: t0.Add(time.Second)}, 1},
 		{"a tie goes by id", keyset.Order{Field: AuditOrderByActor}, AuditEntry{ActorSubject: "x", EntryID: lo}, AuditEntry{ActorSubject: "x", EntryID: hi}, -1},
+		{"no client before any", keyset.Order{Field: AuditOrderByClient}, AuditEntry{}, AuditEntry{UserAgent: "curl/8"}, -1},
 		{"and back when descending", keyset.Order{Field: AuditOrderByResource, Desc: true}, AuditEntry{EntryID: lo}, AuditEntry{EntryID: hi}, 1},
 	}
 	for _, tc := range cases {

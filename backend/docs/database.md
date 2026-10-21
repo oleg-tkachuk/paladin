@@ -111,6 +111,7 @@ them, so they must exist before it runs.
 | `090` | `user_settings.theme` accepts three more dark palettes (`navy`, `graphite`, `bordeaux`) |
 | `091` | `user_settings.theme` renames `ember` to `dusk`, carrying saved settings over |
 | `092` | `audit_log.user_agent`, the client a call came from |
+| `093` | `list_audit_entry_ids` sorts by `user_agent` too |
 
 Each file's header comment says why it exists.
 

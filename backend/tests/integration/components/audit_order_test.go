@@ -26,6 +26,7 @@ var auditOrderOracle = map[string]string{
 	admindomain.AuditOrderByAction:   `action COLLATE "C"`,
 	admindomain.AuditOrderByActor:    `actor_subject COLLATE "C"`,
 	admindomain.AuditOrderByResource: `resource_name COLLATE "C"`,
+	admindomain.AuditOrderByClient:   `COALESCE(user_agent, '') COLLATE "C"`,
 }
 
 // Walking the log sorted by any order_by, either way, pages by (value, id):
@@ -51,6 +52,8 @@ func TestListAudit_SortsByEveryOrderField(t *testing.T) {
 			ActorAudience: auth.AudienceAdmin,
 			Action:        actions[g%len(actions)],
 			ResourceName:  fmt.Sprintf("tenants/x/buckets/%d", g%4),
+			// Empty is stored as NULL, which the order sorts as empty.
+			UserAgent: []string{"paladin-sdk-go/0.97.0 gateway/1.4", "", "Paladin-sdk-python/0.97.0", ""}[g%4],
 		}); err != nil {
 			t.Fatal(err)
 		}
