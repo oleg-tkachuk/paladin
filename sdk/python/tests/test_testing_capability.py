@@ -341,6 +341,19 @@ def test_list_refuses_a_token_of_the_other_order(listed: FakePaladin, order: int
     assert _code(lambda: admin.list(garbage)) == Code.INVALID_ARGUMENT
 
 
+@pytest.mark.parametrize(
+    "other",
+    [{"principal_kind": _USER}, {"subject": "agent:one"}, {"dispositions": [_A]}],
+    ids=["another kind", "another subject", "other dispositions"],
+)
+def test_list_refuses_a_token_of_other_filters(listed: FakePaladin, other) -> None:  # type: ignore[no-untyped-def]
+    admin = listed.connect().admin.capability
+    first = admin.list(pb.CapabilityServiceListRequest(tenant_id=listed.tenant, dispositions=_ALL, page_size=1))
+    fields = {"dispositions": _ALL, **other}
+    again = pb.CapabilityServiceListRequest(tenant_id=listed.tenant, page_token=first.next_page_token, **fields)
+    assert _code(lambda: admin.list(again)) == Code.INVALID_ARGUMENT
+
+
 def test_list_counts_a_child_of_a_revoked_parent_revoked(fake: FakePaladin) -> None:
     admin = fake.connect().admin.capability
     parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))

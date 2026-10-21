@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/otelmetric"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/capabilityh"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
@@ -33,8 +34,9 @@ type CapabilityBundle struct {
 	Verifier  *limes.Verifier
 	Keys      *jwks.Static
 
-	// Records lists a tenant's capability records, each with its disposition.
-	Records limes.RecordLister
+	// Records reads capability records with their dispositions: a tenant's
+	// for List, and one for Get.
+	Records capabilityh.Records
 
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability

@@ -3,7 +3,6 @@ package capabilityh
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -17,9 +16,17 @@ import (
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
-// WithRecords wires List: a tenant's capabilities, each with its
-// disposition. Without it the RPC answers Unavailable.
-func (h *Handler) WithRecords(records limes.RecordLister) *Handler {
+// Records reads capability records with their dispositions: a tenant's a
+// page at a time for List, and one for Get. pgstore's and memstore's Census
+// are each one.
+type Records interface {
+	limes.RecordLister
+	limes.RecordListingReader
+}
+
+// WithRecords wires List and Get: capabilities with their dispositions.
+// Without it both RPCs answer Unavailable.
+func (h *Handler) WithRecords(records Records) *Handler {
 	h.records = records
 	return h
 }
@@ -102,20 +109,6 @@ func listOrder(o commonv1.SortOrder) limes.ListOrder {
 		return limes.ListOrderDescending
 	}
 	return limes.ListOrderAscending
-}
-
-// recordDisposition is c's disposition at now by the census's rules, revoked
-// being whether c or an ancestor is: revoked over expired — no expiry, or
-// none after now — over active.
-func recordDisposition(c limes.Capability, revoked bool, now time.Time) limes.RecordDisposition {
-	switch {
-	case revoked:
-		return limes.RecordDispositionRevoked
-	case c.ExpiresAt.IsZero() || !c.ExpiresAt.After(now):
-		return limes.RecordDispositionExpired
-	default:
-		return limes.RecordDispositionActive
-	}
 }
 
 func protoToDisposition(d adminv1.CapabilityDisposition) limes.RecordDisposition {

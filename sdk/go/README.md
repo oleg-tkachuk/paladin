@@ -531,7 +531,7 @@ answers:
 | `Delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PermissionDenied` |
 | `List` of a tenant, alone or with a principal kind, a subject, dispositions and `sort_order` | Its capabilities in issue order, each with its `disposition`: revoked — itself or through a revoked ancestor — over expired over active; no dispositions named lists the active ones and those `include_expired` and `include_revoked` add |
 | `Get` of a capability it issued | It, with its `disposition` as `List` gives it |
-| `List` with a page token of the other order, or one it did not hand out | `InvalidArgument` |
+| `List` with a page token of the other order or of other filters, or one it did not hand out | `InvalidArgument` |
 | `List` of another tenant under `WithStrictAuth` | `PermissionDenied` |
 
 The token and the Biscuit are the fake's own credentials — `Attenuate`

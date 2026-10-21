@@ -108,7 +108,7 @@ func mkHandler(t *testing.T, store limes.Store, usage meter.UsageStore, policy c
 	t.Helper()
 	m := newMinter(t, store)
 	h := NewHandler(m.Issuer, m.Verifier, store, usage, policy)
-	if records, ok := store.(limes.RecordLister); ok {
+	if records, ok := store.(Records); ok {
 		h.WithRecords(records)
 	}
 	return h

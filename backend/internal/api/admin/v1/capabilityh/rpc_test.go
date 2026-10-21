@@ -58,6 +58,10 @@ func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) e
 	return s.revokeErr
 }
 
+func (s *recordingStore) GetRecordListing(context.Context, uuid.UUID) (limes.RecordListing, error) {
+	return limes.RecordListing{}, errors.New("not used")
+}
+
 // ListRecords makes recordingStore the handler's record lister too.
 func (s *recordingStore) ListRecords(_ context.Context, args limes.ListRecordsRequest) (limes.Page[limes.RecordListing], error) {
 	s.listArgs = &args

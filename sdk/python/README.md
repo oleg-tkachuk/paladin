@@ -548,7 +548,7 @@ hold that fake to the same answers:
 | `delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PERMISSION_DENIED` |
 | `list` of a tenant, alone or with a principal kind, a subject, dispositions and `sort_order` | Its capabilities in issue order, each with its `disposition`: revoked — itself or through a revoked ancestor — over expired over active; no dispositions named lists the active ones and those `include_expired` and `include_revoked` add |
 | `get` of a capability it issued | It, with its `disposition` as `list` gives it |
-| `list` with a page token of the other order, or one it did not hand out | `INVALID_ARGUMENT` |
+| `list` with a page token of the other order or of other filters, or one it did not hand out | `INVALID_ARGUMENT` |
 | `list` of another tenant with `strict_auth` | `PERMISSION_DENIED` |
 
 The token and the Biscuit are the fake's own credentials — `attenuate`
