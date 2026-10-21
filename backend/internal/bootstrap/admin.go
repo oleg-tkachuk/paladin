@@ -69,7 +69,7 @@ type Deps struct {
 const (
 	auditActionCreate = "iam.bootstrap_admin.create"
 	auditActionReset  = "iam.bootstrap_admin.reset"
-	auditActorSubject = "system:bootstrap"
+	auditActorSubject = auth.SubjectPrefixSystem + "bootstrap"
 	auditAudience     = "paladin-iam"
 )
 

@@ -1,0 +1,6 @@
+{
+  "_comment": "What an audit entry's actor_subject begins with for an actor that is not a person: the server writes these prefixes before the token's or the capability's id, and the console reads them back to name the actor. A person's subject is their user id, with no prefix.",
+  "api_token": "apikey:",
+  "capability": "capability:",
+  "system": "system:"
+}

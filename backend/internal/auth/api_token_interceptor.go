@@ -164,7 +164,7 @@ func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal
 	}
 	return &Principal{
 		TenantID: t.TenantID,
-		Subject:  "apikey:" + t.ID.String(),
+		Subject:  SubjectPrefixAPIToken + t.ID.String(),
 		Audience: principalAudienceFor(audienceLabel),
 		Kind:     PrincipalKindApiKey,
 		Scopes:   scopes,
