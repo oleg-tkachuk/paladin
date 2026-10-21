@@ -14,7 +14,10 @@ import {
   RPC_PLANE_PREFIXES,
   type Plane,
   FORWARDED_FOR_HEADER,
+  CONSOLE_USER_AGENT_PRODUCT,
+  USER_AGENT_HEADER,
 } from "@/constants";
+import { uiBuildInfo } from "@/lib/ui/build-info";
 import { planeTransport } from "@/lib/server/upstream";
 import { tokenMatchesPlane } from "@/lib/auth/jwtAudience";
 
@@ -151,6 +154,7 @@ function buildPlaneRouter(plane: Plane) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return await (internalClient as any)[name](req, {
           headers: {
+            [USER_AGENT_HEADER]: CONSOLE_USER_AGENT,
             ...(auth ? { Authorization: auth } : {}),
             ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
             ...(forwardedFor ? { [FORWARDED_FOR_HEADER]: forwardedFor } : {}),
@@ -164,6 +168,13 @@ function buildPlaneRouter(plane: Plane) {
 
   return router;
 }
+
+/**
+ * What the console names itself upstream: the plane records it as the
+ * client of every call the console makes (AuditLogEntry.user_agent). The
+ * browser's own User-Agent is not forwarded — the BFF makes the call.
+ */
+const CONSOLE_USER_AGENT = `${CONSOLE_USER_AGENT_PRODUCT}/${uiBuildInfo().version}`;
 
 const planeRouters: Record<Plane, ReturnType<typeof buildPlaneRouter>> = {
   admin: buildPlaneRouter("admin"),

@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import { AuditLogEntrySchema } from "@/gen/paladin/admin/v1/types_pb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/utils";
 
@@ -51,7 +53,7 @@ import { LINKED_ROW_ATTR } from "@/components/ui/table";
 
 import AuditPage from "./page";
 
-const SEARCH_BOX = "Filter by action, actor, resource, request id…";
+const SEARCH_BOX = "Filter by action, actor, resource, client, request id…";
 
 // The search is the server's filter, so Load more pages on through the
 // matches instead of through entries the box then hides.
@@ -92,13 +94,13 @@ describe("AuditPage rows", () => {
     h.search = "";
     window.history.replaceState(null, "", "/audit");
     h.entries = [
-      {
+      create(AuditLogEntrySchema, {
         entryId: "entry-1",
         action: "admin.TenantService.DeleteTenant",
         actorSubject: "user:ops",
         resourceName: "tenants/t-1",
         errorMessage: "",
-      },
+      }),
     ];
   });
 
@@ -119,20 +121,20 @@ describe("AuditPage rows", () => {
 describe("AuditPage linked entry", () => {
   beforeEach(() => {
     h.entries = [
-      {
+      create(AuditLogEntrySchema, {
         entryId: "entry-1",
         action: "admin.TenantService.DeleteTenant",
         actorSubject: "user:ops",
         resourceName: "tenants/t-1",
         errorMessage: "",
-      },
-      {
+      }),
+      create(AuditLogEntrySchema, {
         entryId: "entry-2",
         action: "admin.TenantService.CreateTenant",
         actorSubject: "user:ops",
         resourceName: "tenants/t-2",
         errorMessage: "",
-      },
+      }),
     ];
   });
 

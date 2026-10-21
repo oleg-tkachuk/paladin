@@ -175,6 +175,14 @@ describe("AuditEntryPanel", () => {
     expect(screen.getByText("paladin-mcp-server")).toBeInTheDocument();
   });
 
+  it("shows the client the call came from, as it sent it", async () => {
+    const ua = "paladin-sdk-go/0.97.0 gateway/1.4";
+    h.get.mockResolvedValue({ ...UPDATE, userAgent: ua });
+    panel("e6");
+    expect(await screen.findByText("Client")).toBeInTheDocument();
+    expect(screen.getByText(ua)).toBeInTheDocument();
+  });
+
   it("says why the entry could not be read", async () => {
     h.get.mockRejectedValue(new Error("not found"));
     panel("e5");

@@ -250,6 +250,11 @@ function Summary({ entry: data }: { entry: AuditLogEntry }) {
           {data.capabilityId}
         </RecordField>
       )}
+      {data.userAgent && (
+        <RecordField label="Client" mono>
+          {data.userAgent}
+        </RecordField>
+      )}
       {data.relayedBy && (
         <RecordField label="Relayed by" mono>
           {data.relayedBy}
