@@ -262,6 +262,36 @@ func TestTheSDKFakeListsAsTheServerDoes(t *testing.T) {
 			}
 		})
 	}
+	// A page token handed back with other filters, which limes refuses as it
+	// refuses one of the other order.
+	for name, mutate := range map[string]func(*adminv1.CapabilityServiceListRequest){
+		"another kind":       func(r *adminv1.CapabilityServiceListRequest) { r.PrincipalKind = user },
+		"another subject":    func(r *adminv1.CapabilityServiceListRequest) { r.Subject = "agent:one" },
+		"other dispositions": func(r *adminv1.CapabilityServiceListRequest) { r.Dispositions = all[:1] },
+	} {
+		t.Run("a token of "+name, func(t *testing.T) {
+			first := &adminv1.CapabilityServiceListRequest{TenantId: tenant, Dispositions: all, PageSize: 1}
+			serverPage, err := h.List(adminCtx(), proto.CloneOf(first))
+			if err != nil {
+				t.Fatal(err)
+			}
+			fakePage, err := fake.List(context.Background(), proto.CloneOf(first))
+			if err != nil {
+				t.Fatal(err)
+			}
+			again := func(token string) *adminv1.CapabilityServiceListRequest {
+				r := proto.CloneOf(first)
+				r.PageToken = token
+				mutate(r)
+				return r
+			}
+			_, serverErr := h.List(adminCtx(), again(serverPage.GetNextPageToken()))
+			_, fakeErr := fake.List(context.Background(), again(fakePage.GetNextPageToken()))
+			if connect.CodeOf(serverErr) != connect.CodeInvalidArgument || connect.CodeOf(fakeErr) != connect.CodeInvalidArgument {
+				t.Errorf("the server answers %v, the fake %v, want InvalidArgument", serverErr, fakeErr)
+			}
+		})
+	}
 	_, serverErr := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: tenant, PageToken: "garbage"})
 	_, fakeErr := fake.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: tenant, PageToken: "garbage"})
 	if connect.CodeOf(serverErr) != connect.CodeInvalidArgument || connect.CodeOf(fakeErr) != connect.CodeInvalidArgument {
@@ -304,7 +334,7 @@ func listAll(t *testing.T, list func(*adminv1.CapabilityServiceListRequest) (*ad
 func TestTheSDKFakeGetsTheDispositionAsTheServerDoes(t *testing.T) {
 	ctx := context.Background()
 	m := captest.NewMinter(t)
-	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, &allowAuthorizer{})
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, &allowAuthorizer{}).WithRecords(memstore.NewCensus(m.Store))
 	active := mintParent(t, m, limes.OpGet)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
 	child, err := h.Delegate(auth.WithCapability(ctx, parent), delegateReq(parent))

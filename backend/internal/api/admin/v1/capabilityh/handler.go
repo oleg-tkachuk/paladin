@@ -55,8 +55,8 @@ type Handler struct {
 	copies limes.BiscuitRevocationStore
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
 	copyUsage meter.CopyUsageReader
-	// records serves List; see WithRecords.
-	records limes.RecordLister
+	// records serves List and Get; see WithRecords.
+	records Records
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
@@ -401,23 +401,24 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	if err != nil {
 		return nil, err
 	}
-	rec, err := h.store.GetRecord(ctx, id)
+	if h.records == nil {
+		return nil, connect.Errorf(connect.CodeUnavailable, "capability record listing not wired")
+	}
+	// The record with its disposition by the store's rules — revoked through
+	// an ancestor too, though the record holds only its own entry.
+	listed, err := h.records.GetRecordListing(ctx, id)
 	if err != nil {
 		if errors.Is(err, limes.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 		}
 		return nil, apiutil.MapError(err)
 	}
-	// Revoked through an ancestor too: the record holds only its own entry.
-	revoked, err := h.store.IsRevoked(ctx, id)
-	if err != nil {
-		return nil, apiutil.MapError(err)
-	}
+	rec := listed.Record
 	out := &adminv1.CapabilityServiceGetResponse{
 		Capability: capabilityToProto(&rec.Capability),
 		IssuedBy:   principalToProto(rec.IssuedBy),
 	}
-	out.Capability.Disposition = dispositionToProto(recordDisposition(rec.Capability, revoked, time.Now()))
+	out.Capability.Disposition = dispositionToProto(listed.Disposition)
 	if r := rec.Revocation; r != nil {
 		out.Revocation = &adminv1.CapabilityRevocation{
 			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Note, Actor: r.Actor, Cascade: r.Cascaded,

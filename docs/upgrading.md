@@ -83,6 +83,21 @@ here.
 
 
 
+## Unreleased — limes v0.112.0: a page token keeps its filters
+
+**Server:** the first release that carries this section.
+
+- **A `CapabilityService.List` page token is refused, as `INVALID_ARGUMENT`,
+  when it comes back with another `principal_kind`, `subject` or
+  `dispositions`** than the page that handed it out, as one of the other
+  `sort_order` already was. Start over from the first page when a filter
+  changes.
+- **limes migrations `015`–`017`** keep a revoked flag on each capability
+  record: 015 adds the column, a change of the catalog that rewrites no row;
+  016 marks the records revoked before it; 017 builds its indexes
+  `CONCURRENTLY`. A revoke now also updates the rows of the records below the
+  one revoked.
+
 ## sdk/go/v0.107.0, sdk/python/v0.107.0 — Get gives a capability its disposition
 
 `CapabilityService.Get` sets `Capability.disposition` (12), by the same rules
