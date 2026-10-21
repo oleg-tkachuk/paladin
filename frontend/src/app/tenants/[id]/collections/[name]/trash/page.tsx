@@ -24,7 +24,7 @@ import {
   OBJECT_ORDER_FIELDS,
   type ObjectOrderField,
 } from "@/lib/objectOrder";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 import { buildObjectFilter } from "@/lib/objectFilter";
 import { ObjectTagBadge } from "@/components/features/ObjectTagBadge";
@@ -244,7 +244,7 @@ export default function CollectionTrashPage() {
                 column={OBJECT_ORDER.key}
                 {...sortProps}
               />
-              <TableHead className="hidden @md:table-cell">Tag</TableHead>
+              <StaticHead className="hidden @md:table-cell">Tag</StaticHead>
               <SortableHead
                 label="MIME"
                 column={OBJECT_ORDER.contentType}

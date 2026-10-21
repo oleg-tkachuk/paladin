@@ -61,7 +61,7 @@ import {
   USAGE_COLUMNS,
 } from "@/components/features/collections/CollectionUsage";
 import { COLLECTION_SORT_COLUMNS, sortCollections } from "@/lib/collectionSort";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
 import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
@@ -229,7 +229,7 @@ export default function CollectionsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead>Tenant</TableHead>
+              <StaticHead>Tenant</StaticHead>
               <SortableHead
                 className="hidden @3xl:table-cell"
                 label="Display name"
