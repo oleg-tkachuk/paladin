@@ -241,6 +241,7 @@ tasks:
       - task: verify:e2e-cluster
       - task: verify:stack-disk
       - task: verify:portable-shell
+      - task: verify:conflict-markers
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
       - task: verify:chart-values
@@ -432,6 +433,11 @@ tasks:
     desc: "The tracked shell scripts use no form only BSD or only GNU accepts"
     cmds:
       - ./scripts/portable-shell.test.sh
+
+  verify:conflict-markers:
+    desc: "No tracked file keeps a merge's conflict markers"
+    cmds:
+      - ./scripts/conflict-markers.test.sh
 
   verify:lefthook-single-thread:
     desc: "The git hooks run their jobs one at a time, the Go ones on one thread"
