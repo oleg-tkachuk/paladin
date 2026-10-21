@@ -1,7 +1,10 @@
 package paladin_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -70,5 +73,56 @@ func TestCredentialOf(t *testing.T) {
 	}
 	if paladin.FormToken.String() != "token" || paladin.FormBiscuit.String() != "biscuit" {
 		t.Errorf("forms are named %q and %q", paladin.FormToken, paladin.FormBiscuit)
+	}
+}
+
+// The token, even beside an issued Biscuit; an answer without one is
+// ErrNoCredential.
+func TestTokenOf(t *testing.T) {
+	const token = "jwt-token"
+	got, err := paladin.TokenOf(&adminv1.CapabilityServiceIssueResponse{
+		Token: token, Biscuit: sealed, BiscuitStatus: adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED,
+	})
+	if err != nil || got != token {
+		t.Fatalf("TokenOf = %q, %v; want the token", got, err)
+	}
+	got, err = paladin.TokenOf(&adminv1.CapabilityServiceIssueResponse{
+		Biscuit: sealed, BiscuitStatus: adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED,
+	})
+	if got != "" || !errors.Is(err, paladin.ErrNoCredential) {
+		t.Errorf("an answer with only a Biscuit: %q, %v; want ErrNoCredential", got, err)
+	}
+}
+
+// A credential logs by name, through either slog handler, and never logs the
+// capability it carries.
+func TestCredentialLogsByNameWithoutItsValue(t *testing.T) {
+	cred := paladin.Credential{Value: sealed, Form: paladin.FormBiscuit, BiscuitStatus: adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED}
+	for name, handler := range map[string]func(*bytes.Buffer) slog.Handler{
+		"json": func(b *bytes.Buffer) slog.Handler { return slog.NewJSONHandler(b, nil) },
+		"text": func(b *bytes.Buffer) slog.Handler { return slog.NewTextHandler(b, nil) },
+	} {
+		var buf bytes.Buffer
+		slog.New(handler(&buf)).Info("issued", "credential", cred, "form", cred.Form)
+		out := buf.String()
+		if strings.Contains(out, sealed) {
+			t.Errorf("%s: the log holds the capability: %s", name, out)
+		}
+		for _, want := range []string{"biscuit", "BISCUIT_STATUS_ISSUED"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s: the log does not name %q: %s", name, want, out)
+			}
+		}
+	}
+	var line struct {
+		Form string `json:"form"`
+	}
+	var buf bytes.Buffer
+	slog.New(slog.NewJSONHandler(&buf, nil)).Info("issued", "form", paladin.FormToken)
+	if err := json.Unmarshal(buf.Bytes(), &line); err != nil || line.Form != "token" {
+		t.Errorf("a form logs as %q (%v), want \"token\"", line.Form, err)
+	}
+	if b, err := json.Marshal(paladin.FormBiscuit); err != nil || string(b) != `"biscuit"` {
+		t.Errorf("a form marshals as %s (%v)", b, err)
 	}
 }

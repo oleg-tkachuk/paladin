@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -24,9 +25,15 @@ var scrubbedCodes = map[connect.Code]bool{
 	connect.CodeDataLoss: true,
 }
 
+// libraryPrefixes are what the server's own libraries begin their errors
+// with. They name an implementation rather than anything the caller sent or
+// can act on, so a message reaches the caller without them.
+var libraryPrefixes = []string{"limes: "}
+
 // ScrubInternal replaces the message of an error that reports the server
 // failing — Internal, Unknown, DataLoss — with a generic one naming the
-// request id, and keeps its code, its details and its metadata. A request
+// request id, and keeps its code, its details and its metadata. Any other
+// error keeps its message, without the names of the server's libraries. A request
 // that arrives without an id is given one, set on the request before the
 // inner interceptors run, so the failure log line and the caller's message
 // carry the same id.
@@ -57,23 +64,46 @@ func ensureRequestID(id string, set func(key, value string)) string {
 }
 
 // scrub is err with its message replaced when its code reports the server
-// failing, and err unchanged otherwise.
+// failing, and with the server's library names taken out of it otherwise.
 func scrub(err error, requestID string) error {
 	if err == nil {
 		return nil
 	}
 	code := connect.CodeOf(err)
+	cerr := new(connect.Error)
+	isConnect := errors.As(err, &cerr)
 	if !scrubbedCodes[code] {
-		return err
+		if !isConnect {
+			return err
+		}
+		msg := withoutLibraryNames(cerr.Message())
+		if msg == cerr.Message() {
+			return err
+		}
+		return withDetailsOf(connect.NewError(code, msg).WithCause(err), cerr)
 	}
 	out := connect.NewError(code, internalMessage+requestIDSep+requestID).WithCause(err)
-	if cerr := new(connect.Error); errors.As(err, &cerr) {
-		// Details are written for the caller — a reason, a retry delay — and
-		// carry no driver text. Metadata is the response's headers, on the
-		// call's CallInfo, and is left as it is.
-		for _, d := range cerr.Details() {
-			out = out.WithDetail(d)
-		}
+	if isConnect {
+		out = withDetailsOf(out, cerr)
 	}
 	return out
+}
+
+// withDetailsOf is out with from's details. Details are written for the
+// caller — a reason, a retry delay — and carry no driver text. Metadata is
+// the response's headers, on the call's CallInfo, and is left as it is.
+func withDetailsOf(out, from *connect.Error) *connect.Error {
+	for _, d := range from.Details() {
+		out = out.WithDetail(d)
+	}
+	return out
+}
+
+// withoutLibraryNames is msg without the prefixes the server's libraries put
+// on their errors, wherever a wrap left them.
+func withoutLibraryNames(msg string) string {
+	for _, prefix := range libraryPrefixes {
+		msg = strings.ReplaceAll(msg, prefix, "")
+	}
+	return msg
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -65,8 +66,13 @@ func TestOpValidate(t *testing.T) {
 		}
 	}
 	for _, op := range names.Invalid {
-		if err := op.Validate(); !errors.Is(err, paladin.ErrInvalidArgument) {
+		err := op.Validate()
+		if !errors.Is(err, paladin.ErrInvalidArgument) {
 			t.Errorf("%q: %v, want ErrInvalidArgument", op, err)
+		}
+		// The library the check comes from is no part of the answer.
+		if err != nil && strings.Contains(err.Error(), "limes") {
+			t.Errorf("%q: %v names limes", op, err)
 		}
 	}
 }

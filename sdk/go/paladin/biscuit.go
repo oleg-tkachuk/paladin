@@ -3,6 +3,7 @@ package paladin
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -46,6 +47,13 @@ func (f CredentialForm) String() string {
 	return fmt.Sprintf("CredentialForm(%d)", int(f))
 }
 
+// MarshalText is the form's name, so encoding/json and slog's JSON handler
+// write "token" rather than its number.
+func (f CredentialForm) MarshalText() ([]byte, error) { return []byte(f.String()), nil }
+
+// LogValue is the form's name.
+func (f CredentialForm) LogValue() slog.Value { return slog.StringValue(f.String()) }
+
 // Credential is what to present for a capability an Issue or Delegate answer
 // carries.
 type Credential struct {
@@ -56,6 +64,21 @@ type Credential struct {
 	// BiscuitStatus is the answer's: ISSUED for a Biscuit, otherwise why the
 	// token is presented instead.
 	BiscuitStatus adminv1.BiscuitStatus
+}
+
+// The attributes a Credential logs as.
+const (
+	logKeyForm          = "form"
+	logKeyBiscuitStatus = "biscuit_status"
+)
+
+// LogValue is the credential's form and BiscuitStatus, by name. Never its
+// Value: that is the capability itself, which a log must not hold.
+func (c Credential) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String(logKeyForm, c.Form.String()),
+		slog.String(logKeyBiscuitStatus, c.BiscuitStatus.String()),
+	)
 }
 
 // ErrNoCredential is an Issue or Delegate answer that carries neither a
@@ -75,4 +98,14 @@ func CredentialOf(resp *adminv1.CapabilityServiceIssueResponse) (Credential, err
 		return Credential{Value: t, Form: FormToken, BiscuitStatus: status}, nil
 	}
 	return Credential{}, fmt.Errorf("%w: biscuit status %s", ErrNoCredential, status)
+}
+
+// TokenOf is the token an Issue or Delegate answer carries, whatever Biscuit
+// comes beside it: for a caller that presents the capability as issued and
+// never narrows it offline. An answer without one wraps ErrNoCredential.
+func TokenOf(resp *adminv1.CapabilityServiceIssueResponse) (string, error) {
+	if t := resp.GetToken(); t != "" {
+		return t, nil
+	}
+	return "", fmt.Errorf("%w: no token", ErrNoCredential)
 }

@@ -40,6 +40,7 @@ AUDIENCES = {
     "AudienceData": "AUDIENCE_DATA",
     "AudienceAdmin": "AUDIENCE_ADMIN",
     "AudienceIAM": "AUDIENCE_IAM",
+    "AudienceMCP": "AUDIENCE_MCP",
 }
 
 

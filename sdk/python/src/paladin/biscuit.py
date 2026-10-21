@@ -20,13 +20,13 @@ import base64
 import binascii
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from paladin.admin.v1 import capability_service_pb2
-from paladin.auth import Op
+from paladin.auth import Op, Plane
 
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
 # the shared spec the server's tests read too.
@@ -89,8 +89,9 @@ class CredentialForm(StrEnum):
 class Credential:
     """What to present for a capability an Issue or Delegate answer carries."""
 
-    value: str
-    """Presented as ``capability=``."""
+    value: str = field(repr=False)
+    """Presented as ``capability=``. Left out of the repr, so a credential
+    logged whole does not put the capability in the log."""
     form: CredentialForm
     """Which form ``value`` is."""
     biscuit_status: int
@@ -124,6 +125,16 @@ def credential_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -
     if resp.token:
         return Credential(resp.token, CredentialForm.TOKEN, status)
     raise NoCredentialError(status)
+
+
+def token_of(resp: capability_service_pb2.CapabilityServiceIssueResponse) -> str:
+    """The token an Issue or Delegate answer carries, whatever Biscuit comes
+    beside it: for a caller that presents the capability as issued and never
+    narrows it offline. Raises ``NoCredentialError`` for an answer without one.
+    """
+    if resp.token:
+        return resp.token
+    raise NoCredentialError(resp.biscuit_status)
 
 
 def _biscuit() -> Any:
@@ -214,7 +225,7 @@ def attenuate(
     ops: Iterable[Op] | None = None,
     resource_prefixes: Iterable[str] | None = None,
     resource_uris: Iterable[str] | None = None,
-    planes: Iterable[str] | None = None,
+    planes: Iterable[Plane] | None = None,
     expires_at: datetime | None = None,
     bind_jkt: str | None = None,
     max_requests: int | None = None,
@@ -227,7 +238,7 @@ def attenuate(
     replaces it, and must be within what the token already allows or the
     server refuses the whole token. ``ops`` are ``Op`` members (``Op.GET``,
     ``Op.LIST``, …), and a name that is none is a ``ValueError`` here rather
-    than a refused token; ``planes`` are audiences (``"data"``, ``"mcp"``, …).
+    than a refused token; ``planes`` are ``Plane`` members (``Plane.DATA``, …).
     Setting ``resource_prefixes`` or ``resource_uris`` replaces both.
     ``expires_at`` (timezone-aware, kept to the second) shortens the
     lifetime. ``bind_jkt`` — ``dpop_thumbprint(key.public_key())`` — binds

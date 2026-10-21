@@ -126,3 +126,35 @@ func TestScrubInternalThroughAHandler(t *testing.T) {
 		})
 	}
 }
+
+// An error the caller can act on keeps its message, its code and its
+// details, but not the name of the library on the server that wrote it.
+func TestScrubDropsLibraryNames(t *testing.T) {
+	detail, err := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: "CAPABILITY_NOT_FOUND", Domain: paladin.ErrorDomain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, in, want string }{
+		{"leading", "limes: capability c-1: not found", "capability c-1: not found"},
+		{"wrapped", "issue: limes: invalid caveats: unknown op \"presign\"", "issue: invalid caveats: unknown op \"presign\""},
+		{"none", "caveats.ops: name at least one operation", "caveats.ops: name at least one operation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := connect.NewError(connect.CodeNotFound, tc.in).WithDetail(detail)
+			var out *connect.Error
+			if !errors.As(scrub(in, "req-1"), &out) {
+				t.Fatal("not a connect error")
+			}
+			if out.Code() != connect.CodeNotFound || out.Message() != tc.want {
+				t.Errorf("scrubbed to %v %q, want NotFound %q", out.Code(), out.Message(), tc.want)
+			}
+			if len(out.Details()) != 1 {
+				t.Errorf("details = %d, want the one it had", len(out.Details()))
+			}
+		})
+	}
+	plain := errors.New("limes: a plain error")
+	if got := scrub(plain, "req-1"); connect.CodeOf(got) != connect.CodeUnknown || strings.Contains(got.Error(), "limes") {
+		t.Errorf("a plain error reaches the caller as %v", got)
+	}
+}

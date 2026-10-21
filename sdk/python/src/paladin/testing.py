@@ -62,6 +62,7 @@ from paladin.admin.v1.capability_service_connect import (
     CapabilityServiceWSGIApplication,
 )
 from paladin.auth import Op
+from paladin.caveats import NO_BUDGET_CEILING, NO_REQUEST_CEILING, op_refusal
 from paladin.client import (
     HEADER_API_TOKEN,
     HEADER_AUTHORIZATION,
@@ -456,18 +457,10 @@ DEFAULT_CAPABILITY_TTL = timedelta(minutes=15)
 _BISCUIT_PREFIX = "paladintest_biscuit_"
 """Marks the fake's stand-in for a capability's Biscuit."""
 _CAPABILITY_ISSUER = "paladintest"
-_BUILTIN_OPS = (Op.GET, Op.PUT, Op.LIST, Op.DELETE, Op.SHARE, Op.MANAGE)
-"""limes's own operations; any other must be namespaced, as ``ns:name``."""
-_OP_NAMESPACE = ":"
-_ASCII_PRINTABLE_FIRST = 0x21
-_ASCII_PRINTABLE_LAST = 0x7E
-"""The printable ASCII characters but the space: what a namespaced op holds."""
 
 # The server's answers, word for word, where the fake gives them.
-_NO_REQUEST_CEILING = (
-    "caveats.request_ceiling: set max_requests, or unlimited_requests for no limit"
-)
-_NO_BUDGET_CEILING = "caveats.budget_ceiling: set max_budget, or unlimited_budget for no limit"
+_NO_REQUEST_CEILING = NO_REQUEST_CEILING
+_NO_BUDGET_CEILING = NO_BUDGET_CEILING
 _ISSUE_ELSEWHERE = (
     "issuing a capability for another tenant requires platform.admin or platform.capability-issuer"
 )
@@ -493,29 +486,11 @@ class _CapabilityRecord:
     children: list[str] = field(default_factory=list)
 
 
-def _op_refusal(op: str) -> str | None:
-    """The server's refusal of ``op`` in a caveat, None when it accepts it:
-    limes's rule, which sdk/testdata/capability_op_names.json holds both SDKs
-    to."""
-    if op in _BUILTIN_OPS:
-        return None
-    ns, sep, name = op.partition(_OP_NAMESPACE)
-    if not sep or not ns or not name:
-        builtin = ", ".join(_BUILTIN_OPS)
-        return (
-            f"limes: invalid caveats: unknown op {json.dumps(op)}: the built-in ops are {builtin}; "
-            'a custom op is namespaced, e.g. "tool:search"'
-        )
-    if any(not _ASCII_PRINTABLE_FIRST <= ord(c) <= _ASCII_PRINTABLE_LAST for c in op):
-        return f"limes: invalid caveats: op {json.dumps(op)} contains a non-printable or space character"
-    return None
-
-
 def _check_ops(ops: Iterable[str]) -> None:
     """Raise the server's refusal of an operation in ``ops``. Caveats that
     name none are refused before, by the contract's own rule."""
     for op in ops:
-        refusal = _op_refusal(op)
+        refusal = op_refusal(op)
         if refusal is not None:
             raise _with_reason(Code.INVALID_ARGUMENT, refusal)
 
@@ -556,7 +531,7 @@ def _lifetime(now: datetime, nbf: datetime | None, ttl_seconds: int) -> datetime
     if nbf is not None and nbf >= until:
         raise _with_reason(
             Code.INVALID_ARGUMENT,
-            f"limes: invalid request: NotBefore {nbf} is not before ExpiresAt {until}",
+            f"invalid request: NotBefore {nbf} is not before ExpiresAt {until}",
         )
     return until
 
@@ -643,7 +618,7 @@ class _CapabilityService(CapabilityServiceSync):
                 if op not in parent_ops:
                     raise _with_reason(
                         Code.PERMISSION_DENIED,
-                        f"limes: delegation too wide: op {json.dumps(op)} is not granted to the parent",
+                        f"delegation too wide: op {json.dumps(op)} is not granted to the parent",
                     )
             caveats = request.caveats
         expires = _lifetime(now, nbf, request.ttl_seconds)
@@ -661,7 +636,7 @@ class _CapabilityService(CapabilityServiceSync):
         fake = self._fake
         with fake._lock:
             if request.id not in fake._capabilities:
-                raise _with_reason(Code.NOT_FOUND, f"limes: capability {request.id}: not found")
+                raise _with_reason(Code.NOT_FOUND, f"capability {request.id}: not found")
             fake._revoke_capability(request.id, cascade=request.cascade_children)
         return capability_service_pb2.CapabilityServiceRevokeResponse()
 
@@ -671,7 +646,7 @@ class _CapabilityService(CapabilityServiceSync):
         with self._fake._lock:
             record = self._fake._capabilities.get(request.id)
             if record is None:
-                raise _with_reason(Code.NOT_FOUND, f"limes: capability {request.id}: not found")
+                raise _with_reason(Code.NOT_FOUND, f"capability {request.id}: not found")
             out = capability_service_pb2.Capability()
             out.CopyFrom(record.msg)
         return capability_service_pb2.CapabilityServiceGetResponse(capability=out)

@@ -41,8 +41,65 @@ The baseline is a tag rather than the default branch on purpose: a branch
 moves with every merge, so comparing against `main` from `main` compares the
 tree with itself and passes without checking anything.
 
+### A field keeps its meaning
+
+`buf breaking` sees a field renamed or renumbered, never one whose meaning
+changed under the same name. That is the change a client cannot catch: it
+compiles, it runs, and it reads the wrong thing. So:
+
+- A field that can be empty for more than one reason ships with a status
+  beside it from its first release, naming why it is empty. The Biscuit on an
+  Issue answer went empty for a capability without `share` with nothing
+  saying so, and `biscuit_status` came two releases later.
+- A field never changes what it means. Add a field, or a status value, and
+  deprecate the old one; its section here says what to read instead.
+- A value a client spells — an operation, a plane — is a type in both SDKs
+  (`paladin.Op`, `paladin.Plane`), so a misspelling fails where it is written.
+
+### Server and SDK
+
+Most server releases work with any SDK of the same contract. These need at
+least the SDK named, and their sections say why:
+
+| Server | Needs at least | Why |
+| --- | --- | --- |
+| `v39.0.0` | `sdk/go/v0.93.0` | the data plane's operations are namespaced; a caveat naming bare `presign` or `tag` is refused |
+| `v27.5.0`, with `capability.dpop_nonce` on | `sdk/go/v0.62.0` | an older SDK cannot answer a DPoP nonce challenge |
+
+A section that needs a newer SDK says so in its first lines, and adds its row
+here.
 
 
+
+
+## Unreleased — the SDKs type the planes; refusals no longer name limes
+
+- **`Attenuation.Planes` takes `[]paladin.Plane`** (Go), and Python's
+  `attenuate(planes=…)` takes `Plane` members. A plane's label — `PlaneData`,
+  `"data"` — is not its bearer audience, `AudienceData` (`"paladin-data"`); a
+  capability issued for the audience is refused as an audience mismatch.
+  `Plane.Audience()` (Go) and `Plane.audience` (Python) map one to the other,
+  and `PlaneNames` spells planes for `CapabilityServiceIssueRequest.audience`.
+  Replace `[]string{"data"}` with `[]paladin.Plane{paladin.PlaneData}`.
+- **`TokenOf`** (Go) and **`token_of`** (Python) return the token an Issue or
+  Delegate answer carries, for a caller that presents the capability as
+  issued; `CredentialOf` still prefers the Biscuit.
+- **`UnlimitedCaveats(ops...)`** and **`ValidateIssueCaveats`** (Go),
+  `unlimited_caveats` and `validate_issue_caveats` (Python): caveats with
+  both ceilings set, and the check Issue makes on their shape, made before
+  the call.
+- **A `Credential` logs by name.** Go's `CredentialForm` writes `"token"` or
+  `"biscuit"` through slog and encoding/json; `Credential` logs its form and
+  `biscuit_status` and never its value. Python's `Credential` leaves the
+  value out of its repr.
+- **Refusals no longer begin with `limes: `.** `capability … not found` and
+  `invalid caveats: …` read the same without the name of the server's
+  capability library, from the server, both fakes and `Op.Validate`. A client
+  matching on the old text matches on the rest of it, or better, on the
+  error's reason.
+
+The Go SDK still depends on limes, for `Attenuate` and `Op.Validate`; no
+exported type of it names one, so a client never imports it.
 
 ## Unreleased — the audit log sorts by client
 

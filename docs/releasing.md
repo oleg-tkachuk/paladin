@@ -63,6 +63,12 @@ change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
 `style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
 own.
 
+A proto's comments are documentation: a change to them alone is
+`docs(proto)`, even when the server's own `feat` is what they describe.
+Commit the two apart. A `feat` that touches only a comment under `proto/`
+cuts an SDK release whose code is unchanged, which every consumer then has to
+read to find nothing in it.
+
 ### What is a breaking change
 
 A `!` makes the train a major, so it marks only a change a deployment or a

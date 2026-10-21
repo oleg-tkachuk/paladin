@@ -11,6 +11,7 @@ from paladin import (
     NoCredentialError,
     biscuit_of,
     credential_of,
+    token_of,
 )
 from paladin.admin.v1 import capability_service_pb2 as pb
 
@@ -81,3 +82,24 @@ def test_credential_of_an_empty_answer_raises() -> None:
     with pytest.raises(NoCredentialError) as raised:
         credential_of(pb.CapabilityServiceIssueResponse())
     assert raised.value.status == pb.BISCUIT_STATUS_UNSPECIFIED
+
+
+def test_token_of_is_the_token_beside_an_issued_biscuit() -> None:
+    resp = pb.CapabilityServiceIssueResponse(
+        token="jwt-token", biscuit=SEALED, biscuit_status=pb.BISCUIT_STATUS_ISSUED
+    )
+    assert token_of(resp) == "jwt-token"
+
+
+def test_token_of_an_answer_without_one_raises() -> None:
+    resp = pb.CapabilityServiceIssueResponse(
+        biscuit=SEALED, biscuit_status=pb.BISCUIT_STATUS_ISSUED
+    )
+    with pytest.raises(NoCredentialError):
+        token_of(resp)
+
+
+def test_a_credential_logged_whole_keeps_the_capability_out() -> None:
+    cred = Credential(SEALED, CredentialForm.BISCUIT, pb.BISCUIT_STATUS_ISSUED)
+    assert SEALED not in repr(cred)
+    assert "BISCUIT" in repr(cred) or "biscuit" in repr(cred)

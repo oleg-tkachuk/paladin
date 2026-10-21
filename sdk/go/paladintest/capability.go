@@ -3,6 +3,7 @@ package paladintest
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -107,7 +108,9 @@ func requireBiscuit(status adminv1.BiscuitStatus) error {
 func validOps(ops []string) error {
 	for _, op := range ops {
 		if err := paladin.Op(op).Validate(); err != nil {
-			return withReason(connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err))
+			// The server's message is what follows the SDK's own prefix.
+			msg := strings.TrimPrefix(err.Error(), paladin.ErrInvalidArgument.Error()+": ")
+			return withReason(connect.NewError(connect.CodeInvalidArgument, msg).WithCause(err))
 		}
 	}
 	return nil
@@ -206,7 +209,7 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 		for _, op := range c.GetOps() {
 			if !slices.Contains(parentCaveats.GetOps(), op) {
 				return nil, withReason(connect.Errorf(connect.CodePermissionDenied,
-					"limes: delegation too wide: op %q is not granted to the parent", op))
+					"delegation too wide: op %q is not granted to the parent", op))
 			}
 		}
 		caveats = c
@@ -238,7 +241,7 @@ func (s capabilityService) Revoke(_ context.Context, req *adminv1.CapabilityServ
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.capabilities[req.GetId()]; !ok {
-		return nil, withReason(connect.Errorf(connect.CodeNotFound, "limes: capability %s: not found", req.GetId()))
+		return nil, withReason(connect.Errorf(connect.CodeNotFound, "capability %s: not found", req.GetId()))
 	}
 	s.revokeCapability(req.GetId(), req.GetCascadeChildren())
 	return &adminv1.CapabilityServiceRevokeResponse{}, nil
@@ -264,7 +267,7 @@ func (s capabilityService) Get(_ context.Context, req *adminv1.CapabilityService
 	defer s.mu.Unlock()
 	rec, ok := s.capabilities[req.GetId()]
 	if !ok {
-		return nil, withReason(connect.Errorf(connect.CodeNotFound, "limes: capability %s: not found", req.GetId()))
+		return nil, withReason(connect.Errorf(connect.CodeNotFound, "capability %s: not found", req.GetId()))
 	}
 	return &adminv1.CapabilityServiceGetResponse{Capability: proto.CloneOf(rec.msg)}, nil
 }
@@ -280,7 +283,7 @@ func lifetime(now, nbf time.Time, ttlSeconds int64) (time.Time, error) {
 	until := now.Add(ttl)
 	if !nbf.IsZero() && !nbf.Before(until) {
 		return time.Time{}, withReason(connect.Errorf(connect.CodeInvalidArgument,
-			"limes: invalid request: NotBefore %s is not before ExpiresAt %s", nbf.UTC(), until.UTC()))
+			"invalid request: NotBefore %s is not before ExpiresAt %s", nbf.UTC(), until.UTC()))
 	}
 	return until, nil
 }

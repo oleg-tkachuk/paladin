@@ -19,7 +19,7 @@ func TestToLimes(t *testing.T) {
 	r, n := requests, nanos
 	got := toLimes(Attenuation{
 		Ops: []Op{OpGet}, ResourcePrefixes: []string{"corpus/"}, ResourceURIs: []string{"paladin://x"},
-		Planes: []string{"data"}, ExpiresAt: expires, BindJKT: "jkt", MaxRequests: &r, MaxBudgetNanos: &n,
+		Planes: []Plane{PlaneData}, ExpiresAt: expires, BindJKT: "jkt", MaxRequests: &r, MaxBudgetNanos: &n,
 	})
 	want := limes.Attenuation{
 		Ops: []limes.Op{limes.OpGet}, ResourcePrefixes: []string{"corpus/"}, ResourceURIs: []string{"paladin://x"},

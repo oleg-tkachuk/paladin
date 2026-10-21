@@ -2,6 +2,7 @@ package paladin
 
 import (
 	"fmt"
+	"strings"
 
 	// limes defines what an operation's name may be; none of its types cross
 	// this package's API.
@@ -38,12 +39,17 @@ const (
 	OpObjectTag Op = "object:tag"
 )
 
+// limesErrorPrefix begins limes's errors. Its name is no part of this
+// package's, nor of the server's, answers.
+const limesErrorPrefix = "limes: "
+
 // Validate refuses a name the server refuses in a caveat, wrapping
 // ErrInvalidArgument: one that is neither a built-in operation nor
-// namespaced, such as a bare "presign".
+// namespaced, such as a bare "presign". Its message after
+// ErrInvalidArgument's is the server's.
 func (op Op) Validate() error {
 	if err := limes.Op(op).Validate(); err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
+		return fmt.Errorf("%w: %s", ErrInvalidArgument, strings.TrimPrefix(err.Error(), limesErrorPrefix))
 	}
 	return nil
 }
