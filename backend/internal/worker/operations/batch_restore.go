@@ -103,7 +103,7 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operat
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchRestoreFailure{
 				ObjectID: objectID.String(),
-				Reason:   "not found",
+				Reason:   errObjectNotFound.Error(),
 			})
 			continue
 		}

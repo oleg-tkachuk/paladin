@@ -176,7 +176,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchCopyFailure{
 				ObjectID: srcID.String(),
-				Reason:   "not found",
+				Reason:   errObjectNotFound.Error(),
 			})
 			continue
 		}

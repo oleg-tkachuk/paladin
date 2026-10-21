@@ -31,10 +31,10 @@ import (
 // failed IDs so polling clients can retry just those.
 //
 // Resource-version semantics: we always pass the row's CURRENT
-// resource_version (read fresh inside the loop) to SoftDelete, so a
-// concurrent UPDATE in flight when the worker picks this op up will
-// surface as ErrVersionMismatch and that ID will land in the failure
-// list. Callers retry with a fresh BatchDelete if needed.
+// resource_version to SoftDelete, so a concurrent UPDATE in flight when the
+// worker picks this op up surfaces as a version conflict. The object is then
+// read again and tried again, up to conflictAttempts times; one still in
+// conflict lands in the failure list.
 type BatchDeleteExecutor struct {
 	Objects     objecth.Repository
 	Transitions Transitioner
@@ -146,49 +146,28 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		ReportProgress(ctx, i, resp.Total)
 
 		obj, found := byID[objectID]
-		if !found && erased[objectID] {
-			logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyErased)
-			resp.AlreadyApplied++
-			resp.Succeeded++
-			continue
+		already, derr := e.deleteOne(ctx, op, args, objectID, obj, found, erased[objectID])
+		// A version conflict is an object changed between the read and the
+		// delete, which a fresh read and a second try resolve; the try reads
+		// whatever the change left — in the trash already, or locked.
+		for attempt := 1; isVersionConflict(derr) && attempt < conflictAttempts; attempt++ {
+			fresh, err := findByIDs(ctx, e.Objects, args.TenantID, args.Collection, []uuid.UUID{objectID})
+			if err != nil {
+				return nil, fmt.Errorf("batch lookup: %w", err)
+			}
+			obj, found = fresh[objectID]
+			already, derr = e.deleteOne(ctx, op, args, objectID, obj, found, erased[objectID])
 		}
-		if !found {
+		if derr != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchDeleteFailure{
 				ObjectID: objectID.String(),
-				Reason:   "not found",
+				Reason:   derr.Error(),
 			})
 			continue
 		}
-		var derr error
-		switch {
-		case !args.Permanent && obj.State == statemachine.StateDeleted:
-			// A soft delete wants the object in the trash, and it is there.
-			// A permanent delete still has work to do on a trashed object.
-			logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyDeleted)
+		if already {
 			resp.AlreadyApplied++
-		case !args.Permanent && obj.State != statemachine.StateAvailable:
-			// Only an AVAILABLE object moves to the trash; the state machine
-			// would report anything else as a version conflict.
-			derr = objecth.SoftDeleteRefusal(obj.State)
-		case !args.Permanent && obj.PublicURL != "":
-			// A public collection has no trash: its bytes would stay served
-			// (ADR-0027).
-			derr = publicread.Rulef("a public object is deleted permanently or not at all")
-		case args.Permanent:
-			// bypassGovernance is always false here: the override needs a
-			// principal to check the role against, and this runs without one.
-			derr = e.Permanent.PermanentDelete(ctx, args.TenantID, obj, obj.ResourceVersion, false)
-		default:
-			derr = e.Transitions.SoftDelete(ctx, obj.ObjectID, obj.ResourceVersion)
-		}
-		if err := derr; err != nil {
-			resp.Failed++
-			resp.Failures = append(resp.Failures, BatchDeleteFailure{
-				ObjectID: objectID.String(),
-				Reason:   err.Error(),
-			})
-			continue
 		}
 		resp.Succeeded++
 	}
@@ -200,6 +179,37 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 		return nil, fmt.Errorf("encode response: %w", err)
 	}
 	return body, nil
+}
+
+// deleteOne deletes one object of the batch, or says why not: already when
+// the object is gone or in the trash already, which counts as done.
+func (e *BatchDeleteExecutor) deleteOne(ctx context.Context, op operationh.Operation, args batchh.BatchDeleteArgs, objectID uuid.UUID, obj objecth.Object, found, erased bool) (already bool, err error) {
+	switch {
+	case !found && erased:
+		logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyErased)
+		return true, nil
+	case !found:
+		return false, errObjectNotFound
+	case !args.Permanent && obj.State == statemachine.StateDeleted:
+		// A soft delete wants the object in the trash, and it is there.
+		// A permanent delete still has work to do on a trashed object.
+		logAlreadyApplied(e.Logger, op, objectID, reasonAlreadyDeleted)
+		return true, nil
+	case !args.Permanent && obj.State != statemachine.StateAvailable:
+		// Only an AVAILABLE object moves to the trash; the state machine
+		// would report anything else as a version conflict.
+		return false, objecth.SoftDeleteRefusal(obj.State)
+	case !args.Permanent && obj.PublicURL != "":
+		// A public collection has no trash: its bytes would stay served
+		// (ADR-0027).
+		return false, publicread.Rulef("a public object is deleted permanently or not at all")
+	case args.Permanent:
+		// bypassGovernance is always false here: the override needs a
+		// principal to check the role against, and this runs without one.
+		return false, e.Permanent.PermanentDelete(ctx, args.TenantID, obj, obj.ResourceVersion, false)
+	default:
+		return false, e.Transitions.SoftDelete(ctx, obj.ObjectID, obj.ResourceVersion)
+	}
 }
 
 // erasedAmong reads the tombstones of the batch's missing ids. Only a

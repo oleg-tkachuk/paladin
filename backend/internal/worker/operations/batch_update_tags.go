@@ -21,11 +21,11 @@ import (
 // repository's UpdateMetadata seam (UpdatedFields=["tags"]).
 //
 // Resource-version semantics: per-object UpdateMetadata uses the row's
-// CURRENT ResourceVersion, read fresh inside the loop. Concurrent
-// UPDATE in flight surfaces as ErrVersionMismatch on that row; the
-// failure list carries the ID and the caller retries with a fresh
-// BatchUpdateTags. Total / Succeeded / Failed counts mirror the
-// BatchDelete contract.
+// CURRENT ResourceVersion. A concurrent UPDATE in flight surfaces as
+// ErrVersionMismatch on that row, which is read again and tried again, up to
+// conflictAttempts times, so a merge applies to what the row holds then; one
+// still in conflict lands in the failure list. Total / Succeeded / Failed
+// counts mirror the BatchDelete contract.
 //
 // Tags semantics: args.Replace selects between the two, matching the RPC.
 // Replace=true overwrites the object's tag map wholesale — an empty map then
@@ -91,25 +91,22 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 		ReportProgress(ctx, i, resp.Total)
 
 		obj, found := byID[objectID]
-		if !found {
-			resp.Failed++
-			resp.Failures = append(resp.Failures, BatchUpdateTagsFailure{
-				ObjectID: objectID.String(),
-				Reason:   "not found",
-			})
-			continue
+		uerr := e.updateOne(ctx, args, obj, found)
+		// A version conflict is the object changed between the read and the
+		// write: a fresh read merges the tags into what it holds now.
+		for attempt := 1; isVersionConflict(uerr) && attempt < conflictAttempts; attempt++ {
+			fresh, err := findByIDs(ctx, e.Objects, args.TenantID, args.Collection, []uuid.UUID{objectID})
+			if err != nil {
+				return nil, fmt.Errorf("batch lookup: %w", err)
+			}
+			obj, found = fresh[objectID]
+			uerr = e.updateOne(ctx, args, obj, found)
 		}
-		if _, err := e.Objects.UpdateMetadata(ctx, objecth.UpdateMetadataArgs{
-			TenantID:        args.TenantID,
-			ObjectID:        obj.ObjectID,
-			ResourceVersion: obj.ResourceVersion,
-			UpdatedFields:   []string{"tags"},
-			Tags:            resolveTags(obj.Tags, args.Tags, args.Replace),
-		}); err != nil {
+		if uerr != nil {
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchUpdateTagsFailure{
 				ObjectID: objectID.String(),
-				Reason:   err.Error(),
+				Reason:   uerr.Error(),
 			})
 			continue
 		}
@@ -123,6 +120,21 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 		return nil, fmt.Errorf("encode response: %w", err)
 	}
 	return body, nil
+}
+
+// updateOne writes one object's tags, or says why not.
+func (e *BatchUpdateTagsExecutor) updateOne(ctx context.Context, args batchh.BatchUpdateTagsArgs, obj objecth.Object, found bool) error {
+	if !found {
+		return errObjectNotFound
+	}
+	_, err := e.Objects.UpdateMetadata(ctx, objecth.UpdateMetadataArgs{
+		TenantID:        args.TenantID,
+		ObjectID:        obj.ObjectID,
+		ResourceVersion: obj.ResourceVersion,
+		UpdatedFields:   []string{"tags"},
+		Tags:            resolveTags(obj.Tags, args.Tags, args.Replace),
+	})
+	return err
 }
 
 // resolveTags computes the tag map to write for one object.
