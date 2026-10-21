@@ -5,6 +5,7 @@ export const AUDIT_ORDER = {
   action: "action",
   actor: "actor_subject",
   resource: "resource_name",
+  client: "user_agent",
 } as const;
 
 export type AuditOrderField = (typeof AUDIT_ORDER)[keyof typeof AUDIT_ORDER];

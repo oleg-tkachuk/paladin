@@ -8,6 +8,8 @@ vi.mock("./ActorName", () => ({
   ActorName: ({ subject }: { subject: string }) => subject,
 }));
 
+import { AUDIT_ORDER } from "@/lib/auditOrder";
+
 import { AuditLogTable } from "./AuditLogTable";
 
 const TENANT = "01a0fcfc-281e-7c59-963c-8a946fe82a47";
@@ -43,6 +45,23 @@ function table(onOpen = vi.fn()) {
 }
 
 describe("AuditLogTable", () => {
+  it("sorts by the client that made each call", () => {
+    const onSort = vi.fn();
+    render(
+      <AuditLogTable
+        entries={[ENTRY]}
+        loading={false}
+        filtered={false}
+        sort={{ column: null, direction: null }}
+        onSort={onSort}
+        onOpen={vi.fn()}
+        rowProps={() => ({})}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Client/ }));
+    expect(onSort).toHaveBeenCalledWith(AUDIT_ORDER.client);
+  });
+
   it("has a column for the client that made each call", () => {
     table();
     expect(

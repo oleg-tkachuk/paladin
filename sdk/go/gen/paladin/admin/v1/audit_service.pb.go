@@ -36,8 +36,9 @@ type ListAuditLogRequest struct {
 	// page_size of them. Empty = every tenant. A caller other than a platform
 	// admin may name only its own tenant.
 	TenantId string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// order_by is the field the log sorts by: at, action, actor_subject or
-	// resource_name; any other is refused. Empty is newest first. Text sorts
+	// order_by is the field the log sorts by: at, action, actor_subject,
+	// resource_name or user_agent (empty when none was sent); any other is
+	// refused. Empty is newest first. Text sorts
 	// bytewise. The page_token of a sorted list resumes only that order and
 	// direction.
 	OrderBy string `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`

@@ -215,17 +215,20 @@ type AuditRepository interface {
 }
 
 // The fields ListAuditLog sorts by, as order_by names them: AuditLogEntry's
-// own field names. list_audit_entry_ids (migration 086) maps each to its
+// own field names. list_audit_entry_ids (migrations 086, 093) maps each to its
 // column, and an integration test sorts by every one.
 const (
 	AuditOrderByAt       = "at"
 	AuditOrderByAction   = "action"
 	AuditOrderByActor    = "actor_subject"
 	AuditOrderByResource = "resource_name"
+	// AuditOrderByClient sorts by the User-Agent; a call that sent none
+	// sorts as empty.
+	AuditOrderByClient = "user_agent"
 )
 
 // AuditOrderFields lists every order_by ListAuditLog accepts.
-var AuditOrderFields = []string{AuditOrderByAt, AuditOrderByAction, AuditOrderByActor, AuditOrderByResource}
+var AuditOrderFields = []string{AuditOrderByAt, AuditOrderByAction, AuditOrderByActor, AuditOrderByResource, AuditOrderByClient}
 
 // DefaultAuditOrder is the order of an empty order_by: newest first.
 var DefaultAuditOrder = keyset.Order{Field: AuditOrderByAt, Desc: true}
@@ -239,6 +242,8 @@ func AuditSortValue(field string, e AuditEntry) string {
 		return e.ActorSubject
 	case AuditOrderByResource:
 		return e.ResourceName
+	case AuditOrderByClient:
+		return e.UserAgent
 	default:
 		return e.At.UTC().Format(time.RFC3339Nano)
 	}
