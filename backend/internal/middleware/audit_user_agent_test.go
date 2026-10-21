@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -53,5 +54,27 @@ func TestAuditRecordsTheUserAgent(t *testing.T) {
 func TestUserAgentOutsideACall(t *testing.T) {
 	if got := userAgent(context.Background()); got != "" {
 		t.Errorf("userAgent = %q, want empty", got)
+	}
+}
+
+// The row holds the request the call was made with, as JSON — what the
+// action was asked to do, not the resource's state after it.
+func TestAuditRecordsTheRequest(t *testing.T) {
+	const theme = "navy"
+	w := &recordingAuditWriter{}
+	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
+		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, &stubSettings{})
+	}, AuditWithMirror(w, "paladin-iam", false, nil)))
+	if _, err := client.UpdateMine(principalCtx(uuid.New()), &iamv1.UpdateMineRequest{Theme: theme}); err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if len(w.rows) != 1 {
+		t.Fatalf("%d rows written, want 1", len(w.rows))
+	}
+	var got struct {
+		Theme string `json:"theme"`
+	}
+	if err := json.Unmarshal(w.rows[0].RequestJSON, &got); err != nil || got.Theme != theme {
+		t.Errorf("request = %s (%v), want the theme %q", w.rows[0].RequestJSON, err, theme)
 	}
 }

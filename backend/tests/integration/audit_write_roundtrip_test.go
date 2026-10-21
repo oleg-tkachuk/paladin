@@ -40,8 +40,7 @@ func auditFixture(tenantID uuid.UUID) admindomain.AuditEntry {
 		RequestID:     "request-id",
 		SourceIP:      "203.0.113.7",
 		ErrorMessage:  "error-message",
-		BeforeJSON:    []byte(`{"side":"before"}`),
-		AfterJSON:     []byte(`{"side":"after"}`),
+		RequestJSON:   []byte(`{"name":"tenants/t"}`),
 		CapabilityID:  uuid.Must(uuid.NewV7()),
 		RelayedBy:     "relayed-by",
 		UserAgent:     "paladin-sdk-go/0.97.0 gateway/1.4",
@@ -73,11 +72,8 @@ func assertAuditEntry(t *testing.T, got, want admindomain.AuditEntry, via string
 			t.Errorf("via %s: %s = %v, want %v", via, c.field, c.got, c.want)
 		}
 	}
-	if string(got.BeforeJSON) != string(want.BeforeJSON) {
-		t.Errorf("via %s: BeforeJSON = %s, want %s", via, got.BeforeJSON, want.BeforeJSON)
-	}
-	if string(got.AfterJSON) != string(want.AfterJSON) {
-		t.Errorf("via %s: AfterJSON = %s, want %s", via, got.AfterJSON, want.AfterJSON)
+	if string(got.RequestJSON) != string(want.RequestJSON) {
+		t.Errorf("via %s: RequestJSON = %s, want %s", via, got.RequestJSON, want.RequestJSON)
 	}
 	if !got.At.Equal(want.At) {
 		t.Errorf("via %s: At = %v, want %v", via, got.At, want.At)

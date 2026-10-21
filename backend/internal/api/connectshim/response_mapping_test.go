@@ -73,6 +73,12 @@ var responseSkipFields = map[string]map[string]string{
 		// not surfaced on the operation read DTO.
 		"InitiatorSubject": "operation read DTO projects initiator tenant only, not subject",
 	},
+	"AuditLogEntry": {
+		// Deprecated: neither held the resource's state; request_json
+		// carries what after_json did.
+		"BeforeJson": "deprecated: never recorded; request_json replaces after_json",
+		"AfterJson":  "deprecated: held the request, now request_json",
+	},
 }
 
 func TestShimResponseFieldCoverage(t *testing.T) {

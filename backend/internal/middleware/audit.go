@@ -35,21 +35,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
-// auditBeforeKey carries a pre-mutation snapshot stashed by a handler so the
-// audit interceptor can record before/after JSON without re-reading the row.
-type auditBeforeKey struct{}
-
 // Canonical resource-name stash lives in apiutil (see audit_stash.go)
 // so domain handlers can call StashResource without importing this
 // middleware package (which sits above them in the dependency graph).
-
-func beforeFromContext(ctx context.Context) []byte {
-	v := ctx.Value(auditBeforeKey{})
-	if v == nil {
-		return nil
-	}
-	return marshalAuditPayload(v)
-}
 
 func marshalAuditPayload(v any) []byte {
 	if v == nil {
@@ -231,8 +219,7 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
 	}
-	entry.BeforeJSON = beforeFromContext(ctx)
-	entry.AfterJSON = marshalAuditPayload(req)
+	entry.RequestJSON = marshalAuditPayload(req)
 	// The audit row and its mirror event commit atomically: the mirror
 	// enqueues its outbox rows on the insert's own transaction (ADR-0003).
 	// nil mirror ⇒ nil hook ⇒ InsertWithOutbox degrades to a plain Insert.

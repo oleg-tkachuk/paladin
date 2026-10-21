@@ -2283,10 +2283,14 @@ type AuditLogEntry struct {
 	ResourceName  string                 `protobuf:"bytes,7,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"` // canonical resource name acted upon
 	RequestId     string                 `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	SourceIp      string                 `protobuf:"bytes,9,opt,name=source_ip,json=sourceIp,proto3" json:"source_ip,omitempty"`
-	// Encoded as JSON; before/after diffs are stripped of secret fields by the
-	// serializer (whitelisted field projection).
+	// before_json and after_json were documented as the resource's state before
+	// and after the action. Nothing recorded the state: before_json was always
+	// empty and after_json held the request. Read request_json; neither is set.
+	//
+	// Deprecated: Marked as deprecated in paladin/admin/v1/types.proto.
 	BeforeJson []byte `protobuf:"bytes,10,opt,name=before_json,json=beforeJson,proto3" json:"before_json,omitempty"`
-	AfterJson  []byte `protobuf:"bytes,11,opt,name=after_json,json=afterJson,proto3" json:"after_json,omitempty"`
+	// Deprecated: Marked as deprecated in paladin/admin/v1/types.proto.
+	AfterJson []byte `protobuf:"bytes,11,opt,name=after_json,json=afterJson,proto3" json:"after_json,omitempty"`
 	// Set when the action failed; empty on success.
 	ErrorMessage string `protobuf:"bytes,12,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	// capability_id is the UUID of the capability token that
@@ -2303,7 +2307,12 @@ type AuditLogEntry struct {
 	// application, which names itself through the SDK's user-agent suffix
 	// option; a browser's own for the console. Cut to 256 bytes. Empty when
 	// the caller sent none.
-	UserAgent     string `protobuf:"bytes,15,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
+	UserAgent string `protobuf:"bytes,15,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
+	// request_json is what the action was asked to do, as JSON with secret
+	// fields redacted: an RPC's request, an OAuth endpoint's, or the storage
+	// event that drove an ingest. Not the resource's state. Empty when the
+	// action recorded none.
+	RequestJson   []byte `protobuf:"bytes,16,opt,name=request_json,json=requestJson,proto3" json:"request_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2401,6 +2410,7 @@ func (x *AuditLogEntry) GetSourceIp() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in paladin/admin/v1/types.proto.
 func (x *AuditLogEntry) GetBeforeJson() []byte {
 	if x != nil {
 		return x.BeforeJson
@@ -2408,6 +2418,7 @@ func (x *AuditLogEntry) GetBeforeJson() []byte {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in paladin/admin/v1/types.proto.
 func (x *AuditLogEntry) GetAfterJson() []byte {
 	if x != nil {
 		return x.AfterJson
@@ -2441,6 +2452,13 @@ func (x *AuditLogEntry) GetUserAgent() string {
 		return x.UserAgent
 	}
 	return ""
+}
+
+func (x *AuditLogEntry) GetRequestJson() []byte {
+	if x != nil {
+		return x.RequestJson
+	}
+	return nil
 }
 
 // ─── Event subscription ─────────────────────────────────────────────────────
@@ -3344,7 +3362,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vbytes_today\x18\x03 \x01(\x03R\n" +
 	"bytesToday\x12#\n" +
 	"\robjects_today\x18\x04 \x01(\x03R\fobjectsToday\x12C\n" +
-	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\x90\x04\n" +
+	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\xbb\x04\n" +
 	"\rAuditLogEntry\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12/\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x02at\x12#\n" +
@@ -3355,18 +3373,19 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\rresource_name\x18\a \x01(\tR\fresourceName\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\b \x01(\tR\trequestId\x12\x1b\n" +
-	"\tsource_ip\x18\t \x01(\tR\bsourceIp\x12\x1f\n" +
+	"\tsource_ip\x18\t \x01(\tR\bsourceIp\x12#\n" +
 	"\vbefore_json\x18\n" +
-	" \x01(\fR\n" +
-	"beforeJson\x12\x1d\n" +
+	" \x01(\fB\x02\x18\x01R\n" +
+	"beforeJson\x12!\n" +
 	"\n" +
-	"after_json\x18\v \x01(\fR\tafterJson\x12#\n" +
+	"after_json\x18\v \x01(\fB\x02\x18\x01R\tafterJson\x12#\n" +
 	"\rerror_message\x18\f \x01(\tR\ferrorMessage\x12#\n" +
 	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\x12\x1d\n" +
 	"\n" +
 	"relayed_by\x18\x0e \x01(\tR\trelayedBy\x12\x1d\n" +
 	"\n" +
-	"user_agent\x18\x0f \x01(\tR\tuserAgent\"\xde\x02\n" +
+	"user_agent\x18\x0f \x01(\tR\tuserAgent\x12!\n" +
+	"\frequest_json\x18\x10 \x01(\fR\vrequestJson\"\xde\x02\n" +
 	"\x11EventSubscription\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x16\n" +

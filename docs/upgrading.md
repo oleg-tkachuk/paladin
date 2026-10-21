@@ -73,6 +73,23 @@ here.
 
 
 
+## Unreleased — an audit entry records its request, not before and after
+
+`AuditLogEntry.before_json` and `after_json` were documented as the
+resource's state before and after an action. Nothing recorded the state:
+`before_json` was always empty, and `after_json` held what the action was
+asked to do — an RPC's request with secrets redacted, an OAuth endpoint's, or
+the storage event behind an ingest.
+
+- **`request_json` (16) carries it**, and both old fields are deprecated and
+  no longer set. Read `request_json` where you read `after_json`.
+- **Migration `094`** renames `audit_log.after_json` to `request_json` and
+  drops `before_json`; both are catalog changes only.
+- **`ExportAuditLog`'s entries name it `request`**, in place of `before` and
+  `after`.
+- **The console's audit entry has a Request tab** in place of Changes and
+  Snapshots, and the summary's request id is labelled *Request id*.
+
 ## Unreleased — the Python SDK has tags of its own
 
 The Python SDK releases as `sdk/python/vX.Y.Z`, versioned by its own commits

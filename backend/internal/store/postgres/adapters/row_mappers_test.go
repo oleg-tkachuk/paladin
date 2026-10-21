@@ -378,8 +378,7 @@ func TestAuditEntryFromModel(t *testing.T) {
 		SourceIp:      &sourceIP,
 		CapabilityID:  pgUUID(capability),
 		ErrorMessage:  &errMsg,
-		BeforeJson:    []byte(`{"side":"before"}`),
-		AfterJson:     []byte(`{"side":"after"}`),
+		RequestJson:   []byte(`{"name":"tenants/t"}`),
 
 		ResourceTenantID: pgUUID(resourceTenant),
 	})
@@ -406,11 +405,8 @@ func TestAuditEntryFromModel(t *testing.T) {
 			t.Errorf("%s = %v, want %v", c.field, c.got, c.want)
 		}
 	}
-	if string(got.BeforeJSON) != `{"side":"before"}` {
-		t.Errorf("BeforeJSON = %s", got.BeforeJSON)
-	}
-	if string(got.AfterJSON) != `{"side":"after"}` {
-		t.Errorf("AfterJSON = %s", got.AfterJSON)
+	if string(got.RequestJSON) != `{"name":"tenants/t"}` {
+		t.Errorf("RequestJSON = %s", got.RequestJSON)
 	}
 	if !got.At.Equal(at) {
 		t.Errorf("At = %v, want %v", got.At, at)

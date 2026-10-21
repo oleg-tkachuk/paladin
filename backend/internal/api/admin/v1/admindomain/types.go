@@ -215,9 +215,11 @@ type AuditEntry struct {
 	ResourceName  string
 	RequestID     string
 	SourceIP      string
-	BeforeJSON    []byte
-	AfterJSON     []byte
-	ErrorMessage  string
+	// RequestJSON is what the action was asked to do, secrets redacted: an
+	// RPC's request, an OAuth endpoint's, or the storage event behind an
+	// ingest. Not the resource's state.
+	RequestJSON  []byte
+	ErrorMessage string
 
 	// CapabilityID is the ID of the capability token attached to the
 	// request, if any. Threaded by middleware.Audit from

@@ -588,7 +588,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 // collection's RV would invalidate every in-flight client that holds
 // a collection resource_version mid-transaction). Operators that
 // need a per-collection audit row can list the affected rows from the
-// audit_log entry's after_json.
+// audit_log entry's request_json.
 //
 // Uniqueness on the new slug is enforced by the tenants_slug_unique
 // constraint (the schema baseline (001_initial_schema.sql)) — caught here as ErrSlugConflict.

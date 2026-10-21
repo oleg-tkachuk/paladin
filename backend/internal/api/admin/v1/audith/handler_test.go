@@ -78,8 +78,7 @@ func mkEntry(at time.Time) admindomain.AuditEntry {
 		ActorAudience: "paladin-admin",
 		Action:        "/paladin.admin.v1.BucketService/UpdateBucket",
 		ResourceName:  "storageBackends/b1/buckets/b",
-		BeforeJSON:    []byte(`{"display_name":"old"}`),
-		AfterJSON:     []byte(`{"display_name":"new"}`),
+		RequestJSON:   []byte(`{"display_name":"new"}`),
 	}
 }
 
@@ -105,12 +104,9 @@ func TestExportAuditLogPaginatesAndProjects(t *testing.T) {
 	if len(res.Entries) != 3 {
 		t.Fatalf("entries len: got %d want 3", len(res.Entries))
 	}
-	// Before/After must round-trip as raw JSON, not double-encoded.
-	if string(res.Entries[0].Before) != `{"display_name":"old"}` {
-		t.Errorf("before raw: got %q", string(res.Entries[0].Before))
-	}
-	if string(res.Entries[0].After) != `{"display_name":"new"}` {
-		t.Errorf("after raw: got %q", string(res.Entries[0].After))
+	// The request must round-trip as raw JSON, not double-encoded.
+	if string(res.Entries[0].Request) != `{"display_name":"new"}` {
+		t.Errorf("request raw: got %q", string(res.Entries[0].Request))
 	}
 }
 

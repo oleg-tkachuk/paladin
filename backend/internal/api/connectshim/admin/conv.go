@@ -380,8 +380,7 @@ func auditEntryToProto(e *admindomain.AuditEntry) *pb.AuditLogEntry {
 		ResourceName:  e.ResourceName,
 		RequestId:     e.RequestID,
 		SourceIp:      e.SourceIP,
-		BeforeJson:    e.BeforeJSON,
-		AfterJson:     e.AfterJSON,
+		RequestJson:   e.RequestJSON,
 		ErrorMessage:  e.ErrorMessage,
 		// CapabilityID is uuid.Nil for JWT/api-token paths;
 		// uuidStrEmpty maps the zero UUID to "" so the wire payload

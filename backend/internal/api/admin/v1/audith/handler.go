@@ -251,8 +251,7 @@ type ExportAuditLogEntry struct {
 	SourceIP      string          `json:"source_ip,omitempty"`
 	RelayedBy     string          `json:"relayed_by,omitempty"`
 	UserAgent     string          `json:"user_agent,omitempty"`
-	Before        json.RawMessage `json:"before,omitempty"`
-	After         json.RawMessage `json:"after,omitempty"`
+	Request       json.RawMessage `json:"request,omitempty"`
 	ErrorMessage  string          `json:"error_message,omitempty"`
 }
 
@@ -332,8 +331,7 @@ func projectExportEntry(e admindomain.AuditEntry) ExportAuditLogEntry {
 		SourceIP:      e.SourceIP,
 		RelayedBy:     e.RelayedBy,
 		UserAgent:     e.UserAgent,
-		Before:        json.RawMessage(e.BeforeJSON),
-		After:         json.RawMessage(e.AfterJSON),
+		Request:       json.RawMessage(e.RequestJSON),
 		ErrorMessage:  e.ErrorMessage,
 	}
 }

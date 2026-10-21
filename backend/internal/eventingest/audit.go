@@ -59,7 +59,7 @@ func (h *PromoteHandler) record(ctx context.Context, logger *zap.Logger, ev Clou
 		ActorAudience: auth.AudienceData,
 		Action:        action,
 		ResourceName:  resourceName,
-		AfterJSON:     detail,
+		RequestJSON:   detail,
 	}); err != nil {
 		logger.Error("audit entry not written", zap.String("action", action), zap.Error(err))
 	}
