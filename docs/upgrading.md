@@ -84,7 +84,7 @@ here.
 
 
 
-## Unreleased — a collection says what it holds
+## sdk/go/v0.105.0, sdk/python/v0.105.0 — a collection says what it holds
 
 `Collection.usage` (14) is what a collection holds now — its available
 objects' count and bytes, and when the newest was stored — on `GetCollection`
@@ -92,7 +92,7 @@ and `ListCollections`; objects still uploading or in the trash are not in it.
 Migration `095` adds the index it is read from, concurrently. The console's
 collection lists show it. Additive: no action needed.
 
-## Unreleased — an API token can be read by its name
+## sdk/go/v0.105.0, sdk/python/v0.105.0 — an API token can be read by its name
 
 `APITokenService.Get` reads one token's metadata by its resource name,
 `tenants/{tenant}/apiTokens/{id}`, under the same authorisation as `List`.
