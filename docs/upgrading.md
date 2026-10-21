@@ -1335,8 +1335,6 @@ revocation down from capabilities revoked earlier as well as the one named.
   inside their download and multipart helpers — got one object's download URL
   under every name. Use one key per request; a retry of the same request
   still replays.
-||||||| parent of 4f8da27e (docs: record the SDK changes consumers can observe, and the gaps left open)
-
 
 ## v15.0.0 — `housekeeping.pending_ttl` and `delete_orphaned_parts` are removed
 
@@ -1354,7 +1352,6 @@ revocation down from capabilities revoked earlier as well as the one named.
   quietly used whatever the AWS chain found — environment, the node's role,
   IRSA. Name the mode on every backend; the chart's `primary` already does
   (`static_keys`).
-||||||| parent of 8b21df7d (fix(config)!: remove housekeeping.pending_ttl and delete_orphaned_parts)
 
 ## v14.0.0 — `security.reject_tenant_mismatch` is removed
 
