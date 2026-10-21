@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@/test/utils";
+import { render, screen } from "@/test/utils";
 
 // The panel re-reads the entry by id via auditClient.getAuditLogEntry.
 const h = vi.hoisted(() => ({ get: vi.fn() }));
@@ -34,8 +34,7 @@ const UPDATE = {
   sourceIp: "10.0.0.1",
   capabilityId: "",
   errorMessage: "",
-  beforeJson: enc({ name: "b1", versioning: false }),
-  afterJson: enc({ name: "b1", versioning: true }),
+  requestJson: enc({ name: "b1", versioning: true }),
 };
 
 describe("AuditEntryPanel", () => {
@@ -55,78 +54,23 @@ describe("AuditEntryPanel", () => {
     ).toHaveTextContent("e1");
   });
 
-  it("lists the fields the action changed, with their values", async () => {
-    h.get.mockResolvedValue({
-      ...UPDATE,
-      beforeJson: enc({ name: "b1", versioning: false, quota: { bytes: 1 } }),
-      afterJson: enc({ name: "b1", versioning: true, quota: {}, tags: ["a"] }),
-    });
-    panel("e1", "changes");
-    const list = await screen.findByRole("list", { name: "Fields changed" });
-    const rows = within(list).getAllByRole("listitem");
-    // The unchanged name is not a change.
-    expect(rows.map((r) => r.getAttribute("data-change"))).toEqual([
-      "changed",
-      "removed",
-      "added",
-    ]);
-    expect(rows[0]).toHaveTextContent("versioning");
-    expect(rows[0].querySelector('[data-side="before"]')).toHaveTextContent(
-      "false",
-    );
-    expect(rows[0].querySelector('[data-side="after"]')).toHaveTextContent(
-      "true",
-    );
-    expect(rows[1]).toHaveTextContent("quota.bytes");
-    expect(rows[2]).toHaveTextContent("tags");
-    expect(rows[2].querySelector('[data-side="after"]')).toHaveTextContent(
-      '["a"]',
-    );
-    expect(rows[2].querySelector('[data-side="before"]')).toBeNull();
-    expect(screen.getByText("3 fields changed")).toBeInTheDocument();
-  });
-
-  it("says so when the snapshots match", async () => {
-    h.get.mockResolvedValue({ ...UPDATE, afterJson: UPDATE.beforeJson });
-    panel("e1", "changes");
-    expect(await screen.findByText(/No field changed/)).toBeInTheDocument();
-  });
-
-  // A create's one snapshot is the Snapshots tab's: a diff of it against
-  // nothing would only repeat it, every line added.
-  it("offers no Changes tab when a side is missing", async () => {
-    h.get.mockResolvedValue({
-      ...UPDATE,
-      beforeJson: new Uint8Array(),
-      afterJson: enc({ name: "b1" }),
-    });
-    panel("e1", "changes");
-    expect(
-      await screen.findByText("admin.BucketService.UpdateBucket"),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Changes" })).toBeNull();
-    expect(screen.getByRole("tab", { name: "Snapshots" })).toBeInTheDocument();
-  });
-
-  it("compares snapshots that are not JSON as text", async () => {
-    const text = (s: string) => new TextEncoder().encode(s);
-    h.get.mockResolvedValue({
-      ...UPDATE,
-      beforeJson: text("mode=a"),
-      afterJson: text("mode=b"),
-    });
-    panel("e1", "changes");
-    await screen.findByRole("table", { name: "Changes from before to after" });
-    expect(document.querySelector('[data-diff="add"]')).toHaveTextContent(
-      "mode=b",
-    );
-  });
-
-  it("shows the decoded snapshots whole", async () => {
+  it("shows the request the action was made with, pretty-printed", async () => {
     h.get.mockResolvedValue(UPDATE);
-    panel("e1", "snapshots");
+    panel("e1", "request");
     expect(await screen.findByText(/"versioning": true/)).toBeInTheDocument();
-    expect(screen.getByText(/"versioning": false/)).toBeInTheDocument();
+    expect(screen.getByText(/not the resource's state/)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Request" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Changes" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Snapshots" })).toBeNull();
+  });
+
+  it("shows a request that is not JSON as it was stored", async () => {
+    h.get.mockResolvedValue({
+      ...UPDATE,
+      requestJson: new TextEncoder().encode("mode=b"),
+    });
+    panel("e1", "request");
+    expect(await screen.findByText("mode=b")).toBeInTheDocument();
   });
 
   it("wraps identifiers and the action instead of overflowing the panel", async () => {
@@ -138,8 +82,7 @@ describe("AuditEntryPanel", () => {
       entryId: "e3",
       action,
       resourceName: resource,
-      beforeJson: new Uint8Array(),
-      afterJson: enc({ subject: resource }),
+      requestJson: enc({ subject: resource }),
     });
     panel("e3");
     expect(await screen.findByText(action)).toHaveClass("break-all");
@@ -152,17 +95,14 @@ describe("AuditEntryPanel", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("notes when no state snapshot was recorded", async () => {
+  it("notes when no request was recorded", async () => {
     h.get.mockResolvedValue({
       ...UPDATE,
       action: "admin.BucketService.ListBuckets",
-      beforeJson: new Uint8Array(),
-      afterJson: new Uint8Array(),
+      requestJson: new Uint8Array(),
     });
-    panel("e2", "snapshots");
-    expect(
-      await screen.findByText(/no state snapshot recorded/i),
-    ).toBeInTheDocument();
+    panel("e2", "request");
+    expect(await screen.findByText(/no request recorded/i)).toBeInTheDocument();
   });
 
   it("names the client that relayed the call", async () => {

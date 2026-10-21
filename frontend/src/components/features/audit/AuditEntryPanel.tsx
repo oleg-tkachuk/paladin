@@ -1,55 +1,51 @@
 "use client";
 
 // The single-entry drill-down for an audit row, beside the log. The list
-// (ListAuditLog) already returns most columns, but the heavy before/after
-// JSON snapshots are only worth fetching on demand — so a row opens this
-// panel, which re-reads the canonical record via GetAuditLogEntry (by entry
-// id) and shows the full field set, the fields the action changed between the
-// sanitised snapshots, and the snapshots themselves.
+// (ListAuditLog) already returns most columns, but the request an action was
+// made with is only worth fetching on demand — so a row opens this panel,
+// which re-reads the canonical record via GetAuditLogEntry (by entry id) and
+// shows the full field set and that request.
 
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { auditClient } from "@/lib/connect/client";
 import { DetailPanel } from "@/components/ui/DetailPanel";
-import { DiffView } from "@/components/ui/DiffView";
 import {
   RecordBlock,
   RecordField,
   RecordFields,
 } from "@/components/ui/RecordDialog";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Badge } from "@/components/ui/badge";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { Timestamp } from "@/components/Timestamp";
 import { errorMessage } from "@/hooks/errorContract";
 import { isUuid } from "@/lib/resources/tenant-resolve";
 import { T } from "@/lib/ui/typography";
-import { cn } from "@/lib/utils";
-import { fieldChanges, fieldValue, type FieldChange } from "@/lib/fieldChanges";
 import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 
 /** The panel's tabs, in order; the first opens by default. */
-export const AUDIT_ENTRY_TABS = ["summary", "changes", "snapshots"] as const;
+export const AUDIT_ENTRY_TABS = ["summary", "request"] as const;
 export type AuditEntryTab = (typeof AUDIT_ENTRY_TABS)[number];
 
-type Snapshot = { text: string; json?: { value: unknown } };
-
-// Decode a bytes state-snapshot. The backend stores sanitized JSON; keep the
-// parsed value and pretty-print it when it parses, else show the raw text.
-// Empty → null so the section is skipped entirely.
-function decodeSnapshot(bytes: Uint8Array | undefined): Snapshot | null {
+/**
+ * The request as the server stored it: JSON with secrets redacted,
+ * pretty-printed when it parses and shown as it is otherwise; null for none.
+ */
+export function requestText(bytes: Uint8Array | undefined): string | null {
   if (!bytes || bytes.length === 0) return null;
   const raw = new TextDecoder().decode(bytes);
   try {
-    const value: unknown = JSON.parse(raw);
-    return { text: JSON.stringify(value, null, 2), json: { value } };
+    return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {
-    return { text: raw };
+    return raw;
   }
 }
 
-const NO_SNAPSHOT = "No state snapshot recorded for this action.";
+// What the request is, so a reader does not take it for the resource's state.
+const REQUEST_HINT =
+  "What the action was asked to do, with secrets redacted — not the resource's state before or after it.";
+const NO_REQUEST = "No request recorded for this action.";
 
 export function AuditEntryPanel({
   entryId,
@@ -69,13 +65,6 @@ export function AuditEntryPanel({
     queryFn: () => auditClient.getAuditLogEntry({ entryId: entryId as string }),
     enabled: open,
   });
-
-  const before = decodeSnapshot(data?.beforeJson);
-  const after = decodeSnapshot(data?.afterJson);
-  // A change needs both sides: a create has no before and a delete no after,
-  // and their one snapshot is the Snapshots tab's to show. Offered while the
-  // entry loads, so a link to the tab does not land on Summary first.
-  const comparable = isLoading || (before !== null && after !== null);
 
   const body = (content: (entry: AuditLogEntry) => ReactNode) =>
     isLoading ? (
@@ -107,95 +96,24 @@ export function AuditEntryPanel({
           label: "Summary",
           content: body((entry) => <Summary entry={entry} />),
         },
-        ...(comparable
-          ? [
-              {
-                value: "changes",
-                label: "Changes",
-                content: body(() =>
-                  before?.json && after?.json ? (
-                    <FieldChanges
-                      changes={fieldChanges(
-                        before.json.value,
-                        after.json.value,
-                      )}
-                    />
-                  ) : (
-                    // Not JSON: only the text can be compared.
-                    <DiffView
-                      before={before?.text ?? ""}
-                      after={after?.text ?? ""}
-                    />
-                  ),
-                ),
-              },
-            ]
-          : []),
         {
-          value: "snapshots",
-          label: "Snapshots",
-          content: body(() => (
-            <RecordFields>
-              {before && (
-                <RecordBlock label="Before">{before.text}</RecordBlock>
-              )}
-              {after && <RecordBlock label="After">{after.text}</RecordBlock>}
-              {!before && !after && <p className={T.hint}>{NO_SNAPSHOT}</p>}
-            </RecordFields>
-          )),
+          value: "request",
+          label: "Request",
+          content: body((entry) => <Request entry={entry} />),
         },
       ]}
     />
   );
 }
 
-const CHANGE_BADGE = {
-  added: "success",
-  removed: "destructive",
-  changed: "warning",
-} as const;
-
-/** Each field the action changed: its path, and its value before and after. */
-function FieldChanges({ changes }: { changes: FieldChange[] }) {
-  if (changes.length === 0) {
-    return <p className={T.hint}>No field changed: the snapshots match.</p>;
-  }
+function Request({ entry }: { entry: AuditLogEntry }) {
+  const text = requestText(entry.requestJson);
+  if (text === null) return <p className={T.hint}>{NO_REQUEST}</p>;
   return (
-    <div className="space-y-2">
-      <p className={T.hint}>
-        {changes.length} {changes.length === 1 ? "field" : "fields"} changed
-      </p>
-      <ul
-        aria-label="Fields changed"
-        className="divide-y divide-border rounded-lg ring-1 ring-border"
-      >
-        {changes.map((c) => (
-          <li key={c.path} data-change={c.kind} className="space-y-1 px-3 py-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className={cn(T.code, "break-all text-foreground")}>
-                {c.path || "the whole snapshot"}
-              </span>
-              <Badge variant={CHANGE_BADGE[c.kind]}>{c.kind}</Badge>
-            </div>
-            <div className={cn(T.code, "break-all text-xs")}>
-              {c.kind !== "added" && (
-                <span data-side="before" className="text-destructive">
-                  {fieldValue(c.before)}
-                </span>
-              )}
-              {c.kind === "changed" && (
-                <span className="text-muted-foreground"> → </span>
-              )}
-              {c.kind !== "removed" && (
-                <span data-side="after" className="text-success">
-                  {fieldValue(c.after)}
-                </span>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <RecordFields>
+      <p className={T.hint}>{REQUEST_HINT}</p>
+      <RecordBlock label="Request">{text}</RecordBlock>
+    </RecordFields>
   );
 }
 
@@ -236,7 +154,7 @@ function Summary({ entry: data }: { entry: AuditLogEntry }) {
         {data.resourceName || "—"}
       </RecordField>
       {data.requestId && (
-        <RecordField label="Request" mono>
+        <RecordField label="Request id" mono>
           {data.requestId}
         </RecordField>
       )}

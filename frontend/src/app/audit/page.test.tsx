@@ -34,7 +34,7 @@ vi.mock("@/components/features/audit/ActorName", () => ({
   ActorName: ({ subject }: { subject: string }) => subject,
 }));
 vi.mock("@/components/features/audit/AuditEntryPanel", () => ({
-  AUDIT_ENTRY_TABS: ["summary", "changes"],
+  AUDIT_ENTRY_TABS: ["summary", "request"],
   AuditEntryPanel: ({
     entryId,
     tab,
@@ -151,10 +151,10 @@ describe("AuditPage linked entry", () => {
   });
 
   it("opens the entry on the tab a link names", () => {
-    window.history.replaceState(null, "", "/audit?id=entry-1&tab=changes");
-    h.search = "id=entry-1&tab=changes";
+    window.history.replaceState(null, "", "/audit?id=entry-1&tab=request");
+    h.search = "id=entry-1&tab=request";
     render(<AuditPage />);
-    expect(screen.getByRole("dialog")).toHaveTextContent("entry-1 on changes");
+    expect(screen.getByRole("dialog")).toHaveTextContent("entry-1 on request");
   });
 
   it("puts an entry opened from its row in the address", () => {
