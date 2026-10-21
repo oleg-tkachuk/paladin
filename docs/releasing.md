@@ -84,8 +84,8 @@ breaking.
 ### Dev builds
 
 In the Actions tab each `release.yaml` run is named for what it releases:
-`DevRelease <version>` for a dev build (the commit's sha when CI could not
-derive the version), `PreRelease` for a release candidate and `Release` for a
+`DevRelease v39.2.1-dev (622e006)` for a dev build, as the console labels it
+(the short commit alone when CI could not derive the version), `PreRelease` for a release candidate and `Release` for a
 release. A run's name is fixed when it starts, before semantic-release derives
 a release's version, so those two carry none; the GitHub release names it.
 

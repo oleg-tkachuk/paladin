@@ -10,32 +10,30 @@
 // (release-head.ts). Octokit tries a transient failure again, so one 5xx
 // does not lose the release.
 //
-// VERSION is the dev build's version, which release.yaml names its run after
-// (run-name): a run's name is fixed when it starts, before the run could
-// derive the version itself. It is left out, and the run named after the
-// commit, when it is missing or is no dev build's.
+// VERSION is the dev build's version. release.yaml names its run after the
+// label made of it (run-name), v39.2.1-dev (622e006): a run's name is fixed
+// when it starts, before the run could derive the version itself, and an
+// expression cannot shorten it. Without a dev version the label is the commit.
 
 import { info, warning } from "./lib/actions.ts";
 import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
-import { isDevVersion } from "./lib/versions.ts";
+import { devBuildLabel, isDevVersion } from "./lib/versions.ts";
 
 // RELEASE_EVENT is the repository_dispatch type release.yaml runs on.
 export const RELEASE_EVENT = "release";
 
 // Payload names what release.yaml reads from client_payload.
-export const Payload = { Sha: "sha", CIRunID: "ci_run_id", Version: "version" } as const;
+export const Payload = { Sha: "sha", CIRunID: "ci_run_id", Label: "label" } as const;
 
 // dispatchRelease asks for a release of sha, vouched for by CI run runId,
-// whose dev build is version when it is one.
+// whose dev build is version when it is one, labelled for the run's name.
 export async function dispatchRelease(github: GitHub, sha: string, runId: string, version?: string): Promise<void> {
-  const payload: Record<string, string> = { [Payload.Sha]: sha, [Payload.CIRunID]: runId };
-  if (version !== undefined && isDevVersion(version)) {
-    payload[Payload.Version] = version;
-  } else if (version !== undefined) {
+  if (version !== undefined && !isDevVersion(version)) {
     warning(`${version} is no dev build's version; the release run is named after the commit`);
   }
+  const payload = { [Payload.Sha]: sha, [Payload.CIRunID]: runId, [Payload.Label]: devBuildLabel(sha, version) };
   await github.dispatch(RELEASE_EVENT, payload);
   info(`dispatched release for ${sha}`);
 }

@@ -45,7 +45,7 @@ name: Release
 # candidate are named without one; their tag names the GitHub release.
 run-name: >-
   ${{ github.event_name == 'repository_dispatch'
-      && format('DevRelease {0}', github.event.client_payload.version || github.event.client_payload.sha)
+      && format('DevRelease {0}', github.event.client_payload.label || github.event.client_payload.sha)
       || (inputs.channel == 'prerelease' && 'PreRelease' || 'Release') }}
 
 on:
