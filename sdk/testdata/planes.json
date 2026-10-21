@@ -1,0 +1,9 @@
+{
+  "_comment": "The planes a capability's audience and an attenuation name, by label, each with the bearer audience of the same plane. A capability names the label; a session's token carries the audience. Both SDKs and the server are held to this table.",
+  "planes": {
+    "data": "paladin-data",
+    "admin": "paladin-admin",
+    "iam": "paladin-iam",
+    "mcp": "paladin-mcp"
+  }
+}

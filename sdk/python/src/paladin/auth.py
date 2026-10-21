@@ -27,11 +27,41 @@ from paladin.iam.v1.auth_service_connect import AuthServiceClient, AuthServiceCl
 from paladin.relay import RelaySyncTransport, RelayTransport
 from paladin.tls import TLS
 
-# The audiences of the three planes. tests/test_headers.py keeps them equal to
-# the Go SDK's, which the server imports.
+# The audiences of the planes. tests/test_headers.py keeps them equal to the
+# Go SDK's, which the server imports.
 AUDIENCE_DATA = "paladin-data"
 AUDIENCE_ADMIN = "paladin-admin"
 AUDIENCE_IAM = "paladin-iam"
+AUDIENCE_MCP = "paladin-mcp"
+"""The MCP server's own audience. Every plane refuses it; the MCP server
+exchanges it for the plane a tool calls."""
+
+
+class Plane(StrEnum):
+    """A plane by the label a capability's audience and ``attenuate`` name it.
+    A label is not the plane's bearer audience: a capability issued for
+    ``AUDIENCE_DATA`` rather than ``Plane.DATA`` is refused as an audience
+    mismatch; ``audience`` maps one to the other. tests/test_planes.py keeps
+    the labels equal to sdk/testdata/planes.json."""
+
+    DATA = "data"
+    ADMIN = "admin"
+    IAM = "iam"
+    MCP = "mcp"
+
+    @property
+    def audience(self) -> str:
+        """The bearer audience of the same plane, what a session's token for
+        it carries."""
+        return _PLANE_AUDIENCES[self]
+
+
+_PLANE_AUDIENCES = {
+    Plane.DATA: AUDIENCE_DATA,
+    Plane.ADMIN: AUDIENCE_ADMIN,
+    Plane.IAM: AUDIENCE_IAM,
+    Plane.MCP: AUDIENCE_MCP,
+}
 
 # The operations a capability names in its caveats. tests/test_capability_ops.py
 # keeps them equal to sdk/testdata/capability_ops.json, which the Go SDK and

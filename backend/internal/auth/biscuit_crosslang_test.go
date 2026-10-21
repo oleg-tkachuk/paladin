@@ -115,13 +115,13 @@ func (noBiscuitRevocations) IsBiscuitRevoked(context.Context, [][]byte) (bool, e
 
 type crossLangCase struct {
 	Attenuate struct {
-		Ops              []paladin.Op `json:"ops"`
-		ResourcePrefixes []string     `json:"resource_prefixes"`
-		Planes           []string     `json:"planes"`
-		ExpiresAt        time.Time    `json:"expires_at"`
-		BindJKT          string       `json:"bind_jkt"`
-		MaxRequests      int64        `json:"max_requests"`
-		MaxBudgetNanos   int64        `json:"max_budget_nanos"`
+		Ops              []paladin.Op    `json:"ops"`
+		ResourcePrefixes []string        `json:"resource_prefixes"`
+		Planes           []paladin.Plane `json:"planes"`
+		ExpiresAt        time.Time       `json:"expires_at"`
+		BindJKT          string          `json:"bind_jkt"`
+		MaxRequests      int64           `json:"max_requests"`
+		MaxBudgetNanos   int64           `json:"max_budget_nanos"`
 		// BindKeySeed is the hex seed of the Ed25519 key the copy is bound
 		// to, so the proof of possession can be signed.
 		BindKeySeed string `json:"bind_key_seed"`

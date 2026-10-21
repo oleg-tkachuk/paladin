@@ -11,6 +11,7 @@ from paladin.auth import (
     AUDIENCE_ADMIN,
     AUDIENCE_DATA,
     AUDIENCE_IAM,
+    AUDIENCE_MCP,
     OP_DELETE,
     OP_GET,
     OP_LIST,
@@ -22,6 +23,7 @@ from paladin.auth import (
     TOKEN_REFRESH_MARGIN,
     AsyncSession,
     Op,
+    Plane,
     Session,
     StaticToken,
 )
@@ -33,6 +35,7 @@ from paladin.biscuit import (
     attenuate,
     biscuit_of,
     credential_of,
+    token_of,
 )
 from paladin.capability_cache import (
     CAPABILITY_REFRESH_MARGIN,
@@ -40,6 +43,7 @@ from paladin.capability_cache import (
     CapabilityCache,
     NoCapabilityKeyError,
 )
+from paladin.caveats import unlimited_caveats, validate_issue_caveats
 from paladin.client import (
     DEFAULT_RETRY_BASE_DELAY,
     DEFAULT_RETRY_MAX_DELAY,
@@ -177,6 +181,7 @@ __all__ = [
     "AUDIENCE_ADMIN",
     "AUDIENCE_DATA",
     "AUDIENCE_IAM",
+    "AUDIENCE_MCP",
     "CAPABILITY_REFRESH_MARGIN",
     "CHECKSUM_CRC32C",
     "CHECKSUM_MD5",
@@ -254,6 +259,7 @@ __all__ = [
     "Paladin",
     "PaladinError",
     "PermissionDeniedError",
+    "Plane",
     "RangeIgnoredError",
     "RelaySyncTransport",
     "RelayTransport",
@@ -325,10 +331,13 @@ __all__ = [
     "reason",
     "sdk_version",
     "sign_webhook",
+    "token_of",
+    "unlimited_caveats",
     "unpack_detail",
     "upload",
     "upload_many",
     "user_agent",
+    "validate_issue_caveats",
     "verify_webhook",
     "wait",
 ]

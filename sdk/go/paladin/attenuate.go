@@ -19,9 +19,8 @@ type Attenuation struct {
 	// replaces both.
 	ResourcePrefixes []string
 	ResourceURIs     []string
-	// Planes the copy is accepted by, by label: "data", "admin", "iam",
-	// "mcp".
-	Planes []string
+	// Planes the copy is accepted by: PlaneData and the rest.
+	Planes []Plane
 	// ExpiresAt is an earlier expiry.
 	ExpiresAt time.Time
 	// BindJKT binds the copy to a key, by its DPoPThumbprint; only an
@@ -53,9 +52,11 @@ func toLimes(a Attenuation) limes.Attenuation {
 	out := limes.Attenuation{
 		ResourcePrefixes: a.ResourcePrefixes,
 		ResourceURIs:     a.ResourceURIs,
-		Audience:         a.Planes,
 		ExpiresAt:        a.ExpiresAt,
 		ConfirmationJKT:  a.BindJKT,
+	}
+	if len(a.Planes) > 0 {
+		out.Audience = PlaneNames(a.Planes...)
 	}
 	for _, op := range a.Ops {
 		out.Ops = append(out.Ops, limes.Op(op))
