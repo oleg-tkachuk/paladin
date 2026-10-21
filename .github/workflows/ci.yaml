@@ -793,19 +793,36 @@ jobs:
     permissions:
       contents: write # POST /repos/{owner}/{repo}/dispatches needs write
     steps:
-      - name: Check out the dispatch script
+      # The whole history: the dev version below is derived with
+      # `git describe`, which needs the tags.
+      - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-          sparse-checkout: |
-            .github/ci
-            .github/actions
 
       - name: Set up the CI scripts
         uses: ./.github/actions/setup-ci
 
-      # Both values come from Actions itself. See .github/ci/dispatch-release.ts.
+      - name: Set up Task
+        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        with:
+          version: ${{ env.TASK_VERSION }}
+
+      # The version this commit's dev build will carry, derived by the task
+      # library from the commit alone, as release.yaml's publish job derives
+      # it, so the release run is named after it. No token reaches this step,
+      # and a failure only loses the name: the run is named after the commit.
+      # --yes accepts the first-fetch trust prompt for the task library.
+      - name: Derive the dev version
+        id: dev
+        continue-on-error: true
+        run: printf 'version=%s\n' "$(task --yes backend:release:version)" >> "$GITHUB_OUTPUT"
+
+      # The commit and the run come from Actions itself. See
+      # .github/ci/dispatch-release.ts.
       - name: Dispatch the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.dev.outputs.version }}
         run: node .github/ci/dispatch-release.ts
