@@ -40,9 +40,7 @@ import { BulkActionsToolbar } from "@/components/features/objects/BulkActionsToo
 import { SaveViewModal } from "@/components/features/objects/SaveViewModal";
 import { BulkEditModal } from "@/components/features/objects/BulkEditModal";
 
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { T } from "@/lib/ui/typography";
 
 import { useCollection } from "../collection-context";
 import { SavedViewSchema, type SavedView } from "./_view";
@@ -718,25 +716,20 @@ function CollectionObjectsContent() {
           isProcessing={isBulkDeleting}
         />
 
-        {/* Collection scope is fixed by the URL — show it as a static
-          context badge instead of a picker. The OK is already in the
-          page header above (rendered by the OK detail layout); this
-          local badge keeps the operator anchored when the toolbar
-          gets long. */}
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card/40 p-3">
-          <div className="min-w-0 space-y-0.5">
-            <Label className={T.label}>Collection</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="info" className={T.code}>
-                {collection}
-              </Badge>
-              {collectionResource.bucket && (
-                <span className="min-w-0 break-all text-xs text-muted-foreground font-mono">
-                  → {collectionResource.bucket}
-                </span>
-              )}
-            </div>
-          </div>
+        {/* The collection is named in the row above (the collection
+          layout); this one line says where its objects are stored and
+          holds what acts on them, so the list starts right below. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {collectionResource.bucket ? (
+            <span
+              className="min-w-0 truncate text-xs text-muted-foreground font-mono"
+              title={collectionResource.bucket}
+            >
+              → {collectionResource.bucket}
+            </span>
+          ) : (
+            <span />
+          )}
           <div className="flex items-center gap-3">
             <p className="text-xs text-muted-foreground">
               Drop files on the list to upload them here.

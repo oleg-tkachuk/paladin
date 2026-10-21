@@ -34,9 +34,12 @@ const TABS: TabSpec[] = [
 export function CollectionTabs({
   tenantId,
   collection,
+  className,
 }: {
   tenantId: string;
   collection: string;
+  /** Replaces the strip's own full-width rule, for a row that draws its own. */
+  className?: string;
 }) {
   const pathname = usePathname();
   const base = `/tenants/${tenantId}/collections/${encodeURIComponent(
@@ -45,7 +48,10 @@ export function CollectionTabs({
 
   return (
     <div
-      className="flex w-full items-center gap-0.5 overflow-x-auto border-b border-border/60"
+      className={cn(
+        "flex w-full items-center gap-0.5 overflow-x-auto border-b border-border/60",
+        className,
+      )}
       role="tablist"
     >
       {TABS.map((tab) => {

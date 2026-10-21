@@ -86,34 +86,41 @@ export default function CollectionDetailLayout({
 
   return (
     // No second PageHeader here — TenantLayout already owns the
-    // page chrome (breadcrumbs + separator + tab strip). Inside
-    // that we render a focused OK header band: back-link + title +
-    // refresh action, no separator. Keeps the visual hierarchy
-    // unambiguous (one PageHeader per page).
+    // page chrome (breadcrumbs + separator + tab strip). Inside it the
+    // collection is one row: its name, its tabs and a refresh, so the
+    // tab's content — an object list above all — starts right below
+    // the tenant's chrome rather than under a second header band.
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1 min-w-0">
-          <h2 className="flex items-center gap-2 truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-            <KeyIcon className="size-5 text-primary" />
-            <span className="truncate font-mono">{collectionName}</span>
-          </h2>
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-b border-border/60">
+        <h2
+          className="order-1 flex min-w-0 max-w-full items-center gap-2 pb-2 text-base font-semibold text-foreground"
+          title={collection?.displayName || undefined}
+        >
+          <KeyIcon className="size-4 shrink-0 text-primary" />
+          <span className="truncate font-mono">{collectionName}</span>
           {collection?.displayName && (
-            <p className={cn(T.helper, "truncate")}>{collection.displayName}</p>
+            <span className={cn(T.helper, "truncate font-normal")}>
+              {collection.displayName}
+            </span>
           )}
-        </div>
+        </h2>
+        <CollectionTabs
+          tenantId={tenant.slug}
+          collection={collectionName}
+          // A row of its own on a phone, beside the name from sm up.
+          className="order-3 border-b-0 sm:order-2 sm:w-auto sm:flex-1"
+        />
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           onClick={() => void refetch()}
           aria-label="Refresh"
           disabled={loading}
-          className="shrink-0"
+          className="order-2 mb-1 ml-auto shrink-0 sm:order-3 sm:ml-0"
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
         </Button>
       </div>
-
-      <CollectionTabs tenantId={tenant.slug} collection={collectionName} />
 
       {error && !collection ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
