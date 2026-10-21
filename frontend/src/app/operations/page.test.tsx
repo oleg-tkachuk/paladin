@@ -194,7 +194,11 @@ describe("OperationsPage", () => {
     );
     const linked = document.querySelectorAll(`tr[${LINKED_ROW_ATTR}]`);
     expect(linked).toHaveLength(1);
-    expect(linked[0]).toHaveTextContent("operations/run-1");
+    // A row shows the id; the whole name is its tooltip and its record.
+    expect(linked[0]).toHaveTextContent("run-1");
+    expect(
+      within(linked[0] as HTMLElement).getByTitle("operations/run-1"),
+    ).toBeInTheDocument();
     window.history.replaceState(null, "", "/operations");
   });
 });
