@@ -236,64 +236,64 @@
 
 .dusk {
   /* ── "Dusk" ───────────────────────────────────────────────────────────
-   * A second dark palette: a warm plum ground, one orange accent with
-   * near-black text on it, and larger corners. Status fills carry dark text
-   * too, so every solid fill reads the same way. The ground is the lightest
-   * dark of the palettes, so the page does not sink below the sidebar
-   * around it; the danger, unknown and muted inks are lifted to match. */
+   * Twilight: a cool indigo sky and the warm light of a sunset in it. The
+   * planes share one indigo hue and step only in lightness; the sidebar is
+   * the same hue, deeper and richer. The accent is an apricot coral, across
+   * the wheel from the sky, and the one loud colour: the status inks share a
+   * lightness and a lower chroma, their hues spaced round the wheel so none
+   * borrows the accent's or the sky's. Every solid fill carries the same
+   * indigo-black text. */
   --radius: 0.8rem;
 
-  --background: #232028;
-  --foreground: #ece7f1;
-  --card: #2e2936;
-  --card-foreground: #ece7f1;
-  --band: #342e3d;
+  --background: #1f1f2d;
+  --foreground: #ececf5;
+  --card: #29293b;
+  --card-foreground: #ececf5;
+  --band: #2f2e42;
   /* A step above the card: what floats reads as nearer (see elevation). */
-  --popover: #373040;
-  --popover-foreground: #ece7f1;
+  --popover: #323246;
+  --popover-foreground: #ececf5;
 
-  --primary: #ff7a3d;
-  --primary-foreground: #160f09;
+  --primary: #f49851;
+  --primary-foreground: #121221;
 
-  --secondary: #322e3d;
-  --secondary-foreground: #ece7f1;
-  --muted: #322e3d;
-  --muted-foreground: #b0a7b9;
-  --accent: #322e3d;
-  --accent-foreground: #ece7f1;
+  --secondary: #2e2e3f;
+  --secondary-foreground: #ececf5;
+  --muted: #2e2e3f;
+  --muted-foreground: #aeafc5;
+  --accent: #2e2e3f;
+  --accent-foreground: #ececf5;
 
-  --destructive: #ff7480;
-  --destructive-foreground: #160f09;
-  --success: #34d399;
-  --warning: #f5b14c;
-  --warning-foreground: #160f09;
-  --info: #59b6ea;
-  --progress: #4fd4e0;
-  --suspended: #b9a2f2;
-  --unknown: #b0aab8;
+  --destructive: #ee7c90;
+  --destructive-foreground: #121221;
+  --success: #7bcc98;
+  --warning: #dec766;
+  --warning-foreground: #121221;
+  --info: #7fb6ee;
+  --progress: #6ecbd6;
+  --suspended: #d1a0dc;
+  --unknown: #b0a7b4;
 
-  --border: #474053;
-  --input: #4a4356;
-  --ring: #ff7a3d;
+  --border: #434259;
+  --input: #45455c;
+  --ring: #f49851;
 
-  --chart-1: #ff7a3d;
-  --chart-2: #34d399;
-  --chart-3: #f5b14c;
-  --chart-4: #ff7480;
-  --chart-5: #59b6ea;
+  --chart-1: #f49851;
+  --chart-2: #7bcc98;
+  --chart-3: #dec766;
+  --chart-4: #ee7c90;
+  --chart-5: #7fb6ee;
 
-  /* The sidebar is a zone of its own, after Argo CD's: a step below the
-     ground in a deeper, more saturated aubergine than the page's plum, so
-     the navigation and the page read apart at a glance while keeping to
-     the palette's hue. */
-  --sidebar: #20142b;
-  --sidebar-foreground: #ece7f1;
-  --sidebar-primary: #ff7a3d;
-  --sidebar-primary-foreground: #160f09;
-  --sidebar-accent: #2f223a;
-  --sidebar-accent-foreground: #ece7f1;
-  --sidebar-border: #3b2f48;
-  --sidebar-ring: #ff7a3d;
+  /* The sidebar is a zone of its own, after Argo CD's: the planes' indigo,
+     a step below the ground and richer, so the navigation reads apart. */
+  --sidebar: #14132d;
+  --sidebar-foreground: #ececf5;
+  --sidebar-primary: #f49851;
+  --sidebar-primary-foreground: #121221;
+  --sidebar-accent: #23233e;
+  --sidebar-accent-foreground: #ececf5;
+  --sidebar-border: #30314d;
+  --sidebar-ring: #f49851;
 
   --elevation-shadow: rgb(0 0 0 / 25%);
   --elevation-shadow-soft: rgb(0 0 0 / 50%);
