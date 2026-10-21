@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { anyPack, StructSchema } from "@bufbuild/protobuf/wkt";
+import { CONSOLE_USER_AGENT_PRODUCT, USER_AGENT_HEADER } from "@/constants";
 import { ListOperationsResponseSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 
 // Integration tests for the BFF RPC router (browser → /api/rpc → backend).
@@ -140,6 +141,21 @@ describe("BFF /api/rpc router", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].headers.get("X-Forwarded-For")).toBe(
       "198.51.100.7, 10.0.0.2",
+    );
+  });
+
+  // The plane records the client of every call; the console's are its own,
+  // whatever browser made the request.
+  it("names the console as the client upstream", async () => {
+    await post(
+      rpc(BUCKET_LIST, {
+        authorization: `Bearer ${jwt("paladin-admin")}`,
+        "user-agent": "Mozilla/5.0 (X11; Linux x86_64)",
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0].headers.get(USER_AGENT_HEADER)).toMatch(
+      new RegExp(`^${CONSOLE_USER_AGENT_PRODUCT}/\\S+$`),
     );
   });
 

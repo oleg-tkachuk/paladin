@@ -34,6 +34,11 @@ import { cn } from "@/lib/utils";
 /** How long an opened card's answer is reused before it is read again. */
 export const HOVER_CARD_STALE_MS = 30_000;
 
+/** A capability's page: its tenant's list, open on it. */
+export function capabilityHref(tenantId: string, id: string): string {
+  return `/tenants/${encodeURIComponent(tenantId)}/capabilities?id=${encodeURIComponent(id)}`;
+}
+
 /** What a principal's kind is called on a card. */
 const PRINCIPAL_KIND: Partial<Record<PrincipalKind, string>> = {
   [PrincipalKind.USER]: "user",
@@ -321,11 +326,7 @@ function CapabilityHoverCardInner({
             <Line label="Expires">
               {c?.expiresAt ? <RelativeTime ts={c.expiresAt} /> : "never"}
             </Line>
-            <Open
-              href={`/tenants/${encodeURIComponent(tenantId)}/capabilities?id=${encodeURIComponent(id)}`}
-            >
-              Open capability
-            </Open>
+            <Open href={capabilityHref(tenantId, id)}>Open capability</Open>
           </>
         );
       }}

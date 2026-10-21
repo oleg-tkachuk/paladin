@@ -110,6 +110,7 @@ them, so they must exist before it runs.
 | `088` | `operations.dismissed_at`: the initiator cleared it from their own list |
 | `090` | `user_settings.theme` accepts three more dark palettes (`navy`, `graphite`, `bordeaux`) |
 | `091` | `user_settings.theme` renames `ember` to `dusk`, carrying saved settings over |
+| `092` | `audit_log.user_agent`, the client a call came from |
 
 Each file's header comment says why it exists.
 

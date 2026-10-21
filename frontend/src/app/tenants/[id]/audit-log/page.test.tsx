@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { AuditLogEntrySchema } from "@/gen/paladin/admin/v1/types_pb";
 import { fireEvent, render, screen } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
@@ -63,13 +65,13 @@ describe("TenantAuditLogPage rows", () => {
   it("opens an entry's details from its row", () => {
     window.history.replaceState(null, "", "/tenants/t-1/audit-log");
     h.entries = [
-      {
+      create(AuditLogEntrySchema, {
         entryId: "entry-9",
         action: "admin.BucketService.UpdateBucket",
         actorSubject: "user:ops",
         resourceName: "buckets/b9",
         errorMessage: "",
-      },
+      }),
     ];
     render(<TenantAuditLogPage />);
     const row = screen.getByRole("row", { name: /buckets\/b9/ });

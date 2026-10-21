@@ -85,6 +85,7 @@ func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindo
 		pgUUIDOptional(e.CapabilityID),
 		pgUUIDOptional(e.ResourceTenant()),
 		strPtr(e.RelayedBy),
+		strPtr(e.UserAgent),
 	)
 }
 
@@ -248,6 +249,7 @@ func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 		ErrorMessage:  derefStr(row.ErrorMessage),
 		CapabilityID:  uuidFrom(row.CapabilityID),
 		RelayedBy:     derefStr(row.RelayedBy),
+		UserAgent:     derefStr(row.UserAgent),
 
 		ResourceTenantID: uuidFrom(row.ResourceTenantID),
 	}

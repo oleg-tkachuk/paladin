@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -225,6 +226,7 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 		SourceIP:      sourceIP(ctx),
 		CapabilityID:  capabilityID(ctx),
 		RelayedBy:     relayedBy(ctx),
+		UserAgent:     userAgent(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
@@ -262,6 +264,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 		RequestID:     requestID,
 		CapabilityID:  capabilityID(ctx),
 		RelayedBy:     relayedBy(ctx),
+		UserAgent:     userAgent(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()
@@ -339,4 +342,19 @@ func sourceIP(ctx context.Context) string {
 		return a.String()
 	}
 	return ""
+}
+
+// userAgent is the User-Agent the call arrived with, cut to
+// MaxAuditUserAgentBytes on a rune boundary: the caller writes it, and it
+// lands in every row, export and mirrored event.
+func userAgent(ctx context.Context) string {
+	ua := unary.Info(ctx).RequestHeader().Get(HeaderUserAgent)
+	if len(ua) <= MaxAuditUserAgentBytes {
+		return ua
+	}
+	cut := MaxAuditUserAgentBytes
+	for cut > 0 && !utf8.RuneStart(ua[cut]) {
+		cut--
+	}
+	return ua[:cut]
 }

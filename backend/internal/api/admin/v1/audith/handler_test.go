@@ -193,6 +193,31 @@ func TestListAuditLogSearchesTextFields(t *testing.T) {
 
 // relayed_by selects the calls an agent made through the MCP server, and the
 // console's search finds them by the client's name too (ADR-0036).
+// user_agent selects the calls one client made, and the console's search
+// finds them by the application's name in it.
+func TestListAuditLogFiltersByUserAgent(t *testing.T) {
+	const gateway = "paladin-sdk-go/0.97.0 gateway/1.4"
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	other := mkEntry(t0)
+	other.UserAgent = "paladin-sdk-python/0.97.0"
+	fromGateway := mkEntry(t0.Add(time.Second))
+	fromGateway.UserAgent = gateway
+	for _, filter := range []string{
+		`user_agent == "` + gateway + `"`,
+		`search.contains("gateway/1.4")`,
+	} {
+		repo := &fakeAuditRepo{pages: [][]admindomain.AuditEntry{{other, fromGateway}}}
+		h := NewHandler(repo, allowAuthorizer{})
+		got, _, err := h.ListAuditLog(ctxWithPlatformAdmin(t), admindomain.ListAuditArgs{PageSize: 50}, filter)
+		if err != nil {
+			t.Fatalf("%s: %v", filter, err)
+		}
+		if len(got) != 1 || got[0].EntryID != fromGateway.EntryID {
+			t.Errorf("%s: got %d entries, want only the gateway's", filter, len(got))
+		}
+	}
+}
+
 func TestListAuditLogFiltersByRelay(t *testing.T) {
 	const mcpServer = "paladin-mcp-server"
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

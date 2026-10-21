@@ -36,6 +36,7 @@ func TestAuditMirror_EmitsAuditEvent(t *testing.T) {
 		SourceIP:      "10.0.0.1",
 		CapabilityID:  capID,
 		RelayedBy:     "paladin-mcp-server",
+		UserAgent:     "paladin-sdk-go/0.97.0",
 		ErrorMessage:  "",
 	}
 	if err := m.EmitAuditedTx(context.Background(), nil, entry); err != nil {
@@ -67,6 +68,7 @@ func TestAuditMirror_EmitsAuditEvent(t *testing.T) {
 		"source_ip":      "10.0.0.1",
 		"capability_id":  capID.String(),
 		"relayed_by":     "paladin-mcp-server",
+		"user_agent":     "paladin-sdk-go/0.97.0",
 		"error_message":  "",
 		"severity":       "info", // successful audit (no error_message)
 	} {

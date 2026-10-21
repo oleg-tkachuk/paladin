@@ -69,5 +69,11 @@ export const STORAGE_KEYS = {
  */
 export const FORWARDED_FOR_HEADER = "X-Forwarded-For";
 
+/** Names the calling client to a plane, which records it in the audit log. */
+export const USER_AGENT_HEADER = "User-Agent";
+
+/** The product the console's server names itself by, upstream. */
+export const CONSOLE_USER_AGENT_PRODUCT = "paladin-console";
+
 /** How long a query's data counts as fresh unless the query says otherwise. */
 export const QUERY_STALE_MS = 30_000;

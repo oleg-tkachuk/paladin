@@ -9,7 +9,7 @@ vi.mock("@heroicons/react/24/outline", () => ({
   ArrowDownIcon: () => <svg data-testid="desc" />,
 }));
 
-import { SortableHead } from "./SortHeader";
+import { HEAD_LABEL, SortableHead, StaticHead } from "./SortHeader";
 import type { SortState } from "@/hooks/useTableSort";
 
 type Col = "name" | "size";
@@ -53,5 +53,28 @@ describe("SortableHead", () => {
     const onSort = head({ column: null, direction: null });
     await userEvent.click(screen.getByRole("button", { name: "Name" }));
     expect(onSort).toHaveBeenCalledWith("name");
+  });
+});
+
+// A column that does not sort reads as a header beside the ones that do: the
+// audit log's Request header was plain text in a row of capitals.
+describe("StaticHead", () => {
+  it("styles its label as a sortable header's", () => {
+    head({ column: null, direction: null });
+    render(
+      <table>
+        <thead>
+          <tr>
+            <StaticHead>Request</StaticHead>
+          </tr>
+        </thead>
+      </table>,
+    );
+    const sortable = screen.getByRole("button", { name: /Name/ });
+    const plain = screen.getByRole("columnheader", { name: "Request" });
+    for (const cls of HEAD_LABEL.split(" ")) {
+      expect(sortable).toHaveClass(cls);
+      expect(plain).toHaveClass(cls);
+    }
   });
 });

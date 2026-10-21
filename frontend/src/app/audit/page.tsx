@@ -1,14 +1,11 @@
 "use client";
 
-import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
+import { ListPage } from "@/components/layout/templates/ListPage";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
-import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
-  ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
@@ -21,32 +18,15 @@ import { useAuditStream } from "@/hooks/useAuditStream";
 import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 
 import { Button } from "@/components/ui/button";
-import { SortableHead } from "@/components/ui/SortHeader";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
-import {
-  AUDIT_ORDER,
-  AUDIT_ORDER_FIELDS,
-  type AuditOrderField,
-} from "@/lib/auditOrder";
+import { AUDIT_ORDER_FIELDS, type AuditOrderField } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
-import {
-  Table,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { openableRow } from "@/components/ui/RecordDialog";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { ActorName } from "@/components/features/audit/ActorName";
-import { RelayedBy } from "@/components/features/audit/RelayedBy";
-import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
-import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
-import { CapabilityHoverCard } from "@/components/features/hover/ResourceHoverCards";
+import { AuditLogTable } from "@/components/features/audit/AuditLogTable";
 import {
   AUDIT_ENTRY_TABS,
   AuditEntryPanel,
@@ -83,7 +63,6 @@ export default function AuditPage() {
     tableId: TABLE_ID,
     columns: AUDIT_ORDER_FIELDS,
   });
-  const sortProps = { current: sort, onSort: toggleSort };
   const { entries, loading, error, nextCursor, refresh, loadMore } =
     useAuditLogs(AUDIT_PAGE_SIZE, searchFilter(debouncedSearch), "", sort);
 
@@ -107,8 +86,6 @@ export default function AuditPage() {
     }, 800);
   }, [refresh]);
   const { connected } = useAuditStream(live, onStreamEvent);
-
-  const filtered = entries;
 
   return (
     <TableScope id={TABLE_ID} sort={sort}>
@@ -153,7 +130,7 @@ export default function AuditPage() {
               query={search}
               onQueryChange={setSearch}
               searchLabel="Filter the audit log"
-              placeholder="Filter by action, actor, resource, request id…"
+              placeholder="Filter by action, actor, resource, client, request id…"
             >
               <span className={T.hint}>
                 {entries.length} loaded
@@ -184,176 +161,15 @@ export default function AuditPage() {
           )
         }
       >
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead
-                label="When"
-                column={AUDIT_ORDER.at}
-                className="@md:w-45"
-                {...sortProps}
-              />
-              <SortableHead
-                label="Action"
-                column={AUDIT_ORDER.action}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Actor"
-                column={AUDIT_ORDER.actor}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Resource"
-                column={AUDIT_ORDER.resource}
-                className="hidden @2xl:table-cell"
-                {...sortProps}
-              />
-              <TableHead className="hidden @4xl:table-cell w-45">
-                Request
-              </TableHead>
-              <TableHead className="hidden @6xl:table-cell w-35">
-                Capability
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <ListBody
-            colSpan={6}
-            loading={loading && entries.length === 0}
-            // A failed read is the banner above the table.
-            error={null}
-            empty={
-              filtered.length === 0
-                ? {
-                    icon: ClipboardDocumentListIcon,
-                    what: "audit entries",
-                    reason: emptyReason({ filtered: !!search }),
-                  }
-                : null
-            }
-          >
-            {filtered.map((e) => {
-              const hasError = !!e.errorMessage;
-              const row = openableRow(() => detail.open(e.entryId));
-              return (
-                <TableRow
-                  key={e.entryId}
-                  {...row}
-                  {...detail.rowProps(e.entryId)}
-                  className={cn(row.className, hasError && "bg-destructive/5")}
-                >
-                  <TableCell
-                    className={cn(
-                      T.codeSmall,
-                      "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
-                    )}
-                  >
-                    <Timestamp ts={e.at} />
-                  </TableCell>
-                  {/* Actor and resource are long unbroken identifiers
-                        (`apikey:<uuid>`, resource names): they wrap, or one
-                        row widens the table past its card. */}
-                  <TableCell className="max-w-80 whitespace-normal">
-                    <AuditActionCell
-                      action={e.action}
-                      errorMessage={e.errorMessage}
-                    />
-                  </TableCell>
-                  <TableCell className="whitespace-normal break-all">
-                    <div className="space-y-0.5">
-                      <span className={T.body}>
-                        {e.actorSubject ? (
-                          <ActorName
-                            subject={e.actorSubject}
-                            tenantId={e.actorTenantId}
-                          />
-                        ) : (
-                          <span className="italic text-muted-foreground">
-                            system
-                          </span>
-                        )}
-                      </span>
-                      {e.actorAudience && (
-                        <div
-                          className={cn(T.codeSmall, "text-muted-foreground")}
-                        >
-                          aud {e.actorAudience}
-                        </div>
-                      )}
-                      <RelayedBy client={e.relayedBy} />
-                    </div>
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "hidden @2xl:table-cell whitespace-normal break-all",
-                      T.code,
-                      "text-muted-foreground",
-                    )}
-                  >
-                    {e.resourceName || "—"}
-                  </TableCell>
-                  <TableCell className="hidden @4xl:table-cell">
-                    {e.requestId ? (
-                      <span
-                        className={cn(T.code, "text-muted-foreground")}
-                        title={e.requestId}
-                      >
-                        {e.requestId.slice(0, 12)}
-                        {e.requestId.length > 12 ? "…" : ""}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                    {e.sourceIp && (
-                      <div className={cn(T.codeSmall, "text-muted-foreground")}>
-                        {e.sourceIp}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden @6xl:table-cell">
-                    {e.capabilityId ? (
-                      // Capabilities are tenant-scoped now (the
-                      // page lives under /tenants/<id>/capabilities).
-                      // Use the audit row's actor_tenant_id to
-                      // route — TenantLayout's resolver canonicalises
-                      // UUID→slug on landing.
-                      e.actorTenantId ? (
-                        <CapabilityHoverCard
-                          id={e.capabilityId}
-                          tenantId={e.actorTenantId}
-                        >
-                          <Link
-                            href={`/tenants/${encodeURIComponent(e.actorTenantId)}/capabilities?id=${e.capabilityId}`}
-                            className={cn(
-                              T.code,
-                              "text-primary hover:underline",
-                            )}
-                            title={e.capabilityId}
-                            onClick={(ev) => ev.stopPropagation()}
-                          >
-                            {e.capabilityId.slice(0, 8)}…
-                          </Link>
-                        </CapabilityHoverCard>
-                      ) : (
-                        // No actor_tenant_id (system action): show
-                        // the id as text so the column still
-                        // carries the data, just not the navigation.
-                        <span
-                          className={cn(T.code, "text-muted-foreground")}
-                          title={e.capabilityId}
-                        >
-                          {e.capabilityId.slice(0, 8)}…
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </ListBody>
-        </Table>
+        <AuditLogTable
+          entries={entries}
+          loading={loading}
+          filtered={!!search}
+          sort={sort}
+          onSort={toggleSort}
+          onOpen={(id) => detail.open(id)}
+          rowProps={detail.rowProps}
+        />
       </ListPage>
 
       <AuditEntryPanel

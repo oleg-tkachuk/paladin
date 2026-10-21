@@ -313,6 +313,7 @@ type AuditLog struct {
 	Detail           []byte             `json:"detail"`
 	ResourceTenantID pgtype.UUID        `json:"resource_tenant_id"`
 	RelayedBy        *string            `json:"relayed_by"`
+	UserAgent        *string            `json:"user_agent"`
 }
 
 type AuditLogDefault struct {

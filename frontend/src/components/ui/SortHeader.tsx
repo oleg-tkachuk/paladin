@@ -12,6 +12,24 @@ import { TableHead } from "@/components/ui/table";
 import type { SortState } from "@/hooks/useTableSort";
 import { cn } from "@/lib/utils";
 
+/** A column header's label, sortable or not, so the two read alike. */
+export const HEAD_LABEL = "text-xs font-medium uppercase tracking-wider";
+
+/** A header cell that does not sort, styled as the sortable ones beside it. */
+export function StaticHead({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <TableHead className={cn(HEAD_LABEL, "text-muted-foreground", className)}>
+      {children}
+    </TableHead>
+  );
+}
+
 interface SortHeaderProps<C extends string> {
   label: string;
   column: C;
@@ -75,7 +93,8 @@ function SortHeader<C extends string>({
       type="button"
       onClick={() => onSort(column)}
       className={cn(
-        "inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider transition-colors",
+        "inline-flex items-center gap-1 transition-colors",
+        HEAD_LABEL,
         active
           ? "text-foreground"
           : "text-muted-foreground hover:text-foreground",

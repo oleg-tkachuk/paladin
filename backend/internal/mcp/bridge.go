@@ -404,7 +404,7 @@ type simulateAuthzArgs struct {
 }
 type auditRecentArgs struct {
 	PageSize int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 200"`
-	Filter   string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry — fields: actor_subject, actor_tenant_id, actor_audience, action, resource_name, request_id, source_ip, relayed_by, at, is_error"`
+	Filter   string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry — fields: actor_subject, actor_tenant_id, actor_audience, action, resource_name, request_id, source_ip, relayed_by, user_agent, at, is_error"`
 }
 
 // getNameArgs is the canonical "fetch one resource by name" shape — used
@@ -913,7 +913,7 @@ type setQuotaArgs struct {
 const quotaNoRowVersion = "0"
 
 type auditExportArgs struct {
-	Filter      string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry — fields: actor_subject, actor_tenant_id, actor_audience, action, resource_name, request_id, source_ip, relayed_by, at, is_error"`
+	Filter      string `json:"filter,omitempty" jsonschema:"CEL filter over AuditLogEntry — fields: actor_subject, actor_tenant_id, actor_audience, action, resource_name, request_id, source_ip, relayed_by, user_agent, at, is_error"`
 	Destination string `json:"destination,omitempty" jsonschema:"Advisory tag — recorded in result envelope; not yet acted upon"`
 }
 

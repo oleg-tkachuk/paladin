@@ -1,7 +1,7 @@
 "use client";
 
-// Tenant-scoped audit log. Same table shape as the cross-tenant
-// /audit page; the difference is the tenant's trail, which the server
+// Tenant-scoped audit log. The same table as the cross-tenant /audit page
+// (AuditLogTable); the difference is the tenant's trail, which the server
 // selects (ListAuditLogRequest.tenant_id): entries the tenant's
 // principals made, and entries on its resources — a platform admin's
 // work inside the tenant included.
@@ -9,47 +9,28 @@
 // Free-text search filters client-side over the loaded page, same
 // affordance as /audit, and a row opens the entry beside the log, as there.
 
-import { ListBody, ListPage } from "@/components/layout/templates/ListPage";
-import { emptyReason } from "@/lib/emptyState";
+import { ListPage } from "@/components/layout/templates/ListPage";
 import { useMemo } from "react";
 import Link from "next/link";
-import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
-import { SortableHead } from "@/components/ui/SortHeader";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { PAGE_TABLE } from "@/lib/table/urlState";
-import {
-  AUDIT_ORDER,
-  AUDIT_ORDER_FIELDS,
-  type AuditOrderField,
-} from "@/lib/auditOrder";
+import { AUDIT_ORDER_FIELDS, type AuditOrderField } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   ArrowPathIcon,
-  ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
 import { useAuditLogs } from "@/hooks/useAuditLogs";
 
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../tenant-context";
-import { ActorName } from "@/components/features/audit/ActorName";
-import { RelayedBy } from "@/components/features/audit/RelayedBy";
-import { AuditActionCell } from "@/components/features/audit/AuditActionCell";
-import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
-import { openableRow } from "@/components/ui/RecordDialog";
+import { AuditLogTable } from "@/components/features/audit/AuditLogTable";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import {
   AUDIT_ENTRY_TABS,
@@ -72,7 +53,6 @@ export default function TenantAuditLogPage() {
     tableId: TABLE_ID,
     columns: AUDIT_ORDER_FIELDS,
   });
-  const sortProps = { current: sort, onSort: toggleSort };
   const { entries, loading, error, nextCursor, refresh, loadMore } =
     useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId, sort);
 
@@ -92,6 +72,8 @@ export default function TenantAuditLogPage() {
         e.requestId,
         e.sourceIp,
         e.errorMessage,
+        e.relayedBy,
+        e.userAgent,
       ]
         .join(" ")
         .toLowerCase();
@@ -137,7 +119,7 @@ export default function TenantAuditLogPage() {
               query={search}
               onQueryChange={setSearch}
               searchLabel="Filter the audit log"
-              placeholder="Filter by action, actor, resource, request id…"
+              placeholder="Filter by action, actor, resource, client, request id…"
             >
               <span className={T.hint}>
                 {entries.length} loaded
@@ -168,151 +150,15 @@ export default function TenantAuditLogPage() {
           )
         }
       >
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableHead
-                label="When"
-                column={AUDIT_ORDER.at}
-                className="@md:w-45"
-                {...sortProps}
-              />
-              <SortableHead
-                label="Action"
-                column={AUDIT_ORDER.action}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Actor"
-                column={AUDIT_ORDER.actor}
-                {...sortProps}
-              />
-              <SortableHead
-                label="Resource"
-                column={AUDIT_ORDER.resource}
-                className="hidden @2xl:table-cell"
-                {...sortProps}
-              />
-              <TableHead className="hidden @4xl:table-cell w-45">
-                Request
-              </TableHead>
-              <TableHead className="hidden @6xl:table-cell w-35">
-                Capability
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <ListBody
-            colSpan={6}
-            loading={loading && entries.length === 0}
-            // A failed read is the banner above the table.
-            error={null}
-            empty={
-              filtered.length === 0
-                ? {
-                    icon: ClipboardDocumentListIcon,
-                    what: "audit entries",
-                    reason: emptyReason({ filtered: !!search }),
-                  }
-                : null
-            }
-          >
-            {filtered.map((e) => {
-              const hasError = !!e.errorMessage;
-              const row = openableRow(() => detail.open(e.entryId));
-              return (
-                <TableRow
-                  key={e.entryId}
-                  {...row}
-                  {...detail.rowProps(e.entryId)}
-                  className={cn(row.className, hasError && "bg-destructive/5")}
-                >
-                  <TableCell
-                    className={cn(
-                      T.codeSmall,
-                      "whitespace-normal text-muted-foreground @md:whitespace-nowrap",
-                    )}
-                  >
-                    <Timestamp ts={e.at} />
-                  </TableCell>
-                  {/* Actor and resource are long unbroken identifiers
-                        (`apikey:<uuid>`, resource names): they wrap, or one
-                        row widens the table past its card. */}
-                  <TableCell className="max-w-80 whitespace-normal">
-                    <AuditActionCell
-                      action={e.action}
-                      errorMessage={e.errorMessage}
-                    />
-                  </TableCell>
-                  <TableCell className="whitespace-normal break-all">
-                    <div className="space-y-0.5">
-                      <span className={T.body}>
-                        {e.actorSubject ? (
-                          <ActorName
-                            subject={e.actorSubject}
-                            tenantId={e.actorTenantId}
-                          />
-                        ) : (
-                          <span className="italic text-muted-foreground">
-                            system
-                          </span>
-                        )}
-                      </span>
-                      {e.actorAudience && (
-                        <div
-                          className={cn(T.codeSmall, "text-muted-foreground")}
-                        >
-                          aud {e.actorAudience}
-                        </div>
-                      )}
-                      <RelayedBy client={e.relayedBy} />
-                    </div>
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "hidden @2xl:table-cell whitespace-normal break-all",
-                      T.code,
-                      "text-muted-foreground",
-                    )}
-                  >
-                    {e.resourceName || "—"}
-                  </TableCell>
-                  <TableCell className="hidden @4xl:table-cell">
-                    {e.requestId ? (
-                      <span
-                        className={cn(T.code, "text-muted-foreground")}
-                        title={e.requestId}
-                      >
-                        {e.requestId.slice(0, 12)}
-                        {e.requestId.length > 12 ? "…" : ""}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                    {e.sourceIp && (
-                      <div className={cn(T.codeSmall, "text-muted-foreground")}>
-                        {e.sourceIp}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden @6xl:table-cell">
-                    {e.capabilityId ? (
-                      // Copyable, not a link: this went to /capabilities,
-                      // a page that does not exist, and the tenant's
-                      // capability page cannot open one capability by id.
-                      <IdentifierCopy
-                        value={e.capabilityId}
-                        label="Capability ID"
-                        className={T.code}
-                      />
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </ListBody>
-        </Table>
+        <AuditLogTable
+          entries={filtered}
+          loading={loading}
+          filtered={!!search}
+          sort={sort}
+          onSort={toggleSort}
+          onOpen={(id) => detail.open(id)}
+          rowProps={detail.rowProps}
+        />
       </ListPage>
 
       <AuditEntryPanel

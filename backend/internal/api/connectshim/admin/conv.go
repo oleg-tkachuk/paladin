@@ -388,6 +388,7 @@ func auditEntryToProto(e *admindomain.AuditEntry) *pb.AuditLogEntry {
 		// is tight and the UI can render with a falsy check.
 		CapabilityId: uuidStrEmpty(e.CapabilityID.String()),
 		RelayedBy:    e.RelayedBy,
+		UserAgent:    e.UserAgent,
 	}
 }
 

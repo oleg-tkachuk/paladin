@@ -44,6 +44,7 @@ func auditFixture(tenantID uuid.UUID) admindomain.AuditEntry {
 		AfterJSON:     []byte(`{"side":"after"}`),
 		CapabilityID:  uuid.Must(uuid.NewV7()),
 		RelayedBy:     "relayed-by",
+		UserAgent:     "paladin-sdk-go/0.97.0 gateway/1.4",
 	}
 }
 
@@ -65,6 +66,7 @@ func assertAuditEntry(t *testing.T, got, want admindomain.AuditEntry, via string
 		{"ErrorMessage", got.ErrorMessage, want.ErrorMessage},
 		{"CapabilityID", got.CapabilityID, want.CapabilityID},
 		{"RelayedBy", got.RelayedBy, want.RelayedBy},
+		{"UserAgent", got.UserAgent, want.UserAgent},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
