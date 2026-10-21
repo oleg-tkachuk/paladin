@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { OP_CHOICES } from "./_constants";
+import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
+
+import { OP_CHOICES, principalKindLabel } from "./_constants";
 
 // The table of capability operations both SDKs and the server are held to.
 const SHARED_OPS = resolve(
@@ -20,5 +22,14 @@ describe("capability op choices", () => {
       ...table.limes,
       ...Object.values(table.data_plane),
     ]);
+  });
+});
+
+describe("principalKindLabel", () => {
+  it("names each kind, and the number of one it does not know", () => {
+    expect(principalKindLabel(PrincipalKind.USER)).toBe("user");
+    expect(principalKindLabel(PrincipalKind.AGENT)).toBe("agent");
+    expect(principalKindLabel(PrincipalKind.SERVICE)).toBe("service");
+    expect(principalKindLabel(PrincipalKind.UNSPECIFIED)).toBe("kind:0");
   });
 });
