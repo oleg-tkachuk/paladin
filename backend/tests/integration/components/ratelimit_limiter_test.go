@@ -46,6 +46,13 @@ func newLimiterFixture(t *testing.T) (context.Context, *pgxpool.Pool, *ratelimit
 	return ctx, pool, lim, tok.ID
 }
 
+// counted is what a snapshot's two buckets hold together. A test that runs
+// across a minute's boundary sees its requests move to the previous bucket,
+// so it reads both rather than the current one alone.
+func counted(s ratelimit.Snapshot) int64 {
+	return s.CurrentBucketCount + s.PreviousBucketCount
+}
+
 func bucketRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tokenID uuid.UUID) int {
 	t.Helper()
 	var n int
@@ -141,8 +148,8 @@ func TestLimiterDoesNotCountDenials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("usage: %v", err)
 	}
-	if usage.CurrentBucketCount != capacity {
-		t.Errorf("bucket counts %d after %d denials, want the %d admitted", usage.CurrentBucketCount, 6, capacity)
+	if counted(usage) != capacity {
+		t.Errorf("buckets count %d after %d denials, want the %d admitted", counted(usage), 6, capacity)
 	}
 	if last.RetryAfter > first.RetryAfter {
 		t.Errorf("retry_after grew with denials: %v → %v", first.RetryAfter, last.RetryAfter)
@@ -226,8 +233,8 @@ func TestLimiterUsageDoesNotMutate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("usage: %v", err)
 	}
-	if first.CurrentBucketCount != 3 {
-		t.Fatalf("current bucket %d, want 3", first.CurrentBucketCount)
+	if counted(first) != 3 {
+		t.Fatalf("buckets count %d, want 3", counted(first))
 	}
 	if first.WindowResetsAt.Before(time.Now().UTC()) {
 		t.Errorf("window resets in the past: %v", first.WindowResetsAt)
@@ -242,8 +249,8 @@ func TestLimiterUsageDoesNotMutate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("usage: %v", err)
 	}
-	if after.CurrentBucketCount != first.CurrentBucketCount {
-		t.Errorf("Usage bumped the counter: %d → %d", first.CurrentBucketCount, after.CurrentBucketCount)
+	if counted(after) != counted(first) {
+		t.Errorf("Usage bumped the counter: %d → %d", counted(first), counted(after))
 	}
 
 	// An untouched token reads as empty rather than erroring.
@@ -290,8 +297,8 @@ func TestLimiterSweepRespectsCutoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("usage after sweep: %v", err)
 	}
-	if got.CurrentBucketCount != 1 {
-		t.Errorf("sweep disturbed the current bucket: count %d, want 1", got.CurrentBucketCount)
+	if counted(got) != 1 {
+		t.Errorf("sweep disturbed the current bucket: count %d, want 1", counted(got))
 	}
 }
 
