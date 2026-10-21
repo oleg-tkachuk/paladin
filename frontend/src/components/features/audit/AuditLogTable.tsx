@@ -6,7 +6,13 @@ import { ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
 import { ListBody } from "@/components/layout/templates/ListPage";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
-import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  SHOWN_IN_CARD,
+  Table,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Timestamp } from "@/components/Timestamp";
 import {
   CapabilityHoverCard,
@@ -166,12 +172,22 @@ export function AuditLogTable({
                   <RelayedBy client={e.relayedBy} />
                 </div>
               </TableCell>
-              <TableCell className="hidden @3xl:table-cell">
+              <TableCell
+                className={cn("hidden @3xl:table-cell", SHOWN_IN_CARD)}
+              >
                 <ClientCell userAgent={e.userAgent} />
               </TableCell>
               {/* The one column that gives: it takes what the others leave and
                   truncates there, so no width overflows the card. */}
-              <TableCell className="hidden w-full max-w-0 @2xl:table-cell">
+              {/* On a phone's card the row has room again, so it shows there
+                  in full width rather than as the column that gives. */}
+              <TableCell
+                className={cn(
+                  "hidden w-full max-w-0 @2xl:table-cell",
+                  SHOWN_IN_CARD,
+                  "@max-md:max-w-none",
+                )}
+              >
                 {e.resourceName ? (
                   <div
                     className={cn(T.code, "truncate text-muted-foreground")}
