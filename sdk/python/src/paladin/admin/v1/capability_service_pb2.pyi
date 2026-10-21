@@ -5,6 +5,7 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.type import money_pb2 as _money_pb2
 from paladin.admin.v1 import types_pb2 as _types_pb2
+from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -21,6 +22,13 @@ class PrincipalKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PRINCIPAL_KIND_AGENT: _ClassVar[PrincipalKind]
     PRINCIPAL_KIND_SERVICE: _ClassVar[PrincipalKind]
 
+class CapabilityDisposition(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    CAPABILITY_DISPOSITION_UNSPECIFIED: _ClassVar[CapabilityDisposition]
+    CAPABILITY_DISPOSITION_ACTIVE: _ClassVar[CapabilityDisposition]
+    CAPABILITY_DISPOSITION_EXPIRED: _ClassVar[CapabilityDisposition]
+    CAPABILITY_DISPOSITION_REVOKED: _ClassVar[CapabilityDisposition]
+
 class BiscuitStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     BISCUIT_STATUS_UNSPECIFIED: _ClassVar[BiscuitStatus]
@@ -32,6 +40,10 @@ PRINCIPAL_KIND_UNSPECIFIED: PrincipalKind
 PRINCIPAL_KIND_USER: PrincipalKind
 PRINCIPAL_KIND_AGENT: PrincipalKind
 PRINCIPAL_KIND_SERVICE: PrincipalKind
+CAPABILITY_DISPOSITION_UNSPECIFIED: CapabilityDisposition
+CAPABILITY_DISPOSITION_ACTIVE: CapabilityDisposition
+CAPABILITY_DISPOSITION_EXPIRED: CapabilityDisposition
+CAPABILITY_DISPOSITION_REVOKED: CapabilityDisposition
 BISCUIT_STATUS_UNSPECIFIED: BiscuitStatus
 BISCUIT_STATUS_ISSUED: BiscuitStatus
 BISCUIT_STATUS_NOT_SHAREABLE: BiscuitStatus
@@ -89,7 +101,7 @@ class CapabilityCaveats(_message.Message):
     def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., max_copies: _Optional[int] = ..., unlimited_copies: _Optional[bool] = ...) -> None: ...
 
 class Capability(_message.Message):
-    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "confirmation_jkt")
+    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "confirmation_jkt", "disposition")
     ID_FIELD_NUMBER: _ClassVar[int]
     ISSUER_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -100,6 +112,7 @@ class Capability(_message.Message):
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     PARENT_ID_FIELD_NUMBER: _ClassVar[int]
     CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
+    DISPOSITION_FIELD_NUMBER: _ClassVar[int]
     id: str
     issuer: str
     subject: CapabilityPrincipal
@@ -110,7 +123,8 @@ class Capability(_message.Message):
     expires_at: _timestamp_pb2.Timestamp
     parent_id: str
     confirmation_jkt: str
-    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., confirmation_jkt: _Optional[str] = ...) -> None: ...
+    disposition: CapabilityDisposition
+    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., confirmation_jkt: _Optional[str] = ..., disposition: _Optional[_Union[CapabilityDisposition, str]] = ...) -> None: ...
 
 class CapabilityServiceIssueRequest(_message.Message):
     __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt", "require_biscuit")
@@ -221,7 +235,7 @@ class CapabilityServiceGetBiscuitUsageResponse(_message.Message):
     def __init__(self, capability_id: _Optional[str] = ..., copies: _Optional[_Iterable[_Union[CapabilityBiscuitCopyUsage, _Mapping]]] = ...) -> None: ...
 
 class CapabilityServiceListRequest(_message.Message):
-    __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token")
+    __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token", "dispositions", "sort_order")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     PRINCIPAL_KIND_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -229,6 +243,8 @@ class CapabilityServiceListRequest(_message.Message):
     INCLUDE_REVOKED_FIELD_NUMBER: _ClassVar[int]
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    DISPOSITIONS_FIELD_NUMBER: _ClassVar[int]
+    SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
     tenant_id: str
     principal_kind: PrincipalKind
     subject: str
@@ -236,7 +252,9 @@ class CapabilityServiceListRequest(_message.Message):
     include_revoked: bool
     page_size: int
     page_token: str
-    def __init__(self, tenant_id: _Optional[str] = ..., principal_kind: _Optional[_Union[PrincipalKind, str]] = ..., subject: _Optional[str] = ..., include_expired: _Optional[bool] = ..., include_revoked: _Optional[bool] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+    dispositions: _containers.RepeatedScalarFieldContainer[CapabilityDisposition]
+    sort_order: _pagination_pb2.SortOrder
+    def __init__(self, tenant_id: _Optional[str] = ..., principal_kind: _Optional[_Union[PrincipalKind, str]] = ..., subject: _Optional[str] = ..., include_expired: _Optional[bool] = ..., include_revoked: _Optional[bool] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., dispositions: _Optional[_Iterable[_Union[CapabilityDisposition, str]]] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ...) -> None: ...
 
 class CapabilityServiceListResponse(_message.Message):
     __slots__ = ("capabilities", "next_page_token")

@@ -33,6 +33,9 @@ type CapabilityBundle struct {
 	Verifier  *limes.Verifier
 	Keys      *jwks.Static
 
+	// Records lists a tenant's capability records, each with its disposition.
+	Records limes.RecordLister
+
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
 	// purger drops the ids that have expired.
@@ -113,6 +116,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	store, err := capabilitypg.New(deps.Pool)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability store: %w", err)
+	}
+	records, err := capabilitypg.NewCensus(deps.Pool)
+	if err != nil {
+		return nil, fmt.Errorf("app: capability records: %w", err)
 	}
 
 	issuer, err := limes.NewIssuer(limes.IssuerConfig{
@@ -220,6 +227,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Store:        store,
 		Copies:       store,
 		CopyUsage:    copyUsage,
+		Records:      records,
 		Usage:        usage,
 		Issuer:       issuer,
 		Verifier:     verifier,

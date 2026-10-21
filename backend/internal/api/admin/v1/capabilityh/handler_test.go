@@ -103,11 +103,15 @@ func newMinter(t *testing.T, store limes.Store) *captest.Minter {
 }
 
 // mkHandler builds a Handler over store, with an issuer and a verifier that
-// accept each other's tokens.
+// accept each other's tokens, and store as its record lister when it is one.
 func mkHandler(t *testing.T, store limes.Store, usage meter.UsageStore, policy cedar.Authorizer) *Handler {
 	t.Helper()
 	m := newMinter(t, store)
-	return NewHandler(m.Issuer, m.Verifier, store, usage, policy)
+	h := NewHandler(m.Issuer, m.Verifier, store, usage, policy)
+	if records, ok := store.(limes.RecordLister); ok {
+		h.WithRecords(records)
+	}
+	return h
 }
 
 // delegateHandler builds a Handler over m, so the capabilities m mints are

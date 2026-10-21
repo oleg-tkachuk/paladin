@@ -113,7 +113,9 @@ class CapabilityService(Protocol):
 
     async def list(self, request: CapabilityServiceListRequest, ctx: RequestContext[CapabilityServiceListRequest, CapabilityServiceListResponse], /) -> CapabilityServiceListResponse:
         """
-        List enumerates capabilities issued to a principal. Cursor-paginated.
+        List pages through a tenant's capabilities, each with its disposition:
+        every one of them, or those of a principal kind, a subject and the
+        dispositions asked for. Cursor-paginated.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -449,7 +451,9 @@ class CapabilityServiceClient(ConnectClient):
         use_get: bool = False,
     ) -> CapabilityServiceListResponse:
         """
-        List enumerates capabilities issued to a principal. Cursor-paginated.
+        List pages through a tenant's capabilities, each with its disposition:
+        every one of them, or those of a principal kind, a subject and the
+        dispositions asked for. Cursor-paginated.
         """
         return await self.execute_unary(
             request=request,
@@ -572,7 +576,9 @@ class CapabilityServiceSync(Protocol):
 
     def list(self, request: CapabilityServiceListRequest, ctx: RequestContext[CapabilityServiceListRequest, CapabilityServiceListResponse], /) -> CapabilityServiceListResponse:
         """
-        List enumerates capabilities issued to a principal. Cursor-paginated.
+        List pages through a tenant's capabilities, each with its disposition:
+        every one of them, or those of a principal kind, a subject and the
+        dispositions asked for. Cursor-paginated.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -900,7 +906,9 @@ class CapabilityServiceClientSync(ConnectClientSync):
         use_get: bool = False,
     ) -> CapabilityServiceListResponse:
         """
-        List enumerates capabilities issued to a principal. Cursor-paginated.
+        List pages through a tenant's capabilities, each with its disposition:
+        every one of them, or those of a principal kind, a subject and the
+        dispositions asked for. Cursor-paginated.
         """
         return self.execute_unary(
             request=request,

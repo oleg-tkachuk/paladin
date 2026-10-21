@@ -55,6 +55,8 @@ type Handler struct {
 	copies limes.BiscuitRevocationStore
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
 	copyUsage meter.CopyUsageReader
+	// records serves List; see WithRecords.
+	records limes.RecordLister
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
@@ -382,52 +384,6 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 	}
 	stashCapabilityInScope(ctx, id)
 	return &adminv1.CapabilityServiceRevokeResponse{}, nil
-}
-
-// List enumerates capabilities issued to a principal.
-func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRequest) (*adminv1.CapabilityServiceListResponse, error) {
-	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
-	if err != nil {
-		return nil, err
-	}
-
-	tenantID, err := uuid.Parse(req.GetTenantId())
-	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
-	}
-	// Same gate as Issue: ReadCapability in a tenant's own policy must not become a
-	// read of every other tenant's capabilities. Cedar above authorised the
-	// ACTION against the caller's own tenant, not against this one.
-	if tenantID != caller.TenantID && !spansTenants(caller) {
-		return nil, connect.NewError(connect.CodePermissionDenied, "listing another tenant's capabilities requires platform.admin or platform.capability-issuer")
-	}
-	// Capability records are RLS-isolated, so reading another tenant's rows
-	// needs the connection scoped to that tenant. Without this the admin
-	// console renders an empty list instead of an error — RLS filters.
-	ctx = auth.WithActingTenant(ctx, tenantID)
-	page, err := h.store.ListByPrincipal(ctx, limes.ListByPrincipalRequest{
-		TenantID:       tenantID,
-		PrincipalType:  protoToPrincipalKind(req.GetPrincipalKind()),
-		Subject:        req.GetSubject(),
-		IncludeExpired: req.GetIncludeExpired(),
-		IncludeRevoked: req.GetIncludeRevoked(),
-		Cursor:         req.GetPageToken(),
-		Limit:          int(req.GetPageSize()),
-	})
-	if err != nil {
-		// A page token the store cannot read is the caller's to fix
-		// (ErrInvalidRequest → InvalidArgument); anything else is Internal.
-		return nil, apiutil.MapError(err)
-	}
-
-	out := make([]*adminv1.Capability, 0, len(page.Items))
-	for i := range page.Items {
-		out = append(out, capabilityToProto(&page.Items[i]))
-	}
-	return &adminv1.CapabilityServiceListResponse{
-		Capabilities:  out,
-		NextPageToken: page.Next,
-	}, nil
 }
 
 // Get returns one capability as it is on record. Gated as List and GetUsage

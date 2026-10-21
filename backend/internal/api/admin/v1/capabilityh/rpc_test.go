@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
@@ -22,6 +24,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
 // Drives Issue / Revoke / List / GetUsage through the handler with the
@@ -43,8 +46,8 @@ type recordingStore struct {
 	revokeArgs *limes.RevokeRequest
 	revokeErr  error
 	revokeCtx  context.Context
-	listArgs   *limes.ListByPrincipalRequest
-	listOut    []limes.Capability
+	listArgs   *limes.ListRecordsRequest
+	listOut    []limes.RecordListing
 	listNext   string
 	listErr    error
 }
@@ -55,12 +58,13 @@ func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) e
 	return s.revokeErr
 }
 
-func (s *recordingStore) ListByPrincipal(_ context.Context, args limes.ListByPrincipalRequest) (limes.Page[limes.Capability], error) {
+// ListRecords makes recordingStore the handler's record lister too.
+func (s *recordingStore) ListRecords(_ context.Context, args limes.ListRecordsRequest) (limes.Page[limes.RecordListing], error) {
 	s.listArgs = &args
 	if s.listErr != nil {
-		return limes.Page[limes.Capability]{}, s.listErr
+		return limes.Page[limes.RecordListing]{}, s.listErr
 	}
-	return limes.Page[limes.Capability]{Items: s.listOut, Next: s.listNext}, nil
+	return limes.Page[limes.RecordListing]{Items: s.listOut, Next: s.listNext}, nil
 }
 
 // fakeUsage embeds the interface so only Get needs implementing; any other
@@ -338,34 +342,136 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
 	resp, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
-		TenantId:       tenant.String(),
-		PrincipalKind:  adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
-		Subject:        "agent-1",
-		IncludeExpired: true,
-		IncludeRevoked: true,
-		PageToken:      "cursor-1",
-		PageSize:       25,
+		TenantId:      tenant.String(),
+		PrincipalKind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
+		Subject:       "agent-1",
+		Dispositions: []adminv1.CapabilityDisposition{
+			adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_EXPIRED,
+			adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED,
+		},
+		SortOrder: commonv1.SortOrder_SORT_ORDER_DESC,
+		PageToken: "cursor-1",
+		PageSize:  25,
 	})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	if store.listArgs == nil {
-		t.Fatal("store.ListByPrincipal was not called")
+		t.Fatal("ListRecords was not called")
 	}
-	a := store.listArgs
-	if a.TenantID != tenant || a.Subject != "agent-1" || a.PrincipalType != limes.PrincipalTypeAgent {
-		t.Errorf("filters = %+v", a)
+	want := limes.ListRecordsRequest{
+		TenantID:      tenant,
+		PrincipalType: limes.PrincipalTypeAgent,
+		Subject:       "agent-1",
+		Dispositions:  []limes.RecordDisposition{limes.RecordDispositionExpired, limes.RecordDispositionRevoked},
+		Order:         limes.ListOrderDescending,
+		Cursor:        "cursor-1",
+		Limit:         25,
 	}
-	// Include flags widen the result set; dropping one silently hides revoked
-	// tokens from an operator auditing a leak.
-	if !a.IncludeExpired || !a.IncludeRevoked {
-		t.Errorf("include flags = %v / %v", a.IncludeExpired, a.IncludeRevoked)
-	}
-	if a.Cursor != "cursor-1" || a.Limit != 25 {
-		t.Errorf("paging = %q / %d", a.Cursor, a.Limit)
+	if diff := cmp.Diff(want, *store.listArgs); diff != "" {
+		t.Errorf("ListRecords request (-want +got):\n%s", diff)
 	}
 	if resp.GetNextPageToken() != "cursor-2" {
 		t.Errorf("next token = %q", resp.GetNextPageToken())
+	}
+}
+
+// A tenant alone lists every one of its capabilities' principals, oldest
+// first.
+func TestListATenantAlone(t *testing.T) {
+	store := &recordingStore{}
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
+
+	if _, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	a := store.listArgs
+	if a.PrincipalType != limes.PrincipalTypeUnspecified || a.Subject != "" || a.Order != limes.ListOrderAscending {
+		t.Errorf("a tenant alone listed %+v", a)
+	}
+}
+
+// A request naming no dispositions lists the active capabilities, and those
+// the deprecated include flags add, as List did before it took dispositions.
+func TestListDispositionsFromTheIncludeFlags(t *testing.T) {
+	active, expired, revoked := limes.RecordDispositionActive, limes.RecordDispositionExpired, limes.RecordDispositionRevoked
+	cases := map[string]struct {
+		expired, revoked bool
+		want             []limes.RecordDisposition
+	}{
+		"neither": {want: []limes.RecordDisposition{active}},
+		"expired": {expired: true, want: []limes.RecordDisposition{active, expired}},
+		"revoked": {revoked: true, want: []limes.RecordDisposition{active, revoked}},
+		"both":    {expired: true, revoked: true, want: []limes.RecordDisposition{active, expired, revoked}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			//nolint:staticcheck // SA1019: the deprecated flags are what this pins
+			got := listDispositions(&adminv1.CapabilityServiceListRequest{IncludeExpired: tc.expired, IncludeRevoked: tc.revoked})
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("dispositions = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	named := listDispositions(&adminv1.CapabilityServiceListRequest{
+		IncludeExpired: true, //nolint:staticcheck // SA1019: as above
+		Dispositions:   []adminv1.CapabilityDisposition{adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED},
+	})
+	if !slices.Equal(named, []limes.RecordDisposition{revoked}) {
+		t.Errorf("named dispositions = %v, want only revoked: they replace the flags", named)
+	}
+}
+
+// Each capability comes back with the disposition limes listed it under.
+func TestListGivesEachCapabilityItsDisposition(t *testing.T) {
+	dispositions := map[limes.RecordDisposition]adminv1.CapabilityDisposition{
+		limes.RecordDispositionActive:  adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_ACTIVE,
+		limes.RecordDispositionExpired: adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_EXPIRED,
+		limes.RecordDispositionRevoked: adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED,
+	}
+	store := &recordingStore{}
+	for d := range dispositions {
+		store.listOut = append(store.listOut, limes.RecordListing{
+			Record:      limes.Record{Capability: limes.Capability{ID: uuid.New()}},
+			Disposition: d,
+		})
+	}
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
+
+	resp, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(resp.GetCapabilities()) != len(store.listOut) {
+		t.Fatalf("listed %d, want %d", len(resp.GetCapabilities()), len(store.listOut))
+	}
+	for i, c := range resp.GetCapabilities() {
+		in := store.listOut[i]
+		if c.GetId() != in.Record.Capability.ID.String() || c.GetDisposition() != dispositions[in.Disposition] {
+			t.Errorf("capability %d = %s %v, want %s %v", i, c.GetId(), c.GetDisposition(), in.Record.Capability.ID, dispositions[in.Disposition])
+		}
+	}
+}
+
+// Every disposition maps both ways, so none is listed as unspecified.
+func TestDispositionsRoundTrip(t *testing.T) {
+	for _, d := range []limes.RecordDisposition{limes.RecordDispositionActive, limes.RecordDispositionExpired, limes.RecordDispositionRevoked} {
+		p := dispositionToProto(d)
+		if p == adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_UNSPECIFIED || protoToDisposition(p) != d {
+			t.Errorf("%q maps to %v and back to %q", d, p, protoToDisposition(p))
+		}
+	}
+}
+
+// Without a record lister List says so rather than list nothing, which
+// would read as "this tenant holds no capabilities".
+func TestListUnwiredIsUnavailable(t *testing.T) {
+	m := newMinter(t, &fakeStore{})
+	h := NewHandler(m.Issuer, m.Verifier, &fakeStore{}, nil, &allowAuthorizer{})
+
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
+	if codeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v, want Unavailable", codeOf(err))
 	}
 }
 

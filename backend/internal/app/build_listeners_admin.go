@@ -354,6 +354,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			deps.Capability.Usage, polEngine).
 			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Copies).
 			WithCopyUsage(deps.Capability.CopyUsage).
+			WithRecords(deps.Capability.Records).
 			WithCurrency(deps.Cfg.Capability.Currency)
 		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)
 	} else {
