@@ -18,9 +18,9 @@ import paladin
 from paladin import CredentialForm, NoBiscuitError, Op, biscuit_of, credential_of
 from paladin.admin.v1 import capability_service_pb2 as pb
 from paladin.admin.v1 import types_pb2 as admin_types
+from paladin.caveats import op_refusal
 from paladin.data.v1 import object_service_pb2, types_pb2
 from paladin.testing import DEFAULT_CAPABILITY_TTL, FakePaladin
-from paladin.testing import _op_refusal as op_refusal
 
 OP_NAMES = Path(__file__).resolve().parents[2] / "testdata" / "capability_op_names.json"
 JKT = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
