@@ -52,7 +52,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
 import { NoticeIcon } from "@/components/ui/Notice";
 import { noticeFromLabels } from "@/lib/notice";
@@ -255,13 +255,13 @@ export default function TenantsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden @2xl:table-cell">
+              <StaticHead className="hidden @4xl:table-cell">
                 Default bucket
-              </TableHead>
-              <TableHead className="hidden @md:table-cell">Labels</TableHead>
-              <TableHead className="hidden @5xl:table-cell w-70">
+              </StaticHead>
+              <StaticHead className="hidden @md:table-cell">Labels</StaticHead>
+              <StaticHead className="hidden @5xl:table-cell w-70">
                 Tenant ID
-              </TableHead>
+              </StaticHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -342,11 +342,14 @@ export default function TenantsPage() {
                       {notice && <NoticeIcon notice={notice} />}
                     </div>
                   </TableCell>
-                  {/* Free text: wraps rather than widening the table. */}
-                  <TableCell className="whitespace-normal break-words">
+                  {/* Free text, and the one column that gives: it takes what
+                      the others leave and truncates there, one line a row,
+                      with the whole name in the tooltip. */}
+                  <TableCell className="w-full max-w-0">
                     <Link
                       href={detailHref}
-                      className="hover:text-primary hover:underline"
+                      title={tenant.displayName || undefined}
+                      className="block truncate hover:text-primary hover:underline"
                     >
                       {tenant.displayName || (
                         <span className="text-muted-foreground italic">
@@ -355,12 +358,15 @@ export default function TenantsPage() {
                       )}
                     </Link>
                   </TableCell>
-                  <TableCell className="hidden @2xl:table-cell">
+                  <TableCell className="hidden @4xl:table-cell">
                     {db ? (
                       <Link
                         href={bucketHref(db.backendId, db.bucketId)}
                         title={tenant.defaultBucket}
-                        className={cn(T.codeSmall, "hover:text-primary")}
+                        className={cn(
+                          T.codeSmall,
+                          "block max-w-40 truncate hover:text-primary",
+                        )}
                       >
                         {db.bucketId}
                       </Link>
@@ -378,7 +384,8 @@ export default function TenantsPage() {
                           <Badge
                             key={k}
                             variant="outline"
-                            className={T.codeSmall}
+                            title={`${k}=${String(v)}`}
+                            className={cn(T.codeSmall, "max-w-40 truncate")}
                           >
                             {k}={String(v)}
                           </Badge>

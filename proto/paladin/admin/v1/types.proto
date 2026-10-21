@@ -394,6 +394,19 @@ message Collection {
   // with. Empty at creation means "public, max-age=31536000, immutable";
   // a private collection has none.
   string cache_control = 13 [(google.api.field_behavior) = IMMUTABLE];
+  // usage is what the collection holds now, read on GetCollection and
+  // ListCollections. Empty on the answer to a change.
+  CollectionUsage usage = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// CollectionUsage is what a collection holds: its available objects, not
+// those still uploading or in the trash.
+message CollectionUsage {
+  int64 object_count = 1;
+  int64 total_bytes = 2;
+  // last_committed_at is when the newest of them was stored; absent with
+  // none.
+  google.protobuf.Timestamp last_committed_at = 3;
 }
 
 // Who may read a collection's objects.

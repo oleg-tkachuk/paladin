@@ -30,7 +30,7 @@ import { ObjectTableRow } from "@/components/features/objects/ObjectTableRow";
 import { OBJECT_COLUMN_CLASS } from "@/components/features/objects/columns";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
 
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { OBJECT_ORDER } from "@/lib/objectOrder";
 import type { SortState } from "./_view";
 import { folderName } from "@/lib/objectFolders";
@@ -139,9 +139,9 @@ export function ObjectsTable({
             )}
             {/* Tags are a map, so there is no one value to sort them by. */}
             {visibleColumns.has("object_tag") && (
-              <TableHead className={OBJECT_COLUMN_CLASS.object_tag}>
+              <StaticHead className={OBJECT_COLUMN_CLASS.object_tag}>
                 Object Tags
-              </TableHead>
+              </StaticHead>
             )}
             {visibleColumns.has("mime") && (
               <SortableHead

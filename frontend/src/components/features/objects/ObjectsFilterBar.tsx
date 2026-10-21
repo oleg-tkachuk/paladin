@@ -134,7 +134,7 @@ export function ObjectsFilterBar({
           />
           <label
             htmlFor="recursive-toggle"
-            className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none"
+            className="text-xs font-medium text-muted-foreground cursor-pointer select-none"
           >
             Recursive
           </label>
@@ -183,9 +183,7 @@ export function ObjectsFilterBar({
         <Dropdown align="right" width="w-72">
           <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all">
             <DocumentIcon className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">
-              Views
-            </span>
+            <span className="text-xs font-medium">Views</span>
             <ChevronDownIcon className="w-3 h-3 ml-1 opacity-50" />
           </Dropdown.Trigger>
           <Dropdown.Menu className="p-2 space-y-1">
@@ -234,9 +232,7 @@ export function ObjectsFilterBar({
         <Dropdown align="right" width="w-56">
           <Dropdown.Trigger className="flex items-center gap-2 px-3 py-2 bg-foreground/5 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all">
             <EllipsisVerticalIcon className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">
-              Layout
-            </span>
+            <span className="text-xs font-medium">Layout</span>
           </Dropdown.Trigger>
           <Dropdown.Menu className="p-2 space-y-1">
             <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border mb-1">

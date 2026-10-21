@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useTableView } from "@/hooks/useTableView";
@@ -331,9 +331,9 @@ export default function M2MTokensPage() {
                 className={COL_RATE}
                 {...sortProps}
               />
-              <TableHead className={cn(COL_USAGE, "w-35")}>
+              <StaticHead className={cn(COL_USAGE, "w-35")}>
                 Usage (1m)
-              </TableHead>
+              </StaticHead>
               <SortableHead
                 label="Last used"
                 column="used"

@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { NoticeIcon } from "@/components/ui/Notice";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import {
   Table,
   TableBody,
@@ -181,9 +181,11 @@ export function BucketTable({
           <TableRow>
             {head("Bucket", "name")}
             {showBackend && head("Backend", "backend", "hidden @md:table-cell")}
-            <TableHead>Owner</TableHead>
-            <TableHead className="hidden @lg:table-cell">Shared with</TableHead>
-            <TableHead className="@md:w-40">State</TableHead>
+            <StaticHead>Owner</StaticHead>
+            <StaticHead className="hidden @lg:table-cell">
+              Shared with
+            </StaticHead>
+            <StaticHead className="@md:w-40">State</StaticHead>
             {rowActions && (
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>

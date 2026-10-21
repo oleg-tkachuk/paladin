@@ -23,6 +23,12 @@ const DENSITY_CLASS: Record<Density, string> = {
  * data-label labelCells gives it. A cell the page hides at that width stays
  * hidden, and a row spanning the table (an empty state) stays one block.
  */
+/**
+ * For a cell the page hides on narrow tables (`hidden @3xl:table-cell`) that
+ * still belongs on a phone's card, where the row has room for it again.
+ */
+export const SHOWN_IN_CARD = "@max-md:flex";
+
 const STACKED_CLASS = [
   "@max-md:[&_thead]:hidden",
   "@max-md:[&_tbody]:block @max-md:[&_tr]:block",

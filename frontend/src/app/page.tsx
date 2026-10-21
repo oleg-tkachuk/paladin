@@ -16,6 +16,7 @@ import { DispatcherStatsCard } from "@/components/DispatcherStatsCard";
 import { FirstRunChecklist } from "@/components/dashboard/FirstRunChecklist";
 import { MyOperationsWidget } from "@/components/dashboard/MyOperationsWidget";
 import { QuotaAlertsWidget } from "@/components/dashboard/QuotaAlertsWidget";
+import { QuietCards } from "@/components/dashboard/quiet";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
 import { StatusBar } from "@/components/ui/StatusBar";
@@ -108,14 +109,17 @@ export default function DashboardPage() {
         <>
           <FirstRunChecklist />
 
-          {/* ─── Attention widgets: recent activity, failed ops, budgets ── */}
-          <DashboardWidgets />
+          {/* ─── Attention widgets: recent activity, failed ops, budgets, my
+              operations, quotas. One with nothing to report is named on
+              the All clear line instead of taking a card. ─────────── */}
+          <QuietCards>
+            <DashboardWidgets />
 
-          {/* ─── Mine and the limits: my operations, quotas near their caps */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <MyOperationsWidget />
-            <QuotaAlertsWidget />
-          </div>
+            <div className="grid gap-4 empty:hidden md:auto-cols-fr md:grid-flow-col">
+              <MyOperationsWidget />
+              <QuotaAlertsWidget />
+            </div>
+          </QuietCards>
 
           {/* ─── Event-dispatcher backlog (SystemService.GetDispatcherStats) */}
           <DispatcherStatsCard />
