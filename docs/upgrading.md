@@ -73,7 +73,7 @@ here.
 
 
 
-## Unreleased — an audit entry records its request, not before and after
+## sdk/go/v0.103.0, sdk/python/v0.104.0 — an audit entry records its request, not before and after
 
 `AuditLogEntry.before_json` and `after_json` were documented as the
 resource's state before and after an action. Nothing recorded the state:
