@@ -69,7 +69,7 @@ func (q *Queries) DismissOperations(ctx context.Context, tenantID pgtype.UUID, i
 }
 
 const getOperation = `-- name: GetOperation :one
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at, operations.failed_count
 FROM operations
 WHERE id = $1 AND tenant_id = $2
 `
@@ -96,12 +96,13 @@ func (q *Queries) GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgt
 		&i.Operation.Progress,
 		&i.Operation.InitiatorSubject,
 		&i.Operation.DismissedAt,
+		&i.Operation.FailedCount,
 	)
 	return i, err
 }
 
 const listOperations = `-- name: ListOperations :many
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at, operations.failed_count
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
@@ -122,17 +123,21 @@ WHERE tenant_id = $1
   AND ($9::text[] IS NULL OR state::text = ANY($9::text[]))
   -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
   AND ($10::bool IS NULL OR (done_at IS NOT NULL) = $10::bool)
-  AND ($11::text IS NULL
-       OR coalesce(error_message, '') <> $11::text)
+  -- ` + "`" + `has_failures` + "`" + `, as operationh derives it: failed, or a batch that left
+  -- objects behind (096).
+  AND ($11::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = $11::bool)
+  AND ($12::text IS NULL
+       OR coalesce(error_message, '') <> $12::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($12::timestamptz IS NULL
-       OR created_at >= $12::timestamptz)
   AND ($13::timestamptz IS NULL
-       OR created_at <= $13::timestamptz)
+       OR created_at >= $13::timestamptz)
+  AND ($14::timestamptz IS NULL
+       OR created_at <= $14::timestamptz)
 ORDER BY id
-LIMIT $14
+LIMIT $15
 `
 
 type ListOperationsRow struct {
@@ -140,7 +145,7 @@ type ListOperationsRow struct {
 }
 
 // Oldest first. The cursor compares `>`, so paging walks forward in time.
-func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
+func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error) {
 	rows, err := q.db.Query(ctx, listOperations,
 		tenantID,
 		state,
@@ -152,6 +157,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 		errorCodeIn,
 		stateIn,
 		done,
+		hasFailures,
 		errorMessageNeq,
 		createdAtGte,
 		createdAtLte,
@@ -179,6 +185,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 			&i.Operation.Progress,
 			&i.Operation.InitiatorSubject,
 			&i.Operation.DismissedAt,
+			&i.Operation.FailedCount,
 		); err != nil {
 			return nil, err
 		}
@@ -191,7 +198,7 @@ func (q *Queries) ListOperations(ctx context.Context, tenantID pgtype.UUID, stat
 }
 
 const listOperationsDesc = `-- name: ListOperationsDesc :many
-SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at
+SELECT operations.id, operations.tenant_id, operations.type, operations.state, operations.metadata, operations.response, operations.error_code, operations.error_message, operations.created_at, operations.updated_at, operations.done_at, operations.progress, operations.initiator_subject, operations.dismissed_at, operations.failed_count
 FROM operations
 WHERE tenant_id = $1
   AND ($2::operation_state IS NULL OR state = $2::operation_state)
@@ -209,17 +216,21 @@ WHERE tenant_id = $1
   AND ($9::text[] IS NULL OR state::text = ANY($9::text[]))
   -- ` + "`" + `done` + "`" + ` is what the domain derives from done_at (operationh.handler).
   AND ($10::bool IS NULL OR (done_at IS NOT NULL) = $10::bool)
-  AND ($11::text IS NULL
-       OR coalesce(error_message, '') <> $11::text)
+  -- ` + "`" + `has_failures` + "`" + `, as operationh derives it: failed, or a batch that left
+  -- objects behind (096).
+  AND ($11::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = $11::bool)
+  AND ($12::text IS NULL
+       OR coalesce(error_message, '') <> $12::text)
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($12::timestamptz IS NULL
-       OR created_at >= $12::timestamptz)
   AND ($13::timestamptz IS NULL
-       OR created_at <= $13::timestamptz)
+       OR created_at >= $13::timestamptz)
+  AND ($14::timestamptz IS NULL
+       OR created_at <= $14::timestamptz)
 ORDER BY id DESC
-LIMIT $14
+LIMIT $15
 `
 
 type ListOperationsDescRow struct {
@@ -230,7 +241,7 @@ type ListOperationsDescRow struct {
 // rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 // the sort (`<` here, `>` above) or the second page walks away from the rows
 // the caller asked for, and sqlc cannot parameterise either.
-func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
+func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error) {
 	rows, err := q.db.Query(ctx, listOperationsDesc,
 		tenantID,
 		state,
@@ -242,6 +253,7 @@ func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, 
 		errorCodeIn,
 		stateIn,
 		done,
+		hasFailures,
 		errorMessageNeq,
 		createdAtGte,
 		createdAtLte,
@@ -269,6 +281,7 @@ func (q *Queries) ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, 
 			&i.Operation.Progress,
 			&i.Operation.InitiatorSubject,
 			&i.Operation.DismissedAt,
+			&i.Operation.FailedCount,
 		); err != nil {
 			return nil, err
 		}
@@ -421,6 +434,9 @@ SET state         = $2::operation_state,
     response      = COALESCE($3,      response),
     error_code    = COALESCE($4,    error_code),
     error_message = COALESCE($5, error_message),
+    -- The objects a batch's result says it could not act on (096); 0 for
+    -- every other transition.
+    failed_count  = $6::bigint,
     done_at       = CASE WHEN $2::text IN ('SUCCEEDED', 'FAILED', 'CANCELLED')
                          THEN now() ELSE done_at END,
     updated_at    = now()
@@ -439,13 +455,14 @@ WHERE id = $1
 // creation. Progress has its own column and query (ReportOperationProgress).
 // A finished operation stays finished: a cancel, or the stale reclaimer's
 // FAILED, is not overwritten by the runner's late progress or result.
-func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, response []byte, errorCode *string, errorMessage *string) (int64, error) {
+func (q *Queries) UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, response []byte, errorCode *string, errorMessage *string, failedCount int64) (int64, error) {
 	result, err := q.db.Exec(ctx, updateOperationState,
 		iD,
 		state,
 		response,
 		errorCode,
 		errorMessage,
+		failedCount,
 	)
 	if err != nil {
 		return 0, err

@@ -242,6 +242,58 @@ func TestPushdown_OperationsStateAndDone(t *testing.T) {
 	}
 }
 
+// has_failures is pushed: a failed operation and a batch that left objects
+// behind, never a clean one. Clean ones bracket them in id order, so a
+// two-row page read without the predicate starts with the wrong kind.
+func TestPushdown_OperationsWithFailures(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	tenantID, _ := mkTenant(t, ctx, pool, "shared")
+	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
+
+	const pageSize = 2
+	const clean = 4
+	insert := func(state string, failed int64) uuid.UUID {
+		id := uuid.Must(uuid.NewV7())
+		mustExec(t, ctx, pool,
+			`INSERT INTO operations (id, tenant_id, type, state, done_at, failed_count) VALUES ($1, $2, 'BatchDelete', $3, now(), $4)`,
+			id, tenantID, state, failed)
+		return id
+	}
+	for range clean / 2 {
+		insert("SUCCEEDED", 0)
+	}
+	failed := insert("FAILED", 0)
+	partial := insert("SUCCEEDED", 1)
+	for range clean / 2 {
+		insert("SUCCEEDED", 0)
+	}
+
+	got, _, err := repo.List(ctx, operationh.ListArgs{TenantID: tenantID, PageSize: pageSize, Filter: `has_failures`})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != pageSize || got[0].OperationID != failed || got[1].OperationID != partial {
+		t.Fatalf("got %+v, want the failed operation and the partial batch — the predicate was not pushed", got)
+	}
+	if got[1].FailedCount != 1 {
+		t.Errorf("partial batch's failed_count = %d, want 1", got[1].FailedCount)
+	}
+	clean2, _, err := repo.List(ctx, operationh.ListArgs{TenantID: tenantID, PageSize: clean, Filter: `!has_failures`})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, o := range clean2 {
+		if o.HasFailures() {
+			t.Errorf("!has_failures listed %s (state %s, failed %d)", o.OperationID, o.State, o.FailedCount)
+		}
+	}
+	if len(clean2) != clean {
+		t.Errorf("!has_failures listed %d, want %d", len(clean2), clean)
+	}
+}
+
 type operationRow struct {
 	state string
 	done  bool

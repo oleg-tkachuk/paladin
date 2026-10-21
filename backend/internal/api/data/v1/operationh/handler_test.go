@@ -49,7 +49,7 @@ func (f *fakeRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (Operation
 	return f.getFn(ctx, opID, tenantID)
 }
 
-func (f *fakeRepo) UpdateState(context.Context, uuid.UUID, State, []byte, string, string) error {
+func (f *fakeRepo) UpdateState(context.Context, uuid.UUID, State, []byte, int64, string, string) error {
 	return nil
 }
 

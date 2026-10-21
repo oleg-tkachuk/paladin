@@ -312,6 +312,7 @@ export default function OperationsPage() {
             : null
         }
         onClose={linked.close}
+        onRetried={() => void refresh()}
       />
     </>
   );
@@ -348,7 +349,11 @@ function OperationRow({
       {...row}
       {...linkedProps}
       aria-label={`${operationLabel(op)}, ${badge.label}`}
-      className={cn(row.className, status === "failed" && "bg-destructive/5")}
+      className={cn(
+        row.className,
+        status === "failed" && "bg-destructive/5",
+        status === "partial" && "bg-warning/5",
+      )}
     >
       {/* What it is and which one: the state is the icon's shape and colour,
           and the status column's words. */}

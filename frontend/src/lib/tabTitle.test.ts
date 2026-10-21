@@ -7,6 +7,9 @@ import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 import { FAILED_MARK, activitySignal, titleWithActivity } from "./tabTitle";
 
 const op = (state: OperationState) => create(OperationSchema, { state });
+// A batch that ran to its end leaving an object behind.
+const partial = () =>
+  create(OperationSchema, { state: OperationState.SUCCEEDED, failedCount: 1n });
 
 describe("titleWithActivity", () => {
   it.each([
@@ -25,6 +28,8 @@ describe("titleWithActivity", () => {
       [op(OperationState.FAILED)],
       `${FAILED_MARK} Users · Paladin`,
     ],
+    // Objects left behind are a failure to look at too.
+    ["a partly failed batch", [partial()], `${FAILED_MARK} Users · Paladin`],
     [
       "a failure while one runs",
       [op(OperationState.FAILED), op(OperationState.RUNNING)],
@@ -39,6 +44,7 @@ describe("activitySignal", () => {
   it.each([
     ["no operations", [], "idle"],
     ["only finished ones", [op(OperationState.SUCCEEDED)], "idle"],
+    ["a partly failed batch", [partial()], "failed"],
     ["one running", [op(OperationState.RUNNING)], "running"],
     ["one queued", [op(OperationState.PENDING)], "running"],
     [

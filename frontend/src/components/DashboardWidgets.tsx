@@ -40,6 +40,12 @@ import {
 import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
+import {
+  hasFailures,
+  operationStatus,
+  operationsFilter,
+  outcomeLine,
+} from "@/lib/operations";
 import type { TenantBudgetSummary } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { formatMoney, unitOf } from "@/lib/format/money";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
@@ -229,13 +235,11 @@ function FailedOpsWidget() {
         .listOperations(
           {
             page: { pageSize: 5, pageToken: "" },
-            // != "" rather than != null: the field is a string, and CEL
-            // strings are never null — the old expression matched every
-            // operation, leaving the client-side opError() filter below to do
-            // all the work while the server shipped a full page each time.
-            // The predicate now pushes into SQL, so these five are five
-            // failures rather than five rows that may contain none.
-            filter: 'error_message != ""',
+            // The failed view's own filter: an operation that failed, or a
+            // batch that left objects behind. It pushes into SQL, so these
+            // five are five failures rather than five rows that may contain
+            // none.
+            filter: operationsFilter("failed"),
             // Newest first: ascending, this widget showed the five OLDEST
             // failures — a three-day-old one stayed pinned there while
             // everything since went unseen.
@@ -243,7 +247,11 @@ function FailedOpsWidget() {
           },
           { signal },
         )
-        .then((res) => res.operations.filter((o) => !!opError(o)).slice(0, 5)),
+        .then((res) =>
+          res.operations
+            .filter((o) => hasFailures(operationStatus(o)))
+            .slice(0, 5),
+        ),
   });
   if (useQuiet(FAILED_OPS_CARD, !loading && !error && ops.length === 0)) {
     return null;
@@ -281,7 +289,9 @@ function FailedOpsWidget() {
               <li key={o.name} className="text-xs">
                 <p className="font-medium">{o.type || o.name}</p>
                 <p className="truncate font-mono text-sm text-destructive">
-                  {opError(o)}
+                  {/* A batch that left objects behind has no error of its
+                      own: what it could not do is its outcome. */}
+                  {opError(o) || outcomeLine(o)}
                 </p>
               </li>
             ))}

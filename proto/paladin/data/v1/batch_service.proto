@@ -60,6 +60,11 @@ message Operation {
   // retention of finished operations. Unset while it runs, and when finished
   // operations are kept indefinitely.
   google.protobuf.Timestamp expire_time = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // failed_count is how many objects a batch could not act on, each with its
+  // reason in the response's failures. A batch that runs to its end is
+  // SUCCEEDED whatever it could not do, so this is what tells one that left
+  // objects behind from a clean one; 0 for any other operation.
+  int64 failed_count = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ObjectSelector {

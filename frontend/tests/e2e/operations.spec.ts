@@ -101,7 +101,7 @@ test.describe("Background operations", () => {
     await page.goto("/");
     await page.waitForTimeout(5_000);
 
-    // The dashboard's failed-ops widget filters on error_message. A field the
+    // The dashboard's failed-ops widget filters on has_failures. A field the
     // CEL schema does not declare is rejected outright — the widget then shows
     // nothing, with the reason only visible in the console.
     expect(rejected, `filter rejected: ${rejected.join(" | ")}`).toEqual([]);

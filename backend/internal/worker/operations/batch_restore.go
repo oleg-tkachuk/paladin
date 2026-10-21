@@ -50,13 +50,9 @@ type BatchRestoreExecutor struct {
 
 // BatchRestoreResponse mirrors the BatchDelete shape.
 type BatchRestoreResponse struct {
-	Total     int `json:"total"`
-	Succeeded int `json:"succeeded"`
-	// AlreadyApplied counts the succeeded items this run found available
-	// already (see applied.go).
-	AlreadyApplied int                   `json:"already_applied,omitempty"`
-	Failed         int                   `json:"failed"`
-	Failures       []BatchRestoreFailure `json:"failures,omitempty"`
+	// AlreadyApplied counts the items this run found available already.
+	BatchCounts
+	Failures []BatchRestoreFailure `json:"failures,omitempty"`
 }
 
 type BatchRestoreFailure struct {
@@ -82,7 +78,7 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operat
 			args.TenantID, op.TenantID)
 	}
 
-	resp := BatchRestoreResponse{Total: len(args.ObjectIDs)}
+	resp := BatchRestoreResponse{BatchCounts: BatchCounts{Total: len(args.ObjectIDs)}}
 
 	// One batched read for existence checks (DELETED rows included —
 	// the query has no state filter). Missing ids land in the failure
@@ -103,7 +99,7 @@ func (e *BatchRestoreExecutor) Execute(ctx context.Context, op operationh.Operat
 			resp.Failed++
 			resp.Failures = append(resp.Failures, BatchRestoreFailure{
 				ObjectID: objectID.String(),
-				Reason:   "not found",
+				Reason:   errObjectNotFound.Error(),
 			})
 			continue
 		}

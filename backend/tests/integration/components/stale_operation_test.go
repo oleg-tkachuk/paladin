@@ -267,7 +267,7 @@ func TestOperationStateWritesKeepTerminalStates(t *testing.T) {
 		if err := repo.ReportProgress(ctx, tc.id, progress); !errors.Is(err, operationh.ErrOperationFinished) {
 			t.Errorf("%s: late progress returned %v, want ErrOperationFinished", name, err)
 		}
-		if err := repo.UpdateState(ctx, tc.id, operationh.StateSucceeded, []byte(`{}`), "", ""); !errors.Is(err, operationh.ErrOperationFinished) {
+		if err := repo.UpdateState(ctx, tc.id, operationh.StateSucceeded, []byte(`{}`), 0, "", ""); !errors.Is(err, operationh.ErrOperationFinished) {
 			t.Errorf("%s: late result returned %v, want ErrOperationFinished", name, err)
 		}
 		if got := stateOf(tc.id); got != tc.want {
@@ -279,7 +279,7 @@ func TestOperationStateWritesKeepTerminalStates(t *testing.T) {
 	if err := repo.ReportProgress(ctx, live, progress); err != nil {
 		t.Fatalf("progress on a running operation: %v", err)
 	}
-	if err := repo.UpdateState(ctx, live, operationh.StateSucceeded, []byte(`{}`), "", ""); err != nil {
+	if err := repo.UpdateState(ctx, live, operationh.StateSucceeded, []byte(`{}`), 0, "", ""); err != nil {
 		t.Fatalf("result on a running operation: %v", err)
 	}
 	if got := stateOf(live); got != "SUCCEEDED" {

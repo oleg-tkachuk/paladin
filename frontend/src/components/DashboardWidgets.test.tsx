@@ -3,6 +3,10 @@ import { onlineManager } from "@tanstack/react-query";
 import { render, screen } from "@/test/utils";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { CAPABILITIES_DOCS_URL } from "@/constants";
+import { create, fromJson } from "@bufbuild/protobuf";
+import { anyPack, StructSchema } from "@bufbuild/protobuf/wkt";
+import { OperationSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
+import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 
 const h = vi.hoisted(() => ({
   audit: vi.fn(),
@@ -57,6 +61,45 @@ describe("DashboardWidgets", () => {
     for (const text of EMPTY_STATES) {
       expect(screen.queryByText(text)).toBeNull();
     }
+  });
+
+  // A batch that ran to its end leaving objects behind is a failure: asked
+  // for by the failed view's filter, and shown by what it could not do.
+  it("lists a batch that left objects behind among the failures", async () => {
+    h.audit.mockResolvedValue({ entries: [] });
+    h.budget.mockResolvedValue({ summaries: [] });
+    h.ops.mockResolvedValue({
+      operations: [
+        create(OperationSchema, {
+          name: "operations/p-1",
+          type: "BatchDelete",
+          state: OperationState.SUCCEEDED,
+          failedCount: 1n,
+          result: {
+            case: "response",
+            value: anyPack(
+              StructSchema,
+              fromJson(StructSchema, { total: 2, succeeded: 1, failed: 1 }),
+            ),
+          },
+        }),
+        create(OperationSchema, {
+          name: "operations/c-1",
+          type: "BatchCopy",
+          state: OperationState.SUCCEEDED,
+        }),
+      ],
+    });
+
+    render(<DashboardWidgets />);
+
+    expect(await screen.findByText("BatchDelete")).toBeInTheDocument();
+    expect(screen.getByText(/1 failed/)).toBeInTheDocument();
+    expect(screen.queryByText("BatchCopy")).toBeNull();
+    expect(h.ops).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: "has_failures" }),
+      expect.anything(),
+    );
   });
 
   it("says a widget is unavailable when its query fails", async () => {

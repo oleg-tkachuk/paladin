@@ -11,6 +11,7 @@ import {
   ArrowPathIcon,
   CheckCircleIcon,
   ClockIcon,
+  ExclamationTriangleIcon,
   NoSymbolIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
@@ -19,6 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { errorMessage } from "@/hooks/errorContract";
+import { useNotification } from "@/components/ui/Notification";
+import { batchClient } from "@/lib/connect/client";
+import { selectorBatches } from "@/lib/batchSelector";
+import { retryRequest, type RetryRequest } from "@/lib/operationRetry";
 import {
   RecordBlock,
   RecordDialog,
@@ -53,6 +58,7 @@ export const STATUS_ICON = {
   pending: ClockIcon,
   running: ArrowPathIcon,
   succeeded: CheckCircleIcon,
+  partial: ExclamationTriangleIcon,
   failed: XCircleIcon,
   cancelled: NoSymbolIcon,
 } as const;
@@ -60,6 +66,7 @@ export const STATUS_TINT: Record<OpStatus, string> = {
   pending: "text-muted-foreground",
   running: "text-warning",
   succeeded: "text-success",
+  partial: "text-warning",
   failed: "text-destructive",
   cancelled: "text-muted-foreground",
 };
@@ -201,9 +208,12 @@ export function OperationRecord({
 export function OperationPanel({
   op,
   onClose,
+  onRetried,
 }: {
   op: Operation | null;
   onClose: () => void;
+  /** Called once a retry of op's failures has started. */
+  onRetried?: () => void;
 }) {
   return (
     <DetailPanel
@@ -212,9 +222,97 @@ export function OperationPanel({
       rowId={op?.name}
       title={op ? operationLabel(op) : "Operation"}
       identifier={op?.name}
+      footer={op ? <RetryFailedButton op={op} onRetried={onRetried} /> : null}
     >
       {op ? <OperationFields op={op} /> : null}
     </DetailPanel>
+  );
+}
+
+/** Starts the batch a retry asks for, as one operation per selector's worth. */
+async function startRetry(req: RetryRequest): Promise<void> {
+  const items = req.names.map((name) => ({ name, collection: req.parent }));
+  await Promise.all(
+    selectorBatches(items).map(({ names }) =>
+      req.kind === "delete"
+        ? batchClient.batchDeleteObjects({
+            parent: req.parent,
+            selector: { names, filter: "" },
+            permanent: req.permanent,
+          })
+        : batchClient.batchRestoreObjects({
+            parent: req.parent,
+            selector: { names, filter: "" },
+          }),
+    ),
+  );
+}
+
+/**
+ * Starts op again for the objects it could not act on, once asked: a new
+ * operation of the same kind over the same collection. Nothing for an
+ * operation that left nothing behind, or whose request a retry cannot rebuild
+ * (retryRequest).
+ */
+export function RetryFailedButton({
+  op,
+  onRetried,
+}: {
+  op: Operation;
+  onRetried?: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const { showNotification } = useNotification();
+  const req = retryRequest(op);
+  if (!req) return null;
+  const count = req.names.length;
+  const objects = count === 1 ? "1 object" : `${count} objects`;
+  const permanent = req.kind === "delete" && req.permanent;
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      await startRetry(req);
+      setConfirming(false);
+      showNotification({
+        type: "success",
+        title: "Retry started",
+        message: `${operationLabel(op)} of ${objects} runs again.`,
+      });
+      onRetried?.();
+    } catch (err) {
+      showNotification({
+        type: "error",
+        title: "Retry failed to start",
+        message: errorMessage(err, "The retry could not start"),
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
+  return (
+    <>
+      <Button size="sm" onClick={() => setConfirming(true)} disabled={retrying}>
+        <ArrowPathIcon className="size-4" />
+        Retry failed
+      </Button>
+      <ConfirmModal
+        isOpen={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={retry}
+        title={`Retry ${objects}?`}
+        message={`${operationLabel(op)} starts again for the ${objects} it could not act on, as a new operation.`}
+        warning={
+          permanent
+            ? "These objects are deleted for good: there is no trash to restore them from."
+            : undefined
+        }
+        type={req.kind === "delete" ? "danger" : "warning"}
+        typeToConfirm={permanent ? "delete" : undefined}
+        confirmText="Retry"
+        loading={retrying}
+      />
+    </>
   );
 }
 
