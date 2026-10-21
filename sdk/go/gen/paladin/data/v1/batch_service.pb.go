@@ -59,7 +59,12 @@ type Operation struct {
 	// When the housekeeping reaper removes it: done_at plus the configured
 	// retention of finished operations. Unset while it runs, and when finished
 	// operations are kept indefinitely.
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// failed_count is how many objects a batch could not act on, each with its
+	// reason in the response's failures. A batch that runs to its end is
+	// SUCCEEDED whatever it could not do, so this is what tells one that left
+	// objects behind from a clean one; 0 for any other operation.
+	FailedCount   int64 `protobuf:"varint,15,opt,name=failed_count,json=failedCount,proto3" json:"failed_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -201,6 +206,13 @@ func (x *Operation) GetExpireTime() *timestamppb.Timestamp {
 		return x.ExpireTime
 	}
 	return nil
+}
+
+func (x *Operation) GetFailedCount() int64 {
+	if x != nil {
+		return x.FailedCount
+	}
+	return 0
 }
 
 type isOperation_Result interface {
@@ -546,7 +558,7 @@ var File_paladin_data_v1_batch_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\n" +
-	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a!paladin/common/v1/operation.proto\"\xd9\x05\n" +
+	"#paladin/data/v1/batch_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a!paladin/common/v1/operation.proto\"\x81\x06\n" +
 	"\tOperation\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x120\n" +
@@ -565,7 +577,8 @@ const file_paladin_data_v1_batch_service_proto_rawDesc = "" +
 	"\x11initiator_subject\x18\f \x01(\tB\x03\xe0A\x03R\x10initiatorSubject\x12B\n" +
 	"\fdismissed_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vdismissedAt\x12@\n" +
 	"\vexpire_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +
-	"expireTimeB\b\n" +
+	"expireTime\x12&\n" +
+	"\ffailed_count\x18\x0f \x01(\x03B\x03\xe0A\x03R\vfailedCountB\b\n" +
 	"\x06result\"H\n" +
 	"\x0eObjectSelector\x12\x1e\n" +
 	"\x05names\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\x10dR\x05names\x12\x16\n" +

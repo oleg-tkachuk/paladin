@@ -52,8 +52,12 @@ type Operation struct {
 	// Progress is the latest {processed, total} snapshot the worker reported,
 	// JSON; nil until the first report. It is what the API calls metadata
 	// (AIP-151: an operation's metadata is its progress).
-	Progress     []byte
-	Response     []byte
+	Progress []byte
+	Response []byte
+	// FailedCount is how many objects a batch could not act on: one that
+	// runs to its end succeeds whatever it could not do, so this is what
+	// tells one that left objects behind from a clean one.
+	FailedCount  int64
 	ErrorCode    string
 	ErrorMessage string
 	CreatedAt    time.Time
@@ -65,8 +69,9 @@ type Repository interface {
 	Create(ctx context.Context, op Operation) error
 	Get(ctx context.Context, opID, tenantID uuid.UUID) (Operation, error)
 	// UpdateState moves a PENDING or RUNNING operation to newState. It never
-	// touches the arguments (Metadata) or Progress.
-	UpdateState(ctx context.Context, opID uuid.UUID, newState State, response []byte, errCode, errMsg string) error
+	// touches the arguments (Metadata) or Progress. failedCount is how many
+	// objects a batch's result says it could not act on; 0 for any other.
+	UpdateState(ctx context.Context, opID uuid.UUID, newState State, response []byte, failedCount int64, errCode, errMsg string) error
 	// ReportProgress records a RUNNING operation's latest progress snapshot;
 	// ErrOperationFinished once it is no longer RUNNING.
 	ReportProgress(ctx context.Context, opID uuid.UUID, progress []byte) error
@@ -238,6 +243,13 @@ func (h *Handler) ListOperations(ctx context.Context, in ListInput) ([]Operation
 	return page, next, nil
 }
 
+// HasFailures reports whether o failed, or is a batch that could not act on
+// some of its objects: what the filter's has_failures and the list's
+// pushdown of it both mean.
+func (o Operation) HasFailures() bool {
+	return o.State == StateFailed || o.FailedCount > 0
+}
+
 // operationRow projects an Operation onto the variables OperationSchema
 // declares. `done` is derived from DoneAt rather than stored, matching what
 // the proto reports.
@@ -250,6 +262,8 @@ func operationRow(o Operation) map[string]any {
 		"tenant_id":     o.TenantID.String(),
 		"error_code":    o.ErrorCode,
 		"error_message": o.ErrorMessage,
+		"failed_count":  o.FailedCount,
+		"has_failures":  o.HasFailures(),
 		"created_at":    o.CreatedAt,
 		"updated_at":    o.UpdatedAt,
 	}

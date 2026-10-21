@@ -344,6 +344,7 @@ function OpRow({
         row.className,
         "rounded-lg border border-border bg-background/40 p-3 text-sm",
         failed && "border-destructive/30",
+        status === "partial" && "border-warning/30",
       )}
     >
       <div className="flex items-start gap-2.5">

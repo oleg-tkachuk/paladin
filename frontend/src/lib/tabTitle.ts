@@ -3,9 +3,12 @@
 // Pure, so the shell and its tests agree on the words.
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 
-import { isActive, operationStatus } from "./operations";
+import { hasFailures, isActive, operationStatus } from "./operations";
 
-/** Set before the title while one of the user's operations has failed. */
+/**
+ * Set before the title while one of the user's operations has failed, or
+ * left objects behind.
+ */
 export const FAILED_MARK = "⚠";
 
 /** What the tab's icon shows: a failure outranks work still running. */
@@ -13,7 +16,7 @@ export type ActivitySignal = "idle" | "running" | "failed";
 
 export function activitySignal(ops: readonly Operation[]): ActivitySignal {
   const statuses = ops.map(operationStatus);
-  if (statuses.includes("failed")) return "failed";
+  if (statuses.some(hasFailures)) return "failed";
   return statuses.some(isActive) ? "running" : "idle";
 }
 
@@ -23,7 +26,7 @@ export function titleWithActivity(
 ): string {
   const statuses = ops.map(operationStatus);
   const running = statuses.filter(isActive).length;
-  const failed = statuses.includes("failed");
+  const failed = statuses.some(hasFailures);
   const parts = [
     failed ? FAILED_MARK : "",
     running > 0 ? `(${running})` : "",

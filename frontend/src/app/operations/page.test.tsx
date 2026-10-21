@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
   dismiss: vi.fn(),
 }));
 
+vi.mock("@/components/ui/Notification", () => ({
+  useNotification: () => ({ showNotification: vi.fn() }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/operations",
   useSearchParams: () => new URLSearchParams(),
@@ -119,6 +122,17 @@ describe("OperationsPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tenant" }));
     expect(screen.queryByRole("button", { name: /^Clear/ })).toBeNull();
     expect(screen.queryByRole("switch", { name: "Show cleared" })).toBeNull();
+  });
+
+  // A batch that ran to its end leaving objects behind reads as partly
+  // failed, not done, in its row's name too.
+  it("marks a batch that left objects behind as partly failed", () => {
+    h.operations = [create(OperationSchema, { ...finished, failedCount: 1n })];
+    render(<OperationsPage />);
+    expect(
+      screen.getByRole("row", { name: /Move to trash, partly failed/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("partly failed")).toBeInTheDocument();
   });
 
   it("marks a cleared operation and offers no second clear", () => {

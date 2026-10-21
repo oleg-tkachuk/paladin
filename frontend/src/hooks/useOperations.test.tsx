@@ -62,9 +62,8 @@ describe("useOperations", () => {
     h.listOperations.mockReset().mockResolvedValue(page([]));
     renderHook(() => useOperations({ ...base, view: "failed" }), { wrapper });
     await waitFor(() => expect(h.listOperations).toHaveBeenCalled());
-    expect(h.listOperations.mock.calls[0][0].filter).toBe(
-      'state in ["FAILED"]',
-    );
+    // Failed, or a batch that left objects behind: pushed into the query.
+    expect(h.listOperations.mock.calls[0][0].filter).toBe("has_failures");
   });
 
   it("asks for the cleared only of the user's own list", async () => {

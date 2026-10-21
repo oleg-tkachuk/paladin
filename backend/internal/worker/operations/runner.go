@@ -200,7 +200,7 @@ func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 	writeCtx, cancel := terminalCtx(ctx)
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
-		operationh.StateSucceeded, response, "", ""); err != nil {
+		operationh.StateSucceeded, response, failedCount(response), "", ""); err != nil {
 		r.logTerminalWrite(logger, operationh.StateSucceeded, err)
 	}
 }
@@ -288,7 +288,7 @@ func (r *Runner) markFailed(ctx context.Context, op operationh.Operation, code, 
 	writeCtx, cancel := terminalCtx(ctx)
 	defer cancel()
 	if err := r.Repo.UpdateState(writeCtx, op.OperationID,
-		operationh.StateFailed, resp, code, msg); err != nil {
+		operationh.StateFailed, resp, 0, code, msg); err != nil {
 		r.logTerminalWrite(r.log().With(zap.String("operation_id", op.OperationID.String())),
 			operationh.StateFailed, err)
 	}

@@ -196,8 +196,14 @@ var OperationSchema = &Schema{
 		"tenant_id":     cel.StringType,
 		"error_code":    cel.StringType,
 		"error_message": cel.StringType,
-		"created_at":    cel.TimestampType,
-		"updated_at":    cel.TimestampType,
+		// How many objects a batch could not act on; one that ran to its
+		// end succeeded whatever it left behind.
+		"failed_count": cel.IntType,
+		// has_failures is an operation that failed, or a batch that could
+		// not act on some objects: what a list of failures shows.
+		"has_failures": cel.BoolType,
+		"created_at":   cel.TimestampType,
+		"updated_at":   cel.TimestampType,
 	},
 	enums: map[string][]string{fieldState: operationStates},
 }

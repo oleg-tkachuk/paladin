@@ -489,12 +489,12 @@ type Querier interface {
 	// still checked against every row.
 	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
-	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
+	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
 	// Newest first, for a caller showing current activity. A separate query
 	// rather than a CASE in the ORDER BY: the cursor comparison has to flip with
 	// the sort (`<` here, `>` above) or the second page walks away from the rows
 	// the caller asked for, and sqlc cannot parameterise either.
-	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error)
+	ListOperationsDesc(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsDescRow, error)
 	// Worker query for the delete path. Picks 'deleting' rows plus
 	// 'deletion_failed' rows whose retry budget hasn't run out.
 	ListPendingBucketDeletions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketDeletionsRow, error)
@@ -970,7 +970,7 @@ type Querier interface {
 	// creation. Progress has its own column and query (ReportOperationProgress).
 	// A finished operation stays finished: a cancel, or the stale reclaimer's
 	// FAILED, is not overwritten by the runner's late progress or result.
-	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, response []byte, errorCode *string, errorMessage *string) (int64, error)
+	UpdateOperationState(ctx context.Context, iD pgtype.UUID, state OperationState, response []byte, errorCode *string, errorMessage *string, failedCount int64) (int64, error)
 	UpdateStorageBackend(ctx context.Context, displayName *string, endpoint *string, publicEndpoint *string, region *string, forcePathStyle *bool, credentialsSecretRef *string, sseType *string, sseKeyID *string, eventsEnabled *bool, eventsTarget *string, eventsQueueUrl *string, eventsPollIntervalMs *int64, cedarPolicy *string, name string, expectedVersion int64) (int64, error)
 	// A tenant in the trash takes no changes (middleware.TenantFreeze); this is
 	// the same rule where the row is written, for a caller the freeze could not

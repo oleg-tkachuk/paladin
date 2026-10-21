@@ -32,7 +32,7 @@ func (r *recordingRepo) ClaimNext(context.Context) (operationh.Operation, error)
 	return op, nil
 }
 
-func (r *recordingRepo) UpdateState(ctx context.Context, _ uuid.UUID, st operationh.State, _ []byte, _, _ string) error {
+func (r *recordingRepo) UpdateState(ctx context.Context, _ uuid.UUID, st operationh.State, _ []byte, _ int64, _, _ string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

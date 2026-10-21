@@ -45,7 +45,7 @@ func (m *memRepo) Get(_ context.Context, id uuid.UUID, _ uuid.UUID) (operationh.
 	}
 	return operationh.Operation{}, errors.New("not found")
 }
-func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operationh.State, resp []byte, code, msg string) error {
+func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operationh.State, resp []byte, failed int64, code, msg string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	op, ok := m.final[id]
@@ -54,6 +54,7 @@ func (m *memRepo) UpdateState(_ context.Context, id uuid.UUID, ns operationh.Sta
 	}
 	op.State = ns
 	op.Response = resp
+	op.FailedCount = failed
 	op.ErrorCode = code
 	op.ErrorMessage = msg
 	m.final[id] = op
@@ -239,5 +240,31 @@ func TestRunner_ProgressIsReportedApartFromState(t *testing.T) {
 	}
 	if got.State != operationh.StateSucceeded {
 		t.Errorf("state = %s, want SUCCEEDED", got.State)
+	}
+}
+
+// A batch that runs to its end succeeds whatever it could not do: the runner
+// records the objects its response says it could not act on beside it, and
+// a response that is no batch's counts none.
+func TestRunner_RecordsTheObjectsABatchCouldNotActOn(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		response string
+		want     int64
+	}{
+		"a batch with failures": {`{"total":2,"succeeded":1,"failed":1}`, 1},
+		"a clean batch":         {`{"total":2,"succeeded":2,"failed":0}`, 0},
+		"not a batch":           {`{"ok":true}`, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := newMemRepo()
+			r := &Runner{Repo: repo, Executors: map[string]Executor{"X": &stubExecutor{response: []byte(tc.response)}}, Interval: time.Millisecond}
+			id := uuid.New()
+			repo.enqueue(operationh.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
+			r.drain(context.Background())
+			if got := repo.final[id]; got.State != operationh.StateSucceeded || got.FailedCount != tc.want {
+				t.Errorf("state %v, failed %d; want SUCCEEDED, %d", got.State, got.FailedCount, tc.want)
+			}
+		})
 	}
 }

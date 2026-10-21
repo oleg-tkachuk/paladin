@@ -42,6 +42,7 @@ const VERB: Record<OpStatus, string> = {
   pending: "is queued",
   running: "is running",
   succeeded: "finished",
+  partial: "finished with failures",
   failed: "failed",
   cancelled: "was cancelled",
 };
