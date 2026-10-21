@@ -84,7 +84,7 @@ here.
 
 
 
-## Unreleased — an API token can be read by its name
+## sdk/go/v0.104.0 — an API token can be read by its name
 
 `APITokenService.Get` reads one token's metadata by its resource name,
 `tenants/{tenant}/apiTokens/{id}`, under the same authorisation as `List`.
