@@ -6,14 +6,17 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
 )
@@ -140,5 +143,157 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 				t.Errorf("the server answers %v, the fake %v", server.GetBiscuitStatus(), faked.GetBiscuitStatus())
 			}
 		})
+	}
+}
+
+// listScenario is one principal the fidelity test issues a capability to,
+// and what becomes of it.
+type listScenario struct {
+	kind    adminv1.PrincipalKind
+	subject string
+	ttl     int64
+	revoke  bool
+}
+
+// expiringTTLSeconds is the lifetime of the capability the listing test
+// waits out, so it lists one expired.
+const expiringTTLSeconds = 1
+
+// The SDK's fake lists a tenant's capabilities as this handler does over
+// limes's own record listing: the same capabilities in the same order, each
+// under the same disposition, for every filter, order and page, and the same
+// refusals of a page token it did not hand out.
+func TestTheSDKFakeListsAsTheServerDoes(t *testing.T) {
+	agent, user := adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, adminv1.PrincipalKind_PRINCIPAL_KIND_USER
+	scenario := []listScenario{
+		{kind: agent, subject: "agent:one", ttl: 300},
+		{kind: agent, subject: "agent:two", ttl: 300, revoke: true},
+		{kind: user, subject: "user:one", ttl: 300},
+		{kind: user, subject: "user:gone", ttl: expiringTTLSeconds},
+		{kind: agent, subject: "agent:one", ttl: 300},
+	}
+	srv := paladintest.New(t)
+	fake := srv.Connect().Admin.Capability
+	m := captest.NewMinter(t)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, &allowAuthorizer{}).WithRecords(memstore.NewCensus(m.Store))
+	tenant := srv.Tenant()
+	var expiry time.Time
+	for _, p := range scenario {
+		req := &adminv1.CapabilityServiceIssueRequest{
+			Subject:    &adminv1.CapabilityPrincipal{Kind: p.kind, TenantId: tenant, Subject: p.subject},
+			Audience:   []string{"paladin-data"},
+			TtlSeconds: p.ttl,
+			Caveats:    openCaveats(limes.OpGet),
+		}
+		server, err := h.Issue(adminCtx(), proto.CloneOf(req))
+		if err != nil {
+			t.Fatalf("server Issue %s: %v", p.subject, err)
+		}
+		faked, err := fake.Issue(context.Background(), proto.CloneOf(req))
+		if err != nil {
+			t.Fatalf("fake Issue %s: %v", p.subject, err)
+		}
+		for _, c := range []*adminv1.Capability{server.GetCapability(), faked.GetCapability()} {
+			if e := c.GetExpiresAt().AsTime(); p.ttl == expiringTTLSeconds && e.After(expiry) {
+				expiry = e
+			}
+		}
+		if p.revoke {
+			if _, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: server.GetCapability().GetId()}); err != nil {
+				t.Fatalf("server Revoke: %v", err)
+			}
+			if _, err := fake.Revoke(context.Background(), &adminv1.CapabilityServiceRevokeRequest{Id: faked.GetCapability().GetId()}); err != nil {
+				t.Fatalf("fake Revoke: %v", err)
+			}
+		}
+	}
+	time.Sleep(time.Until(expiry) + time.Millisecond)
+
+	all := []adminv1.CapabilityDisposition{
+		adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_ACTIVE,
+		adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_EXPIRED,
+		adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED,
+	}
+	cases := map[string]*adminv1.CapabilityServiceListRequest{
+		"the tenant alone":                {},
+		"every disposition, newest first": {Dispositions: all, SortOrder: commonv1.SortOrder_SORT_ORDER_DESC},
+		"a kind":                          {PrincipalKind: agent, Dispositions: all},
+		"a subject":                       {Subject: "agent:one", Dispositions: all},
+		"revoked":                         {Dispositions: all[2:]},
+		"the include flags":               {IncludeExpired: true, IncludeRevoked: true},
+		"a page at a time":                {Dispositions: all, PageSize: 2},
+		"a page at a time, newest first":  {Dispositions: all, PageSize: 2, SortOrder: commonv1.SortOrder_SORT_ORDER_DESC},
+	}
+	for name, req := range cases {
+		t.Run(name, func(t *testing.T) {
+			req.TenantId = tenant
+			server := listAll(t, func(r *adminv1.CapabilityServiceListRequest) (*adminv1.CapabilityServiceListResponse, error) {
+				return h.List(adminCtx(), r)
+			}, req)
+			faked := listAll(t, func(r *adminv1.CapabilityServiceListRequest) (*adminv1.CapabilityServiceListResponse, error) {
+				return fake.List(context.Background(), r)
+			}, req)
+			if diff := cmp.Diff(server, faked); diff != "" {
+				t.Errorf("listings differ (-server +fake):\n%s", diff)
+			}
+		})
+	}
+
+	// A page token for the other order, and one neither handed out.
+	for name, order := range map[string]commonv1.SortOrder{"ascending": commonv1.SortOrder_SORT_ORDER_ASC, "descending": commonv1.SortOrder_SORT_ORDER_DESC} {
+		t.Run("a token of the other order, "+name, func(t *testing.T) {
+			first := &adminv1.CapabilityServiceListRequest{TenantId: tenant, Dispositions: all, PageSize: 1, SortOrder: order}
+			serverPage, err := h.List(adminCtx(), proto.CloneOf(first))
+			if err != nil {
+				t.Fatal(err)
+			}
+			fakePage, err := fake.List(context.Background(), proto.CloneOf(first))
+			if err != nil {
+				t.Fatal(err)
+			}
+			other := commonv1.SortOrder_SORT_ORDER_DESC
+			if order == other {
+				other = commonv1.SortOrder_SORT_ORDER_ASC
+			}
+			_, serverErr := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: tenant, SortOrder: other, PageToken: serverPage.GetNextPageToken()})
+			_, fakeErr := fake.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: tenant, SortOrder: other, PageToken: fakePage.GetNextPageToken()})
+			if connect.CodeOf(serverErr) != connect.CodeInvalidArgument || connect.CodeOf(fakeErr) != connect.CodeInvalidArgument {
+				t.Errorf("the server answers %v, the fake %v, want InvalidArgument", serverErr, fakeErr)
+			}
+		})
+	}
+	_, serverErr := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: tenant, PageToken: "garbage"})
+	_, fakeErr := fake.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: tenant, PageToken: "garbage"})
+	if connect.CodeOf(serverErr) != connect.CodeInvalidArgument || connect.CodeOf(fakeErr) != connect.CodeInvalidArgument {
+		t.Errorf("a token neither handed out: the server answers %v, the fake %v, want InvalidArgument", serverErr, fakeErr)
+	}
+}
+
+// listedCapability is what the fidelity test compares of a listed
+// capability: the ids differ between the two, the rest must not.
+type listedCapability struct {
+	Kind        adminv1.PrincipalKind
+	Subject     string
+	Disposition adminv1.CapabilityDisposition
+}
+
+// listAll is every page of req, as list answers it.
+func listAll(t *testing.T, list func(*adminv1.CapabilityServiceListRequest) (*adminv1.CapabilityServiceListResponse, error), req *adminv1.CapabilityServiceListRequest) []listedCapability {
+	t.Helper()
+	out := []listedCapability{}
+	r := proto.CloneOf(req)
+	for {
+		resp, err := list(r)
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		for _, c := range resp.GetCapabilities() {
+			out = append(out, listedCapability{c.GetSubject().GetKind(), c.GetSubject().GetSubject(), c.GetDisposition()})
+		}
+		if resp.GetNextPageToken() == "" {
+			return out
+		}
+		r = proto.CloneOf(req)
+		r.PageToken = resp.GetNextPageToken()
 	}
 }

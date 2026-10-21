@@ -529,6 +529,9 @@ answers:
 | Any other, `share` or no `share` | Its token and its Biscuit, `ISSUED` |
 | `Delegate` with no capability presented, or from a Biscuit copy | `FailedPrecondition` |
 | `Delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PermissionDenied` |
+| `List` of a tenant, alone or with a principal kind, a subject, dispositions and `sort_order` | Its capabilities in issue order, each with its `disposition`: revoked — itself or through a revoked ancestor — over expired over active; no dispositions named lists the active ones and those `include_expired` and `include_revoked` add |
+| `List` with a page token of the other order, or one it did not hand out | `InvalidArgument` |
+| `List` of another tenant under `WithStrictAuth` | `PermissionDenied` |
 
 The token and the Biscuit are the fake's own credentials — `Attenuate`
 refuses its Biscuit — and both are accepted under `WithStrictAuth` until the
@@ -538,7 +541,9 @@ too. It checks no audience, resource, plane or copy quota.
 Where it is checked against the server: a backend test
 (`capabilityh/sdk_fake_fidelity_test.go`) runs every `Issue` and `Delegate`
 case above through the server's handler and through this fake, in every CI
-run, and requires the same code. The data-plane calls are not run against it
+run, and requires the same code; it runs `List` through the handler over
+limes's own record listing and through this fake, and requires the same
+capabilities, order, dispositions and refusals. The data-plane calls are not run against it
 that way yet; the shared scenarios (`sdk/testdata/scenarios.json`) run
 against a real server only. See BACKLOG.md, "The shared SDK scenarios run
 against the server only".

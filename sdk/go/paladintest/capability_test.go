@@ -255,3 +255,58 @@ func TestCapabilityServiceFaultsAndGaps(t *testing.T) {
 		t.Errorf("GetUsage: %v, want Unimplemented", err)
 	}
 }
+
+// A capability delegated from a revoked one is listed as revoked, as the
+// server lists it, though it holds no revocation of its own; and the
+// tenant's listing is the tenant's alone.
+func TestListCountsAChildOfARevokedParentRevoked(t *testing.T) {
+	srv := paladintest.New(t)
+	admin := srv.Connect().Admin.Capability
+	ctx := context.Background()
+	parent := issue(t, admin, issueRequest(srv, paladin.OpGet, paladin.OpShare))
+	child, err := srv.Connect(paladin.WithCapability(parent.GetToken())).Admin.Capability.Delegate(ctx,
+		&adminv1.CapabilityServiceDelegateRequest{ParentId: parent.GetCapability().GetId()})
+	if err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	elsewhere := issueRequest(srv, paladin.OpGet)
+	elsewhere.Subject.TenantId = uuid.NewString()
+	issue(t, admin, elsewhere)
+	if _, err := admin.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: parent.GetCapability().GetId()}); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	resp, err := admin.List(ctx, &adminv1.CapabilityServiceListRequest{
+		TenantId:     srv.Tenant(),
+		Dispositions: []adminv1.CapabilityDisposition{adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED},
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	var got []string
+	for _, c := range resp.GetCapabilities() {
+		got = append(got, c.GetId())
+	}
+	want := []string{parent.GetCapability().GetId(), child.GetCapability().GetId()}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("revoked = %v, want the parent then its child %v", got, want)
+	}
+	active, err := admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant()})
+	if err != nil || len(active.GetCapabilities()) != 0 {
+		t.Errorf("active = %v, %v; want none", active.GetCapabilities(), err)
+	}
+}
+
+// Under strict authentication a caller lists its own tenant's capabilities
+// only, as the server refuses another's to all but a platform role.
+func TestStrictListStaysInTheCallersTenant(t *testing.T) {
+	srv := paladintest.New(t, paladintest.WithStrictAuth())
+	admin := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant()))).Admin.Capability
+	if _, err := admin.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant()}); err != nil {
+		t.Errorf("own tenant: %v", err)
+	}
+	_, err := admin.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
+	if !errors.Is(err, paladin.ErrPermissionDenied) {
+		t.Errorf("another tenant: %v, want PermissionDenied", err)
+	}
+}

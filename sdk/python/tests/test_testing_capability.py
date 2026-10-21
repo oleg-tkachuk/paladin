@@ -5,6 +5,7 @@ to (sdk/testdata/capability_op_names.json)."""
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -19,6 +20,7 @@ from paladin import CredentialForm, NoBiscuitError, Op, biscuit_of, credential_o
 from paladin.admin.v1 import capability_service_pb2 as pb
 from paladin.admin.v1 import types_pb2 as admin_types
 from paladin.caveats import op_refusal
+from paladin.common.v1.pagination_pb2 import SORT_ORDER_ASC, SORT_ORDER_DESC
 from paladin.data.v1 import object_service_pb2, types_pb2
 from paladin.testing import DEFAULT_CAPABILITY_TTL, FakePaladin
 
@@ -241,3 +243,121 @@ def test_faults_and_gaps(fake: FakePaladin) -> None:
     assert _code(lambda: admin.issue(_issue_request(fake, Op.GET))) == Code.UNAVAILABLE
     usage = pb.CapabilityServiceGetUsageRequest(id=str(uuid.uuid4()))
     assert _code(lambda: admin.get_usage(usage)) == Code.UNIMPLEMENTED
+
+
+EXPIRING_TTL_SECONDS = 1
+"""The lifetime of the capability the listing test waits out, so it lists one
+expired."""
+_AGENT, _USER = pb.PRINCIPAL_KIND_AGENT, pb.PRINCIPAL_KIND_USER
+_ALL = [pb.CAPABILITY_DISPOSITION_ACTIVE, pb.CAPABILITY_DISPOSITION_EXPIRED, pb.CAPABILITY_DISPOSITION_REVOKED]
+_A, _E, _R = _ALL
+
+
+@pytest.fixture(scope="module")
+def listed():  # type: ignore[no-untyped-def]
+    """The scenario capabilityh/sdk_fake_fidelity_test.go lists through the
+    server's handler and the Go fake: the same principals, one revoked and
+    one expired."""
+    with FakePaladin() as f:
+        admin = f.connect().admin.capability
+        expires = datetime.now(UTC)
+        for kind, subject, ttl, revoke in [
+            (_AGENT, "agent:one", 300, False),
+            (_AGENT, "agent:two", 300, True),
+            (_USER, "user:one", 300, False),
+            (_USER, "user:gone", EXPIRING_TTL_SECONDS, False),
+            (_AGENT, "agent:one", 300, False),
+        ]:
+            req = _issue_request(f, Op.GET)
+            req.subject.kind, req.subject.subject, req.ttl_seconds = kind, subject, ttl
+            got = admin.issue(req)
+            if ttl == EXPIRING_TTL_SECONDS:
+                expires = got.capability.expires_at.ToDatetime(tzinfo=UTC)
+            if revoke:
+                admin.revoke(pb.CapabilityServiceRevokeRequest(id=got.capability.id))
+        time.sleep(max((expires - datetime.now(UTC)).total_seconds(), 0) + 0.001)
+        yield f
+
+
+def _list_all(fake: FakePaladin, **fields) -> list[tuple[int, str, int]]:  # type: ignore[no-untyped-def]
+    admin = fake.connect().admin.capability
+    out, token = [], ""
+    while True:
+        resp = admin.list(pb.CapabilityServiceListRequest(tenant_id=fake.tenant, page_token=token, **fields))
+        out += [(c.subject.kind, c.subject.subject, c.disposition) for c in resp.capabilities]
+        token = resp.next_page_token
+        if not token:
+            return out
+
+
+_ASC = [
+    (_AGENT, "agent:one", _A),
+    (_AGENT, "agent:two", _R),
+    (_USER, "user:one", _A),
+    (_USER, "user:gone", _E),
+    (_AGENT, "agent:one", _A),
+]
+
+
+@pytest.mark.parametrize(
+    ("fields", "want"),
+    [
+        ({}, [c for c in _ASC if c[2] == _A]),
+        ({"dispositions": _ALL, "sort_order": SORT_ORDER_DESC}, _ASC[::-1]),
+        ({"principal_kind": _AGENT, "dispositions": _ALL}, [c for c in _ASC if c[0] == _AGENT]),
+        ({"subject": "agent:one", "dispositions": _ALL}, [c for c in _ASC if c[1] == "agent:one"]),
+        ({"dispositions": [_R]}, [c for c in _ASC if c[2] == _R]),
+        ({"include_expired": True, "include_revoked": True}, _ASC),
+        ({"dispositions": _ALL, "page_size": 2}, _ASC),
+        ({"dispositions": _ALL, "page_size": 2, "sort_order": SORT_ORDER_DESC}, _ASC[::-1]),
+    ],
+    ids=[
+        "the tenant alone",
+        "every disposition, newest first",
+        "a kind",
+        "a subject",
+        "revoked",
+        "the include flags",
+        "a page at a time",
+        "a page at a time, newest first",
+    ],
+)
+def test_list_as_the_server_does(listed: FakePaladin, fields, want) -> None:  # type: ignore[no-untyped-def]
+    assert _list_all(listed, **fields) == want
+
+
+@pytest.mark.parametrize("order", [SORT_ORDER_ASC, SORT_ORDER_DESC], ids=["ascending", "descending"])
+def test_list_refuses_a_token_of_the_other_order(listed: FakePaladin, order: int) -> None:
+    admin = listed.connect().admin.capability
+    first = admin.list(
+        pb.CapabilityServiceListRequest(tenant_id=listed.tenant, dispositions=_ALL, page_size=1, sort_order=order)
+    )
+    other = SORT_ORDER_DESC if order == SORT_ORDER_ASC else SORT_ORDER_ASC
+    again = pb.CapabilityServiceListRequest(
+        tenant_id=listed.tenant, sort_order=other, page_token=first.next_page_token
+    )
+    assert _code(lambda: admin.list(again)) == Code.INVALID_ARGUMENT
+    garbage = pb.CapabilityServiceListRequest(tenant_id=listed.tenant, page_token="garbage")
+    assert _code(lambda: admin.list(garbage)) == Code.INVALID_ARGUMENT
+
+
+def test_list_counts_a_child_of_a_revoked_parent_revoked(fake: FakePaladin) -> None:
+    admin = fake.connect().admin.capability
+    parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
+    child = fake.connect(capability=parent.token).admin.capability.delegate(
+        pb.CapabilityServiceDelegateRequest(parent_id=parent.capability.id)
+    )
+    elsewhere = _issue_request(fake, Op.GET)
+    elsewhere.subject.tenant_id = str(uuid.uuid4())
+    admin.issue(elsewhere)
+    admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id))
+    revoked = admin.list(pb.CapabilityServiceListRequest(tenant_id=fake.tenant, dispositions=[_R]))
+    assert [c.id for c in revoked.capabilities] == [parent.capability.id, child.capability.id]
+    assert not admin.list(pb.CapabilityServiceListRequest(tenant_id=fake.tenant)).capabilities
+
+
+def test_strict_list_stays_in_the_callers_tenant(strict: FakePaladin) -> None:
+    admin = _admin(strict).admin.capability
+    admin.list(pb.CapabilityServiceListRequest(tenant_id=strict.tenant))
+    other = pb.CapabilityServiceListRequest(tenant_id=str(uuid.uuid4()))
+    assert _code(lambda: admin.list(other)) == Code.PERMISSION_DENIED
