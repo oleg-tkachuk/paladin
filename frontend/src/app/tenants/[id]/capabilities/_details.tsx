@@ -11,13 +11,11 @@ import type { Money } from "@/gen/google/type/money_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import { copyLimit, requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
-import {
-  PRINCIPAL_KIND_OPTIONS,
-  SPEND_DIGITS,
-  principalKindLabel,
-} from "./_constants";
+import { SPEND_DIGITS, principalKindLabel } from "./_constants";
 import { capabilityStatus } from "./_disposition";
 import { Timestamp } from "@/components/Timestamp";
+import { CopyableId } from "@/components/ui/CopyableId";
+import { ActorName } from "@/components/features/audit/ActorName";
 
 type UsageEntry =
   { requestCount: bigint; spent: Money | undefined } | "never" | undefined;
@@ -35,8 +33,8 @@ function recordText(record: RecordEntry): string | undefined {
 }
 
 // DetailsBody renders every field of a Capability in a stacked label/value
-// layout. Long mono strings (id, parent_id, prefixes) `break-all` so the dialog
-// doesn't blow out horizontally on UUIDs. Extracted from page.tsx (props-only).
+// layout, what it is now first. Its id is the panel's header, with a copy;
+// long free text (prefixes, URIs) `break-all` so the panel does not widen.
 export function DetailsBody({
   cap,
   usageEntry,
@@ -52,34 +50,45 @@ export function DetailsBody({
   const maxRequests = requestLimit(cap.caveats);
   const maxCopies = copyLimit(cap.caveats);
   const maxBudget = budgetLimit(cap.caveats?.budgetCeiling);
-  const status = capabilityStatus(cap);
+  const status = capabilityStatus(
+    cap,
+    typeof record === "object" && record.revocation !== undefined,
+  );
 
   return (
-    // CSS multi-column layout (columns-2 on md+) with `break-inside-avoid` on
-    // each section, so the dialog ends ~half as tall as a single-column stack.
-    <div className="md:columns-2 md:gap-x-8 py-1">
-      <DetailsSection title="Identity">
-        <DetailRow label="Capability ID" value={cap.id} mono breakAll />
-        <DetailRow label="Issuer" value={cap.issuer || "—"} mono />
+    // One column, what the capability is now first: two columns left each
+    // value too narrow for an id or a timestamp, which then broke mid-way.
+    <div className="py-1">
+      <DetailsSection title="Lifetime">
         <DetailRow
-          label="Parent ID"
-          value={cap.parentId || "—"}
+          label="Status"
+          value={
+            <Badge variant={status.variant} className={T.code}>
+              {status.label}
+            </Badge>
+          }
+        />
+        <DetailRow
+          label="Issued"
+          value={<Timestamp ts={cap.issuedAt} />}
           mono
-          breakAll
+        />
+        <DetailRow
+          label="Not before"
+          value={<Timestamp ts={cap.notBefore} />}
+          mono
+        />
+        <DetailRow
+          label="Expires"
+          value={<Timestamp ts={cap.expiresAt} />}
+          mono
         />
       </DetailsSection>
-
       <DetailsSection title="Principal">
         <DetailRow label="Kind" value={principalKindLabel(cap.subject?.kind)} />
         <DetailRow
           label="Subject"
           value={cap.subject?.subject || "—"}
-          mono
-          breakAll
-        />
-        <DetailRow
-          label="Tenant ID"
-          value={cap.subject?.tenantId || "—"}
           mono
           breakAll
         />
@@ -227,32 +236,30 @@ export function DetailsBody({
       </DetailsSection>
 
       <DetailsSection title="Issuance & revocation">
-        <IssuanceRows record={record} />
+        <IssuanceRows record={record} tenantId={cap.subject?.tenantId ?? ""} />
       </DetailsSection>
 
-      <DetailsSection title="Lifetime">
+      <DetailsSection title="Identifiers">
+        <DetailRow label="Issuer" value={cap.issuer || "—"} mono />
         <DetailRow
-          label="Status"
+          label="Parent"
           value={
-            <Badge variant={status.variant} className={T.code}>
-              {status.label}
-            </Badge>
+            cap.parentId ? (
+              <CopyableId value={cap.parentId} label="parent capability ID" />
+            ) : (
+              "—"
+            )
           }
         />
         <DetailRow
-          label="Issued"
-          value={<Timestamp ts={cap.issuedAt} />}
-          mono
-        />
-        <DetailRow
-          label="Not before"
-          value={<Timestamp ts={cap.notBefore} />}
-          mono
-        />
-        <DetailRow
-          label="Expires"
-          value={<Timestamp ts={cap.expiresAt} />}
-          mono
+          label="Tenant"
+          value={
+            cap.subject?.tenantId ? (
+              <CopyableId value={cap.subject.tenantId} label="tenant ID" />
+            ) : (
+              "—"
+            )
+          }
         />
       </DetailsSection>
     </div>
@@ -261,7 +268,14 @@ export function DetailsBody({
 
 // IssuanceRows shows who asked for the capability and its own revocation
 // entry. A capability stopped only through an ancestor has none of its own.
-function IssuanceRows({ record }: { record: RecordEntry }) {
+function IssuanceRows({
+  record,
+  tenantId,
+}: {
+  record: RecordEntry;
+  /** The capability's tenant: where an actor without one of its own is. */
+  tenantId: string;
+}) {
   const pending = recordText(record);
   if (pending !== undefined || typeof record !== "object") {
     return (
@@ -272,22 +286,21 @@ function IssuanceRows({ record }: { record: RecordEntry }) {
     );
   }
   const issuer = record.issuedBy;
-  const issuerKind = PRINCIPAL_KIND_OPTIONS.find(
-    (o) => Number(o.value) === issuer?.kind,
-  )?.label;
   const rev = record.revocation;
   return (
     <>
       <DetailRow
         label="Issued by"
         value={
-          issuer?.subject
-            ? issuerKind
-              ? `${issuer.subject} (${issuerKind})`
-              : issuer.subject
-            : "—"
+          issuer?.subject ? (
+            <ActorName
+              subject={issuer.subject}
+              tenantId={issuer.tenantId || tenantId}
+            />
+          ) : (
+            "—"
+          )
         }
-        mono
         breakAll
       />
       {rev ? (
@@ -299,8 +312,13 @@ function IssuanceRows({ record }: { record: RecordEntry }) {
           />
           <DetailRow
             label="Revoked by"
-            value={rev.actor || "—"}
-            mono
+            value={
+              rev.actor ? (
+                <ActorName subject={rev.actor} tenantId={tenantId} />
+              ) : (
+                "—"
+              )
+            }
             breakAll
           />
           <DetailRow label="Reason" value={rev.reason || "—"} />
@@ -330,7 +348,7 @@ function DetailsSection({
     // CSS multi-column layout; `mb-4` gives the inter-section breathing room.
     <div className="mb-4 break-inside-avoid space-y-2 last:mb-0">
       <h3 className={T.label}>{title}</h3>
-      <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-sm">
+      <dl className="grid grid-cols-[9rem_1fr] gap-x-4 gap-y-1.5 text-sm">
         {children}
       </dl>
     </div>

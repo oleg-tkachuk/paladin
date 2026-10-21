@@ -11,6 +11,7 @@ import type { Money } from "@/gen/google/type/money_pb";
 import { T } from "@/lib/ui/typography";
 
 import { DetailsBody, type RecordEntry } from "./_details";
+import { isCapabilityRevoked } from "./_disposition";
 
 type UsageEntry =
   { requestCount: bigint; spent: Money | undefined } | "never" | undefined;
@@ -55,7 +56,12 @@ export function CapabilityDetailsPanel({
       title="Capability details"
       identifier={id ?? undefined}
       footer={
-        shown ? (
+        // A revoked capability has nothing left to revoke.
+        shown &&
+        !isCapabilityRevoked(
+          shown,
+          recordQuery.data?.revocation !== undefined,
+        ) ? (
           <Button
             variant="destructive"
             size="sm"

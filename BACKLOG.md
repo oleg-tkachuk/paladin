@@ -996,10 +996,11 @@ order they are being taken up.
 
 - **Status:** Deferred.
 - **Reason:** `CapabilityService.List` sets `Capability.disposition`, but
-  `Get` leaves it unspecified, so the console's details of a capability opened
-  from an audit link and not on the current list read its status from the
-  expiry alone: a revoked one shows as active there while the list shows it
-  revoked.
+  `Get` leaves it unspecified. The console's details of a capability opened
+  from an audit link, and not on the current list, read a revoked status from
+  its own revocation on record, but one stopped only through a revoked
+  ancestor has none, so it shows as active or expired there while the list
+  shows it revoked.
 - **Definition of Done:** `Get` sets `disposition` by the census's rules —
   revoked through an ancestor too — with the SDK fakes' `Get` doing the same,
   held to the handler by the fidelity test.

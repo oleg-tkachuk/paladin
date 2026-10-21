@@ -64,6 +64,19 @@ const OP_BATCH_UPDATE_TAGS = "BatchUpdateTags";
 const OP_BATCH_RESTORE = "BatchRestoreObjects";
 
 /** What op does, in words: the type, sharpened by what its request asked. */
+/** The collection an operation's resource name sits in: operations/{id}. */
+export const OPERATIONS_COLLECTION = "operations/";
+
+/**
+ * An operation's id, its resource name without the collection: what a list
+ * row has room for, the full name being on its record.
+ */
+export function operationId(op: Pick<Operation, "name">): string {
+  return op.name.startsWith(OPERATIONS_COLLECTION)
+    ? op.name.slice(OPERATIONS_COLLECTION.length)
+    : op.name;
+}
+
 export function operationLabel(op: Operation): string {
   const t = op.target;
   switch (op.type) {

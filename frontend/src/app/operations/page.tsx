@@ -29,6 +29,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  SHOWN_IN_CARD,
 } from "@/components/ui/table";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { useDetailPanel, type DetailRowProps } from "@/hooks/useDetailPanel";
@@ -64,6 +65,7 @@ import {
   operationProgress,
   operationStatus,
   outcomeLine,
+  operationId,
 } from "@/lib/operations";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
@@ -78,6 +80,12 @@ const SCOPES: { value: OpScope; label: string }[] = [
   { value: "tenant", label: "Tenant" },
 ];
 const COLUMNS = 7;
+// Optional columns appear by the width of the table's card, most useful
+// first; a phone's card shows the target and the start again.
+const COL_TARGET = cn("hidden @2xl:table-cell", SHOWN_IN_CARD);
+const COL_STARTED = cn("hidden @3xl:table-cell", SHOWN_IN_CARD);
+const COL_DURATION = "hidden @4xl:table-cell";
+const COL_STARTED_BY = "hidden @5xl:table-cell";
 const SKELETON_ROWS = [0, 1, 2, 3];
 
 export default function OperationsPage() {
@@ -235,14 +243,12 @@ export default function OperationsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Operation</TableHead>
-              <TableHead className="hidden @2xl:table-cell">Target</TableHead>
-              <TableHead className="min-w-48">Progress</TableHead>
-              <TableHead className="hidden @4xl:table-cell">
-                Started by
-              </TableHead>
-              <TableHead className="hidden @md:table-cell">Started</TableHead>
-              <TableHead className="hidden @3xl:table-cell">Duration</TableHead>
-              <TableHead className="w-24">
+              <TableHead className={COL_TARGET}>Target</TableHead>
+              <TableHead className="min-w-40">Status</TableHead>
+              <TableHead className={COL_STARTED_BY}>Started by</TableHead>
+              <TableHead className={COL_STARTED}>Started</TableHead>
+              <TableHead className={COL_DURATION}>Duration</TableHead>
+              <TableHead className="w-16">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
@@ -344,28 +350,38 @@ function OperationRow({
       aria-label={`${operationLabel(op)}, ${badge.label}`}
       className={cn(row.className, status === "failed" && "bg-destructive/5")}
     >
-      <TableCell className="whitespace-normal">
+      {/* What it is and which one: the state is the icon's shape and colour,
+          and the status column's words. */}
+      <TableCell>
         <div className="flex items-start gap-2">
           <Icon
+            aria-hidden
             className={cn(
               "mt-0.5 size-4 shrink-0",
               STATUS_TINT[status],
               status === "running" && "animate-spin",
             )}
           />
-          <div className="min-w-0 space-y-0.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-medium">{operationLabel(op)}</span>
-              <Badge variant={badge.variant}>{badge.label}</Badge>
-              {op.dismissedAt ? <Badge variant="outline">cleared</Badge> : null}
-            </div>
-            <p className={cn(T.codeSmall, "break-all text-muted-foreground")}>
-              {op.name}
+          <div className="min-w-0">
+            <p className="font-medium">{operationLabel(op)}</p>
+            <p className={cn(T.hint, "flex items-center gap-1.5")}>
+              <span
+                className="block max-w-24 truncate font-mono @xl:max-w-40"
+                title={op.name}
+              >
+                {operationId(op)}
+              </span>
+              {op.dismissedAt ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>cleared</span>
+                </>
+              ) : null}
             </p>
           </div>
         </div>
       </TableCell>
-      <TableCell className="hidden whitespace-normal @2xl:table-cell">
+      <TableCell className={cn(COL_TARGET, "whitespace-normal")}>
         {op.target ? (
           <div className="space-y-0.5">
             <p className="flex flex-wrap items-center gap-x-1.5">
@@ -385,10 +401,13 @@ function OperationRow({
       </TableCell>
       <TableCell className="whitespace-normal">
         <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge variant={badge.variant}>{badge.label}</Badge>
+            {outcome ? <span className={T.hint}>{outcome}</span> : null}
+          </div>
           {progress && active ? (
             <OperationProgressBar progress={progress} />
           ) : null}
-          {outcome ? <p className={T.hint}>{outcome}</p> : null}
           {failure ? (
             <p className="line-clamp-2 text-xs text-destructive">
               {failure}
@@ -397,15 +416,12 @@ function OperationRow({
                 : ""}
             </p>
           ) : null}
-          {!(progress && active) && !outcome && !failure ? (
-            <span className="text-muted-foreground">—</span>
-          ) : null}
           {cancelErr ? (
             <p className="text-xs text-destructive">{cancelErr}</p>
           ) : null}
         </div>
       </TableCell>
-      <TableCell className="hidden whitespace-normal break-all @4xl:table-cell">
+      <TableCell className={cn(COL_STARTED_BY, "whitespace-normal break-all")}>
         {op.initiatorSubject ? (
           <ActorName
             subject={op.initiatorSubject}
@@ -418,12 +434,13 @@ function OperationRow({
       <TableCell
         className={cn(
           T.codeSmall,
-          "hidden text-muted-foreground @md:table-cell",
+          COL_STARTED,
+          "whitespace-nowrap text-muted-foreground",
         )}
       >
         {op.createdAt ? <Timestamp ts={op.createdAt} /> : "—"}
       </TableCell>
-      <TableCell className="hidden tabular-nums @3xl:table-cell">
+      <TableCell className={cn(COL_DURATION, "tabular-nums")}>
         {elapsed !== null ? formatDuration(elapsed) : "—"}
       </TableCell>
       <TableCell className="text-right">
