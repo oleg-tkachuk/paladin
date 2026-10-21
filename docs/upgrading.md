@@ -73,7 +73,7 @@ here.
 
 
 
-## Unreleased — the Python SDK has tags of its own
+## sdk/python/v0.103.0 — the Python SDK has tags of its own
 
 The Python SDK releases as `sdk/python/vX.Y.Z`, versioned by its own commits
 and those to `proto/` and `sdk/testdata/`, rather than by the Go SDK's tag.
