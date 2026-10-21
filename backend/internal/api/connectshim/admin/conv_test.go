@@ -523,3 +523,17 @@ func TestAuditEntryToProto_RelayedBy(t *testing.T) {
 		t.Errorf("direct call: relayed_by = %q, want empty", got)
 	}
 }
+
+// The request reaches the caller as request_json; the deprecated before and
+// after images, which never held state, stay empty.
+func TestAuditEntryToProto_Request(t *testing.T) {
+	const request = `{"name":"tenants/t"}`
+	got := auditEntryToProto(&admindomain.AuditEntry{RequestJSON: []byte(request)})
+	if string(got.GetRequestJson()) != request {
+		t.Errorf("request_json = %s, want %s", got.GetRequestJson(), request)
+	}
+	//nolint:staticcheck // the deprecated fields are what is checked
+	if len(got.GetBeforeJson()) != 0 || len(got.GetAfterJson()) != 0 {
+		t.Errorf("before_json %q, after_json %q: want both empty", got.GetBeforeJson(), got.GetAfterJson())
+	}
+}

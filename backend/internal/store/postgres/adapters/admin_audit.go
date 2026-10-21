@@ -76,8 +76,7 @@ func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindo
 		e.ResourceName,
 		e.RequestID,
 		strPtr(e.SourceIP),
-		e.BeforeJSON,
-		e.AfterJSON,
+		e.RequestJSON,
 		strPtr(e.ErrorMessage),
 		// CapabilityID is uuid.Nil when no capability was presented;
 		// pgUUIDOptional maps that to a NULL DB value so the partial
@@ -244,8 +243,7 @@ func auditEntryFromModel(row sqlc.AuditLog) admindomain.AuditEntry {
 		ResourceName:  row.ResourceName,
 		RequestID:     row.RequestID,
 		SourceIP:      derefStr(row.SourceIp),
-		BeforeJSON:    row.BeforeJson,
-		AfterJSON:     row.AfterJson,
+		RequestJSON:   row.RequestJson,
 		ErrorMessage:  derefStr(row.ErrorMessage),
 		CapabilityID:  uuidFrom(row.CapabilityID),
 		RelayedBy:     derefStr(row.RelayedBy),

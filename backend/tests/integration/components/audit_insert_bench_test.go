@@ -60,7 +60,7 @@ func BenchmarkAuditInsertDurable(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			e := base
 			e.EntryID = uuid.Must(uuid.NewV7()) // unique PK per iteration
-			e.AfterJSON = after
+			e.RequestJSON = after
 			if err := repo.Insert(ctx, e); err != nil {
 				b.Fatalf("audit insert: %v", err)
 			}

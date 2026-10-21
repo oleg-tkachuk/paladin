@@ -112,6 +112,7 @@ them, so they must exist before it runs.
 | `091` | `user_settings.theme` renames `ember` to `dusk`, carrying saved settings over |
 | `092` | `audit_log.user_agent`, the client a call came from |
 | `093` | `list_audit_entry_ids` sorts by `user_agent` too |
+| `094` | `audit_log.after_json` is `request_json`, what it always held; the never-written `before_json` is dropped |
 
 Each file's header comment says why it exists.
 

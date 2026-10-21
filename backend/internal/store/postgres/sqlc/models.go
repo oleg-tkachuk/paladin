@@ -308,8 +308,7 @@ type AuditLog struct {
 	CapabilityID     pgtype.UUID        `json:"capability_id"`
 	Outcome          string             `json:"outcome"`
 	ErrorMessage     *string            `json:"error_message"`
-	BeforeJson       []byte             `json:"before_json"`
-	AfterJson        []byte             `json:"after_json"`
+	RequestJson      []byte             `json:"request_json"`
 	Detail           []byte             `json:"detail"`
 	ResourceTenantID pgtype.UUID        `json:"resource_tenant_id"`
 	RelayedBy        *string            `json:"relayed_by"`
@@ -330,7 +329,7 @@ type AuditLogDefault struct {
 	Outcome       string             `json:"outcome"`
 	ErrorMessage  *string            `json:"error_message"`
 	BeforeJson    []byte             `json:"before_json"`
-	AfterJson     []byte             `json:"after_json"`
+	RequestJson   []byte             `json:"request_json"`
 	Detail        []byte             `json:"detail"`
 }
 

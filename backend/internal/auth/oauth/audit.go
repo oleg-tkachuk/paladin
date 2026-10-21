@@ -63,7 +63,7 @@ func (h *Handler) record(ctx context.Context, e admindomain.AuditEntry, detail a
 	}
 	if detail != nil {
 		if b, err := json.Marshal(detail); err == nil {
-			e.AfterJSON = b
+			e.RequestJSON = b
 		}
 	}
 	if err := h.audit.Insert(ctx, e); err != nil {

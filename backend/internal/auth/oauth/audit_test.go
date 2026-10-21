@@ -98,8 +98,8 @@ func TestOAuthWritesTheRowsThatChangeAccess(t *testing.T) {
 			}
 			if c.action == actionGrantRedeemed || c.action == actionConsentGranted {
 				var d grantDetail
-				if err := json.Unmarshal(e.AfterJSON, &d); err != nil || d.Audience == "" || len(d.Scopes) == 0 {
-					t.Errorf("grant detail = %s (%v)", e.AfterJSON, err)
+				if err := json.Unmarshal(e.RequestJSON, &d); err != nil || d.Audience == "" || len(d.Scopes) == 0 {
+					t.Errorf("grant detail = %s (%v)", e.RequestJSON, err)
 				}
 			}
 		})

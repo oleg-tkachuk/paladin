@@ -47,11 +47,11 @@ func TestExportAuditLogIsAFinishedOperation(t *testing.T) {
 	}
 }
 
-// An entry whose stored before-image is not JSON cannot be written out; the
+// An entry whose stored request is not JSON cannot be written out; the
 // export fails rather than answering with a truncated or empty result.
 func TestExportAuditLogRefusesAResultItCannotEncode(t *testing.T) {
 	srv := &AuditServer{H: exportingAudit{result: &audith.ExportAuditLogResult{
-		Entries: []audith.ExportAuditLogEntry{{Before: json.RawMessage(`{`)}},
+		Entries: []audith.ExportAuditLogEntry{{Request: json.RawMessage(`{`)}},
 	}}}
 	_, err := srv.ExportAuditLog(context.Background(), &pb.ExportAuditLogRequest{})
 	if connect.CodeOf(err) != connect.CodeInternal {

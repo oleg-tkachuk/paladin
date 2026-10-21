@@ -49,6 +49,33 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Audit log
+
+### An audit entry does not record the resource's state
+
+- **Status:** Deferred.
+- **Reason:** an entry records what the action was asked to do
+  (`request_json`), not what the resource looked like before and after it,
+  so the log cannot show what an update changed. `before_json` and
+  `after_json` promised that and never delivered it; migration `094` removed
+  the pretence.
+- **Definition of Done:** each mutating handler records the resource's state
+  before and after the change, secrets redacted, in fields of their own on
+  `AuditLogEntry`; the console shows the fields that changed between them,
+  with tests on both sides.
+- **Blockers:** none.
+
+### audit_log carries columns nothing writes
+
+- **Status:** Deferred.
+- **Reason:** `audit_log.detail` (jsonb) and `outcome` (text) date from the
+  initial schema and no writer sets either, so every row holds their
+  defaults.
+- **Definition of Done:** a migration drops both, or a writer sets them and
+  the API carries them.
+- **Blockers:** none.
+
+---
 ## SDKs
 
 ### The Python fake's CapabilityService is held to the server only by mirror
