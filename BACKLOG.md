@@ -992,6 +992,19 @@ order they are being taken up.
   saved ones too.
 - **Blockers:** the owner's decision.
 
+#### A capability read by Get carries no disposition
+
+- **Status:** Deferred.
+- **Reason:** `CapabilityService.List` sets `Capability.disposition`, but
+  `Get` leaves it unspecified, so the console's details of a capability opened
+  from an audit link and not on the current list read its status from the
+  expiry alone: a revoked one shows as active there while the list shows it
+  revoked.
+- **Definition of Done:** `Get` sets `disposition` by the census's rules —
+  revoked through an ancestor too — with the SDK fakes' `Get` doing the same,
+  held to the handler by the fidelity test.
+- **Blockers:** none.
+
 #### A tenant purge names what it takes by row, not by kind
 
 - **Status:** Deferred.
