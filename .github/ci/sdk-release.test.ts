@@ -5,7 +5,7 @@ import { after, before, describe, test } from "node:test";
 
 import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
 import { tempRepo, type TempRepo } from "./lib/temp-repo.ts";
-import { anchor, moduleInfoUrl, publishStream, streamNotes, upgradeHeading, warmGoProxy } from "./sdk-release.ts";
+import { NO_RELEASE, anchor, moduleInfoUrl, publishStream, releaseSummary, streamNotes, upgradeHeading, warmGoProxy } from "./sdk-release.ts";
 
 const REPO = "o/r";
 
@@ -158,4 +158,15 @@ describe("the Go proxy", () => {
       repo.cleanup();
     }
   });
+});
+
+// The summary names every SDK, released or not, so a run that released one
+// says so of the other too.
+test("releaseSummary has a row per SDK", () => {
+  const summary = releaseSummary(["sdk/python/v0.103.0", "v39.3.0"], REPO);
+  assert.ok(summary.includes("| Go SDK | no release |"), summary);
+  assert.ok(summary.includes("| Python SDK | [sdk/python/v0.103.0](https://github.com/o/r/releases/tag/sdk/python/v0.103.0) |"), summary);
+  assert.equal(summary.includes("v39.3.0"), false, "the product's tag is not an SDK's");
+  const none = releaseSummary([], REPO);
+  assert.equal(none.split(NO_RELEASE).length - 1, 2, none);
 });
