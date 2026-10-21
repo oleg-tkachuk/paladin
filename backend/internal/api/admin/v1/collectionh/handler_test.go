@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -27,7 +28,7 @@ type fakeRepo struct {
 	updateTxFn func(ctx context.Context, args UpdateCollectionArgs) (Collection, error)
 	deleteTxFn func(ctx context.Context, tenantID uuid.UUID, collection string, expectedVersion int64) error
 	listFn     func(ctx context.Context, args ListCollectionsArgs) ([]Collection, string, error)
-	statsFn    func(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionStats, error)
+	usageFn    func(ctx context.Context, keys []CollectionKey) (map[CollectionKey]CollectionUsage, error)
 	rebindFn   func(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error
 	holdingFn  func(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionHolding, error)
 
@@ -44,10 +45,7 @@ type fakeRepo struct {
 		collection string
 		version    int64
 	}
-	lastStats struct {
-		tenantID   uuid.UUID
-		collection string
-	}
+	lastUsage  []CollectionKey
 	lastRebind struct {
 		tenantID   uuid.UUID
 		collection string
@@ -115,13 +113,12 @@ func (f *fakeRepo) List(ctx context.Context, args ListCollectionsArgs) ([]Collec
 	return f.listFn(ctx, args)
 }
 
-func (f *fakeRepo) Stats(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionStats, error) {
-	f.lastStats.tenantID = tenantID
-	f.lastStats.collection = collection
-	if f.statsFn == nil {
-		return CollectionStats{}, nil
+func (f *fakeRepo) Usage(ctx context.Context, keys []CollectionKey) (map[CollectionKey]CollectionUsage, error) {
+	f.lastUsage = keys
+	if f.usageFn == nil {
+		return nil, nil
 	}
-	return f.statsFn(ctx, tenantID, collection)
+	return f.usageFn(ctx, keys)
 }
 
 func (f *fakeRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error {
@@ -621,45 +618,75 @@ func TestListCollections(t *testing.T) {
 	})
 }
 
-func TestGetCollectionStats(t *testing.T) {
+// A read answers with what each collection holds, read in one query for the
+// page; one with no available object holds nothing.
+func TestCollectionReadsCarryUsage(t *testing.T) {
 	tid := uuid.New()
+	last := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	full := CollectionUsage{ObjectCount: 42, TotalBytes: 1024, LastCommittedAt: &last}
+	usage := func(_ context.Context, keys []CollectionKey) (map[CollectionKey]CollectionUsage, error) {
+		return map[CollectionKey]CollectionUsage{{TenantID: tid, Collection: "assets"}: full}, nil
+	}
 
-	t.Run("unauthenticated", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, allowAll())
-		_, err := h.GetCollectionStats(context.Background(), "k")
-		wantCode(t, err, connect.CodeUnauthenticated)
-	})
-
-	t.Run("policy denies → permission denied", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, &fakeAuthorizer{decision: cedar.DecisionDeny})
-		_, err := h.GetCollectionStats(authedCtx(tid), "k")
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
-	t.Run("repo error → internal", func(t *testing.T) {
-		fr := &fakeRepo{statsFn: func(context.Context, uuid.UUID, string) (CollectionStats, error) {
-			return CollectionStats{}, errors.New("boom")
-		}}
-		h := NewHandler(fr, allowAll())
-		_, err := h.GetCollectionStats(authedCtx(tid), "k")
-		wantCode(t, err, connect.CodeInternal)
-	})
-
-	t.Run("ok forwards tenant/key + returns stats", func(t *testing.T) {
-		fr := &fakeRepo{statsFn: func(_ context.Context, tenant uuid.UUID, key string) (CollectionStats, error) {
-			return CollectionStats{ObjectCountAvailable: 42, SizeBytesAvailable: 1024}, nil
-		}}
-		h := NewHandler(fr, allowAll())
-		got, err := h.GetCollectionStats(authedCtx(tid), "assets")
+	t.Run("get", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn: func(_ context.Context, tenant uuid.UUID, key string) (Collection, error) {
+				return Collection{TenantID: tenant, Collection: key}, nil
+			},
+			usageFn: usage,
+		}
+		got, err := NewHandler(fr, allowAll()).GetCollection(authedCtx(tid), uuid.Nil, "assets")
 		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
+			t.Fatal(err)
 		}
-		if fr.lastStats.tenantID != tid || fr.lastStats.collection != "assets" {
-			t.Fatalf("forwarded (%v,%q)", fr.lastStats.tenantID, fr.lastStats.collection)
+		if got.Usage.ObjectCount != full.ObjectCount || got.Usage.TotalBytes != full.TotalBytes || !got.Usage.LastCommittedAt.Equal(last) {
+			t.Errorf("usage = %+v, want %+v", got.Usage, full)
 		}
-		if got.ObjectCountAvailable != 42 || got.SizeBytesAvailable != 1024 {
-			t.Fatalf("stats passthrough: got %+v", *got)
+	})
+
+	t.Run("list", func(t *testing.T) {
+		fr := &fakeRepo{
+			listFn: func(context.Context, ListCollectionsArgs) ([]Collection, string, error) {
+				return []Collection{{TenantID: tid, Collection: "assets"}, {TenantID: tid, Collection: "empty"}}, "", nil
+			},
+			usageFn: usage,
 		}
+		page, _, err := NewHandler(fr, allowAll()).ListCollections(authedCtx(tid), ListCollectionsArgs{TenantID: tid})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(fr.lastUsage) != 2 {
+			t.Fatalf("usage read for %d collections, want the page's 2 in one call", len(fr.lastUsage))
+		}
+		if page[0].Usage.ObjectCount != full.ObjectCount || page[1].Usage != (CollectionUsage{}) {
+			t.Errorf("usage = %+v, %+v; want the first's and none", page[0].Usage, page[1].Usage)
+		}
+	})
+
+	t.Run("an empty page reads nothing", func(t *testing.T) {
+		fr := &fakeRepo{
+			listFn: func(context.Context, ListCollectionsArgs) ([]Collection, string, error) { return nil, "", nil },
+			usageFn: func(context.Context, []CollectionKey) (map[CollectionKey]CollectionUsage, error) {
+				t.Error("usage read for an empty page")
+				return nil, nil
+			},
+		}
+		if _, _, err := NewHandler(fr, allowAll()).ListCollections(authedCtx(tid), ListCollectionsArgs{TenantID: tid}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("a failed read is internal", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn: func(_ context.Context, tenant uuid.UUID, key string) (Collection, error) {
+				return Collection{TenantID: tenant, Collection: key}, nil
+			},
+			usageFn: func(context.Context, []CollectionKey) (map[CollectionKey]CollectionUsage, error) {
+				return nil, errors.New("boom")
+			},
+		}
+		_, err := NewHandler(fr, allowAll()).GetCollection(authedCtx(tid), uuid.Nil, "assets")
+		wantCode(t, err, connect.CodeInternal)
 	})
 }
 

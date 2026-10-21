@@ -58,13 +58,24 @@ type Collection struct {
 	ResourceVersion int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	// Usage is what the collection holds, set on a read and zero on the
+	// answer to a change.
+	Usage CollectionUsage
 }
 
-type CollectionStats struct {
-	ObjectCountAvailable int64
-	ObjectCountPending   int64
-	ObjectCountDeleted   int64
-	SizeBytesAvailable   int64
+// CollectionUsage is what a collection holds: its available objects, not
+// those still uploading or in the trash.
+type CollectionUsage struct {
+	ObjectCount int64
+	TotalBytes  int64
+	// LastCommittedAt is when the newest was stored; nil with none.
+	LastCommittedAt *time.Time
+}
+
+// CollectionKey names a collection across tenants.
+type CollectionKey struct {
+	TenantID   uuid.UUID
+	Collection string
 }
 
 type CreateCollectionArgs struct {
@@ -113,7 +124,9 @@ type Repository interface {
 	Update(ctx context.Context, args UpdateCollectionArgs) (Collection, error)
 	Delete(ctx context.Context, tenantID uuid.UUID, collection string, expectedVersion int64) error
 	List(ctx context.Context, args ListCollectionsArgs) ([]Collection, string, error)
-	Stats(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionStats, error)
+	// Usage is the usage of each collection keys names; one that holds no
+	// available object, or is not on record, is absent.
+	Usage(ctx context.Context, keys []CollectionKey) (map[CollectionKey]CollectionUsage, error)
 	// Rebind atomically swaps the (backend_id, bucket_name) target. DB
 	// trigger enforces tenancy on single-tenant buckets.
 	Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error
@@ -369,7 +382,30 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
-	return &b, nil
+	page := []Collection{b}
+	if err := h.withUsage(ctx, page); err != nil {
+		return nil, err
+	}
+	return &page[0], nil
+}
+
+// withUsage sets each collection's Usage, read in one query for the page.
+func (h *Handler) withUsage(ctx context.Context, page []Collection) error {
+	if len(page) == 0 {
+		return nil
+	}
+	keys := make([]CollectionKey, len(page))
+	for i, c := range page {
+		keys[i] = CollectionKey{TenantID: c.TenantID, Collection: c.Collection}
+	}
+	usage, err := h.repo.Usage(ctx, keys)
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	for i := range page {
+		page[i].Usage = usage[keys[i]]
+	}
+	return nil
 }
 
 // targetTenant decides which tenant a name-addressed write applies to.
@@ -539,6 +575,9 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	if err != nil {
 		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
+	if err := h.withUsage(ctx, page); err != nil {
+		return nil, "", err
+	}
 	return page, next, nil
 }
 
@@ -561,22 +600,6 @@ func collectionRow(c Collection) map[string]any {
 		// the SQL narrows on those two columns.
 		"search": celpkg.SearchText(c.Collection, c.DisplayName),
 	}
-}
-
-func (h *Handler) GetCollectionStats(ctx context.Context, collection string) (*CollectionStats, error) {
-	tenantID, principal, err := apiutil.CallerContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := h.authorize(ctx, principal, tenantID, collection, cedar.ActionManageCollection); err != nil {
-		return nil, err
-	}
-	ctx = auth.WithActingTenant(ctx, tenantID)
-	s, err := h.repo.Stats(ctx, tenantID, collection)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return &s, nil
 }
 
 // BindCollectionToBucket rebinds the namespace to a different bucket. Cedar
