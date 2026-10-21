@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useShell } from "@/context/ShellContext";
+import { useQuiet, type QuietCard } from "@/components/dashboard/quiet";
 import { SECTION } from "@/lib/navigation/sections";
 import {
   OP_STATUS_BADGE,
@@ -19,9 +20,20 @@ import {
 /** How many of the user's operations the card lists. */
 export const MY_OPERATIONS_SHOWN = 5;
 
+const MY_OPERATIONS_CARD: QuietCard = {
+  id: "myOperations",
+  label: "Nothing of yours running",
+  href: SECTION.operations,
+};
+
 export function MyOperationsWidget() {
   const { operations } = useShell();
   const ops = (operations.data ?? []).slice(0, MY_OPERATIONS_SHOWN);
+  const quiet =
+    operations.status !== "loading" &&
+    operations.status !== "unavailable" &&
+    ops.length === 0;
+  if (useQuiet(MY_OPERATIONS_CARD, quiet)) return null;
   return (
     <Card>
       <CardHeader className="pb-2">

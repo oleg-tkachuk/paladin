@@ -15,7 +15,14 @@ import { StatusTone } from "@/lib/ui/status";
 import { SECTION } from "@/lib/navigation/sections";
 import { cn } from "@/lib/utils";
 
+import { useQuiet, type QuietCard } from "./quiet";
 import { usePlatformSummary } from "./usePlatformSummary";
+
+const QUOTAS_CARD: QuietCard = {
+  id: "quotas",
+  label: "No quota near its limit",
+  href: SECTION.stats,
+};
 
 export function QuotaAlertsWidget() {
   const { data, isPending, error } = usePlatformSummary();
@@ -26,6 +33,8 @@ export function QuotaAlertsWidget() {
   // with a cap are within their limits.
   const within = Math.max(0, Number(quotas?.withLimits ?? 0) - atLimit - near);
   const alarm = atLimit > 0;
+  const quiet = !isPending && !error && !!quotas && atLimit === 0 && near === 0;
+  if (useQuiet(QUOTAS_CARD, quiet)) return null;
   return (
     <Card className={cn(alarm && "border-destructive/40")}>
       <CardHeader className="pb-2">

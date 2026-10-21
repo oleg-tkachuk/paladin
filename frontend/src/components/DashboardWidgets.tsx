@@ -52,6 +52,8 @@ function opError(o: Operation): string {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/badge";
+import { useQuiet, type QuietCard } from "@/components/dashboard/quiet";
+import { SECTION } from "@/lib/navigation/sections";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { ActorName } from "@/components/features/audit/ActorName";
@@ -62,7 +64,7 @@ export function DashboardWidgets() {
   return (
     <div className="space-y-3">
       <TrashRetentionNotice />
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 lg:auto-cols-fr lg:grid-flow-col">
         <RecentActivityWidget />
         <FailedOpsWidget />
         <BudgetAlertsWidget />
@@ -209,6 +211,12 @@ function RecentActivityWidget() {
   );
 }
 
+const FAILED_OPS_CARD: QuietCard = {
+  id: "failedOperations",
+  label: "No failed operations",
+  href: SECTION.operations,
+};
+
 function FailedOpsWidget() {
   const {
     data: ops = [],
@@ -237,6 +245,9 @@ function FailedOpsWidget() {
         )
         .then((res) => res.operations.filter((o) => !!opError(o)).slice(0, 5)),
   });
+  if (useQuiet(FAILED_OPS_CARD, !loading && !error && ops.length === 0)) {
+    return null;
+  }
   return (
     <Card
       className={cn(
@@ -287,6 +298,12 @@ function FailedOpsWidget() {
 const BUDGET_ALERT_THRESHOLD = 80;
 const BUDGET_ALERT_LIMIT = 5;
 
+const BUDGET_ALERTS_CARD: QuietCard = {
+  id: "budgetAlerts",
+  label: "No tenant near its budget",
+  href: SECTION.billing,
+};
+
 function BudgetAlertsWidget() {
   const {
     data: rows = [],
@@ -312,6 +329,9 @@ function BudgetAlertsWidget() {
     () => rows.filter((r) => r.utilisationPct >= 100).length,
     [rows],
   );
+  if (useQuiet(BUDGET_ALERTS_CARD, !loading && !error && rows.length === 0)) {
+    return null;
+  }
 
   return (
     <Card
