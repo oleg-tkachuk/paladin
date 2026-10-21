@@ -219,7 +219,8 @@ jobs:
         run: node .github/ci/upgrade-sections.ts name "$RUNNER_TEMP/tags-before"
 
       # A GitHub release beside each SDK tag this run cut, if any, with notes of
-      # the stream's own commits, and the Go proxy told of a Go SDK tag. Never the
+      # the stream's own commits, and the Go proxy told of a Go SDK tag. The
+      # run's summary lists each SDK's release, or that it had none. Never the
       # latest release: that stays the product's. See .github/ci/sdk-release.ts.
       - name: Publish the SDK releases
         if: steps.head.outputs.release == 'true'

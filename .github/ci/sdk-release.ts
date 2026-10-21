@@ -22,13 +22,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { info, warning } from "./lib/actions.ts";
+import { info, summarize, table, warning } from "./lib/actions.ts";
 import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { git, lines } from "./lib/git.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
 import { retry } from "./lib/retry.ts";
-import { GO_SDK, PYTHON_SDK, streamOf, streams, tagPrefix } from "./lib/release-config.ts";
+import { GO_SDK, PYTHON_SDK, sdkStreams, streamOf, streams, tagPrefix, type Stream } from "./lib/release-config.ts";
 import { readBefore, streamTags } from "./release-tags.ts";
 import { HEADING, UPGRADING } from "./upgrade-sections.ts";
 
@@ -48,6 +48,12 @@ const FOOTER = /^BREAKING[ -]CHANGE: /m;
 // heading is named after the tag is cut (upgrade-sections.ts), so the tag's
 // own copy still says Unreleased.
 const DEFAULT_BRANCH = "main";
+
+// The run's summary page: a row per SDK, its release or that it had none, so
+// the run says what it shipped without a job of its own per SDK.
+const SUMMARY_TITLE = "### SDK releases";
+const SUMMARY_HEADER = ["SDK", "Release"];
+export const NO_RELEASE = "no release";
 
 // The Go module proxy, and how often it is asked: it fetches from GitHub on
 // the first request.
@@ -186,6 +192,16 @@ export async function publishStream(github: GitHub, tag: string, root: string, r
   }
 }
 
+// releaseSummary is the summary page's table of what this run released of
+// each SDK: the release of its tag among tags, or NO_RELEASE.
+export function releaseSummary(tags: readonly string[], repository: string, all: Record<string, Stream> = streams()): string {
+  const rows = sdkStreams(all).map((name) => {
+    const tag = tags.find((t) => streamOf(t, all) === name);
+    return [TITLES[name] ?? name, tag === undefined ? NO_RELEASE : `[${tag}](https://github.com/${repository}/releases/tag/${tag})`];
+  });
+  return `${SUMMARY_TITLE}\n\n${table(SUMMARY_HEADER, rows)}`;
+}
+
 async function main(): Promise<void> {
   const [file] = process.argv.slice(2);
   if (file === undefined) {
@@ -194,9 +210,11 @@ async function main(): Promise<void> {
   const repository = requireEnv("GITHUB_REPOSITORY");
   const github = gitHubFor(requireEnv("GH_TOKEN"), repository);
   const root = (await git(["rev-parse", "--show-toplevel"])).trim();
-  for (const tag of await streamTags(github, readBefore(file), root)) {
+  const tags = await streamTags(github, readBefore(file), root);
+  for (const tag of tags) {
     await publishStream(github, tag, root, repository, optionalEnv("GOPROXY_URL") ?? GO_PROXY);
   }
+  summarize(releaseSummary(tags, repository));
 }
 
 if (import.meta.main) {
