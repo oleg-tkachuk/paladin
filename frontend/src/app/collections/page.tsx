@@ -55,7 +55,7 @@ import { cn } from "@/lib/utils";
 import { searchFilter } from "@/lib/cel";
 import { CollectionCreateDialog } from "@/components/features/collections/CollectionCreateDialog";
 import { CollectionDeleteDialog } from "@/components/features/collections/CollectionDeleteDialog";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
 import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
@@ -241,7 +241,7 @@ export default function CollectionsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead>Tenant</TableHead>
+              <StaticHead>Tenant</StaticHead>
               <SortableHead
                 className="hidden @xs:table-cell"
                 label="Display name"

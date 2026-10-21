@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import {
   SelectContent,
@@ -17,7 +17,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -288,9 +287,9 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
                 className="hidden @md:table-cell"
                 {...sortProps}
               />
-              <TableHead className="hidden @2xl:table-cell">
+              <StaticHead className="hidden @2xl:table-cell">
                 Description
-              </TableHead>
+              </StaticHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -357,10 +356,10 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Profile</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead className="hidden @md:table-cell">Allows</TableHead>
-            <TableHead className="text-right">Tools visible</TableHead>
+            <StaticHead>Profile</StaticHead>
+            <StaticHead>Source</StaticHead>
+            <StaticHead className="hidden @md:table-cell">Allows</StaticHead>
+            <StaticHead className="text-right">Tools visible</StaticHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -440,11 +439,11 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Denied</TableHead>
-            <TableHead>Plane</TableHead>
-            <TableHead className="hidden @2xl:table-cell">
+            <StaticHead>Denied</StaticHead>
+            <StaticHead>Plane</StaticHead>
+            <StaticHead className="hidden @2xl:table-cell">
               Why it matters
-            </TableHead>
+            </StaticHead>
           </TableRow>
         </TableHeader>
         <TableBody>

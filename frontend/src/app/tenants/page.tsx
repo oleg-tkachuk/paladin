@@ -52,7 +52,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
 import { NoticeIcon } from "@/components/ui/Notice";
 import { noticeFromLabels } from "@/lib/notice";
@@ -255,13 +255,13 @@ export default function TenantsPage() {
                 current={sort}
                 onSort={handleSort}
               />
-              <TableHead className="hidden @2xl:table-cell">
+              <StaticHead className="hidden @2xl:table-cell">
                 Default bucket
-              </TableHead>
-              <TableHead className="hidden @md:table-cell">Labels</TableHead>
-              <TableHead className="hidden @5xl:table-cell w-70">
+              </StaticHead>
+              <StaticHead className="hidden @md:table-cell">Labels</StaticHead>
+              <StaticHead className="hidden @5xl:table-cell w-70">
                 Tenant ID
-              </TableHead>
+              </StaticHead>
               <TableHead className="w-12 text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>

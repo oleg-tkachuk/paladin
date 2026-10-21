@@ -21,7 +21,7 @@ import { listAllCollections } from "@/lib/listAllCollections";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 
 import { Button } from "@/components/ui/button";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableToolbar } from "@/components/ui/TableToolbar";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
@@ -33,7 +33,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -225,9 +224,9 @@ export default function BucketCollectionsPage() {
                       column="display"
                       {...sortProps}
                     />
-                    <TableHead className="@md:w-45 text-right">
+                    <StaticHead className="@md:w-45 text-right">
                       Browse
-                    </TableHead>
+                    </StaticHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

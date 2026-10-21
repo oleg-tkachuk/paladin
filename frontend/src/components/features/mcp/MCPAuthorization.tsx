@@ -13,7 +13,7 @@ import {
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import {
   TableToolbar,
   type ToolbarFilterOption,
@@ -33,7 +33,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -264,8 +263,10 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
                 className="hidden @sm:table-cell"
                 {...sortProps}
               />
-              <TableHead className="hidden @md:table-cell">Scopes</TableHead>
-              <TableHead className="hidden @md:table-cell">Audiences</TableHead>
+              <StaticHead className="hidden @md:table-cell">Scopes</StaticHead>
+              <StaticHead className="hidden @md:table-cell">
+                Audiences
+              </StaticHead>
             </TableRow>
           </TableHeader>
           <TableBody>

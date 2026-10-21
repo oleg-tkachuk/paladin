@@ -36,7 +36,7 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 
 import { Button } from "@/components/ui/button";
 import { TableToolbar } from "@/components/ui/TableToolbar";
-import { SortableHead } from "@/components/ui/SortHeader";
+import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { User } from "@/gen/paladin/iam/v1/types_pb";
 import { useTableView } from "@/hooks/useTableView";
@@ -49,13 +49,7 @@ import type { SearchText, SortAccessors } from "@/lib/table/view";
 import { StatusTone } from "@/lib/ui/status";
 import { failedRead } from "@/components/ui/ListLoadError";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
 import { TableScope } from "@/components/ui/TableScope";
@@ -227,7 +221,7 @@ export default function UsersPage() {
                 className="hidden @lg:table-cell"
                 {...sortProps}
               />
-              <TableHead className="hidden @md:table-cell">Roles</TableHead>
+              <StaticHead className="hidden @md:table-cell">Roles</StaticHead>
               <SortableHead
                 label="Last login"
                 column="login"
@@ -240,7 +234,7 @@ export default function UsersPage() {
                 className="w-20"
                 {...sortProps}
               />
-              <TableHead className="text-right @md:w-30">Actions</TableHead>
+              <StaticHead className="text-right @md:w-30">Actions</StaticHead>
             </TableRow>
           </TableHeader>
           <ListBody
