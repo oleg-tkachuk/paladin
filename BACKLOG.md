@@ -64,6 +64,22 @@ the same commit. Treat this file like a runtime invariant.
   backend fidelity test, `paladintest` and `paladin.testing` all run.
 - **Blockers:** none.
 
+### The Python SDK still supports Python 3.13
+
+- **Status:** Blocked.
+- **Reason:** only 3.14 and 3.15 should be supported, but `biscuit-python`
+  0.4.0, which the `biscuit` extra (`paladin.attenuate`) needs, ships wheels
+  up to CPython 3.13 only, and its pyo3 0.24 refuses to build for anything
+  newer. Without 3.13 the extra installs nowhere and its tests run nowhere.
+- **Definition of Done:** `requires-python = ">=3.14"`; 3.13 is gone from
+  `sdk/python/compat.json`, `PY_SDK_PYTHON` in `.github/workflows/ci.yaml`
+  (or the variable itself, the SDK job then following the runner), the dev
+  group's `python_version < '3.14'` marker on `biscuit-python`, and the
+  README's compatibility table; `docs/upgrading.md` names the break; the
+  attenuation tests run in CI on 3.14.
+- **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
+  wheel.
+
 ---
 ## Deploy cutover: rename to `paladin`
 
