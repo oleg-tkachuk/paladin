@@ -8,6 +8,7 @@ import {
   typeToConfirm,
 } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 // Protective net for decomposing the capabilities Issue dialog. The page talks
 // to capabilityClient directly, so mock that + the tenant context. Covers the
@@ -120,6 +121,53 @@ describe("CapabilitiesPage", () => {
       sortOrder: SortOrder.DESC,
       pageToken: "",
     });
+  });
+
+  // A list superseded by a newer filter is cancelled: that is no failure.
+  it("says nothing of a list it cancelled", async () => {
+    h.list.mockRejectedValue(new ConnectError("cancelled", Code.Canceled));
+    render(<CapabilitiesPage />);
+    await waitFor(() => expect(h.list).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeNull());
+    expect(h.showNotification).not.toHaveBeenCalled();
+  });
+
+  it("toasts a list that failed", async () => {
+    h.list.mockRejectedValue(new ConnectError("down", Code.Unavailable));
+    render(<CapabilitiesPage />);
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "error", title: "Load failed" }),
+      ),
+    );
+  });
+
+  // One list once typing settles, not one per keystroke.
+  it("lists by the subject once typing settles", async () => {
+    render(<CapabilitiesPage />);
+    await waitFor(() => expect(h.list).toHaveBeenCalledTimes(1));
+    await userEvent.type(
+      screen.getByPlaceholderText(/agent-id, user subject/),
+      "agent-x",
+    );
+    await waitFor(() =>
+      expect(h.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ subject: "agent-x" }),
+        expect.anything(),
+      ),
+    );
+    expect(h.list).toHaveBeenCalledTimes(2);
+  });
+
+  // The list spans the tenant's principals, so each row names its own.
+  it("names each capability's principal", async () => {
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    render(<CapabilitiesPage />);
+    const row = (
+      await screen.findByText("Actions for capability cap-1")
+    ).closest("tr") as HTMLElement;
+    expect(within(row).getByText("agent")).toBeInTheDocument();
+    expect(within(row).getByTitle("agent-x")).toHaveTextContent("agent-x");
   });
 
   it("lists the revoked ones too once their box is checked", async () => {

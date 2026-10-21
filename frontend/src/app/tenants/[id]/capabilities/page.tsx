@@ -41,7 +41,11 @@ import { openableRow } from "@/components/ui/RecordDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
-import { PRINCIPAL_KIND_FILTER_OPTIONS, SPEND_DIGITS } from "./_constants";
+import {
+  PRINCIPAL_KIND_FILTER_OPTIONS,
+  SPEND_DIGITS,
+  principalKindLabel,
+} from "./_constants";
 import {
   DEFAULT_STATUSES,
   STATUS_FILTERS,
@@ -63,6 +67,7 @@ import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import type { Money } from "@/gen/google/type/money_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
@@ -86,7 +91,7 @@ const COL_EXPIRES = "hidden @3xl:table-cell";
 const COL_USAGE = "hidden @4xl:table-cell";
 const COL_ISSUED = "hidden @6xl:table-cell";
 // Every header column, hidden ones included: a full-width row must span them all.
-const COLUMN_COUNT = 8;
+const COLUMN_COUNT = 9;
 
 /** Capabilities per page of the list; Load more reads the next. */
 const CAPABILITIES_PAGE_SIZE = 100;
@@ -139,6 +144,8 @@ export default function CapabilitiesPage() {
     String(PrincipalKind.UNSPECIFIED),
   );
   const [subject, setSubject] = useState("");
+  // The subject lists once typing settles, not on each keystroke.
+  const subjectFilter = useDebouncedValue(subject.trim());
   const [statuses, setStatuses] =
     useState<readonly CapabilityDisposition[]>(DEFAULT_STATUSES);
 
@@ -147,7 +154,7 @@ export default function CapabilitiesPage() {
       "capabilities",
       tenantId,
       principalKind,
-      subject.trim(),
+      subjectFilter,
       statuses,
     ],
     enabled: !!tenantId,
@@ -159,7 +166,7 @@ export default function CapabilitiesPage() {
           {
             tenantId,
             principalKind: Number(principalKind),
-            subject: subject.trim(),
+            subject: subjectFilter,
             dispositions: [...statuses],
             sortOrder: SortOrder.DESC,
             pageSize: CAPABILITIES_PAGE_SIZE,
@@ -203,11 +210,14 @@ export default function CapabilitiesPage() {
         );
         return { items: capabilities, usage, next: page.nextPageToken };
       } catch (err) {
-        showNotification({
-          type: "error",
-          title: "Load failed",
-          message: errorMessage(err, "Failed to list capabilities"),
-        });
+        // A list superseded by a newer filter is cancelled, not failed.
+        if (!isAbortError(err)) {
+          showNotification({
+            type: "error",
+            title: "Load failed",
+            message: errorMessage(err, "Failed to list capabilities"),
+          });
+        }
         throw err;
       }
     },
@@ -400,6 +410,7 @@ export default function CapabilitiesPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="@xl:w-70">ID</TableHead>
+              <TableHead>Principal</TableHead>
               <TableHead>Caveats</TableHead>
               <TableHead className={COL_AUDIENCE}>Audience</TableHead>
               <TableHead className={COL_ISSUED}>Issued</TableHead>
@@ -483,6 +494,17 @@ export default function CapabilitiesPage() {
                           ↪ {c.parentId.slice(0, 8)}…
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="block text-xs text-muted-foreground">
+                        {principalKindLabel(c.subject?.kind)}
+                      </span>
+                      <span
+                        className="block max-w-32 truncate @xl:max-w-48 font-mono text-xs"
+                        title={c.subject?.subject}
+                      >
+                        {c.subject?.subject || "—"}
+                      </span>
                     </TableCell>
                     {/* Caveats wrap: resource prefixes are free text, and a
                         long one on a single line would widen the whole table. */}

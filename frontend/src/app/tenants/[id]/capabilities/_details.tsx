@@ -11,7 +11,11 @@ import type { Money } from "@/gen/google/type/money_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import { copyLimit, requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
-import { PRINCIPAL_KIND_OPTIONS, SPEND_DIGITS } from "./_constants";
+import {
+  PRINCIPAL_KIND_OPTIONS,
+  SPEND_DIGITS,
+  principalKindLabel,
+} from "./_constants";
 import { capabilityStatus } from "./_disposition";
 import { Timestamp } from "@/components/Timestamp";
 
@@ -48,9 +52,6 @@ export function DetailsBody({
   const maxRequests = requestLimit(cap.caveats);
   const maxCopies = copyLimit(cap.caveats);
   const maxBudget = budgetLimit(cap.caveats?.budgetCeiling);
-  const principalKindLabel =
-    PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === cap.subject?.kind)
-      ?.label ?? `kind:${cap.subject?.kind}`;
   const status = capabilityStatus(cap);
 
   return (
@@ -69,7 +70,7 @@ export function DetailsBody({
       </DetailsSection>
 
       <DetailsSection title="Principal">
-        <DetailRow label="Kind" value={principalKindLabel} />
+        <DetailRow label="Kind" value={principalKindLabel(cap.subject?.kind)} />
         <DetailRow
           label="Subject"
           value={cap.subject?.subject || "—"}
