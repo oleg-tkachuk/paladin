@@ -2,22 +2,35 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { userClient } from "@/lib/connect/client";
+import {
+  apiTokenClient,
+  capabilityClient,
+  userClient,
+} from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
+import { parseActor } from "@/lib/actor";
 import { isUuid } from "@/lib/resources/tenant-resolve";
-import { UserHoverCard } from "@/components/features/hover/ResourceHoverCards";
+import {
+  CapabilityHoverCard,
+  UserHoverCard,
+} from "@/components/features/hover/ResourceHoverCards";
 
-/** How long a resolved name is reused; users are renamed rarely. */
+/** How long a resolved name is reused; actors are renamed rarely. */
 export const ACTOR_NAME_STALE_MS = 5 * 60_000;
+
+/** What an API token's name is shown with, so it does not read as a person. */
+export const API_TOKEN_LABEL = "token";
 
 /**
  * The actor of an audit entry, by name.
  *
- * The audit log records the token's subject, which for a person is their user
- * id, so every row read as a UUID. A user id is looked up once per session and
- * shown as the display name, with the id kept in the tooltip. Anything else —
- * "system:bootstrap", a lookup the caller may not make, a user deleted since —
- * is shown as recorded, because the recorded value is still the truth.
+ * The audit log records the token's subject: a person's user id, an API
+ * token's `apikey:<id>`, a capability's `capability:<id>`, so every row read
+ * as an id. Each is looked up once per session — the user's display name, the
+ * API token's, the subject the capability was issued to — with the recorded
+ * subject kept in the tooltip. Anything else — "system:bootstrap", a lookup
+ * the caller may not make, an actor deleted since — is shown as recorded,
+ * because the recorded value is still the truth.
  */
 export function ActorName({
   subject,
@@ -28,29 +41,86 @@ export function ActorName({
   tenantId: string;
   fallback?: string;
 }) {
-  const resolvable = isUuid(subject) && isUuid(tenantId);
+  const actor = parseActor(subject);
+  const inTenant = isUuid(tenantId);
+  const query = {
+    staleTime: ACTOR_NAME_STALE_MS,
+    retry: false,
+  } as const;
   const user = useQuery({
-    queryKey: ["actorName", tenantId, subject],
+    queryKey: ["actorName", "user", tenantId, subject],
     queryFn: ({ signal }) =>
       userClient.getUser(
         { name: `tenants/${tenantId}/users/${subject}` },
-        // A user deleted since is shown as recorded, not reported.
+        // An actor deleted since is shown as recorded, not reported.
         notFoundIsAnswer({ signal }),
       ),
-    enabled: resolvable,
-    staleTime: ACTOR_NAME_STALE_MS,
-    retry: false,
+    enabled: actor.kind === "user" && inTenant,
+    ...query,
+  });
+  const token = useQuery({
+    queryKey: ["actorName", "apiToken", tenantId, subject],
+    queryFn: ({ signal }) =>
+      apiTokenClient.get(
+        {
+          name: `tenants/${tenantId}/apiTokens/${actor.kind === "apiToken" ? actor.id : ""}`,
+        },
+        notFoundIsAnswer({ signal }),
+      ),
+    enabled: actor.kind === "apiToken" && inTenant,
+    ...query,
+  });
+  const capability = useQuery({
+    queryKey: ["actorName", "capability", subject],
+    queryFn: ({ signal }) =>
+      capabilityClient.get(
+        { id: actor.kind === "capability" ? actor.id : "" },
+        notFoundIsAnswer({ signal }),
+      ),
+    enabled: actor.kind === "capability",
+    ...query,
   });
 
   if (!subject) return <>{fallback}</>;
-  const name = user.data?.displayName || user.data?.subject;
-  const label = <span title={subject}>{name || subject}</span>;
-  // A person can be profiled; "system:bootstrap" and the like cannot.
-  return resolvable ? (
-    <UserHoverCard name={`tenants/${tenantId}/users/${subject}`}>
-      {label}
-    </UserHoverCard>
-  ) : (
-    label
-  );
+  switch (actor.kind) {
+    case "user": {
+      const name = user.data?.displayName || user.data?.subject;
+      const label = <span title={subject}>{name || subject}</span>;
+      return inTenant ? (
+        <UserHoverCard name={`tenants/${tenantId}/users/${subject}`}>
+          {label}
+        </UserHoverCard>
+      ) : (
+        label
+      );
+    }
+    case "apiToken": {
+      const name = token.data?.apiToken?.displayName;
+      return (
+        <span title={subject}>
+          {name ? (
+            <>
+              {name}{" "}
+              <span className="text-muted-foreground">{API_TOKEN_LABEL}</span>
+            </>
+          ) : (
+            subject
+          )}
+        </span>
+      );
+    }
+    case "capability": {
+      const name = capability.data?.capability?.subject?.subject;
+      const label = <span title={subject}>{name || subject}</span>;
+      return inTenant ? (
+        <CapabilityHoverCard id={actor.id} tenantId={tenantId}>
+          {label}
+        </CapabilityHoverCard>
+      ) : (
+        label
+      );
+    }
+    default:
+      return <span title={subject}>{subject}</span>;
+  }
 }

@@ -13,6 +13,7 @@ import {
   parseAuditAction,
   parseAuditError,
 } from "@/components/features/audit/action";
+import { SUBJECT_PREFIX } from "@/lib/actor";
 import { isUuid } from "@/lib/resources/tenant-resolve";
 import {
   OP_STATUS_BADGE,
@@ -38,16 +39,13 @@ export const ACTOR_KIND_LABEL: Record<ActorKind, string> = {
   system: "System",
 };
 
-// The audit log's subject for Paladin's own work: "system:bootstrap".
-const SYSTEM_SUBJECT_PREFIX = "system:";
-
 /**
  * The kind of actor a subject names. A person's subject is their user id; a
  * token's carries its kind ("apikey:…", "capability:…"); an entry with none
  * was made by Paladin.
  */
 export function actorKind(subject: string): ActorKind {
-  if (!subject || subject.startsWith(SYSTEM_SUBJECT_PREFIX)) return "system";
+  if (!subject || subject.startsWith(SUBJECT_PREFIX.system)) return "system";
   return isUuid(subject) ? "user" : "token";
 }
 

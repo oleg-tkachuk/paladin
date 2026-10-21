@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@/test/utils";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-const h = vi.hoisted(() => ({ getUser: vi.fn() }));
+const h = vi.hoisted(() => ({
+  getUser: vi.fn(),
+  getToken: vi.fn(),
+  getCapability: vi.fn(),
+}));
 vi.mock("@/lib/connect/client", () => ({
   userClient: { getUser: h.getUser },
+  apiTokenClient: { get: h.getToken },
+  capabilityClient: { get: h.getCapability },
 }));
 
 import { kNotFoundIsAnswer } from "@/lib/connect/expected";
@@ -19,6 +25,8 @@ describe("ActorName", () => {
   // returned from beforeEach is run as teardown — calling getUser once more.
   beforeEach(() => {
     h.getUser.mockReset();
+    h.getToken.mockReset();
+    h.getCapability.mockReset();
   });
 
   it("shows a user's display name, keeping the id in the tooltip", async () => {
@@ -76,5 +84,59 @@ describe("ActorName", () => {
   it("shows the fallback for an entry with no actor", () => {
     render(<ActorName subject="" tenantId="" fallback="system" />);
     expect(screen.getByText("system")).toBeInTheDocument();
+  });
+});
+
+// A token's or a capability's subject is its kind and its id; each is named
+// as the operator knows it, with the recorded subject in the tooltip.
+describe("ActorName for an automated actor", () => {
+  const ID = "01a0f2e5-67d5-7825-a9d9-7c7c87abff10";
+
+  beforeEach(() => {
+    h.getUser.mockReset();
+    h.getToken.mockReset();
+    h.getCapability.mockReset();
+  });
+
+  it("names an API token by its display name", async () => {
+    h.getToken.mockResolvedValue({
+      apiToken: { displayName: "rag-api-issuer" },
+    });
+    render(<ActorName subject={`apikey:${ID}`} tenantId={TENANT} />);
+    const el = await screen.findByText("rag-api-issuer");
+    expect(el.closest("[title]")).toHaveAttribute("title", `apikey:${ID}`);
+    expect(screen.getByText("token")).toBeInTheDocument();
+    expect(h.getToken).toHaveBeenCalledWith(
+      { name: `tenants/${TENANT}/apiTokens/${ID}` },
+      expect.anything(),
+    );
+    expect(h.getUser).not.toHaveBeenCalled();
+  });
+
+  it("names a capability by the subject it was issued to", async () => {
+    h.getCapability.mockResolvedValue({
+      capability: { subject: { subject: "rag-worker" } },
+    });
+    render(<ActorName subject={`capability:${ID}`} tenantId={TENANT} />);
+    expect(await screen.findByText("rag-worker")).toHaveAttribute(
+      "title",
+      `capability:${ID}`,
+    );
+    expect(h.getCapability).toHaveBeenCalledWith({ id: ID }, expect.anything());
+  });
+
+  it("shows the recorded subject when the token is gone", async () => {
+    h.getToken.mockRejectedValue(new ConnectError("gone", Code.NotFound));
+    render(<ActorName subject={`apikey:${ID}`} tenantId={TENANT} />);
+    await waitFor(() => expect(h.getToken).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(`apikey:${ID}`)).toBeInTheDocument();
+  });
+
+  it("looks nothing up for a system actor", () => {
+    render(<ActorName subject="system:bootstrap" tenantId={TENANT} />);
+    expect(screen.getByText("system:bootstrap")).toBeInTheDocument();
+    expect(h.getToken).not.toHaveBeenCalled();
+    expect(h.getCapability).not.toHaveBeenCalled();
+    expect(h.getUser).not.toHaveBeenCalled();
   });
 });
