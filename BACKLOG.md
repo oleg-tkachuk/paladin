@@ -64,6 +64,71 @@ the same commit. Treat this file like a runtime invariant.
   backend fidelity test, `paladintest` and `paladin.testing` all run.
 - **Blockers:** none.
 
+### The fakes' Biscuit cannot be attenuated
+
+- **Status:** Deferred.
+- **Reason:** `paladintest` and `paladin.testing` return a stand-in for a
+  capability's Biscuit, which `paladin.Attenuate` and `paladin.attenuate`
+  refuse as no Paladin Biscuit, so a consumer cannot unit-test narrowing a
+  capability and handing the copy on.
+- **Definition of Done:** both fakes seal a real Biscuit, with a key of
+  their own, that both SDKs' attenuation accepts; a narrowed copy presented
+  to the fake is held to the narrowing (ops, resources, expiry), with tests in
+  both SDKs.
+- **Blockers:** none.
+
+### The fakes check no audience, resource or limit of a capability
+
+- **Status:** Deferred.
+- **Reason:** in strict mode the fakes refuse a revoked or expired
+  capability, but not one presented to a plane its audience does not name,
+  outside its resources, or past its request and budget ceilings. A consumer
+  that issued a capability for `paladin-data` rather than `data` saw green
+  unit tests and an audience mismatch on the cluster.
+- **Definition of Done:** strict mode refuses each of the three as the
+  server does — code, reason and message — and the backend fidelity test
+  runs the cases through the handler and `paladintest` alike.
+- **Blockers:** none.
+
+### The shared SDK scenarios run against the server only
+
+- **Status:** Deferred.
+- **Reason:** `sdk/testdata/scenarios.json` runs through both SDKs against
+  the compose stack (`verify-stack.sh`, phase sdk), not against the fakes, so
+  a fake can disagree with the server on a data-plane scenario and only a
+  consumer finds out. It happened before for multipart complete, a double
+  reserve and `InvalidPart`.
+- **Definition of Done:** the conformance suites of both SDKs take a server
+  to run against, and an untagged test runs them against `paladintest` and
+  `paladin.testing` in every CI run, so a scenario either fake fails is red
+  where the fake changed.
+- **Blockers:** none.
+
+### The Python SDK is versioned by the Go SDK's tag
+
+- **Status:** Deferred.
+- **Reason:** both SDKs release as `sdk/go/vX.Y.Z`, so a Go-only change
+  gives Python a release with nothing in it, and the reverse; a Python
+  consumer installs from git at a Go tag.
+- **Definition of Done:** the Python SDK has a stream of its own
+  (`sdk/python/vX.Y.Z`), versioned by the commits under `sdk/python/` and
+  `proto/`, with its own notes, and `docs/releasing.md` and the README say
+  how to install a version.
+- **Blockers:** whether the Python SDK is published to an index, which
+  decides what its tag has to look like.
+
+### A comment-only proto change still releases the SDK
+
+- **Status:** Deferred.
+- **Reason:** the release analyzer reads a commit's type and paths, so a
+  `feat` that only rewrites a comment under `proto/` cuts an SDK release
+  whose code is unchanged (`sdk/go/v0.98.0`, `v0.99.0`). `docs/releasing.md`
+  asks for `docs(proto)` there; nothing checks it.
+- **Definition of Done:** a CI check refuses a `feat` or `fix` whose changes
+  under `proto/` and `sdk/` leave every generated descriptor unchanged, or
+  the analyzer releases nothing for one, with tests.
+- **Blockers:** none.
+
 ### The Python SDK still supports Python 3.13
 
 - **Status:** Blocked.
