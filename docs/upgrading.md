@@ -44,6 +44,12 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the audit log sorts by client
+
+`ListAuditLog` takes `order_by: "user_agent"` (migration `093`); a call that
+sent no User-Agent sorts as empty. The console's Client column sorts by it.
+Additive: no action needed.
+
 ## sdk/go/v0.100.0 — the audit log names the client a call came from
 
 Migration `092` adds `audit_log.user_agent`, and `AuditLogEntry` gains
