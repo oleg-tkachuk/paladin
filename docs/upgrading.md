@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — an operation says how many objects it left behind
+## sdk/go/v0.108.0, sdk/python/v0.108.0 — an operation says how many objects it left behind
 
 **Server:** the first release that carries this section.
 
