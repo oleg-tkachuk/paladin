@@ -73,6 +73,13 @@ here.
 
 
 
+## Unreleased — an API token can be read by its name
+
+`APITokenService.Get` reads one token's metadata by its resource name,
+`tenants/{tenant}/apiTokens/{id}`, under the same authorisation as `List`.
+The console uses it to name an audit entry's `apikey:<id>` actor. Additive: no
+action needed.
+
 ## sdk/go/v0.103.0, sdk/python/v0.104.0 — an audit entry records its request, not before and after
 
 `AuditLogEntry.before_json` and `after_json` were documented as the

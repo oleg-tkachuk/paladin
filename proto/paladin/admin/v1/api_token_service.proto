@@ -39,6 +39,13 @@ service APITokenService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // Get reads one token's metadata by its resource name, so a reader that
+  // holds only a token's id — an audit entry's apikey:<id> actor — can name
+  // it without listing its tenant's tokens. NOT_FOUND when it does not exist.
+  rpc Get(APITokenServiceGetRequest) returns (APITokenServiceGetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // GetSelf introspects the API token attached to the calling request,
   // if any. Returns NOT_FOUND when the request was authenticated via
   // JWT or capability instead of an API token. Used by clients that
@@ -170,6 +177,15 @@ message APITokenServiceGetSelfRequest {
 }
 
 message APITokenServiceGetSelfResponse {
+  APIToken api_token = 1;
+}
+
+message APITokenServiceGetRequest {
+  // "tenants/{tenant}/apiTokens/{id}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message APITokenServiceGetResponse {
   APIToken api_token = 1;
 }
 

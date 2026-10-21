@@ -299,6 +299,31 @@ func (h *Handler) List(ctx context.Context, req *adminv1.APITokenServiceListRequ
 	}, nil
 }
 
+// Get reads one token's metadata by its resource name, under ReadAPIToken as
+// List is; another tenant's is platform.admin's alone.
+func (h *Handler) Get(ctx context.Context, req *adminv1.APITokenServiceGetRequest) (*adminv1.APITokenServiceGetResponse, error) {
+	caller, err := h.authorize(ctx, cedar.ActionReadAPIToken)
+	if err != nil {
+		return nil, err
+	}
+	tenantID, id, err := parseTokenName(req.GetName())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	ctx, err = scopeToTenant(ctx, caller, tenantID, "read")
+	if err != nil {
+		return nil, err
+	}
+	tok, err := h.store.Get(ctx, id)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return &adminv1.APITokenServiceGetResponse{ApiToken: tokenToProto(tok)}, nil
+}
+
 // GetSelf returns the API token attached to the calling context. NOT_FOUND
 // when the request was authenticated by something other than an API token.
 // No Cedar gate — the bearer of a token can always introspect what they

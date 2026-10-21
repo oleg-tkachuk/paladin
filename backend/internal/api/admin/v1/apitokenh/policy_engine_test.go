@@ -47,9 +47,10 @@ func TestTokenActions_CapabilityIssuerIsRefused(t *testing.T) {
 	_, revokeErr := h.Revoke(ctx, &adminv1.APITokenServiceRevokeRequest{Name: tokenName})
 	_, listErr := h.List(ctx, &adminv1.APITokenServiceListRequest{Parent: "tenants/" + own.String()})
 	_, usageErr := h.GetUsage(ctx, &adminv1.APITokenServiceGetUsageRequest{Name: tokenName})
+	_, getErr := h.Get(ctx, &adminv1.APITokenServiceGetRequest{Name: tokenName})
 
 	for call, err := range map[string]error{
-		"Create": createErr, "Revoke": revokeErr, "List": listErr, "GetUsage": usageErr,
+		"Create": createErr, "Revoke": revokeErr, "List": listErr, "GetUsage": usageErr, "Get": getErr,
 	} {
 		if code(err) != connect.CodePermissionDenied {
 			t.Errorf("%s code = %v, want PermissionDenied", call, code(err))

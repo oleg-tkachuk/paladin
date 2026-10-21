@@ -117,6 +117,10 @@ func (disabledAPITokenServiceHandler) List(ctx context.Context, _ *adminv1.APITo
 	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }
 
+func (disabledAPITokenServiceHandler) Get(ctx context.Context, _ *adminv1.APITokenServiceGetRequest) (*adminv1.APITokenServiceGetResponse, error) {
+	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
+}
+
 func (disabledAPITokenServiceHandler) GetSelf(ctx context.Context, _ *adminv1.APITokenServiceGetSelfRequest) (*adminv1.APITokenServiceGetSelfResponse, error) {
 	return nil, subsystemDisabledError(ctx, "api_token", "config.api_token.enabled")
 }

@@ -115,6 +115,18 @@ class APITokenServiceGetSelfResponse(_message.Message):
     api_token: APIToken
     def __init__(self, api_token: _Optional[_Union[APIToken, _Mapping]] = ...) -> None: ...
 
+class APITokenServiceGetRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class APITokenServiceGetResponse(_message.Message):
+    __slots__ = ("api_token",)
+    API_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    api_token: APIToken
+    def __init__(self, api_token: _Optional[_Union[APIToken, _Mapping]] = ...) -> None: ...
+
 class APITokenServiceGetUsageRequest(_message.Message):
     __slots__ = ("name",)
     NAME_FIELD_NUMBER: _ClassVar[int]

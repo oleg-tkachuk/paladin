@@ -76,6 +76,7 @@ var procedureKinds = map[string]Kind{
 	admin.APITokenServiceCreateProcedure:   Changes,
 	admin.APITokenServiceRevokeProcedure:   Withdraws,
 	admin.APITokenServiceListProcedure:     Reads,
+	admin.APITokenServiceGetProcedure:      Reads,
 	admin.APITokenServiceGetSelfProcedure:  Reads,
 	admin.APITokenServiceGetUsageProcedure: Reads,
 
