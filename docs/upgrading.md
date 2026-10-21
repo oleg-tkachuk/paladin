@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — Get gives a capability its disposition
+## sdk/go/v0.107.0, sdk/python/v0.107.0 — Get gives a capability its disposition
 
 `CapabilityService.Get` sets `Capability.disposition` (12), by the same rules
 as `List`: revoked — itself or through a revoked ancestor — over expired over
