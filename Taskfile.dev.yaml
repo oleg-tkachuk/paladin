@@ -662,10 +662,12 @@ tasks:
   # ═══ dependency bumps ═══════════════════════════════════════════════════════
 
   deps:update:
-    desc: "Bump both halves and the Python SDK to the latest minor/patch (no majors)"
+    desc: "Bump both halves and both SDKs to the latest minor/patch (no majors)"
     cmds:
       - task: backend:go:deps:update
       - task: frontend:node:deps:update
+      # The Go SDK is a module of its own, so the backend's bump leaves it.
+      - task: go-sdk:deps:update
       # Within pyproject's constraints, so the floors the SDK declares to its
       # users stay where they are; only sdk/python/uv.lock moves.
       - task: py-sdk:deps:update
