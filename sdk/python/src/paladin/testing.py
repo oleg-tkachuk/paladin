@@ -481,6 +481,8 @@ _ASCENDING_CURSOR = "paladintest_asc_"
 _DESCENDING_CURSOR = "paladintest_desc_"
 """Prefixes of List's page tokens, by the order each was handed out for: a
 token of the other order is refused, as the server refuses one."""
+_CURSOR_SEPARATOR = "_"
+"""Ends a page token's filters, before the id it resumes after."""
 DEFAULT_LIST_LIMIT = 50
 """List's page size when the request names none: limes's ``DefaultListLimit``."""
 MAX_LIST_LIMIT = 500
@@ -683,8 +685,14 @@ class _CapabilityService(CapabilityServiceSync):
             if caller != request.tenant_id:
                 raise _with_reason(Code.PERMISSION_DENIED, _LIST_ELSEWHERE)
         descending = request.sort_order == pagination_pb2.SORT_ORDER_DESC
-        prefix = _DESCENDING_CURSOR if descending else _ASCENDING_CURSOR
         wanted = _list_dispositions(request)
+        # The filters follow the order, so a token handed back with others
+        # is refused, as the server refuses it.
+        prefix = (
+            (_DESCENDING_CURSOR if descending else _ASCENDING_CURSOR)
+            + _list_filters(request, wanted)
+            + _CURSOR_SEPARATOR
+        )
         now = datetime.now(UTC)
         with fake._lock:
             # The records are kept in the order they were issued.
@@ -721,6 +729,15 @@ class _CapabilityService(CapabilityServiceSync):
         if len(listed) > limit:
             response.next_page_token = prefix + listed[limit - 1].id
         return response
+
+
+def _list_filters(
+    request: capability_service_pb2.CapabilityServiceListRequest, wanted: set[int]
+) -> str:
+    """What ``request`` lists, as the server's cursor holds it: the principal
+    kind, the subject and the set of dispositions."""
+    key = f"{request.principal_kind}\x00{request.subject}\x00{sorted(wanted)}"
+    return hashlib.sha256(key.encode()).hexdigest()
 
 
 def _list_dispositions(request: capability_service_pb2.CapabilityServiceListRequest) -> set[int]:

@@ -2,6 +2,9 @@ package paladintest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -19,7 +22,9 @@ import (
 const msgListElsewhere = "listing another tenant's capabilities requires platform.admin or platform.capability-issuer"
 
 // Prefixes of the fake's List page tokens, by the order each was handed out
-// for: a token of the other order is refused, as the server refuses one.
+// for: a token of the other order is refused, as the server refuses one. The
+// filters it was handed out for follow (listFilters), so a token handed back
+// with others is refused too.
 const (
 	ascendingCursor  = "paladintest_asc_"
 	descendingCursor = "paladintest_desc_"
@@ -42,7 +47,7 @@ func (s capabilityService) List(ctx context.Context, req *adminv1.CapabilityServ
 		}
 	}
 	descending := req.GetSortOrder() == commonv1.SortOrder_SORT_ORDER_DESC
-	after, err := listCursor(req.GetPageToken(), descending)
+	after, err := listCursor(req.GetPageToken(), descending, listFilters(req))
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +92,7 @@ func (s capabilityService) List(ctx context.Context, req *adminv1.CapabilityServ
 		if descending {
 			prefix = descendingCursor
 		}
-		out.NextPageToken = prefix + listed[len(listed)-1].GetId()
+		out.NextPageToken = prefix + listFilters(req) + cursorSeparator + listed[len(listed)-1].GetId()
 	}
 	out.Capabilities = append(out.Capabilities, listed...)
 	return out, nil
@@ -109,9 +114,23 @@ func listDispositions(req *adminv1.CapabilityServiceListRequest) []adminv1.Capab
 	return out
 }
 
+// cursorSeparator ends a page token's filters, before the id it resumes after.
+const cursorSeparator = "_"
+
+// listFilters names what req lists, as the server's cursor holds it: the
+// principal kind, the subject and the set of dispositions, in any order.
+func listFilters(req *adminv1.CapabilityServiceListRequest) string {
+	ds := slices.Clone(listDispositions(req))
+	slices.Sort(ds)
+	h := sha256.New()
+	fmt.Fprintf(h, "%d\x00%s\x00%v", req.GetPrincipalKind(), req.GetSubject(), ds)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // listCursor is the id a page token resumes after, empty for none. A token
-// the fake did not hand out for this order is InvalidArgument.
-func listCursor(token string, descending bool) (string, error) {
+// the fake did not hand out for this order and these filters is
+// InvalidArgument.
+func listCursor(token string, descending bool, filters string) (string, error) {
 	if token == "" {
 		return "", nil
 	}
@@ -119,7 +138,7 @@ func listCursor(token string, descending bool) (string, error) {
 	if descending {
 		prefix = descendingCursor
 	}
-	id, ok := strings.CutPrefix(token, prefix)
+	id, ok := strings.CutPrefix(token, prefix+filters+cursorSeparator)
 	if _, err := uuid.Parse(id); !ok || err != nil {
 		return "", withReason(connect.Errorf(connect.CodeInvalidArgument, "invalid request: record list cursor %q", token))
 	}
