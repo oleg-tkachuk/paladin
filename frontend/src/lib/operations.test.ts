@@ -15,6 +15,7 @@ import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 import {
   isActive,
   operationElapsedMs,
+  operationId,
   operationLabel,
   operationOutcome,
   operationStatus,
@@ -214,5 +215,14 @@ describe("operationMatches", () => {
       },
     });
     expect(operationMatches(failed, "worker")).toBe(true);
+  });
+});
+
+describe("operationId", () => {
+  it("is the name without its collection", () => {
+    expect(operationId({ name: "operations/0199-ab" })).toBe("0199-ab");
+  });
+  it("is the whole name when it is not in the collection", () => {
+    expect(operationId({ name: "0199-ab" })).toBe("0199-ab");
   });
 });
