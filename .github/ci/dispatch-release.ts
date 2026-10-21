@@ -1,6 +1,6 @@
 // Dispatch release.yaml for the commit this CI run checked.
 //
-// Usage: GH_TOKEN=… GITHUB_REPOSITORY=… GITHUB_SHA=… GITHUB_RUN_ID=… node dispatch-release.ts
+// Usage: GH_TOKEN=… GITHUB_REPOSITORY=… GITHUB_SHA=… GITHUB_RUN_ID=… [VERSION=…] node dispatch-release.ts
 //
 // workflow_run is the obvious trigger for the release and is refused by
 // zizmor's dangerous-triggers audit, and GitHub starts no workflow run from
@@ -9,24 +9,40 @@
 // run; release.yaml releases that commit only while it is main's head
 // (release-head.ts). Octokit tries a transient failure again, so one 5xx
 // does not lose the release.
+//
+// VERSION is the dev build's version, which release.yaml names its run after
+// (run-name): a run's name is fixed when it starts, before the run could
+// derive the version itself. It is left out, and the run named after the
+// commit, when it is missing or is no dev build's.
 
-import { info } from "./lib/actions.ts";
-import { requireEnv } from "./lib/env.ts";
+import { info, warning } from "./lib/actions.ts";
+import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
+import { isDevVersion } from "./lib/versions.ts";
 
 // RELEASE_EVENT is the repository_dispatch type release.yaml runs on.
 export const RELEASE_EVENT = "release";
 
-// dispatchRelease asks for a release of sha, vouched for by CI run runId.
-export async function dispatchRelease(github: GitHub, sha: string, runId: string): Promise<void> {
-  await github.dispatch(RELEASE_EVENT, { sha, ci_run_id: runId });
+// Payload names what release.yaml reads from client_payload.
+export const Payload = { Sha: "sha", CIRunID: "ci_run_id", Version: "version" } as const;
+
+// dispatchRelease asks for a release of sha, vouched for by CI run runId,
+// whose dev build is version when it is one.
+export async function dispatchRelease(github: GitHub, sha: string, runId: string, version?: string): Promise<void> {
+  const payload: Record<string, string> = { [Payload.Sha]: sha, [Payload.CIRunID]: runId };
+  if (version !== undefined && isDevVersion(version)) {
+    payload[Payload.Version] = version;
+  } else if (version !== undefined) {
+    warning(`${version} is no dev build's version; the release run is named after the commit`);
+  }
+  await github.dispatch(RELEASE_EVENT, payload);
   info(`dispatched release for ${sha}`);
 }
 
 async function main(): Promise<void> {
   const github = gitHubFor(requireEnv("GH_TOKEN"), requireEnv("GITHUB_REPOSITORY"));
-  await dispatchRelease(github, requireEnv("GITHUB_SHA"), requireEnv("GITHUB_RUN_ID"));
+  await dispatchRelease(github, requireEnv("GITHUB_SHA"), requireEnv("GITHUB_RUN_ID"), optionalEnv("VERSION"));
 }
 
 if (import.meta.main) {

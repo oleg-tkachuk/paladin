@@ -18,8 +18,10 @@
 #
 # --matrix builds the wheel and reads the test dependencies once, installs
 # every Python the cells need in one go, then runs the cells side by side,
-# PY_SDK_COMPAT_JOBS at a time (default: one per CPU). Each cell's output is
-# printed whole when it ends, folded into a group under GitHub Actions.
+# PY_SDK_COMPAT_JOBS at a time (default: one per CPU). It says what it is doing
+# as it goes, and a line per cell as each ends: its result, how long it took
+# and pytest's summary. A failed cell's output is printed whole at the end;
+# under GitHub Actions every cell's is, folded into a group.
 
 set -euo pipefail
 
@@ -77,8 +79,11 @@ run_cell() {
     if [[ $with_tls == true ]]; then
         sdk_requirement="${PACKAGE}[${TLS_EXTRA}] @ file://${wheel}"
     fi
-    uv venv --quiet --python "$python" "$venv"
-    uv pip install --quiet --python "$venv" "$sdk_requirement" "${deps[@]}" "$@"
+    # Each step stops the cell itself: --matrix runs it as an `if` condition,
+    # where set -e does not, and a failed install would run on into an import
+    # error that hides why.
+    uv venv --quiet --python "$python" "$venv" || return
+    uv pip install --quiet --python "$venv" "$sdk_requirement" "${deps[@]}" "$@" || return
 
     # From outside the source tree: the tests import the installed wheel.
     (
@@ -89,9 +94,50 @@ assert "site-packages" in paladin.__file__, paladin.__file__
 import importlib.util
 has_tls = importlib.util.find_spec("httpcore") is not None
 assert has_tls == (sys.argv[1] == "true"), f"httpcore installed: {has_tls}, wanted: {sys.argv[1]}"
-print(f"python {sys.version.split()[0]} protobuf {google.protobuf.__version__} tls {has_tls} paladin {paladin.__file__}")' "$with_tls"
+print(f"python {sys.version.split()[0]} protobuf {google.protobuf.__version__} tls {has_tls} paladin {paladin.__file__}")' "$with_tls" || exit
         "$venv/bin/python" -m pytest --quiet --rootdir "$SDK" -p no:cacheprovider .
     )
+}
+
+# PREFIX starts every line the matrix prints about its progress.
+readonly PREFIX=">>> [py-sdk-compat]"
+# PYTEST_SUMMARY matches pytest's closing line, "552 passed, 9 skipped in 2.1s",
+# whose counts the cell's line repeats.
+readonly PYTEST_SUMMARY='[0-9]+ (passed|failed|error)'
+# ERROR_LINE matches the line uv or Python names a failure with.
+readonly ERROR_LINE='^(error|[A-Za-z]*Error):'
+readonly SECONDS_PER_MINUTE=60
+
+# say prints one line of progress.
+say() {
+    echo "$PREFIX $*"
+}
+
+# elapsed prints $1 seconds as "1m05s", or "42s" under a minute.
+elapsed() {
+    local s=$1
+    if ((s >= SECONDS_PER_MINUTE)); then
+        printf '%dm%02ds' $((s / SECONDS_PER_MINUTE)) $((s % SECONDS_PER_MINUTE))
+    else
+        printf '%ds' "$s"
+    fi
+}
+
+# summary_of prints the pytest summary in log $1, or, when the cell ended
+# before pytest did, its first error line, else its last line.
+summary_of() {
+    local line
+    line=$(grep -E "$PYTEST_SUMMARY" "$1" | tail -1 || true)
+    if [[ -n $line ]]; then
+        # pytest wraps it in "=" rules and ends it with its own time; the
+        # counts are what matter, and the cell's line has the time.
+        line=${line//=/}
+        line=${line%% in [0-9]*}
+    else
+        line=$(grep -m1 -E "$ERROR_LINE" "$1" || tail -1 "$1")
+    fi
+    # Without the indentation it carried.
+    echo "${line#"${line%%[![:space:]]*}"}"
 }
 
 cpus() {
@@ -111,6 +157,8 @@ run_matrix() {
     # shellcheck disable=SC2064 # expand now: the variable is local
     trap "rm -rf '$work'" EXIT
 
+    local started=$SECONDS
+    say "building the wheel"
     local wheel
     wheel=$(build_wheel "$work/dist")
     test_deps >"$work/deps"
@@ -121,19 +169,25 @@ run_matrix() {
     # otherwise race to download it.
     local -a pythons
     mapfile -t pythons < <(printf '%s\n' "${rows[@]}" | cut -f1 | sort -u)
+    say "installing Python ${pythons[*]}"
     uv python install --quiet "${pythons[@]}"
 
     local jobs=${PY_SDK_COMPAT_JOBS:-$(cpus)}
+    say "running ${#rows[@]} cells, $jobs at a time"
     local i running=0
     for i in "${!rows[@]}"; do
         local python with tls
         IFS=$'\t' read -r python with tls <<<"${rows[$i]}"
         (
-            if run_cell "$wheel" "$work/deps" "$tls" "$python" "$with" >"$work/$i.log" 2>&1 </dev/null; then
-                echo ok >"$work/$i.status"
-            else
-                echo failed >"$work/$i.status"
+            local cell_started=$SECONDS status=ok mark="✔"
+            if ! run_cell "$wheel" "$work/deps" "$tls" "$python" "$with" >"$work/$i.log" 2>&1 </dev/null; then
+                status=failed mark="✘"
             fi
+            echo "$status" >"$work/$i.status"
+            # One line, printed whole, so the cells running beside it do not
+            # interleave with it.
+            printf '  %s %s (%s): %s\n' "$mark" "$(label "$python" "$with" "$tls")" \
+                "$(elapsed $((SECONDS - cell_started)))" "$(summary_of "$work/$i.log")"
         ) &
         running=$((running + 1))
         if ((running >= jobs)); then
@@ -151,45 +205,57 @@ run_matrix() {
         status=$(cat "$work/$i.status" 2>/dev/null || echo failed)
         if [[ ${GITHUB_ACTIONS:-} == true ]]; then
             echo "::group::$name — $status"
-        else
+            cat "$work/$i.log"
+            echo "::endgroup::"
+        elif [[ $status != ok ]]; then
+            # Locally only a failed cell's output: a passing one said what
+            # it had to in its line above.
             echo "=== $name — $status"
+            cat "$work/$i.log"
         fi
-        cat "$work/$i.log"
-        [[ ${GITHUB_ACTIONS:-} == true ]] && echo "::endgroup::"
         [[ $status == ok ]] || failed+=("$name")
     done
 
+    local took
+    took=$(elapsed $((SECONDS - started)))
     if ((${#failed[@]} > 0)); then
-        echo "!!! ${#failed[@]} of ${#rows[@]} cells failed:" >&2
+        echo "!!! ${#failed[@]} of ${#rows[@]} cells failed in $took:" >&2
         printf '      %s\n' "${failed[@]}" >&2
         exit 1
     fi
-    echo "python sdk: all ${#rows[@]} cells passed"
+    echo "python sdk: all ${#rows[@]} cells passed in $took"
 }
 
-(($# >= 1)) || usage
-case $1 in
---list)
-    cells
-    exit 0
-    ;;
---matrix)
-    run_matrix
-    exit 0
-    ;;
-esac
+main() {
+    (($# >= 1)) || usage
+    case $1 in
+    --list)
+        cells
+        exit 0
+        ;;
+    --matrix)
+        run_matrix
+        exit 0
+        ;;
+    esac
 
-with_tls=true
-if [[ $1 == --without-tls ]]; then
-    with_tls=false
+    with_tls=true
+    if [[ $1 == --without-tls ]]; then
+        with_tls=false
+        shift
+    fi
+    (($# >= 1)) || usage
+    python=$1
     shift
-fi
-(($# >= 1)) || usage
-python=$1
-shift
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-wheel=$(build_wheel "$work/dist")
-test_deps >"$work/deps"
-run_cell "$wheel" "$work/deps" "$with_tls" "$python" "$@"
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' EXIT
+    wheel=$(build_wheel "$work/dist")
+    test_deps >"$work/deps"
+    run_cell "$wheel" "$work/deps" "$with_tls" "$python" "$@"
+}
+
+# Sourced by its test for the helpers above; run, it runs.
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    main "$@"
+fi

@@ -38,6 +38,16 @@ name: Release
 # A manual run releases main's head only once CI passed on it
 # (.github/ci/release-head.ts): a click cannot release an untested commit, which is
 # what dispatching from CI guarantees the other trigger.
+# Each run is named for what it releases: a dev build, with its version when CI
+# derived one (dispatch-release.ts), or the commit otherwise; a release
+# candidate; a release. A run's name is fixed when it starts, and a release's
+# version is derived inside it by semantic-release, so a release and a
+# candidate are named without one; their tag names the GitHub release.
+run-name: >-
+  ${{ github.event_name == 'repository_dispatch'
+      && format('DevRelease {0}', github.event.client_payload.version || github.event.client_payload.sha)
+      || (inputs.channel == 'prerelease' && 'PreRelease' || 'Release') }}
+
 on:
   repository_dispatch:
     types: [release]
