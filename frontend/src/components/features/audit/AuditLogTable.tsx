@@ -69,7 +69,7 @@ export function AuditLogTable({
           <SortableHead
             label="When"
             column={AUDIT_ORDER.at}
-            className="@2xl:w-44"
+            className="@4xl:w-44"
             {...sortProps}
           />
           <SortableHead
@@ -82,7 +82,12 @@ export function AuditLogTable({
             column={AUDIT_ORDER.actor}
             {...sortProps}
           />
-          <StaticHead className="hidden @3xl:table-cell">Client</StaticHead>
+          <SortableHead
+            label="Client"
+            column={AUDIT_ORDER.client}
+            className="hidden @3xl:table-cell"
+            {...sortProps}
+          />
           <SortableHead
             label="Resource"
             column={AUDIT_ORDER.resource}
@@ -126,13 +131,13 @@ export function AuditLogTable({
               <TableCell
                 className={cn(
                   T.codeSmall,
-                  "whitespace-normal text-muted-foreground @2xl:whitespace-nowrap",
+                  "whitespace-normal text-muted-foreground @4xl:whitespace-nowrap",
                 )}
               >
                 <Timestamp ts={e.at} />
               </TableCell>
               <TableCell>
-                <div className="max-w-40 @2xl:max-w-56">
+                <div className="max-w-40 @4xl:max-w-56">
                   <AuditActionCell
                     action={e.action}
                     errorMessage={e.errorMessage}
@@ -140,7 +145,7 @@ export function AuditLogTable({
                 </div>
               </TableCell>
               <TableCell>
-                <div className="min-w-0 max-w-40 space-y-0.5 @2xl:max-w-56">
+                <div className="min-w-0 max-w-40 space-y-0.5 @4xl:max-w-56">
                   <div className={cn(T.body, "truncate")}>
                     {e.actorSubject ? (
                       <ActorName
@@ -164,13 +169,12 @@ export function AuditLogTable({
               <TableCell className="hidden @3xl:table-cell">
                 <ClientCell userAgent={e.userAgent} />
               </TableCell>
-              <TableCell className="hidden @2xl:table-cell">
+              {/* The one column that gives: it takes what the others leave and
+                  truncates there, so no width overflows the card. */}
+              <TableCell className="hidden w-full max-w-0 @2xl:table-cell">
                 {e.resourceName ? (
                   <div
-                    className={cn(
-                      T.code,
-                      "max-w-48 truncate text-muted-foreground @5xl:max-w-72",
-                    )}
+                    className={cn(T.code, "truncate text-muted-foreground")}
                     title={e.resourceName}
                   >
                     {resourceInTenant(e.resourceName)}
