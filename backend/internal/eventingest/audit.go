@@ -21,7 +21,7 @@ type AuditWriter interface {
 const (
 	// ingestActor is who an ingested transition is recorded as: the
 	// pipeline, acting on what the storage backend reported, not a client.
-	ingestActor = "system:event-ingest"
+	ingestActor = auth.SubjectPrefixSystem + "event-ingest"
 	// The actions of the rows a storage event's transitions write, as the
 	// data-plane RPCs that make the same transitions are recorded.
 	actionObjectUploaded = "ingest.ObjectUploaded"

@@ -28,6 +28,10 @@ const ALLOWED: Record<string, string> = {
     "names the tenant in the trail; a failed lookup shows its id, which the page already has",
   "components/features/audit/ActorName.tsx#user":
     "a failed lookup shows the subject id, which is what it resolves",
+  "components/features/audit/ActorName.tsx#token":
+    "a failed lookup shows the recorded apikey:<id> subject, which is what it resolves",
+  "components/features/audit/ActorName.tsx#capability":
+    "a failed lookup shows the recorded capability:<id> subject, which is what it resolves",
   "components/SettingsSync.tsx#{data, isPending}":
     "a failed read keeps the current theme and zone; /profile renders the error",
   "components/features/tenants/RenamedSlugHint.tsx#{data}":

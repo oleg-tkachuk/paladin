@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .api_token_service_pb2 import APITokenServiceCreateRequest, APITokenServiceCreateResponse, APITokenServiceGetSelfRequest, APITokenServiceGetSelfResponse, APITokenServiceGetUsageRequest, APITokenServiceGetUsageResponse, APITokenServiceListRequest, APITokenServiceListResponse, APITokenServiceRevokeRequest, APITokenServiceRevokeResponse
+from .api_token_service_pb2 import APITokenServiceCreateRequest, APITokenServiceCreateResponse, APITokenServiceGetRequest, APITokenServiceGetResponse, APITokenServiceGetSelfRequest, APITokenServiceGetSelfResponse, APITokenServiceGetUsageRequest, APITokenServiceGetUsageResponse, APITokenServiceListRequest, APITokenServiceListResponse, APITokenServiceRevokeRequest, APITokenServiceRevokeResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -69,6 +69,14 @@ class APITokenService(Protocol):
         """
         List enumerates tokens for a tenant. Paginated cursor-style. The
         `token_hash` is never returned; callers see metadata only.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def get(self, request: APITokenServiceGetRequest, ctx: RequestContext[APITokenServiceGetRequest, APITokenServiceGetResponse], /) -> APITokenServiceGetResponse:
+        """
+        Get reads one token's metadata by its resource name, so a reader that
+        holds only a token's id — an audit entry's apikey:<id> actor — can name
+        it without listing its tenant's tokens. NOT_FOUND when it does not exist.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -135,6 +143,16 @@ class APITokenServiceASGIApplication(ConnectASGIApplication[APITokenService]):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.list,
+                ),
+                "/paladin.admin.v1.APITokenService/Get": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Get",
+                        service_name="paladin.admin.v1.APITokenService",
+                        input=APITokenServiceGetRequest,
+                        output=APITokenServiceGetResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.get,
                 ),
                 "/paladin.admin.v1.APITokenService/GetSelf": Endpoint.unary(
                     method=MethodInfo(
@@ -284,6 +302,33 @@ class APITokenServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def get(
+        self,
+        request: APITokenServiceGetRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> APITokenServiceGetResponse:
+        """
+        Get reads one token's metadata by its resource name, so a reader that
+        holds only a token's id — an audit entry's apikey:<id> actor — can name
+        it without listing its tenant's tokens. NOT_FOUND when it does not exist.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Get",
+                service_name="paladin.admin.v1.APITokenService",
+                input=APITokenServiceGetRequest,
+                output=APITokenServiceGetResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def get_self(
         self,
         request: APITokenServiceGetSelfRequest,
@@ -380,6 +425,14 @@ class APITokenServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def get(self, request: APITokenServiceGetRequest, ctx: RequestContext[APITokenServiceGetRequest, APITokenServiceGetResponse], /) -> APITokenServiceGetResponse:
+        """
+        Get reads one token's metadata by its resource name, so a reader that
+        holds only a token's id — an audit entry's apikey:<id> actor — can name
+        it without listing its tenant's tokens. NOT_FOUND when it does not exist.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def get_self(self, request: APITokenServiceGetSelfRequest, ctx: RequestContext[APITokenServiceGetSelfRequest, APITokenServiceGetSelfResponse], /) -> APITokenServiceGetSelfResponse:
         """
         GetSelf introspects the API token attached to the calling request,
@@ -441,6 +494,16 @@ class APITokenServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.list,
+                ),
+                "/paladin.admin.v1.APITokenService/Get": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Get",
+                        service_name="paladin.admin.v1.APITokenService",
+                        input=APITokenServiceGetRequest,
+                        output=APITokenServiceGetResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.get,
                 ),
                 "/paladin.admin.v1.APITokenService/GetSelf": EndpointSync.unary(
                     method=MethodInfo(
@@ -581,6 +644,32 @@ class APITokenServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.APITokenService",
                 input=APITokenServiceListRequest,
                 output=APITokenServiceListResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def get(
+        self,
+        request: APITokenServiceGetRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> APITokenServiceGetResponse:
+        """
+        Get reads one token's metadata by its resource name, so a reader that
+        holds only a token's id — an audit entry's apikey:<id> actor — can name
+        it without listing its tenant's tokens. NOT_FOUND when it does not exist.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Get",
+                service_name="paladin.admin.v1.APITokenService",
+                input=APITokenServiceGetRequest,
+                output=APITokenServiceGetResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

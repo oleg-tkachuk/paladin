@@ -731,6 +731,95 @@ func (x *APITokenServiceGetSelfResponse) GetApiToken() *APIToken {
 	return nil
 }
 
+type APITokenServiceGetRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "tenants/{tenant}/apiTokens/{id}".
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *APITokenServiceGetRequest) Reset() {
+	*x = APITokenServiceGetRequest{}
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *APITokenServiceGetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*APITokenServiceGetRequest) ProtoMessage() {}
+
+func (x *APITokenServiceGetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use APITokenServiceGetRequest.ProtoReflect.Descriptor instead.
+func (*APITokenServiceGetRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *APITokenServiceGetRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type APITokenServiceGetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ApiToken      *APIToken              `protobuf:"bytes,1,opt,name=api_token,json=apiToken,proto3" json:"api_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *APITokenServiceGetResponse) Reset() {
+	*x = APITokenServiceGetResponse{}
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *APITokenServiceGetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*APITokenServiceGetResponse) ProtoMessage() {}
+
+func (x *APITokenServiceGetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use APITokenServiceGetResponse.ProtoReflect.Descriptor instead.
+func (*APITokenServiceGetResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *APITokenServiceGetResponse) GetApiToken() *APIToken {
+	if x != nil {
+		return x.ApiToken
+	}
+	return nil
+}
+
 type APITokenServiceGetUsageRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "tenants/{tenant}/apiTokens/{id}".
@@ -741,7 +830,7 @@ type APITokenServiceGetUsageRequest struct {
 
 func (x *APITokenServiceGetUsageRequest) Reset() {
 	*x = APITokenServiceGetUsageRequest{}
-	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[9]
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -753,7 +842,7 @@ func (x *APITokenServiceGetUsageRequest) String() string {
 func (*APITokenServiceGetUsageRequest) ProtoMessage() {}
 
 func (x *APITokenServiceGetUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[9]
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -766,7 +855,7 @@ func (x *APITokenServiceGetUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use APITokenServiceGetUsageRequest.ProtoReflect.Descriptor instead.
 func (*APITokenServiceGetUsageRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{9}
+	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *APITokenServiceGetUsageRequest) GetName() string {
@@ -803,7 +892,7 @@ type APITokenServiceGetUsageResponse struct {
 
 func (x *APITokenServiceGetUsageResponse) Reset() {
 	*x = APITokenServiceGetUsageResponse{}
-	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[10]
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +904,7 @@ func (x *APITokenServiceGetUsageResponse) String() string {
 func (*APITokenServiceGetUsageResponse) ProtoMessage() {}
 
 func (x *APITokenServiceGetUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[10]
+	mi := &file_paladin_admin_v1_api_token_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +917,7 @@ func (x *APITokenServiceGetUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use APITokenServiceGetUsageResponse.ProtoReflect.Descriptor instead.
 func (*APITokenServiceGetUsageResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{10}
+	return file_paladin_admin_v1_api_token_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *APITokenServiceGetUsageResponse) GetName() string {
@@ -940,6 +1029,10 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x1f\n" +
 	"\x1dAPITokenServiceGetSelfRequest\"Y\n" +
 	"\x1eAPITokenServiceGetSelfResponse\x127\n" +
+	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\"8\n" +
+	"\x19APITokenServiceGetRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"U\n" +
+	"\x1aAPITokenServiceGetResponse\x127\n" +
 	"\tapi_token\x18\x01 \x01(\v2\x1a.paladin.admin.v1.APITokenR\bapiToken\"=\n" +
 	"\x1eAPITokenServiceGetUsageRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xf6\x02\n" +
@@ -953,11 +1046,12 @@ const file_paladin_admin_v1_api_token_service_proto_rawDesc = "" +
 	"\flast_used_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastUsedAtB\f\n" +
 	"\n" +
-	"_limit_rpm2\xbf\x04\n" +
+	"_limit_rpm2\xa6\x05\n" +
 	"\x0fAPITokenService\x12i\n" +
 	"\x06Create\x12..paladin.admin.v1.APITokenServiceCreateRequest\x1a/.paladin.admin.v1.APITokenServiceCreateResponse\x12n\n" +
 	"\x06Revoke\x12..paladin.admin.v1.APITokenServiceRevokeRequest\x1a/.paladin.admin.v1.APITokenServiceRevokeResponse\"\x03\x90\x02\x02\x12h\n" +
-	"\x04List\x12,.paladin.admin.v1.APITokenServiceListRequest\x1a-.paladin.admin.v1.APITokenServiceListResponse\"\x03\x90\x02\x01\x12q\n" +
+	"\x04List\x12,.paladin.admin.v1.APITokenServiceListRequest\x1a-.paladin.admin.v1.APITokenServiceListResponse\"\x03\x90\x02\x01\x12e\n" +
+	"\x03Get\x12+.paladin.admin.v1.APITokenServiceGetRequest\x1a,.paladin.admin.v1.APITokenServiceGetResponse\"\x03\x90\x02\x01\x12q\n" +
 	"\aGetSelf\x12/.paladin.admin.v1.APITokenServiceGetSelfRequest\x1a0.paladin.admin.v1.APITokenServiceGetSelfResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\bGetUsage\x120.paladin.admin.v1.APITokenServiceGetUsageRequest\x1a1.paladin.admin.v1.APITokenServiceGetUsageResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
@@ -973,7 +1067,7 @@ func file_paladin_admin_v1_api_token_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_api_token_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_api_token_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_paladin_admin_v1_api_token_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_paladin_admin_v1_api_token_service_proto_goTypes = []any{
 	(*APIToken)(nil),                        // 0: paladin.admin.v1.APIToken
 	(*APITokenServiceCreateRequest)(nil),    // 1: paladin.admin.v1.APITokenServiceCreateRequest
@@ -984,35 +1078,40 @@ var file_paladin_admin_v1_api_token_service_proto_goTypes = []any{
 	(*APITokenServiceListResponse)(nil),     // 6: paladin.admin.v1.APITokenServiceListResponse
 	(*APITokenServiceGetSelfRequest)(nil),   // 7: paladin.admin.v1.APITokenServiceGetSelfRequest
 	(*APITokenServiceGetSelfResponse)(nil),  // 8: paladin.admin.v1.APITokenServiceGetSelfResponse
-	(*APITokenServiceGetUsageRequest)(nil),  // 9: paladin.admin.v1.APITokenServiceGetUsageRequest
-	(*APITokenServiceGetUsageResponse)(nil), // 10: paladin.admin.v1.APITokenServiceGetUsageResponse
-	(*timestamppb.Timestamp)(nil),           // 11: google.protobuf.Timestamp
+	(*APITokenServiceGetRequest)(nil),       // 9: paladin.admin.v1.APITokenServiceGetRequest
+	(*APITokenServiceGetResponse)(nil),      // 10: paladin.admin.v1.APITokenServiceGetResponse
+	(*APITokenServiceGetUsageRequest)(nil),  // 11: paladin.admin.v1.APITokenServiceGetUsageRequest
+	(*APITokenServiceGetUsageResponse)(nil), // 12: paladin.admin.v1.APITokenServiceGetUsageResponse
+	(*timestamppb.Timestamp)(nil),           // 13: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_api_token_service_proto_depIdxs = []int32{
-	11, // 0: paladin.admin.v1.APIToken.expires_at:type_name -> google.protobuf.Timestamp
-	11, // 1: paladin.admin.v1.APIToken.revoked_at:type_name -> google.protobuf.Timestamp
-	11, // 2: paladin.admin.v1.APIToken.last_used_at:type_name -> google.protobuf.Timestamp
-	11, // 3: paladin.admin.v1.APIToken.created_at:type_name -> google.protobuf.Timestamp
+	13, // 0: paladin.admin.v1.APIToken.expires_at:type_name -> google.protobuf.Timestamp
+	13, // 1: paladin.admin.v1.APIToken.revoked_at:type_name -> google.protobuf.Timestamp
+	13, // 2: paladin.admin.v1.APIToken.last_used_at:type_name -> google.protobuf.Timestamp
+	13, // 3: paladin.admin.v1.APIToken.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: paladin.admin.v1.APITokenServiceCreateResponse.api_token:type_name -> paladin.admin.v1.APIToken
 	0,  // 5: paladin.admin.v1.APITokenServiceListResponse.api_tokens:type_name -> paladin.admin.v1.APIToken
 	0,  // 6: paladin.admin.v1.APITokenServiceGetSelfResponse.api_token:type_name -> paladin.admin.v1.APIToken
-	11, // 7: paladin.admin.v1.APITokenServiceGetUsageResponse.window_resets_at:type_name -> google.protobuf.Timestamp
-	11, // 8: paladin.admin.v1.APITokenServiceGetUsageResponse.last_used_at:type_name -> google.protobuf.Timestamp
-	1,  // 9: paladin.admin.v1.APITokenService.Create:input_type -> paladin.admin.v1.APITokenServiceCreateRequest
-	3,  // 10: paladin.admin.v1.APITokenService.Revoke:input_type -> paladin.admin.v1.APITokenServiceRevokeRequest
-	5,  // 11: paladin.admin.v1.APITokenService.List:input_type -> paladin.admin.v1.APITokenServiceListRequest
-	7,  // 12: paladin.admin.v1.APITokenService.GetSelf:input_type -> paladin.admin.v1.APITokenServiceGetSelfRequest
-	9,  // 13: paladin.admin.v1.APITokenService.GetUsage:input_type -> paladin.admin.v1.APITokenServiceGetUsageRequest
-	2,  // 14: paladin.admin.v1.APITokenService.Create:output_type -> paladin.admin.v1.APITokenServiceCreateResponse
-	4,  // 15: paladin.admin.v1.APITokenService.Revoke:output_type -> paladin.admin.v1.APITokenServiceRevokeResponse
-	6,  // 16: paladin.admin.v1.APITokenService.List:output_type -> paladin.admin.v1.APITokenServiceListResponse
-	8,  // 17: paladin.admin.v1.APITokenService.GetSelf:output_type -> paladin.admin.v1.APITokenServiceGetSelfResponse
-	10, // 18: paladin.admin.v1.APITokenService.GetUsage:output_type -> paladin.admin.v1.APITokenServiceGetUsageResponse
-	14, // [14:19] is the sub-list for method output_type
-	9,  // [9:14] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	0,  // 7: paladin.admin.v1.APITokenServiceGetResponse.api_token:type_name -> paladin.admin.v1.APIToken
+	13, // 8: paladin.admin.v1.APITokenServiceGetUsageResponse.window_resets_at:type_name -> google.protobuf.Timestamp
+	13, // 9: paladin.admin.v1.APITokenServiceGetUsageResponse.last_used_at:type_name -> google.protobuf.Timestamp
+	1,  // 10: paladin.admin.v1.APITokenService.Create:input_type -> paladin.admin.v1.APITokenServiceCreateRequest
+	3,  // 11: paladin.admin.v1.APITokenService.Revoke:input_type -> paladin.admin.v1.APITokenServiceRevokeRequest
+	5,  // 12: paladin.admin.v1.APITokenService.List:input_type -> paladin.admin.v1.APITokenServiceListRequest
+	9,  // 13: paladin.admin.v1.APITokenService.Get:input_type -> paladin.admin.v1.APITokenServiceGetRequest
+	7,  // 14: paladin.admin.v1.APITokenService.GetSelf:input_type -> paladin.admin.v1.APITokenServiceGetSelfRequest
+	11, // 15: paladin.admin.v1.APITokenService.GetUsage:input_type -> paladin.admin.v1.APITokenServiceGetUsageRequest
+	2,  // 16: paladin.admin.v1.APITokenService.Create:output_type -> paladin.admin.v1.APITokenServiceCreateResponse
+	4,  // 17: paladin.admin.v1.APITokenService.Revoke:output_type -> paladin.admin.v1.APITokenServiceRevokeResponse
+	6,  // 18: paladin.admin.v1.APITokenService.List:output_type -> paladin.admin.v1.APITokenServiceListResponse
+	10, // 19: paladin.admin.v1.APITokenService.Get:output_type -> paladin.admin.v1.APITokenServiceGetResponse
+	8,  // 20: paladin.admin.v1.APITokenService.GetSelf:output_type -> paladin.admin.v1.APITokenServiceGetSelfResponse
+	12, // 21: paladin.admin.v1.APITokenService.GetUsage:output_type -> paladin.admin.v1.APITokenServiceGetUsageResponse
+	16, // [16:22] is the sub-list for method output_type
+	10, // [10:16] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_api_token_service_proto_init() }
@@ -1028,14 +1127,14 @@ func file_paladin_admin_v1_api_token_service_proto_init() {
 		(*APITokenServiceCreateRequest_RateLimitRpm)(nil),
 		(*APITokenServiceCreateRequest_UnlimitedRate)(nil),
 	}
-	file_paladin_admin_v1_api_token_service_proto_msgTypes[10].OneofWrappers = []any{}
+	file_paladin_admin_v1_api_token_service_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_api_token_service_proto_rawDesc), len(file_paladin_admin_v1_api_token_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

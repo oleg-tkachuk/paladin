@@ -638,7 +638,7 @@ under [`proto/paladin`](../../proto/paladin).
 
 | Service | Methods |
 | --- | --- |
-| `APITokenService` | `create`, `revoke`, `list`, `get_self`, `get_usage` |
+| `APITokenService` | `create`, `revoke`, `list`, `get`, `get_self`, `get_usage` |
 | `AuditLogService` | `list_audit_log`, `get_audit_log_entry`, `export_audit_log` |
 | `BackendService` | `create_backend`, `get_backend`, `update_backend`, `delete_backend`, `list_backends`, `rotate_credentials`, `test_backend`, `set_backend_enabled`, `set_backend_read_only`, `set_backend_maintenance` |
 | `BillingService` | `get_tenant_summary`, `get_tenant_time_series`, `list_tenant_spend`, `get_billing_settings` |

@@ -31,6 +31,8 @@ const (
 	APITokenServiceRevokeProcedure = "/paladin.admin.v1.APITokenService/Revoke"
 	// APITokenServiceListProcedure is the procedure name of the APITokenService's List RPC.
 	APITokenServiceListProcedure = "/paladin.admin.v1.APITokenService/List"
+	// APITokenServiceGetProcedure is the procedure name of the APITokenService's Get RPC.
+	APITokenServiceGetProcedure = "/paladin.admin.v1.APITokenService/Get"
 	// APITokenServiceGetSelfProcedure is the procedure name of the APITokenService's GetSelf RPC.
 	APITokenServiceGetSelfProcedure = "/paladin.admin.v1.APITokenService/GetSelf"
 	// APITokenServiceGetUsageProcedure is the procedure name of the APITokenService's GetUsage RPC.
@@ -58,6 +60,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_paladin_admin_v1_api_token_service_proto.Services().ByName("APITokenService").Methods().ByName("List"),
 			Procedure:        APITokenServiceListProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	aPITokenServiceGetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_api_token_service_proto.Services().ByName("APITokenService").Methods().ByName("Get"),
+			Procedure:        APITokenServiceGetProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -93,6 +103,10 @@ type APITokenServiceClient interface {
 	// List enumerates tokens for a tenant. Paginated cursor-style. The
 	// `token_hash` is never returned; callers see metadata only.
 	List(context.Context, *v1.APITokenServiceListRequest) (*v1.APITokenServiceListResponse, error)
+	// Get reads one token's metadata by its resource name, so a reader that
+	// holds only a token's id — an audit entry's apikey:<id> actor — can name
+	// it without listing its tenant's tokens. NOT_FOUND when it does not exist.
+	Get(context.Context, *v1.APITokenServiceGetRequest) (*v1.APITokenServiceGetResponse, error)
 	// GetSelf introspects the API token attached to the calling request,
 	// if any. Returns NOT_FOUND when the request was authenticated via
 	// JWT or capability instead of an API token. Used by clients that
@@ -127,6 +141,10 @@ type APITokenServiceHandler interface {
 	// List enumerates tokens for a tenant. Paginated cursor-style. The
 	// `token_hash` is never returned; callers see metadata only.
 	List(context.Context, *v1.APITokenServiceListRequest) (*v1.APITokenServiceListResponse, error)
+	// Get reads one token's metadata by its resource name, so a reader that
+	// holds only a token's id — an audit entry's apikey:<id> actor — can name
+	// it without listing its tenant's tokens. NOT_FOUND when it does not exist.
+	Get(context.Context, *v1.APITokenServiceGetRequest) (*v1.APITokenServiceGetResponse, error)
 	// GetSelf introspects the API token attached to the calling request,
 	// if any. Returns NOT_FOUND when the request was authenticated via
 	// JWT or capability instead of an API token. Used by clients that
@@ -149,6 +167,7 @@ func RegisterAPITokenServiceHandler(server *connect.Server, svc APITokenServiceH
 		connect.Method{Spec: aPITokenServiceCreateSpec(), Handler: adapter.create},
 		connect.Method{Spec: aPITokenServiceRevokeSpec(), Handler: adapter.revoke},
 		connect.Method{Spec: aPITokenServiceListSpec(), Handler: adapter.list},
+		connect.Method{Spec: aPITokenServiceGetSpec(), Handler: adapter.get},
 		connect.Method{Spec: aPITokenServiceGetSelfSpec(), Handler: adapter.getSelf},
 		connect.Method{Spec: aPITokenServiceGetUsageSpec(), Handler: adapter.getUsage},
 	)
@@ -167,6 +186,10 @@ func (UnimplementedAPITokenServiceHandler) Revoke(context.Context, *v1.APITokenS
 
 func (UnimplementedAPITokenServiceHandler) List(context.Context, *v1.APITokenServiceListRequest) (*v1.APITokenServiceListResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.APITokenService.List is not implemented")
+}
+
+func (UnimplementedAPITokenServiceHandler) Get(context.Context, *v1.APITokenServiceGetRequest) (*v1.APITokenServiceGetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.APITokenService.Get is not implemented")
 }
 
 func (UnimplementedAPITokenServiceHandler) GetSelf(context.Context, *v1.APITokenServiceGetSelfRequest) (*v1.APITokenServiceGetSelfResponse, error) {
@@ -200,6 +223,14 @@ func (c *aPITokenServiceClient) Revoke(ctx context.Context, req *v1.APITokenServ
 func (c *aPITokenServiceClient) List(ctx context.Context, req *v1.APITokenServiceListRequest) (*v1.APITokenServiceListResponse, error) {
 	var res v1.APITokenServiceListResponse
 	if err := c.client.CallUnary(ctx, aPITokenServiceListSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *aPITokenServiceClient) Get(ctx context.Context, req *v1.APITokenServiceGetRequest) (*v1.APITokenServiceGetResponse, error) {
+	var res v1.APITokenServiceGetResponse
+	if err := c.client.CallUnary(ctx, aPITokenServiceGetSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -253,6 +284,18 @@ func (h aPITokenServiceHandler) list(ctx context.Context, _ connect.Spec, stream
 		return err
 	}
 	res, err := h.svc.List(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h aPITokenServiceHandler) get(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.APITokenServiceGetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Get(ctx, &req)
 	if err != nil {
 		return err
 	}

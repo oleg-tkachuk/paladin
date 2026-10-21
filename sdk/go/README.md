@@ -613,7 +613,7 @@ what each field means, are documented in the `.proto` files under
 
 | Service | Methods |
 | --- | --- |
-| `APITokenService` | `Create`, `Revoke`, `List`, `GetSelf`, `GetUsage` |
+| `APITokenService` | `Create`, `Revoke`, `List`, `Get`, `GetSelf`, `GetUsage` |
 | `AuditLogService` | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |

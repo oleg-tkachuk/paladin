@@ -277,6 +277,44 @@ func TestGetSelf_ReturnsContextToken(t *testing.T) {
 	}
 }
 
+// ─── Get ─────────────────────────────────────────────────────────────────────
+
+// Get answers with the token's metadata under its resource name.
+func TestGet_Success(t *testing.T) {
+	id, tenantID := uuid.New(), uuid.New()
+	store := &fakeStore{get: api_token.Token{ID: id, TenantID: tenantID, Name: "ci-uploader"}}
+	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
+	name := "tenants/" + tenantID.String() + "/apiTokens/" + id.String()
+	resp, err := h.Get(ctxAs("platform.admin"), &adminv1.APITokenServiceGetRequest{Name: name})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := resp.GetApiToken(); got.GetDisplayName() != "ci-uploader" || got.GetName() != name {
+		t.Errorf("token = %q at %q, want ci-uploader at %q", got.GetDisplayName(), got.GetName(), name)
+	}
+}
+
+func TestGet_Refusals(t *testing.T) {
+	foreign := "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString()
+	for name, tc := range map[string]struct {
+		role, tokenName string
+		store           *fakeStore
+		want            connect.Code
+	}{
+		"not found":      {"platform.admin", foreign, &fakeStore{getErr: api_token.ErrTokenNotFound}, connect.CodeNotFound},
+		"a bare id":      {"platform.admin", uuid.NewString(), &fakeStore{}, connect.CodeInvalidArgument},
+		"another tenant": {"tenant.admin", foreign, &fakeStore{}, connect.CodePermissionDenied},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHandler(&stubIssuer{}, tc.store, allowAuthorizer{})
+			_, err := h.Get(ctxAs(tc.role), &adminv1.APITokenServiceGetRequest{Name: tc.tokenName})
+			if code(err) != tc.want {
+				t.Fatalf("code = %v, want %v", code(err), tc.want)
+			}
+		})
+	}
+}
+
 // ─── GetUsage ────────────────────────────────────────────────────────────────
 
 func TestGetUsage_NotFound(t *testing.T) {

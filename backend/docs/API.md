@@ -28,7 +28,7 @@ browser from reaching tenant administration.
 - **Protocol**: Connect, Connect-Web and gRPC over the same endpoints
 - **Handlers**: `backend/internal/api/{admin,data,iam}/v1/`, adapted to the
   generated Connect interfaces in `backend/internal/api/connectshim/`
-- **Surface**: 158 RPCs across 28 services (inventory below)
+- **Surface**: 159 RPCs across 28 services (inventory below)
 
 ## Two headers you cannot skip
 
@@ -120,7 +120,7 @@ Every service and RPC in `proto/`, by plane.
 
 | service | rpcs | methods |
 | --- | --- | --- |
-| `APITokenService` | 5 | `Create`, `Revoke`, `List`, `GetSelf`, `GetUsage` |
+| `APITokenService` | 6 | `Create`, `Revoke`, `List`, `Get`, `GetSelf`, `GetUsage` |
 | `AuditLogService` | 3 | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | 10 | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | 4 | `GetTenantSummary`, `GetTenantTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |
