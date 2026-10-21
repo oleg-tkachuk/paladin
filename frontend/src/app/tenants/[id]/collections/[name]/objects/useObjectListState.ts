@@ -4,7 +4,8 @@
 // whether to list everything under it. Derives the CEL `filter` the data hook
 // consumes. Selection, tag-option accumulation, and the data fetch itself stay
 // in the page — they depend on the loaded objects, which this hook never sees.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
@@ -37,9 +38,6 @@ const META = textParam(OBJECT_LIST_PARAMS.meta);
 const RECURSIVE = flagParam(OBJECT_LIST_PARAMS.recursive);
 const FOLDER = textParam(OBJECT_LIST_PARAMS.folder);
 const SORT_IN_URL = { url: PAGE_TABLE, columns: OBJECT_ORDER_FIELDS };
-
-/** How long typing settles before the search becomes a list request. */
-const SEARCH_DEBOUNCE_MS = 300;
 
 export interface ObjectListState {
   status: string | undefined;
@@ -89,11 +87,7 @@ export function useObjectListState(): ObjectListState {
 
   // Trails `search`, so a list request follows typing once it settles
   // rather than once per keystroke.
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [search]);
+  const debouncedSearch = useDebouncedValue(search);
 
   const setStatus = useCallback(
     (value: string | undefined) => setStatusText(value ?? ""),

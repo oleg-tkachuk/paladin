@@ -2,7 +2,8 @@
 
 import { ListPage } from "@/components/layout/templates/ListPage";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -46,16 +47,10 @@ const TABLE_ID = "audit";
 
 /** Entries a page of the log holds. */
 const AUDIT_PAGE_SIZE = 100;
-/** How long the search waits after a keystroke before asking the server. */
-const SEARCH_DEBOUNCE_MS = 300;
 
 export default function AuditPage() {
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [search]);
+  const debouncedSearch = useDebouncedValue(search);
   // Sorted on the server: the log loads a page at a time, so a sort in the
   // browser would order only what has loaded. A new sort starts over.
   const { sort, toggleSort } = useTableSort<AuditOrderField>(undefined, {
