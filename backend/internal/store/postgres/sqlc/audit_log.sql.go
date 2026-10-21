@@ -12,7 +12,7 @@ import (
 )
 
 const getAuditEntry = `-- name: GetAuditEntry :one
-SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent
 FROM audit_log
 WHERE id = $1
 `
@@ -42,6 +42,7 @@ func (q *Queries) GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEn
 		&i.AuditLog.Detail,
 		&i.AuditLog.ResourceTenantID,
 		&i.AuditLog.RelayedBy,
+		&i.AuditLog.UserAgent,
 	)
 	return i, err
 }
@@ -51,11 +52,11 @@ INSERT INTO audit_log (
     id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
     before_json, after_json, error_message, capability_id,
-    resource_tenant_id, relayed_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    resource_tenant_id, relayed_by, user_agent
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 `
 
-func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID, relayedBy *string) error {
+func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, beforeJson []byte, afterJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID, relayedBy *string, userAgent *string) error {
 	_, err := q.db.Exec(ctx, insertAuditEntry,
 		iD,
 		at,
@@ -72,12 +73,13 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtyp
 		capabilityID,
 		resourceTenantID,
 		relayedBy,
+		userAgent,
 	)
 	return err
 }
 
 const listAuditEntries = `-- name: ListAuditEntries :many
-SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.before_json, audit_log.after_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent
 FROM audit_log
 WHERE id = ANY (ARRAY(
         SELECT list_audit_entry_ids(
@@ -149,6 +151,7 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 			&i.AuditLog.Detail,
 			&i.AuditLog.ResourceTenantID,
 			&i.AuditLog.RelayedBy,
+			&i.AuditLog.UserAgent,
 		); err != nil {
 			return nil, err
 		}

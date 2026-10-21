@@ -234,6 +234,10 @@ type AuditEntry struct {
 	// (ADR-0036). Empty for a call made directly.
 	RelayedBy string
 
+	// UserAgent is the User-Agent the call arrived with: the SDK and its
+	// version, then the application's own suffix. Empty when none was sent.
+	UserAgent string
+
 	// ResourceTenantID is the tenant the action was done to, as read back
 	// from the log. Writers leave it unset; it is derived from ResourceName
 	// on insert (ResourceTenant). uuid.Nil when the name carries none.

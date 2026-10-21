@@ -506,6 +506,14 @@ func TestBucketToProtoCarriesGrantees(t *testing.T) {
 
 // The relay reaches the wire as the client's name, and a direct call as
 // nothing for the console to show.
+// The client a call came from reaches the wire as its User-Agent.
+func TestAuditEntryToProto_UserAgent(t *testing.T) {
+	const sdk = "paladin-sdk-go/0.97.0 gateway/1.4"
+	if got := auditEntryToProto(&admindomain.AuditEntry{UserAgent: sdk}).GetUserAgent(); got != sdk {
+		t.Errorf("user_agent = %q, want %q", got, sdk)
+	}
+}
+
 func TestAuditEntryToProto_RelayedBy(t *testing.T) {
 	const mcpServer = "paladin-mcp-server"
 	if got := auditEntryToProto(&admindomain.AuditEntry{RelayedBy: mcpServer}).GetRelayedBy(); got != mcpServer {

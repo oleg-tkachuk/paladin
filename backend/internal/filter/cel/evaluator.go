@@ -279,6 +279,7 @@ var AuditLogSchema = &Schema{
 		"request_id":      cel.StringType,
 		"source_ip":       cel.StringType,
 		"relayed_by":      cel.StringType,
+		"user_agent":      cel.StringType,
 		"at":              cel.TimestampType,
 		"is_error":        cel.BoolType,
 		"search":          cel.StringType,

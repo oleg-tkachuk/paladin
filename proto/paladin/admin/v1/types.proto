@@ -459,6 +459,12 @@ message AuditLogEntry {
   // behalf: the MCP server, which exchanges each agent's token for the plane
   // it calls (ADR-0036). Empty for a call made directly.
   string relayed_by = 14;
+  // user_agent is the User-Agent the call arrived with: the SDK and its
+  // version (paladin-sdk-go/0.97.0, paladin-sdk-python/0.97.0), then the
+  // application, which names itself through the SDK's user-agent suffix
+  // option; a browser's own for the console. Cut to 256 bytes. Empty when
+  // the caller sent none.
+  string user_agent = 15;
 }
 
 // ─── Event subscription ─────────────────────────────────────────────────────

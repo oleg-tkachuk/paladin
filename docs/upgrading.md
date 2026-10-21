@@ -44,6 +44,15 @@ tree with itself and passes without checking anything.
 
 
 
+## Unreleased — the audit log names the client a call came from
+
+Migration `092` adds `audit_log.user_agent`, and `AuditLogEntry` gains
+`user_agent`: the User-Agent the call arrived with, cut to 256 bytes. The
+SDKs send their own name and version there, followed by the application's,
+which it sets with `paladin.WithUserAgentSuffix` (Go) or `user_agent_suffix`
+(Python). It is filterable and searchable, exported and mirrored, and the
+console shows it as the Client column. Additive: no action needed.
+
 ## sdk/go/v0.97.0 — a capability has a Biscuit without share
 
 limes v0.110 seals a Biscuit for any capability: a copy narrowed from it

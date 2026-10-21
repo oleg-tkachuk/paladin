@@ -89,6 +89,7 @@ func (m *auditMirror) EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admind
 			"source_ip":      entry.SourceIP,
 			"capability_id":  entry.CapabilityID.String(),
 			"relayed_by":     entry.RelayedBy,
+			"user_agent":     entry.UserAgent,
 			"error_message":  entry.ErrorMessage,
 			"severity":       severity,
 		},

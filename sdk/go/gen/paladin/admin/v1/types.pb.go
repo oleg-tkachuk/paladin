@@ -2297,7 +2297,13 @@ type AuditLogEntry struct {
 	// relayed_by is the OAuth client that relayed the call on the actor's
 	// behalf: the MCP server, which exchanges each agent's token for the plane
 	// it calls (ADR-0036). Empty for a call made directly.
-	RelayedBy     string `protobuf:"bytes,14,opt,name=relayed_by,json=relayedBy,proto3" json:"relayed_by,omitempty"`
+	RelayedBy string `protobuf:"bytes,14,opt,name=relayed_by,json=relayedBy,proto3" json:"relayed_by,omitempty"`
+	// user_agent is the User-Agent the call arrived with: the SDK and its
+	// version (paladin-sdk-go/0.97.0, paladin-sdk-python/0.97.0), then the
+	// application, which names itself through the SDK's user-agent suffix
+	// option; a browser's own for the console. Cut to 256 bytes. Empty when
+	// the caller sent none.
+	UserAgent     string `protobuf:"bytes,15,opt,name=user_agent,json=userAgent,proto3" json:"user_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2426,6 +2432,13 @@ func (x *AuditLogEntry) GetCapabilityId() string {
 func (x *AuditLogEntry) GetRelayedBy() string {
 	if x != nil {
 		return x.RelayedBy
+	}
+	return ""
+}
+
+func (x *AuditLogEntry) GetUserAgent() string {
+	if x != nil {
+		return x.UserAgent
 	}
 	return ""
 }
@@ -3331,7 +3344,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vbytes_today\x18\x03 \x01(\x03R\n" +
 	"bytesToday\x12#\n" +
 	"\robjects_today\x18\x04 \x01(\x03R\fobjectsToday\x12C\n" +
-	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\xf1\x03\n" +
+	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\x90\x04\n" +
 	"\rAuditLogEntry\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12/\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x02at\x12#\n" +
@@ -3351,7 +3364,9 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\rerror_message\x18\f \x01(\tR\ferrorMessage\x12#\n" +
 	"\rcapability_id\x18\r \x01(\tR\fcapabilityId\x12\x1d\n" +
 	"\n" +
-	"relayed_by\x18\x0e \x01(\tR\trelayedBy\"\xde\x02\n" +
+	"relayed_by\x18\x0e \x01(\tR\trelayedBy\x12\x1d\n" +
+	"\n" +
+	"user_agent\x18\x0f \x01(\tR\tuserAgent\"\xde\x02\n" +
 	"\x11EventSubscription\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x16\n" +
