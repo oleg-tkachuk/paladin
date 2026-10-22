@@ -22,8 +22,10 @@ type recordStore struct {
 	rec    limes.Record
 	err    error
 	getCtx context.Context
-	// disposition is what GetRecordListing gives the record.
+	// disposition is what GetRecordListing gives the record, and stoppedBy
+	// the entry that revokes it.
 	disposition limes.RecordDisposition
+	stoppedBy   *limes.CapabilityRevocation
 }
 
 // GetRecordListing makes recordStore the handler's record reader: rec, under
@@ -33,7 +35,7 @@ func (s *recordStore) GetRecordListing(ctx context.Context, id uuid.UUID) (limes
 	if err != nil {
 		return limes.RecordListing{}, err
 	}
-	return limes.RecordListing{Record: rec, Disposition: s.disposition}, nil
+	return limes.RecordListing{Record: rec, Disposition: s.disposition, StoppedBy: s.stoppedBy}, nil
 }
 
 func (s *recordStore) ListRecords(context.Context, limes.ListRecordsRequest) (limes.Page[limes.RecordListing], error) {
@@ -159,5 +161,35 @@ func TestGetUnwiredIsUnavailable(t *testing.T) {
 	h := NewHandler(m.Issuer, m.Verifier, store, nil, &allowAuthorizer{})
 	if _, err := h.Get(adminCtx(), getReq(c.ID.String())); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v, want Unavailable", connect.CodeOf(err))
+	}
+}
+
+// A capability revoked only through an ancestor says which: its record holds
+// no entry of its own, and the ancestor's is what stopped it.
+func TestGetSaysWhatStoppedIt(t *testing.T) {
+	c := mkParent(uuid.New(), limes.OpGet)
+	parent := uuid.New()
+	revokedAt := time.Unix(1_800_000_000, 0).UTC()
+	store := &recordStore{
+		rec:         limes.Record{Capability: c},
+		disposition: limes.RecordDispositionRevoked,
+		stoppedBy: &limes.CapabilityRevocation{
+			CapabilityID: parent,
+			Revocation:   limes.Revocation{RevokedAt: revokedAt, Note: "leak", Actor: "sec", Cascaded: false},
+		},
+	}
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
+	resp, err := h.Get(adminCtx(), getReq(c.ID.String()))
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	by := resp.GetStoppedBy()
+	if resp.GetRevocation() != nil || by.GetCapabilityId() != parent.String() || by.GetRevocation().GetReason() != "leak" || !by.GetRevocation().GetRevokedAt().AsTime().Equal(revokedAt) {
+		t.Errorf("revocation %v, stopped by %v; want none of its own, stopped by %s", resp.GetRevocation(), by, parent)
+	}
+
+	store.disposition, store.stoppedBy = limes.RecordDispositionActive, nil
+	if resp, err := h.Get(adminCtx(), getReq(c.ID.String())); err != nil || resp.GetStoppedBy() != nil {
+		t.Errorf("an active capability says it was stopped by %v (%v)", resp.GetStoppedBy(), err)
 	}
 }

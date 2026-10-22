@@ -83,6 +83,26 @@ here.
 
 
 
+## Unreleased — a revoke says what it did, and a capability what stopped it
+
+**Server:** the first release that carries this section.
+
+- **`CapabilityService.Revoke` answers `already_revoked` and `revocation`**:
+  whether the capability had an entry of its own before the call, and the
+  entry that stands — the first one, which a second revoke keeps. One stopped
+  only through an ancestor had none, so its first revoke writes it.
+- **`CapabilityService.Get` answers `stopped_by`** for a revoked capability:
+  its own entry, or that of its nearest revoked ancestor, with that
+  capability's id. `revocation` keeps its meaning: the capability's own entry.
+- **limes v0.114.0, pgstore v0.33.0.** Migration `018` names the revoked
+  capabilities in pgstore's notification, so a revocation clears only the
+  cached answers it outdates rather than every replica's whole cache. A
+  revoke of a capability whose parent is revoked already sends none, since
+  nothing cached of it can be stale. Migration `014` now builds its indexes
+  concurrently; a store that ran it before is unaffected.
+
+Additive: no action needed.
+
 ## sdk/go/v0.109.0, sdk/python/v0.109.0 — the platform's spend over time
 
 **Server:** the first release that carries this section.

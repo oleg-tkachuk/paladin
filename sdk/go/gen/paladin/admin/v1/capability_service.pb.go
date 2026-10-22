@@ -1045,7 +1045,14 @@ func (x *CapabilityServiceRevokeRequest) GetCascadeChildren() bool {
 }
 
 type CapabilityServiceRevokeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// already_revoked is a capability that had a revocation entry of its own
+	// before the call, so the call wrote none: the first entry stands. One
+	// stopped only through an ancestor had none, and its first revoke writes it.
+	AlreadyRevoked bool `protobuf:"varint,1,opt,name=already_revoked,json=alreadyRevoked,proto3" json:"already_revoked,omitempty"`
+	// revocation is the capability's entry as it stands after the call: the one
+	// this call wrote, or the earlier one it kept.
+	Revocation    *CapabilityRevocation `protobuf:"bytes,2,opt,name=revocation,proto3" json:"revocation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1078,6 +1085,20 @@ func (x *CapabilityServiceRevokeResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CapabilityServiceRevokeResponse.ProtoReflect.Descriptor instead.
 func (*CapabilityServiceRevokeResponse) Descriptor() ([]byte, []int) {
 	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CapabilityServiceRevokeResponse) GetAlreadyRevoked() bool {
+	if x != nil {
+		return x.AlreadyRevoked
+	}
+	return false
+}
+
+func (x *CapabilityServiceRevokeResponse) GetRevocation() *CapabilityRevocation {
+	if x != nil {
+		return x.Revocation
+	}
+	return nil
 }
 
 type CapabilityServiceRevokeBiscuitRequest struct {
@@ -1667,7 +1688,11 @@ type CapabilityServiceGetResponse struct {
 	IssuedBy *CapabilityPrincipal `protobuf:"bytes,2,opt,name=issued_by,json=issuedBy,proto3" json:"issued_by,omitempty"`
 	// revocation is the capability's own entry; absent when it has none. A
 	// capability stopped only through an ancestor has none.
-	Revocation    *CapabilityRevocation `protobuf:"bytes,3,opt,name=revocation,proto3" json:"revocation,omitempty"`
+	Revocation *CapabilityRevocation `protobuf:"bytes,3,opt,name=revocation,proto3" json:"revocation,omitempty"`
+	// stopped_by is the entry that makes a revoked capability revoked: its own,
+	// or that of its nearest revoked ancestor still on record. Absent unless
+	// the capability's disposition is revoked.
+	StoppedBy     *CapabilityStoppedBy `protobuf:"bytes,4,opt,name=stopped_by,json=stoppedBy,proto3" json:"stopped_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1723,6 +1748,68 @@ func (x *CapabilityServiceGetResponse) GetRevocation() *CapabilityRevocation {
 	return nil
 }
 
+func (x *CapabilityServiceGetResponse) GetStoppedBy() *CapabilityStoppedBy {
+	if x != nil {
+		return x.StoppedBy
+	}
+	return nil
+}
+
+// CapabilityStoppedBy is a revocation entry and the capability it is of.
+type CapabilityStoppedBy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// capability_id is the capability the entry is of: the one read, or an
+	// ancestor of it.
+	CapabilityId  string                `protobuf:"bytes,1,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
+	Revocation    *CapabilityRevocation `protobuf:"bytes,2,opt,name=revocation,proto3" json:"revocation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CapabilityStoppedBy) Reset() {
+	*x = CapabilityStoppedBy{}
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapabilityStoppedBy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapabilityStoppedBy) ProtoMessage() {}
+
+func (x *CapabilityStoppedBy) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapabilityStoppedBy.ProtoReflect.Descriptor instead.
+func (*CapabilityStoppedBy) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CapabilityStoppedBy) GetCapabilityId() string {
+	if x != nil {
+		return x.CapabilityId
+	}
+	return ""
+}
+
+func (x *CapabilityStoppedBy) GetRevocation() *CapabilityRevocation {
+	if x != nil {
+		return x.Revocation
+	}
+	return nil
+}
+
 type CapabilityServiceGetUsageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1732,7 +1819,7 @@ type CapabilityServiceGetUsageRequest struct {
 
 func (x *CapabilityServiceGetUsageRequest) Reset() {
 	*x = CapabilityServiceGetUsageRequest{}
-	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1744,7 +1831,7 @@ func (x *CapabilityServiceGetUsageRequest) String() string {
 func (*CapabilityServiceGetUsageRequest) ProtoMessage() {}
 
 func (x *CapabilityServiceGetUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1757,7 +1844,7 @@ func (x *CapabilityServiceGetUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapabilityServiceGetUsageRequest.ProtoReflect.Descriptor instead.
 func (*CapabilityServiceGetUsageRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{18}
+	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CapabilityServiceGetUsageRequest) GetId() string {
@@ -1780,7 +1867,7 @@ type CapabilityServiceGetUsageResponse struct {
 
 func (x *CapabilityServiceGetUsageResponse) Reset() {
 	*x = CapabilityServiceGetUsageResponse{}
-	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1792,7 +1879,7 @@ func (x *CapabilityServiceGetUsageResponse) String() string {
 func (*CapabilityServiceGetUsageResponse) ProtoMessage() {}
 
 func (x *CapabilityServiceGetUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_capability_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1805,7 +1892,7 @@ func (x *CapabilityServiceGetUsageResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CapabilityServiceGetUsageResponse.ProtoReflect.Descriptor instead.
 func (*CapabilityServiceGetUsageResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{19}
+	return file_paladin_admin_v1_capability_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CapabilityServiceGetUsageResponse) GetCapabilityId() string {
@@ -1924,8 +2011,12 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x1eCapabilityServiceRevokeRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12)\n" +
-	"\x10cascade_children\x18\x03 \x01(\bR\x0fcascadeChildren\"!\n" +
-	"\x1fCapabilityServiceRevokeResponse\"a\n" +
+	"\x10cascade_children\x18\x03 \x01(\bR\x0fcascadeChildren\"\x9c\x01\n" +
+	"\x1fCapabilityServiceRevokeResponse\x12,\n" +
+	"\x0falready_revoked\x18\x01 \x01(\bB\x03\xe0A\x03R\x0ealreadyRevoked\x12K\n" +
+	"\n" +
+	"revocation\x18\x02 \x01(\v2&.paladin.admin.v1.CapabilityRevocationB\x03\xe0A\x03R\n" +
+	"revocation\"a\n" +
 	"%CapabilityServiceRevokeBiscuitRequest\x12 \n" +
 	"\x05token\x18\x01 \x01(\tB\n" +
 	"\xbaH\x04r\x02\x10\x01\x80\x01\x01R\x05token\x12\x16\n" +
@@ -1969,7 +2060,7 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"revoked_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x14\n" +
 	"\x05actor\x18\x03 \x01(\tR\x05actor\x12\x18\n" +
-	"\acascade\x18\x04 \x01(\bR\acascade\"\xe8\x01\n" +
+	"\acascade\x18\x04 \x01(\bR\acascade\"\xb3\x02\n" +
 	"\x1cCapabilityServiceGetResponse\x12<\n" +
 	"\n" +
 	"capability\x18\x01 \x01(\v2\x1c.paladin.admin.v1.CapabilityR\n" +
@@ -1977,6 +2068,13 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\tissued_by\x18\x02 \x01(\v2%.paladin.admin.v1.CapabilityPrincipalR\bissuedBy\x12F\n" +
 	"\n" +
 	"revocation\x18\x03 \x01(\v2&.paladin.admin.v1.CapabilityRevocationR\n" +
+	"revocation\x12I\n" +
+	"\n" +
+	"stopped_by\x18\x04 \x01(\v2%.paladin.admin.v1.CapabilityStoppedByB\x03\xe0A\x03R\tstoppedBy\"\x82\x01\n" +
+	"\x13CapabilityStoppedBy\x12#\n" +
+	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12F\n" +
+	"\n" +
+	"revocation\x18\x02 \x01(\v2&.paladin.admin.v1.CapabilityRevocationR\n" +
 	"revocation\"<\n" +
 	" CapabilityServiceGetUsageRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x8b\x02\n" +
@@ -2025,7 +2123,7 @@ func file_paladin_admin_v1_capability_service_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_admin_v1_capability_service_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_paladin_admin_v1_capability_service_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_paladin_admin_v1_capability_service_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_paladin_admin_v1_capability_service_proto_goTypes = []any{
 	(PrincipalKind)(0),                               // 0: paladin.admin.v1.PrincipalKind
 	(CapabilityDisposition)(0),                       // 1: paladin.admin.v1.CapabilityDisposition
@@ -2048,66 +2146,70 @@ var file_paladin_admin_v1_capability_service_proto_goTypes = []any{
 	(*CapabilityServiceGetRequest)(nil),              // 18: paladin.admin.v1.CapabilityServiceGetRequest
 	(*CapabilityRevocation)(nil),                     // 19: paladin.admin.v1.CapabilityRevocation
 	(*CapabilityServiceGetResponse)(nil),             // 20: paladin.admin.v1.CapabilityServiceGetResponse
-	(*CapabilityServiceGetUsageRequest)(nil),         // 21: paladin.admin.v1.CapabilityServiceGetUsageRequest
-	(*CapabilityServiceGetUsageResponse)(nil),        // 22: paladin.admin.v1.CapabilityServiceGetUsageResponse
-	(*money.Money)(nil),                              // 23: google.type.Money
-	(*UnlimitedBudget)(nil),                          // 24: paladin.admin.v1.UnlimitedBudget
-	(*timestamppb.Timestamp)(nil),                    // 25: google.protobuf.Timestamp
-	(v1.SortOrder)(0),                                // 26: paladin.common.v1.SortOrder
+	(*CapabilityStoppedBy)(nil),                      // 21: paladin.admin.v1.CapabilityStoppedBy
+	(*CapabilityServiceGetUsageRequest)(nil),         // 22: paladin.admin.v1.CapabilityServiceGetUsageRequest
+	(*CapabilityServiceGetUsageResponse)(nil),        // 23: paladin.admin.v1.CapabilityServiceGetUsageResponse
+	(*money.Money)(nil),                              // 24: google.type.Money
+	(*UnlimitedBudget)(nil),                          // 25: paladin.admin.v1.UnlimitedBudget
+	(*timestamppb.Timestamp)(nil),                    // 26: google.protobuf.Timestamp
+	(v1.SortOrder)(0),                                // 27: paladin.common.v1.SortOrder
 }
 var file_paladin_admin_v1_capability_service_proto_depIdxs = []int32{
 	0,  // 0: paladin.admin.v1.CapabilityPrincipal.kind:type_name -> paladin.admin.v1.PrincipalKind
-	23, // 1: paladin.admin.v1.CapabilityCaveats.max_budget:type_name -> google.type.Money
-	24, // 2: paladin.admin.v1.CapabilityCaveats.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
+	24, // 1: paladin.admin.v1.CapabilityCaveats.max_budget:type_name -> google.type.Money
+	25, // 2: paladin.admin.v1.CapabilityCaveats.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
 	3,  // 3: paladin.admin.v1.Capability.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
 	4,  // 4: paladin.admin.v1.Capability.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	25, // 5: paladin.admin.v1.Capability.issued_at:type_name -> google.protobuf.Timestamp
-	25, // 6: paladin.admin.v1.Capability.not_before:type_name -> google.protobuf.Timestamp
-	25, // 7: paladin.admin.v1.Capability.expires_at:type_name -> google.protobuf.Timestamp
+	26, // 5: paladin.admin.v1.Capability.issued_at:type_name -> google.protobuf.Timestamp
+	26, // 6: paladin.admin.v1.Capability.not_before:type_name -> google.protobuf.Timestamp
+	26, // 7: paladin.admin.v1.Capability.expires_at:type_name -> google.protobuf.Timestamp
 	1,  // 8: paladin.admin.v1.Capability.disposition:type_name -> paladin.admin.v1.CapabilityDisposition
 	3,  // 9: paladin.admin.v1.CapabilityServiceIssueRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
 	4,  // 10: paladin.admin.v1.CapabilityServiceIssueRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	25, // 11: paladin.admin.v1.CapabilityServiceIssueRequest.not_before:type_name -> google.protobuf.Timestamp
+	26, // 11: paladin.admin.v1.CapabilityServiceIssueRequest.not_before:type_name -> google.protobuf.Timestamp
 	5,  // 12: paladin.admin.v1.CapabilityServiceIssueResponse.capability:type_name -> paladin.admin.v1.Capability
 	2,  // 13: paladin.admin.v1.CapabilityServiceIssueResponse.biscuit_status:type_name -> paladin.admin.v1.BiscuitStatus
 	3,  // 14: paladin.admin.v1.CapabilityServiceDelegateRequest.subject:type_name -> paladin.admin.v1.CapabilityPrincipal
 	4,  // 15: paladin.admin.v1.CapabilityServiceDelegateRequest.caveats:type_name -> paladin.admin.v1.CapabilityCaveats
-	25, // 16: paladin.admin.v1.CapabilityServiceDelegateRequest.not_before:type_name -> google.protobuf.Timestamp
-	23, // 17: paladin.admin.v1.CapabilityBiscuitCopyUsage.max_budget:type_name -> google.type.Money
-	23, // 18: paladin.admin.v1.CapabilityBiscuitCopyUsage.spent:type_name -> google.type.Money
-	23, // 19: paladin.admin.v1.CapabilityBiscuitCopyUsage.reserved:type_name -> google.type.Money
-	14, // 20: paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse.copies:type_name -> paladin.admin.v1.CapabilityBiscuitCopyUsage
-	0,  // 21: paladin.admin.v1.CapabilityServiceListRequest.principal_kind:type_name -> paladin.admin.v1.PrincipalKind
-	1,  // 22: paladin.admin.v1.CapabilityServiceListRequest.dispositions:type_name -> paladin.admin.v1.CapabilityDisposition
-	26, // 23: paladin.admin.v1.CapabilityServiceListRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	5,  // 24: paladin.admin.v1.CapabilityServiceListResponse.capabilities:type_name -> paladin.admin.v1.Capability
-	25, // 25: paladin.admin.v1.CapabilityRevocation.revoked_at:type_name -> google.protobuf.Timestamp
-	5,  // 26: paladin.admin.v1.CapabilityServiceGetResponse.capability:type_name -> paladin.admin.v1.Capability
-	3,  // 27: paladin.admin.v1.CapabilityServiceGetResponse.issued_by:type_name -> paladin.admin.v1.CapabilityPrincipal
-	19, // 28: paladin.admin.v1.CapabilityServiceGetResponse.revocation:type_name -> paladin.admin.v1.CapabilityRevocation
-	25, // 29: paladin.admin.v1.CapabilityServiceGetUsageResponse.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 30: paladin.admin.v1.CapabilityServiceGetUsageResponse.spent:type_name -> google.type.Money
-	6,  // 31: paladin.admin.v1.CapabilityService.Issue:input_type -> paladin.admin.v1.CapabilityServiceIssueRequest
-	8,  // 32: paladin.admin.v1.CapabilityService.Delegate:input_type -> paladin.admin.v1.CapabilityServiceDelegateRequest
-	9,  // 33: paladin.admin.v1.CapabilityService.Revoke:input_type -> paladin.admin.v1.CapabilityServiceRevokeRequest
-	11, // 34: paladin.admin.v1.CapabilityService.RevokeBiscuit:input_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitRequest
-	13, // 35: paladin.admin.v1.CapabilityService.GetBiscuitUsage:input_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest
-	18, // 36: paladin.admin.v1.CapabilityService.Get:input_type -> paladin.admin.v1.CapabilityServiceGetRequest
-	16, // 37: paladin.admin.v1.CapabilityService.List:input_type -> paladin.admin.v1.CapabilityServiceListRequest
-	21, // 38: paladin.admin.v1.CapabilityService.GetUsage:input_type -> paladin.admin.v1.CapabilityServiceGetUsageRequest
-	7,  // 39: paladin.admin.v1.CapabilityService.Issue:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
-	7,  // 40: paladin.admin.v1.CapabilityService.Delegate:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
-	10, // 41: paladin.admin.v1.CapabilityService.Revoke:output_type -> paladin.admin.v1.CapabilityServiceRevokeResponse
-	12, // 42: paladin.admin.v1.CapabilityService.RevokeBiscuit:output_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitResponse
-	15, // 43: paladin.admin.v1.CapabilityService.GetBiscuitUsage:output_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse
-	20, // 44: paladin.admin.v1.CapabilityService.Get:output_type -> paladin.admin.v1.CapabilityServiceGetResponse
-	17, // 45: paladin.admin.v1.CapabilityService.List:output_type -> paladin.admin.v1.CapabilityServiceListResponse
-	22, // 46: paladin.admin.v1.CapabilityService.GetUsage:output_type -> paladin.admin.v1.CapabilityServiceGetUsageResponse
-	39, // [39:47] is the sub-list for method output_type
-	31, // [31:39] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	26, // 16: paladin.admin.v1.CapabilityServiceDelegateRequest.not_before:type_name -> google.protobuf.Timestamp
+	19, // 17: paladin.admin.v1.CapabilityServiceRevokeResponse.revocation:type_name -> paladin.admin.v1.CapabilityRevocation
+	24, // 18: paladin.admin.v1.CapabilityBiscuitCopyUsage.max_budget:type_name -> google.type.Money
+	24, // 19: paladin.admin.v1.CapabilityBiscuitCopyUsage.spent:type_name -> google.type.Money
+	24, // 20: paladin.admin.v1.CapabilityBiscuitCopyUsage.reserved:type_name -> google.type.Money
+	14, // 21: paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse.copies:type_name -> paladin.admin.v1.CapabilityBiscuitCopyUsage
+	0,  // 22: paladin.admin.v1.CapabilityServiceListRequest.principal_kind:type_name -> paladin.admin.v1.PrincipalKind
+	1,  // 23: paladin.admin.v1.CapabilityServiceListRequest.dispositions:type_name -> paladin.admin.v1.CapabilityDisposition
+	27, // 24: paladin.admin.v1.CapabilityServiceListRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	5,  // 25: paladin.admin.v1.CapabilityServiceListResponse.capabilities:type_name -> paladin.admin.v1.Capability
+	26, // 26: paladin.admin.v1.CapabilityRevocation.revoked_at:type_name -> google.protobuf.Timestamp
+	5,  // 27: paladin.admin.v1.CapabilityServiceGetResponse.capability:type_name -> paladin.admin.v1.Capability
+	3,  // 28: paladin.admin.v1.CapabilityServiceGetResponse.issued_by:type_name -> paladin.admin.v1.CapabilityPrincipal
+	19, // 29: paladin.admin.v1.CapabilityServiceGetResponse.revocation:type_name -> paladin.admin.v1.CapabilityRevocation
+	21, // 30: paladin.admin.v1.CapabilityServiceGetResponse.stopped_by:type_name -> paladin.admin.v1.CapabilityStoppedBy
+	19, // 31: paladin.admin.v1.CapabilityStoppedBy.revocation:type_name -> paladin.admin.v1.CapabilityRevocation
+	26, // 32: paladin.admin.v1.CapabilityServiceGetUsageResponse.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 33: paladin.admin.v1.CapabilityServiceGetUsageResponse.spent:type_name -> google.type.Money
+	6,  // 34: paladin.admin.v1.CapabilityService.Issue:input_type -> paladin.admin.v1.CapabilityServiceIssueRequest
+	8,  // 35: paladin.admin.v1.CapabilityService.Delegate:input_type -> paladin.admin.v1.CapabilityServiceDelegateRequest
+	9,  // 36: paladin.admin.v1.CapabilityService.Revoke:input_type -> paladin.admin.v1.CapabilityServiceRevokeRequest
+	11, // 37: paladin.admin.v1.CapabilityService.RevokeBiscuit:input_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitRequest
+	13, // 38: paladin.admin.v1.CapabilityService.GetBiscuitUsage:input_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageRequest
+	18, // 39: paladin.admin.v1.CapabilityService.Get:input_type -> paladin.admin.v1.CapabilityServiceGetRequest
+	16, // 40: paladin.admin.v1.CapabilityService.List:input_type -> paladin.admin.v1.CapabilityServiceListRequest
+	22, // 41: paladin.admin.v1.CapabilityService.GetUsage:input_type -> paladin.admin.v1.CapabilityServiceGetUsageRequest
+	7,  // 42: paladin.admin.v1.CapabilityService.Issue:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
+	7,  // 43: paladin.admin.v1.CapabilityService.Delegate:output_type -> paladin.admin.v1.CapabilityServiceIssueResponse
+	10, // 44: paladin.admin.v1.CapabilityService.Revoke:output_type -> paladin.admin.v1.CapabilityServiceRevokeResponse
+	12, // 45: paladin.admin.v1.CapabilityService.RevokeBiscuit:output_type -> paladin.admin.v1.CapabilityServiceRevokeBiscuitResponse
+	15, // 46: paladin.admin.v1.CapabilityService.GetBiscuitUsage:output_type -> paladin.admin.v1.CapabilityServiceGetBiscuitUsageResponse
+	20, // 47: paladin.admin.v1.CapabilityService.Get:output_type -> paladin.admin.v1.CapabilityServiceGetResponse
+	17, // 48: paladin.admin.v1.CapabilityService.List:output_type -> paladin.admin.v1.CapabilityServiceListResponse
+	23, // 49: paladin.admin.v1.CapabilityService.GetUsage:output_type -> paladin.admin.v1.CapabilityServiceGetUsageResponse
+	42, // [42:50] is the sub-list for method output_type
+	34, // [34:42] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_capability_service_proto_init() }
@@ -2131,7 +2233,7 @@ func file_paladin_admin_v1_capability_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_capability_service_proto_rawDesc), len(file_paladin_admin_v1_capability_service_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

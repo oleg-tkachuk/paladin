@@ -328,6 +328,27 @@ func TestRevokeRejectsBadID(t *testing.T) {
 	}
 }
 
+// Revoke says whether the capability was revoked already, with the entry
+// that stands: the first one, kept by an idempotent second revoke.
+func TestRevokeSaysWhatItDid(t *testing.T) {
+	revokedAt := time.Unix(1_800_000_000, 0).UTC()
+	for _, already := range []bool{false, true} {
+		store := &recordingStore{revokeResult: limes.RevokeResult{
+			AlreadyRevoked: already,
+			Revocation:     limes.Revocation{RevokedAt: revokedAt, Note: "first", Actor: "sec", Cascaded: true},
+		}}
+		h := mkHandler(t, store, nil, &allowAuthorizer{})
+		resp, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString(), Reason: "second"})
+		if err != nil {
+			t.Fatalf("Revoke: %v", err)
+		}
+		r := resp.GetRevocation()
+		if resp.GetAlreadyRevoked() != already || r.GetReason() != "first" || r.GetActor() != "sec" || !r.GetCascade() || !r.GetRevokedAt().AsTime().Equal(revokedAt) {
+			t.Errorf("already=%v: response %v, want the store's result", already, resp)
+		}
+	}
+}
+
 func TestRevokeStoreErrorIsInternal(t *testing.T) {
 	store := &recordingStore{revokeErr: errors.New("db down")}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})

@@ -530,7 +530,8 @@ answers:
 | `Delegate` with no capability presented, or from a Biscuit copy | `FailedPrecondition` |
 | `Delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PermissionDenied` |
 | `List` of a tenant, alone or with a principal kind, a subject, dispositions and `sort_order` | Its capabilities in issue order, each with its `disposition`: revoked — itself or through a revoked ancestor — over expired over active; no dispositions named lists the active ones and those `include_expired` and `include_revoked` add |
-| `Get` of a capability it issued | It, with its `disposition` as `List` gives it |
+| `Get` of a capability it issued | It, with its `disposition` as `List` gives it, its own `revocation`, and `stopped_by`: the entry that revokes it, its own or its nearest revoked ancestor's |
+| `Revoke` of a capability revoked already | `already_revoked`, and the first entry, which stands |
 | `List` with a page token of the other order or of other filters, or one it did not hand out | `InvalidArgument` |
 | `List` of another tenant under `WithStrictAuth` | `PermissionDenied` |
 

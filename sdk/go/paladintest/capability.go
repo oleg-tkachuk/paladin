@@ -80,6 +80,9 @@ type capabilityRecord struct {
 	// credentials are its token and, when it has one, its Biscuit.
 	credentials []string
 	children    []string
+	// revocation is its own revocation entry, the first one written; nil
+	// while it has none.
+	revocation *adminv1.CapabilityRevocation
 }
 
 // biscuitStatusOf is the server's: a key-bound capability and one valid only
@@ -241,25 +244,48 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 func (s capabilityService) Revoke(_ context.Context, req *adminv1.CapabilityServiceRevokeRequest) (*adminv1.CapabilityServiceRevokeResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.capabilities[req.GetId()]; !ok {
+	rec, ok := s.capabilities[req.GetId()]
+	if !ok {
 		return nil, withReason(connect.Errorf(connect.CodeNotFound, "capability %s: not found", req.GetId()))
 	}
-	s.revokeCapability(req.GetId(), req.GetCascadeChildren())
-	return &adminv1.CapabilityServiceRevokeResponse{}, nil
+	already := rec.revocation != nil
+	s.revokeCapability(req.GetId(), req.GetCascadeChildren(), &adminv1.CapabilityRevocation{
+		RevokedAt: timestamppb.Now(), Reason: req.GetReason(), Cascade: req.GetCascadeChildren(),
+	})
+	// The first entry stands, as the server keeps it.
+	return &adminv1.CapabilityServiceRevokeResponse{
+		AlreadyRevoked: already,
+		Revocation:     proto.CloneOf(rec.revocation),
+	}, nil
 }
 
 // revokeCapability revokes id's credentials, and its children's when
-// cascade. The caller holds mu.
-func (s *Server) revokeCapability(id string, cascade bool) {
+// cascade, giving each without an entry of its own entry. A nil entry
+// revokes the credentials alone. The caller holds mu.
+func (s *Server) revokeCapability(id string, cascade bool, entry *adminv1.CapabilityRevocation) {
 	rec := s.capabilities[id]
 	for _, token := range rec.credentials {
 		s.credentials[token].revoked = true
 	}
+	if entry != nil && rec.revocation == nil {
+		rec.revocation = proto.CloneOf(entry)
+	}
 	if cascade {
 		for _, child := range rec.children {
-			s.revokeCapability(child, cascade)
+			s.revokeCapability(child, cascade, entry)
 		}
 	}
+}
+
+// stoppedBy is the entry that revokes rec: its own, or its nearest revoked
+// ancestor's; nil for one with none. The caller holds mu.
+func (s *Server) stoppedBy(rec *capabilityRecord) *adminv1.CapabilityStoppedBy {
+	for r := rec; r != nil; r = s.capabilities[r.msg.GetParentId()] {
+		if r.revocation != nil {
+			return &adminv1.CapabilityStoppedBy{CapabilityId: r.msg.GetId(), Revocation: proto.CloneOf(r.revocation)}
+		}
+	}
+	return nil
 }
 
 // Get answers a capability the fake issued, with its disposition as List
@@ -273,7 +299,11 @@ func (s capabilityService) Get(_ context.Context, req *adminv1.CapabilityService
 	}
 	c := proto.CloneOf(rec.msg)
 	c.Disposition = s.dispositionOf(rec, time.Now())
-	return &adminv1.CapabilityServiceGetResponse{Capability: c}, nil
+	out := &adminv1.CapabilityServiceGetResponse{Capability: c, Revocation: proto.CloneOf(rec.revocation)}
+	if c.GetDisposition() == adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED {
+		out.StoppedBy = s.stoppedBy(rec)
+	}
+	return out, nil
 }
 
 // lifetime is when a capability issued at now for ttlSeconds — the default

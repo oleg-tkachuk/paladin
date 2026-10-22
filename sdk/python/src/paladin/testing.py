@@ -500,6 +500,8 @@ class _CapabilityRecord:
     msg: capability_service_pb2.Capability
     credentials: list[str]
     children: list[str] = field(default_factory=list)
+    revocation: capability_service_pb2.CapabilityRevocation | None = None
+    """Its own revocation entry, the first one written; None while it has none."""
 
 
 def _check_ops(ops: Iterable[str]) -> None:
@@ -651,10 +653,22 @@ class _CapabilityService(CapabilityServiceSync):
     ) -> capability_service_pb2.CapabilityServiceRevokeResponse:
         fake = self._fake
         with fake._lock:
-            if request.id not in fake._capabilities:
+            record = fake._capabilities.get(request.id)
+            if record is None:
                 raise _with_reason(Code.NOT_FOUND, f"capability {request.id}: not found")
-            fake._revoke_capability(request.id, cascade=request.cascade_children)
-        return capability_service_pb2.CapabilityServiceRevokeResponse()
+            already = record.revocation is not None
+            entry = capability_service_pb2.CapabilityRevocation(
+                revoked_at=_timestamp(datetime.now(UTC)),
+                reason=request.reason,
+                cascade=request.cascade_children,
+            )
+            fake._revoke_capability(request.id, cascade=request.cascade_children, entry=entry)
+            # The first entry stands, as the server keeps it.
+            out = capability_service_pb2.CapabilityRevocation()
+            out.CopyFrom(record.revocation)
+        return capability_service_pb2.CapabilityServiceRevokeResponse(
+            already_revoked=already, revocation=out
+        )
 
     def get(
         self, request: capability_service_pb2.CapabilityServiceGetRequest, ctx: Any, /
@@ -668,7 +682,14 @@ class _CapabilityService(CapabilityServiceSync):
             out = capability_service_pb2.Capability()
             out.CopyFrom(record.msg)
             out.disposition = self._fake._disposition(record, datetime.now(UTC))
-        return capability_service_pb2.CapabilityServiceGetResponse(capability=out)
+            response = capability_service_pb2.CapabilityServiceGetResponse(capability=out)
+            if record.revocation is not None:
+                response.revocation.CopyFrom(record.revocation)
+            if out.disposition == _REVOKED:
+                stopped = self._fake._stopped_by(record)
+                if stopped is not None:
+                    response.stopped_by.CopyFrom(stopped)
+        return response
 
     def list(
         self, request: capability_service_pb2.CapabilityServiceListRequest, ctx: Any, /
@@ -1066,15 +1087,39 @@ class FakePaladin(
             return _EXPIRED
         return _ACTIVE
 
-    def _revoke_capability(self, capability: str, *, cascade: bool) -> None:
+    def _revoke_capability(
+        self,
+        capability: str,
+        *,
+        cascade: bool,
+        entry: capability_service_pb2.CapabilityRevocation | None = None,
+    ) -> None:
         """Revoke ``capability``'s token and Biscuit, and its children's when
-        ``cascade``. The caller holds the lock."""
+        ``cascade``, giving each without an entry of its own ``entry``; None
+        revokes the credentials alone. The caller holds the lock."""
         record = self._capabilities[capability]
         for token in record.credentials:
             self._credentials[token].revoked = True
+        if entry is not None and record.revocation is None:
+            record.revocation = capability_service_pb2.CapabilityRevocation()
+            record.revocation.CopyFrom(entry)
         if cascade:
             for child in record.children:
-                self._revoke_capability(child, cascade=cascade)
+                self._revoke_capability(child, cascade=cascade, entry=entry)
+
+    def _stopped_by(
+        self, record: _CapabilityRecord
+    ) -> capability_service_pb2.CapabilityStoppedBy | None:
+        """The entry that revokes ``record``: its own, or its nearest revoked
+        ancestor's; None for one with none. The caller holds the lock."""
+        r: _CapabilityRecord | None = record
+        while r is not None:
+            if r.revocation is not None:
+                return capability_service_pb2.CapabilityStoppedBy(
+                    capability_id=r.msg.id, revocation=r.revocation
+                )
+            r = self._capabilities.get(r.msg.parent_id)
+        return None
 
     def revoke(self, token: str) -> None:
         """Revoke a credential the fake issued: with ``strict_auth``, a call

@@ -131,7 +131,8 @@ type CapabilityServiceClient interface {
 	Delegate(context.Context, *v1.CapabilityServiceDelegateRequest) (*v1.CapabilityServiceIssueResponse, error)
 	// Revoke adds the supplied capability ID to the revocation list.
 	// CascadeChildren=true revokes every descendant in the delegation
-	// tree. Idempotent — re-revoking a revoked capability is a no-op.
+	// tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+	// response says so, with the entry that stands.
 	Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error)
 	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
 	// `token` is, and every copy attenuated from it. The capability, the copy
@@ -185,7 +186,8 @@ type CapabilityServiceHandler interface {
 	Delegate(context.Context, *v1.CapabilityServiceDelegateRequest) (*v1.CapabilityServiceIssueResponse, error)
 	// Revoke adds the supplied capability ID to the revocation list.
 	// CascadeChildren=true revokes every descendant in the delegation
-	// tree. Idempotent — re-revoking a revoked capability is a no-op.
+	// tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+	// response says so, with the entry that stands.
 	Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error)
 	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
 	// `token` is, and every copy attenuated from it. The capability, the copy
