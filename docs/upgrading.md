@@ -83,6 +83,40 @@ here.
 
 
 
+## Unreleased — limes v0.116.0: a revoke says what the capability was, and the cache follows its watcher
+
+**Server:** the first release that carries this section.
+
+- **`CapabilityService.Revoke` answers `before`**: the capability's
+  disposition just before the call, by the rules `disposition` is read by.
+  Only a revoke of an `ACTIVE` one stopped something new; one already
+  revoked through an ancestor, or expired, still gets its entry for the
+  audit, and answers `REVOKED` or `EXPIRED` with `already_revoked` false.
+  The console says which.
+- **`capability.revocation_cache_synced_ttl`** (default `30s`) is how long a
+  revocation answer is cached while the revocation watcher listens, and every
+  revocation clears what it outdates at once. `capability.revocation_cache_ttl`
+  (default `2s`) bounds it before the watcher's first `LISTEN` and while it
+  reconnects: losing the connection cuts every cached answer back to it at
+  once. A synced TTL shorter than `revocation_cache_ttl` is raised to it, so
+  a deployment that set the TTL above `30s` keeps it for both. A negative
+  `revocation_cache_ttl` is refused by the config schema; the old comment
+  that one disables the cache was wrong, as limes refuses it at startup.
+- **The health page has a `capability-revocations` row**: unhealthy, never
+  critical, while the watcher does not listen, with when it last lost its
+  connection, and how often it has connected, lost its connection and passed
+  a notification on.
+- **The revocation cache's metrics gain** `limes.revocation_cache.clears_revoked`,
+  `.clears_without_lineage`, `.lineage`, `.synced`, `.syncs`, `.syncs_lost`,
+  `.last_sync_loss`, `.signals` and `.signals_whole`. `synced` at 0, or
+  `syncs_lost` growing with `syncs`, is the watcher losing its connection.
+- **limes v0.116.0, pgstore v0.35.0, otelmetric v0.6.0.** No migration. The
+  cache is built with `RequireLineage`, so a decorator of the capability
+  store that drops `RevocationLineage` fails startup rather than turn every
+  revocation into a whole clear.
+
+Additive: no action needed.
+
 ## sdk/go/v0.110.0, sdk/python/v0.110.0 — a revoke says what it did, and a capability what stopped it
 
 **Server:** the first release that carries this section.

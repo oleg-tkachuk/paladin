@@ -249,6 +249,7 @@ func (s capabilityService) Revoke(_ context.Context, req *adminv1.CapabilityServ
 		return nil, withReason(connect.Errorf(connect.CodeNotFound, "capability %s: not found", req.GetId()))
 	}
 	already := rec.revocation != nil
+	before := s.dispositionOf(rec, time.Now())
 	s.revokeCapability(req.GetId(), req.GetCascadeChildren(), &adminv1.CapabilityRevocation{
 		RevokedAt: timestamppb.Now(), Reason: req.GetReason(), Cascade: req.GetCascadeChildren(),
 	})
@@ -256,6 +257,7 @@ func (s capabilityService) Revoke(_ context.Context, req *adminv1.CapabilityServ
 	return &adminv1.CapabilityServiceRevokeResponse{
 		AlreadyRevoked: already,
 		Revocation:     proto.CloneOf(rec.revocation),
+		Before:         before,
 	}, nil
 }
 

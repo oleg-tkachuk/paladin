@@ -1268,11 +1268,20 @@ type Capability struct {
 	DPoPNonce DPoPNonce `yaml:"dpop_nonce" json:"dpop_nonce"`
 
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
-	// answers. Revocations normally clear every replica's cache at once
-	// through pgstore's limes_revocations notification; the TTL bounds how
-	// stale an answer can get while that LISTEN connection is down.
-	// Default 2s. Set <0 to disable caching (every check hits the DB).
+	// answers while no revocation signal vouches for the cache: before the
+	// watcher's first LISTEN and while it reconnects. It bounds how long a
+	// revocation may go unseen there, so keep it short. Default 2s; a
+	// negative one is refused at startup.
 	RevocationCacheTTL time.Duration `yaml:"revocation_cache_ttl" json:"revocation_cache_ttl"`
+
+	// RevocationCacheSyncedTTL is how long an answer is cached while the
+	// watcher listens, and pgstore's notification clears every replica's
+	// cache at once: a little above the interval between two checks of one
+	// token, so an agent verified once per model step still hits the cache.
+	// The watcher losing its connection cuts every answer back to
+	// RevocationCacheTTL at once. Default 30s; one shorter than
+	// RevocationCacheTTL, zero among them, is raised to it.
+	RevocationCacheSyncedTTL time.Duration `yaml:"revocation_cache_synced_ttl" json:"revocation_cache_synced_ttl"`
 }
 
 // APIToken configures the hashed-bearer M2M token subsystem. Distinct

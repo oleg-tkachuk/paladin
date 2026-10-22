@@ -12,7 +12,9 @@ import (
 // NewRevocationWatcher is pgstore's watcher of the revocations made anywhere —
 // any replica, an operator's psql — clearing caches when one is and after
 // every reconnect, so a revocation reaches this replica at once rather than
-// when its cached answer expires. It listens on a connection taken from pool
+// when its cached answer expires. A cache that is a pgstore.Syncer, as
+// limes.RevocationCache is, is also told when the watcher starts and stops
+// listening, and serves its longer TTL only in between. It listens on a connection taken from pool
 // for good (Hijack): a LISTEN left on a pooled connection would follow it
 // back into the pool. onError hears each failure it reconnects after.
 func NewRevocationWatcher(pool *pgxpool.Pool, onError func(error), caches ...pgstore.Clearer) pgstore.RevocationWatcher {

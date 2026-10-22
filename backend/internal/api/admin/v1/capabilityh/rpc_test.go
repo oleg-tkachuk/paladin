@@ -329,13 +329,19 @@ func TestRevokeRejectsBadID(t *testing.T) {
 }
 
 // Revoke says whether the capability was revoked already, with the entry
-// that stands: the first one, kept by an idempotent second revoke.
+// that stands — the first one, kept by an idempotent second revoke — and
+// what the capability was just before the call.
 func TestRevokeSaysWhatItDid(t *testing.T) {
 	revokedAt := time.Unix(1_800_000_000, 0).UTC()
 	for _, already := range []bool{false, true} {
+		before := limes.RecordDispositionActive
+		if already {
+			before = limes.RecordDispositionRevoked
+		}
 		store := &recordingStore{revokeResult: limes.RevokeResult{
 			AlreadyRevoked: already,
 			Revocation:     limes.Revocation{RevokedAt: revokedAt, Note: "first", Actor: "sec", Cascaded: true},
+			Before:         before,
 		}}
 		h := mkHandler(t, store, nil, &allowAuthorizer{})
 		resp, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString(), Reason: "second"})
@@ -345,6 +351,9 @@ func TestRevokeSaysWhatItDid(t *testing.T) {
 		r := resp.GetRevocation()
 		if resp.GetAlreadyRevoked() != already || r.GetReason() != "first" || r.GetActor() != "sec" || !r.GetCascade() || !r.GetRevokedAt().AsTime().Equal(revokedAt) {
 			t.Errorf("already=%v: response %v, want the store's result", already, resp)
+		}
+		if got := resp.GetBefore(); got != dispositionToProto(before) {
+			t.Errorf("already=%v: before = %v, want %v", already, got, before)
 		}
 	}
 }

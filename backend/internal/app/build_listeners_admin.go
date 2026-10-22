@@ -261,6 +261,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// admin pod alone (e.g. via /system/health.json) shouldn't have to
 	// cross-reference the api pod to learn that capability is disabled.
 	AddComponent(healthH, capabilityComponent(deps))
+	AddComponent(healthH, capabilityRevocationsComponent(deps))
 	AddComponent(healthH, apiTokenComponent(deps))
 
 	mux := http.NewServeMux()

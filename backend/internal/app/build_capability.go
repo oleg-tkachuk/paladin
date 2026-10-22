@@ -33,6 +33,11 @@ type CapabilityBundle struct {
 	Verifier  *limes.Verifier
 	Keys      *jwks.Static
 
+	// Revocations is the verifier's revocation cache, which the watcher
+	// keeps in step; its Stats say whether a revocation reaches this
+	// replica at once (the health page's capability-revocations).
+	Revocations *limes.RevocationCache
+
 	// Records reads capability records with their dispositions: a tenant's
 	// for List, and one for Get.
 	Records limes.RecordReporter
@@ -143,30 +148,43 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		trusted = []string{cfg.IssuerName}
 	}
 
-	// One cache answers for capabilities and for Biscuit copies alike.
+	// One cache answers for capabilities and for Biscuit copies alike. It
+	// serves an answer for SyncedTTL while the watcher below listens, and
+	// for TTL alone before and between its connections. The store must name
+	// each answer's ancestors, so a revocation drops only what it outdates:
+	// a decorator of it that forgot to forward RevocationLineage would turn
+	// every revocation into a whole clear, and is refused here instead.
+	// limes refuses a SyncedTTL shorter than the TTL; a deployment that
+	// raised the TTL above the synced default gets the TTL for both, as it
+	// had before the synced one existed, rather than a refusal to start.
 	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{
-		Capabilities: store, Biscuits: store, TTL: cfg.RevocationCacheTTL,
+		Capabilities:   store,
+		Biscuits:       store,
+		TTL:            cfg.RevocationCacheTTL,
+		SyncedTTL:      max(cfg.RevocationCacheSyncedTTL, cfg.RevocationCacheTTL),
+		RequireLineage: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability revocation cache: %w", err)
 	}
-	// Its hits, misses, lookups, evictions and clears, read when the
-	// provider collects. The registration lives as long as the cache: the
-	// process.
+	// Its hits, misses, lookups, evictions and clears, and the state of the
+	// revocation signal — synced, its connections, losses and
+	// notifications — read when the provider collects. The registration
+	// lives as long as the cache: the process.
 	if _, err := otelmetric.InstrumentRevocationCache(cache); err != nil {
 		return nil, fmt.Errorf("app: capability revocation cache metrics: %w", err)
 	}
 
-	// Revocations made on any replica clear this one's caches at once; the
-	// TTL above is only the fallback for while the LISTEN connection is
-	// down. The watcher holds a connection for the process lifetime, so it
-	// runs on its own context, which StopWatchers cancels before the pool is
-	// closed — the same arrangement as the Cedar watcher. It reconnects on
-	// its own, clearing the caches each time.
+	// Revocations made on any replica clear this one's cache at once. The
+	// watcher keeps the cache in step with its connection: it tells it when
+	// it listens (a clear, then SyncedTTL) and when it stops (TTL alone, at
+	// once). It holds a connection for the process lifetime, so it runs on
+	// its own context, which StopWatchers cancels before the pool is closed
+	// — the same arrangement as the Cedar watcher. It reconnects on its own.
 	watchCtx, stopWatch := context.WithCancel(context.Background())
 	watchLog := deps.Logger.Named("capability-revocation-watch")
 	watcher := capabilitypg.NewRevocationWatcher(deps.Pool, func(err error) {
-		watchLog.Warn("revocation watch reconnecting; caches clear on reconnect", zap.Error(err))
+		watchLog.Warn("revocation watch reconnecting; revocation answers cached for the short TTL until it listens again", zap.Error(err))
 	}, cache)
 	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
@@ -226,6 +244,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 
 	return &CapabilityBundle{
 		Store:        store,
+		Revocations:  cache,
 		Copies:       store,
 		CopyUsage:    copyUsage,
 		Records:      records,

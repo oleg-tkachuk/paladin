@@ -395,6 +395,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 	// Each subsystem is listed whether on or off: the page says which.
 	AddComponent(healthH, capabilityComponent(deps))
+	AddComponent(healthH, capabilityRevocationsComponent(deps))
 	AddComponent(healthH, apiTokenComponent(deps))
 
 	// The api role serves two listeners — data and iam — and Kubernetes

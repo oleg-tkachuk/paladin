@@ -398,7 +398,8 @@ def test_get_gives_the_disposition_as_the_server_does(fake: FakePaladin) -> None
 
 def test_revoke_says_what_it_did_and_get_what_stopped_it(fake: FakePaladin) -> None:
     """The cases capabilityh/sdk_fake_fidelity_test.go holds the Go fake to: a
-    second revoke keeps the first entry, and a child names its parent's."""
+    second revoke keeps the first entry, each says what the capability was
+    before it, and a child names its parent's."""
     admin = fake.connect().admin.capability
     parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
     child = fake.connect(capability=parent.token).admin.capability.delegate(
@@ -406,8 +407,10 @@ def test_revoke_says_what_it_did_and_get_what_stopped_it(fake: FakePaladin) -> N
     )
     first = admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="leaked"))
     assert not first.already_revoked
+    assert first.before == _A
     again = admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="again"))
     assert again.already_revoked
+    assert again.before == _R
     assert again.revocation.reason == "leaked"
 
     got = admin.get(pb.CapabilityServiceGetRequest(id=child.capability.id))
@@ -416,3 +419,17 @@ def test_revoke_says_what_it_did_and_get_what_stopped_it(fake: FakePaladin) -> N
     assert got.stopped_by.revocation.reason == "leaked"
     own = admin.get(pb.CapabilityServiceGetRequest(id=parent.capability.id))
     assert own.stopped_by.capability_id == parent.capability.id
+
+
+def test_revoke_of_a_child_stopped_through_its_parent_stops_nothing_new(fake: FakePaladin) -> None:
+    """A child stopped only through its revoked parent has no entry of its own:
+    its revoke writes one, but says it was revoked already before the call."""
+    admin = fake.connect().admin.capability
+    parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
+    child = fake.connect(capability=parent.token).admin.capability.delegate(
+        pb.CapabilityServiceDelegateRequest(parent_id=parent.capability.id)
+    )
+    admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id))
+    got = admin.revoke(pb.CapabilityServiceRevokeRequest(id=child.capability.id))
+    assert not got.already_revoked
+    assert got.before == _R

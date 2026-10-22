@@ -467,7 +467,8 @@ capability:
   verifier_leeway: 30s               # clock-skew window for nbf / exp
   charge_per_request_amount: 0       # amount auto-charged on billable handler calls, in the capability's own unit; 0 = no auto-charge
   currency: XXX                      # platform ISO 4217 unit for budgets and capabilities that name none; XXX = no currency
-  revocation_cache_ttl: 2s           # IsRevoked cache TTL; <0 disables (every check hits DB)
+  revocation_cache_ttl: 2s           # revocation answers cached while the watcher is down; keep it short
+  revocation_cache_synced_ttl: 30s   # cached while the watcher listens and clears them on revoke; never below revocation_cache_ttl
   dpop_nonce:                        # DPoP server nonces (RFC 9449 §8)
     enabled: false
     lifetime: 5m                     # how long a nonce is accepted

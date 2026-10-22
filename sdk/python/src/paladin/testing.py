@@ -657,6 +657,7 @@ class _CapabilityService(CapabilityServiceSync):
             if record is None:
                 raise _with_reason(Code.NOT_FOUND, f"capability {request.id}: not found")
             already = record.revocation is not None
+            before = fake._disposition(record, datetime.now(UTC))
             entry = capability_service_pb2.CapabilityRevocation(
                 revoked_at=_timestamp(datetime.now(UTC)),
                 reason=request.reason,
@@ -667,7 +668,7 @@ class _CapabilityService(CapabilityServiceSync):
             out = capability_service_pb2.CapabilityRevocation()
             out.CopyFrom(record.revocation)
         return capability_service_pb2.CapabilityServiceRevokeResponse(
-            already_revoked=already, revocation=out
+            already_revoked=already, revocation=out, before=before
         )
 
     def get(

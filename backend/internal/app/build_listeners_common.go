@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/limes"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -168,6 +170,54 @@ func capabilityComponent(deps *SharedDeps) health.Check {
 			return err
 		},
 	}
+}
+
+// capabilityRevocationsComponent reports whether a revocation reaches this
+// replica at once: the watcher listens, so the cache serves for its synced
+// TTL and every revocation clears what it outdates. Down, a revocation made
+// elsewhere still verifies here until the short TTL runs out. Not critical:
+// requests are still authorised, only a revocation is slower to take.
+func capabilityRevocationsComponent(deps *SharedDeps) health.Check {
+	on := deps.Capability != nil && deps.Capability.Revocations != nil
+	return health.Check{
+		Name:     "capability-revocations",
+		Category: health.CategorySubsystem,
+		Switch:   health.Fixed(health.ByConfig(on, config.KeyCapabilityEnabled)),
+		Func: func(context.Context) error {
+			return revocationSignalErr(deps.Capability.Revocations.Stats())
+		},
+		Describe: func(context.Context) []health.Detail {
+			return revocationSignalDetails(deps.Capability.Revocations.Stats())
+		},
+	}
+}
+
+// revocationSignalErr is a cache no revocation signal vouches for.
+func revocationSignalErr(st limes.RevocationCacheStats) error {
+	if st.Synced {
+		return nil
+	}
+	if st.Syncs == 0 {
+		return errors.New("revocation watcher not listening yet: revocations reach this replica as cached answers expire")
+	}
+	return fmt.Errorf("revocation watcher lost its connection at %s: revocations reach this replica as cached answers expire",
+		st.LastSyncLoss.UTC().Format(time.RFC3339))
+}
+
+// revocationSignalDetails is what the health page shows of the signal: how
+// often the watcher connected and lost its connection, what it passed on,
+// and whether a revocation clears narrowly.
+func revocationSignalDetails(st limes.RevocationCacheStats) []health.Detail {
+	d := []health.Detail{
+		{Name: "connections", Value: strconv.FormatUint(st.Syncs, 10)},
+		{Name: "connections lost", Value: strconv.FormatUint(st.SyncsLost, 10)},
+		{Name: "notifications", Value: strconv.FormatUint(st.Signals, 10)},
+		{Name: "narrow clears", Value: strconv.FormatBool(st.Lineage)},
+	}
+	if !st.LastSyncLoss.IsZero() {
+		d = append(d, health.Detail{Name: "last lost", Value: st.LastSyncLoss.UTC().Format(time.RFC3339)})
+	}
+	return d
 }
 
 // apiTokenComponent reports the api_token subsystem. On, it checks the

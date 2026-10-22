@@ -341,8 +341,9 @@ func TestTheSDKFakeGetsTheDispositionAsTheServerDoes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("server Delegate: %v", err)
 	}
-	if first, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: parent.Capability().ID.String()}); err != nil || first.GetAlreadyRevoked() {
-		t.Fatalf("server Revoke: %v, already revoked %v", err, first.GetAlreadyRevoked())
+	if first, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: parent.Capability().ID.String()}); err != nil || first.GetAlreadyRevoked() ||
+		first.GetBefore() != adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_ACTIVE {
+		t.Fatalf("server Revoke: %v, already revoked %v, before %v", err, first.GetAlreadyRevoked(), first.GetBefore())
 	}
 
 	srv := paladintest.New(t)
@@ -365,8 +366,9 @@ func TestTheSDKFakeGetsTheDispositionAsTheServerDoes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fake Delegate: %v", err)
 	}
-	if first, err := fake.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: fakeParent.GetCapability().GetId()}); err != nil || first.GetAlreadyRevoked() {
-		t.Fatalf("fake Revoke: %v, already revoked %v", err, first.GetAlreadyRevoked())
+	if first, err := fake.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: fakeParent.GetCapability().GetId()}); err != nil || first.GetAlreadyRevoked() ||
+		first.GetBefore() != adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_ACTIVE {
+		t.Fatalf("fake Revoke: %v, already revoked %v, before %v", err, first.GetAlreadyRevoked(), first.GetBefore())
 	}
 
 	serverParent, fakeParentID := parent.Capability().ID.String(), fakeParent.GetCapability().GetId()
@@ -413,5 +415,25 @@ func TestTheSDKFakeGetsTheDispositionAsTheServerDoes(t *testing.T) {
 	}
 	if server.GetRevocation().GetReason() == "again" || faked.GetRevocation().GetReason() == "again" {
 		t.Errorf("a second revoke replaced the first entry: server %v, fake %v", server.GetRevocation(), faked.GetRevocation())
+	}
+	if s, f := server.GetBefore(), faked.GetBefore(); s != adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED || f != s {
+		t.Errorf("a second revoke: before %v on the server, %v on the fake; want revoked", s, f)
+	}
+
+	// The child, stopped only through its parent, has no entry of its own:
+	// its revoke writes one, but stops nothing new, and both say so.
+	server, err = h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: child.GetCapability().GetId()})
+	if err != nil {
+		t.Fatalf("server Revoke child: %v", err)
+	}
+	faked, err = fake.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: fakeChild.GetCapability().GetId()})
+	if err != nil {
+		t.Fatalf("fake Revoke child: %v", err)
+	}
+	if server.GetAlreadyRevoked() || faked.GetAlreadyRevoked() {
+		t.Errorf("the child's revoke: already revoked on the server %v, on the fake %v; want neither", server.GetAlreadyRevoked(), faked.GetAlreadyRevoked())
+	}
+	if s, f := server.GetBefore(), faked.GetBefore(); s != adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED || f != s {
+		t.Errorf("the child's revoke: before %v on the server, %v on the fake; want revoked", s, f)
 	}
 }
