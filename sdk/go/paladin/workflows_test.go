@@ -103,8 +103,11 @@ func TestPagesFollowsEveryPage(t *testing.T) {
 func TestPagesStopsWhenTheLoopDoes(t *testing.T) {
 	srv := &pagedObjects{items: []string{"a", "b", "c", "d"}, pageSize: 1}
 	objects := objectClient(t, srv)
-	for range paladin.Pages(context.Background(), objects.ListObjects,
+	for _, err := range paladin.Pages(context.Background(), objects.ListObjects,
 		&datav1.ListObjectsRequest{}, (*datav1.ListObjectsResponse).GetObjects) {
+		if err != nil {
+			t.Fatalf("the first item: %v", err)
+		}
 		break
 	}
 	if srv.calls != 1 {
