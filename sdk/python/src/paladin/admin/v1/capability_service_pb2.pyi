@@ -187,8 +187,12 @@ class CapabilityServiceRevokeRequest(_message.Message):
     def __init__(self, id: _Optional[str] = ..., reason: _Optional[str] = ..., cascade_children: _Optional[bool] = ...) -> None: ...
 
 class CapabilityServiceRevokeResponse(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...
+    __slots__ = ("already_revoked", "revocation")
+    ALREADY_REVOKED_FIELD_NUMBER: _ClassVar[int]
+    REVOCATION_FIELD_NUMBER: _ClassVar[int]
+    already_revoked: bool
+    revocation: CapabilityRevocation
+    def __init__(self, already_revoked: _Optional[bool] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ...) -> None: ...
 
 class CapabilityServiceRevokeBiscuitRequest(_message.Message):
     __slots__ = ("token", "reason")
@@ -283,14 +287,24 @@ class CapabilityRevocation(_message.Message):
     def __init__(self, revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., reason: _Optional[str] = ..., actor: _Optional[str] = ..., cascade: _Optional[bool] = ...) -> None: ...
 
 class CapabilityServiceGetResponse(_message.Message):
-    __slots__ = ("capability", "issued_by", "revocation")
+    __slots__ = ("capability", "issued_by", "revocation", "stopped_by")
     CAPABILITY_FIELD_NUMBER: _ClassVar[int]
     ISSUED_BY_FIELD_NUMBER: _ClassVar[int]
     REVOCATION_FIELD_NUMBER: _ClassVar[int]
+    STOPPED_BY_FIELD_NUMBER: _ClassVar[int]
     capability: Capability
     issued_by: CapabilityPrincipal
     revocation: CapabilityRevocation
-    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., issued_by: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ...) -> None: ...
+    stopped_by: CapabilityStoppedBy
+    def __init__(self, capability: _Optional[_Union[Capability, _Mapping]] = ..., issued_by: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ..., stopped_by: _Optional[_Union[CapabilityStoppedBy, _Mapping]] = ...) -> None: ...
+
+class CapabilityStoppedBy(_message.Message):
+    __slots__ = ("capability_id", "revocation")
+    CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    REVOCATION_FIELD_NUMBER: _ClassVar[int]
+    capability_id: str
+    revocation: CapabilityRevocation
+    def __init__(self, capability_id: _Optional[str] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ...) -> None: ...
 
 class CapabilityServiceGetUsageRequest(_message.Message):
     __slots__ = ("id",)

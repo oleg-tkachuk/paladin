@@ -48,7 +48,8 @@ service CapabilityService {
 
   // Revoke adds the supplied capability ID to the revocation list.
   // CascadeChildren=true revokes every descendant in the delegation
-  // tree. Idempotent — re-revoking a revoked capability is a no-op.
+  // tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+  // response says so, with the entry that stands.
   rpc Revoke(CapabilityServiceRevokeRequest) returns (CapabilityServiceRevokeResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -300,7 +301,15 @@ message CapabilityServiceRevokeRequest {
   bool cascade_children = 3;
 }
 
-message CapabilityServiceRevokeResponse {}
+message CapabilityServiceRevokeResponse {
+  // already_revoked is a capability that had a revocation entry of its own
+  // before the call, so the call wrote none: the first entry stands. One
+  // stopped only through an ancestor had none, and its first revoke writes it.
+  bool already_revoked = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // revocation is the capability's entry as it stands after the call: the one
+  // this call wrote, or the earlier one it kept.
+  CapabilityRevocation revocation = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
 
 message CapabilityServiceRevokeBiscuitRequest {
   // token is the Biscuit copy to revoke, exactly as its holder presents it.
@@ -404,6 +413,18 @@ message CapabilityServiceGetResponse {
   // revocation is the capability's own entry; absent when it has none. A
   // capability stopped only through an ancestor has none.
   CapabilityRevocation revocation = 3;
+  // stopped_by is the entry that makes a revoked capability revoked: its own,
+  // or that of its nearest revoked ancestor still on record. Absent unless
+  // the capability's disposition is revoked.
+  CapabilityStoppedBy stopped_by = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// CapabilityStoppedBy is a revocation entry and the capability it is of.
+message CapabilityStoppedBy {
+  // capability_id is the capability the entry is of: the one read, or an
+  // ancestor of it.
+  string capability_id = 1;
+  CapabilityRevocation revocation = 2;
 }
 
 message CapabilityServiceGetUsageRequest {

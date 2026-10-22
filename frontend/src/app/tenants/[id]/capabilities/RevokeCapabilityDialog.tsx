@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatTimestamp } from "@/lib/format/timestamp";
 import { useNotification } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -40,12 +41,22 @@ export function RevokeCapabilityDialog({
   const handleRevoke = async () => {
     if (!cap) return;
     try {
-      await capabilityClient.revoke({
+      const res = await capabilityClient.revoke({
         id: cap.id,
         reason: revokeReason.trim(),
         cascadeChildren: revokeCascade,
       });
-      showNotification({ type: "success", title: "Revoked", message: cap.id });
+      // A revoke is idempotent: a second one keeps the first entry, and says
+      // so rather than claim it revoked anything.
+      showNotification(
+        res.alreadyRevoked
+          ? {
+              type: "info",
+              title: "Already revoked",
+              message: `${cap.id} was revoked on ${formatTimestamp(res.revocation?.revokedAt)}; that revocation stands.`,
+            }
+          : { type: "success", title: "Revoked", message: cap.id },
+      );
       reset();
       onRevoked();
       onClose();

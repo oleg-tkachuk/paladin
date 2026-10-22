@@ -81,7 +81,8 @@ class CapabilityService(Protocol):
         """
         Revoke adds the supplied capability ID to the revocation list.
         CascadeChildren=true revokes every descendant in the delegation
-        tree. Idempotent — re-revoking a revoked capability is a no-op.
+        tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+        response says so, with the entry that stands.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -346,7 +347,8 @@ class CapabilityServiceClient(ConnectClient):
         """
         Revoke adds the supplied capability ID to the revocation list.
         CascadeChildren=true revokes every descendant in the delegation
-        tree. Idempotent — re-revoking a revoked capability is a no-op.
+        tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+        response says so, with the entry that stands.
         """
         return await self.execute_unary(
             request=request,
@@ -544,7 +546,8 @@ class CapabilityServiceSync(Protocol):
         """
         Revoke adds the supplied capability ID to the revocation list.
         CascadeChildren=true revokes every descendant in the delegation
-        tree. Idempotent — re-revoking a revoked capability is a no-op.
+        tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+        response says so, with the entry that stands.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -805,7 +808,8 @@ class CapabilityServiceClientSync(ConnectClientSync):
         """
         Revoke adds the supplied capability ID to the revocation list.
         CascadeChildren=true revokes every descendant in the delegation
-        tree. Idempotent — re-revoking a revoked capability is a no-op.
+        tree. Idempotent — re-revoking a revoked capability is a no-op, and the
+        response says so, with the entry that stands.
         """
         return self.execute_unary(
             request=request,

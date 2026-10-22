@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 
 import type {
   Capability,
@@ -24,6 +25,9 @@ type UsageEntry =
 // undefined while loading, "unavailable" when the read failed.
 export type RecordEntry =
   CapabilityServiceGetResponse | "unavailable" | undefined;
+
+// How much of an ancestor's id names it in a row; the whole is its tooltip.
+const ANCESTOR_ID_SHOWN = 8;
 
 // recordText is what a field read from the record shows while there is none.
 function recordText(record: RecordEntry): string | undefined {
@@ -287,6 +291,7 @@ function IssuanceRows({
   }
   const issuer = record.issuedBy;
   const rev = record.revocation;
+  const stopped = record.stoppedBy;
   return (
     <>
       <DetailRow
@@ -328,6 +333,32 @@ function IssuanceRows({
               rev.cascade ? "yes — with everything delegated from it" : "no"
             }
           />
+        </>
+      ) : stopped?.revocation ? (
+        // No entry of its own: an ancestor's revocation stopped it, which
+        // the record names so the operator can open it.
+        <>
+          <DetailRow
+            label="Revoked"
+            value={
+              <span>
+                through its ancestor{" "}
+                <Link
+                  href={`?id=${encodeURIComponent(stopped.capabilityId)}`}
+                  className="font-mono text-xs text-primary hover:underline"
+                  title={stopped.capabilityId}
+                >
+                  {stopped.capabilityId.slice(0, ANCESTOR_ID_SHOWN)}…
+                </Link>
+              </span>
+            }
+          />
+          <DetailRow
+            label="On"
+            value={<Timestamp ts={stopped.revocation.revokedAt} />}
+            mono
+          />
+          <DetailRow label="Reason" value={stopped.revocation.reason || "—"} />
         </>
       ) : (
         <DetailRow label="Revoked" value="not revoked itself" />

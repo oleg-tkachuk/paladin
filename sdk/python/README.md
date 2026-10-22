@@ -547,7 +547,8 @@ hold that fake to the same answers:
 | `delegate` with no capability presented, or from a Biscuit copy | `FAILED_PRECONDITION` |
 | `delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PERMISSION_DENIED` |
 | `list` of a tenant, alone or with a principal kind, a subject, dispositions and `sort_order` | Its capabilities in issue order, each with its `disposition`: revoked — itself or through a revoked ancestor — over expired over active; no dispositions named lists the active ones and those `include_expired` and `include_revoked` add |
-| `get` of a capability it issued | It, with its `disposition` as `list` gives it |
+| `get` of a capability it issued | It, with its `disposition` as `list` gives it, its own `revocation`, and `stopped_by`: the entry that revokes it, its own or its nearest revoked ancestor's |
+| `revoke` of a capability revoked already | `already_revoked`, and the first entry, which stands |
 | `list` with a page token of the other order or of other filters, or one it did not hand out | `INVALID_ARGUMENT` |
 | `list` of another tenant with `strict_auth` | `PERMISSION_DENIED` |
 

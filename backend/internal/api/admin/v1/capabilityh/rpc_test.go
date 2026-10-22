@@ -45,17 +45,19 @@ type recordingStore struct {
 	fakeStore
 	revokeArgs *limes.RevokeRequest
 	revokeErr  error
-	revokeCtx  context.Context
-	listArgs   *limes.ListRecordsRequest
-	listOut    []limes.RecordListing
-	listNext   string
-	listErr    error
+	// revokeResult is what Revoke answers when it does not fail.
+	revokeResult limes.RevokeResult
+	revokeCtx    context.Context
+	listArgs     *limes.ListRecordsRequest
+	listOut      []limes.RecordListing
+	listNext     string
+	listErr      error
 }
 
-func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) error {
+func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) (limes.RevokeResult, error) {
 	s.revokeArgs = &args
 	s.revokeCtx = ctx
-	return s.revokeErr
+	return s.revokeResult, s.revokeErr
 }
 
 func (s *recordingStore) GetRecordListing(context.Context, uuid.UUID) (limes.RecordListing, error) {
@@ -323,6 +325,27 @@ func TestRevokeRejectsBadID(t *testing.T) {
 	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: "nope"})
 	if codeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", codeOf(err))
+	}
+}
+
+// Revoke says whether the capability was revoked already, with the entry
+// that stands: the first one, kept by an idempotent second revoke.
+func TestRevokeSaysWhatItDid(t *testing.T) {
+	revokedAt := time.Unix(1_800_000_000, 0).UTC()
+	for _, already := range []bool{false, true} {
+		store := &recordingStore{revokeResult: limes.RevokeResult{
+			AlreadyRevoked: already,
+			Revocation:     limes.Revocation{RevokedAt: revokedAt, Note: "first", Actor: "sec", Cascaded: true},
+		}}
+		h := mkHandler(t, store, nil, &allowAuthorizer{})
+		resp, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString(), Reason: "second"})
+		if err != nil {
+			t.Fatalf("Revoke: %v", err)
+		}
+		r := resp.GetRevocation()
+		if resp.GetAlreadyRevoked() != already || r.GetReason() != "first" || r.GetActor() != "sec" || !r.GetCascade() || !r.GetRevokedAt().AsTime().Equal(revokedAt) {
+			t.Errorf("already=%v: response %v, want the store's result", already, resp)
+		}
 	}
 }
 

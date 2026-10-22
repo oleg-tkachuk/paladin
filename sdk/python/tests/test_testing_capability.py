@@ -394,3 +394,25 @@ def test_get_gives_the_disposition_as_the_server_does(fake: FakePaladin) -> None
     assert disposition(active.capability) == _A
     assert disposition(parent.capability) == _R
     assert disposition(child.capability) == _R
+
+
+def test_revoke_says_what_it_did_and_get_what_stopped_it(fake: FakePaladin) -> None:
+    """The cases capabilityh/sdk_fake_fidelity_test.go holds the Go fake to: a
+    second revoke keeps the first entry, and a child names its parent's."""
+    admin = fake.connect().admin.capability
+    parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
+    child = fake.connect(capability=parent.token).admin.capability.delegate(
+        pb.CapabilityServiceDelegateRequest(parent_id=parent.capability.id)
+    )
+    first = admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="leaked"))
+    assert not first.already_revoked
+    again = admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="again"))
+    assert again.already_revoked
+    assert again.revocation.reason == "leaked"
+
+    got = admin.get(pb.CapabilityServiceGetRequest(id=child.capability.id))
+    assert not got.HasField("revocation")
+    assert got.stopped_by.capability_id == parent.capability.id
+    assert got.stopped_by.revocation.reason == "leaked"
+    own = admin.get(pb.CapabilityServiceGetRequest(id=parent.capability.id))
+    assert own.stopped_by.capability_id == parent.capability.id

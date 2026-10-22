@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, typeToConfirm } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 const h = vi.hoisted(() => ({
   revoke: vi.fn(),
@@ -76,5 +77,40 @@ describe("RevokeCapabilityDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalled();
     expect(h.revoke).not.toHaveBeenCalled();
+  });
+
+  // A second revoke keeps the first entry: the dialog says it was revoked
+  // already, and when, rather than claim it revoked anything.
+  it("says a capability was revoked already, and when", async () => {
+    h.revoke.mockResolvedValue({
+      alreadyRevoked: true,
+      revocation: {
+        revokedAt: timestampFromDate(new Date("2026-10-21T13:57:25Z")),
+      },
+    });
+    open();
+    await typeToConfirm("revoke");
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "info",
+          title: "Already revoked",
+          message: expect.stringContaining("that revocation stands"),
+        }),
+      ),
+    );
+  });
+
+  it("says it revoked one that was not", async () => {
+    h.revoke.mockResolvedValue({ alreadyRevoked: false });
+    open();
+    await typeToConfirm("revoke");
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() =>
+      expect(h.showNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "success", title: "Revoked" }),
+      ),
+    );
   });
 });

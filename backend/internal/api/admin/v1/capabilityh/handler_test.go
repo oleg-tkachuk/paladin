@@ -60,8 +60,8 @@ func (s *fakeStore) GetRecord(_ context.Context, id uuid.UUID) (limes.Record, er
 	return limes.Record{}, limes.ErrNotFound // the Store contract's sentinel
 }
 func (s *fakeStore) IsRevoked(context.Context, uuid.UUID) (bool, error) { return false, nil }
-func (s *fakeStore) Revoke(context.Context, limes.RevokeRequest) error {
-	return errors.New("not used")
+func (s *fakeStore) Revoke(context.Context, limes.RevokeRequest) (limes.RevokeResult, error) {
+	return limes.RevokeResult{}, errors.New("not used")
 }
 func (s *fakeStore) Purge(context.Context, limes.PurgeRequest) (limes.PurgeResult, error) {
 	return limes.PurgeResult{}, errors.New("not used")
@@ -108,7 +108,7 @@ func mkHandler(t *testing.T, store limes.Store, usage meter.UsageStore, policy c
 	t.Helper()
 	m := newMinter(t, store)
 	h := NewHandler(m.Issuer, m.Verifier, store, usage, policy)
-	if records, ok := store.(Records); ok {
+	if records, ok := store.(limes.RecordReporter); ok {
 		h.WithRecords(records)
 	}
 	return h

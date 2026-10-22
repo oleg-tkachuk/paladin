@@ -56,7 +56,7 @@ type Handler struct {
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
 	copyUsage meter.CopyUsageReader
 	// records serves List and Get; see WithRecords.
-	records Records
+	records limes.RecordReporter
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
@@ -367,12 +367,13 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.Revoke(ctx, limes.RevokeRequest{
+	res, err := h.store.Revoke(ctx, limes.RevokeRequest{
 		CapabilityID:    id,
 		Note:            req.GetReason(),
 		Actor:           caller.Subject,
 		CascadeChildren: req.GetCascadeChildren(),
-	}); err != nil {
+	})
+	if err != nil {
 		// The store scopes the revoke to capabilities the caller can see, so
 		// a not-found here covers both "no such id" and "belongs to another
 		// tenant". Both answer NotFound: telling the caller which one it was
@@ -383,7 +384,17 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	stashCapabilityInScope(ctx, id)
-	return &adminv1.CapabilityServiceRevokeResponse{}, nil
+	return &adminv1.CapabilityServiceRevokeResponse{
+		AlreadyRevoked: res.AlreadyRevoked,
+		Revocation:     revocationToProto(res.Revocation),
+	}, nil
+}
+
+// revocationToProto is a revocation entry as the API carries it.
+func revocationToProto(r limes.Revocation) *adminv1.CapabilityRevocation {
+	return &adminv1.CapabilityRevocation{
+		RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Note, Actor: r.Actor, Cascade: r.Cascaded,
+	}
 }
 
 // Get returns one capability as it is on record. Gated as List and GetUsage
@@ -420,8 +431,12 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	}
 	out.Capability.Disposition = dispositionToProto(listed.Disposition)
 	if r := rec.Revocation; r != nil {
-		out.Revocation = &adminv1.CapabilityRevocation{
-			RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Note, Actor: r.Actor, Cascade: r.Cascaded,
+		out.Revocation = revocationToProto(*r)
+	}
+	if by := listed.StoppedBy; by != nil {
+		out.StoppedBy = &adminv1.CapabilityStoppedBy{
+			CapabilityId: by.CapabilityID.String(),
+			Revocation:   revocationToProto(by.Revocation),
 		}
 	}
 	return out, nil

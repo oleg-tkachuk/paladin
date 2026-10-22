@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/pgstore"
@@ -59,7 +60,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 
 	// Revoked through the first pool — a different connection, as another
 	// replica would.
-	if err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
+	if _, err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
@@ -76,5 +77,58 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 			t.Fatalf("the child's cached 'live' answer survived its parent's revocation for %s; the notification never cleared the cache", notifyDeadline)
 		}
 		time.Sleep(notifyPoll)
+	}
+}
+
+// A revocation clears only what it outdates: pgstore names the revoked
+// capability, so a replica's cache drops its answer and its descendants' and
+// keeps every other capability's. A whole clear would have every capability
+// on the replica look its revocation up again after any one revoke.
+func TestRevocationNotificationClearsOnlyWhatItOutdates(t *testing.T) {
+	t.Parallel()
+	ctx, f := newLineageFixture(t)
+	unrelated := f.insert(t, ctx, uuid.Nil, lineageRootBudget, lineageRequests)
+
+	replica := newCapStore(t, rlsPool(t, ctx, f.pool))
+	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{Capabilities: replica, TTL: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	watchCtx, stop := context.WithCancel(ctx)
+	t.Cleanup(stop)
+	watchRevocations(t, watchCtx, f.pool, cache)
+
+	for _, id := range []uuid.UUID{f.child, unrelated} {
+		if r, err := cache.IsRevoked(ctx, id); err != nil || r {
+			t.Fatalf("%s before revoke: revoked=%v err=%v", id, r, err)
+		}
+	}
+	if _, err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	deadline := time.Now().Add(notifyDeadline)
+	for {
+		r, err := cache.IsRevoked(ctx, f.child)
+		if err != nil {
+			t.Fatalf("IsRevoked: %v", err)
+		}
+		if r {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the child's cached 'live' answer survived its parent's revocation for %s", notifyDeadline)
+		}
+		time.Sleep(notifyPoll)
+	}
+
+	if cache.Stats().ClearsRevoked == 0 {
+		t.Errorf("stats = %+v, want the revocation cleared narrowly", cache.Stats())
+	}
+	hits := cache.Stats().Capabilities.Hits
+	if r, err := cache.IsRevoked(ctx, unrelated); err != nil || r {
+		t.Fatalf("unrelated after revoke: revoked=%v err=%v", r, err)
+	}
+	if cache.Stats().Capabilities.Hits != hits+1 {
+		t.Errorf("an unrelated capability's answer was looked up again; the revocation cleared the whole cache")
 	}
 }
