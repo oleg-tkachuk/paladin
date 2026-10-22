@@ -83,7 +83,7 @@ here.
 
 
 
-## sdk/go/v0.111.0, sdk/python/v0.111.0 — limes v0.116.0: a revoke says what the capability was, and the cache follows its watcher
+## v39.3.0, sdk/go/v0.111.0, sdk/python/v0.111.0 — limes v0.116.0: a revoke says what the capability was, and the cache follows its watcher
 
 **Server:** the first release that carries this section.
 
@@ -117,7 +117,7 @@ here.
 
 Additive: no action needed.
 
-## sdk/go/v0.110.0, sdk/python/v0.110.0 — a revoke says what it did, and a capability what stopped it
+## v39.3.0, sdk/go/v0.110.0, sdk/python/v0.110.0 — a revoke says what it did, and a capability what stopped it
 
 **Server:** the first release that carries this section.
 
@@ -137,7 +137,7 @@ Additive: no action needed.
 
 Additive: no action needed.
 
-## sdk/go/v0.109.0, sdk/python/v0.109.0 — the platform's spend over time
+## v39.3.0, sdk/go/v0.109.0, sdk/python/v0.109.0 — the platform's spend over time
 
 **Server:** the first release that carries this section.
 
@@ -147,7 +147,7 @@ unit most of the period's charges are in. It reads every tenant's rows, so
 it is gated as `ListTenantSpend` is: `ReadBilling` and the `platform.admin`
 role. The console's Billing page charts it. Additive: no action needed.
 
-## Unreleased — limes v0.112.0: a page token keeps its filters
+## v39.3.0 — limes v0.112.0: a page token keeps its filters
 
 **Server:** the first release that carries this section.
 
@@ -162,7 +162,7 @@ role. The console's Billing page charts it. Additive: no action needed.
   `CONCURRENTLY`. A revoke now also updates the rows of the records below the
   one revoked.
 
-## sdk/go/v0.108.0, sdk/python/v0.108.0 — an operation says how many objects it left behind
+## v39.3.0, sdk/go/v0.108.0, sdk/python/v0.108.0 — an operation says how many objects it left behind
 
 **Server:** the first release that carries this section.
 
@@ -181,7 +181,7 @@ A batch that runs to its end is `SUCCEEDED` whatever it could not do, so a
   its read and its write, up to three times on a fresh read, before it
   reports a version conflict.
 
-## sdk/go/v0.107.0, sdk/python/v0.107.0 — Get gives a capability its disposition
+## v39.3.0, sdk/go/v0.107.0, sdk/python/v0.107.0 — Get gives a capability its disposition
 
 `CapabilityService.Get` sets `Capability.disposition` (12), by the same rules
 as `List`: revoked — itself or through a revoked ancestor — over expired over
@@ -189,7 +189,7 @@ active. A capability stopped only through its parent has no `revocation` of
 its own, so read `disposition`, not `revocation`, for whether it still works.
 Additive: no action needed.
 
-## sdk/go/v0.106.0, sdk/python/v0.106.0 — a tenant's capabilities list without a principal
+## v39.3.0, sdk/go/v0.106.0, sdk/python/v0.106.0 — a tenant's capabilities list without a principal
 
 **Server:** the first release that carries this section; an older one still
 requires `principal_kind` and `subject` and answers as before.
@@ -214,7 +214,7 @@ limes's record listing (limes v0.111.0, pgstore v0.31.0):
   without `CONCURRENTLY`, so on a large `limes.capabilities` the first start
   of this release holds writes to it until they are built.
 
-## sdk/go/v0.105.0, sdk/python/v0.105.0 — a collection says what it holds
+## v39.3.0, sdk/go/v0.105.0, sdk/python/v0.105.0 — a collection says what it holds
 
 `Collection.usage` (14) is what a collection holds now — its available
 objects' count and bytes, and when the newest was stored — on `GetCollection`
@@ -222,14 +222,14 @@ and `ListCollections`; objects still uploading or in the trash are not in it.
 Migration `095` adds the index it is read from, concurrently. The console's
 collection lists show it. Additive: no action needed.
 
-## sdk/go/v0.104.0, sdk/python/v0.105.0 — an API token can be read by its name
+## v39.3.0, sdk/go/v0.104.0, sdk/python/v0.105.0 — an API token can be read by its name
 
 `APITokenService.Get` reads one token's metadata by its resource name,
 `tenants/{tenant}/apiTokens/{id}`, under the same authorisation as `List`.
 The console uses it to name an audit entry's `apikey:<id>` actor. Additive: no
 action needed.
 
-## sdk/go/v0.103.0, sdk/python/v0.104.0 — an audit entry records its request, not before and after
+## v39.3.0, sdk/go/v0.103.0, sdk/python/v0.104.0 — an audit entry records its request, not before and after
 
 **Server:** v39.3.0 or later; so far released as v39.3.0-rc.1, so a v39.2.x server still answers as before.
 
@@ -260,7 +260,7 @@ pin from `@sdk/go/vX.Y.Z#subdirectory=sdk/python` to
 `@sdk/python/vX.Y.Z#subdirectory=sdk/python`. A pin to a Go tag keeps
 installing what it pointed at, but no later Python release has one.
 
-## sdk/go/v0.102.0, sdk/python/v0.102.0 — the SDKs type the planes; refusals no longer name limes
+## v39.3.0, sdk/go/v0.102.0, sdk/python/v0.102.0 — the SDKs type the planes; refusals no longer name limes
 
 The SDK changes are in these tags. The refusals' text is the server's:
 **Server:** v39.3.0 or later; so far released as v39.3.0-rc.1, so a v39.2.x server still answers as before.
@@ -299,7 +299,7 @@ The SDK changes are in these tags. The refusals' text is the server's:
 The Go SDK still depends on limes, for `Attenuate` and `Op.Validate`; no
 exported type of it names one, so a client never imports it.
 
-## sdk/go/v0.101.0 — the audit log sorts by client
+## v39.3.0, sdk/go/v0.101.0 — the audit log sorts by client
 
 **Server:** v39.3.0 or later; so far released as v39.3.0-rc.1, so a v39.2.x server still answers as before.
 
@@ -307,7 +307,7 @@ exported type of it names one, so a client never imports it.
 sent no User-Agent sorts as empty. The console's Client column sorts by it.
 Additive: no action needed.
 
-## sdk/go/v0.100.0 — the audit log names the client a call came from
+## v39.3.0, sdk/go/v0.100.0 — the audit log names the client a call came from
 
 Migration `092` adds `audit_log.user_agent`, and `AuditLogEntry` gains
 `user_agent`: the User-Agent the call arrived with, cut to 256 bytes. The
