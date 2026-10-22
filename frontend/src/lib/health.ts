@@ -183,3 +183,42 @@ function latest(roles: Snapshot[]): string {
       .at(-1) ?? ""
   );
 }
+
+/** A component that needs an operator, and the card it is on. */
+export interface Finding {
+  role: string;
+  component: Component;
+}
+
+/**
+ * Every component across the cards that is unhealthy or degraded, the worst
+ * first and the required ones first among them, then in the cards' order: what
+ * the page leads with, so a fault is not found by scrolling through cards.
+ */
+export function needsAttention(cards: readonly Snapshot[]): Finding[] {
+  const out = cards.flatMap((s) =>
+    s.components
+      .filter((c) => c.status === "unhealthy" || c.status === "degraded")
+      .map((component) => ({ role: s.role, component })),
+  );
+  // A stable sort keeps the cards' order within one severity.
+  return out.sort(
+    (a, b) =>
+      SEVERITY[b.component.status] - SEVERITY[a.component.status] ||
+      Number(b.component.critical) - Number(a.component.critical),
+  );
+}
+
+/** How many components are in each state. */
+export function countByStatus(
+  components: readonly Component[],
+): Record<ComponentStatus, number> {
+  const out: Record<ComponentStatus, number> = {
+    healthy: 0,
+    degraded: 0,
+    unhealthy: 0,
+    disabled: 0,
+  };
+  for (const c of components) out[c.status]++;
+  return out;
+}

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@/test/utils";
+import { fireEvent, render, screen, within } from "@/test/utils";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/health",
@@ -103,16 +103,13 @@ describe("HealthPage disabled component", () => {
     };
   });
 
-  it("shows it as disabled, with no latency and nothing to expand", async () => {
+  // Switched off is the expected state: one muted line, not a row that
+  // reads like a check.
+  it("lists it on the card's Off line rather than as a row", async () => {
     render(<HealthPage />);
-    const row = (await screen.findByText("postgres-replica")).closest(
-      "button",
-    )!;
-    expect(row).toHaveTextContent("Disabled");
-    expect(row).not.toHaveTextContent("Healthy");
-    expect(row).not.toHaveTextContent("ms");
-    expect(row).not.toHaveAttribute("aria-expanded");
-    expect(row.querySelector("svg")).toBeNull(); // no chevron
+    const name = await screen.findByText("postgres-replica");
+    expect(name.closest("button")).toBeNull();
+    expect(name.closest("p")).toHaveTextContent(/^Off:\s*postgres-replica$/);
   });
 
   it("leaves it out of the component count", async () => {
@@ -159,10 +156,17 @@ describe("HealthPage component switch", () => {
   const row = async (name: string) =>
     (await screen.findByText(name)).closest("button")!;
 
-  it("badges a component switched by the database or by config", async () => {
+  // An Off name says why it is off, and what switches it, on hover.
+  it("says what switched a component off, and why", async () => {
     render(<HealthPage />);
-    expect(await row("rabbitmq")).toHaveTextContent("db");
-    expect(await row("postgres-replica")).toHaveTextContent("config");
+    expect(await screen.findByText("rabbitmq")).toHaveAttribute(
+      "title",
+      "not in use: no enabled subscription delivers to rabbitmq — In use while something stored in the database uses it",
+    );
+    expect(screen.getByText("postgres-replica")).toHaveAttribute(
+      "title",
+      "off by configuration: datastores.postgres.replica.enabled — Switched by a configuration key",
+    );
   });
 
   it("badges nothing on a component with no switch", async () => {
@@ -170,22 +174,6 @@ describe("HealthPage component switch", () => {
     const postgres = await row("postgres");
     expect(postgres).not.toHaveTextContent("db");
     expect(postgres).not.toHaveTextContent("config");
-  });
-
-  // Why a component is off is the expected state, not news: it was a line
-  // under every disabled row. It now waits behind the row's chevron.
-  it("folds why a disabled component is off behind its chevron", async () => {
-    render(<HealthPage />);
-    const reason = "not in use: no enabled subscription delivers to rabbitmq";
-    const r = await row("rabbitmq");
-    expect(r).toHaveTextContent("Disabled");
-    expect(screen.queryByText(reason)).not.toBeInTheDocument();
-    expect(r).toHaveAttribute("aria-expanded", "false");
-    expect(r.querySelector("svg")).not.toBeNull();
-
-    fireEvent.click(r);
-    expect(r).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(reason)).toBeInTheDocument();
   });
 });
 
@@ -321,10 +309,16 @@ describe("HealthPage component message", () => {
     ],
   });
 
+  // The row in its card; the attention list names it too.
+  const cacheRow = async () =>
+    within((await roleCard("api")) as HTMLElement)
+      .getByText("cache")
+      .closest("button")!;
+
   it("offers no expansion for a message that fits its line", async () => {
     payload = withMessage("connection refused");
     render(<HealthPage />);
-    const row = (await screen.findByText("cache")).closest("button")!;
+    const row = await cacheRow();
     expect(row).not.toHaveAttribute("aria-expanded");
     expect(row.querySelector("svg")).toBeNull(); // no chevron
   });
@@ -332,7 +326,7 @@ describe("HealthPage component message", () => {
   it("offers to expand a message its line cannot show", async () => {
     payload = withMessage("dial tcp: timeout\n  at retry 1\n  at retry 2");
     render(<HealthPage />);
-    const row = (await screen.findByText("cache")).closest("button")!;
+    const row = await cacheRow();
     expect(row).toHaveAttribute("aria-expanded", "false");
     expect(row.querySelector("svg")).not.toBeNull(); // the chevron
   });
@@ -361,5 +355,51 @@ describe("HealthPage status bar", () => {
         name: "1 unhealthy · 1 disabled · 1 healthy",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+// A fault is read at the top, not found by scrolling through the cards.
+describe("HealthPage needs attention", () => {
+  const listed = () =>
+    screen.getByText("Needs attention").closest('[data-slot="card"]')!;
+
+  it("lists every fault across the cards, the worst first", async () => {
+    payload = {
+      roles: [
+        {
+          role: "api",
+          status: "degraded",
+          components: [
+            component("postgres", true),
+            { ...component("cache"), status: "degraded", message: "slow" },
+          ],
+        },
+        {
+          role: "worker",
+          status: "unhealthy",
+          components: [
+            {
+              ...component("nats", true),
+              status: "unhealthy",
+              message: "connection refused",
+            },
+          ],
+        },
+      ],
+    };
+    render(<HealthPage />);
+    await screen.findByText("Needs attention");
+    const items = within(listed() as HTMLElement).getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual([
+      expect.stringContaining("worker · nats"),
+      expect.stringContaining("api · cache"),
+    ]);
+    expect(items[0]).toHaveTextContent("connection refused");
+  });
+
+  it("is not there while every check is healthy", async () => {
+    render(<HealthPage />);
+    await roleCard("api");
+    expect(screen.queryByText("Needs attention")).toBeNull();
   });
 });
