@@ -143,6 +143,28 @@ describe("CapabilityDetailsPanel", () => {
     expect(screen.getByRole("button", { name: /Revoke/ })).toBeInTheDocument();
   });
 
+  // Stopped only through an ancestor: no entry of its own, so the panel
+  // names the ancestor whose entry stopped it, and links to it.
+  it("names the ancestor whose revocation stopped it", async () => {
+    const ancestor = "01a15ec0-a510-7a88-8ec4-1733c36e17a4";
+    h.get.mockResolvedValue({
+      capability: CAP,
+      stoppedBy: {
+        capabilityId: ancestor,
+        revocation: {
+          reason: "run finished",
+          revokedAt: timestampFromDate(new Date("2026-10-21T13:59:57Z")),
+        },
+      },
+    });
+    open();
+    const link = await screen.findByRole("link", { name: /01a15ec0/ });
+    expect(link).toHaveAttribute("href", `?id=${ancestor}`);
+    expect(link).toHaveAttribute("title", ancestor);
+    expect(screen.getByText("run finished")).toBeInTheDocument();
+    expect(screen.queryByText("not revoked itself")).toBeNull();
+  });
+
   it("says when the capability has no revocation of its own", async () => {
     h.get.mockResolvedValue({
       capability: CAP,
