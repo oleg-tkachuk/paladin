@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — the platform's spend over time
+## sdk/go/v0.109.0, sdk/python/v0.109.0 — the platform's spend over time
 
 **Server:** the first release that carries this section.
 
