@@ -30,25 +30,6 @@ When work lands that surfaces *new* deferred items, add them here in
 the same commit. Treat this file like a runtime invariant.
 
 ---
-## Release tooling
-
-### An upgrade section is named by the first stream to release it
-
-- **Status:** Deferred.
-- **Reason:** `upgrade-sections.ts name` renames an `Unreleased` heading
-  to the tags of the run that releases it, and only once. A section whose
-  change belongs to the product and an SDK alike is named by whichever
-  stream releases first; the other's run finds no `Unreleased` heading
-  left. The limes v0.109 section was named `sdk/go/v0.93.0` alone and had
-  `v39.0.0` added by hand.
-- **Definition of Done:** a release also adds its tag to a section already
-  named by another stream when the commit that added the section belongs to
-  its stream, with a test in `upgrade-sections.test.ts` for a section
-  released by the SDK first and the product after.
-- **Blockers:** none.
-
----
-
 ## Audit log
 
 ### An audit entry does not record the resource's state
