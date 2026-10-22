@@ -387,6 +387,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 	return &adminv1.CapabilityServiceRevokeResponse{
 		AlreadyRevoked: res.AlreadyRevoked,
 		Revocation:     revocationToProto(res.Revocation),
+		Before:         dispositionToProto(res.Before),
 	}, nil
 }
 

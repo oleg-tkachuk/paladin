@@ -1121,7 +1121,8 @@ config:
     verifier_leeway: 30s                # clock-skew window for nbf / exp
     charge_per_request_amount: 0        # amount auto-charged on billable handler calls, in the capability's own unit, exact to nine decimals; 0 = no auto-charge
     currency: XXX                       # platform ISO 4217 unit for budgets and capabilities that name none; XXX = no currency
-    revocation_cache_ttl: 2s            # IsRevoked cache TTL; <0 disables (every check hits DB)
+    revocation_cache_ttl: 2s            # revocation answers cached while the watcher is down; keep it short
+    revocation_cache_synced_ttl: 30s    # cached while the watcher listens and clears them on revoke; never below revocation_cache_ttl
     # DPoP server nonces (RFC 9449 §8): a key-bound capability's proof must
     # carry a nonce the server issued, so a captured proof is usable for
     # `lifetime` at most. Every replica shares the key — give it as

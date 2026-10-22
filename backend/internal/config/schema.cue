@@ -665,7 +665,10 @@ capability: {
   signing_key_kid:          string | *""
   default_ttl:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   verifier_leeway:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
-  revocation_cache_ttl:     =~"^-?[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  revocation_cache_ttl:     =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
+  // How long a revocation answer is cached while the revocation watcher
+  // listens; the TTL above bounds it while the watcher is down.
+  revocation_cache_synced_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   // DPoP server nonces (RFC 9449 §8). The key is shared by every replica;
   // inline for dev, key_secret otherwise.
   dpop_nonce: {

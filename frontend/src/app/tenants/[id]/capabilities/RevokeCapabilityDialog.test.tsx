@@ -14,7 +14,10 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
 
-import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import {
+  CapabilityDisposition,
+  type Capability,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 
 const CAP = { id: "0f6c1d2e-0000-4000-8000-000000000001" } as Capability;
@@ -102,8 +105,35 @@ describe("RevokeCapabilityDialog", () => {
     );
   });
 
+  // A first revoke of one already stopped writes its entry but stops
+  // nothing new: through a revoked ancestor, or by expiring.
+  it.each([
+    [CapabilityDisposition.REVOKED, "revoked ancestor"],
+    [CapabilityDisposition.EXPIRED, "already expired"],
+  ])(
+    "says a revoke of one already stopped (%s) stopped nothing new",
+    async (before, says) => {
+      h.revoke.mockResolvedValue({ alreadyRevoked: false, before });
+      open();
+      await typeToConfirm("revoke");
+      await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+      await waitFor(() =>
+        expect(h.showNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "info",
+            title: "Revocation recorded",
+            message: expect.stringContaining(says),
+          }),
+        ),
+      );
+    },
+  );
+
   it("says it revoked one that was not", async () => {
-    h.revoke.mockResolvedValue({ alreadyRevoked: false });
+    h.revoke.mockResolvedValue({
+      alreadyRevoked: false,
+      before: CapabilityDisposition.ACTIVE,
+    });
     open();
     await typeToConfirm("revoke");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));

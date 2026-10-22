@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -92,5 +94,61 @@ func TestSubsystemComponentsCheckTheirStore(t *testing.T) {
 				t.Errorf("message = %q, want it to name %s", got.Message, tc.key)
 			}
 		})
+	}
+}
+
+// lineageStore is a capStore that names no ancestors, as the revocation
+// cache, built with RequireLineage, asks of its upstream.
+type lineageStore struct{ capStore }
+
+func (lineageStore) RevocationLineage(context.Context, uuid.UUID) (bool, []uuid.UUID, error) {
+	return false, nil, nil
+}
+
+// The revocations row follows the watcher as the cache hears of it: down
+// before its first LISTEN and after a lost connection, which it dates, and
+// healthy in between. Never critical: a slower revocation is no outage.
+func TestCapabilityRevocationsFollowTheWatcher(t *testing.T) {
+	if got := componentOf(t, capabilityRevocationsComponent(&SharedDeps{})); got.Status != health.StatusDisabled {
+		t.Fatalf("capability off: component = %+v, want disabled", got)
+	}
+
+	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{
+		Capabilities: lineageStore{}, SyncedTTL: time.Minute, RequireLineage: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := capabilityRevocationsComponent(&SharedDeps{Capability: &CapabilityBundle{Revocations: cache}})
+	if c.Critical {
+		t.Fatal("capability-revocations is critical; a revocation slower to take is no outage")
+	}
+
+	got := componentOf(t, c)
+	if got.Status != health.StatusUnhealthy || !strings.Contains(got.Message, "not listening yet") {
+		t.Errorf("before the first LISTEN: component = %+v, want unhealthy, not listening yet", got)
+	}
+
+	cache.Listening()
+	cache.Signal(uuid.New())
+	got = componentOf(t, c)
+	if got.Status != health.StatusHealthy {
+		t.Errorf("listening: component = %+v, want healthy", got)
+	}
+	want := map[string]string{"connections": "1", "connections lost": "0", "notifications": "1", "narrow clears": "true"}
+	for _, d := range got.Details {
+		if v, ok := want[d.Name]; ok && v != d.Value {
+			t.Errorf("detail %s = %s, want %s", d.Name, d.Value, v)
+		}
+		delete(want, d.Name)
+	}
+	if len(want) != 0 {
+		t.Errorf("details %v missing from %+v", want, got.Details)
+	}
+
+	cache.NotListening()
+	got = componentOf(t, c)
+	if got.Status != health.StatusUnhealthy || !strings.Contains(got.Message, "lost its connection at") {
+		t.Errorf("connection lost: component = %+v, want unhealthy, dated", got)
 	}
 }

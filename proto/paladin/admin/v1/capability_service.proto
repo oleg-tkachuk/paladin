@@ -309,6 +309,12 @@ message CapabilityServiceRevokeResponse {
   // revocation is the capability's entry as it stands after the call: the one
   // this call wrote, or the earlier one it kept.
   CapabilityRevocation revocation = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // before is the capability's disposition just before the call, by the
+  // rules disposition is read by: only the revoke of an active capability
+  // stopped something new. One already revoked — by its own entry or
+  // through an ancestor — or expired still gets its entry, so the audit
+  // names who revoked it and why.
+  CapabilityDisposition before = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message CapabilityServiceRevokeBiscuitRequest {

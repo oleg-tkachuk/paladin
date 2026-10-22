@@ -6,10 +6,55 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatTimestamp } from "@/lib/format/timestamp";
-import { useNotification } from "@/components/ui/Notification";
+import {
+  useNotification,
+  type Notification,
+} from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
-import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import {
+  CapabilityDisposition,
+  type Capability,
+  type CapabilityServiceRevokeResponse,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
+
+/**
+ * What a revoke did, as the notification says it. A revoke is idempotent: a
+ * second one keeps the first entry, and says so rather than claim it revoked
+ * anything. One of a capability already stopped — through an ancestor, or by
+ * expiring — writes its entry for the audit but stops nothing new, which the
+ * server reports as the disposition the capability had before the call.
+ */
+export function noticeOfRevoke(
+  id: string,
+  res: Pick<
+    CapabilityServiceRevokeResponse,
+    "alreadyRevoked" | "revocation" | "before"
+  >,
+): Omit<Notification, "id"> {
+  if (res.alreadyRevoked) {
+    return {
+      type: "info",
+      title: "Already revoked",
+      message: `${id} was revoked on ${formatTimestamp(res.revocation?.revokedAt)}; that revocation stands.`,
+    };
+  }
+  switch (res.before) {
+    case CapabilityDisposition.REVOKED:
+      return {
+        type: "info",
+        title: "Revocation recorded",
+        message: `${id} had already stopped through a revoked ancestor; the audit trail now names it too.`,
+      };
+    case CapabilityDisposition.EXPIRED:
+      return {
+        type: "info",
+        title: "Revocation recorded",
+        message: `${id} had already expired; the audit trail now records it as revoked.`,
+      };
+  }
+  return { type: "success", title: "Revoked", message: id };
+}
 
 /**
  * Revoke-capability confirmation, extracted from the capabilities page. Owns
@@ -46,17 +91,7 @@ export function RevokeCapabilityDialog({
         reason: revokeReason.trim(),
         cascadeChildren: revokeCascade,
       });
-      // A revoke is idempotent: a second one keeps the first entry, and says
-      // so rather than claim it revoked anything.
-      showNotification(
-        res.alreadyRevoked
-          ? {
-              type: "info",
-              title: "Already revoked",
-              message: `${cap.id} was revoked on ${formatTimestamp(res.revocation?.revokedAt)}; that revocation stands.`,
-            }
-          : { type: "success", title: "Revoked", message: cap.id },
-      );
+      showNotification(noticeOfRevoke(cap.id, res));
       reset();
       onRevoked();
       onClose();
