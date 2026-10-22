@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { announce } from "./announce.ts";
+import { announce, announceSummary } from "./announce.ts";
 import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
 
 test("the release, with generated notes and every SBOM", async () => {
@@ -27,4 +27,10 @@ test("the release, with generated notes and every SBOM", async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("announceSummary links the release, and says a candidate is one", () => {
+  const release = announceSummary("v40.0.0", "o/r", 6);
+  assert.ok(release.includes("[v40.0.0](https://github.com/o/r/releases/tag/v40.0.0), the latest release, with 6 SBOMs."), release);
+  assert.ok(announceSummary("v40.0.0-rc.1", "o/r", 6).includes("a release candidate"));
 });

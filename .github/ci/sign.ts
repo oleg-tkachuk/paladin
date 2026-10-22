@@ -34,7 +34,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { info } from "./lib/actions.ts";
+import { info, summarize, table } from "./lib/actions.ts";
 import { optionalEnv } from "./lib/env.ts";
 import { execute } from "./lib/exec.ts";
 import { runMain } from "./lib/main.ts";
@@ -157,6 +157,7 @@ export async function signImage(image: string, digest: string, sbomDir: string, 
     await run(tools.cosign, ["verify-attestation", ...mode.verify, "--type", SBOM_TYPE, pref]);
     info(`    ${p.name}: signed, SBOM attested`);
   }
+  summarize(imageSummary(image, digest, images.map((p) => p.name)));
   return sboms;
 }
 
@@ -177,6 +178,23 @@ export async function signChart(chart: string, mode: Mode, run: Run = realRun, t
   await run(tools.cosign, ["sign", "--yes", ...mode.sign, ref]);
   await run(tools.cosign, ["verify", ...mode.verify, ref]);
   info("    signed and verified");
+  summarize(chartSummary(chart, digest));
+}
+
+// What the summary says each published artifact is.
+const SIGNED_HEADER = ["Published", "Reference", "Checked"];
+const IMAGE_CHECKED = "signed; an SBOM attested to each platform; verified";
+const CHART_CHECKED = "signed; verified";
+
+// imageSummary is the summary page's row for a signed image: the index by
+// its digest, and each platform it holds.
+export function imageSummary(image: string, digest: string, platformNames: readonly string[]): string {
+  return table(SIGNED_HEADER, [[`image (${platformNames.join(", ")})`, `\`${image}@${digest}\``, IMAGE_CHECKED]]);
+}
+
+// chartSummary is the summary page's row for a signed chart.
+export function chartSummary(chart: string, digest: string): string {
+  return table(SIGNED_HEADER, [["chart", `\`${chart}\` (\`${digest}\`)`, CHART_CHECKED]]);
 }
 
 async function main(): Promise<void> {

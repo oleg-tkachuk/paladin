@@ -12,7 +12,7 @@
 // Set as step outputs for dataaxiom/ghcr-cleanup-action, which deletes a
 // version with its children and keeps those of what it keeps.
 
-import { setOutput } from "./lib/actions.ts";
+import { setOutput, summarize } from "./lib/actions.ts";
 import { requireEnv } from "./lib/env.ts";
 import { runMain } from "./lib/main.ts";
 import { DEV_MARK } from "./lib/versions.ts";
@@ -41,10 +41,21 @@ export function cleanupPlan(image: string, chart: string): Record<string, string
   };
 }
 
+export const CLEANUP_TITLE = "### Older dev builds removed from GHCR";
+
+// cleanupSummary is the summary page's line on what the cleanup step takes.
+export function cleanupSummary(image: string, chart: string): string {
+  const what = `Every dev build of \`${image}\` and \`${chart}\` but the newest ${DEV_BUILDS_KEPT}; releases are left alone.`;
+  return `${CLEANUP_TITLE}\n\n${what}${DRY_RUN ? " A dry run: nothing is deleted." : ""}\n`;
+}
+
 async function main(): Promise<void> {
-  for (const [name, value] of Object.entries(cleanupPlan(requireEnv("PACKAGE"), requireEnv("CHART_PACKAGE")))) {
+  const image = requireEnv("PACKAGE");
+  const chart = requireEnv("CHART_PACKAGE");
+  for (const [name, value] of Object.entries(cleanupPlan(image, chart))) {
     setOutput(name, value);
   }
+  summarize(cleanupSummary(image, chart));
 }
 
 if (import.meta.main) {

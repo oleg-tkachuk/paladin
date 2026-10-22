@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 
 import { parse } from "yaml";
 
-import { ALL_GROUPS, DEEP_GROUPS, E2E_GROUPS, INERT, Output, candidateRange, classify, reachedGroups, reachesAny } from "./changes.ts";
+import { ALL_GROUPS, DEEP_GROUPS, E2E_GROUPS, INERT, Output, RUNS, SKIPPED, candidateRange, changesSummary, classify, reachedGroups, reachesAny } from "./changes.ts";
 import { tempRepo } from "./lib/temp-repo.ts";
 
 // Too few groups and a change merges on checks that never ran against it; too
@@ -118,5 +118,28 @@ describe("classify", () => {
     } finally {
       repo.cleanup();
     }
+  });
+});
+
+describe("changesSummary", () => {
+  test("names every check, and whether this change runs it", () => {
+    const summary = changesSummary(["backend", "repo"], true, false);
+    assert.ok(summary.includes(`| Verify (backend) | ${RUNS} |`), summary);
+    assert.ok(summary.includes(`| Verify (sdk) | ${SKIPPED} |`), summary);
+    assert.ok(summary.includes(`| End-to-end | ${RUNS} |`), summary);
+    assert.ok(summary.includes(`| Deep | ${SKIPPED} |`), summary);
+    assert.equal(summary.includes("Documentation only"), false);
+  });
+
+  test("says a change of documentation alone runs nothing", () => {
+    const summary = changesSummary([], false, false);
+    assert.ok(summary.includes("Documentation only"), summary);
+    assert.equal(summary.includes(`| ${RUNS} |`), false, summary);
+  });
+
+  // The rows name the jobs as ci.yaml names them.
+  test("names the jobs ci.yaml has", () => {
+    const names = Object.values((parse(readFileSync(new URL("../workflows/ci.yaml", import.meta.url), "utf8")) as { jobs: Record<string, { name?: string }> }).jobs).map((j) => j.name?.replace(/\s*#.*$/, ""));
+    for (const job of ["Verify", "End-to-end", "Deep"]) assert.ok(names.includes(job), `ci.yaml has no ${job} job`);
   });
 });

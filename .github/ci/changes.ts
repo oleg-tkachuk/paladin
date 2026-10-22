@@ -24,7 +24,7 @@
 // name a commit this clone does not have, and a run by hand names none at
 // all. None of them is a diff, so each reaches everything.
 
-import { info, setOutput } from "./lib/actions.ts";
+import { info, setOutput, summarize, table } from "./lib/actions.ts";
 import { optionalEnv } from "./lib/env.ts";
 import { changedPaths, hasCommit } from "./lib/git.ts";
 import { matchesAny } from "./lib/glob.ts";
@@ -147,6 +147,30 @@ export async function classify(env: DiffEnv, cwd?: string): Promise<Group[]> {
   return reachedGroups(paths);
 }
 
+// What the summary says of a check: it runs on this change, or reports as
+// skipped.
+export const RUNS = "runs";
+export const SKIPPED = "skipped";
+export const CHANGES_TITLE = "### What this change checks";
+const CHANGES_HEADER = ["Check", "On this change"];
+// The jobs that read each output, by their names in ci.yaml.
+const VERIFY_JOB = (group: Group) => `Verify (${group})`;
+const E2E_JOB = "End-to-end";
+const DEEP_JOB = "Deep";
+
+// changesSummary is the summary page's table of the checks this change
+// reaches: a Verify group each, then end-to-end and the deep checks.
+export function changesSummary(groups: readonly Group[], e2e: boolean, deep: boolean): string {
+  const runs = (on: boolean) => (on ? RUNS : SKIPPED);
+  const rows = [
+    ...ALL_GROUPS.map((group) => [VERIFY_JOB(group), runs(groups.includes(group))]),
+    [E2E_JOB, runs(e2e)],
+    [DEEP_JOB, runs(deep)],
+  ];
+  const note = groups.length === 0 ? "\nDocumentation only: every check reports as skipped.\n" : "";
+  return `${CHANGES_TITLE}\n\n${table(CHANGES_HEADER, rows)}${note}`;
+}
+
 async function main(): Promise<void> {
   const groups = await classify({
     base: optionalEnv("BASE"),
@@ -164,6 +188,7 @@ async function main(): Promise<void> {
   setOutput(Output.E2e, String(e2e));
   setOutput(Output.Deep, String(deep));
   setOutput(Output.Relevant, String(groups.length > 0));
+  summarize(changesSummary(groups, e2e, deep));
 }
 
 if (import.meta.main) {

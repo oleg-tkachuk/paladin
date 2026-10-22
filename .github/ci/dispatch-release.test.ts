@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { parse } from "yaml";
 
 import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
-import { Payload, RELEASE_EVENT, dispatchRelease } from "./dispatch-release.ts";
+import { Payload, RELEASE_EVENT, dispatchRelease, dispatchSummary } from "./dispatch-release.ts";
 
 const SHA = "622e006bda05880b265e4fb9b96c6441f49ce955";
 const DEV_VERSION = "39.2.1-dev.1792562188.g622e006b";
@@ -57,4 +57,8 @@ test("CI dispatches with the dev version it derived", () => {
   assert.ok(derived, "dispatch-release derives no version");
   const dispatch = steps.find((s) => s.env?.["VERSION"] !== undefined);
   assert.equal(dispatch?.env?.["VERSION"], `\${{ steps.${derived.id}.outputs.version }}`);
+});
+
+test("dispatchSummary names the release run it started", () => {
+  assert.ok(dispatchSummary("v39.2.1-dev (622e006)").includes("`v39.2.1-dev (622e006)`"));
 });
