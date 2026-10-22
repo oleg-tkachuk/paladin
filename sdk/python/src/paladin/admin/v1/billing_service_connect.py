@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse, ListTenantSpendRequest, ListTenantSpendResponse
+from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetPlatformTimeSeriesRequest, GetPlatformTimeSeriesResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse, ListTenantSpendRequest, ListTenantSpendResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -56,6 +56,15 @@ class BillingService(Protocol):
         """
         GetTenantTimeSeries returns time-bucketed spend for a chart.
         granularity ∈ {hour, day, week} — server validates.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def get_platform_time_series(self, request: GetPlatformTimeSeriesRequest, ctx: RequestContext[GetPlatformTimeSeriesRequest, GetPlatformTimeSeriesResponse], /) -> GetPlatformTimeSeriesResponse:
+        """
+        GetPlatformTimeSeries returns time-bucketed spend across every tenant,
+        as GetTenantTimeSeries does for one: what the platform was charged, in
+        the unit most of the period's charges are in. It reads every tenant's
+        rows, so it is gated as ListTenantSpend is.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -109,6 +118,16 @@ class BillingServiceASGIApplication(ConnectASGIApplication[BillingService]):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_tenant_time_series,
+                ),
+                "/paladin.admin.v1.BillingService/GetPlatformTimeSeries": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GetPlatformTimeSeries",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=GetPlatformTimeSeriesRequest,
+                        output=GetPlatformTimeSeriesResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.get_platform_time_series,
                 ),
                 "/paladin.admin.v1.BillingService/ListTenantSpend": Endpoint.unary(
                     method=MethodInfo(
@@ -230,6 +249,34 @@ class BillingServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def get_platform_time_series(
+        self,
+        request: GetPlatformTimeSeriesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> GetPlatformTimeSeriesResponse:
+        """
+        GetPlatformTimeSeries returns time-bucketed spend across every tenant,
+        as GetTenantTimeSeries does for one: what the platform was charged, in
+        the unit most of the period's charges are in. It reads every tenant's
+        rows, so it is gated as ListTenantSpend is.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetPlatformTimeSeries",
+                service_name="paladin.admin.v1.BillingService",
+                input=GetPlatformTimeSeriesRequest,
+                output=GetPlatformTimeSeriesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def list_tenant_spend(
         self,
         request: ListTenantSpendRequest,
@@ -310,6 +357,15 @@ class BillingServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def get_platform_time_series(self, request: GetPlatformTimeSeriesRequest, ctx: RequestContext[GetPlatformTimeSeriesRequest, GetPlatformTimeSeriesResponse], /) -> GetPlatformTimeSeriesResponse:
+        """
+        GetPlatformTimeSeries returns time-bucketed spend across every tenant,
+        as GetTenantTimeSeries does for one: what the platform was charged, in
+        the unit most of the period's charges are in. It reads every tenant's
+        rows, so it is gated as ListTenantSpend is.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def list_tenant_spend(self, request: ListTenantSpendRequest, ctx: RequestContext[ListTenantSpendRequest, ListTenantSpendResponse], /) -> ListTenantSpendResponse:
         """
         ListTenantSpend lists the tenants that spent anything over the period,
@@ -358,6 +414,16 @@ class BillingServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_tenant_time_series,
+                ),
+                "/paladin.admin.v1.BillingService/GetPlatformTimeSeries": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GetPlatformTimeSeries",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=GetPlatformTimeSeriesRequest,
+                        output=GetPlatformTimeSeriesResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.get_platform_time_series,
                 ),
                 "/paladin.admin.v1.BillingService/ListTenantSpend": EndpointSync.unary(
                     method=MethodInfo(
@@ -471,6 +537,33 @@ class BillingServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.BillingService",
                 input=GetTenantTimeSeriesRequest,
                 output=GetTenantTimeSeriesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def get_platform_time_series(
+        self,
+        request: GetPlatformTimeSeriesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> GetPlatformTimeSeriesResponse:
+        """
+        GetPlatformTimeSeries returns time-bucketed spend across every tenant,
+        as GetTenantTimeSeries does for one: what the platform was charged, in
+        the unit most of the period's charges are in. It reads every tenant's
+        rows, so it is gated as ListTenantSpend is.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetPlatformTimeSeries",
+                service_name="paladin.admin.v1.BillingService",
+                input=GetPlatformTimeSeriesRequest,
+                output=GetPlatformTimeSeriesResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

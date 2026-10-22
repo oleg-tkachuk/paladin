@@ -59,6 +59,9 @@ func TestBillingServer_NilHandler_Unavailable(t *testing.T) {
 		TenantId: tenantID,
 	})
 	assertUnavailable(t, "GetTenantTimeSeries", err)
+
+	_, err = srv.GetPlatformTimeSeries(ctx, &pb.GetPlatformTimeSeriesRequest{})
+	assertUnavailable(t, "GetPlatformTimeSeries", err)
 }
 
 func TestSystemServer_NilHandler_Unavailable(t *testing.T) {

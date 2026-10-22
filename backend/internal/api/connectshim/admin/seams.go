@@ -51,6 +51,7 @@ var _ backendHandler = (*backendh.Handler)(nil)
 type billingHandler interface {
 	GetTenantSummary(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time) (*billingh.Summary, error)
 	GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time, granularity string) (*billingh.TimeSeries, error)
+	GetPlatformTimeSeries(ctx context.Context, periodStart, periodEnd time.Time, granularity string) (*billingh.TimeSeries, error)
 	ListTenantSpend(ctx context.Context, periodStart, periodEnd time.Time, limit int) ([]billingh.TenantSpend, bool, error)
 	Currency(ctx context.Context) (string, error)
 }

@@ -95,10 +95,11 @@ var procedureKinds = map[string]Kind{
 	admin.BackendServiceSetBackendReadOnlyProcedure:    Changes,
 	admin.BackendServiceSetBackendMaintenanceProcedure: Changes,
 
-	admin.BillingServiceGetTenantSummaryProcedure:    Reads,
-	admin.BillingServiceListTenantSpendProcedure:     Reads,
-	admin.BillingServiceGetBillingSettingsProcedure:  Reads,
-	admin.BillingServiceGetTenantTimeSeriesProcedure: Reads,
+	admin.BillingServiceGetTenantSummaryProcedure:      Reads,
+	admin.BillingServiceListTenantSpendProcedure:       Reads,
+	admin.BillingServiceGetBillingSettingsProcedure:    Reads,
+	admin.BillingServiceGetTenantTimeSeriesProcedure:   Reads,
+	admin.BillingServiceGetPlatformTimeSeriesProcedure: Reads,
 
 	admin.BucketServiceCreateBucketProcedure:          Changes,
 	admin.BucketServiceGetBucketProcedure:             Reads,

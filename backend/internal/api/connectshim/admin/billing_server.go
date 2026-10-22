@@ -94,17 +94,39 @@ func (s *BillingServer) GetTenantTimeSeries(
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.GetTenantTimeSeriesResponse{
-		Buckets: make([]*pb.TimeBucket, 0, len(ts.Buckets)),
+	return &pb.GetTenantTimeSeriesResponse{Buckets: bucketsToProto(ts)}, nil
+}
+
+// GetPlatformTimeSeries is GetTenantTimeSeries over every tenant's charges.
+func (s *BillingServer) GetPlatformTimeSeries(
+	ctx context.Context,
+	req *pb.GetPlatformTimeSeriesRequest,
+) (*pb.GetPlatformTimeSeriesResponse, error) {
+	if s.H == nil {
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
 	}
+	ts, err := s.H.GetPlatformTimeSeries(ctx,
+		timeFromPB(req.GetPeriodStart()),
+		timeFromPB(req.GetPeriodEnd()),
+		req.GetGranularity(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetPlatformTimeSeriesResponse{Buckets: bucketsToProto(ts)}, nil
+}
+
+// bucketsToProto is a series' buckets, each spent in the series' unit.
+func bucketsToProto(ts *billingh.TimeSeries) []*pb.TimeBucket {
+	out := make([]*pb.TimeBucket, 0, len(ts.Buckets))
 	for _, b := range ts.Buckets {
-		out.Buckets = append(out.Buckets, &pb.TimeBucket{
+		out = append(out, &pb.TimeBucket{
 			Start:       timestamppb.New(b.Start),
 			Spent:       apiutil.MoneyOf(ts.UnitCode, b.Amount),
 			ChargeCount: b.ChargeCount,
 		})
 	}
-	return out, nil
+	return out
 }
 
 // ListTenantSpend lists the tenants that spent over the period, the most
