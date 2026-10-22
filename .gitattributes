@@ -85,5 +85,5 @@ Brewfile -linguist-detectable
 
 # ─── Version for a source archive ────────────────────────────────────────
 # git archive (and a GitHub tarball of a tag) fills in .git_archival.txt, so
-# the Python SDK built from it without git still knows its sdk/go/v* version.
+# the Python SDK built from it without git still knows its sdk/python/v* version.
 .git_archival.txt export-subst

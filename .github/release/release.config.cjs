@@ -36,7 +36,12 @@ const BREAKING_IS_A_MINOR_BEFORE_1_0 = { breaking: true, release: "minor" };
 // What both SDKs are generated from and held to.
 const SHARED_SDK_PATHS = ["proto/", "sdk/testdata/"];
 const GO_SDK_PATHS = ["sdk/go/", ...SHARED_SDK_PATHS];
-const PYTHON_SDK_PATHS = ["sdk/python/", ...SHARED_SDK_PATHS];
+// The Python SDK's own files: its directory, and the version git archive
+// writes into .git_archival.txt for a build from a source archive. The file
+// sits at the root because git archive fills it in there; only hatch-vcs
+// reads it.
+const PYTHON_SDK_OWN = ["sdk/python/", ".git_archival.txt"];
+const PYTHON_SDK_PATHS = [...PYTHON_SDK_OWN, ...SHARED_SDK_PATHS];
 // The Go module the backend compiles in: its API is its own, not the product's.
 const MODULE_PATHS = ["sdk/go/"];
 // Files that do not decide which stream a commit belongs to, when it changed
@@ -46,13 +51,13 @@ const DOCUMENTATION = { prefixes: ["docs/"], suffixes: [".md"] };
 const streams = {
   product: {
     tagFormat: "v${version}",
-    // Only sdk/python/ is in no image. sdk/go/ is in the backend's, and
+    // Only the Python SDK is in no image. sdk/go/ is in the backend's, and
     // proto/ is the server's contract. A breaking change to the Go SDK's own
     // API alone is not the product's: it releases the product as a minor, the
     // way it releases the SDK.
     analyzer: {
       releaseRules: [SECURITY_IS_A_PATCH],
-      exclude: ["sdk/python/"],
+      exclude: PYTHON_SDK_OWN,
       modules: { paths: MODULE_PATHS, releaseRules: [BREAKING_IS_A_MINOR_BEFORE_1_0] },
       documentation: DOCUMENTATION,
     },

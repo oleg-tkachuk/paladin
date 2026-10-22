@@ -21,6 +21,8 @@ const PYTHON_SDK = ["sdk/python/src/paladin/client.py"];
 const PROTO = ["proto/paladin/data/v1/object_service.proto"];
 const UPGRADING = ["docs/upgrading.md"];
 const SHARED_TABLE = ["sdk/testdata/planes.json"];
+// The Python SDK's archive version, at the root but its alone.
+const ARCHIVAL = [".git_archival.txt"];
 
 // [stream, commit message, files it changed, release wanted]
 const cases = [
@@ -45,6 +47,8 @@ const cases = [
   // Its upgrade notes do not make a module's break the product's: what
   // released v5.0.0 and v6.0.0 for SDK-only breaks.
   ["product", "feat(sdk)!: the Go SDK breaks, with its notes", [...SDK, ...UPGRADING], "minor"],
+  ["product", "feat(sdk): the Python SDK and its archive version", [...PYTHON_SDK, ...ARCHIVAL, "BACKLOG.md"], null],
+  ["product", "fix(sdk): the archive version alone", ARCHIVAL, null],
   ["product", "feat(sdk)!: the Python SDK breaks, with its notes", [...PYTHON_SDK, ...UPGRADING, "sdk/python/README.md"], null],
   ["product", "feat(api)!: the server breaks, with its notes", [...BACKEND, ...UPGRADING], "major"],
   ["product", "docs: documentation alone releases nothing", UPGRADING, null],
@@ -63,6 +67,9 @@ const cases = [
   ["go-sdk", "fix(sdk): a Python fix", PYTHON_SDK, null],
   ["python-sdk", "fix(sdk): a Python fix", PYTHON_SDK, "patch"],
   ["python-sdk", "feat(sdk): a Go helper", SDK, null],
+  ["python-sdk", "feat(sdk): the Python SDK and its archive version", [...PYTHON_SDK, ...ARCHIVAL, "BACKLOG.md"], "minor"],
+  ["python-sdk", "fix(sdk): the archive version alone", ARCHIVAL, "patch"],
+  ["go-sdk", "fix(sdk): the Python SDK's archive version", ARCHIVAL, null],
   ["python-sdk", "feat(events): a new RPC changes the stubs", PROTO, "minor"],
   ["python-sdk", "feat(sdk): a table both SDKs are held to", SHARED_TABLE, "minor"],
   ["python-sdk", "feat(sdk)!: before 1.0 a break is a minor", PYTHON_SDK, "minor"],
