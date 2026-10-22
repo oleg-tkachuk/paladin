@@ -10,7 +10,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { info } from "./lib/actions.ts";
+import { info, summarize } from "./lib/actions.ts";
 import { requireEnv } from "./lib/env.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
@@ -39,12 +39,23 @@ export async function announce(github: GitHub, tag: string, dir: string): Promis
   info(`announced ${tag} with ${assets.length} SBOMs`);
 }
 
+export const ANNOUNCE_TITLE = "### The release";
+
+// announceSummary is the summary page's link to the release it published.
+export function announceSummary(tag: string, repository: string, sbomCount: number): string {
+  const kind = isCandidate(tag) ? "a release candidate" : "the latest release";
+  return `${ANNOUNCE_TITLE}\n\n[${tag}](https://github.com/${repository}/releases/tag/${tag}), ${kind}, with ${sbomCount} SBOMs.\n`;
+}
+
 async function main(): Promise<void> {
   const [dir] = process.argv.slice(2);
   if (dir === undefined) {
     throw new Error("usage: announce.ts <sbom-dir>");
   }
-  await announce(gitHubFor(requireEnv("GH_TOKEN"), requireEnv("GITHUB_REPOSITORY")), requireEnv("TAG"), dir);
+  const repository = requireEnv("GITHUB_REPOSITORY");
+  const tag = requireEnv("TAG");
+  await announce(gitHubFor(requireEnv("GH_TOKEN"), repository), tag, dir);
+  summarize(announceSummary(tag, repository, sboms(dir).length));
 }
 
 if (import.meta.main) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { pullNumber, updatable, updateBehind } from "./auto-merge.ts";
+import { pullNumber, updatable, updateBehind, updatedSummary } from "./auto-merge.ts";
 import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
 import { MergeState, type OpenPullRequest } from "./lib/github.ts";
 
@@ -34,4 +34,9 @@ test("a pull request number is a positive integer", () => {
   for (const bad of ["", "0", "-1", "6a", "1.5"]) {
     assert.throws(() => pullNumber(bad), /is not a number/, bad);
   }
+});
+
+test("updatedSummary links each pull request it updated", () => {
+  assert.ok(updatedSummary([7, 9], "o/r").includes("- [#7](https://github.com/o/r/pull/7)\n- [#9](https://github.com/o/r/pull/9)"));
+  assert.ok(updatedSummary([], "o/r").includes("None was behind."));
 });

@@ -15,7 +15,7 @@
 // when it starts, before the run could derive the version itself, and an
 // expression cannot shorten it. Without a dev version the label is the commit.
 
-import { info, warning } from "./lib/actions.ts";
+import { info, summarize, warning } from "./lib/actions.ts";
 import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
@@ -36,6 +36,15 @@ export async function dispatchRelease(github: GitHub, sha: string, runId: string
   const payload = { [Payload.Sha]: sha, [Payload.CIRunID]: runId, [Payload.Label]: devBuildLabel(sha, version) };
   await github.dispatch(RELEASE_EVENT, payload);
   info(`dispatched release for ${sha}`);
+  summarize(dispatchSummary(payload[Payload.Label]));
+}
+
+export const DISPATCH_TITLE = "### Release dispatched";
+
+// dispatchSummary is the summary page's line naming the release run this one
+// started, as the Release workflow's run list names it.
+export function dispatchSummary(label: string): string {
+  return `${DISPATCH_TITLE}\n\nThe Release workflow publishes \`${label}\`; its run is named after it.\n`;
 }
 
 async function main(): Promise<void> {

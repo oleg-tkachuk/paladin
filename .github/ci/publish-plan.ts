@@ -17,7 +17,7 @@
 // built only a head that was still the dispatched commit, and a merge landing
 // while that CI finished left the commit unpublished.
 
-import { info, setOutput } from "./lib/actions.ts";
+import { info, setOutput, summarize } from "./lib/actions.ts";
 import { optionalEnv } from "./lib/env.ts";
 import { runMain } from "./lib/main.ts";
 
@@ -45,8 +45,24 @@ export function plan(tag: string | undefined, event: string | undefined, sha: st
   return undefined;
 }
 
+export const PLAN_TITLE = "### What this run publishes";
+// NOTHING says why a run publishes nothing.
+export const NOTHING = "Nothing: no tag was cut, and CI dispatched no commit.";
+
+// planSummary is the summary page's line on what the run publishes.
+export function planSummary(decided: Plan | undefined): string {
+  const what =
+    decided === undefined
+      ? NOTHING
+      : decided.kind === Kind.Release
+        ? `The release of \`${decided.ref}\`: every component's image and chart, signed, and its GitHub release.`
+        : `A dev build of \`${decided.ref}\`, for the dev cluster.`;
+  return `${PLAN_TITLE}\n\n${what}\n`;
+}
+
 async function main(): Promise<void> {
   const decided = plan(optionalEnv("TAG"), optionalEnv("EVENT"), optionalEnv("SHA"));
+  summarize(planSummary(decided));
   if (decided === undefined) {
     info("nothing to publish: no tag, and CI dispatched no commit");
     return;

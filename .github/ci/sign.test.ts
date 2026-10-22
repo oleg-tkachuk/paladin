@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 
-import { RELEASE_WORKFLOW, SBOM_TYPE, TOOLS, byDigest, certIdentity, platforms, signChart, signImage, signingMode, type Run } from "./sign.ts";
+import { RELEASE_WORKFLOW, SBOM_TYPE, TOOLS, byDigest, certIdentity, chartSummary, imageSummary, platforms, signChart, signImage, signingMode, type Run } from "./sign.ts";
 
 describe("signingMode", () => {
   test("a key pair, and no transparency log", () => {
@@ -91,4 +91,17 @@ test("a chart: signed and verified by its digest", async () => {
   const { calls, run } = recorder();
   await signChart("r/o/charts/c:1.2.3", mode, run);
   assert.deepEqual(calls, ["crane digest r/o/charts/c:1.2.3", "cosign sign --yes --key k r/o/charts/c@sha256:chart", "cosign verify --key p r/o/charts/c@sha256:chart"]);
+});
+
+describe("the summary of what was signed", () => {
+  test("names an image by its digest, and its platforms", () => {
+    const row = imageSummary("ghcr.io/o/core", "sha256:abc", ["linux/amd64", "linux/arm64"]);
+    assert.ok(row.includes("| image (linux/amd64, linux/arm64) | `ghcr.io/o/core@sha256:abc` |"), row);
+    assert.ok(row.includes("SBOM"), row);
+  });
+
+  test("names a chart by its tag and its digest", () => {
+    const row = chartSummary("ghcr.io/o/charts/core:40.0.0", "sha256:def");
+    assert.ok(row.includes("| chart | `ghcr.io/o/charts/core:40.0.0` (`sha256:def`) |"), row);
+  });
 });

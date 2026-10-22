@@ -8,7 +8,7 @@
 // GITHUB_TOKEN makes, so a branch it updated would never be checked. Unset,
 // the step warns and does nothing rather than fail every pull request.
 
-import { info, warning } from "./lib/actions.ts";
+import { info, summarize, warning } from "./lib/actions.ts";
 import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { MergeState, gitHubFor, type GitHub, type OpenPullRequest } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
@@ -51,6 +51,17 @@ export function pullNumber(text: string): number {
   return Number(text);
 }
 
+export const UPDATED_TITLE = "### Pull requests brought up to date with main";
+
+// updatedSummary is the summary page's list of the pull requests updated.
+export function updatedSummary(updated: readonly number[], repository: string): string {
+  const what =
+    updated.length === 0
+      ? "None was behind."
+      : updated.map((n) => `- [#${n}](https://github.com/${repository}/pull/${n})`).join("\n");
+  return `${UPDATED_TITLE}\n\n${what}\n`;
+}
+
 async function main(): Promise<void> {
   const [command] = process.argv.slice(2);
   if (command !== Command.Enable && command !== Command.Update) {
@@ -67,7 +78,7 @@ async function main(): Promise<void> {
     await github.enableAutoMerge(number);
     info(`#${number} merges once it is green`);
   } else {
-    await updateBehind(github);
+    summarize(updatedSummary(await updateBehind(github), requireEnv("GITHUB_REPOSITORY")));
   }
 }
 

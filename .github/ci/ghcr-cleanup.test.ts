@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { parse } from "yaml";
 
-import { Output, cleanupPlan } from "./ghcr-cleanup.ts";
+import { DEV_BUILDS_KEPT, Output, cleanupPlan, cleanupSummary } from "./ghcr-cleanup.ts";
 import { Kind } from "./publish-plan.ts";
 
 const plan = cleanupPlan("paladin-core", "charts/paladin-core");
@@ -46,4 +46,10 @@ test("release.yaml cleans up after a dev build only, with the plan unchanged", (
   for (const [input, output] of Object.entries(inputs)) {
     assert.equal(step("Delete older dev builds")?.with?.[input], `\${{ steps.${planStep?.id}.outputs.${output} }}`, input);
   }
+});
+
+test("cleanupSummary names both packages and what it keeps", () => {
+  const summary = cleanupSummary("core", "charts/core");
+  assert.ok(summary.includes("`core` and `charts/core`"), summary);
+  assert.ok(summary.includes(`newest ${DEV_BUILDS_KEPT}`), summary);
 });
