@@ -16,6 +16,11 @@
 // product's: write it in the commit that makes the change, as the repository
 // does anyway. A heading no tag of this run belongs to stays Unreleased.
 //
+// A change can belong to the product and an SDK alike, and the streams
+// release apart: the first to release names the section, and the other adds
+// its tag when it releases in turn. It adds it only when no earlier tag of its
+// stream holds the change, so a section shipped before keeps its name.
+//
 // propose commits the renamed guide to a branch and opens a pull request:
 // main is protected. The token must be AUTOMERGE_TOKEN, not GITHUB_TOKEN:
 // GitHub starts no workflow for a pull request GITHUB_TOKEN opens, so CI
@@ -75,15 +80,45 @@ export function tagsFor(files: readonly string[], tags: readonly string[], all: 
     .map(({ tag }) => tag);
 }
 
-// nameSections is text with each Unreleased heading named by the tags
-// tagsOf(heading) returns; none leaves it.
-export function nameSections(text: string, tagsOf: (heading: string) => readonly string[]): string {
+// Section is a heading of the guide: the tags that named it, none while it
+// is Unreleased, and its title.
+export interface Section {
+  tags: string[];
+  title: string;
+}
+
+// parseSection reads line as a section heading, or undefined when it is not
+// one: a heading of the guide's own, such as its introduction.
+export function parseSection(line: string, all: Record<string, Stream>): Section | undefined {
+  if (!line.startsWith(HEADING)) return undefined;
+  const at = line.indexOf(SEPARATOR);
+  if (at < 0) return undefined;
+  const name = line.slice(HEADING.length, at);
+  const title = line.slice(at + SEPARATOR.length);
+  if (name === UNRELEASED) return { tags: [], title };
+  const tags = name.split(TAG_SEPARATOR);
+  return tags.every((t) => streamOf(t, all) !== undefined) ? { tags, title } : undefined;
+}
+
+// unreleasedHeading is the heading section was written with.
+export function unreleasedHeading(section: Section): string {
+  return UNRELEASED_HEADING + section.title;
+}
+
+// nameSections is text with each section's heading given the tags
+// tagsOf(heading) adds to it, every tag in stream order; none leaves it.
+export function nameSections(text: string, tagsOf: (heading: string) => readonly string[], all: Record<string, Stream>): string {
+  const order = Object.keys(all);
+  const rank = (tag: string) => order.indexOf(streamOf(tag, all) ?? "");
   return text
     .split("\n")
     .map((line) => {
-      if (!line.startsWith(UNRELEASED_HEADING)) return line;
-      const tags = tagsOf(line);
-      return tags.length === 0 ? line : HEADING + tags.join(TAG_SEPARATOR) + SEPARATOR + line.slice(UNRELEASED_HEADING.length);
+      const section = parseSection(line, all);
+      if (section === undefined) return line;
+      const added = tagsOf(line).filter((t) => !section.tags.includes(t));
+      if (added.length === 0) return line;
+      const tags = [...section.tags, ...added].sort((a, b) => rank(a) - rank(b));
+      return HEADING + tags.join(TAG_SEPARATOR) + SEPARATOR + section.title;
     })
     .join("\n");
 }
@@ -94,6 +129,30 @@ async function addedBy(line: string, root: string): Promise<string | undefined> 
   return lines(await git(["log", "--format=%H", "--reverse", "-S", line, "--", UPGRADING], root))[0];
 }
 
+// shippedBefore reports whether a tag of tag's stream other than the run's
+// tags already holds commit: the stream released the change before.
+async function shippedBefore(commit: string, tag: string, tags: readonly string[], root: string, all: Record<string, Stream>): Promise<boolean> {
+  const stream = streamOf(tag, all);
+  return lines(await git(["tag", "--contains", commit], root)).some((t) => !tags.includes(t) && streamOf(t, all) === stream);
+}
+
+// sectionTags is the tags of this run section's change belongs to and its
+// heading still lacks: of a stream not in it, which has not shipped it before.
+async function sectionTags(section: Section, root: string, tags: readonly string[], all: Record<string, Stream>): Promise<string[]> {
+  const named = new Set(section.tags.map((t) => streamOf(t, all)));
+  const missing = tags.filter((t) => !named.has(streamOf(t, all)));
+  if (missing.length === 0) return [];
+  const commit = await addedBy(unreleasedHeading(section), root);
+  if (commit === undefined) return [];
+  const wanted = tagsFor(filesOf(commit, root), missing, all);
+  if (section.tags.length === 0) return wanted;
+  const fresh: string[] = [];
+  for (const tag of wanted) {
+    if (!(await shippedBefore(commit, tag, tags, root, all))) fresh.push(tag);
+  }
+  return fresh;
+}
+
 // nameGuide names the guide's sections in the clone at root for tags, and
 // reports whether it changed.
 export async function nameGuide(root: string, tags: readonly string[]): Promise<boolean> {
@@ -101,11 +160,11 @@ export async function nameGuide(root: string, tags: readonly string[]): Promise<
   const text = readFileSync(path, "utf8");
   const all = streams();
   const added = new Map<string, readonly string[]>();
-  for (const line of text.split("\n").filter((l) => l.startsWith(UNRELEASED_HEADING))) {
-    const commit = await addedBy(line, root);
-    added.set(line, commit === undefined ? [] : tagsFor(filesOf(commit, root), tags, all));
+  for (const line of text.split("\n")) {
+    const section = parseSection(line, all);
+    if (section !== undefined) added.set(line, await sectionTags(section, root, tags, all));
   }
-  const named = nameSections(text, (line) => added.get(line) ?? []);
+  const named = nameSections(text, (line) => added.get(line) ?? [], all);
   if (named === text) {
     return false;
   }
