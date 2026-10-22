@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — a revoke says what it did, and a capability what stopped it
+## sdk/go/v0.110.0, sdk/python/v0.110.0 — a revoke says what it did, and a capability what stopped it
 
 **Server:** the first release that carries this section.
 
