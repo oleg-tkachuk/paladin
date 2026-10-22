@@ -267,26 +267,9 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 	// Input validation (granularity + period + bucket bound) runs before the
 	// subsystem-availability check so a malformed request is rejected the same
 	// way whether or not the capability subsystem is wired.
-	if granularity == "" {
-		granularity = granularityDay
-	}
-	if _, ok := ledgerBuckets[granularity]; !ok {
-		return nil, connect.Errorf(connect.CodeInvalidArgument, "granularity must be one of hour|day|week, got %q", granularity)
-	}
-	start, end, err := resolvePeriod(periodStart, periodEnd)
+	start, end, granularity, err := seriesWindow(periodStart, periodEnd, granularity)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
-	}
-	// Bound the result set: (period ÷ granularity) is the bucket count the
-	// GROUP BY produces, all buffered in memory. An hour-granularity request
-	// over years would materialise tens of thousands of rows. Reject rather
-	// than silently LIMIT — a truncated series is a misleading answer, so the
-	// caller must narrow the period or coarsen the granularity instead.
-	if step := granularityStep(granularity); step > 0 {
-		if buckets := int64(end.Sub(start) / step); buckets > maxTimeSeriesBuckets {
-			return nil, connect.Errorf(connect.CodeInvalidArgument, "period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
-				granularity, buckets, maxTimeSeriesBuckets)
-		}
+		return nil, err
 	}
 	if h.ledger == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
@@ -308,6 +291,69 @@ func (h *Handler) GetTenantTimeSeries(ctx context.Context, tenantID uuid.UUID, p
 		if tb, ok := h.tenantBudget(ctx, tenantID); ok {
 			out.UnitCode = tb.Ceiling.UnitCode
 		}
+	}
+	if out.UnitCode == "" {
+		out.UnitCode = h.currency
+	}
+	return out, nil
+}
+
+// seriesWindow is a time series request's period and granularity, checked:
+// the granularity one of the ledger's buckets (day when unset), the period
+// resolved as every billing read resolves it, and no more buckets than
+// maxTimeSeriesBuckets. Every error is InvalidArgument.
+func seriesWindow(periodStart, periodEnd time.Time, granularity string) (time.Time, time.Time, string, error) {
+	if granularity == "" {
+		granularity = granularityDay
+	}
+	if _, ok := ledgerBuckets[granularity]; !ok {
+		return time.Time{}, time.Time{}, "", connect.Errorf(connect.CodeInvalidArgument, "granularity must be one of hour|day|week, got %q", granularity)
+	}
+	start, end, err := resolvePeriod(periodStart, periodEnd)
+	if err != nil {
+		return time.Time{}, time.Time{}, "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	// Bound the result set: (period ÷ granularity) is the bucket count the
+	// GROUP BY produces, all buffered in memory. An hour-granularity request
+	// over years would materialise tens of thousands of rows. Reject rather
+	// than silently LIMIT — a truncated series is a misleading answer, so the
+	// caller must narrow the period or coarsen the granularity instead.
+	if step := granularityStep(granularity); step > 0 {
+		if buckets := int64(end.Sub(start) / step); buckets > maxTimeSeriesBuckets {
+			return time.Time{}, time.Time{}, "", connect.Errorf(connect.CodeInvalidArgument, "period too wide for %q granularity: %d buckets exceeds the %d cap; narrow the period or use a coarser granularity",
+				granularity, buckets, maxTimeSeriesBuckets)
+		}
+	}
+	return start, end, granularity, nil
+}
+
+// GetPlatformTimeSeries is GetTenantTimeSeries over every tenant's charges:
+// what the platform was charged, a bucket at a time, in the unit most of the
+// period's charges are in. It reads every tenant's rows, so it is gated as
+// ListTenantSpend is.
+func (h *Handler) GetPlatformTimeSeries(ctx context.Context, periodStart, periodEnd time.Time, granularity string) (*TimeSeries, error) {
+	if err := h.authorizeAcrossTenants(ctx); err != nil {
+		return nil, err
+	}
+	start, end, granularity, err := seriesWindow(periodStart, periodEnd, granularity)
+	if err != nil {
+		return nil, err
+	}
+	if h.ledger == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
+	}
+	out := &TimeSeries{Buckets: make([]TimeBucket, 0)}
+	if start.Before(end) {
+		var sums []meter.ChargeSum
+		req := meter.SumChargesRequest{AllTenants: true, From: start, To: end, Bucket: ledgerBuckets[granularity]}
+		// Every tenant's rows, read with no write allowed.
+		if err := h.sumCharges(auth.WithCrossTenantRead(ctx), req, func(s meter.ChargeSum) bool {
+			sums = append(sums, s)
+			return true
+		}); err != nil {
+			return nil, err
+		}
+		out.UnitCode, out.Buckets = series(sums)
 	}
 	if out.UnitCode == "" {
 		out.UnitCode = h.currency

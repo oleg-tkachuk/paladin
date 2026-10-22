@@ -30,8 +30,11 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatTime } from "@/lib/format/locale";
 import {
+  countByStatus,
+  needsAttention,
   splitDatabase,
   type Component,
+  type Finding,
   type ComponentStatus,
   type Control,
   type Detail,
@@ -144,9 +147,8 @@ function StatusPill({ status }: { status: StateKey }) {
 //
 // A message that does not fit its line (a timeout, a stack trace) gets a
 // chevron that reveals the whole of it in a pre-formatted block; one that
-// fits gets none. A disabled component is muted and shows no latency, since
-// it is never probed, and why it is off stays behind its chevron: it is the
-// expected state, not something to read on every visit.
+// fits gets none. A disabled component has no row: it is never probed, and
+// its card lists it on one "Off" line, why it is off in its tooltip.
 
 // The badge of a component that can be switched off, and what switches it.
 // A component with no switch (always_on) carries none.
@@ -163,13 +165,11 @@ const CONTROL_BADGE: Partial<
 function ComponentRow({ c }: { c: Component }) {
   const [open, setOpen] = useState(false);
   const m = META[c.status];
-  const disabled = c.status === "disabled";
   const preview = useRef<HTMLParagraphElement>(null);
   const cutOff = useCutOff(preview, c.message);
-  // A disabled row always folds its reason away. Otherwise expanding is only
-  // offered when the preview does not already show the whole message: a
-  // toggle that reveals the same text again is noise.
-  const expandable = !!c.message && (disabled || cutOff || open);
+  // Expanding is only offered when the preview does not already show the
+  // whole message: a toggle that reveals the same text again is noise.
+  const expandable = !!c.message && (cutOff || open);
   const control = c.control && CONTROL_BADGE[c.control];
 
   return (
@@ -185,15 +185,8 @@ function ComponentRow({ c }: { c: Component }) {
       >
         <div className="flex min-w-0 items-center gap-2">
           <StatusDot tone={m.status} />
-          <span
-            className={cn(
-              "truncate font-mono text-sm",
-              disabled && "text-muted-foreground",
-            )}
-          >
-            {c.name}
-          </span>
-          {c.critical && !disabled && (
+          <span className="truncate font-mono text-sm">{c.name}</span>
+          {c.critical && (
             <Badge
               variant="outline"
               className="shrink-0 px-1.5 py-0 font-normal"
@@ -218,12 +211,9 @@ function ComponentRow({ c }: { c: Component }) {
           >
             {c.statusLabel ?? m.label}
           </span>
-          {/* A disabled component is not probed: no latency to show. */}
-          {!disabled && (
-            <span className="font-mono text-xs tabular-nums text-muted-foreground">
-              {c.latency_ms}ms
-            </span>
-          )}
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {c.latency_ms}ms
+          </span>
           {expandable && (
             <ChevronRightIcon
               aria-hidden
@@ -236,7 +226,7 @@ function ComponentRow({ c }: { c: Component }) {
         </div>
       </button>
 
-      {c.message && !open && !disabled && (
+      {c.message && !open && (
         // Collapsed preview: one line, truncated when it does not fit, with
         // the full text in the tooltip.
         <p
@@ -248,11 +238,7 @@ function ComponentRow({ c }: { c: Component }) {
         </p>
       )}
 
-      {c.message && open && disabled && (
-        <p className="mt-1 text-xs text-muted-foreground">{c.message}</p>
-      )}
-
-      {c.message && open && !disabled && (
+      {c.message && open && (
         // Expanded view: pre-formatted code block so timeouts /
         // multi-line stack traces wrap and stay readable. `whitespace-
         // pre-wrap` preserves newlines; `break-all` catches long
@@ -386,6 +372,8 @@ function tally(components: Component[]): { ok: number; total: number } {
 function RoleCard({ snap }: { snap: Snapshot }) {
   const m = META[snap.status];
   const { ok, total } = tally(snap.components);
+  const active = snap.components.filter((c) => c.status !== "disabled");
+  const off = snap.components.filter((c) => c.status === "disabled");
   return (
     // gap-0 py-0: the header and the rows carry their own padding, and the
     // card's default gap stacked on it left a blank band under the header.
@@ -410,11 +398,109 @@ function RoleCard({ snap }: { snap: Snapshot }) {
           </p>
         ) : (
           <div className="space-y-0">
-            {snap.components.map((c) => (
+            {active.map((c) => (
               <ComponentRow key={c.name} c={c} />
             ))}
           </div>
         )}
+        {/* Switched off is the expected state of an unused feature: one
+            muted line, each name's reason in its tooltip, rather than a row
+            each that reads like a check. */}
+        {off.length > 0 ? (
+          <p className="border-t border-border/40 py-2 text-xs text-muted-foreground">
+            <span className="mr-1.5">Off:</span>
+            {off.map((c, i) => (
+              <span key={c.name}>
+                {i > 0 ? ", " : null}
+                <span
+                  className="font-mono"
+                  title={[
+                    c.message,
+                    c.control && CONTROL_BADGE[c.control]?.title,
+                  ]
+                    .filter(Boolean)
+                    .join(" — ")}
+                >
+                  {c.name}
+                </span>
+              </span>
+            ))}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Needs attention — every fault, ahead of the cards ──────────────────────
+
+/**
+ * The components that are down or slow, across every card, the worst first:
+ * a fault is read here rather than found by scrolling through the cards.
+ */
+function AttentionCard({ findings }: { findings: Finding[] }) {
+  return (
+    <Card className="gap-0 border-warning/40 py-0">
+      <CardHeader className="flex flex-row items-center gap-2 px-4 py-3">
+        <IconChip
+          icon={ExclamationTriangleIcon}
+          tone={IconTone.Warning}
+          size="md"
+        />
+        <CardTitle className="text-base">
+          Needs attention{" "}
+          <span className="font-mono text-sm text-muted-foreground">
+            {findings.length}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <Separator />
+      <CardContent className="px-4 py-1">
+        <ul>
+          {findings.map(({ role, component: c }) => {
+            const m = META[c.status];
+            return (
+              <li
+                key={`${role}/${c.name}`}
+                className="flex items-start gap-2 border-b border-border/40 py-2 last:border-b-0"
+              >
+                <StatusDot tone={m.status} className="mt-1.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="font-mono text-sm">
+                      <span className="text-muted-foreground">{role} ·</span>{" "}
+                      {c.name}
+                    </span>
+                    {c.critical ? (
+                      <Badge
+                        variant="outline"
+                        className="px-1.5 py-0 font-normal"
+                      >
+                        required
+                      </Badge>
+                    ) : null}
+                    <span
+                      className={cn(
+                        "text-xs font-medium",
+                        STATUS_TONE[m.status].ink,
+                      )}
+                    >
+                      {c.statusLabel ?? m.label}
+                    </span>
+                  </div>
+                  {c.message ? (
+                    <p
+                      className="truncate text-xs text-muted-foreground"
+                      title={c.message}
+                    >
+                      {c.message}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </CardContent>
     </Card>
   );
@@ -474,13 +560,15 @@ export default function HealthPage() {
     () => splitDatabase(orderedRoles),
     [orderedRoles],
   );
-  const cards = database ? [database, ...roleCards] : roleCards;
+  const cards = useMemo(
+    () => (database ? [database, ...roleCards] : roleCards),
+    [database, roleCards],
+  );
 
   const rollup = rollupOf(orderedRoles);
-  const RollupIcon = META[rollup].icon;
-  const { ok: healthyComponents, total: totalComponents } = tally(
-    cards.flatMap((s) => s.components),
-  );
+  const counts = countByStatus(cards.flatMap((s) => s.components));
+  const probed = counts.healthy + counts.degraded + counts.unhealthy;
+  const findings = useMemo(() => needsAttention(cards), [cards]);
 
   const backendVersion = stats?.version?.version || "—";
   const backendCommit = stats?.version?.commit
@@ -529,26 +617,21 @@ export default function HealthPage() {
               waste. Replaces the previous grid of 6 cards. ─────────────── */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
-          <div className="flex items-center gap-2.5">
-            <RollupIcon
-              className={cn("size-6", STATUS_TONE[META[rollup].status].ink)}
-            />
-            <div>
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                Rollup
-              </div>
-              <StatusPill status={rollup} />
-            </div>
-          </div>
-          <Separator orientation="vertical" className="h-8" />
           <div>
             <div className="text-xs uppercase tracking-wider text-muted-foreground">
-              Components
+              Status
+            </div>
+            <StatusPill status={rollup} />
+          </div>
+          <Separator orientation="vertical" className="h-8" />
+          {/* Of the checks that run: a switched-off one is neither healthy
+              nor failing, and the bar beside counts it apart. */}
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Healthy checks
             </div>
             <div className="font-mono text-base tabular-nums">
-              {totalComponents === 0
-                ? "—"
-                : `${healthyComponents}/${totalComponents}`}
+              {probed === 0 ? "—" : `${counts.healthy}/${probed}`}
             </div>
           </div>
           <div>
@@ -602,6 +685,8 @@ export default function HealthPage() {
           </div>
         </CardContent>
       </Card>
+
+      {findings.length > 0 ? <AttentionCard findings={findings} /> : null}
 
       {/* ─── Per-role cards, as many to a row as fit whole (ROLE_GRID). */}
       {!data && loading ? (

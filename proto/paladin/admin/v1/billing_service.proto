@@ -31,6 +31,14 @@ service BillingService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // GetPlatformTimeSeries returns time-bucketed spend across every tenant,
+  // as GetTenantTimeSeries does for one: what the platform was charged, in
+  // the unit most of the period's charges are in. It reads every tenant's
+  // rows, so it is gated as ListTenantSpend is.
+  rpc GetPlatformTimeSeries(GetPlatformTimeSeriesRequest) returns (GetPlatformTimeSeriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // ListTenantSpend lists the tenants that spent anything over the period,
   // the most first, from one sum of the charges ledger across tenants.
   // Defaults to the last 30 days, as GetTenantSummary does. Gated by
@@ -155,6 +163,17 @@ message GetTenantTimeSeriesResponse {
   // unit_code, replaced by the currency of each bucket's amount.
   reserved 2;
   reserved "unit_code";
+}
+
+message GetPlatformTimeSeriesRequest {
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+  // granularity ∈ {hour, day, week}, as GetTenantTimeSeries takes it.
+  string granularity = 3;
+}
+
+message GetPlatformTimeSeriesResponse {
+  repeated TimeBucket buckets = 1;
 }
 
 message TimeBucket {

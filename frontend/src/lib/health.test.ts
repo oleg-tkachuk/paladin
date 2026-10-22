@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { splitDatabase, type Component, type Snapshot } from "./health";
+import {
+  countByStatus,
+  needsAttention,
+  splitDatabase,
+  type Component,
+  type Snapshot,
+} from "./health";
 
 const at = "2026-10-08T18:00:00Z";
 const comp = (name: string, extra: Partial<Component> = {}): Component => ({
@@ -131,6 +137,67 @@ describe("splitDatabase", () => {
     expect(roles[0].components[0]).toMatchObject({
       statusLabel: "Online",
       message: "postgres-schema failing: see database",
+    });
+  });
+});
+
+describe("needsAttention", () => {
+  const comp = (
+    name: string,
+    status: Component["status"],
+    critical = false,
+  ): Component => ({
+    name,
+    status,
+    critical,
+    latency_ms: 0,
+    category: "",
+  });
+  const snap = (role: string, components: Component[]): Snapshot => ({
+    role,
+    status: "healthy",
+    components,
+    checked_at: "",
+  });
+
+  it("leads with what is down, the required first, then what is slow", () => {
+    const findings = needsAttention([
+      snap("api", [comp("cache", "degraded"), comp("ok", "healthy")]),
+      snap("worker", [comp("nats", "unhealthy"), comp("off", "disabled")]),
+      snap("admin", [comp("postgres", "unhealthy", true)]),
+    ]);
+    expect(findings.map((f) => `${f.role}/${f.component.name}`)).toEqual([
+      "admin/postgres",
+      "worker/nats",
+      "api/cache",
+    ]);
+  });
+
+  it("finds nothing when every check is healthy or switched off", () => {
+    expect(
+      needsAttention([
+        snap("api", [comp("a", "healthy"), comp("b", "disabled")]),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("countByStatus", () => {
+  it("counts each state, the disabled apart", () => {
+    const c = (status: Component["status"]): Component => ({
+      name: status,
+      status,
+      critical: false,
+      latency_ms: 0,
+      category: "",
+    });
+    expect(
+      countByStatus([c("healthy"), c("healthy"), c("disabled"), c("degraded")]),
+    ).toEqual({
+      healthy: 2,
+      degraded: 1,
+      unhealthy: 0,
+      disabled: 1,
     });
   });
 });

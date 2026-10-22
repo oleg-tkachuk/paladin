@@ -83,6 +83,16 @@ here.
 
 
 
+## Unreleased — the platform's spend over time
+
+**Server:** the first release that carries this section.
+
+`BillingService.GetPlatformTimeSeries` is `GetTenantTimeSeries` over every
+tenant's charges: what the platform was charged, a bucket at a time, in the
+unit most of the period's charges are in. It reads every tenant's rows, so
+it is gated as `ListTenantSpend` is: `ReadBilling` and the `platform.admin`
+role. The console's Billing page charts it. Additive: no action needed.
+
 ## Unreleased — limes v0.112.0: a page token keeps its filters
 
 **Server:** the first release that carries this section.

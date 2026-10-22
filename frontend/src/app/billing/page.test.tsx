@@ -3,11 +3,16 @@ import { render, screen, waitFor, within } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
   spend: vi.fn(),
+  series: vi.fn(),
   roles: [] as string[],
   scope: "t-1" as string | undefined,
 }));
 vi.mock("@/lib/connect/client", () => ({
-  billingClient: { listTenantSpend: h.spend },
+  billingClient: {
+    listTenantSpend: h.spend,
+    getPlatformTimeSeries: h.series,
+    getBillingSettings: () => Promise.resolve({ currencyCode: "USD" }),
+  },
 }));
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: { roles: h.roles } }),
@@ -58,6 +63,7 @@ describe("BillingPage", () => {
   beforeEach(() => {
     h.spend.mockReset();
     h.spend.mockResolvedValue(spendRows);
+    h.series.mockReset().mockResolvedValue({ buckets: [] });
     h.roles = [];
     h.scope = "t-1";
     urlRouter.reset("/billing");
@@ -79,6 +85,42 @@ describe("BillingPage", () => {
           .getAllByRole("link")
           .map((a) => a.textContent),
       ).toEqual(["Globex", "Smoke · in trash"]);
+    });
+
+    // What the platform was charged in all, and each tenant's part of it.
+    it("heads the page with the platform's totals, and each tenant's share", async () => {
+      render(<BillingPage />);
+      const spend = await screen.findByRole("group", { name: "Spend" });
+      expect(spend).toHaveTextContent("2.9000");
+      expect(screen.getByRole("group", { name: "Charges" })).toHaveTextContent(
+        "4",
+      );
+      expect(screen.getByRole("group", { name: "Tenants" })).toHaveTextContent(
+        "2",
+      );
+      const shares = screen
+        .getAllByRole("progressbar", { name: "Share of the platform's spend" })
+        .map((b) => b.getAttribute("aria-valuenow"));
+      // 2.5 and 0.4 of 2.9.
+      expect(shares).toEqual(["86", "14"]);
+    });
+
+    it("charts the platform's spend over the period, a day a bar", async () => {
+      render(<BillingPage />);
+      await waitFor(() => expect(h.series).toHaveBeenCalled());
+      expect(h.series.mock.calls[0][0]).toMatchObject({ granularity: "day" });
+      expect(
+        await screen.findByText("Nothing was charged in this period."),
+      ).toBeInTheDocument();
+    });
+
+    // A series that could not be read says so, rather than load for ever.
+    it("says the spend over time could not be read", async () => {
+      h.series.mockRejectedValue(new Error("unavailable"));
+      render(<BillingPage />);
+      expect(
+        await screen.findByText(/Spend over time could not be loaded/),
+      ).toBeInTheDocument();
     });
 
     it("links a row to that tenant's billing tab, with the period", async () => {

@@ -10,14 +10,11 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { BillingPeriodBar } from "@/components/features/billing/BillingPeriodBar";
-import { TenantSpendCard } from "@/components/features/billing/TenantSpendCard";
+import { PlatformBilling } from "@/components/features/billing/PlatformBilling";
 import { useBillingPeriod } from "@/components/features/billing/useBillingPeriod";
 import { isPlatformAdmin } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
@@ -68,27 +65,13 @@ function BillingView() {
     <div className="space-y-6">
       <PageHeader
         title="Billing"
-        description="Every tenant's capability spend from the charges ledger, the most first."
+        description="What the platform was charged over the period, how it moved, and which tenants it came from."
         showDefaultActions={false}
       />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <BillingPeriodBar state={state} />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={state.refresh}
-          disabled={!state.range}
-        >
-          <ArrowPathIcon className="size-4" />
-          Refresh
-        </Button>
-      </div>
-      {state.range ? (
-        <TenantSpendCard
-          period={state.range}
-          hrefOf={(tenant) => `${tenantBillingHref(tenant)}${state.query}`}
-        />
-      ) : null}
+      <PlatformBilling
+        state={state}
+        hrefOf={(tenant) => `${tenantBillingHref(tenant)}${state.query}`}
+      />
     </div>
   );
 }

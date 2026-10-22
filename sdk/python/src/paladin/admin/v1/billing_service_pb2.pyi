@@ -113,6 +113,22 @@ class GetTenantTimeSeriesResponse(_message.Message):
     buckets: _containers.RepeatedCompositeFieldContainer[TimeBucket]
     def __init__(self, buckets: _Optional[_Iterable[_Union[TimeBucket, _Mapping]]] = ...) -> None: ...
 
+class GetPlatformTimeSeriesRequest(_message.Message):
+    __slots__ = ("period_start", "period_end", "granularity")
+    PERIOD_START_FIELD_NUMBER: _ClassVar[int]
+    PERIOD_END_FIELD_NUMBER: _ClassVar[int]
+    GRANULARITY_FIELD_NUMBER: _ClassVar[int]
+    period_start: _timestamp_pb2.Timestamp
+    period_end: _timestamp_pb2.Timestamp
+    granularity: str
+    def __init__(self, period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., granularity: _Optional[str] = ...) -> None: ...
+
+class GetPlatformTimeSeriesResponse(_message.Message):
+    __slots__ = ("buckets",)
+    BUCKETS_FIELD_NUMBER: _ClassVar[int]
+    buckets: _containers.RepeatedCompositeFieldContainer[TimeBucket]
+    def __init__(self, buckets: _Optional[_Iterable[_Union[TimeBucket, _Mapping]]] = ...) -> None: ...
+
 class TimeBucket(_message.Message):
     __slots__ = ("start", "charge_count", "spent")
     START_FIELD_NUMBER: _ClassVar[int]

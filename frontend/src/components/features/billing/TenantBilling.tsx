@@ -1,21 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { ArrowPathIcon, ChartBarIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Count } from "@/components/ui/Count";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ActorName } from "@/components/features/audit/ActorName";
-import { SpendChart } from "@/components/features/billing/SpendChart";
-import {
-  fillSeries,
-  type Granularity,
-} from "@/components/features/billing/spendSeries";
+import type { Granularity } from "@/components/features/billing/spendSeries";
 import { errorMessage } from "@/hooks/errorContract";
 import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import { billingClient } from "@/lib/connect/client";
@@ -25,14 +20,12 @@ import {
   budgetUnit,
   budgetUnlimited,
 } from "@/lib/format/budgetCeiling";
-import { formatDate } from "@/lib/format/locale";
 import {
   ABSTRACT_UNIT_CODE,
   formatMoney,
   moneyFromNanos,
   moneyPercent,
   moneyToNanos,
-  moneyToNumber,
 } from "@/lib/format/money";
 import { tenantBudgetHref, tenantHref } from "@/lib/navigation/hrefs";
 import { BILLING_QUERY_KEY } from "@/lib/queries/billing";
@@ -40,9 +33,11 @@ import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { BillingPeriodBar } from "./BillingPeriodBar";
-import { GRANULARITIES, allowedGranularities, pickGranularity } from "./period";
+import { KPI_TILE_HEIGHT, KPITile } from "./KPITile";
+import { SpendOverTimeCard } from "./SpendOverTimeCard";
+import { spendStats } from "./spendStats";
+import { allowedGranularities, pickGranularity } from "./period";
 import { RankedSpendCard } from "./RankedSpendCard";
-import { Segmented } from "./Segmented";
 import type { BillingPeriodState } from "./useBillingPeriod";
 
 // Spend is shown to four decimals so a sub-cent charge does not read as
@@ -52,12 +47,8 @@ const SPEND_DIGITS = 4;
 const BUDGET_WARN_PERCENT = 70;
 const BUDGET_CRITICAL_PERCENT = 90;
 const FULL_PERCENT = 100;
-// The chart takes numbers of whole units.
-const NANOS_PER_UNIT = 1e9;
 // The period the empty state offers when the chosen one held no charge.
 const WIDER_PRESET = "90d";
-// The height a KPI tile takes, so its placeholder keeps the same place.
-const KPI_TILE_HEIGHT = "h-18";
 
 // A long identifier keeps its ends: enough to tell two apart.
 const SHORT_LABEL_MAX = 24;
@@ -146,50 +137,19 @@ export function TenantBilling({
     ? Math.min(FULL_PERCENT, moneyPercent(total, max) ?? FULL_PERCENT)
     : 0;
 
-  const buckets = useMemo(
-    () => seriesQuery.data?.buckets ?? [],
-    [seriesQuery.data],
-  );
-  const seriesUnit =
-    buckets.find((b) => b.spent?.currencyCode)?.spent?.currencyCode || unit;
-  // The axis covers the whole period, so a quiet day reads as a gap.
-  const points = useMemo(() => {
-    const raw = buckets.flatMap((b) =>
-      b.start
-        ? [
-            {
-              start: timestampDate(b.start),
-              value: moneyToNumber(b.spent),
-              chargeCount: Number(b.chargeCount),
-              spent: b.spent,
-            },
-          ]
-        : [],
-    );
-    return period
-      ? fillSeries(raw, period.start, period.end, granularity)
-      : raw;
-  }, [buckets, period, granularity]);
-  const formatAxis = useCallback(
-    (v: number) =>
-      formatMoney(
-        moneyFromNanos(BigInt(Math.round(v * NANOS_PER_UNIT)), seriesUnit),
+  const stats = useMemo(
+    () =>
+      spendStats(
+        seriesQuery.data?.buckets ?? [],
+        period ?? undefined,
+        granularity,
       ),
-    [seriesUnit],
+    [seriesQuery.data, period, granularity],
   );
+  const seriesUnit = stats.unit || unit;
+  const avgNanos = stats.avgNanos;
   const money = (m: typeof total, fallbackUnit = unit) =>
     formatMoney(m, { fallbackUnit, fractionDigits: SPEND_DIGITS });
-  const peak = buckets.reduce<(typeof buckets)[number] | null>(
-    (acc, b) =>
-      !acc || moneyToNanos(b.spent) > moneyToNanos(acc.spent) ? b : acc,
-    null,
-  );
-  // Over every bucket of the period, the quiet ones included.
-  const avgNanos =
-    points.length === 0
-      ? 0n
-      : buckets.reduce((acc, b) => acc + moneyToNanos(b.spent), 0n) /
-        BigInt(points.length);
   const loadError = summaryQuery.error ?? seriesQuery.error;
 
   return (
@@ -290,60 +250,17 @@ export function TenantBilling({
             </div>
           )}
 
-          <Card>
-            <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle
-                level={3}
-                className={T.cardTitleProse}
-                icon={ChartBarIcon}
-              >
-                Spend over time
-              </CardTitle>
-              <Segmented
-                label="Granularity"
-                options={GRANULARITIES.map((g) => ({
-                  ...g,
-                  disabled: !allowed.includes(g.value),
-                  title: "Too many bars for this period",
-                }))}
-                value={granularity}
-                onChange={setWanted}
-              />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!seriesQuery.data ? (
-                <Skeleton className="h-48" />
-              ) : buckets.length === 0 ? (
-                <div className={cn(T.helper, "py-8 text-center")}>
-                  No spend for {tenantName} in this period.
-                </div>
-              ) : (
-                <>
-                  <SpendChart
-                    points={points}
-                    granularity={granularity}
-                    formatValue={formatAxis}
-                    formatPoint={(p) =>
-                      money(p.spent as typeof total, seriesUnit)
-                    }
-                  />
-                  <div className={cn(T.hint, "flex flex-wrap gap-x-6 gap-y-1")}>
-                    {peak && peak.start ? (
-                      <span>
-                        Peak: {money(peak.spent, seriesUnit)} on{" "}
-                        {formatDate(timestampDate(peak.start))}
-                      </span>
-                    ) : null}
-                    <span>
-                      Average:{" "}
-                      {money(moneyFromNanos(avgNanos, seriesUnit), seriesUnit)}{" "}
-                      per {granularity}
-                    </span>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          <SpendOverTimeCard
+            buckets={seriesQuery.data?.buckets}
+            stats={stats}
+            unit={seriesUnit}
+            granularity={granularity}
+            allowed={allowed}
+            onGranularity={setWanted}
+            emptyText={`No spend for ${tenantName} in this period.`}
+            error={seriesQuery.error}
+            onRetry={() => void seriesQuery.refetch()}
+          />
 
           {summary && chargeCount === 0 ? (
             <Card className="space-y-3 p-8 text-center">
@@ -406,40 +323,5 @@ export function TenantBilling({
         </>
       )}
     </div>
-  );
-}
-
-/**
- * A headline figure: its label, with the tile's one action beside it, over
- * the value and what qualifies it on one line. The card's own gap and
- * padding are tightened so a row of these stays a band, not a block.
- */
-function KPITile({
-  label,
-  value,
-  helper,
-  action,
-  footer,
-}: {
-  label: string;
-  value: React.ReactNode;
-  helper?: React.ReactNode;
-  action?: React.ReactNode;
-  footer?: React.ReactNode;
-}) {
-  return (
-    <Card className="gap-1.5 px-4 py-3" aria-label={label} role="group">
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className={T.label}>{label}</h3>
-        {action}
-      </div>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="text-xl font-semibold leading-tight tabular-nums">
-          {value}
-        </span>
-        {helper && <span className={T.hint}>{helper}</span>}
-      </div>
-      {footer}
-    </Card>
   );
 }

@@ -74,7 +74,7 @@ describe("card titles", () => {
       "an empty state",
     ],
     [
-      "components/features/billing/TenantBilling.tsx",
+      "components/features/billing/KPITile.tsx",
       "{label}",
       "a figure's label on a number tile",
     ],

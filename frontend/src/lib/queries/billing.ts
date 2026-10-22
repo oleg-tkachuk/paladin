@@ -41,3 +41,32 @@ export function tenantSpendQuery(period: BillingPeriod) {
     },
   });
 }
+
+/**
+ * What every tenant was charged over the period, a bucket at a time — the
+ * platform admin's view; anyone else is refused.
+ */
+export function platformSeriesQuery(
+  period: BillingPeriod,
+  granularity: string,
+) {
+  return queryOptions({
+    queryKey: [
+      ...BILLING_QUERY_KEY,
+      "platform-series",
+      millis(period.periodStart),
+      millis(period.periodEnd),
+      granularity,
+    ] as const,
+    queryFn: async ({ signal }) => {
+      try {
+        return await billingClient.getPlatformTimeSeries(
+          { ...period, granularity },
+          { signal },
+        );
+      } catch (err) {
+        throw normalizeError(err);
+      }
+    },
+  });
+}
