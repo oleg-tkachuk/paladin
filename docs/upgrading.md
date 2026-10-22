@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — limes v0.116.0: a revoke says what the capability was, and the cache follows its watcher
+## sdk/go/v0.111.0, sdk/python/v0.111.0 — limes v0.116.0: a revoke says what the capability was, and the cache follows its watcher
 
 **Server:** the first release that carries this section.
 
