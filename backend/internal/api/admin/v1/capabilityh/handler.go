@@ -56,7 +56,7 @@ type Handler struct {
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
 	copyUsage meter.CopyUsageReader
 	// records serves List and Get; see WithRecords.
-	records Records
+	records limes.RecordReporter
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
@@ -367,7 +367,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.Revoke(ctx, limes.RevokeRequest{
+	if _, err := h.store.Revoke(ctx, limes.RevokeRequest{
 		CapabilityID:    id,
 		Note:            req.GetReason(),
 		Actor:           caller.Subject,

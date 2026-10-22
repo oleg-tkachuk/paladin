@@ -37,7 +37,7 @@ func TestCapabilityListingIsTenantScoped(t *testing.T) {
 			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
 		}
 	}
-	if err := seed.Revoke(auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant}), limes.RevokeRequest{
+	if _, err := seed.Revoke(auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant}), limes.RevokeRequest{
 		CapabilityID: revoked.ID, Note: "leaked", Actor: "user:operator",
 	}); err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -97,7 +97,7 @@ func TestCapabilityRevokedThroughItsParentUnderTheTenantScope(t *testing.T) {
 			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
 		}
 	}
-	if err := seed.Revoke(auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant}), limes.RevokeRequest{
+	if _, err := seed.Revoke(auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant}), limes.RevokeRequest{
 		CapabilityID: parent.ID, Note: "leaked", Actor: "user:operator",
 	}); err != nil {
 		t.Fatalf("revoke: %v", err)

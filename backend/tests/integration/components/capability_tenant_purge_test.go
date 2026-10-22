@@ -76,7 +76,7 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	if err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {
 		t.Fatalf("revoke copy: %v", err)
 	}
-	if err := records.Revoke(acting, limes.RevokeRequest{CapabilityID: c.ID}); err != nil {
+	if _, err := records.Revoke(acting, limes.RevokeRequest{CapabilityID: c.ID}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 }

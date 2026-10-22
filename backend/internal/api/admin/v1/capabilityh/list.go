@@ -16,17 +16,9 @@ import (
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
-// Records reads capability records with their dispositions: a tenant's a
-// page at a time for List, and one for Get. pgstore's and memstore's Census
-// are each one.
-type Records interface {
-	limes.RecordLister
-	limes.RecordListingReader
-}
-
 // WithRecords wires List and Get: capabilities with their dispositions.
 // Without it both RPCs answer Unavailable.
-func (h *Handler) WithRecords(records Records) *Handler {
+func (h *Handler) WithRecords(records limes.RecordReporter) *Handler {
 	h.records = records
 	return h
 }

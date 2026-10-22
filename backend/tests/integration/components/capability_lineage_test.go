@@ -128,7 +128,7 @@ func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 		t.Errorf("parent's subtree spend after an RLS refund = %v, want 15", got)
 	}
 
-	if err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
+	if _, err := f.records.Revoke(ctx, limes.RevokeRequest{CapabilityID: f.root, Note: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke root: %v", err)
 	}
 	if r, err := records.IsRevoked(ctx, f.child); err != nil || !r {

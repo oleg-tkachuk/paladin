@@ -31,7 +31,7 @@ func seedCapability(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenan
 // seedRevocation revokes the capability id through the capability store.
 func seedRevocation(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) {
 	t.Helper()
-	if err := newCapStore(t, pool).Revoke(ctx, limes.RevokeRequest{CapabilityID: id, Note: "fixture", Actor: "fixture-issuer"}); err != nil {
+	if _, err := newCapStore(t, pool).Revoke(ctx, limes.RevokeRequest{CapabilityID: id, Note: "fixture", Actor: "fixture-issuer"}); err != nil {
 		t.Fatalf("seed revocation: %v", err)
 	}
 }

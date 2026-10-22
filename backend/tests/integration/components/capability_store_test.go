@@ -99,7 +99,7 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 	if _, err := getCapability(ctxA, scoped, victim.ID); !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("tenant A read B's capability: %v", err)
 	}
-	if err := scoped.Revoke(ctxA, limes.RevokeRequest{
+	if _, err := scoped.Revoke(ctxA, limes.RevokeRequest{
 		CapabilityID: victim.ID, Note: "hostile", Actor: "user:attacker",
 	}); !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("tenant A revoking B's capability: err = %v, want ErrNotFound", err)
@@ -118,7 +118,7 @@ func TestCapabilityRevokeIsTenantScoped(t *testing.T) {
 
 	// The owning tenant can.
 	ctxB := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantB})
-	if err := scoped.Revoke(ctxB, limes.RevokeRequest{CapabilityID: victim.ID, Note: "own", Actor: "user:ops"}); err != nil {
+	if _, err := scoped.Revoke(ctxB, limes.RevokeRequest{CapabilityID: victim.ID, Note: "own", Actor: "user:ops"}); err != nil {
 		t.Errorf("owning tenant: %v", err)
 	}
 }
@@ -143,7 +143,7 @@ func TestCapabilityIsRevokedBeforeTheTenantIsKnown(t *testing.T) {
 			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
 		}
 	}
-	if err := seed.Revoke(ctx, limes.RevokeRequest{
+	if _, err := seed.Revoke(ctx, limes.RevokeRequest{
 		CapabilityID: revokedCap.ID, Note: "compromise", Actor: "user:ops",
 	}); err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -239,7 +239,7 @@ func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 	if err := seed.Insert(ctx, limes.InsertRequest{Capability: expired, IssuedBy: seedIssuer}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	if err := seed.Revoke(ctx, limes.RevokeRequest{CapabilityID: expired.ID, Note: "r", Actor: "a"}); err != nil {
+	if _, err := seed.Revoke(ctx, limes.RevokeRequest{CapabilityID: expired.ID, Note: "r", Actor: "a"}); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 

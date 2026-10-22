@@ -45,17 +45,19 @@ type recordingStore struct {
 	fakeStore
 	revokeArgs *limes.RevokeRequest
 	revokeErr  error
-	revokeCtx  context.Context
-	listArgs   *limes.ListRecordsRequest
-	listOut    []limes.RecordListing
-	listNext   string
-	listErr    error
+	// revokeResult is what Revoke answers when it does not fail.
+	revokeResult limes.RevokeResult
+	revokeCtx    context.Context
+	listArgs     *limes.ListRecordsRequest
+	listOut      []limes.RecordListing
+	listNext     string
+	listErr      error
 }
 
-func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) error {
+func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) (limes.RevokeResult, error) {
 	s.revokeArgs = &args
 	s.revokeCtx = ctx
-	return s.revokeErr
+	return s.revokeResult, s.revokeErr
 }
 
 func (s *recordingStore) GetRecordListing(context.Context, uuid.UUID) (limes.RecordListing, error) {
