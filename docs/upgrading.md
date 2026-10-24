@@ -83,6 +83,29 @@ here.
 
 
 
+## Unreleased — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
+
+**Server:** the first release that carries this section.
+
+- **limes v1.0.0-rc.1, pgstore v0.35.1, otelmetric v0.6.2.** The candidate is
+  limes v0.117.0's code under the next major; nothing in its API changed.
+- **Migrations `019` and `020`** run at startup, as pgstore's do. `019` has
+  `limes.is_revoked` answer from `limes.revocation_lineage`'s walk, so the two
+  never disagree; `020` recreates `revocation_lineage` with a `known` column.
+  The `postgres-limes-schema` health row now wants `20`. Deploy the schema
+  with the binary that needs it, as before.
+- **A capability not on record is not cached.** `RevocationLineage` reports
+  it as not found, and the revocation cache keeps no answer for it, which no
+  ancestor's revocation could clear.
+- **A revoke writes its entry whatever the capability's state**, and pgstore
+  reads a revoked capability's state for `before` under its row lock.
+- **The revocation cache holds the synced TTL only while every revocation
+  signal listens**, and pgstore's watcher now notices a connection that died
+  without an error. Paladin runs one watcher per replica, so the rule in
+  ADR-0037 is unchanged.
+
+Additive: no action needed beyond deploying the migrations with the binary.
+
 ## v39.3.0, sdk/go/v0.111.0, sdk/python/v0.111.0 — limes v0.116.0: a revoke says what the capability was, and the cache follows its watcher
 
 **Server:** the first release that carries this section.
