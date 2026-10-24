@@ -511,11 +511,28 @@ It refuses as the server does, with the server's code and message and no
 | A capability the fake did not issue, or revoked | `PermissionDenied` — the server's answer to any capability it cannot verify |
 | A `name` or `parent` in another tenant, or another tenant's multipart upload | `PermissionDenied` |
 
-It checks only that: the credential is one it issued, not revoked, and of
-the tenant the call names. It verifies no signature, Biscuit, caveat,
-scope, audience or expiry, and has no platform admin acting in another
-tenant. A refused call is in `Requests`, and is refused before `FailRPC`'s
-failures, which it does not spend.
+A capability its `CapabilityService` issued or delegated is held to its
+caveats too, as the server holds it, with the server's code, `ErrorInfo`
+reason and message:
+
+| Call | Answer |
+| --- | --- |
+| To a plane its audience does not name — a bearer audience such as `paladin-data` instead of the label `data` included | `PermissionDenied`, `CAPABILITY_AUDIENCE_MISMATCH` |
+| Past its request ceiling, or an ancestor's | `ResourceExhausted`, `CAPABILITY_REQUEST_LIMIT_EXCEEDED` |
+| An operation its caveats do not name | `PermissionDenied`, `CAPABILITY_OP_NOT_ALLOWED` |
+| A resource outside its prefixes and URIs, or none under a resource-restricted one | `PermissionDenied`, `CAPABILITY_RESOURCE_NOT_ALLOWED` |
+
+Each comes where the server's does: the audience before the revocation, the
+ceiling before the request is validated, and the operation and resource in
+the RPC, after what it looks up — a missing object is `NotFound` first. Its
+budget is not counted: the server charges a request only when a deployment
+sets a price per request, which it does not by default.
+
+It checks only that: the credential is one it issued, not revoked, of the
+tenant the call names, and a capability's caveats as above. It verifies no
+signature, Biscuit, scope or expiry, and has no platform admin acting in
+another tenant. A refused call is in `Requests`, and is refused before
+`FailRPC`'s failures, which it does not spend.
 
 Its `CapabilityService` holds a capability to the server's rules where a
 consumer's tests meet them, and the server's tests hold the fake to the same
@@ -538,7 +555,7 @@ answers:
 The token and the Biscuit are the fake's own credentials — `Attenuate`
 refuses its Biscuit — and both are accepted under `WithStrictAuth` until the
 capability is revoked; `Revoke` with `cascade_children` revokes its children
-too. It checks no audience, resource, plane or copy quota.
+too. It counts no copy quota.
 
 Where it is checked against the server: a backend test
 (`capabilityh/sdk_fake_fidelity_test.go`) runs every `Issue` and `Delegate`
@@ -546,7 +563,11 @@ case above through the server's handler and through this fake, in every CI
 run, and requires the same code; it runs `List` through the handler over
 limes's own record listing and through this fake, and requires the same
 capabilities, order, dispositions and refusals, and `Get` the same
-disposition. The data-plane calls are not run against it
+disposition. Another (`auth/sdk_fake_caveats_fidelity_test.go`) presents a
+capability to the data plane's interceptor chain and through this fake
+alike — the wrong plane, an operation or resource outside its caveats, a
+request past its ceiling — and requires the same code, reason and message.
+The data-plane calls are not otherwise run against it
 that way yet; the shared scenarios (`sdk/testdata/scenarios.json`) run
 against a real server only. See BACKLOG.md, "The shared SDK scenarios run
 against the server only".

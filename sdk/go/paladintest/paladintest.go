@@ -503,7 +503,7 @@ func Start(opts ...Option) (*Server, func()) {
 			s.requests = append(s.requests, Request{Procedure: procedure, Header: header.Clone(), Message: msg})
 			s.mu.Unlock()
 			if s.strictAuth {
-				if err := s.authenticate(header, msg); err != nil {
+				if err := s.authenticate(procedure, header, msg); err != nil {
 					return nil, err
 				}
 			}
@@ -754,7 +754,7 @@ func (s *Server) lookup(name string) (*object, error) {
 
 // ─── ObjectService ──────────────────────────────────────────────────────────
 
-func (s *Server) UploadObject(_ context.Context, req *datav1.UploadObjectRequest) (*datav1.UploadObjectResponse, error) {
+func (s *Server) UploadObject(ctx context.Context, req *datav1.UploadObjectRequest) (*datav1.UploadObjectResponse, error) {
 	if _, err := paladin.ParseCollectionName(req.GetParent()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
@@ -766,6 +766,9 @@ func (s *Server) UploadObject(_ context.Context, req *datav1.UploadObjectRequest
 	}
 	if req.GetSizeHintBytes() < 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "size must not be negative")
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, childURI(req.GetParent(), req.GetKey()), paladin.OpPut); err != nil {
+		return nil, err
 	}
 	o, err := s.claim(req.GetParent(), req.GetKey(), req.GetContentType(), req.GetMetadata(), req.GetTags())
 	if err != nil {
@@ -780,12 +783,15 @@ func (s *Server) UploadObject(_ context.Context, req *datav1.UploadObjectRequest
 	return &datav1.UploadObjectResponse{Object: o.msg, UploadUrl: url}, nil
 }
 
-func (s *Server) CompleteObject(_ context.Context, req *datav1.CompleteObjectRequest) (*datav1.Object, error) {
+func (s *Server) CompleteObject(ctx context.Context, req *datav1.CompleteObjectRequest) (*datav1.Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o, ok := s.objects[req.GetName()]
 	if !ok {
 		return nil, notFound(req.GetName())
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpPut); err != nil {
+		return nil, err
 	}
 	// As the server: completing a completed object returns it.
 	if o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_AVAILABLE {
@@ -805,35 +811,44 @@ func (s *Server) CompleteObject(_ context.Context, req *datav1.CompleteObjectReq
 	return o.msg, nil
 }
 
-func (s *Server) GetObject(_ context.Context, req *datav1.GetObjectRequest) (*datav1.Object, error) {
+func (s *Server) GetObject(ctx context.Context, req *datav1.GetObjectRequest) (*datav1.Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o, err := s.lookup(req.GetName())
 	if err != nil {
 		return nil, err
 	}
+	if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpGet); err != nil {
+		return nil, err
+	}
 	return o.msg, nil
 }
 
-func (s *Server) LookupObject(_ context.Context, req *datav1.LookupObjectRequest) (*datav1.Object, error) {
+func (s *Server) LookupObject(ctx context.Context, req *datav1.LookupObjectRequest) (*datav1.Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, o := range s.objects {
 		if strings.HasPrefix(o.msg.GetName(), req.GetParent()+"/objects/") && o.msg.GetKey() == req.GetKey() &&
 			o.msg.GetState() != datav1.ObjectState_OBJECT_STATE_DELETED {
+			if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpGet); err != nil {
+				return nil, err
+			}
 			return o.msg, nil
 		}
 	}
 	return nil, notFound(req.GetParent() + " key " + req.GetKey())
 }
 
-func (s *Server) ListObjects(_ context.Context, req *datav1.ListObjectsRequest) (*datav1.ListObjectsResponse, error) {
+func (s *Server) ListObjects(ctx context.Context, req *datav1.ListObjectsRequest) (*datav1.ListObjectsResponse, error) {
 	if field := unhonouredListField(req); field != "" {
 		return nil, connect.Errorf(connect.CodeUnimplemented,
 			"paladintest: ListObjects does not apply %s; the server does, so a test would pass on what it would not", field)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.allowLocked(requestHeader(ctx), req, childURI(req.GetParent(), ""), paladin.OpList); err != nil {
+		return nil, err
+	}
 	var all []*datav1.Object
 	for _, o := range s.objects {
 		if strings.HasPrefix(o.msg.GetName(), req.GetParent()+"/objects/") && o.msg.GetState() == datav1.ObjectState_OBJECT_STATE_AVAILABLE {
@@ -875,11 +890,14 @@ func unhonouredListField(req *datav1.ListObjectsRequest) string {
 	return ""
 }
 
-func (s *Server) DownloadObject(_ context.Context, req *datav1.DownloadObjectRequest) (*datav1.DownloadObjectResponse, error) {
+func (s *Server) DownloadObject(ctx context.Context, req *datav1.DownloadObjectRequest) (*datav1.DownloadObjectResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o, err := s.lookup(req.GetName())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpObjectPresign, paladin.OpGet); err != nil {
 		return nil, err
 	}
 	if o.msg.GetState() != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
@@ -892,7 +910,7 @@ func (s *Server) DownloadObject(_ context.Context, req *datav1.DownloadObjectReq
 	return &datav1.DownloadObjectResponse{Object: o.msg, DownloadUrl: url}, nil
 }
 
-func (s *Server) DeleteObject(_ context.Context, req *datav1.DeleteObjectRequest) (*datav1.DeleteObjectResponse, error) {
+func (s *Server) DeleteObject(ctx context.Context, req *datav1.DeleteObjectRequest) (*datav1.DeleteObjectResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if req.GetPermanent() {
@@ -900,6 +918,9 @@ func (s *Server) DeleteObject(_ context.Context, req *datav1.DeleteObjectRequest
 		o, ok := s.objects[req.GetName()]
 		if !ok {
 			return nil, notFound(req.GetName())
+		}
+		if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpDelete); err != nil {
+			return nil, err
 		}
 		if err := checkVersion(o, req.GetResourceVersion()); err != nil {
 			return nil, err
@@ -909,6 +930,9 @@ func (s *Server) DeleteObject(_ context.Context, req *datav1.DeleteObjectRequest
 	}
 	o, err := s.lookup(req.GetName())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpDelete); err != nil {
 		return nil, err
 	}
 	if err := checkVersion(o, req.GetResourceVersion()); err != nil {
@@ -927,7 +951,7 @@ func (s *Server) DeleteObject(_ context.Context, req *datav1.DeleteObjectRequest
 
 // RegenerateUploadUrl presigns a PENDING object's upload URL again, bound as
 // the first was.
-func (s *Server) RegenerateUploadUrl(_ context.Context, req *datav1.RegenerateUploadUrlRequest) (*datav1.RegenerateUploadUrlResponse, error) {
+func (s *Server) RegenerateUploadUrl(ctx context.Context, req *datav1.RegenerateUploadUrlRequest) (*datav1.RegenerateUploadUrlResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o, err := s.lookup(req.GetName())
@@ -936,6 +960,9 @@ func (s *Server) RegenerateUploadUrl(_ context.Context, req *datav1.RegenerateUp
 	}
 	if o.msg.GetState() != datav1.ObjectState_OBJECT_STATE_PENDING {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, "the object is not pending")
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpObjectPresign, paladin.OpPut); err != nil {
+		return nil, err
 	}
 	url := s.signed(o.msg.GetObjectId(), http.MethodPut)
 	url.RequiredHeaders = o.bound.headers()
@@ -947,7 +974,7 @@ func (s *Server) RegenerateUploadUrl(_ context.Context, req *datav1.RegenerateUp
 // is negative or above MaxPresignTTL is InvalidArgument, a name that is not
 // an object's is InvalidArgument, an unknown object NotFound, and one that
 // is not AVAILABLE FailedPrecondition.
-func (s *Server) PresignDownload(_ context.Context, req *datav1.PresignDownloadRequest) (*datav1.PresignDownloadResponse, error) {
+func (s *Server) PresignDownload(ctx context.Context, req *datav1.PresignDownloadRequest) (*datav1.PresignDownloadResponse, error) {
 	if _, err := paladin.ParseObjectName(req.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
@@ -967,6 +994,9 @@ func (s *Server) PresignDownload(_ context.Context, req *datav1.PresignDownloadR
 	if state := o.msg.GetState(); state != datav1.ObjectState_OBJECT_STATE_AVAILABLE {
 		return nil, connect.Errorf(connect.CodeFailedPrecondition, "object state %s does not allow GET", state)
 	}
+	if err := s.allowLocked(requestHeader(ctx), req, objectURI(o), paladin.OpObjectPresign, paladin.OpGet); err != nil {
+		return nil, err
+	}
 	path := o.msg.GetObjectId()
 	if d := req.GetContentDisposition(); d != "" {
 		path += "?" + url.Values{dispositionQuery: {d}}.Encode()
@@ -981,7 +1011,7 @@ func (s *Server) PresignDownload(_ context.Context, req *datav1.PresignDownloadR
 
 // ─── MultipartUploadService ────────────────────────────────────────────────
 
-func (s *Server) InitiateMultipartUpload(_ context.Context, req *datav1.InitiateMultipartUploadRequest) (*datav1.InitiateMultipartUploadResponse, error) {
+func (s *Server) InitiateMultipartUpload(ctx context.Context, req *datav1.InitiateMultipartUploadRequest) (*datav1.InitiateMultipartUploadResponse, error) {
 	if _, err := paladin.ParseCollectionName(req.GetParent()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
@@ -994,6 +1024,9 @@ func (s *Server) InitiateMultipartUpload(_ context.Context, req *datav1.Initiate
 	if total < 1 || total > paladin.MaxParts {
 		return nil, connect.Errorf(connect.CodeInvalidArgument,
 			"size %d needs %d parts of %d bytes, over the limit of %d", req.GetSizeBytes(), total, PartSize, paladin.MaxParts)
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, childURI(req.GetParent(), req.GetKey()), paladin.OpPut); err != nil {
+		return nil, err
 	}
 	o, err := s.claim(req.GetParent(), req.GetKey(), req.GetContentType(), req.GetMetadata(), req.GetTags())
 	if err != nil {
@@ -1009,12 +1042,15 @@ func (s *Server) InitiateMultipartUpload(_ context.Context, req *datav1.Initiate
 	}, nil
 }
 
-func (s *Server) PresignPart(_ context.Context, req *datav1.PresignPartRequest) (*datav1.PresignPartResponse, error) {
+func (s *Server) PresignPart(ctx context.Context, req *datav1.PresignPartRequest) (*datav1.PresignPartResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	up, ok := s.uploads[req.GetUploadId()]
 	if !ok {
 		return nil, notFound("upload " + req.GetUploadId())
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, s.uploadURILocked(up), paladin.OpObjectPresign, paladin.OpPut); err != nil {
+		return nil, err
 	}
 	if err := validChecksum(up.algo, req.GetChecksumValue()); err != nil {
 		return nil, err
@@ -1035,12 +1071,15 @@ func (s *Server) PresignPart(_ context.Context, req *datav1.PresignPartRequest) 
 	return &datav1.PresignPartResponse{UploadUrl: url}, nil
 }
 
-func (s *Server) CompleteMultipartUpload(_ context.Context, req *datav1.CompleteMultipartUploadRequest) (*datav1.Object, error) {
+func (s *Server) CompleteMultipartUpload(ctx context.Context, req *datav1.CompleteMultipartUploadRequest) (*datav1.Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	up, ok := s.uploads[req.GetUploadId()]
 	if !ok {
 		return nil, notFound("upload " + req.GetUploadId())
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, s.uploadURILocked(up), paladin.OpPut); err != nil {
+		return nil, err
 	}
 	var body []byte
 	for i, p := range req.GetParts() {
@@ -1064,12 +1103,15 @@ func (s *Server) CompleteMultipartUpload(_ context.Context, req *datav1.Complete
 	return o.msg, nil
 }
 
-func (s *Server) ListParts(_ context.Context, req *datav1.ListPartsRequest) (*datav1.ListPartsResponse, error) {
+func (s *Server) ListParts(ctx context.Context, req *datav1.ListPartsRequest) (*datav1.ListPartsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	up, ok := s.uploads[req.GetUploadId()]
 	if !ok {
 		return nil, notFound("upload " + req.GetUploadId())
+	}
+	if err := s.allowLocked(requestHeader(ctx), req, s.uploadURILocked(up), paladin.OpList); err != nil {
+		return nil, err
 	}
 	resp := &datav1.ListPartsResponse{Page: &commonv1.PageResponse{}}
 	for n, data := range up.parts {
@@ -1079,10 +1121,13 @@ func (s *Server) ListParts(_ context.Context, req *datav1.ListPartsRequest) (*da
 	return resp, nil
 }
 
-func (s *Server) AbortMultipartUpload(_ context.Context, req *datav1.AbortMultipartUploadRequest) (*datav1.AbortMultipartUploadResponse, error) {
+func (s *Server) AbortMultipartUpload(ctx context.Context, req *datav1.AbortMultipartUploadRequest) (*datav1.AbortMultipartUploadResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if up, ok := s.uploads[req.GetUploadId()]; ok {
+		if err := s.allowLocked(requestHeader(ctx), req, s.uploadURILocked(up), paladin.OpDelete); err != nil {
+			return nil, err
+		}
 		delete(s.objects, up.name)
 		delete(s.uploads, req.GetUploadId())
 	}
@@ -1100,13 +1145,16 @@ const (
 // EnsureTenantStorage records the bucket and the collections, and reports
 // which this call created. Any backend id is taken to exist. Every collection
 // already works for objects, bootstrapped or not.
-func (s *Server) EnsureTenantStorage(_ context.Context, req *datav1.EnsureTenantStorageRequest) (*datav1.EnsureTenantStorageResponse, error) {
+func (s *Server) EnsureTenantStorage(ctx context.Context, req *datav1.EnsureTenantStorageRequest) (*datav1.EnsureTenantStorageResponse, error) {
 	backend, bucket := req.GetBackendId(), req.GetBucket()
 	if backend == "" || len(bucket) < minBucketLen || len(bucket) > maxBucketLen {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "a backend id and a bucket of 3 to 63 characters are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.allowLocked(requestHeader(ctx), req, noResource, paladin.OpManage); err != nil {
+		return nil, err
+	}
 	resp := &datav1.EnsureTenantStorageResponse{}
 	if key := backend + "/" + bucket; !s.buckets[key] {
 		s.buckets[key] = true

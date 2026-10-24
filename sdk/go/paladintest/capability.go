@@ -30,9 +30,10 @@ import (
 //
 // The fake checks only that. Its token and its Biscuit are the fake's own
 // credentials, not a JWT and a Biscuit — paladin.Attenuate refuses the
-// fake's Biscuit — and it checks no ceiling beyond requiring one at Issue,
-// no audience, resource, plane or copy quota, and of the lifetime only that
-// a not_before falls before the expiry. Both credentials are
+// fake's Biscuit — and of the lifetime it checks only that a not_before
+// falls before the expiry. Under WithStrictAuth a call is held to the
+// capability's planes, request ceiling, operations and resources
+// (caveats.go); its budget and copy quota are not counted. Both credentials are
 // accepted under WithStrictAuth for the subject's tenant until the
 // capability is revoked; with WithStrictAuth, Issue for another tenant than
 // the caller's is refused, as the server refuses it to all but a platform
@@ -83,6 +84,9 @@ type capabilityRecord struct {
 	// revocation is its own revocation entry, the first one written; nil
 	// while it has none.
 	revocation *adminv1.CapabilityRevocation
+	// requests is how many requests it was presented to, ancestors counting
+	// their descendants', as the server counts them against a ceiling.
+	requests int64
 }
 
 // biscuitStatusOf is the server's: a key-bound capability and one valid only

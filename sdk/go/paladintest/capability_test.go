@@ -22,13 +22,15 @@ import (
 const testJKT = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
 
 // issueRequest asks for a capability of the fake's tenant with ops and
-// ceilings of no limit.
+// ceilings of no limit, for the data plane and the admin plane Delegate is
+// on, by their labels: a bearer audience there is refused, as the server
+// refuses it.
 func issueRequest(srv *paladintest.Server, ops ...paladin.Op) *adminv1.CapabilityServiceIssueRequest {
 	return &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
 			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: srv.Tenant(), Subject: "agent:worker",
 		},
-		Audience: []string{paladin.AudienceData},
+		Audience: paladin.PlaneNames(paladin.PlaneData, paladin.PlaneAdmin),
 		Caveats: &adminv1.CapabilityCaveats{
 			Ops:            paladin.OpNames(ops...),
 			RequestCeiling: &adminv1.CapabilityCaveats_UnlimitedRequests{UnlimitedRequests: true},
