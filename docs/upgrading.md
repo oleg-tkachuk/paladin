@@ -30,7 +30,7 @@ release that carries it.
 
 Additive: no action needed.
 
-## Unreleased — <title>`, in the commit that makes
+## sdk/go/v0.112.0, sdk/python/v0.112.0 — <title>`, in the commit that makes
    the change. The release renames the heading to the tags that shipped it,
    reading which streams it belongs to from the commit that wrote it
    ([`.github/ci/upgrade-sections.ts`](../.github/ci/upgrade-sections.ts)): a
@@ -98,7 +98,7 @@ here.
 
 
 
-## Unreleased — the Go fake holds a capability to its caveats
+## sdk/go/v0.112.0 — the Go fake holds a capability to its caveats
 
 **Go SDK:** the first release that carries this section.
 
@@ -116,7 +116,7 @@ here.
   checked as before. The budget is not counted, as the server counts none
   unless a price per request is set.
 
-## Unreleased — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
+## sdk/go/v0.112.0 — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
 
 **Server:** the first release that carries this section.
 
