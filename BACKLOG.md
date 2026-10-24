@@ -61,22 +61,17 @@ the same commit. Treat this file like a runtime invariant.
   after the newest `protobuf-py`, and the wheel compatibility cells green.
 - **Blockers:** connectrpc/connect-py#423.
 
-### The Python fake's Biscuit cannot be attenuated
+### The Python fake refuses an unknown capability in its own words
 
-- **Status:** Deferred; the Go fake seals a real Biscuit since the change
-  that narrowed this entry.
-- **Reason:** `paladin.testing` returns a stand-in for a capability's
-  Biscuit, which `paladin.attenuate` refuses as no Paladin Biscuit, so a
-  consumer cannot unit-test narrowing a capability and handing the copy on.
-  The Python fake has no limes to seal and verify with, so it narrows as the
-  library does by its own reading of the vocabulary.
-- **Definition of Done:** `paladin.testing` seals a real Biscuit with
-  `biscuit_auth` under a key of its own, which `paladin.attenuate` accepts,
-  and holds a narrowed copy to its narrowing (ops, resources, planes,
-  expiry); a shared table of attenuations
-  (`sdk/testdata/biscuit_attenuations.json`) runs through the server's
-  interceptor chain, `paladintest` and `paladin.testing` alike. Without the
-  `biscuit` extra the fake keeps its stand-in.
+- **Status:** Deferred.
+- **Reason:** under `strict_auth`, `paladin.testing` answers a capability it
+  did not issue with `capability: invalid signature` and no reason. The
+  server hands such a token to its verifier and answers in limes's words
+  with `CAPABILITY_INVALID_TOKEN` or another reason, as `paladintest` now
+  does; the Python fake has no limes to give those words.
+- **Definition of Done:** a shared table of malformed and foreign
+  capabilities, held by the server's interceptor chain and both fakes, and
+  the Python fake giving its answers.
 - **Blockers:** none.
 
 ### The Python SDK still supports Python 3.13

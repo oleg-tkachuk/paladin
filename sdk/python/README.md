@@ -573,15 +573,24 @@ hold that fake to the same answers:
 | `list` with a page token of the other order or of other filters, or one it did not hand out | `INVALID_ARGUMENT` |
 | `list` of another tenant with `strict_auth` | `PERMISSION_DENIED` |
 
-The token and the Biscuit are the fake's own credentials — `attenuate`
-refuses its Biscuit — and both are accepted with `strict_auth` until the
-capability is revoked; `revoke` with `cascade_children` revokes its children
-too. It counts no copy quota.
+The token is the fake's own credential. With the `biscuit` extra the
+Biscuit is a real one, sealed with `biscuit_auth` under a root key of the
+fake's own, so `attenuate` narrows it; with `strict_auth` a narrowed copy is
+held to its narrowing — operations, resources, planes, expiry — a block that
+widens it is refused, it stops when its capability is revoked, and it spends
+its capability's requests. A copy's own request and budget limits are read
+and not counted, and the fake counts no copy quota. Without the extra the
+Biscuit is a stand-in that `attenuate` cannot narrow. Both credentials are
+accepted until the capability is revoked; `revoke` with `cascade_children`
+revokes its children too.
 
 Where it is checked against the server: every `issue` and `delegate` case
 above is a row of `sdk/testdata/capability_issuance.json`, which the server's
 handler, the Go SDK's fake and this one all run in every CI run, each
-required to give the row's code, Biscuit status and Biscuit. The shared
+required to give the row's code, Biscuit status and Biscuit. Every
+narrowing of a copy is a row of `sdk/testdata/biscuit_attenuations.json`,
+which the server's interceptor chain, the Go SDK's fake and this one run
+alike, each required to give the row's code, reason and message. The shared
 data-plane scenarios (`sdk/testdata/scenarios.json`) run against this fake
 in every CI run, as they run against the server in the stack gate, so a
 scenario the fake answers differently is red where it changed. Every
