@@ -32,7 +32,7 @@ from paladin._http_settings import Settings
 if TYPE_CHECKING:
     from cryptography import x509
 
-EXTRA_HINT = "paladin: TLS needs the 'tls' extra: pip install 'paladin-sdk[tls]'"
+EXTRA_HINT = "paladin: TLS needs the 'tls' extra: uv add 'paladin-sdk[tls]'"
 """What ``TLS`` raises, as an ``ImportError``, without the ``tls`` extra."""
 
 DEFAULT_TLS_RELOAD_INTERVAL = 30.0
