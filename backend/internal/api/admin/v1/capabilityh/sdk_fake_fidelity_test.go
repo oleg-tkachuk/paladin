@@ -2,6 +2,8 @@ package capabilityh
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -21,126 +23,169 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
 )
 
-// The SDK's fake answers Issue as this handler does: the same Biscuit status,
-// whether a Biscuit came back, and the same code for a request either
-// refuses. A consumer's unit tests run against the fake, so a rule it does
-// not share is one those tests pass and the cluster fails — a hand-written
-// fake that sealed a Biscuit regardless did exactly that.
-func TestTheSDKFakeIssuesAsTheServerDoes(t *testing.T) {
-	// Within the TTL below, and past it.
-	later := timestamppb.New(time.Now().Add(time.Minute))
-	pastExpiry := timestamppb.New(time.Now().Add(time.Hour))
-	cases := map[string]func(*adminv1.CapabilityServiceIssueRequest){
-		"no share":    func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats(limes.OpGet) },
-		"share":       func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats(limes.OpGet, limes.OpShare) },
-		"key-bound":   func(r *adminv1.CapabilityServiceIssueRequest) { r.ConfirmationJkt = testJKT },
-		"not yet":     func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore = later },
-		"past expiry": func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore = pastExpiry },
-		"bare op":     func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats(limes.OpGet, "presign") },
-		"misspelt op": func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats("Get") },
-		"no ops":      func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats = openCaveats() },
-		"a data-plane op": func(r *adminv1.CapabilityServiceIssueRequest) {
-			r.Caveats = openCaveats(limes.OpGet, limes.Op("object:presign"))
-		},
-		"no request ceiling": func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats.RequestCeiling = nil },
-		"no budget ceiling":  func(r *adminv1.CapabilityServiceIssueRequest) { r.Caveats.BudgetCeiling = nil },
-		"key-bound, required": func(r *adminv1.CapabilityServiceIssueRequest) {
-			r.ConfirmationJkt, r.RequireBiscuit = testJKT, true
-		},
-		"not yet, required": func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore, r.RequireBiscuit = later, true },
-		// require_biscuit is refused before what limes refuses as it mints.
-		"a bare op, key-bound, required": func(r *adminv1.CapabilityServiceIssueRequest) {
-			r.Caveats, r.ConfirmationJkt, r.RequireBiscuit = openCaveats("presign"), testJKT, true
-		},
-		"past expiry, required": func(r *adminv1.CapabilityServiceIssueRequest) { r.NotBefore, r.RequireBiscuit = pastExpiry, true },
-		"no share, required": func(r *adminv1.CapabilityServiceIssueRequest) {
-			r.Caveats, r.RequireBiscuit = openCaveats(limes.OpGet), true
-		},
+// issuanceTable is how CapabilityService answers Issue and Delegate, which
+// the server and both SDKs' fakes are held to
+// (sdk/testdata/capability_issuance.json).
+const issuanceTable = "../../../../../../sdk/testdata/capability_issuance.json"
+
+// The table's not_before values.
+const (
+	notBeforeLater      = "later"
+	notBeforePastExpiry = "past_expiry"
+)
+
+// issuanceTTLSeconds is the lifetime an issue case asks for, which
+// notBeforePastExpiry lies beyond and notBeforeLater within.
+const issuanceTTLSeconds = 300
+
+// issuanceWant is the answer a case gets: the code it is refused with, or
+// its Biscuit status and whether a Biscuit came back.
+type issuanceWant struct {
+	Code          string `json:"code"`
+	BiscuitStatus string `json:"biscuit_status"`
+	Biscuit       bool   `json:"biscuit"`
+}
+
+// issuanceCase is one request of the table, Issue's or Delegate's.
+type issuanceCase struct {
+	Name             string       `json:"name"`
+	Ops              *[]string    `json:"ops"`
+	ParentOps        []string     `json:"parent_ops"`
+	ChildOps         *[]string    `json:"child_ops"`
+	KeyBound         bool         `json:"key_bound"`
+	NotBefore        string       `json:"not_before"`
+	RequireBiscuit   bool         `json:"require_biscuit"`
+	NoRequestCeiling bool         `json:"no_request_ceiling"`
+	NoBudgetCeiling  bool         `json:"no_budget_ceiling"`
+	Want             issuanceWant `json:"want"`
+}
+
+func readIssuanceTable(t *testing.T) (issue, delegate []issuanceCase) {
+	t.Helper()
+	raw, err := os.ReadFile(issuanceTable)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var table struct {
+		Issue    []issuanceCase `json:"issue"`
+		Delegate []issuanceCase `json:"delegate"`
+	}
+	if err := json.Unmarshal(raw, &table); err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Issue) == 0 || len(table.Delegate) == 0 {
+		t.Fatal("the issuance table has no cases")
+	}
+	return table.Issue, table.Delegate
+}
+
+func opsOf(names []string) []limes.Op {
+	ops := make([]limes.Op, 0, len(names))
+	for _, n := range names {
+		ops = append(ops, limes.Op(n))
+	}
+	return ops
+}
+
+// gotIssuance is what an Issue or a Delegate answered, as the table spells it.
+func gotIssuance(resp *adminv1.CapabilityServiceIssueResponse, err error) issuanceWant {
+	if err != nil {
+		return issuanceWant{Code: connect.CodeOf(err).String()}
+	}
+	return issuanceWant{BiscuitStatus: resp.GetBiscuitStatus().String(), Biscuit: resp.GetBiscuit() != ""}
+}
+
+// A consumer's unit tests run against the SDK's fake, so a rule it does not
+// share is one those tests pass and the cluster fails — a hand-written fake
+// that sealed a Biscuit regardless did exactly that. Each Issue case of the
+// shared table runs through this handler and through paladintest, and both
+// must give the table's answer; the Python SDK's tests hold its fake to the
+// same table.
+func TestTheSDKFakeIssuesAsTheServerDoes(t *testing.T) {
+	cases, _ := readIssuanceTable(t)
 	fake := paladintest.New(t).Connect().Admin.Capability
 	h := mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{})
-	for name, mutate := range cases {
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
 			req := &adminv1.CapabilityServiceIssueRequest{
 				Subject: &adminv1.CapabilityPrincipal{
 					Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: uuid.NewString(), Subject: "agent:worker",
 				},
-				Audience:   []string{"paladin-data"},
-				TtlSeconds: 300,
-				Caveats:    openCaveats(limes.OpGet, limes.OpList),
+				Audience:       paladin.PlaneNames(paladin.PlaneData),
+				TtlSeconds:     issuanceTTLSeconds,
+				Caveats:        openCaveats(limes.OpGet, limes.OpList),
+				RequireBiscuit: tc.RequireBiscuit,
 			}
-			mutate(req)
-			server, serverErr := h.Issue(adminCtx(), proto.CloneOf(req))
-			faked, fakeErr := fake.Issue(context.Background(), proto.CloneOf(req))
-			if connect.CodeOf(serverErr) != connect.CodeOf(fakeErr) {
-				t.Fatalf("the server answers %v, the fake %v", serverErr, fakeErr)
+			if tc.Ops != nil {
+				req.Caveats = openCaveats(opsOf(*tc.Ops)...)
 			}
-			if serverErr != nil {
-				return
+			if tc.KeyBound {
+				req.ConfirmationJkt = testJKT
 			}
-			if server.GetBiscuitStatus() != faked.GetBiscuitStatus() || (server.GetBiscuit() == "") != (faked.GetBiscuit() == "") {
-				t.Errorf("the server answers %v with a Biscuit %t, the fake %v with one %t",
-					server.GetBiscuitStatus(), server.GetBiscuit() != "", faked.GetBiscuitStatus(), faked.GetBiscuit() != "")
+			switch tc.NotBefore {
+			case notBeforeLater:
+				req.NotBefore = timestamppb.New(time.Now().Add(time.Minute))
+			case notBeforePastExpiry:
+				req.NotBefore = timestamppb.New(time.Now().Add(time.Hour))
+			}
+			if tc.NoRequestCeiling {
+				req.Caveats.RequestCeiling = nil
+			}
+			if tc.NoBudgetCeiling {
+				req.Caveats.BudgetCeiling = nil
+			}
+			if got := gotIssuance(h.Issue(adminCtx(), proto.CloneOf(req))); got != tc.Want {
+				t.Errorf("the server answers %+v, the table %+v", got, tc.Want)
+			}
+			if got := gotIssuance(fake.Issue(context.Background(), proto.CloneOf(req))); got != tc.Want {
+				t.Errorf("the fake answers %+v, the table %+v", got, tc.Want)
 			}
 		})
 	}
 }
 
-// The SDK's fake answers Delegate as this handler does, for the rules a
-// consumer's tests meet: a parent without share, a child narrowed off share,
-// one it would bind to a key, and an op the parent lacks.
+// Each Delegate case of the shared table — a parent without share, a child
+// narrowed off share, one bound to a key, an op the parent lacks — runs
+// through this handler and through paladintest alike.
 func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
-	type delegation struct {
-		parentOps []limes.Op
-		mutate    func(*adminv1.CapabilityServiceDelegateRequest)
-	}
-	keep := func(*adminv1.CapabilityServiceDelegateRequest) {}
-	narrowTo := func(ops ...limes.Op) func(*adminv1.CapabilityServiceDelegateRequest) {
-		return func(r *adminv1.CapabilityServiceDelegateRequest) { r.Caveats = openCaveats(ops...) }
-	}
-	cases := map[string]delegation{
-		"the parent's caveats":   {[]limes.Op{limes.OpGet, limes.OpShare}, keep},
-		"a parent without share": {[]limes.Op{limes.OpGet}, keep},
-		"narrowed off share":     {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo(limes.OpGet)},
-		"an op the parent lacks": {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo(limes.OpPut)},
-		"narrowed to a bare op":  {[]limes.Op{limes.OpGet, limes.OpShare}, narrowTo("presign")},
-		"wider and key-bound, required": {[]limes.Op{limes.OpGet, limes.OpShare}, func(r *adminv1.CapabilityServiceDelegateRequest) {
-			r.Caveats, r.ConfirmationJkt, r.RequireBiscuit = openCaveats(limes.OpPut), testJKT, true
-		}},
-		"a key-bound child, required": {[]limes.Op{limes.OpGet, limes.OpShare}, func(r *adminv1.CapabilityServiceDelegateRequest) {
-			r.ConfirmationJkt, r.RequireBiscuit = testJKT, true
-		}},
-	}
+	_, cases := readIssuanceTable(t)
 	srv := paladintest.New(t)
 	m := captest.NewMinter(t)
 	h := delegateHandler(m, &denyAuthorizer{})
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			parent := mintParent(t, m, tc.parentOps...)
+	mutate := func(tc issuanceCase, r *adminv1.CapabilityServiceDelegateRequest) {
+		if tc.ChildOps != nil {
+			r.Caveats = openCaveats(opsOf(*tc.ChildOps)...)
+		}
+		if tc.KeyBound {
+			r.ConfirmationJkt = testJKT
+		}
+		r.RequireBiscuit = tc.RequireBiscuit
+	}
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			parent := mintParent(t, m, opsOf(tc.ParentOps)...)
 			serverReq := delegateReq(parent)
-			tc.mutate(serverReq)
-			server, serverErr := h.Delegate(auth.WithCapability(context.Background(), parent), serverReq)
+			mutate(tc, serverReq)
+			if got := gotIssuance(h.Delegate(auth.WithCapability(context.Background(), parent), serverReq)); got != tc.Want {
+				t.Errorf("the server answers %+v, the table %+v", got, tc.Want)
+			}
 
 			issueReq := &adminv1.CapabilityServiceIssueRequest{
 				Subject: &adminv1.CapabilityPrincipal{
 					Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: srv.Tenant(), Subject: "agent:parent",
 				},
-				Audience: []string{"paladin-data"},
-				Caveats:  openCaveats(tc.parentOps...),
+				Audience: paladin.PlaneNames(paladin.PlaneData, paladin.PlaneAdmin),
+				Caveats:  openCaveats(opsOf(tc.ParentOps)...),
 			}
 			fakeParent, err := srv.Connect().Admin.Capability.Issue(context.Background(), issueReq)
 			if err != nil {
 				t.Fatal(err)
 			}
 			fakeReq := &adminv1.CapabilityServiceDelegateRequest{ParentId: fakeParent.GetCapability().GetId(), TtlSeconds: delegateTTLSeconds}
-			tc.mutate(fakeReq)
+			mutate(tc, fakeReq)
 			faked, fakeErr := srv.Connect(paladin.WithCapability(fakeParent.GetToken())).Admin.Capability.Delegate(context.Background(), fakeReq)
-
-			if connect.CodeOf(serverErr) != connect.CodeOf(fakeErr) {
-				t.Fatalf("the server answers %v, the fake %v", serverErr, fakeErr)
-			}
-			if serverErr == nil && server.GetBiscuitStatus() != faked.GetBiscuitStatus() {
-				t.Errorf("the server answers %v, the fake %v", server.GetBiscuitStatus(), faked.GetBiscuitStatus())
+			if got := gotIssuance(faked, fakeErr); got != tc.Want {
+				t.Errorf("the fake answers %+v, the table %+v", got, tc.Want)
 			}
 		})
 	}

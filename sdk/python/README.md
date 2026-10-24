@@ -557,13 +557,13 @@ refuses its Biscuit — and both are accepted with `strict_auth` until the
 capability is revoked; `revoke` with `cascade_children` revokes its children
 too. It checks no audience, resource, plane or copy quota.
 
-Where it is checked against the server: the Go SDK's fake is run against the
-server's handler for every case above in every CI run, and this fake is held
-to the Go fake only by tests that mirror the same cases. The data-plane calls
-are not run against either fake that way yet; the shared scenarios
+Where it is checked against the server: every `issue` and `delegate` case
+above is a row of `sdk/testdata/capability_issuance.json`, which the server's
+handler, the Go SDK's fake and this one all run in every CI run, each
+required to give the row's code, Biscuit status and Biscuit. The data-plane
+calls are not run against either fake that way yet; the shared scenarios
 (`sdk/testdata/scenarios.json`) run against a real server only. See
-BACKLOG.md, "The Python fake's CapabilityService is held to the server only
-by mirror" and "The shared SDK scenarios run against the server only".
+BACKLOG.md, "The shared SDK scenarios run against the server only".
 
 ### Concurrency and asyncio
 
