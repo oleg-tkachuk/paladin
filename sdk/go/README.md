@@ -559,8 +559,9 @@ too. It counts no copy quota.
 
 Where it is checked against the server: a backend test
 (`capabilityh/sdk_fake_fidelity_test.go`) runs every `Issue` and `Delegate`
-case above through the server's handler and through this fake, in every CI
-run, and requires the same code; it runs `List` through the handler over
+case above — the rows of `sdk/testdata/capability_issuance.json`, which the
+Python SDK's fake runs too — through the server's handler and through this
+fake, in every CI run, and requires the row's code and Biscuit status; it runs `List` through the handler over
 limes's own record listing and through this fake, and requires the same
 capabilities, order, dispositions and refusals, and `Get` the same
 disposition. Another (`auth/sdk_fake_caveats_fidelity_test.go`) presents a

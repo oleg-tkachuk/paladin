@@ -22,7 +22,7 @@ from paladin.admin.v1 import types_pb2 as admin_types
 from paladin.caveats import op_refusal
 from paladin.common.v1.pagination_pb2 import SORT_ORDER_ASC, SORT_ORDER_DESC
 from paladin.data.v1 import object_service_pb2, types_pb2
-from paladin.testing import DEFAULT_CAPABILITY_TTL, FakePaladin
+from paladin.testing import FakePaladin
 
 OP_NAMES = Path(__file__).resolve().parents[2] / "testdata" / "capability_op_names.json"
 JKT = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
@@ -144,33 +144,6 @@ def test_issue_refuses_what_the_server_refuses(
         fake.connect().admin.capability.issue(req)
     assert caught.value.code == Code.INVALID_ARGUMENT
     assert names in str(caught.value)
-
-
-def test_issue_takes_the_data_planes_ops(fake: FakePaladin) -> None:
-    fake.connect().admin.capability.issue(_issue_request(fake, Op.OBJECT_PRESIGN, Op.GET))
-
-
-def test_require_biscuit_is_refused_before_the_caveats(fake: FakePaladin) -> None:
-    """The server's order: a request failing both is FAILED_PRECONDITION."""
-    admin = fake.connect().admin.capability
-    bare = _issue_request(fake, "presign")
-    bare.confirmation_jkt, bare.require_biscuit = JKT, True
-    late = _issue_request(fake, Op.GET)
-    late.not_before.CopyFrom(_in(DEFAULT_CAPABILITY_TTL + timedelta(minutes=1)))
-    late.require_biscuit = True
-    for req in (bare, late):
-        assert _code(lambda r=req: admin.issue(r)) == Code.FAILED_PRECONDITION
-    parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))
-    wider = _narrow(parent.capability.id, Op.PUT)
-    wider.confirmation_jkt, wider.require_biscuit = JKT, True
-    delegate = fake.connect(capability=parent.token).admin.capability.delegate
-    assert _code(lambda: delegate(wider)) == Code.FAILED_PRECONDITION
-
-
-def test_a_not_before_past_the_expiry_is_refused(fake: FakePaladin) -> None:
-    req = _issue_request(fake, Op.GET)
-    req.not_before.CopyFrom(_in(DEFAULT_CAPABILITY_TTL + timedelta(minutes=1)))
-    assert _code(lambda: fake.connect().admin.capability.issue(req)) == Code.INVALID_ARGUMENT
 
 
 def test_strict_issue_stays_in_the_callers_tenant(strict: FakePaladin) -> None:

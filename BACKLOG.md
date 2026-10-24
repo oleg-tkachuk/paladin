@@ -71,19 +71,6 @@ the same commit. Treat this file like a runtime invariant.
   after the newest `protobuf-py`, and the wheel compatibility cells green.
 - **Blockers:** connectrpc/connect-py#423.
 
-### The Python fake's CapabilityService is held to the server only by mirror
-
-- **Status:** Deferred.
-- **Reason:** a backend test runs each Issue and Delegate scenario through
-  the handler and Go's `paladintest` and requires the same answer, but
-  Python's `paladin.testing` reproduces the same rules by hand, held only by
-  the shared operation-name table and scenarios its tests copy from Go's. A
-  rule the server and the Go fake change together can leave it behind.
-- **Definition of Done:** the scenarios live in one table under
-  `sdk/testdata/` — request, expected code and Biscuit status — which the
-  backend fidelity test, `paladintest` and `paladin.testing` all run.
-- **Blockers:** none.
-
 ### The fakes' Biscuit cannot be attenuated
 
 - **Status:** Deferred.
