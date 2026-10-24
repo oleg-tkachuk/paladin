@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -38,14 +39,22 @@ func (s *OperationServer) GetOperation(ctx context.Context, req *pb.GetOperation
 
 func (s *OperationServer) ListOperations(ctx context.Context, req *pb.ListOperationsRequest) (*pb.ListOperationsResponse, error) {
 	m := req
-	list, next, err := s.H.ListOperations(ctx, operationh.ListInput{
+	in := operationh.ListInput{
 		PageSize:         m.GetPage().GetPageSize(),
 		PageToken:        m.GetPage().GetPageToken(),
 		Filter:           m.GetFilter(),
 		NewestFirst:      m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC,
 		Mine:             m.GetMine(),
 		IncludeDismissed: m.GetIncludeDismissed(),
-	})
+	}
+	if id := m.GetTenantId(); id != "" {
+		tenant, err := uuid.Parse(id)
+		if err != nil {
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		}
+		in.TenantID = tenant
+	}
+	list, next, err := s.H.ListOperations(ctx, in)
 	if err != nil {
 		return nil, err
 	}

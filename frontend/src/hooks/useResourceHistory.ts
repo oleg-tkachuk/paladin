@@ -11,7 +11,6 @@ import {
   historyFromAudit,
   historyFromOperation,
   mergeHistory,
-  operationsFilterFor,
   type HistoryEntry,
 } from "@/lib/history";
 import { isActive, operationStatus } from "@/lib/operations";
@@ -55,8 +54,9 @@ export function useResourceHistory(
   const filter = scope.kind === "resource" ? scope.filter : "";
   const audit = useAuditLogs(HISTORY_PAGE_SIZE, filter, tenantId);
 
-  // The server lists the operations of the caller's own tenant; the filter
-  // keeps another tenant's page from showing them as its own.
+  // The tenant's operations, named: the server lists the caller's own
+  // tenant's unless told which, so a platform admin on another tenant's page
+  // saw none of its batches.
   const ops = useInfiniteQuery({
     queryKey: ["operations", "history", tenantId],
     enabled: tenantId !== "",
@@ -66,7 +66,7 @@ export function useResourceHistory(
         return await adminOperationClient.listOperations(
           {
             page: { pageSize: HISTORY_PAGE_SIZE, pageToken: pageParam },
-            filter: operationsFilterFor(tenantId),
+            tenantId,
             sortOrder: SortOrder.DESC,
           },
           { signal },

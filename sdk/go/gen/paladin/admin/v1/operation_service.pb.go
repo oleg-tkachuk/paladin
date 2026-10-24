@@ -306,8 +306,12 @@ type ListOperationsRequest struct {
 	Mine bool `protobuf:"varint,4,opt,name=mine,proto3" json:"mine,omitempty"`
 	// include_dismissed lists, with mine, the operations the caller cleared too.
 	IncludeDismissed bool `protobuf:"varint,5,opt,name=include_dismissed,json=includeDismissed,proto3" json:"include_dismissed,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// tenant_id lists another tenant's operations: those its principals started.
+	// Empty = the caller's own tenant. A caller other than a platform admin may
+	// name only its own tenant.
+	TenantId      string `protobuf:"bytes,6,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListOperationsRequest) Reset() {
@@ -373,6 +377,13 @@ func (x *ListOperationsRequest) GetIncludeDismissed() bool {
 		return x.IncludeDismissed
 	}
 	return false
+}
+
+func (x *ListOperationsRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
 }
 
 type ListOperationsResponse struct {
@@ -589,14 +600,15 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\ffailed_count\x18\x10 \x01(\x03B\x03\xe0A\x03R\vfailedCountB\b\n" +
 	"\x06result\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xe1\x01\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x8b\x02\n" +
 	"\x15ListOperationsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
 	"\n" +
 	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x12\n" +
 	"\x04mine\x18\x04 \x01(\bR\x04mine\x12+\n" +
-	"\x11include_dismissed\x18\x05 \x01(\bR\x10includeDismissed\"\x8a\x01\n" +
+	"\x11include_dismissed\x18\x05 \x01(\bR\x10includeDismissed\x12(\n" +
+	"\ttenant_id\x18\x06 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\"\x8a\x01\n" +
 	"\x16ListOperationsResponse\x12;\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1b.paladin.admin.v1.OperationR\n" +

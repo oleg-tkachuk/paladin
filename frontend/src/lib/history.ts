@@ -144,8 +144,3 @@ export function auditFilterFor(resourceName: string, nested = true): string {
   const under = JSON.stringify(`${resourceName}/`);
   return `${own} || resource_name.startsWith(${under})`;
 }
-
-/** The operations filter for one tenant's, as the server's CEL names it. */
-export function operationsFilterFor(tenantId: string): string {
-  return `tenant_id == ${JSON.stringify(tenantId)}`;
-}

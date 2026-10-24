@@ -205,6 +205,12 @@ func (h *Handler) ListOperations(ctx context.Context, in ListInput) ([]Operation
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
+	if in.TenantID != uuid.Nil && in.TenantID != tenantID {
+		if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
+			return nil, "", connect.NewError(connect.CodePermissionDenied, msgCrossTenant)
+		}
+		tenantID = in.TenantID
+	}
 	var initiator string
 	if mine {
 		if initiator, err = callerSubject(ctx); err != nil {
@@ -318,7 +324,14 @@ type ListInput struct {
 	// caller dismissed unless IncludeDismissed.
 	Mine             bool
 	IncludeDismissed bool
+	// TenantID lists another tenant's operations, which only a platform
+	// admin may; uuid.Nil is the caller's own tenant.
+	TenantID uuid.UUID
 }
+
+// msgCrossTenant is the refusal of a caller who names another tenant's
+// operations without the platform admin role.
+const msgCrossTenant = "cross-tenant operations denied"
 
 // ErrNotCancellable is surfaced by repositories when the operation is in a
 // terminal state and cannot be cancelled.
