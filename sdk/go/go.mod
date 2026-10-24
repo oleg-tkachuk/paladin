@@ -10,7 +10,7 @@ require (
 	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/otelconnect v0.12.0
 	github.com/google/uuid v1.6.0
-	github.com/oleg-tkachuk/limes v0.116.0
+	github.com/oleg-tkachuk/limes v1.0.0-rc.1
 	github.com/spiffe/go-spiffe/v2 v2.9.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0
