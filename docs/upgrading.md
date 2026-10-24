@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — the Python fake holds a capability to its caveats
+## sdk/python/v0.113.0 — the Python fake holds a capability to its caveats
 
 **Python SDK:** the first release that carries this section.
 
