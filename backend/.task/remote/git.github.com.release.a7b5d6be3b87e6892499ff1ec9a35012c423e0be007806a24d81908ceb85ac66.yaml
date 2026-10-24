@@ -64,7 +64,13 @@ version: "3"
 #
 # The *_FLAGS inputs are shell by contract: spliced in verbatim and word-split.
 # Every other value goes through `q` where it reaches a shell.
+#
+# Exported: the derived values another module reads, because it acts on what
+# this one published — cosign signs it, runtime/* loads and installs it. A
+# rename of one of these breaks those modules, so check:vars refuses a read of
+# any other.
 # ─────────────────────────────────────────────────────────────────────────────
+# exports: _REL_VERSION _REL_IMAGE _REL_DIGEST_FILE
 # shell-verbatim: _REL_BUILD_FLAGS DOCKER_BUILD_FLAGS _REL_HELM_FLAGS HELM_FLAGS _REL_HELM_LINT_FLAGS HELM_LINT_FLAGS _REL_HELM_TPL_FLAGS HELM_TEMPLATE_FLAGS _REL_HELM_PKG_FLAGS HELM_PACKAGE_FLAGS _REL_KUBECONFORM_FLAGS KUBECONFORM_FLAGS _REL_TAG_MATCH
 
 silent: true
@@ -223,13 +229,35 @@ vars:
     sh: git status --porcelain 2>/dev/null | head -c1
   _REL_NOW:
     sh: date +%s
+  # Set when this tree is exactly a version tag: the one case git vouches for.
+  # _REL_VERSION and _REL_KIND both branch on it, so they cannot disagree.
+  _REL_ON_TAG: '{{if and ._REL_TAG (not ._REL_DIRTY)}}1{{end}}'
   _REL_VERSION: >-
     {{- if .APP_VERSION -}}{{.APP_VERSION}}
-    {{- else if and ._REL_TAG (not ._REL_DIRTY) -}}{{._REL_TAG}}
+    {{- else if ._REL_ON_TAG -}}{{._REL_TAG}}
     {{- else -}}
     {{- ._REL_BASE}}{{._REL_DEV}}.{{._REL_CTS}}
     {{- if ._REL_DIRTY}}.dirty.{{._REL_NOW}}{{end}}.g{{._REL_SHA}}
     {{- end -}}
+  # What kind of build _REL_VERSION is, one value per branch above, written to
+  # the info file as BUILD_KIND. A consumer that tells a dev build by the
+  # version's shape breaks whenever the shape changes — `-dev.` became `.dev.`
+  # after a pre-release in v13 — so the kind is said outright instead.
+  # Pinned is its own kind, not a release: APP_VERSION is the consumer's claim,
+  # and a gate that deploys only releases must not take it for git's.
+  _REL_KIND_RELEASE: release
+  _REL_KIND_DEV: dev
+  _REL_KIND_PINNED: pinned
+  _REL_KIND: >-
+    {{- if .APP_VERSION -}}{{._REL_KIND_PINNED}}
+    {{- else if ._REL_ON_TAG -}}{{._REL_KIND_RELEASE}}
+    {{- else -}}{{._REL_KIND_DEV}}
+    {{- end -}}
+  # Where image:push records the digest it pushed, one file per version so a
+  # file left by an earlier push is never read for this one. Under .task/,
+  # which Task owns and repositories ignore. Exported: cosign signs it.
+  _REL_DIGEST_DIR: .task/release
+  _REL_DIGEST_FILE: '{{._REL_DIGEST_DIR}}/{{._REL_VERSION}}.digest'
   _REL_BUILD_TIME:
     sh: TZ={{.TIMEZONE | default "UTC" | q}} date +%Y-%m-%dT%H:%M:%S%z
   # Status markers. The shape carries the meaning, so a line still reads in
@@ -248,13 +276,13 @@ tasks:
       - printf '%s\n' {{._REL_VERSION | q}}
 
   metadata:
-    desc: "Write APP_VERSION / GIT_COMMIT_HASH / BUILD_TIME into the deploy info file"
+    desc: "Write APP_VERSION / BUILD_KIND / GIT_COMMIT_HASH / BUILD_TIME into the deploy info file"
     aliases: [info]
     cmds:
       - mkdir -p {{dir ._REL_INFO_ENV | q}}
       - >-
-        printf 'APP_VERSION=%s\nGIT_COMMIT_HASH=%s\nBUILD_TIME=%s\n'
-        {{._REL_VERSION | q}} {{._REL_SHA | q}} {{._REL_BUILD_TIME | q}} > {{._REL_INFO_ENV | q}}
+        printf 'APP_VERSION=%s\nBUILD_KIND=%s\nGIT_COMMIT_HASH=%s\nBUILD_TIME=%s\n'
+        {{._REL_VERSION | q}} {{._REL_KIND | q}} {{._REL_SHA | q}} {{._REL_BUILD_TIME | q}} > {{._REL_INFO_ENV | q}}
       - printf '%s %s · version · %s → %s\n' "{{._REL_RUN}}" {{._REL_SVC | q}} {{._REL_VERSION | q}} {{._REL_INFO_ENV | q}}
 
   doctor:
@@ -386,6 +414,27 @@ tasks:
             say '{{._REL_WARN}}' "registry $reg did not answer over https or http (got $code) — a push would fail"
           fi
 
+          # ─── remote lock ──────────────────────────────────────────────────
+          # Task's checksum of each module fetched over git, beside the root
+          # Taskfile: the only thing between a moved tag and this build. It
+          # protects another checkout only once it is committed, and the usual
+          # `.task/` ignore rule throws it away — as does `.task/` followed by
+          # `!.task/remote/`, since git re-includes nothing under an excluded
+          # directory. No lock is a library included from a checkout: silent.
+          lockdir={{.TASK_TEMP_DIR | default ".task" | q}}/remote
+          root={{.ROOT_DIR | q}}
+          case "$lockdir" in /*) at=$lockdir ;; *) at=$root/$lockdir ;; esac
+          lock=$(ls "$at"/*.checksum 2>/dev/null | head -1 || true)
+          if [ -n "$lock" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+            if git -C "$root" check-ignore -q "$lock"; then
+              say '{{._REL_WARN}}' "remote lock $lockdir is ignored by git — ignore .task/* rather than .task/, then add !$lockdir/ and commit it"
+            elif ! git -C "$root" ls-files --error-unmatch "$lock" >/dev/null 2>&1; then
+              say '{{._REL_WARN}}' "remote lock $lockdir is not committed — commit it, or a moved tag goes unnoticed in every other checkout"
+            else
+              say '{{._REL_OK}}' "remote lock $lockdir is committed"
+            fi
+          fi
+
           if [ "$fail" = 0 ]; then
             say '{{._REL_OK}}' "ready to publish"
           fi
@@ -464,6 +513,31 @@ tasks:
     cmds:
       - printf '%s %s · image · push %s:%s\n' "{{._REL_RUN}}" {{._REL_SVC | q}} {{._REL_IMAGE | q}} {{._REL_VERSION | q}}
       - docker push {{._REL_IMAGE | q}}:{{._REL_VERSION | q}}
+      # The digest that push sent, for cosign to sign and verify instead of the
+      # tag, which can be moved between the push and the signature. Read from
+      # docker's own record of the push, not the registry: asking the registry
+      # what the tag points at now is the same race. A module var cannot carry
+      # it — vars are fixed when the include loads, before this push — so it
+      # goes to a file per version, whose path is exported.
+      #
+      # One repo digest per repository the image was pushed to; this one's is
+      # the line naming it. Docker Hub names are recorded without docker.io/
+      # and library/, so those are matched too.
+      - cmd: |-
+          set -eu
+          image={{._REL_IMAGE | q}}
+          short=${image#docker.io/}; short=${short#index.docker.io/}; short=${short#library/}
+          digest=$(docker image inspect "$image:"{{._REL_VERSION | q}} --format '{{"{{"}}range .RepoDigests{{"}}"}}{{"{{"}}println .{{"}}"}}{{"{{"}}end{{"}}"}}' \
+            | awk -v a="$image@" -v b="$short@" 'index($0, a) == 1 || index($0, b) == 1 { print; exit }')
+          if [ -z "$digest" ]; then
+            printf '%s %s · image · pushed, but docker recorded no digest for %s\n' "{{._REL_ERR}}" {{._REL_SVC | q}} "$image" >&2
+            exit 1
+          fi
+          out={{._REL_DIGEST_FILE | q}}
+          mkdir -p "$(dirname "$out")"
+          tmp=$(mktemp "$out.XXXXXX")
+          printf '%s\n' "$digest" > "$tmp"
+          mv "$tmp" "$out"
       - printf '%s %s · image · pushed %s\n' "{{._REL_OK}}" {{._REL_SVC | q}} {{._REL_VERSION | q}}
       # A floating tag, only when a repository asks for one. It is off by
       # default because :latest makes a deployment unreproducible — what it
