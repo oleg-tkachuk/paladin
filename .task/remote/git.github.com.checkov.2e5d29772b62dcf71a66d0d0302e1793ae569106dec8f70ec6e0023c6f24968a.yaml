@@ -260,6 +260,13 @@ tasks:
             printf '%s checkov · %s was not written (checkov exited %s); checkov writes %s into the directory it scans. The last of its output:\n' \
               "{{._CKV_ERR}}" {{._CKV_BASE | q}} "$status" {{._CKV_BASE_NAME | q}} >&2
             tail -n {{._CKV_LOG_TAIL | q}} "$log" | sed 's/^/    /' >&2
+            # Where it did write, when that is somewhere else: the config's
+            # directory is not CHECKOV_BASELINE's. Found rather than parsed
+            # out of the config, which would need a YAML reader here.
+            written=$(find . -name .git -prune -o -name {{._CKV_BASE_NAME | q}} -newer "$stamp" -print 2>/dev/null | sed 's|^\./||')
+            if [ -n "$written" ]; then
+              printf '%s checkov · it wrote %s instead — point CHECKOV_BASELINE there\n' "{{._CKV_ERR}}" "$(echo $written)" >&2
+            fi
             exit 1
           fi
           after=$(count {{._CKV_BASE | q}})

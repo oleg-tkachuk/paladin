@@ -258,7 +258,9 @@ tasks:
           bad() { say '{{._REL_ERR}}' "$1" >&2; fail=1; }
 
           # ─── tools ────────────────────────────────────────────────────────
-          for t in git helm; do
+          # curl answers the registry probe below; without it that probe reads
+          # as "registry did not answer", naming the wrong cause.
+          for t in git helm curl; do
             command -v "$t" >/dev/null 2>&1 || bad "$t is not installed"
           done
 
@@ -558,8 +560,6 @@ tasks:
     preconditions:
       - sh: test -f {{._REL_CHART_DIR | q}}/Chart.yaml
         msg: "{{._REL_CHART_DIR}}/Chart.yaml not found — set CHART_DIR"
-    generates:
-      - "{{._REL_CHART}}-{{._REL_VERSION}}.tgz"
     cmds:
       - >-
         helm package {{._REL_HELM_PKG_FLAGS}} {{._REL_CHART_DIR | q}} --version {{._REL_VERSION | q}}

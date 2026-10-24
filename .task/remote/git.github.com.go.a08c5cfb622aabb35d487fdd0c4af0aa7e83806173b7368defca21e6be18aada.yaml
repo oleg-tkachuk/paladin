@@ -110,7 +110,9 @@ tasks:
     desc: "Run the unit suite with coverage; HTML report lands in coverage/"
     cmds:
       - mkdir -p coverage
-      - go test -coverprofile=coverage/cover.out {{._GO_PKGS}}
+      # The unit run, so the unit run's flags: a suite that needs `-p 1` to
+      # share package state needs it here too.
+      - go test {{._GO_TEST_FLAGS}} -coverprofile=coverage/cover.out {{._GO_PKGS}}
       - go tool cover -html=coverage/cover.out -o coverage/cover.html
       - printf '%s %s · go · coverage report → coverage/cover.html\n' "{{._GO_OK}}" {{._GO_NAME | q}}
 

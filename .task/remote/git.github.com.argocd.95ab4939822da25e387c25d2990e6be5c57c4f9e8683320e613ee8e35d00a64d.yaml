@@ -53,6 +53,9 @@ vars:
   # a value passed at include time and at call time alike.
   # A command fragment, spliced into the tasks as shell: the context inside it
   # is quoted here, where it is built.
+  # How long a reachability probe waits before calling the cluster gone: the
+  # skip guards below would otherwise hang on a dead context.
+  _ARGO_PROBE_TIMEOUT: 3s
   _ARGO_KUBECTL: 'kubectl{{if .K8S_CONTEXT}} --context {{.K8S_CONTEXT | q}}{{end}}'
   _ARGO_SERVER: '{{.ARGOCD_SERVER | default "argocd-server"}}'
   _ARGO_LABEL: '{{.ARGOCD_SERVER_LABEL | default "argocd-server"}}'
@@ -81,7 +84,7 @@ tasks:
           touched. Pass a prefix, e.g. APP_PREFIX=acme-.
     # Skipped, not failed, when there is no cluster to talk to.
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     vars:
       # The leading version check is deliberate, not redundant with the task's
       # own status guard: task-level vars are evaluated before status is even
@@ -93,7 +96,7 @@ tasks:
       # loudly on, not something to fold into "no application matched".
       _ARGO_APPS:
         sh: |-
-          {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1 || exit 0
+          {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1 || exit 0
           set -eu -o pipefail
           {{._ARGO_KUBECTL}} -n {{._ARGO_NS | q}} get applications.argoproj.io \
             -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
@@ -111,7 +114,7 @@ tasks:
   list:
     desc: "Show the sync + health state of every application matching APP_PREFIX"
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     cmds:
       - >-
         {{._ARGO_KUBECTL}} -n {{._ARGO_NS | q}} get applications.argoproj.io
@@ -128,8 +131,11 @@ tasks:
 
   server:port-forward:
     desc: "Port-forward the Argo server to localhost (Ctrl-C to stop)"
+    # Streams until Ctrl-C: under `output: group` a non-interactive task shows
+    # nothing until it ends, which this one never does on its own.
+    interactive: true
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     cmds:
       - printf '%s argocd · server · https://localhost:%s\n' "{{._ARGO_RUN}}" {{._ARGO_PORT | q}}
       - >-
@@ -139,7 +145,7 @@ tasks:
   server:password:
     desc: "Print the initial admin password"
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     # The secret is deleted once the password has been changed, so its absence
     # is an answer rather than a failure.
     cmds:
@@ -170,7 +176,7 @@ tasks:
           can satisfy, on a server this task then rolls.
       - sh: command -v argocd >/dev/null
         msg: "the argocd CLI is not installed — https://argo-cd.readthedocs.io/en/stable/cli_installation/"
-      - sh: "{{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - sh: "{{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
         msg: "no reachable cluster — this one changes a credential, so it refuses rather than skipping"
     cmds:
       # bcrypt via the argocd CLI rather than a hash written by hand: the
@@ -192,7 +198,7 @@ tasks:
   server:restart:
     desc: "Roll the Argo server deployment"
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     cmds:
       - "{{._ARGO_KUBECTL}} -n {{._ARGO_NS | q}} rollout restart deploy/{{._ARGO_SERVER | q}} >/dev/null"
       - "{{._ARGO_KUBECTL}} -n {{._ARGO_NS | q}} rollout status deploy/{{._ARGO_SERVER | q}} --timeout={{.ROLLOUT_TIMEOUT | default \"2m\" | q}}"
@@ -201,14 +207,17 @@ tasks:
   server:status:
     desc: "Show the Argo pods"
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     cmds:
       - "{{._ARGO_KUBECTL}} -n {{._ARGO_NS | q}} get pods -o wide"
 
   server:logs:
     desc: "Tail the Argo server logs (Ctrl-C to stop)"
+    # Streams until Ctrl-C: under `output: group` a non-interactive task shows
+    # nothing until it ends, which this one never does on its own.
+    interactive: true
     status:
-      - "! {{._ARGO_KUBECTL}} version --request-timeout=3s >/dev/null 2>&1"
+      - "! {{._ARGO_KUBECTL}} version --request-timeout={{._ARGO_PROBE_TIMEOUT | q}} >/dev/null 2>&1"
     cmds:
       - >-
         {{._ARGO_KUBECTL}} -n {{._ARGO_NS | q}} logs -l app.kubernetes.io/name={{._ARGO_LABEL | q}}
