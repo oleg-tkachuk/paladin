@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -29,12 +30,34 @@ type recordingOperation struct {
 	failingOperation
 	newestFirst *bool
 	mine        bool
+	tenant      uuid.UUID
 }
 
 func (r *recordingOperation) ListOperations(_ context.Context, in operationh.ListInput) ([]operationh.Operation, string, error) {
 	r.newestFirst = &in.NewestFirst
 	r.mine = in.Mine
+	r.tenant = in.TenantID
 	return nil, "", nil
+}
+
+// tenant_id reaches the handler as the tenant to list, and none as the
+// caller's own; one that is no id is refused before it.
+func TestListPlatformOperationsOfANamedTenant(t *testing.T) {
+	named := uuid.New()
+	for id, want := range map[string]uuid.UUID{named.String(): named, "": uuid.Nil} {
+		h := &recordingOperation{}
+		if _, err := (&OperationServer{H: h}).ListOperations(context.Background(), &pb.ListOperationsRequest{TenantId: id}); err != nil {
+			t.Fatal(err)
+		}
+		if h.tenant != want {
+			t.Errorf("tenant_id %q reached the handler as %v, want %v", id, h.tenant, want)
+		}
+	}
+	h := &recordingOperation{}
+	_, err := (&OperationServer{H: h}).ListOperations(context.Background(), &pb.ListOperationsRequest{TenantId: "not-an-id"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || h.newestFirst != nil {
+		t.Errorf("err = %v, handler reached = %t; want InvalidArgument before it", err, h.newestFirst != nil)
+	}
 }
 
 // mine reaches the handler, and the initiator reaches the caller.

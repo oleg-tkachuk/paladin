@@ -511,21 +511,6 @@ open deliberately — each notes why._
 
 ## Features
 
-### A tenant's history shows its operations only to its own sessions
-
-- **Status:** Blocked.
-- **Reason:** `ListOperations` lists the operations of the caller's own
-  tenant, so a platform admin reading another tenant's History tab sees its
-  audit trail without the batches its collections ran; the console filters
-  to the tenant on the page, which keeps another tenant's batches out but
-  cannot bring this one's in.
-- **Definition of Done:** `ListOperations` takes a tenant a platform admin
-  may name, as `ListAuditLogRequest.tenant_id` does, with a test for its
-  authorization; the tenant's History reads it, and its test covers a
-  platform admin on another tenant's page.
-- **Blockers:** an `OperationService` contract change, out of scope for the
-  console slice that added the History tab.
-
 ### Public collections on a store without bucket policies
 
 - **Status:** Aspirational

@@ -38,7 +38,8 @@ class PlatformOperationService(Protocol):
     """
     OperationService exposes long-running operations on the admin plane.
     Mirrors the data-plane OperationService. Both list the caller tenant's
-    operations; ListOperationsRequest.mine narrows that to the caller's own.
+    operations; ListOperationsRequest.mine narrows that to the caller's own,
+    and here a platform admin can name another tenant with tenant_id.
     """
     async def get_operation(self, request: GetOperationRequest, ctx: RequestContext[GetOperationRequest, Operation], /) -> Operation:
         """
@@ -143,7 +144,8 @@ class PlatformOperationServiceClient(ConnectClient):
     """
     OperationService exposes long-running operations on the admin plane.
     Mirrors the data-plane OperationService. Both list the caller tenant's
-    operations; ListOperationsRequest.mine narrows that to the caller's own.
+    operations; ListOperationsRequest.mine narrows that to the caller's own,
+    and here a platform admin can name another tenant with tenant_id.
     """
     def __init__(
         self,
@@ -277,7 +279,8 @@ class PlatformOperationServiceSync(Protocol):
     """
     OperationService exposes long-running operations on the admin plane.
     Mirrors the data-plane OperationService. Both list the caller tenant's
-    operations; ListOperationsRequest.mine narrows that to the caller's own.
+    operations; ListOperationsRequest.mine narrows that to the caller's own,
+    and here a platform admin can name another tenant with tenant_id.
     """
     def get_operation(self, request: GetOperationRequest, ctx: RequestContext[GetOperationRequest, Operation], /) -> Operation:
         """
@@ -380,7 +383,8 @@ class PlatformOperationServiceClientSync(ConnectClientSync):
     """
     OperationService exposes long-running operations on the admin plane.
     Mirrors the data-plane OperationService. Both list the caller tenant's
-    operations; ListOperationsRequest.mine narrows that to the caller's own.
+    operations; ListOperationsRequest.mine narrows that to the caller's own,
+    and here a platform admin can name another tenant with tenant_id.
     """
     def __init__(
         self,

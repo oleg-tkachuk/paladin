@@ -15,23 +15,7 @@ To land a deliberate breaking change:
 2. Decide it is worth it. The common case is a field rename that keeps the
    number — gRPC clients survive that, JSON clients do not, and nothing at
    runtime will tell you which you broke.
-3. Note it here, under `## Unreleased — the Python fake holds a capability to its caveats
-
-**Python SDK:** the first release that carries this section.
-
-- **`paladin.testing` under `strict_auth=True` checks a capability its
-  `CapabilityService` issued or delegated as the server does**, as the Go
-  fake already does: the plane its audience names, its request ceiling and
-  its ancestors', and each call's operation and resource. The refusals carry
-  the server's code, `ErrorInfo` reason and message, held to the server's by
-  `sdk/testdata/capability_refusals.json`.
-- **A consumer test may now fail for a real reason.** One that issued a
-  capability for `paladin.AUDIENCE_DATA` (`paladin-data`) rather than
-  `Plane.DATA` (`data`), or that calls outside the caveats it issued, passed
-  before and fails on the cluster; it now fails in the test too. Fix the
-  capability, not the test.
-
-## Unreleased — <title>`, in the commit that makes
+3. Note it here, under `## Unreleased — <title>`, in the commit that makes
    the change. The release renames the heading to the tags that shipped it,
    reading which streams it belongs to from the commit that wrote it
    ([`.github/ci/upgrade-sections.ts`](../.github/ci/upgrade-sections.ts)): a
@@ -98,6 +82,37 @@ here.
 
 
 
+
+## Unreleased — the Python fake holds a capability to its caveats
+
+**Python SDK:** the first release that carries this section.
+
+- **`paladin.testing` under `strict_auth=True` checks a capability its
+  `CapabilityService` issued or delegated as the server does**, as the Go
+  fake already does: the plane its audience names, its request ceiling and
+  its ancestors', and each call's operation and resource. The refusals carry
+  the server's code, `ErrorInfo` reason and message, held to the server's by
+  `sdk/testdata/capability_refusals.json`.
+- **A consumer test may now fail for a real reason.** One that issued a
+  capability for `paladin.AUDIENCE_DATA` (`paladin-data`) rather than
+  `Plane.DATA` (`data`), or that calls outside the caveats it issued, passed
+  before and fails on the cluster; it now fails in the test too. Fix the
+  capability, not the test.
+
+## Unreleased — a platform admin reads another tenant's operations
+
+**Server:** the first release that carries this section. **SDKs:** the first
+release that carries it.
+
+- **`PlatformOperationService.ListOperations` takes `tenant_id`**: the tenant
+  whose operations to list, as `ListAuditLogRequest.tenant_id` names one.
+  Empty is the caller's own, as before. A caller other than a platform admin
+  that names another tenant is refused with `PermissionDenied`.
+- **The console's tenant History** names the tenant, so a platform admin on
+  another tenant's page sees the batches its collections ran, which it did
+  not before.
+
+Additive: no action needed.
 
 ## Unreleased — the Go fake holds a capability to its caveats
 
