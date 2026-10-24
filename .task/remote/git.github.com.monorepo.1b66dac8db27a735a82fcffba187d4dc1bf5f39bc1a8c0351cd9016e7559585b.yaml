@@ -42,6 +42,7 @@ vars:
   # Status markers. The shape carries the meaning, so a line still reads in
   # a monochrome log; the colour sits on top and drops out under NO_COLOR.
   _MONO_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _MONO_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
 
 tasks:
 
@@ -116,6 +117,68 @@ tasks:
     desc: "Run `task deploy` in every component, after checking the registry answers"
     deps: [registry:check]
     cmds: [{ task: each, vars: { TARGET: deploy } }]
+
+  doctor:
+    desc: "Report a top-level var some included components declare and others do not"
+    # `each` runs every component as its own `task` process, so it shares
+    # nothing. A root Taskfile that INCLUDES its components does: their
+    # top-level vars land in one pool, a name one declares is what the others
+    # read — a module's own default never applies — and with two declarations
+    # which one wins is not stable (README, Variable scoping). A name every
+    # component declares is safe; one only some declare is the shape that
+    # bites, so those are reported, with who declares them.
+    #
+    # A warning, not a failure: a name only one component uses harms nothing
+    # until a module in another component reads it, and this cannot see which
+    # names modules read. Only local includes are components — a git include is
+    # a library module — and only unprefixed names: a module declares nothing
+    # else, so a local include of one (TASKLIB pointed at a checkout) declares
+    # no unprefixed name and is skipped.
+    #
+    # yq reads the includes; without it the check is skipped and says so,
+    # rather than this module requiring a tool for one report.
+    cmds:
+      - cmd: |-
+          set -eu
+          root={{.ROOT_TASKFILE | q}}
+          rootdir={{.ROOT_DIR | q}}
+          if ! yq --version >/dev/null 2>&1; then
+            printf '%s monorepo · yq absent — shared top-level vars not checked\n' "{{._MONO_WARN}}"
+            exit 0
+          fi
+          # "<name>\t<component>" for each unprefixed top-level var, one line
+          # per component declaring it; and the list of components.
+          pool=$(mktemp)
+          trap 'rm -f "$pool"' EXIT
+          components=""
+          includes=$(yq -r '.includes // {} | to_entries[] | .key + "\t" + ((.value | select(type == "!!str")) // .value.taskfile // "")' "$root")
+          while IFS="$(printf '\t')" read -r name path; do
+            case "$path" in ""|*"{{"{{"}}"*|*://*|*"?ref="*|git@*) continue ;; esac
+            case "$path" in /*) file=$path ;; *) file=$rootdir/$path ;; esac
+            if [ -d "$file" ]; then
+              file=$(ls "$file"/[Tt]askfile.yml "$file"/[Tt]askfile.yaml "$file"/[Tt]askfile.dist.yml "$file"/[Tt]askfile.dist.yaml 2>/dev/null | head -1 || true)
+            fi
+            [ -n "$file" ] && [ -f "$file" ] || continue
+            declared=$(yq -r '.vars // {} | keys | .[]' "$file")
+            bare=$(printf '%s\n' "$declared" | grep -v '^_' | grep . || true)
+            # Prefixed vars and nothing else: a library module, not a component.
+            if [ -z "$bare" ] && [ -n "$declared" ]; then continue; fi
+            components="$components $name"
+            for var in $bare; do printf '%s\t%s\n' "$var" "$name" >> "$pool"; done
+          done <<< "$includes"
+          set -- $components
+          if [ "$#" -lt 2 ]; then
+            printf '%s monorepo · fewer than two included components — no shared pool\n' "{{._MONO_OK}}"
+            exit 0
+          fi
+          partial=$(awk -F'\t' -v n="$#" '{ by[$1] = by[$1] " " $2; c[$1]++ } END { for (v in c) if (c[v] < n) print v "\t" by[v] }' "$pool" | sort)
+          if [ -z "$partial" ]; then
+            printf '%s monorepo · every top-level var is declared by every component\n' "{{._MONO_OK}}"
+            exit 0
+          fi
+          while IFS="$(printf '\t')" read -r var by; do
+            printf '%s monorepo · %s is declared at the top level of%s only — every other component reads that value; move it into the vars: of the include that reads it\n' "{{._MONO_WARN}}" "$var" "$by"
+          done <<< "$partial"
 
   registry:check:
     desc: "Fail fast when {{._MONO_REG}} is not reachable"
