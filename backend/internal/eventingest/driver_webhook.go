@@ -142,7 +142,7 @@ func (d *WebhookDriver) handler(src Source, deliver func(context.Context, CloudE
 			}
 		}
 
-		ev, err := src.Parse(body, r.Header.Get("Content-Type"))
+		evs, err := src.Parse(body, r.Header.Get("Content-Type"))
 		if err != nil {
 			if errors.Is(err, ErrIgnoredEvent) {
 				// Adapter recognised the shape but chose to skip
@@ -160,7 +160,7 @@ func (d *WebhookDriver) handler(src Source, deliver func(context.Context, CloudE
 			return
 		}
 
-		if err := deliver(r.Context(), ev); err != nil {
+		if err := deliverEach(r.Context(), evs, deliver); err != nil {
 			// 5xx tells the publisher to retry. dedup row already
 			// blocks the duplicate; handler-fail surfaces as a
 			// genuine retry op.

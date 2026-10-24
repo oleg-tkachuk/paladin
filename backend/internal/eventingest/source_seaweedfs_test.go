@@ -14,7 +14,7 @@ func TestSeaweedFSSource_Parse_Create(t *testing.T) {
 		"etag": "abc123",
 		"size": 1024
 	}`)
-	ev, err := src.Parse(body, "application/json")
+	ev, err := parseOne(src, body, "application/json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestSeaweedFSSource_Parse_Create(t *testing.T) {
 func TestSeaweedFSSource_Parse_Delete(t *testing.T) {
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/t/ok/k","event_type":"delete","timestamp_ns":1}`)
-	ev, err := src.Parse(body, "application/json")
+	ev, err := parseOne(src, body, "application/json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestSeaweedFSSource_Parse_Delete(t *testing.T) {
 func TestSeaweedFSSource_Parse_IgnoredEventType(t *testing.T) {
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/t/ok/k","event_type":"checksum","timestamp_ns":1}`)
-	_, err := src.Parse(body, "application/json")
+	_, err := parseOne(src, body, "application/json")
 	if !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("err = %v, want ErrIgnoredEvent", err)
 	}
@@ -69,7 +69,7 @@ func TestSeaweedFSSource_Parse_NonPaladinPath(t *testing.T) {
 	// Path doesn't have the 3-segment Paladin layout — ignored not error.
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/random/file.txt","event_type":"create","timestamp_ns":1}`)
-	_, err := src.Parse(body, "application/json")
+	_, err := parseOne(src, body, "application/json")
 	if !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("err = %v, want ErrIgnoredEvent", err)
 	}
@@ -78,7 +78,7 @@ func TestSeaweedFSSource_Parse_NonPaladinPath(t *testing.T) {
 func TestSeaweedFSSource_Parse_BucketPrefixStripped(t *testing.T) {
 	src := &SeaweedFSSource{BucketName: "paladin-primary", URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/paladin-primary/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/ok/k","event_type":"create","timestamp_ns":1}`)
-	ev, err := src.Parse(body, "application/json")
+	ev, err := parseOne(src, body, "application/json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestSeaweedFSSource_Parse_Update(t *testing.T) {
 	// etag/size for the same PromoteToAvailable transition.
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/t/ok/k","event_type":"update","timestamp_ns":2}`)
-	ev, err := src.Parse(body, "application/json")
+	ev, err := parseOne(src, body, "application/json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestSeaweedFSSource_Parse_BucketsNamespacePrefix(t *testing.T) {
 	// `buckets/` prefix before the bucket-name check so both publishers parse.
 	src := &SeaweedFSSource{BucketName: "paladin-primary", URI: "seaweedfs://primary"}
 	body := []byte(`{"key":"/buckets/paladin-primary/0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/ok/deep/k","event_type":"create","timestamp_ns":1}`)
-	ev, err := src.Parse(body, "application/json")
+	ev, err := parseOne(src, body, "application/json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestSeaweedFSSource_Parse_BucketsNamespacePrefix(t *testing.T) {
 
 func TestSeaweedFSSource_Parse_BadJSON(t *testing.T) {
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
-	_, err := src.Parse([]byte("not json"), "application/json")
+	_, err := parseOne(src, []byte("not json"), "application/json")
 	if !errors.Is(err, ErrUnrecognisedEvent) {
 		t.Errorf("err = %v, want ErrUnrecognisedEvent", err)
 	}

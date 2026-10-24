@@ -82,7 +82,12 @@ type cloudEventEnvelope struct {
 	Data json.RawMessage `json:"data,omitempty"`
 }
 
-func (s *CloudEventsSource) Parse(raw []byte, _ string) (CloudEvent, error) {
+// Parse is the one event of a message: the format carries one.
+func (s *CloudEventsSource) Parse(raw []byte, _ string) ([]CloudEvent, error) {
+	return single(s.parseEvent(raw))
+}
+
+func (s *CloudEventsSource) parseEvent(raw []byte) (CloudEvent, error) {
 	var env cloudEventEnvelope
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return CloudEvent{}, fmt.Errorf("%w: cloudevents json: %w", ErrUnrecognisedEvent, err)

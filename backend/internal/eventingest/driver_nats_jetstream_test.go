@@ -32,8 +32,8 @@ type fakeSource struct {
 }
 
 func (f fakeSource) Name() string { return "fake" }
-func (f fakeSource) Parse(raw []byte, ct string) (CloudEvent, error) {
-	return f.parse(raw, ct)
+func (f fakeSource) Parse(raw []byte, ct string) ([]CloudEvent, error) {
+	return single(f.parse(raw, ct))
 }
 
 // startJetStreamServer boots an in-process nats-server with JetStream on a

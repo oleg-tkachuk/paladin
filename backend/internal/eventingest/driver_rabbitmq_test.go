@@ -58,8 +58,8 @@ func (r *recordingAck) Reject(_ uint64, requeue bool) error {
 type sourceFunc func(raw []byte, contentType string) (CloudEvent, error)
 
 func (f sourceFunc) Name() string { return "test-source" }
-func (f sourceFunc) Parse(raw []byte, ct string) (CloudEvent, error) {
-	return f(raw, ct)
+func (f sourceFunc) Parse(raw []byte, ct string) ([]CloudEvent, error) {
+	return single(f(raw, ct))
 }
 
 func TestRabbitMQDriver_AcknowledgementContract(t *testing.T) {

@@ -57,7 +57,12 @@ type seaweedFSWebhookPayload struct {
 	Collection string `json:"collection,omitempty"`
 }
 
-func (s *SeaweedFSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
+// Parse is the one event of a message: the format carries one.
+func (s *SeaweedFSSource) Parse(raw []byte, _ string) ([]CloudEvent, error) {
+	return single(s.parseEvent(raw))
+}
+
+func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 	var p seaweedFSWebhookPayload
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return CloudEvent{}, fmt.Errorf("%w: seaweedfs json: %w", ErrUnrecognisedEvent, err)

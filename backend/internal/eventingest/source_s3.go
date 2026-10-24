@@ -39,8 +39,9 @@ import (
 //	  }]
 //	}
 //
-// One CloudEvent is emitted per envelope (the first Records entry — see the
-// batching note in Parse). The object key is bucket-RELATIVE (the bucket is
+// One CloudEvent is emitted per Records entry: a publisher may batch several
+// into one notification, and DeleteObjects reports every key it removed under
+// one request id. The object key is bucket-RELATIVE (the bucket is
 // carried separately in `s3.bucket.name`), so — unlike SeaweedFS' filer path
 // — there is no bucket segment to strip; the key already starts at the Paladin
 // 3-segment layout.
@@ -79,7 +80,7 @@ func (s *S3EventSource) Name() string {
 // listed; extra keys (userIdentity, requestParameters, glacierEventData, …)
 // are tolerated so a publisher-side addition doesn't break ingest.
 type s3Envelope struct {
-	Records []s3Record `json:"Records"`
+	Records []json.RawMessage `json:"Records"`
 }
 
 type s3Record struct {
@@ -107,36 +108,49 @@ type s3Object struct {
 	VersionID string `json:"versionId,omitempty"`
 }
 
-func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
+// Parse is one CloudEvent per record of the notification, in order, each
+// carrying its own record as Data. A record for another bucket, of an event
+// Paladin does not act on, or outside the Paladin layout is skipped;
+// ErrIgnoredEvent means every record was.
+func (s *S3EventSource) Parse(raw []byte, _ string) ([]CloudEvent, error) {
 	var env s3Envelope
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return CloudEvent{}, fmt.Errorf("%w: s3 json: %w", ErrUnrecognisedEvent, err)
+		return nil, fmt.Errorf("%w: s3 json: %w", ErrUnrecognisedEvent, err)
 	}
 	if len(env.Records) == 0 {
-		return CloudEvent{}, ErrUnrecognisedEvent
+		return nil, ErrUnrecognisedEvent
 	}
+	evs := make([]CloudEvent, 0, len(env.Records))
+	for i, rec := range env.Records {
+		var r s3Record
+		if err := json.Unmarshal(rec, &r); err != nil {
+			return nil, fmt.Errorf("%w: s3 record %d: %w", ErrUnrecognisedEvent, i, err)
+		}
+		if ev, ok := s.event(r, rec); ok {
+			evs = append(evs, ev)
+		}
+	}
+	if len(evs) == 0 {
+		return nil, ErrIgnoredEvent
+	}
+	return evs, nil
+}
 
-	// One envelope, one record in the typical case. If a publisher batches
-	// multiple records we take the first; the rest are still in `Data` for a
-	// handler that wants fan-out. A batched Parse emitting one CloudEvent per
-	// record is in BACKLOG.md.
-	r := env.Records[0]
-
+// event is the CloudEvent of one record, or false when Paladin does not act on
+// it: a record for a different bucket, an event type outside the taxonomy, or
+// a non-Paladin object dropped in the same bucket — ignored so it does not
+// fill the dedup table with junk.
+func (s *S3EventSource) event(r s3Record, raw json.RawMessage) (CloudEvent, bool) {
 	if s.BucketName != "" && r.S3.Bucket.Name != s.BucketName {
-		// Event is for a different bucket — not ours, skip silently.
-		return CloudEvent{}, ErrIgnoredEvent
+		return CloudEvent{}, false
 	}
-
 	evType, ok := s3EventType(r.EventName)
 	if !ok {
-		return CloudEvent{}, ErrIgnoredEvent
+		return CloudEvent{}, false
 	}
-
 	subj, ok := parseStoragePath(r.S3.Object.Key)
 	if !ok {
-		// Not the Paladin layout — a non-Paladin object dropped in the same bucket.
-		// Ignore so we don't fill the dedup table with junk.
-		return CloudEvent{}, ErrIgnoredEvent
+		return CloudEvent{}, false
 	}
 	subj.Etag = r.S3.Object.ETag
 	subj.SizeBytes = r.S3.Object.Size
@@ -160,7 +174,7 @@ func (s *S3EventSource) Parse(raw []byte, _ string) (CloudEvent, error) {
 		),
 		Data:          raw,
 		SubjectFields: subj,
-	}, nil
+	}, true
 }
 
 // s3EventType maps S3 eventName strings to the Paladin taxonomy. All "created"
@@ -205,15 +219,17 @@ func parseStoragePath(key string) (SubjectFields, bool) {
 	}, true
 }
 
-// s3ID prefers the broker-issued x-amz-request-id (AWS + MinIO both set it, and
-// a retry from the same notifier reuses it). Falls back to a content hash of
-// (key, eventName, sequencer) so a missing request-id still dedups across
+// s3IDLength is how many hex digits of the hash name an event.
+const s3IDLength = 32
+
+// s3ID names one record: a hash of the broker-issued x-amz-request-id (AWS and
+// MinIO both set it, and a retry from the same notifier reuses it) with the
+// object key, event name and sequencer. The request id alone is not enough:
+// a DeleteObjects call reports every key it removed under one, and those
+// records would dedup as one. Without a request id the rest still dedups
 // replays of the same physical event.
 func s3ID(r s3Record) string {
-	if id := r.ResponseElements["x-amz-request-id"]; id != "" {
-		return id
-	}
 	h := sha256.New()
-	fmt.Fprintf(h, "s3|%s|%s|%s", r.S3.Object.Key, r.EventName, r.S3.Object.Sequencer)
-	return hex.EncodeToString(h.Sum(nil))[:32]
+	fmt.Fprintf(h, "s3|%s|%s|%s|%s", r.ResponseElements["x-amz-request-id"], r.S3.Object.Key, r.EventName, r.S3.Object.Sequencer)
+	return hex.EncodeToString(h.Sum(nil))[:s3IDLength]
 }

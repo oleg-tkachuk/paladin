@@ -204,11 +204,14 @@ S3-compatible store that speaks bucket notifications.
   (AWS), other bytes → `%XX`. The parser uses `url.QueryUnescape`, which
   handles all of it (`+`/`%20` → space, `%2F` → `/`, `%2B` → literal `+`), so
   both AWS-literal-slash and MinIO-encoded-slash keys parse identically.
-- **Dedup id:** prefers `responseElements["x-amz-request-id"]` (AWS + MinIO
-  both set it, reused on retry); falls back to a hash of
-  `(key, eventName, sequencer)`.
-- **Batching:** one CloudEvent per envelope (first `Records` entry); the rest
-  stay in `Data` and are not acted on.
+- **Dedup id:** a hash of `responseElements["x-amz-request-id"]` (AWS + MinIO
+  both set it, reused on retry) with `(key, eventName, sequencer)`. The
+  request id alone would collapse the records of one `DeleteObjects` call,
+  which share it.
+- **Batching:** one CloudEvent per `Records` entry, each with its own record
+  as `Data`; records Paladin does not act on are skipped. The message is
+  acked only when every event was handled, and its redelivery skips the ones
+  already claimed.
 
 ### MinIO config recipe
 
@@ -319,4 +322,6 @@ message-id where available, else a deterministic content hash. Ignored events
 
 **`Nats-Msg-Id` override.** When a NATS message carries `Nats-Msg-Id`, the
 driver uses it as the CloudEvent `ID`, preserving dedup across upstream
-re-publish.
+re-publish. A message of several events keeps each event's own id after it
+(`<msg-id>/<event-id>`), so they do not dedup as one; RabbitMQ's
+`message-id` is handled the same way.

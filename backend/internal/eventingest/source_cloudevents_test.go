@@ -20,7 +20,7 @@ func TestCloudEventsSource_Parse_Canonical(t *testing.T) {
 		"paladinsequencer": "001",
 		"data": {"foo": "bar"}
 	}`)
-	ev, err := src.Parse(body, "application/json")
+	ev, err := parseOne(src, body, "application/json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestCloudEventsSource_Parse_BareTripleSubject(t *testing.T) {
 		"id": "evt-1",
 		"subject": "0d4f8a3c-3b1e-4a3a-bbbb-cccccccccccc/contracts/2026/q1.pdf"
 	}`)
-	ev, err := src.Parse(body, "")
+	ev, err := parseOne(src, body, "")
 	if err != nil {
 		t.Fatalf("Parse bare: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestCloudEventsSource_Parse_DeleteEvent(t *testing.T) {
 		"id": "evt-1",
 		"subject": "t/ok/k"
 	}`)
-	ev, err := src.Parse(body, "")
+	ev, err := parseOne(src, body, "")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestCloudEventsSource_Parse_UnknownTypeIgnored(t *testing.T) {
 		"id": "evt-1",
 		"subject": "t/ok/k"
 	}`)
-	if _, err := src.Parse(body, ""); !errors.Is(err, ErrIgnoredEvent) {
+	if _, err := parseOne(src, body, ""); !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("non-Paladin type should be ignored, got %v", err)
 	}
 }
@@ -127,7 +127,7 @@ func TestCloudEventsSource_Parse_MissingRequiredAttribute(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		_, err := src.Parse([]byte(c.body), "")
+		_, err := parseOne(src, []byte(c.body), "")
 		if !errors.Is(err, ErrUnrecognisedEvent) {
 			t.Errorf("%s: err = %v, want ErrUnrecognisedEvent", c.name, err)
 		}
@@ -143,14 +143,14 @@ func TestCloudEventsSource_Parse_EmptySubjectIgnored(t *testing.T) {
 		"id": "evt-1",
 		"subject": ""
 	}`)
-	if _, err := src.Parse(body, ""); !errors.Is(err, ErrIgnoredEvent) {
+	if _, err := parseOne(src, body, ""); !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("empty subject should be ignored, got %v", err)
 	}
 }
 
 func TestCloudEventsSource_Parse_BadJSON(t *testing.T) {
 	src := &CloudEventsSource{URI: "cloudevents://primary"}
-	if _, err := src.Parse([]byte("not json"), ""); !errors.Is(err, ErrUnrecognisedEvent) {
+	if _, err := parseOne(src, []byte("not json"), ""); !errors.Is(err, ErrUnrecognisedEvent) {
 		t.Errorf("err = %v, want ErrUnrecognisedEvent", err)
 	}
 }

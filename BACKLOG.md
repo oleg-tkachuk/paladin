@@ -555,17 +555,6 @@ open deliberately — each notes why._
 - **Blockers:** an `OperationService` contract change, out of scope for the
   console slice that added the History tab.
 
-### Ingest acts on the first record of a batched S3 notification only
-
-- **Status:** Deferred.
-- **Reason:** an S3-shaped notification can carry several `Records`;
-  `eventingest/source_s3.go` turns the first into the CloudEvent and leaves the
-  rest in `Data`, where nothing reads them.
-- **Definition of Done:** `Source` parses one CloudEvent per record, each
-  deduplicated and handled on its own, with a test feeding a multi-record
-  notification; `docs/storage-ingest.md` stops saying the rest are not acted on.
-- **Blockers:** none.
-
 ### Public collections on a store without bucket policies
 
 - **Status:** Aspirational
