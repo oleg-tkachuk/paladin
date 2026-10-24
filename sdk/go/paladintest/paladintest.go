@@ -79,6 +79,9 @@ const (
 	PartSize = 5 << 20
 	// DefaultPageSize is the page ListObjects answers when asked for none.
 	DefaultPageSize = 100
+	// ServerVersion is the release the fake names on every response, in
+	// paladin.HeaderServerVersion, as the server names its own.
+	ServerVersion = "paladintest"
 	// storagePath is where the presigned URLs point, on the same server.
 	storagePath = "/storage/"
 	etagQuote   = `"`
@@ -528,7 +531,10 @@ func Start(opts ...Option) (*Server, func()) {
 
 	mux.Handle(storagePath, http.HandlerFunc(s.storage))
 	mux.Handle(publicPath, http.HandlerFunc(s.servePublic))
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(paladin.HeaderServerVersion, ServerVersion)
+		mux.ServeHTTP(w, r)
+	}))
 	s.URL = srv.URL
 	return s, srv.Close
 }
