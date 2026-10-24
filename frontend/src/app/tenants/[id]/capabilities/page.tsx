@@ -14,7 +14,6 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { ConnectError, Code } from "@connectrpc/connect";
 
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/button";
@@ -55,7 +54,10 @@ import {
 import { requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { capabilityClient } from "@/lib/connect/client";
-import { notFoundIsAnswer } from "@/lib/connect/expected";
+import {
+  type CapabilityUsage,
+  fetchCapabilityUsage,
+} from "@/lib/queries/details";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -65,20 +67,13 @@ import {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
-import type { Money } from "@/gen/google/type/money_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
-// Per-capability usage snapshot keyed by capability id; "never" ⇒ the
-// capability has no usage row yet (GetUsage NotFound).
-type UsageSnap = {
-  requestCount: bigint;
-  // Absent on a usage row that has spent nothing in any unit.
-  spent: Money | undefined;
-};
-type UsageMap = Map<string, UsageSnap | "never">;
+// Per-capability usage keyed by capability id.
+type UsageMap = Map<string, CapabilityUsage>;
 const EMPTY_USAGE: UsageMap = new Map();
 
 // Optional columns appear by the width of the table's card, not the viewport:
@@ -181,31 +176,18 @@ export default function CapabilitiesPage() {
         const entries = await Promise.all(
           capabilities.map(async (c) => {
             try {
-              const u = await capabilityClient.getUsage(
-                { id: c.id },
-                notFoundIsAnswer({ signal }),
-              );
-              return [
-                c.id,
-                {
-                  requestCount: u.requestCount,
-                  spent: u.spent,
-                },
-              ] as const;
+              return [c.id, await fetchCapabilityUsage(c.id, signal)] as const;
             } catch (err) {
               // An aborted query is not a failure the operator needs to see:
               // TanStack cancels in-flight reads on unmount and on supersede.
               if (isAbortError(err)) throw err;
-              if (err instanceof ConnectError && err.code === Code.NotFound) {
-                return [c.id, "never" as const] as const;
-              }
               return null;
             }
           }),
         );
         const usage: UsageMap = new Map(
           entries.filter(
-            (e): e is readonly [string, UsageSnap | "never"] => e !== null,
+            (e): e is readonly [string, CapabilityUsage] => e !== null,
           ),
         );
         return { items: capabilities, usage, next: page.nextPageToken };

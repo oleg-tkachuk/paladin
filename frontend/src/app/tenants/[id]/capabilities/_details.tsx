@@ -8,7 +8,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
-import type { Money } from "@/gen/google/type/money_pb";
+import type { CapabilityUsage } from "@/lib/queries/details";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
 import { copyLimit, requestLimit } from "./_ceilings";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
@@ -18,8 +18,9 @@ import { Timestamp } from "@/components/Timestamp";
 import { CopyableId } from "@/components/ui/CopyableId";
 import { ActorName } from "@/components/features/audit/ActorName";
 
-type UsageEntry =
-  { requestCount: bigint; spent: Money | undefined } | "never" | undefined;
+// UsageEntry is the capability's usage: undefined while loading,
+// "unavailable" when the read failed.
+export type UsageEntry = CapabilityUsage | "unavailable" | undefined;
 
 // RecordEntry is the capability's record as read by CapabilityService.Get:
 // undefined while loading, "unavailable" when the read failed.
@@ -208,9 +209,11 @@ export function DetailsBody({
           value={
             usageEntry === undefined
               ? "loading…"
-              : usageEntry === "never"
-                ? "never used"
-                : usageEntry.requestCount.toString()
+              : usageEntry === "unavailable"
+                ? "unavailable"
+                : usageEntry === "never"
+                  ? "never used"
+                  : usageEntry.requestCount.toString()
           }
           mono
         />
@@ -225,15 +228,17 @@ export function DetailsBody({
           value={
             usageEntry === undefined
               ? "loading…"
-              : usageEntry === "never"
-                ? formatMoney(undefined, {
-                    fallbackUnit: unit,
-                    fractionDigits: SPEND_DIGITS,
-                  })
-                : formatMoney(usageEntry.spent, {
-                    fallbackUnit: unit,
-                    fractionDigits: SPEND_DIGITS,
-                  })
+              : usageEntry === "unavailable"
+                ? "unavailable"
+                : usageEntry === "never"
+                  ? formatMoney(undefined, {
+                      fallbackUnit: unit,
+                      fractionDigits: SPEND_DIGITS,
+                    })
+                  : formatMoney(usageEntry.spent, {
+                      fallbackUnit: unit,
+                      fractionDigits: SPEND_DIGITS,
+                    })
           }
           mono
         />

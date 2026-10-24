@@ -5,10 +5,11 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 const h = vi.hoisted(() => ({
   revoke: vi.fn(),
+  get: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
-  capabilityClient: { revoke: h.revoke },
+  capabilityClient: { revoke: h.revoke, get: h.get },
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -18,6 +19,8 @@ import {
   CapabilityDisposition,
   type Capability,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { useQuery } from "@tanstack/react-query";
+import { capabilityDetailQuery } from "@/lib/queries/details";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
 
 const CAP = { id: "0f6c1d2e-0000-4000-8000-000000000001" } as Capability;
@@ -142,5 +145,30 @@ describe("RevokeCapabilityDialog", () => {
         expect.objectContaining({ type: "success", title: "Revoked" }),
       ),
     );
+  });
+
+  // The panel beside the dialog showed the capability as active after the
+  // revoke: nothing read its record again.
+  it("reads the capability's record again once revoked", async () => {
+    h.get.mockResolvedValue({ capability: CAP });
+    function Record() {
+      const q = useQuery(capabilityDetailQuery(CAP.id));
+      return <span>{q.isSuccess ? "read" : "reading"}</span>;
+    }
+    render(
+      <>
+        <Record />
+        <RevokeCapabilityDialog
+          cap={CAP}
+          onClose={vi.fn()}
+          onRevoked={vi.fn()}
+        />
+      </>,
+    );
+    await screen.findByText("read");
+    expect(h.get).toHaveBeenCalledTimes(1);
+    await typeToConfirm("revoke");
+    await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(h.get).toHaveBeenCalledTimes(2));
   });
 });

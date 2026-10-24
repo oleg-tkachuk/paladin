@@ -2,15 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 const h = vi.hoisted(() => ({
   get: vi.fn(),
+  getUsage: vi.fn(),
   getToken: vi.fn(),
   revoke: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
-  capabilityClient: { get: h.get },
+  capabilityClient: { get: h.get, getUsage: h.getUsage },
   apiTokenClient: { get: h.getToken },
 }));
 vi.mock("@/lib/utils", async (orig) => ({
@@ -57,6 +59,7 @@ function open() {
 describe("CapabilityDetailsPanel", () => {
   beforeEach(() => {
     h.get.mockReset();
+    h.getUsage.mockReset();
   });
 
   it("reads the record for its issuer and revocation", async () => {
@@ -220,6 +223,57 @@ describe("CapabilityDetailsPanel", () => {
       expect(
         await screen.findByText(/No capability cap-1 is on record/),
       ).toBeInTheDocument();
+    });
+  });
+
+  // The page reads usage for the rows of its list alone, which by default
+  // holds active capabilities: a revoked or expired one opened by its link
+  // had none, and its usage read "loading…" for good.
+  describe("usage the page did not read", () => {
+    const openUnlisted = () =>
+      render(
+        <CapabilityDetailsPanel
+          id={CAP.id}
+          cap={CAP}
+          usageEntry={undefined}
+          onClose={vi.fn()}
+          onRevoke={h.revoke}
+        />,
+      );
+    const value = (label: string) =>
+      screen.getByText(label).nextElementSibling?.textContent;
+
+    beforeEach(() => {
+      h.get.mockResolvedValue({ capability: CAP });
+    });
+
+    it("is read by the panel", async () => {
+      h.getUsage.mockResolvedValue({ requestCount: 3n, spent: undefined });
+      openUnlisted();
+      await waitFor(() => expect(value("Requests used")).toBe("3"));
+      expect(h.getUsage).toHaveBeenCalledWith(
+        { id: CAP.id },
+        expect.anything(),
+      );
+    });
+
+    it("says never used when the capability has no usage row", async () => {
+      h.getUsage.mockRejectedValue(new ConnectError("no usage", Code.NotFound));
+      openUnlisted();
+      await waitFor(() => expect(value("Requests used")).toBe("never used"));
+    });
+
+    it("says unavailable when the read fails", async () => {
+      h.getUsage.mockRejectedValue(new Error("boom"));
+      openUnlisted();
+      await waitFor(() => expect(value("Requests used")).toBe("unavailable"));
+      expect(value("Spent")).toBe("unavailable");
+    });
+
+    it("is not read again when the page has it", async () => {
+      open();
+      await screen.findByText("Requests used");
+      expect(h.getUsage).not.toHaveBeenCalled();
     });
   });
 
