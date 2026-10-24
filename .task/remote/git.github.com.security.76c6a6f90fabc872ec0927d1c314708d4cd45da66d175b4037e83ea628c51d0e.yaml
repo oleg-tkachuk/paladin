@@ -212,7 +212,7 @@ tasks:
 
   # The single place the Go scans decide whether there is anything to scan.
   # A directory with no go.mod is skipped and says so — the repository is not
-  # a Go one, or not one here, and failing would make `all` unusable for every
+  # a Go one, or not one here, and failing would make `scan` unusable for every
   # consumer that ships another language. The skip is printed rather than done
   # through `status:`, which is silent: a GO_MODULES typo must be visible.
   # No `dir:`: Task creates a dir that is not there, so a typo in GO_MODULES
@@ -234,8 +234,6 @@ tasks:
           printf '%s sec · %s · %s\n' "{{._SEC_RUN}}" {{.LABEL | q}} {{.MODULE | q}}
           {{.CMD}}
 
-
-  # ═══ Go static analysis ═════════════════════════════════════════════════════
 
   dockerfile:
     desc: "hadolint over the Dockerfiles this repository ships"
@@ -271,6 +269,8 @@ tasks:
           printf '%s sec · hadolint · %s\n' "{{._SEC_RUN}}" {{.ITEM | q}}
           hadolint {{._SEC_HADOLINT_FLAGS}} {{.ITEM | q}}
           printf '%s sec · hadolint · %s clean\n' "{{._SEC_OK}}" {{.ITEM | q}}
+
+  # ═══ Go static analysis ═════════════════════════════════════════════════════
 
   gosec:
     desc: "gosec — insecure patterns the compiler is happy with"

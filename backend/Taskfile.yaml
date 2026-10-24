@@ -14,7 +14,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v12.0.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v12.1.0'
   PROJECT_NAME: paladin-core
   K8S_NAMESPACE: paladin
   # GLOBAL_REGISTRY, IMAGE_NAMESPACE and K8S_CONTEXT are deliberately NOT

@@ -19,6 +19,7 @@ version: "3"
 #   PY_SRC          source directories, space-separated   (default src)
 #   PY_TEST_FLAGS   default "-q"
 #   UV_SYNC_FLAGS   which dependency sets to install   (default "--group dev";
+#                   an extras-based project passes "--extra dev --extra ...")
 #
 # The three tools each task runs are inputs, not assumptions. ruff, pytest and
 # mypy are the defaults because they are what most projects reach for; a project
@@ -30,7 +31,6 @@ version: "3"
 #   FORMAT_CMD      default "ruff format"
 #   TYPECHECK_CMD   default mypy
 #   TYPECHECK_MODULE  what typecheck probes for before running (default mypy)
-#                   an extras-based project passes "--extra dev --extra ...")
 #
 # uv resolves and installs from the lockfile by default, which is the
 # reproducible path — `uv sync` on an unchanged lock is a no-op measured in

@@ -208,6 +208,12 @@ tasks:
           set -eu
           ns={{._K8S_NS | q}}
           sel=$({{._K8S_KUBECTL}} -n "$ns" get deploy/{{._K8S_DEPLOY | q}} -o go-template='{{"{{"}}range $k,$v := .spec.selector.matchLabels{{"}}"}}{{"{{"}}$k{{"}}"}}={{"{{"}}$v{{"}}"}},{{"{{"}}end{{"}}"}}' | sed 's/,$//')
+          # A selector of matchExpressions alone leaves nothing here, and an
+          # empty -l lists every pod in the namespace as if it were this one's.
+          if [ -z "$sel" ]; then
+            printf '%s %s · k8s · deploy/%s selects by matchExpressions only — pods not listed\n' "{{._K8S_SKIP}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}}
+            exit 0
+          fi
           {{._K8S_KUBECTL}} -n "$ns" get pods -l "$sel" -o wide
 
   port-forward:
