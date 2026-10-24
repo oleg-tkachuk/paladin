@@ -34,9 +34,14 @@ type Option func(*Server)
 //   - a name or parent in another tenant: PermissionDenied; an upload of
 //     another tenant: PermissionDenied.
 //
-// The fake checks only that: it verifies no signature, no Biscuit, no
-// caveat, scope, audience or expiry, and it has no platform admin who acts
-// in another tenant. Credentials are checked before FailRPC's failures.
+// A capability CapabilityService issued or delegated is held to its caveats
+// as well, with the server's reasons (caveats.go): an audience that does not
+// name the plane, a request past its ceiling or an ancestor's, and an
+// operation or resource outside its caveats.
+//
+// The fake checks only that: it verifies no signature, no Biscuit, scope or
+// expiry, no budget, and it has no platform admin who acts in another tenant.
+// Credentials are checked before FailRPC's failures.
 func WithStrictAuth() Option {
 	return func(s *Server) { s.strictAuth = true }
 }
@@ -140,11 +145,30 @@ func (s *Server) Revoke(token string) {
 }
 
 // authenticate is the server's answer to a call's credentials under
-// WithStrictAuth, nil when it lets the call through.
-func (s *Server) authenticate(header http.Header, msg proto.Message) error {
+// WithStrictAuth, nil when it lets the call through. A capability
+// CapabilityService issued is held, as the server's verifier holds it, to
+// the plane its audience names before its revocation, and its request
+// ceilings are counted once it is verified.
+func (s *Server) authenticate(procedure string, header http.Header, msg proto.Message) error {
+	s.mu.Lock()
+	rec := s.presentedLocked(header)
+	s.mu.Unlock()
+	if plane, ok := planeOf(procedure); ok && rec != nil {
+		if err := audienceRefusal(rec.msg.GetAudience(), plane); err != nil {
+			return err
+		}
+	}
 	tenant, err := s.principalTenant(header)
 	if err != nil {
 		return err
+	}
+	if rec != nil {
+		s.mu.Lock()
+		err := s.bumpRequestsLocked(rec)
+		s.mu.Unlock()
+		if err != nil {
+			return err
+		}
 	}
 	return s.authorizeTenant(tenant, msg)
 }

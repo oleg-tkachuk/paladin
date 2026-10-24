@@ -83,6 +83,24 @@ here.
 
 
 
+## Unreleased — the Go fake holds a capability to its caveats
+
+**Go SDK:** the first release that carries this section.
+
+- **`paladintest` under `WithStrictAuth` checks a capability its
+  `CapabilityService` issued or delegated as the server does**: the plane its
+  audience names, its request ceiling and its ancestors', and each call's
+  operation and resource. The refusals carry the server's code, `ErrorInfo`
+  reason and message, and a backend test holds the fake to them.
+- **A consumer test may now fail for a real reason.** One that issued a
+  capability for a bearer audience (`paladin.AudienceData`, `paladin-data`)
+  rather than a plane's label (`paladin.PlaneNames(paladin.PlaneData)`), or
+  that calls outside the caveats it issued, passed before and fails on the
+  cluster; it now fails in the test too. Fix the capability, not the test.
+- A capability from `IssueCapability(tenant)` carries no caveats and is
+  checked as before. The budget is not counted, as the server counts none
+  unless a price per request is set.
+
 ## Unreleased — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
 
 **Server:** the first release that carries this section.
