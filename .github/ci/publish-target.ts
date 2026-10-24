@@ -6,7 +6,8 @@
 //
 //   release  the version is the tag's, without its leading v
 //   dev      the version is a prerelease of the next patch, <x.y.z>-dev.<…>,
-//            which sorts after the last release and before the next
+//            or of the candidate it follows, <x.y.z>-rc.<n>.dev.<…>: either
+//            sorts after the last tag and before the next
 //
 // A dev publish that derived a release version — a run that raced a tag —
 // would push a release without the release run that announces it, so it is

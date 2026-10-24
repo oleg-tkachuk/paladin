@@ -5,8 +5,8 @@ name: Release
 # A product release is a tag, both components published to GHCR at that tag
 # (a multi-arch image and a Helm chart each), and the GitHub release that
 # announces them. A commit that passed CI and cut no tag is published too, as a
-# dev build at the version the library derives for it, <next patch>-dev.<…>:
-# the dev cluster follows those, so it runs every change as it lands. A dev
+# dev build at the version the library derives for it, <next patch>-dev.<…>,
+# or <x.y.z>-rc.<n>.dev.<…> after a release candidate: the dev cluster follows those, so it runs every change as it lands. A dev
 # build is not announced and moves no floating tag. Each SDK releases too, as a
 # tag of its own (sdk/go/v*, sdk/python/v*), when a commit touched it. The announcement comes last and only when every component
 # published: a release whose charts are missing is not announced. Nothing is

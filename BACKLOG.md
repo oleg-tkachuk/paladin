@@ -56,22 +56,6 @@ the same commit. Treat this file like a runtime invariant.
   the API carries them.
 - **Blockers:** none.
 
-### A dev build after a release candidate outranks the release
-
-- **Status:** Blocked.
-- **Reason:** the task library's `release:version` bases an untagged build
-  on the newest version tag one patch up, a pre-release tag's included, so
-  after `v39.3.0-rc.1` every dev build is `39.3.1-dev.…`, which SemVer orders
-  above the `39.3.0` it precedes. `VERSION_TAG_EXCLUDE` cannot leave the
-  candidate out: the same exclusion drops it from the exact-match that
-  publishes the candidate itself.
-- **Definition of Done:** a dev build after a candidate of X.Y.Z sorts after
-  that candidate and before X.Y.Z, still carrying `-dev.` (which
-  `.github/ci/lib/versions.ts` recognises a dev build by), and the release
-  of X.Y.Z outranks every dev build before it; tests in the library.
-- **Blockers:** a change to the task library (oleg-tkachuk/taskfiles,
-  `release` module) and a `TASKLIB` bump here.
-
 ---
 ## SDKs
 
