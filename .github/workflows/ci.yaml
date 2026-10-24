@@ -274,6 +274,16 @@ jobs:
           GROUP: ${{ matrix.group }}
         run: task --yes -t Taskfile.dev.yaml "verify-${GROUP}"
 
+      # A release-cutting commit of the pull request whose proto change is a
+      # comment alone would cut an SDK release with nothing in it; the comment
+      # is docs(proto), committed apart. See .github/ci/proto-comments.ts.
+      - name: Refuse a release cut for a proto comment
+        if: matrix.group == 'repo' && github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: node .github/ci/proto-comments.ts
+
       - name: Save the Go caches
         if: >-
           success() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
