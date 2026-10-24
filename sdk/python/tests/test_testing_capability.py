@@ -47,7 +47,9 @@ def _issue_request(fake: FakePaladin, *ops: str) -> pb.CapabilityServiceIssueReq
         subject=pb.CapabilityPrincipal(
             kind=pb.PRINCIPAL_KIND_AGENT, tenant_id=fake.tenant, subject="agent:worker"
         ),
-        audience=[paladin.AUDIENCE_DATA],
+        # The planes' labels: a bearer audience is refused, as the server
+        # refuses it; admin for Delegate.
+        audience=[str(paladin.Plane.DATA), str(paladin.Plane.ADMIN)],
         caveats=pb.CapabilityCaveats(
             ops=list(ops), unlimited_requests=True, unlimited_budget=admin_types.UnlimitedBudget()
         ),
@@ -222,7 +224,11 @@ EXPIRING_TTL_SECONDS = 1
 """The lifetime of the capability the listing test waits out, so it lists one
 expired."""
 _AGENT, _USER = pb.PRINCIPAL_KIND_AGENT, pb.PRINCIPAL_KIND_USER
-_ALL = [pb.CAPABILITY_DISPOSITION_ACTIVE, pb.CAPABILITY_DISPOSITION_EXPIRED, pb.CAPABILITY_DISPOSITION_REVOKED]
+_ALL = [
+    pb.CAPABILITY_DISPOSITION_ACTIVE,
+    pb.CAPABILITY_DISPOSITION_EXPIRED,
+    pb.CAPABILITY_DISPOSITION_REVOKED,
+]
 _A, _E, _R = _ALL
 
 
@@ -256,7 +262,9 @@ def _list_all(fake: FakePaladin, **fields) -> list[tuple[int, str, int]]:  # typ
     admin = fake.connect().admin.capability
     out, token = [], ""
     while True:
-        resp = admin.list(pb.CapabilityServiceListRequest(tenant_id=fake.tenant, page_token=token, **fields))
+        resp = admin.list(
+            pb.CapabilityServiceListRequest(tenant_id=fake.tenant, page_token=token, **fields)
+        )
         out += [(c.subject.kind, c.subject.subject, c.disposition) for c in resp.capabilities]
         token = resp.next_page_token
         if not token:
@@ -299,11 +307,15 @@ def test_list_as_the_server_does(listed: FakePaladin, fields, want) -> None:  # 
     assert _list_all(listed, **fields) == want
 
 
-@pytest.mark.parametrize("order", [SORT_ORDER_ASC, SORT_ORDER_DESC], ids=["ascending", "descending"])
+@pytest.mark.parametrize(
+    "order", [SORT_ORDER_ASC, SORT_ORDER_DESC], ids=["ascending", "descending"]
+)
 def test_list_refuses_a_token_of_the_other_order(listed: FakePaladin, order: int) -> None:
     admin = listed.connect().admin.capability
     first = admin.list(
-        pb.CapabilityServiceListRequest(tenant_id=listed.tenant, dispositions=_ALL, page_size=1, sort_order=order)
+        pb.CapabilityServiceListRequest(
+            tenant_id=listed.tenant, dispositions=_ALL, page_size=1, sort_order=order
+        )
     )
     other = SORT_ORDER_DESC if order == SORT_ORDER_ASC else SORT_ORDER_ASC
     again = pb.CapabilityServiceListRequest(
@@ -321,9 +333,13 @@ def test_list_refuses_a_token_of_the_other_order(listed: FakePaladin, order: int
 )
 def test_list_refuses_a_token_of_other_filters(listed: FakePaladin, other) -> None:  # type: ignore[no-untyped-def]
     admin = listed.connect().admin.capability
-    first = admin.list(pb.CapabilityServiceListRequest(tenant_id=listed.tenant, dispositions=_ALL, page_size=1))
+    first = admin.list(
+        pb.CapabilityServiceListRequest(tenant_id=listed.tenant, dispositions=_ALL, page_size=1)
+    )
     fields = {"dispositions": _ALL, **other}
-    again = pb.CapabilityServiceListRequest(tenant_id=listed.tenant, page_token=first.next_page_token, **fields)
+    again = pb.CapabilityServiceListRequest(
+        tenant_id=listed.tenant, page_token=first.next_page_token, **fields
+    )
     assert _code(lambda: admin.list(again)) == Code.INVALID_ARGUMENT
 
 
@@ -378,7 +394,9 @@ def test_revoke_says_what_it_did_and_get_what_stopped_it(fake: FakePaladin) -> N
     child = fake.connect(capability=parent.token).admin.capability.delegate(
         pb.CapabilityServiceDelegateRequest(parent_id=parent.capability.id)
     )
-    first = admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="leaked"))
+    first = admin.revoke(
+        pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="leaked")
+    )
     assert not first.already_revoked
     assert first.before == _A
     again = admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, reason="again"))

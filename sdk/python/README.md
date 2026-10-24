@@ -528,10 +528,31 @@ It refuses as the server does, with the server's code and message and no
 | A capability the fake did not issue, or revoked | `PERMISSION_DENIED` — the server's answer to any capability it cannot verify |
 | A `name` or `parent` in another tenant, or another tenant's multipart upload | `PERMISSION_DENIED` |
 
-It checks only that: the credential is one it issued, not revoked, and of
-the tenant the call names. It verifies no signature, Biscuit, caveat,
-scope, audience or expiry, and has no platform admin acting in another
-tenant. A refused call is in `requests()`, and is refused before
+A capability its `CapabilityService` issued or delegated is held to its
+caveats too, as the server holds it, with the server's code, `ErrorInfo`
+reason and message:
+
+| Call | Answer |
+| --- | --- |
+| To a plane its audience does not name — a bearer audience such as `paladin-data` instead of the label `data` included | `PERMISSION_DENIED`, `CAPABILITY_AUDIENCE_MISMATCH` |
+| Past its request ceiling, or an ancestor's | `RESOURCE_EXHAUSTED`, `CAPABILITY_REQUEST_LIMIT_EXCEEDED` |
+| An operation its caveats do not name | `PERMISSION_DENIED`, `CAPABILITY_OP_NOT_ALLOWED` |
+| A resource outside its prefixes and URIs, or none under a resource-restricted one | `PERMISSION_DENIED`, `CAPABILITY_RESOURCE_NOT_ALLOWED` |
+| A write without the idempotency key it requires | `PERMISSION_DENIED`, `CAPABILITY_IDEMPOTENCY_KEY_REQUIRED` |
+
+Each comes where the server's does: the audience before the revocation, the
+ceiling before the request is validated, and the operation and resource in
+the RPC, after what it looks up. Its budget is not counted: the server
+charges a request only when a deployment sets a price per request, which it
+does not by default. The server, the Go SDK's fake and this one are held to
+the same answers by `sdk/testdata/capability_refusals.json`, and this fake's
+reading of a resource prefix to limes's by
+`sdk/testdata/capability_resource_matches.json`.
+
+It checks only that: the credential is one it issued, not revoked, of the
+tenant the call names, and a capability's caveats as above. It verifies no
+signature, Biscuit, scope or expiry, and has no platform admin acting in
+another tenant. A refused call is in `requests()`, and is refused before
 `fail_rpc`'s failures, which it does not spend.
 
 Its `CapabilityService` holds a capability to the server's rules where a
@@ -555,7 +576,7 @@ hold that fake to the same answers:
 The token and the Biscuit are the fake's own credentials — `attenuate`
 refuses its Biscuit — and both are accepted with `strict_auth` until the
 capability is revoked; `revoke` with `cascade_children` revokes its children
-too. It checks no audience, resource, plane or copy quota.
+too. It counts no copy quota.
 
 Where it is checked against the server: every `issue` and `delegate` case
 above is a row of `sdk/testdata/capability_issuance.json`, which the server's

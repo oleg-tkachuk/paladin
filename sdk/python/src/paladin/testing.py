@@ -25,7 +25,8 @@ sends it, and ``fail_rpc_if`` only the calls a test picks out by their
 message, which ``requests()`` and ``calls()`` carry. With
 ``strict_auth=True`` it checks credentials as the server's data plane does,
 accepting only those it issued that were not revoked, for the tenant the call
-names. It runs on the standard library's WSGI server on loopback, each
+names, and holding a capability it issued to its planes, request ceiling and
+caveats. It runs on the standard library's WSGI server on loopback, each
 connection on its own thread.
 """
 
@@ -61,7 +62,7 @@ from paladin.admin.v1.capability_service_connect import (
     CapabilityServiceSync,
     CapabilityServiceWSGIApplication,
 )
-from paladin.auth import Op
+from paladin.auth import Op, Plane
 from paladin.caveats import NO_BUDGET_CEILING, NO_REQUEST_CEILING, op_refusal
 from paladin.client import (
     HEADER_API_TOKEN,
@@ -333,7 +334,7 @@ class _Calls:
         headers = dict(ctx.request_headers.items())
         self._fake._record(Request(procedure, headers, _copy_message(request)))
         if self._fake.strict_auth:
-            self._fake._authenticate(headers, request)
+            self._fake._authenticate(procedure, headers, request)
         # After authentication, as the server's interceptor chain runs it.
         self._fake._validate(request)
         err = self._fake._take_rpc_fault(procedure, request)
@@ -418,6 +419,204 @@ def _tenant_of(name: str) -> str | None:
     return None
 
 
+# ─── A capability's caveats ──────────────────────────────────────────────────
+#
+# What ``strict_auth`` checks of a capability that CapabilityService issued or
+# delegated, as the server does (its Go fake holds the same rules through limes
+# itself): the plane its audience names, before its revocation; its request
+# ceiling and its ancestors', once it is verified; and each call's operation and
+# resource, in the RPC, after what it looks up. Every refusal is the server's
+# code, ErrorInfo reason and message; sdk/testdata/capability_refusals.json
+# holds this fake, the Go one and the server to the same answers. The budget is
+# not counted: the server charges a request only when the deployment sets a
+# price per request, which it does not by default. A capability from
+# ``issue_capability`` carries no caveats and is checked as before.
+
+_DATA_PROCEDURES = "/paladin.data.v1."
+_ADMIN_PROCEDURES = "/paladin.admin.v1."
+
+_READ_OPS = frozenset({str(Op.GET), str(Op.LIST), str(Op.OBJECT_PRESIGN)})
+"""The operations that only read: limes's own get and list, and the server's
+object:presign, whose URL's own operation is asserted beside it. Any other
+writes, and only a write needs an idempotency key."""
+
+_NO_RESOURCE = ""
+"""The resource of an operation bound to none, which a resource-restricted
+capability refuses."""
+
+_OBJECT_RESOURCE_SCHEME = "object://"
+
+# The limes errors the server sends, without the library's name.
+_AUDIENCE_MISMATCH = "audience mismatch"
+_OP_NOT_ALLOWED = "operation not allowed"
+_RESOURCE_NOT_ALLOWED = "resource not allowed"
+_IDEMPOTENCY_KEY_REQUIRED = "idempotency key required"
+_REQUEST_LIMIT_EXCEEDED = "request limit exceeded"
+
+# limes's reading of a resource's segments (resource.go hasDotSegment).
+_DOT_SEGMENTS = frozenset({".", ".."})
+_DOT_ENCODED = "%2e"
+_PATH_PARAMETERS = ";"
+_PATH_PARAMETERS_ENCODED = "%3b"
+_SEGMENT_SEPARATORS = (("%2f", "/"), ("\\", "/"), ("%5c", "/"))
+_CONSUMER_DECODES = 2
+_PERCENT = "%"
+_HEX_DIGITS = 2
+
+
+def _go_list(items: Iterable[str]) -> str:
+    """``items`` as Go's ``%v`` prints a slice of strings."""
+    return "[" + " ".join(items) + "]"
+
+
+def _go_quote(s: str) -> str:
+    """``s`` as Go's ``%q`` prints a printable string."""
+    return json.dumps(s, ensure_ascii=False)
+
+
+def _object_resource(tenant: str, collection: str, key: str) -> str:
+    """The resource an object is to a capability: the server's
+    object://<tenant>/<collection>/<key>, its collection's prefix for an
+    empty key."""
+    return f"{_OBJECT_RESOURCE_SCHEME}{tenant}/{collection}/{key}"
+
+
+def _plane_of(procedure: str) -> str | None:
+    """The plane whose verifier checks a capability presented to
+    ``procedure``; None for one no capability verifier stands in front of."""
+    if procedure.startswith(_DATA_PROCEDURES):
+        return str(Plane.DATA)
+    if procedure.startswith(_ADMIN_PROCEDURES):
+        return str(Plane.ADMIN)
+    return None
+
+
+def _percent_decode(s: str) -> str:
+    """Every well-formed %XX in ``s`` decoded, any other % kept, as limes
+    decodes it — a %XX ending the string included only with a byte after it."""
+    out = bytearray()
+    raw = s.encode()
+    i = 0
+    while i < len(raw):
+        if raw[i : i + 1] == _PERCENT.encode() and i + _HEX_DIGITS < len(raw):
+            try:
+                out.append(int(raw[i + 1 : i + 1 + _HEX_DIGITS].decode(), 16))
+                i += 1 + _HEX_DIGITS
+                continue
+            except ValueError:
+                pass
+        out.append(raw[i])
+        i += 1
+    return out.decode(errors="surrogateescape")
+
+
+def _has_dot_segment(s: str) -> bool:
+    """Whether ``s`` has a "." or ".." segment as limes reads it: %2e as a dot,
+    every separator spelling as a "/", a segment up to its path parameters, in
+    ``s`` and after each of up to two percent-decodings."""
+    for decoding in range(_CONSUMER_DECODES + 1):
+        lowered = s.lower()
+        for spelled, slash in _SEGMENT_SEPARATORS:
+            lowered = lowered.replace(spelled, slash)
+        for seg in lowered.split("/"):
+            seg = seg.replace(_PATH_PARAMETERS_ENCODED, _PATH_PARAMETERS)
+            seg = seg.split(_PATH_PARAMETERS, 1)[0]
+            if seg.replace(_DOT_ENCODED, ".") in _DOT_SEGMENTS:
+                return True
+        if decoding < _CONSUMER_DECODES:
+            s = _percent_decode(s)
+    return False
+
+
+def _match_resource(prefix: str, uri: str) -> bool:
+    """Whether ``prefix`` reaches ``uri``, at a "/" segment boundary."""
+    if not prefix or not uri.startswith(prefix) or _has_dot_segment(uri):
+        return False
+    if len(uri) == len(prefix) or prefix.endswith("/"):
+        return True
+    return uri[len(prefix)] == "/"
+
+
+def _allows_resource(caveats: capability_service_pb2.CapabilityCaveats, uri: str) -> bool:
+    """Whether ``uri`` is within the caveats' resources: any when they name
+    none, otherwise an exact URI or a covering prefix, never an empty one or
+    one with a dot segment."""
+    if not caveats.resource_prefixes and not caveats.resource_uris:
+        return True
+    if not uri or _has_dot_segment(uri):
+        return False
+    return uri in caveats.resource_uris or any(
+        _match_resource(p, uri) for p in caveats.resource_prefixes
+    )
+
+
+def _capability_refusal(
+    code: Code, reason: error_reason_pb2.ErrorReason.ValueType, message: str
+) -> ConnectError:
+    """The server's refusal of a capability: ``code``, ``message``, and an
+    ErrorInfo naming ``reason``."""
+    info = error_details_pb2.ErrorInfo(
+        reason=error_reason_pb2.ErrorReason.Name(reason), domain=ERROR_DOMAIN
+    )
+    return ConnectError(code, message, error_details([info]))
+
+
+def _audience_refusal(audience: Iterable[str], plane: str) -> ConnectError | None:
+    """The verifier's refusal of a capability whose audience does not name
+    ``plane``; None when it does."""
+    names = list(audience)
+    if plane in names:
+        return None
+    return _capability_refusal(
+        Code.PERMISSION_DENIED,
+        error_reason_pb2.ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH,
+        f"{_AUDIENCE_MISMATCH}: token audience {_go_list(names)} lacks {_go_quote(plane)}",
+    )
+
+
+def _caveat_refusal(
+    caveats: capability_service_pb2.CapabilityCaveats,
+    op: str,
+    resource: str,
+    has_idempotency_key: bool,
+) -> ConnectError | None:
+    """limes's check of ``op`` on ``resource`` against the caveats, in its
+    order — the operation, the resource, the idempotency key a write needs;
+    None when it passes."""
+    if op not in caveats.ops:
+        return _capability_refusal(
+            Code.PERMISSION_DENIED,
+            error_reason_pb2.ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED,
+            f"{_OP_NOT_ALLOWED}: {_go_quote(op)} not in {_go_list(caveats.ops)}",
+        )
+    if not _allows_resource(caveats, resource):
+        message = (
+            f"{_RESOURCE_NOT_ALLOWED}: operation {_go_quote(op)} is not bound to a resource, "
+            "and the capability is resource-restricted"
+            if resource == _NO_RESOURCE
+            else f"{_RESOURCE_NOT_ALLOWED}: {_go_quote(resource)}"
+        )
+        return _capability_refusal(
+            Code.PERMISSION_DENIED,
+            error_reason_pb2.ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED,
+            message,
+        )
+    if caveats.idempotency_key_required and op not in _READ_OPS and not has_idempotency_key:
+        return _capability_refusal(
+            Code.PERMISSION_DENIED,
+            error_reason_pb2.ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED,
+            f"{_IDEMPOTENCY_KEY_REQUIRED}: mutating operation {_go_quote(op)}",
+        )
+    return None
+
+
+def _admits_request(caveats: capability_service_pb2.CapabilityCaveats, count: int) -> bool:
+    """Whether a capability with ``caveats`` admits its ``count``-th request."""
+    if caveats.WhichOneof("request_ceiling") != "max_requests":
+        return True
+    return count <= caveats.max_requests
+
+
 _CONNECTION_BACKLOG = 128
 """Connections the fake queues before it accepts them: room for every test of
 a suite sharing one fake to call at once. The standard library's default, 5,
@@ -448,8 +647,9 @@ class _Quiet(WSGIRequestHandler):
 # header, which must allow share, be the parent_id named and not be a Biscuit
 # copy, and grants no operation the parent lacks. The fake checks only that:
 # its token and its Biscuit are its own credentials — ``attenuate`` refuses
-# its Biscuit — and it checks no audience, resource, plane or copy quota, and
-# of the lifetime only that a not_before falls before the expiry.
+# its Biscuit — and of the lifetime it checks only that a not_before falls
+# before the expiry. Under strict_auth a call is held to the capability's
+# planes, request ceiling and caveats (above); its copy quota is not counted.
 
 DEFAULT_CAPABILITY_TTL = timedelta(minutes=15)
 """How long a capability lives when Issue names no TTL: the server's
@@ -502,6 +702,9 @@ class _CapabilityRecord:
     children: list[str] = field(default_factory=list)
     revocation: capability_service_pb2.CapabilityRevocation | None = None
     """Its own revocation entry, the first one written; None while it has none."""
+    requests: int = 0
+    """How many requests it was presented to, an ancestor counting its
+    descendants', as the server counts them against a ceiling."""
 
 
 def _check_ops(ops: Iterable[str]) -> None:
@@ -1132,11 +1335,80 @@ class FakePaladin(
             if credential is not None:
                 credential.revoked = True
 
-    def _authenticate(self, headers: Mapping[str, str], message: Message) -> None:
+    def _authenticate(self, procedure: str, headers: Mapping[str, str], message: Message) -> None:
         """Raise the server's answer to a call's credentials; return when it
-        lets the call through."""
+        lets the call through. A capability CapabilityService issued is held to
+        the plane its audience names before its revocation, and its request
+        ceilings are counted once it is verified."""
+        with self._lock:
+            rec = self._presented_locked(headers)
+        plane = _plane_of(procedure)
+        if rec is not None and plane is not None:
+            refusal = _audience_refusal(rec.msg.audience, plane)
+            if refusal is not None:
+                raise refusal
         tenant = self._principal_tenant(headers)
+        if rec is not None:
+            with self._lock:
+                self._bump_requests_locked(rec)
         self._authorize_tenant(tenant, message)
+
+    def _presented_locked(self, headers: Mapping[str, str]) -> _CapabilityRecord | None:
+        """The record of the capability a call carries; None when it carries
+        none CapabilityService issued."""
+        token = _capability_token(
+            headers.get(HEADER_CAPABILITY.lower(), ""),
+            headers.get(HEADER_AUTHORIZATION.lower(), ""),
+        )
+        credential = self._credentials.get(token) if token else None
+        if credential is None or not credential.capability:
+            return None
+        return self._capabilities.get(credential.capability)
+
+    def _bump_requests_locked(self, rec: _CapabilityRecord) -> None:
+        """Count a request against ``rec`` and each of its ancestors, or raise
+        the server's refusal, counting nothing, when one has no room for it:
+        ``rec`` first, then its ancestors from the nearest."""
+        chain: list[_CapabilityRecord] = []
+        r: _CapabilityRecord | None = rec
+        while r is not None:
+            chain.append(r)
+            r = self._capabilities.get(r.msg.parent_id)
+        for i, r in enumerate(chain):
+            if _admits_request(r.msg.caveats, r.requests + 1):
+                continue
+            message = (
+                _REQUEST_LIMIT_EXCEEDED
+                if i == 0
+                else f"{_REQUEST_LIMIT_EXCEEDED}: ancestor {r.msg.id}"
+            )
+            raise _capability_refusal(
+                Code.RESOURCE_EXHAUSTED,
+                error_reason_pb2.ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
+                message,
+            )
+        for r in chain:
+            r.requests += 1
+
+    def _allow_locked(
+        self, ctx: RequestContext, request: Message, resource: str, *ops: str
+    ) -> None:
+        """Raise the server's refusal when the capability a call carries does
+        not allow ``ops`` on ``resource``, in order; return when it carries none
+        CapabilityService issued, or the fake is not strict."""
+        if not self.strict_auth:
+            return
+        headers = dict(ctx.request_headers.items())
+        rec = self._presented_locked(headers)
+        if rec is None:
+            return
+        has_key = bool(headers.get(HEADER_IDEMPOTENCY_KEY.lower(), "")) or bool(
+            getattr(request, "idempotency_key", "")
+        )
+        for op in ops:
+            refusal = _caveat_refusal(rec.msg.caveats, op, resource, has_key)
+            if refusal is not None:
+                raise refusal
 
     def _principal_tenant(self, headers: Mapping[str, str]) -> str:
         """The tenant of the call's credential, found as the server's
@@ -1334,6 +1606,26 @@ class FakePaladin(
                 [err.to_proto()],  # type: ignore[attr-defined]
             ) from err
 
+    @staticmethod
+    def _object_uri(o: _Object) -> str:
+        """The resource ``o`` is to a capability."""
+        return _object_resource(o.msg.tenant_id, o.msg.collection, o.msg.key)
+
+    @staticmethod
+    def _child_uri(parent: str, key: str) -> str:
+        """The resource a key under the collection ``parent`` names, or the
+        collection's own prefix for an empty key, as a listing asks for it."""
+        try:
+            c = CollectionName.parse(parent)
+        except InvalidNameError:
+            return _NO_RESOURCE  # the RPC refuses the name itself first
+        return _object_resource(c.tenant, c.collection, key)
+
+    def _upload_uri_locked(self, up: _Multipart) -> str:
+        """The resource of the object a multipart upload writes."""
+        o = self._objects.get(up.name)
+        return self._object_uri(o) if o is not None else _NO_RESOURCE
+
     def _get(self, name: str) -> _Object:
         o = self._objects.get(name)
         if o is None or o.msg.state == _DELETED:
@@ -1356,6 +1648,9 @@ class FakePaladin(
         self._parent(request.parent)
         _require_checksum(request.checksum_value)
         with self._lock:
+            self._allow_locked(
+                ctx, request, self._child_uri(request.parent, request.key), str(Op.PUT)
+            )
             o = self._claim(request)
             o.bound = _Binding(
                 request.size_hint_bytes,
@@ -1373,6 +1668,7 @@ class FakePaladin(
             o = self._objects.get(request.name)
             if o is None:
                 raise ConnectError(Code.NOT_FOUND, f"{request.name} not found")
+            self._allow_locked(ctx, request, self._object_uri(o), str(Op.PUT))
             # As the server: completing a completed object returns it.
             if o.msg.state == _AVAILABLE:
                 return o.msg
@@ -1393,7 +1689,9 @@ class FakePaladin(
 
     def get_object(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
-            return self._get(request.name).msg
+            o = self._get(request.name)
+            self._allow_locked(ctx, request, self._object_uri(o), str(Op.GET))
+            return o.msg
 
     def lookup_object(self, request, ctx):  # type: ignore[no-untyped-def]
         prefix = request.parent + _OBJECTS_SEP
@@ -1404,6 +1702,7 @@ class FakePaladin(
                     and o.msg.key == request.key
                     and o.msg.state != _DELETED
                 ):
+                    self._allow_locked(ctx, request, self._object_uri(o), str(Op.GET))
                     return o.msg
         raise ConnectError(Code.NOT_FOUND, f"{request.parent} has no key {request.key!r}")
 
@@ -1417,6 +1716,7 @@ class FakePaladin(
             )
         prefix = request.parent + _OBJECTS_SEP
         with self._lock:
+            self._allow_locked(ctx, request, self._child_uri(request.parent, ""), str(Op.LIST))
             found = sorted(
                 (
                     o.msg
@@ -1440,6 +1740,9 @@ class FakePaladin(
     def download_object(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
             o = self._get(request.name)
+            self._allow_locked(
+                ctx, request, self._object_uri(o), str(Op.OBJECT_PRESIGN), str(Op.GET)
+            )
             if o.msg.state != _AVAILABLE:
                 raise ConnectError(Code.FAILED_PRECONDITION, "the object is not complete")
             url = self._signed(o.msg.object_id, _GET)
@@ -1455,10 +1758,12 @@ class FakePaladin(
                 o = self._objects.get(request.name)
                 if o is None:
                     raise ConnectError(Code.NOT_FOUND, f"{request.name} not found")
+                self._allow_locked(ctx, request, self._object_uri(o), str(Op.DELETE))
                 _check_version(o, request.resource_version)
                 del self._objects[request.name]
                 return object_service_pb2.DeleteObjectResponse()
             o = self._get(request.name)
+            self._allow_locked(ctx, request, self._object_uri(o), str(Op.DELETE))
             _check_version(o, request.resource_version)
             if o.msg.public_url:
                 raise _public_rule(
@@ -1478,6 +1783,9 @@ class FakePaladin(
             o = self._get(request.name)
             if o.msg.state != _PENDING or o.bound is None:
                 raise ConnectError(Code.FAILED_PRECONDITION, "the object is not pending")
+            self._allow_locked(
+                ctx, request, self._object_uri(o), str(Op.OBJECT_PRESIGN), str(Op.PUT)
+            )
             url = self._signed(o.msg.object_id, _PUT)
             url.required_headers.update(o.bound.headers())
             return presign_service_pb2.RegenerateUploadUrlResponse(upload_url=url)
@@ -1503,6 +1811,9 @@ class FakePaladin(
                 raise ConnectError(
                     Code.FAILED_PRECONDITION, f"object state {state} does not allow GET"
                 )
+            self._allow_locked(
+                ctx, request, self._object_uri(o), str(Op.OBJECT_PRESIGN), str(Op.GET)
+            )
             path = o.msg.object_id
             if request.content_disposition:
                 path += "?" + urlencode({_DISPOSITION_QUERY: request.content_disposition})
@@ -1519,6 +1830,9 @@ class FakePaladin(
         if request.size_bytes <= 0:
             raise ConnectError(Code.INVALID_ARGUMENT, "size_bytes must be positive")
         with self._lock:
+            self._allow_locked(
+                ctx, request, self._child_uri(request.parent, request.key), str(Op.PUT)
+            )
             o = self._claim(request)
             upload_id = str(uuid.uuid4())
             self._uploads[upload_id] = _Multipart(o.msg.name, request.size_bytes)
@@ -1535,6 +1849,9 @@ class FakePaladin(
             up = self._uploads.get(request.upload_id)
             if up is None:
                 raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
+            self._allow_locked(
+                ctx, request, self._upload_uri_locked(up), str(Op.OBJECT_PRESIGN), str(Op.PUT)
+            )
             total = -(-up.size // PART_SIZE)
             n = request.part_number
             if not 1 <= n <= total:
@@ -1550,6 +1867,7 @@ class FakePaladin(
             up = self._uploads.get(request.upload_id)
             if up is None:
                 raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
+            self._allow_locked(ctx, request, self._upload_uri_locked(up), str(Op.PUT))
             body = bytearray()
             for i, part in enumerate(request.parts):
                 data = up.parts.get(part.part_number)
@@ -1580,6 +1898,7 @@ class FakePaladin(
             up = self._uploads.get(request.upload_id)
             if up is None:
                 raise ConnectError(Code.NOT_FOUND, f"upload {request.upload_id} not found")
+            self._allow_locked(ctx, request, self._upload_uri_locked(up), str(Op.LIST))
             return multipart_service_pb2.ListPartsResponse(
                 parts=[
                     types_pb2.PartInfo(part_number=n, size_bytes=len(data), etag=_etag(data))
@@ -1590,8 +1909,10 @@ class FakePaladin(
 
     def abort_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
         with self._lock:
-            up = self._uploads.pop(request.upload_id, None)
+            up = self._uploads.get(request.upload_id)
             if up is not None:
+                self._allow_locked(ctx, request, self._upload_uri_locked(up), str(Op.DELETE))
+                del self._uploads[request.upload_id]
                 self._objects.pop(up.name, None)
         return multipart_service_pb2.AbortMultipartUploadResponse()
 
@@ -1610,6 +1931,7 @@ class FakePaladin(
             )
         resp = storage_bootstrap_service_pb2.EnsureTenantStorageResponse()
         with self._lock:
+            self._allow_locked(ctx, request, _NO_RESOURCE, str(Op.MANAGE))
             bucket = (request.backend_id, request.bucket)
             if bucket not in self._buckets:
                 self._buckets.add(bucket)

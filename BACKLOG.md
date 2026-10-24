@@ -84,21 +84,6 @@ the same commit. Treat this file like a runtime invariant.
   both SDKs.
 - **Blockers:** none.
 
-### The Python fake checks no audience, resource or limit of a capability
-
-- **Status:** Deferred.
-- **Reason:** in strict mode the Go fake (`paladintest`) refuses a
-  capability presented to a plane its audience does not name, a call
-  outside its operations or resources, and a request past its ceiling, as
-  the server does, and `TestTheSDKFakeRefusesACapabilityAsTheServerDoes`
-  holds it there. The Python fake (`paladin.testing`) still refuses only a
-  revoked or expired one, so a Python consumer can issue for `paladin-data`
-  rather than `data` and see green unit tests.
-- **Definition of Done:** `paladin.testing`'s strict mode refuses the same
-  cases with the same code, reason and message, held to the Go fake's by a
-  shared table in `sdk/testdata/` both SDKs' tests read.
-- **Blockers:** none.
-
 ### The shared SDK scenarios run against the server only
 
 - **Status:** Deferred.

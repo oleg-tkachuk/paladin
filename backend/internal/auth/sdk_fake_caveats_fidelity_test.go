@@ -2,7 +2,9 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -88,61 +90,99 @@ func reasonOf(e *connect.Error) string {
 	return ""
 }
 
-// fidelityCase is one capability, with the calls made with it.
+// refusalTable is the table the server and both SDKs' fakes are held to
+// (sdk/testdata/capability_refusals.json).
+const refusalTable = "../../../sdk/testdata/capability_refusals.json"
+
+// fidelityCase is one capability of the table, with the calls made with it.
 type fidelityCase struct {
-	audience []string
-	ops      []limes.Op
-	prefixes []string
-	// requests is its request ceiling; 0 is none.
-	requests int64
-	// calls are what the capability is presented to, in order.
-	calls []string
+	Name     string         `json:"name"`
+	Audience []string       `json:"audience"`
+	Ops      []limes.Op     `json:"ops"`
+	Prefixes []string       `json:"prefixes"`
+	Requests int64          `json:"max_requests"`
+	Calls    []fidelityCall `json:"calls"`
 }
 
-// The calls a case makes.
+// fidelityCall is one call and the answer it gets; none when it succeeds.
+type fidelityCall struct {
+	Call    string `json:"call"`
+	Code    string `json:"code"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+}
+
+// The calls a case makes, as the table names them.
 const (
-	callGet    = "get"
-	callManage = "manage"
+	callGet    = "get_object"
+	callManage = "ensure_tenant_storage"
 )
+
+// The table's placeholders for what depends on the fake's tenant.
+const (
+	placeholderObject    = "{object}"
+	placeholderElsewhere = "{elsewhere}"
+)
+
+// elsewhereCollection is the collection {elsewhere} is the prefix of.
+const elsewhereCollection = "elsewhere"
 
 // A consumer's unit tests run against the SDK's fake under WithStrictAuth, so
 // a capability the server refuses must be refused there too, in the same
 // words: one issued for the bearer audience rather than the plane passed the
-// fake and failed on the cluster. Each case runs through the data plane's
-// interceptor chain — the library prefix scrubbed, the capability verified
-// and counted — into a handler that asserts as the real ones do, and through
-// paladintest alike.
+// fake and failed on the cluster. Each case of the shared table runs through
+// the data plane's interceptor chain — the library prefix scrubbed, the
+// capability verified and counted — into a handler that asserts as the real
+// ones do, and through paladintest, and both must give the table's answer.
+// The Python SDK's tests hold its fake to the same table.
 func TestTheSDKFakeRefusesACapabilityAsTheServerDoes(t *testing.T) {
+	raw, err := os.ReadFile(refusalTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table struct {
+		Key   string         `json:"key"`
+		Cases []fidelityCase `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &table); err != nil {
+		t.Fatal(err)
+	}
+	if table.Key != fidelityKey || len(table.Cases) == 0 {
+		t.Fatalf("the table's key %q and %d cases; want %q and some", table.Key, len(table.Cases), fidelityKey)
+	}
 	fake := paladintest.New(t, paladintest.WithStrictAuth())
 	obj := fake.Put(fake.Collection(), fidelityKey, "text/plain", []byte("x"))
 	tenant := fake.Tenant()
-	elsewhere := paladin.ObjectResource(tenant, "elsewhere", "")
+	fill := strings.NewReplacer(
+		placeholderObject, paladin.ObjectResource(tenant, paladintest.DefaultCollection, fidelityKey),
+		placeholderElsewhere, paladin.ObjectResource(tenant, elsewhereCollection, ""),
+	).Replace
 
-	cases := map[string]fidelityCase{
-		"the bearer audience": {audience: []string{paladin.AudienceData}, calls: []string{callGet}},
-		"another plane":       {audience: paladin.PlaneNames(paladin.PlaneAdmin), calls: []string{callGet}},
-		"an op it lacks":      {ops: []limes.Op{limes.OpList}, calls: []string{callGet}},
-		"a resource outside":  {prefixes: []string{elsewhere}, calls: []string{callGet}},
-		"no resource under a restricted one": {
-			ops: []limes.Op{limes.OpManage}, prefixes: []string{elsewhere}, calls: []string{callManage},
-		},
-		"past its request ceiling": {requests: 1, calls: []string{callGet, callGet}},
-		"allowed":                  {calls: []string{callGet, callManage}},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			if tc.audience == nil {
-				tc.audience = paladin.PlaneNames(paladin.PlaneData)
+	for _, tc := range table.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			if tc.Audience == nil {
+				tc.Audience = paladin.PlaneNames(paladin.PlaneData)
 			}
-			if tc.ops == nil {
-				tc.ops = []limes.Op{limes.OpGet, limes.OpManage}
+			if tc.Ops == nil {
+				tc.Ops = []limes.Op{limes.OpGet, limes.OpManage}
 			}
-			serverCalls, serverID := serverSide(t, tenant, tc)
-			fakeCalls, fakeID := fakeSide(t, fake, obj.GetName(), tc)
-			for i, call := range tc.calls {
-				s, f := answerOf(serverCalls[i], serverID), answerOf(fakeCalls[i], fakeID)
-				if s != f {
-					t.Errorf("call %d (%s): the server answers %+v, the fake %+v", i, call, s, f)
+			for i, p := range tc.Prefixes {
+				tc.Prefixes[i] = fill(p)
+			}
+			serverCalls, _ := serverSide(t, tenant, tc)
+			fakeCalls, _ := fakeSide(t, fake, obj.GetName(), tc)
+			for i, call := range tc.Calls {
+				want := answer{reason: call.Reason, message: fill(call.Message)}
+				if call.Code != "" {
+					if err := want.code.UnmarshalText([]byte(call.Code)); err != nil {
+						t.Fatalf("call %d: code %q: %v", i, call.Code, err)
+					}
+				}
+				if got := answerOf(serverCalls[i]); got != want {
+					t.Errorf("call %d (%s): the server answers %+v, the table %+v", i, call.Call, got, want)
+				}
+				if got := answerOf(fakeCalls[i]); got != want {
+					t.Errorf("call %d (%s): the fake answers %+v, the table %+v", i, call.Call, got, want)
 				}
 			}
 		})
@@ -158,13 +198,13 @@ func serverSide(t *testing.T, tenant string, tc fidelityCase) ([]error, string) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	caveats := limes.Caveats{Ops: tc.ops, ResourcePrefixes: tc.prefixes}
-	if tc.requests > 0 {
-		caveats.Requests = limes.RequestCeiling{Max: tc.requests}
+	caveats := limes.Caveats{Ops: tc.Ops, ResourcePrefixes: tc.Prefixes}
+	if tc.Requests > 0 {
+		caveats.Requests = limes.RequestCeiling{Max: tc.Requests}
 	}
 	cap, token := m.Mint(t, limes.Capability{
 		Subject:  limes.Principal{TenantID: uuid.MustParse(tenant)},
-		Audience: tc.audience,
+		Audience: tc.Audience,
 		Caveats:  caveats,
 	})
 	h := caveatHandlers{tenant: tenant}
@@ -175,9 +215,9 @@ func serverSide(t *testing.T, tenant string, tc fidelityCase) ([]error, string) 
 	objects := paladindatav1connect.NewObjectServiceClient(client)
 	storage := paladindatav1connect.NewStorageBootstrapServiceClient(client)
 	var errs []error
-	for _, call := range tc.calls {
+	for _, call := range tc.Calls {
 		ctx := unarytest.WithHeader(context.Background(), paladin.HeaderCapability, token)
-		switch call {
+		switch call.Call {
 		case callGet:
 			_, err = objects.GetObject(ctx, &datav1.GetObjectRequest{Name: paladin.ObjectName{CollectionName: paladin.CollectionName{Tenant: tenant, Collection: paladintest.DefaultCollection}, Object: fidelityKey}.String()})
 		case callManage:
@@ -193,22 +233,22 @@ func serverSide(t *testing.T, tenant string, tc fidelityCase) ([]error, string) 
 func fakeSide(t *testing.T, fake *paladintest.Server, object string, tc fidelityCase) ([]error, string) {
 	t.Helper()
 	admin := fake.Connect(paladin.WithBearerToken(fake.IssueBearerToken(fake.Tenant()))).Admin.Capability
-	ops := make([]paladin.Op, 0, len(tc.ops))
-	for _, op := range tc.ops {
+	ops := make([]paladin.Op, 0, len(tc.Ops))
+	for _, op := range tc.Ops {
 		ops = append(ops, paladin.Op(op))
 	}
 	caveats := &adminv1.CapabilityCaveats{
 		Ops:              paladin.OpNames(ops...),
-		ResourcePrefixes: tc.prefixes,
+		ResourcePrefixes: tc.Prefixes,
 		RequestCeiling:   &adminv1.CapabilityCaveats_UnlimitedRequests{UnlimitedRequests: true},
 		BudgetCeiling:    &adminv1.CapabilityCaveats_UnlimitedBudget{UnlimitedBudget: &adminv1.UnlimitedBudget{}},
 	}
-	if tc.requests > 0 {
-		caveats.RequestCeiling = &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: tc.requests}
+	if tc.Requests > 0 {
+		caveats.RequestCeiling = &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: tc.Requests}
 	}
 	resp, err := admin.Issue(context.Background(), &adminv1.CapabilityServiceIssueRequest{
 		Subject:  &adminv1.CapabilityPrincipal{Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: fake.Tenant(), Subject: captest.Subject},
-		Audience: tc.audience,
+		Audience: tc.Audience,
 		Caveats:  caveats,
 	})
 	if err != nil {
@@ -216,8 +256,8 @@ func fakeSide(t *testing.T, fake *paladintest.Server, object string, tc fidelity
 	}
 	p := fake.Connect(paladin.WithCapability(resp.GetToken()))
 	var errs []error
-	for _, call := range tc.calls {
-		switch call {
+	for _, call := range tc.Calls {
+		switch call.Call {
 		case callGet:
 			_, err = p.Data.Object.GetObject(context.Background(), &datav1.GetObjectRequest{Name: object})
 		case callManage:
