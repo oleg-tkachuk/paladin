@@ -72,6 +72,9 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Timestamp } from "@/components/Timestamp";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 
+// Where the list's query key holds its tenant.
+const CAPABILITIES_TENANT_INDEX = 1;
+
 // Per-capability usage keyed by capability id.
 type UsageMap = Map<string, CapabilityUsage>;
 const EMPTY_USAGE: UsageMap = new Map();
@@ -204,6 +207,13 @@ export default function CapabilitiesPage() {
       }
     },
     getNextPageParam: (last) => last.next || undefined,
+    // While a new filter loads, keep this tenant's last list on screen: the
+    // table fell back to its skeleton for the round trip, unmounting its rows
+    // and any row menu open under the pointer. Never another tenant's rows.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[CAPABILITIES_TENANT_INDEX] === tenantId
+        ? previous
+        : undefined,
   });
   const items = useMemo(
     () => browseQuery.data?.pages.flatMap((p) => p.items) ?? [],
