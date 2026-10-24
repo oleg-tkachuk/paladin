@@ -94,7 +94,7 @@ here.
   with an `ErrorInfo` reason such as `CAPABILITY_INVALID_TOKEN` — rather
   than `capability: invalid signature`, which the server never sent.
 
-## Unreleased — the fakes name a release on every response
+## sdk/go/v0.113.0, sdk/python/v0.114.0 — the fakes name a release on every response
 
 - **`paladintest` and `paladin.testing` set `X-Paladin-Version` on every
   response**, as the server does, so an error from either fake carries a
