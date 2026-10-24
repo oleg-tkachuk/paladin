@@ -14,6 +14,11 @@ dependencies = [
     # successor (connect-py); its stubs target google.protobuf through the
     # generator's protobuf=google option, so consumers keep those messages.
     "connectrpc>=0.12.1,<0.13",
+    # connectrpc's own Protobuf runtime, which errors.py imports as well.
+    # connectrpc 0.12 sets no ceiling on it, and 0.7 moved the well-known
+    # types its codec imports from protobuf.wkt, so any import of connectrpc
+    # fails there. Pre-1.0: the range stops at the next minor.
+    "protobuf-py>=0.6.0,<0.7",
     # The HTTP client under the generated clients, and under Transfer and the
     # relay transports, which this package builds directly — not only through
     # connectrpc, whose own floor (0.5.1) predates what is used here.
