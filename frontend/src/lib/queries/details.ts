@@ -14,6 +14,7 @@ import {
   userClient,
 } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
+import type { Money } from "@/gen/google/type/money_pb";
 
 /** A collection's resource name, as GetCollection takes it. */
 export const collectionResourceName = (tenantId: string, collection: string) =>
@@ -38,11 +39,52 @@ export function userDetailQuery(name: string) {
   });
 }
 
+/**
+ * Every capability record's query key starts so: a revoke changes the
+ * revoked capability's record and its descendants', which are stopped
+ * through it.
+ */
+export const CAPABILITY_RECORDS_KEY = ["capability"] as const;
+
 export function capabilityDetailQuery(id: string) {
   return queryOptions({
-    queryKey: ["capability", id] as const,
+    queryKey: [...CAPABILITY_RECORDS_KEY, id] as const,
     retry: false, // NotFound: no capability has the id, or it is not visible.
     queryFn: ({ signal }) => capabilityClient.get({ id }, { signal }),
+  });
+}
+
+/**
+ * What a capability has used: its requests and its spend, or "never" when it
+ * has no usage row yet — GetUsage's NotFound is that answer, not a failure.
+ */
+export type CapabilityUsage =
+  { requestCount: bigint; spent: Money | undefined } | "never";
+
+/** A capability's usage, read once for the list's rows and the panel alike. */
+export async function fetchCapabilityUsage(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CapabilityUsage> {
+  try {
+    const u = await capabilityClient.getUsage(
+      { id },
+      notFoundIsAnswer({ signal }),
+    );
+    return { requestCount: u.requestCount, spent: u.spent };
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.NotFound) {
+      return "never";
+    }
+    throw err;
+  }
+}
+
+export function capabilityUsageQuery(id: string) {
+  return queryOptions({
+    queryKey: ["capabilityUsage", id] as const,
+    retry: false,
+    queryFn: ({ signal }) => fetchCapabilityUsage(id, signal),
   });
 }
 

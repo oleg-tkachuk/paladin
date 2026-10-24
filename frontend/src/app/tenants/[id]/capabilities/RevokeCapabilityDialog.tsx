@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import {
   type Notification,
 } from "@/components/ui/Notification";
 import { capabilityClient } from "@/lib/connect/client";
+import { CAPABILITY_RECORDS_KEY } from "@/lib/queries/details";
 import {
   CapabilityDisposition,
   type Capability,
@@ -59,7 +61,8 @@ export function noticeOfRevoke(
 /**
  * Revoke-capability confirmation, extracted from the capabilities page. Owns
  * the reason + cascade inputs and the revoke RPC; the page refreshes the list
- * via onRevoked and clears its target via onClose.
+ * via onRevoked and clears its target via onClose. The records it changed —
+ * the capability's and its descendants' — are read again wherever shown.
  */
 export function RevokeCapabilityDialog({
   cap,
@@ -71,6 +74,7 @@ export function RevokeCapabilityDialog({
   onRevoked: () => void;
 }) {
   const { showNotification } = useNotification();
+  const queryClient = useQueryClient();
   const [revokeCascade, setRevokeCascade] = useState(false);
   const [revokeReason, setRevokeReason] = useState("");
 
@@ -92,6 +96,7 @@ export function RevokeCapabilityDialog({
         cascadeChildren: revokeCascade,
       });
       showNotification(noticeOfRevoke(cap.id, res));
+      void queryClient.invalidateQueries({ queryKey: CAPABILITY_RECORDS_KEY });
       reset();
       onRevoked();
       onClose();
