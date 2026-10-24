@@ -889,22 +889,6 @@ open deliberately — each notes why._
 
 ## UI / Admin Console
 
-### A link to `?id=` on the same page does not move a detail panel
-
-- **Status:** Deferred.
-- **Reason:** the capability panel's link to the ancestor that stopped a
-  capability changed `?id=` in the address bar and left the panel on the
-  capability it showed. `useUrlState` re-reads the URL when
-  `useSearchParams` changes, but reads `window.location`, which a soft
-  navigation by `next/link` has likely not updated yet at that render, so
-  the new id is lost. The ancestor link now moves the panel itself
-  (`isPlainClick`, `useDetailPanel().open`); any other same-page link to a
-  URL parameter would meet the same thing.
-- **Definition of Done:** `useUrlState` follows a soft navigation to new
-  parameters, with a test that pushes `?id=` through the router and sees the
-  value change, and the ancestor link goes back to a plain `Link`.
-- **Blockers:** none.
-
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console

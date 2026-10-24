@@ -7,6 +7,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
+import { textParam, useUrlState } from "./useUrlState";
 import { useTableFilter, useTableQuery } from "./useTableUrl";
 import { useTableSort } from "./useTableSort";
 import { useTableView } from "./useTableView";
@@ -123,5 +124,54 @@ describe("useTableView in the URL", () => {
     expect(result.current.rows.map((r) => r.name)).toEqual(["a"]);
     act(() => result.current.setQuery(""));
     expect(result.current.rows.map((r) => r.name)).toEqual(["c", "b", "a"]);
+  });
+});
+
+// A link to the same page (next/link) moves the router first: the page
+// re-renders with the new parameters before Next.js writes them to the
+// address bar. The capability panel's link to an ancestor changed ?id= and
+// left the panel where it was.
+describe("useUrlState", () => {
+  const ID = textParam("id");
+
+  it("takes up a soft navigation the address bar has not caught up with", () => {
+    navigate("?id=first");
+    const { result, rerender } = renderHook(() => useUrlState(ID, ""));
+    expect(result.current[0]).toBe("first");
+    nav.search = "?id=next";
+    rerender();
+    expect(result.current[0]).toBe("next");
+  });
+
+  // A link back to a row opened before: the router reported both writes, so
+  // a query string it already passed is a navigation, not it catching up.
+  it("takes up a link back to a value this page wrote before", () => {
+    const { result, rerender } = renderHook(() => useUrlState(ID, ""));
+    act(() => result.current[1]("parent"));
+    nav.search = "?id=parent";
+    rerender();
+    act(() => result.current[1]("child"));
+    nav.search = "?id=child";
+    rerender();
+    nav.search = "?id=parent";
+    rerender();
+    expect(result.current[0]).toBe("parent");
+  });
+
+  // The router catching up with one hook's write must not undo another's
+  // later one: the registry of writes is the page's, not each hook's.
+  it("keeps a later write when the router catches up with another hook's", () => {
+    const TAB = textParam("tab");
+    const { result, rerender } = renderHook(() => ({
+      id: useUrlState(ID, ""),
+      tab: useUrlState(TAB, ""),
+    }));
+    act(() => result.current.id[1]("a"));
+    act(() => result.current.tab[1]("x"));
+    act(() => result.current.id[1]("ab"));
+    nav.search = "?id=a&tab=x";
+    rerender();
+    expect(result.current.id[0]).toBe("ab");
+    expect(result.current.tab[0]).toBe("x");
   });
 });
