@@ -84,20 +84,6 @@ the same commit. Treat this file like a runtime invariant.
   both SDKs.
 - **Blockers:** none.
 
-### The shared SDK scenarios run against the server only
-
-- **Status:** Deferred.
-- **Reason:** `sdk/testdata/scenarios.json` runs through both SDKs against
-  the compose stack (`verify-stack.sh`, phase sdk), not against the fakes, so
-  a fake can disagree with the server on a data-plane scenario and only a
-  consumer finds out. It happened before for multipart complete, a double
-  reserve and `InvalidPart`.
-- **Definition of Done:** the conformance suites of both SDKs take a server
-  to run against, and an untagged test runs them against `paladintest` and
-  `paladin.testing` in every CI run, so a scenario either fake fails is red
-  where the fake changed.
-- **Blockers:** none.
-
 ### The Python SDK still supports Python 3.13
 
 - **Status:** Blocked.
