@@ -673,6 +673,7 @@ export default function CapabilitiesPage() {
         usageEntry={linked.openId ? usage.get(linked.openId) : undefined}
         onClose={linked.close}
         onRevoke={setRevokeTarget}
+        onOpen={linked.open}
       />
 
       {/* ─── Revoke confirm ────────────────────────────────────────── */}
