@@ -581,10 +581,12 @@ too. It counts no copy quota.
 Where it is checked against the server: every `issue` and `delegate` case
 above is a row of `sdk/testdata/capability_issuance.json`, which the server's
 handler, the Go SDK's fake and this one all run in every CI run, each
-required to give the row's code, Biscuit status and Biscuit. The data-plane
-calls are not run against either fake that way yet; the shared scenarios
-(`sdk/testdata/scenarios.json`) run against a real server only. See
-BACKLOG.md, "The shared SDK scenarios run against the server only".
+required to give the row's code, Biscuit status and Biscuit. The shared
+data-plane scenarios (`sdk/testdata/scenarios.json`) run against this fake
+in every CI run, as they run against the server in the stack gate, so a
+scenario the fake answers differently is red where it changed. Every
+response names `SERVER_VERSION` in `HEADER_SERVER_VERSION`, as the server
+names its release.
 
 ### Concurrency and asyncio
 
@@ -610,9 +612,9 @@ the body in a worker thread, so a file read does not block the loop.
 
 ### Parity with the Go SDK
 
-Both SDKs run the same scenarios against a live server
-([`sdk/testdata/scenarios.json`](../testdata/scenarios.json), in CI's stack
-gate) and parse names against the same table
+Both SDKs run the same scenarios against their fakes and a live server
+([`sdk/testdata/scenarios.json`](../testdata/scenarios.json), the server in
+CI's stack gate) and parse names against the same table
 ([`sdk/testdata/names.json`](../testdata/names.json)), which the server's
 tests hold its parsers to as well. Where they differ, it is on purpose:
 

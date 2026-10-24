@@ -83,6 +83,15 @@ here.
 
 
 
+## Unreleased — the fakes name a release on every response
+
+- **`paladintest` and `paladin.testing` set `X-Paladin-Version` on every
+  response**, as the server does, so an error from either fake carries a
+  server version: `paladintest.ServerVersion` on `*paladin.Error`'s
+  `ServerVersion`, `paladin.testing.SERVER_VERSION` on `PaladinError`'s
+  `server_version`. A consumer test that reports a contract skew can now
+  run against the fake. Nothing else changes.
+
 ## sdk/python/v0.113.0 — the Python fake holds a capability to its caveats
 
 **Python SDK:** the first release that carries this section.

@@ -1,9 +1,9 @@
-//go:build sdkconformance
-
 // Package conformance runs the shared SDK scenarios (sdk/testdata/scenarios.json)
+// against the SDK's fake on every run, and, under the sdkconformance tag,
 // against a live server — the compose stack backend/scripts/verify-stack.sh
-// boots, phase sdk. The Python SDK runs the same scenarios, so the two cannot
-// disagree with the server and both pass.
+// boots, phase sdk. The Python SDK runs the same scenarios against its own
+// fake and the same server, so neither SDK nor either fake can disagree with
+// the server and both pass.
 //
 //	PALADIN_SDK_DATA_URL=http://localhost:18080 PALADIN_SDK_TOKEN=… \
 //	PALADIN_SDK_COLLECTION=tenants/…/collections/default \
@@ -25,13 +25,10 @@ import (
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladintest"
 )
 
-// The environment the stack gate sets.
 const (
-	envDataURL    = "PALADIN_SDK_DATA_URL"
-	envToken      = "PALADIN_SDK_TOKEN"
-	envCollection = "PALADIN_SDK_COLLECTION"
 	scenariosFile = "../../testdata/scenarios.json"
 	// multipartSize is over the threshold the scenario sets, so the upload
 	// goes in parts.
@@ -43,24 +40,6 @@ const (
 type env struct {
 	data       *paladin.DataPlane
 	collection paladin.CollectionName
-}
-
-func setup(t *testing.T) env {
-	t.Helper()
-	url, token, collection := os.Getenv(envDataURL), os.Getenv(envToken), os.Getenv(envCollection)
-	if url == "" || token == "" || collection == "" {
-		t.Fatalf("set %s, %s and %s: under the sdkconformance tag a missing server is a failure, not a skip",
-			envDataURL, envToken, envCollection)
-	}
-	name, err := paladin.ParseCollectionName(collection)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p, err := paladin.Connect(paladin.Endpoints{Data: url}, paladin.WithTokens(paladin.StaticToken(token)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return env{data: p.Data, collection: name}
 }
 
 func random(t *testing.T, n int) []byte {
@@ -223,8 +202,11 @@ func TestEveryScenarioIsImplemented(t *testing.T) {
 	}
 }
 
-func TestScenarios(t *testing.T) {
-	e := setup(t)
+// The fake answers every scenario as the server does, so a consumer's unit
+// tests against it hold to what the stack gate holds the server to.
+func TestScenariosAgainstTheFake(t *testing.T) {
+	fake := paladintest.New(t)
+	e := env{data: fake.Connect().Data, collection: fake.Collection()}
 	for name, run := range scenarios {
 		t.Run(name, func(t *testing.T) { run(t, e) })
 	}
