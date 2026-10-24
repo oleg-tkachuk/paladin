@@ -15,6 +15,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 // header, the issue-dialog open, the empty-subject guard, and the submit→issue
 // wiring — the behaviors the extraction must preserve.
 const h = vi.hoisted(() => ({
+  tenantId: "t-1",
   list: vi.fn(),
   getUsage: vi.fn(),
   issue: vi.fn(),
@@ -41,7 +42,7 @@ vi.mock("@/lib/connect/client", () => ({
 }));
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,
-  useTenant: () => ({ tenantId: "t-1" }),
+  useTenant: () => ({ tenantId: h.tenantId }),
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -89,6 +90,7 @@ const makeCap = (id: string) => ({
 });
 
 beforeEach(() => {
+  h.tenantId = "t-1";
   h.list.mockResolvedValue({ capabilities: [] });
   h.getUsage.mockResolvedValue({
     requestCount: 0n,
@@ -157,6 +159,59 @@ describe("CapabilitiesPage", () => {
       ),
     );
     expect(h.list).toHaveBeenCalledTimes(2);
+  });
+
+  // A new filter keeps the rows on screen until its list answers. Without it
+  // the table fell back to its skeleton for the round trip: rows unmounted
+  // under an open row menu, which the e2e suite saw as its Revoke item
+  // detached mid-click.
+  it("keeps the rows, and an open row menu, while a new filter loads", async () => {
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    render(<CapabilitiesPage />);
+    const actions = await screen.findByRole("button", {
+      name: /Actions for capability cap-1/,
+    });
+    // As the e2e suite does: type the subject, and open the row's menu before
+    // the typing settles and the filtered list is asked for.
+    h.list.mockReturnValue(new Promise(() => {}));
+    await userEvent.type(
+      screen.getByPlaceholderText(/agent-id, user subject/),
+      "agent-x",
+    );
+    await userEvent.click(actions);
+    expect(
+      screen.getByRole("menuitem", { name: /Revoke/ }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(h.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ subject: "agent-x" }),
+        expect.anything(),
+      ),
+    );
+    expect(
+      screen.getByText("Actions for capability cap-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Revoke/ }),
+    ).toBeInTheDocument();
+  });
+
+  // Never across tenants: another tenant's rows must not stand in for these
+  // while this one's list loads.
+  it("keeps no other tenant's rows while a tenant's list loads", async () => {
+    h.list.mockResolvedValue({ capabilities: [makeCap("cap-1")] });
+    const { rerender } = render(<CapabilitiesPage />);
+    await screen.findByText("Actions for capability cap-1");
+    h.list.mockReturnValue(new Promise(() => {}));
+    h.tenantId = "t-2";
+    rerender(<CapabilitiesPage />);
+    await waitFor(() =>
+      expect(h.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ tenantId: "t-2" }),
+        expect.anything(),
+      ),
+    );
+    expect(screen.queryByText("Actions for capability cap-1")).toBeNull();
   });
 
   // The list spans the tenant's principals, so each row names its own.
