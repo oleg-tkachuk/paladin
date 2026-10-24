@@ -12,7 +12,7 @@ import (
 )
 
 const getAuditEntry = `-- name: GetAuditEntry :one
-SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.request_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.error_message, audit_log.request_json, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent
 FROM audit_log
 WHERE id = $1
 `
@@ -35,10 +35,8 @@ func (q *Queries) GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEn
 		&i.AuditLog.RequestID,
 		&i.AuditLog.SourceIp,
 		&i.AuditLog.CapabilityID,
-		&i.AuditLog.Outcome,
 		&i.AuditLog.ErrorMessage,
 		&i.AuditLog.RequestJson,
-		&i.AuditLog.Detail,
 		&i.AuditLog.ResourceTenantID,
 		&i.AuditLog.RelayedBy,
 		&i.AuditLog.UserAgent,
@@ -77,7 +75,7 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtyp
 }
 
 const listAuditEntries = `-- name: ListAuditEntries :many
-SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.outcome, audit_log.error_message, audit_log.request_json, audit_log.detail, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent
+SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.error_message, audit_log.request_json, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent
 FROM audit_log
 WHERE id = ANY (ARRAY(
         SELECT list_audit_entry_ids(
@@ -142,10 +140,8 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 			&i.AuditLog.RequestID,
 			&i.AuditLog.SourceIp,
 			&i.AuditLog.CapabilityID,
-			&i.AuditLog.Outcome,
 			&i.AuditLog.ErrorMessage,
 			&i.AuditLog.RequestJson,
-			&i.AuditLog.Detail,
 			&i.AuditLog.ResourceTenantID,
 			&i.AuditLog.RelayedBy,
 			&i.AuditLog.UserAgent,

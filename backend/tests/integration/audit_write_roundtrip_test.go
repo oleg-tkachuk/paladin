@@ -235,3 +235,49 @@ func TestAuditListFiltersNarrow(t *testing.T) {
 		})
 	}
 }
+
+// auditWrittenColumns is every column InsertAuditEntry writes
+// (queries/audit_log.sql).
+var auditWrittenColumns = []string{
+	"id", "at", "actor_subject", "actor_tenant_id", "actor_audience",
+	"action", "resource_name", "request_id", "source_ip",
+	"request_json", "error_message", "capability_id",
+	"resource_tenant_id", "relayed_by", "user_agent",
+}
+
+// A column nothing writes holds its default in every row and reads as data
+// the log never had: detail and outcome sat in audit_log from the initial
+// schema until 098, and before_json until 094. Every column of the table is
+// one the write sets.
+func TestAuditLogHoldsOnlyColumnsTheWriteSets(t *testing.T) {
+	h := pgharness.Setup(t)
+	rows, err := h.PoolMigrate.Query(context.Background(),
+		`SELECT column_name FROM information_schema.columns
+		 WHERE table_schema = 'public' AND table_name = 'audit_log'
+		 ORDER BY column_name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	written := map[string]bool{}
+	for _, c := range auditWrittenColumns {
+		written[c] = true
+	}
+	var got []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, name)
+		if !written[name] {
+			t.Errorf("audit_log.%s is a column the write never sets", name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(auditWrittenColumns) {
+		t.Errorf("audit_log has columns %v, the write sets %v", got, auditWrittenColumns)
+	}
+}

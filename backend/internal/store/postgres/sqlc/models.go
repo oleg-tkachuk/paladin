@@ -306,10 +306,8 @@ type AuditLog struct {
 	RequestID        string             `json:"request_id"`
 	SourceIp         *string            `json:"source_ip"`
 	CapabilityID     pgtype.UUID        `json:"capability_id"`
-	Outcome          string             `json:"outcome"`
 	ErrorMessage     *string            `json:"error_message"`
 	RequestJson      []byte             `json:"request_json"`
-	Detail           []byte             `json:"detail"`
 	ResourceTenantID pgtype.UUID        `json:"resource_tenant_id"`
 	RelayedBy        *string            `json:"relayed_by"`
 	UserAgent        *string            `json:"user_agent"`
