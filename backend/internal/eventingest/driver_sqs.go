@@ -136,7 +136,7 @@ func (d *SQSDriver) handle(
 		}
 	}
 
-	ev, err := d.SourceAdapt.Parse(payload, "application/json")
+	evs, err := d.SourceAdapt.Parse(payload, "application/json")
 	if err != nil {
 		if errors.Is(err, ErrIgnoredEvent) {
 			d.deleteMsg(ctx, msg) // ack — not ours / uninteresting
@@ -148,11 +148,10 @@ func (d *SQSDriver) handle(
 		return
 	}
 
-	if err := deliver(ctx, ev); err != nil {
+	if err := deliverEach(ctx, evs, deliver); err != nil {
 		// Transient — leave the message. It reappears after VisibilityTimeout;
 		// the redrive policy dead-letters it after maxReceiveCount.
-		d.log().Warn("sqs delivery failed; leaving for redelivery",
-			zap.String("event_id", ev.ID), zap.Error(err))
+		d.log().Warn("sqs delivery failed; leaving for redelivery", zap.Error(err))
 		return
 	}
 	d.deleteMsg(ctx, msg)

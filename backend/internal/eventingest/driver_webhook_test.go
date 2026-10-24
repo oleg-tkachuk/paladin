@@ -26,14 +26,14 @@ func sign(body []byte, secret string) string {
 type stubSource struct{ called bool }
 
 func (s *stubSource) Name() string { return "stub" }
-func (s *stubSource) Parse(_ []byte, _ string) (CloudEvent, error) {
+func (s *stubSource) Parse(_ []byte, _ string) ([]CloudEvent, error) {
 	s.called = true
-	return CloudEvent{
+	return []CloudEvent{{
 		SpecVersion: "1.0",
 		Type:        EventTypeUploaded,
 		Source:      "stub://t",
 		ID:          "stub-evt-1",
-	}, nil
+	}}, nil
 }
 
 func TestVerifyHMAC_Match(t *testing.T) {

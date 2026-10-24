@@ -129,7 +129,7 @@ func (d *NATSDriver) runCorePubSub(
 	deliver func(context.Context, CloudEvent) error,
 ) error {
 	handle := func(msg *nats.Msg) {
-		ev, err := d.SourceAdapt.Parse(msg.Data, msg.Header.Get("Content-Type"))
+		evs, err := d.SourceAdapt.Parse(msg.Data, msg.Header.Get("Content-Type"))
 		if err != nil {
 			if errors.Is(err, ErrIgnoredEvent) {
 				return
@@ -141,14 +141,9 @@ func (d *NATSDriver) runCorePubSub(
 		// across re-publish from upstream gateways. Falls back to
 		// the source-adapter-derived id (which is also stable for
 		// the same logical event).
-		if mid := msg.Header.Get(nats.MsgIdHdr); mid != "" {
-			ev.ID = mid
-		}
-		if err := deliver(ctx, ev); err != nil {
-			d.log().Warn("nats delivery failed",
-				zap.String("event_id", ev.ID),
-				zap.Error(err),
-			)
+		pinMessageID(evs, msg.Header.Get(nats.MsgIdHdr))
+		if err := deliverEach(ctx, evs, deliver); err != nil {
+			d.log().Warn("nats delivery failed", zap.Error(err))
 		}
 	}
 
@@ -225,7 +220,7 @@ func (d *NATSDriver) runJetStream(
 			}
 			return fmt.Errorf("jetstream next: %w", err)
 		}
-		ev, err := d.SourceAdapt.Parse(msg.Data(), msg.Headers().Get("Content-Type"))
+		evs, err := d.SourceAdapt.Parse(msg.Data(), msg.Headers().Get("Content-Type"))
 		if err != nil {
 			if errors.Is(err, ErrIgnoredEvent) {
 				_ = msg.Ack() // not interesting; ack so JS doesn't retry
@@ -235,10 +230,8 @@ func (d *NATSDriver) runJetStream(
 			_ = msg.Term() // unparseable → don't retry, dead-letter
 			continue
 		}
-		if mid := msg.Headers().Get(nats.MsgIdHdr); mid != "" {
-			ev.ID = mid
-		}
-		if err := deliver(ctx, ev); err != nil {
+		pinMessageID(evs, msg.Headers().Get(nats.MsgIdHdr))
+		if err := deliverEach(ctx, evs, deliver); err != nil {
 			_ = msg.Nak() // retry per consumer policy
 			continue
 		}

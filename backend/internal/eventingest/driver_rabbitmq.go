@@ -135,7 +135,7 @@ func (d *RabbitMQDriver) handle(
 	delivery amqp.Delivery,
 	deliver func(context.Context, CloudEvent) error,
 ) {
-	ev, err := d.SourceAdapt.Parse(delivery.Body, delivery.ContentType)
+	evs, err := d.SourceAdapt.Parse(delivery.Body, delivery.ContentType)
 	if err != nil {
 		if errors.Is(err, ErrIgnoredEvent) {
 			_ = delivery.Ack(false) // ack — uninteresting, no retry
@@ -151,11 +151,9 @@ func (d *RabbitMQDriver) handle(
 
 	// Prefer broker-supplied message-id when set (publishers can pin
 	// it for end-to-end dedup); fall back to source-adapter id.
-	if delivery.MessageId != "" {
-		ev.ID = delivery.MessageId
-	}
+	pinMessageID(evs, delivery.MessageId)
 
-	if err := deliver(ctx, ev); err != nil {
+	if err := deliverEach(ctx, evs, deliver); err != nil {
 		// requeue=true so RabbitMQ re-delivers per its policy.
 		_ = delivery.Nack(false, true)
 		return

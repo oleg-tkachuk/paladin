@@ -69,10 +69,11 @@ func TestIngest_SeaweedFSWebhookPromotesPending(t *testing.T) {
 		"size":         1024,
 	})
 
-	ev, err := source.Parse(payload, "application/json")
-	if err != nil {
-		t.Fatalf("source parse: %v", err)
+	evs, err := source.Parse(payload, "application/json")
+	if err != nil || len(evs) != 1 {
+		t.Fatalf("source parse: %d events, %v", len(evs), err)
 	}
+	ev := evs[0]
 	if ev.SubjectFields.TenantID != tenantID.String() {
 		t.Fatalf("parsed tenant_id = %s, want %s", ev.SubjectFields.TenantID, tenantID)
 	}
@@ -183,11 +184,11 @@ func TestIngest_DeleteEventTrashesAnObjectWhoseBytesAreGone(t *testing.T) {
 			"etag":         "abc123",
 			"size":         1024,
 		})
-		ev, err := source.Parse(payload, "application/json")
-		if err != nil {
-			t.Fatalf("source parse: %v", err)
+		evs, err := source.Parse(payload, "application/json")
+		if err != nil || len(evs) != 1 {
+			t.Fatalf("source parse: %d events, %v", len(evs), err)
 		}
-		return ev
+		return evs[0]
 	}
 
 	if err := newWorker(true).Deliver(ctx, event("create")); err != nil {

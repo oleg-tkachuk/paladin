@@ -62,11 +62,15 @@ type SeaweedFSNATSSource struct {
 
 func (s *SeaweedFSNATSSource) Name() string { return "seaweedfs_nats" }
 
-// Parse decodes a single gocdk_pub_sub-shaped NATS payload and maps
-// it to a CloudEvent. The contentType argument is unused — the
-// `nats://` natspubsub driver doesn't propagate one — but Source's
-// signature requires it.
-func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) (CloudEvent, error) {
+// Parse is the one event of a message: the format carries one.
+func (s *SeaweedFSNATSSource) Parse(raw []byte, _ string) ([]CloudEvent, error) {
+	return single(s.parseEvent(raw))
+}
+
+// parseEvent decodes a single gocdk_pub_sub-shaped NATS payload and maps
+// it to a CloudEvent. Parse's contentType argument is unused — the
+// `nats://` natspubsub driver doesn't propagate one.
+func (s *SeaweedFSNATSSource) parseEvent(raw []byte) (CloudEvent, error) {
 	metadata, body, err := decodeNATSEnvelope(raw)
 	if err != nil {
 		return CloudEvent{}, fmt.Errorf("%w: seaweedfs_nats: %w", ErrUnrecognisedEvent, err)

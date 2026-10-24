@@ -69,7 +69,7 @@ func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
 	body := fakeFilerEvent(t, false, true) // create: only new_entry
 	raw := natsEnvelope(t, map[string]string{"key": path}, body)
 
-	ev, err := src.Parse(raw, "")
+	ev, err := parseOne(src, raw, "")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestSeaweedFSNATSSource_Parse_Update(t *testing.T) {
 		map[string]string{"key": "/paladin-primary/t/k/o.txt"},
 		body,
 	)
-	ev, err := src.Parse(raw, "")
+	ev, err := parseOne(src, raw, "")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestSeaweedFSNATSSource_Parse_Delete(t *testing.T) {
 		map[string]string{"key": "/paladin-primary/t/k/gone.txt"},
 		body,
 	)
-	ev, err := src.Parse(raw, "")
+	ev, err := parseOne(src, raw, "")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestSeaweedFSNATSSource_Parse_BothEntriesAbsent_Ignored(t *testing.T) {
 		map[string]string{"key": "/paladin-primary/t/k/whatever.txt"},
 		body,
 	)
-	_, err := src.Parse(raw, "")
+	_, err := parseOne(src, raw, "")
 	if !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("err = %v, want ErrIgnoredEvent", err)
 	}
@@ -156,7 +156,7 @@ func TestSeaweedFSNATSSource_Parse_PathOutsideBucket_Ignored(t *testing.T) {
 		map[string]string{"key": "/other-bucket/t/k/o.txt"},
 		body,
 	)
-	_, err := src.Parse(raw, "")
+	_, err := parseOne(src, raw, "")
 	if !errors.Is(err, ErrIgnoredEvent) {
 		t.Errorf("err = %v, want ErrIgnoredEvent", err)
 	}
@@ -172,7 +172,7 @@ func TestSeaweedFSNATSSource_Parse_MissingKey_Unrecognised(t *testing.T) {
 		map[string]string{},
 		body,
 	)
-	_, err := src.Parse(raw, "")
+	_, err := parseOne(src, raw, "")
 	if !errors.Is(err, ErrUnrecognisedEvent) {
 		t.Errorf("err = %v, want ErrUnrecognisedEvent", err)
 	}
@@ -180,7 +180,7 @@ func TestSeaweedFSNATSSource_Parse_MissingKey_Unrecognised(t *testing.T) {
 
 func TestSeaweedFSNATSSource_Parse_MalformedGob_Unrecognised(t *testing.T) {
 	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
-	_, err := src.Parse([]byte("not a gob stream"), "")
+	_, err := parseOne(src, []byte("not a gob stream"), "")
 	if !errors.Is(err, ErrUnrecognisedEvent) {
 		t.Errorf("err = %v, want ErrUnrecognisedEvent", err)
 	}
