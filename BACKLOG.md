@@ -46,16 +46,6 @@ the same commit. Treat this file like a runtime invariant.
   with tests on both sides.
 - **Blockers:** none.
 
-### audit_log carries columns nothing writes
-
-- **Status:** Deferred.
-- **Reason:** `audit_log.detail` (jsonb) and `outcome` (text) date from the
-  initial schema and no writer sets either, so every row holds their
-  defaults.
-- **Definition of Done:** a migration drops both, or a writer sets them and
-  the API carries them.
-- **Blockers:** none.
-
 ---
 ## SDKs
 
