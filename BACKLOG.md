@@ -61,17 +61,22 @@ the same commit. Treat this file like a runtime invariant.
   after the newest `protobuf-py`, and the wheel compatibility cells green.
 - **Blockers:** connectrpc/connect-py#423.
 
-### The fakes' Biscuit cannot be attenuated
+### The Python fake's Biscuit cannot be attenuated
 
-- **Status:** Deferred.
-- **Reason:** `paladintest` and `paladin.testing` return a stand-in for a
-  capability's Biscuit, which `paladin.Attenuate` and `paladin.attenuate`
-  refuse as no Paladin Biscuit, so a consumer cannot unit-test narrowing a
-  capability and handing the copy on.
-- **Definition of Done:** both fakes seal a real Biscuit, with a key of
-  their own, that both SDKs' attenuation accepts; a narrowed copy presented
-  to the fake is held to the narrowing (ops, resources, expiry), with tests in
-  both SDKs.
+- **Status:** Deferred; the Go fake seals a real Biscuit since the change
+  that narrowed this entry.
+- **Reason:** `paladin.testing` returns a stand-in for a capability's
+  Biscuit, which `paladin.attenuate` refuses as no Paladin Biscuit, so a
+  consumer cannot unit-test narrowing a capability and handing the copy on.
+  The Python fake has no limes to seal and verify with, so it narrows as the
+  library does by its own reading of the vocabulary.
+- **Definition of Done:** `paladin.testing` seals a real Biscuit with
+  `biscuit_auth` under a key of its own, which `paladin.attenuate` accepts,
+  and holds a narrowed copy to its narrowing (ops, resources, planes,
+  expiry); a shared table of attenuations
+  (`sdk/testdata/biscuit_attenuations.json`) runs through the server's
+  interceptor chain, `paladintest` and `paladin.testing` alike. Without the
+  `biscuit` extra the fake keeps its stand-in.
 - **Blockers:** none.
 
 ### The Python SDK still supports Python 3.13

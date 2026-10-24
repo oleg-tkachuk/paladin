@@ -83,6 +83,17 @@ here.
 
 
 
+## Unreleased — the Go fake seals a real Biscuit
+
+- **`paladintest`'s Biscuit is a real one**, so `paladin.Attenuate` narrows
+  it; a narrowed copy presented under `WithStrictAuth` is held to its
+  narrowing as the server holds it. A test that compared the Biscuit with
+  a fixed prefix must stop.
+- **Under `WithStrictAuth` a capability the fake did not issue is refused
+  in the verifier's words**, as the server refuses it — `PermissionDenied`
+  with an `ErrorInfo` reason such as `CAPABILITY_INVALID_TOKEN` — rather
+  than `capability: invalid signature`, which the server never sent.
+
 ## Unreleased — the fakes name a release on every response
 
 - **`paladintest` and `paladin.testing` set `X-Paladin-Version` on every

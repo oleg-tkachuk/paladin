@@ -150,11 +150,16 @@ func (s *Server) Revoke(token string) {
 // the plane its audience names before its revocation, and its request
 // ceilings are counted once it is verified.
 func (s *Server) authenticate(procedure string, header http.Header, msg proto.Message) error {
+	plane, _ := planeOf(procedure)
 	s.mu.Lock()
-	rec := s.presentedLocked(header)
+	p, err := s.presentedLocked(header, plane)
 	s.mu.Unlock()
-	if plane, ok := planeOf(procedure); ok && rec != nil {
-		if err := audienceRefusal(rec.msg.GetAudience(), plane); err != nil {
+	if err != nil {
+		return err
+	}
+	// A copy's planes the library checked as it opened the copy.
+	if plane != "" && p != nil && p.narrowed == nil {
+		if err := audienceRefusal(p.rec.msg.GetAudience(), plane); err != nil {
 			return err
 		}
 	}
@@ -162,9 +167,9 @@ func (s *Server) authenticate(procedure string, header http.Header, msg proto.Me
 	if err != nil {
 		return err
 	}
-	if rec != nil {
+	if p != nil {
 		s.mu.Lock()
-		err := s.bumpRequestsLocked(rec)
+		err := s.bumpRequestsLocked(p.rec)
 		s.mu.Unlock()
 		if err != nil {
 			return err
@@ -228,6 +233,13 @@ func (s *Server) verify(token string, kind credentialKind, code connect.Code, un
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.credentials[token]
+	if !ok && kind == kindCapability {
+		id, _, err := s.seal.open(token, "")
+		if err != nil {
+			return "", err
+		}
+		c, ok = s.biscuitOfLocked(id)
+	}
 	switch {
 	case !ok || c.kind != kind:
 		return "", connect.NewError(code, unknown.Error()).WithCause(unknown)

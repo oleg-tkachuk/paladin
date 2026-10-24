@@ -144,18 +144,45 @@ var opEffects = map[limes.Op]limes.Effect{
 	limes.Op(paladin.OpObjectPresign): limes.EffectRead,
 }
 
-// presentedLocked is the record of the capability a call carries, nil when it
-// carries none CapabilityService issued.
-func (s *Server) presentedLocked(header http.Header) *capabilityRecord {
+// presented is the capability a call carries, as CapabilityService issued it.
+type presented struct {
+	rec *capabilityRecord
+	// narrowed is a copy's capability as its blocks narrow it; nil for the
+	// capability's own token or Biscuit.
+	narrowed *limes.Capability
+}
+
+// presentedLocked is the capability a call carries for plane — any plane
+// when "" — and nil when it carries none CapabilityService issued. A copy
+// of its Biscuit that the library refuses is refused, as the server's
+// verifier refuses it, before anything else is looked at; so is any other
+// capability the fake did not issue, which the server hands its verifier
+// too.
+func (s *Server) presentedLocked(header http.Header, plane paladin.Plane) (*presented, error) {
 	token := capabilityToken(header.Get(paladin.HeaderCapability), header.Get(paladin.HeaderAuthorization))
 	if token == "" {
-		return nil
+		return nil, nil
 	}
-	c, ok := s.credentials[token]
-	if !ok || c.capability == "" {
-		return nil
+	if c, ok := s.credentials[token]; ok {
+		if c.capability == "" {
+			return nil, nil
+		}
+		return &presented{rec: s.capabilities[c.capability]}, nil
 	}
-	return s.capabilities[c.capability]
+	id, narrowed, err := s.seal.open(token, plane)
+	if err != nil {
+		return nil, err
+	}
+	return &presented{rec: s.capabilities[id], narrowed: &narrowed}, nil
+}
+
+// caveats is what a call with p is checked against: a copy's, narrowed, or
+// the capability's own.
+func (p *presented) caveats() limes.Caveats {
+	if p.narrowed != nil {
+		return p.narrowed.Caveats
+	}
+	return limesCaveats(p.rec.msg.GetCaveats())
 }
 
 // noResource is the resource of an operation bound to none, which a
@@ -209,11 +236,11 @@ func (s *Server) allowLocked(header http.Header, req any, resource string, ops .
 	if !s.strictAuth {
 		return nil
 	}
-	rec := s.presentedLocked(header)
-	if rec == nil {
-		return nil
+	p, err := s.presentedLocked(header, "")
+	if err != nil || p == nil {
+		return err
 	}
-	caveats := limesCaveats(rec.msg.GetCaveats())
+	caveats := p.caveats()
 	for _, op := range ops {
 		lop := limes.Op(op)
 		req := limes.CheckRequest{

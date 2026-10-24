@@ -552,10 +552,17 @@ answers:
 | `List` with a page token of the other order or of other filters, or one it did not hand out | `InvalidArgument` |
 | `List` of another tenant under `WithStrictAuth` | `PermissionDenied` |
 
-The token and the Biscuit are the fake's own credentials — `Attenuate`
-refuses its Biscuit — and both are accepted under `WithStrictAuth` until the
-capability is revoked; `Revoke` with `cascade_children` revokes its children
-too. It counts no copy quota.
+The token is the fake's own credential; the Biscuit is a real one, sealed
+by the library the server seals with under a key of the fake's own, so
+`Attenuate` narrows it. Under `WithStrictAuth` a narrowed copy is verified
+as the server verifies it and held to its narrowing — operations,
+resources, planes, expiry — a block that widens it is refused, it stops
+when its capability is revoked, and it spends its capability's requests. A
+copy's own request and budget limits are accepted and not counted, and the
+fake counts no copy quota. Both credentials are accepted until the
+capability is revoked; `Revoke` with `cascade_children` revokes its
+children too. A capability the fake did not issue goes to the same
+verifier, and is refused in its words, as on the server.
 
 Where it is checked against the server: a backend test
 (`capabilityh/sdk_fake_fidelity_test.go`) runs every `Issue` and `Delegate`
