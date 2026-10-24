@@ -124,18 +124,6 @@ the same commit. Treat this file like a runtime invariant.
   where the fake changed.
 - **Blockers:** none.
 
-### A comment-only proto change still releases the SDK
-
-- **Status:** Deferred.
-- **Reason:** the release analyzer reads a commit's type and paths, so a
-  `feat` that only rewrites a comment under `proto/` cuts an SDK release
-  whose code is unchanged (`sdk/go/v0.98.0`, `v0.99.0`). `docs/releasing.md`
-  asks for `docs(proto)` there; nothing checks it.
-- **Definition of Done:** a CI check refuses a `feat` or `fix` whose changes
-  under `proto/` and `sdk/` leave every generated descriptor unchanged, or
-  the analyzer releases nothing for one, with tests.
-- **Blockers:** none.
-
 ### The Python SDK still supports Python 3.13
 
 - **Status:** Blocked.

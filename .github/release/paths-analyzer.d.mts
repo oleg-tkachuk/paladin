@@ -16,3 +16,15 @@ export function within(files: readonly string[], prefixes?: readonly string[]): 
 export function isDocumentation(file: string, documentation?: Documentation): boolean;
 export function deciding(files: readonly string[], documentation: Documentation | undefined): string[];
 export function filesOf(hash: string, cwd?: string): string[];
+
+export interface AnalyzerContext {
+  commits: { hash: string; message: string }[];
+  logger: { log(...args: unknown[]): void; error(...args: unknown[]): void; warn(...args: unknown[]): void; success(...args: unknown[]): void };
+  cwd: string;
+  options: Record<string, unknown>;
+}
+export function analyzeWith(
+  pluginConfig: Record<string, unknown>,
+  context: AnalyzerContext,
+  allFiles: (hash: string) => string[],
+): Promise<string | undefined>;

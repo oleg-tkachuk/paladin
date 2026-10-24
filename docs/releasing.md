@@ -68,7 +68,9 @@ A proto's comments are documentation: a change to them alone is
 `docs(proto)`, even when the server's own `feat` is what they describe.
 Commit the two apart. A `feat` that touches only a comment under `proto/`
 cuts an SDK release whose code is unchanged, which every consumer then has to
-read to find nothing in it.
+read to find nothing in it. CI refuses such a commit in its pull request: one
+that would cut a release, changes `proto/`, and leaves the contract compiled
+without its comments as it was (`.github/ci/proto-comments.ts`).
 
 ### What is a breaking change
 
