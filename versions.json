@@ -1,8 +1,8 @@
 {
   "go": "1.27.0",
   "postgresql": "18.6",
-  "connect": "2.0.1",
+  "connect": "2.0.2",
   "cedar": "1.8.0",
   "mcp": "1.8.0",
-  "nextjs": "16.4.2"
+  "nextjs": "16.4.3"
 }
