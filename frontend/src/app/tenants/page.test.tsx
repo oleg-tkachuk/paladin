@@ -127,11 +127,11 @@ describe("TenantsPage", () => {
 
   // A row is one line: a long name or label is cut, and whole on hover.
   it("keeps a long display name and label whole in the tooltip", () => {
-    const long = "caryon 00000000-0000-4000-8000-000000000001";
+    const long = "example-app 00000000-0000-4000-8000-000000000001";
     h.state.tenants = [
       {
         tenantId: "t-1",
-        slug: "caryon",
+        slug: "example-app",
         displayName: long,
         labels: { managed_by: "paladin-bootstrap" },
         defaultBucket: "",
