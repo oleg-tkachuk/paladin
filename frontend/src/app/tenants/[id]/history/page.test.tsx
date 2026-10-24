@@ -67,12 +67,15 @@ describe("TenantHistoryPage", () => {
       expect.anything(),
     );
     // Named, so a platform admin on another tenant's page reads that
-    // tenant's batches, not its own tenant's.
+    // tenant's batches; filtered too, so a server from before tenant_id —
+    // mid-rollout — cannot show the caller's own tenant's as this one's.
     expect(h.listOperations).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: "t-1" }),
+      expect.objectContaining({
+        tenantId: "t-1",
+        filter: 'tenant_id == "t-1"',
+      }),
       expect.anything(),
     );
-    expect(h.listOperations.mock.calls[0]?.[0]).not.toHaveProperty("filter");
   });
 
   // After Argo CD's deployment history: newest first, each with its outcome,

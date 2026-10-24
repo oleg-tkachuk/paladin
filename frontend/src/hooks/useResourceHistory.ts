@@ -8,6 +8,7 @@ import { adminOperationClient } from "@/lib/connect/client";
 import { normalizeError } from "@/lib/connect/error";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 import {
+  operationsFilterFor,
   historyFromAudit,
   historyFromOperation,
   mergeHistory,
@@ -56,7 +57,8 @@ export function useResourceHistory(
 
   // The tenant's operations, named: the server lists the caller's own
   // tenant's unless told which, so a platform admin on another tenant's page
-  // saw none of its batches.
+  // saw none of its batches. The filter holds a server from before tenant_id
+  // to this tenant's too: during a rollout it showed the caller's own.
   const ops = useInfiniteQuery({
     queryKey: ["operations", "history", tenantId],
     enabled: tenantId !== "",
@@ -67,6 +69,7 @@ export function useResourceHistory(
           {
             page: { pageSize: HISTORY_PAGE_SIZE, pageToken: pageParam },
             tenantId,
+            filter: operationsFilterFor(tenantId),
             sortOrder: SortOrder.DESC,
           },
           { signal },
