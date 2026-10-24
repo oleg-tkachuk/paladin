@@ -75,6 +75,18 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## SDKs
 
+### The Python SDK holds protobuf-py below its latest release
+
+- **Status:** Blocked.
+- **Reason:** `protobuf-py` 0.7.0 moved the well-known type modules out of
+  `protobuf.wkt`, and connectrpc 0.12.1 still imports them from there, so
+  `sdk/python/pyproject.toml` requires `protobuf-py>=0.6.0,<0.7` against
+  the rule that dependencies track their latest stable release.
+- **Definition of Done:** a connectrpc release that imports under
+  `protobuf-py` 0.7, taken here with the ceiling lifted to the next minor
+  after the newest `protobuf-py`, and the wheel compatibility cells green.
+- **Blockers:** connectrpc/connect-py#423.
+
 ### The Python fake's CapabilityService is held to the server only by mirror
 
 - **Status:** Deferred.
