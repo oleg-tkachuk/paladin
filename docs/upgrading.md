@@ -83,8 +83,12 @@ here.
 
 
 
-## Unreleased — the Go fake seals a real Biscuit
+## Unreleased — the fakes seal a real Biscuit
 
+- **`paladin.testing`'s Biscuit is a real one with the `biscuit` extra**,
+  as `paladintest`'s is, so `paladin.attenuate` narrows it and a narrowed
+  copy under `strict_auth` is held to its narrowing as the server holds it.
+  Without the extra it stays a stand-in.
 - **`paladintest`'s Biscuit is a real one**, so `paladin.Attenuate` narrows
   it; a narrowed copy presented under `WithStrictAuth` is held to its
   narrowing as the server holds it. A test that compared the Biscuit with

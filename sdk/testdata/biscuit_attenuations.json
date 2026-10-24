@@ -1,0 +1,76 @@
+{
+  "_comment": "How the data plane holds a narrowed copy of a capability's Biscuit, which the server and both SDKs' fakes are held to: each case is one capability, issued to the fake's tenant with the audience, ops and prefixes named (audience [\"data\"] and ops [\"get\", \"manage\"] when none are), its Biscuit narrowed by each block of attenuations in turn — ops, resource_prefixes and planes as paladin.Attenuate takes them, expires_in_seconds an expiry that many seconds from now — and the copy presented to the calls in order, each with the answer it gets, none when it succeeds. The calls and placeholders are capability_refusals.json's; {collection} is the prefix of the fake's default collection, object://<tenant>/default/. Codes are Connect's, reasons the ErrorInfo's.",
+  "key": "k",
+  "cases": [
+    {
+      "name": "an operation the copy dropped",
+      "attenuations": [{"ops": ["get"]}],
+      "calls": [
+        {"call": "get_object"},
+        {"call": "ensure_tenant_storage", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED", "message": "operation not allowed: \"manage\" not in [get]"}
+      ]
+    },
+    {
+      "name": "a resource outside the copy's prefixes",
+      "attenuations": [{"resource_prefixes": ["{elsewhere}"]}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED", "message": "resource not allowed: \"{object}\""}
+      ]
+    },
+    {
+      "name": "a plane the copy dropped",
+      "audience": ["data", "admin"],
+      "attenuations": [{"planes": ["admin"]}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "message": "audience mismatch: token audience [admin] lacks \"data\""}
+      ]
+    },
+    {
+      "name": "an expiry the copy passed",
+      "attenuations": [{"expires_in_seconds": -60}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_EXPIRED", "message": "expired"}
+      ]
+    },
+    {
+      "name": "blocks narrow in turn",
+      "ops": ["get", "list", "manage"],
+      "attenuations": [{"ops": ["get", "manage"]}, {"ops": ["get"]}],
+      "calls": [
+        {"call": "get_object"},
+        {"call": "ensure_tenant_storage", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED", "message": "operation not allowed: \"manage\" not in [get]"}
+      ]
+    },
+    {
+      "name": "an operation the capability lacks",
+      "ops": ["get"],
+      "attenuations": [{"ops": ["get", "delete"]}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "message": "invalid Biscuit attenuation: block 1: child wider than parent: child op \"delete\" not in parent ops [get]"}
+      ]
+    },
+    {
+      "name": "a prefix outside the capability's",
+      "prefixes": ["{collection}"],
+      "attenuations": [{"resource_prefixes": ["{elsewhere}"]}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "message": "invalid Biscuit attenuation: block 1: child wider than parent: child prefix \"{elsewhere}\" not under any parent prefix [{collection}]"}
+      ]
+    },
+    {
+      "name": "a plane the capability lacks",
+      "attenuations": [{"planes": ["data", "admin"]}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "message": "invalid Biscuit attenuation: block 1: child wider than parent: audience [data admin] widens parent [data]"}
+      ]
+    },
+    {
+      "name": "a later block widening an earlier one",
+      "ops": ["get", "manage"],
+      "attenuations": [{"ops": ["get"]}, {"ops": ["get", "manage"]}],
+      "calls": [
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "message": "invalid Biscuit attenuation: block 2: child wider than parent: child op \"manage\" not in parent ops [get]"}
+      ]
+    }
+  ]
+}

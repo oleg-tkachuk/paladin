@@ -39,7 +39,7 @@ import json
 import secrets
 import threading
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
@@ -57,6 +57,7 @@ from google.protobuf import descriptor_pool, timestamp_pb2
 from google.protobuf.message import Message
 from google.rpc import error_details_pb2
 
+from paladin import _fake_biscuit
 from paladin.admin.v1 import capability_service_pb2
 from paladin.admin.v1.capability_service_connect import (
     CapabilityServiceSync,
@@ -649,16 +650,18 @@ class _Quiet(WSGIRequestHandler):
 # issued; Delegate narrows only the capability presented in the capability
 # header, which must allow share, be the parent_id named and not be a Biscuit
 # copy, and grants no operation the parent lacks. The fake checks only that:
-# its token and its Biscuit are its own credentials — ``attenuate`` refuses
-# its Biscuit — and of the lifetime it checks only that a not_before falls
-# before the expiry. Under strict_auth a call is held to the capability's
+# its token is its own credential; its Biscuit is a real one with the
+# biscuit extra (_fake_biscuit), which ``attenuate`` narrows, and a stand-in
+# without it; of the lifetime it checks only that a not_before falls before
+# the expiry, and that a narrowed copy has not outlived its own. Under strict_auth a call is held to the capability's
 # planes, request ceiling and caveats (above); its copy quota is not counted.
 
 DEFAULT_CAPABILITY_TTL = timedelta(minutes=15)
 """How long a capability lives when Issue names no TTL: the server's
 ``capability.default_ttl``."""
 _BISCUIT_PREFIX = "paladintest_biscuit_"
-"""Marks the fake's stand-in for a capability's Biscuit."""
+"""Marks the fake's stand-in for a capability's Biscuit, without the biscuit
+extra."""
 _CAPABILITY_ISSUER = "paladintest"
 
 # The server's answers, word for word, where the fake gives them.
@@ -708,6 +711,44 @@ class _CapabilityRecord:
     requests: int = 0
     """How many requests it was presented to, an ancestor counting its
     descendants', as the server counts them against a ceiling."""
+
+
+@dataclass(frozen=True)
+class _Presented:
+    """The capability a call carries, as CapabilityService issued it, and a
+    copy's narrowing of it; None for the capability's own token or Biscuit."""
+
+    rec: _CapabilityRecord
+    narrowed: _fake_biscuit.Grant | None = None
+
+    @property
+    def audience(self) -> Sequence[str]:
+        return self.narrowed.audience if self.narrowed is not None else self.rec.msg.audience
+
+    @property
+    def caveats(self) -> capability_service_pb2.CapabilityCaveats:
+        """What a call is checked against: a copy's, narrowed, or the
+        capability's own."""
+        if self.narrowed is None:
+            return self.rec.msg.caveats
+        c = capability_service_pb2.CapabilityCaveats()
+        c.CopyFrom(self.rec.msg.caveats)
+        del c.ops[:], c.resource_prefixes[:], c.resource_uris[:]
+        c.ops.extend(self.narrowed.ops)
+        c.resource_prefixes.extend(self.narrowed.resource_prefixes)
+        c.resource_uris.extend(self.narrowed.resource_uris)
+        return c
+
+
+def _grant_of(c: capability_service_pb2.Capability) -> _fake_biscuit.Grant:
+    """What capability ``c`` allows, for a copy of its Biscuit to narrow."""
+    return _fake_biscuit.Grant(
+        ops=list(c.caveats.ops),
+        resource_prefixes=list(c.caveats.resource_prefixes),
+        resource_uris=list(c.caveats.resource_uris),
+        audience=list(c.audience),
+        expires_at=c.expires_at.ToDatetime(tzinfo=UTC),
+    )
 
 
 def _check_ops(ops: Iterable[str]) -> None:
@@ -816,12 +857,18 @@ class _CapabilityService(CapabilityServiceSync):
             raise _with_reason(Code.FAILED_PRECONDITION, _NOT_PRESENTED)
         with fake._lock:
             credential = fake._credentials.get(presented)
+            copy = None
+            if credential is None:
+                # A copy of a Biscuit delegates nothing, but is checked as
+                # the server checks it first: as the capability it narrows.
+                copy = fake._presented_locked({HEADER_CAPABILITY.lower(): presented})
+                credential = fake._biscuit_of_copy_locked(presented)
             parent = fake._capabilities.get(credential.capability) if credential else None
         if credential is None or parent is None:
             raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_INVALID)
         if credential.revoked:
             raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_REVOKED)
-        parent_ops = list(parent.msg.caveats.ops)
+        parent_ops = list(copy.caveats.ops if copy is not None else parent.msg.caveats.ops)
         if Op.SHARE not in parent_ops:
             raise _with_reason(Code.PERMISSION_DENIED, _LACKS_SHARE)
         if parent.msg.id != request.parent_id:
@@ -1011,6 +1058,7 @@ class FakePaladin(
         self._rpc_faults: dict[str, list[_RPCFault]] = {}
         self._credentials: dict[str, _Credential] = {}
         self._capabilities: dict[str, _CapabilityRecord] = {}
+        self._sealer = _fake_biscuit.Sealer() if _fake_biscuit.AVAILABLE else None
         # Responses memoised per (procedure, idempotency key), with the
         # fingerprint of the request each answered — as the server keeps.
         self._replays: dict[tuple[str, str], tuple[bytes, Any]] = {}
@@ -1276,7 +1324,12 @@ class FakePaladin(
         res.token = self._issue(_CAPABILITY_PREFIX, tenant)
         tokens = [res.token]
         if status == capability_service_pb2.BISCUIT_STATUS_ISSUED:
-            res.biscuit = self._issue(_CAPABILITY_PREFIX, tenant, token_prefix=_BISCUIT_PREFIX)
+            if self._sealer is not None:
+                res.biscuit = self._sealer.seal(c.id)
+                with self._lock:
+                    self._credentials[res.biscuit] = _Credential(_CAPABILITY_PREFIX, tenant)
+            else:
+                res.biscuit = self._issue(_CAPABILITY_PREFIX, tenant, token_prefix=_BISCUIT_PREFIX)
             tokens.append(res.biscuit)
         with self._lock:
             for token in tokens:
@@ -1349,29 +1402,46 @@ class FakePaladin(
         the plane its audience names before its revocation, and its request
         ceilings are counted once it is verified."""
         with self._lock:
-            rec = self._presented_locked(headers)
+            presented = self._presented_locked(headers)
         plane = _plane_of(procedure)
-        if rec is not None and plane is not None:
-            refusal = _audience_refusal(rec.msg.audience, plane)
+        if presented is not None and plane is not None:
+            refusal = _audience_refusal(presented.audience, plane)
             if refusal is not None:
                 raise refusal
         tenant = self._principal_tenant(headers)
-        if rec is not None:
+        if presented is not None:
             with self._lock:
-                self._bump_requests_locked(rec)
+                self._bump_requests_locked(presented.rec)
         self._authorize_tenant(tenant, message)
 
-    def _presented_locked(self, headers: Mapping[str, str]) -> _CapabilityRecord | None:
-        """The record of the capability a call carries; None when it carries
-        none CapabilityService issued."""
+    def _presented_locked(self, headers: Mapping[str, str]) -> _Presented | None:
+        """The capability a call carries; None when it carries none
+        CapabilityService issued. A copy of its Biscuit that the server's
+        library refuses is refused, before anything else is looked at."""
         token = _capability_token(
             headers.get(HEADER_CAPABILITY.lower(), ""),
             headers.get(HEADER_AUTHORIZATION.lower(), ""),
         )
-        credential = self._credentials.get(token) if token else None
-        if credential is None or not credential.capability:
+        if not token:
             return None
-        return self._capabilities.get(credential.capability)
+        credential = self._credentials.get(token)
+        if credential is not None:
+            rec = self._capabilities.get(credential.capability) if credential.capability else None
+            return _Presented(rec) if rec is not None else None
+        capability = self._sealer.capability_of(token) if self._sealer is not None else None
+        rec = self._capabilities.get(capability) if capability else None
+        if rec is None or self._sealer is None:
+            return None
+        try:
+            narrowed = self._sealer.open(token, rec.msg.id, _grant_of(rec.msg), datetime.now(UTC))
+        except _fake_biscuit.Refusal as err:
+            reason = (
+                error_reason_pb2.ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION
+                if err.attenuation
+                else error_reason_pb2.ERROR_REASON_CAPABILITY_EXPIRED
+            )
+            raise _capability_refusal(Code.PERMISSION_DENIED, reason, err.message) from None
+        return _Presented(rec, narrowed)
 
     def _bump_requests_locked(self, rec: _CapabilityRecord) -> None:
         """Count a request against ``rec`` and each of its ancestors, or raise
@@ -1407,14 +1477,14 @@ class FakePaladin(
         if not self.strict_auth:
             return
         headers = dict(ctx.request_headers.items())
-        rec = self._presented_locked(headers)
-        if rec is None:
+        presented = self._presented_locked(headers)
+        if presented is None:
             return
         has_key = bool(headers.get(HEADER_IDEMPOTENCY_KEY.lower(), "")) or bool(
             getattr(request, "idempotency_key", "")
         )
         for op in ops:
-            refusal = _caveat_refusal(rec.msg.caveats, op, resource, has_key)
+            refusal = _caveat_refusal(presented.caveats, op, resource, has_key)
             if refusal is not None:
                 raise refusal
 
@@ -1452,11 +1522,26 @@ class FakePaladin(
             token, _BEARER_TOKEN_PREFIX, Code.UNAUTHENTICATED, _JWT_MALFORMED, _JWT_EXPIRED
         )
 
+    def _biscuit_of_copy_locked(self, token: str) -> _Credential | None:
+        """The credential of the Biscuit ``token`` is a copy of — its tenant
+        and its revocation — None for a token that is no copy of one. The
+        caller holds the lock."""
+        capability = self._sealer.capability_of(token) if self._sealer is not None else None
+        rec = self._capabilities.get(capability) if capability else None
+        if rec is None:
+            return None
+        for t in rec.credentials:
+            if self._credentials[t].biscuit:
+                return self._credentials[t]
+        return None
+
     def _verify(self, token: str, prefix: str, code: Code, unknown: str, revoked: str) -> str:
         """The tenant of ``token``, a credential issued with ``prefix``; raise
         ``code`` with ``unknown`` or ``revoked`` otherwise."""
         with self._lock:
             credential = self._credentials.get(token)
+            if credential is None and prefix == _CAPABILITY_PREFIX:
+                credential = self._biscuit_of_copy_locked(token)
         if credential is None or credential.prefix != prefix:
             raise ConnectError(code, unknown)
         if credential.revoked:
