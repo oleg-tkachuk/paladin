@@ -99,7 +99,7 @@ here.
   before and fails on the cluster; it now fails in the test too. Fix the
   capability, not the test.
 
-## Unreleased — a platform admin reads another tenant's operations
+## sdk/go/v0.112.0, sdk/python/v0.112.0 — a platform admin reads another tenant's operations
 
 **Server:** the first release that carries this section. **SDKs:** the first
 release that carries it.
@@ -114,7 +114,7 @@ release that carries it.
 
 Additive: no action needed.
 
-## Unreleased — the Go fake holds a capability to its caveats
+## sdk/go/v0.112.0 — the Go fake holds a capability to its caveats
 
 **Go SDK:** the first release that carries this section.
 
@@ -132,7 +132,7 @@ Additive: no action needed.
   checked as before. The budget is not counted, as the server counts none
   unless a price per request is set.
 
-## Unreleased — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
+## sdk/go/v0.112.0 — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
 
 **Server:** the first release that carries this section.
 

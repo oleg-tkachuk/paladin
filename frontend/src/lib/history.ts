@@ -138,6 +138,16 @@ export function mergeHistory(
  * slash keeps bucket "logs" from matching "logs-old". A backend's history
  * leaves its buckets out: each bucket has a history of its own.
  */
+/**
+ * The operations filter for one tenant's, as the server's CEL names it. The
+ * request names the tenant too; the filter keeps a server that predates
+ * tenant_id — mid-rollout, behind a newer console — from passing the
+ * caller's own tenant's operations off as this one's.
+ */
+export function operationsFilterFor(tenantId: string): string {
+  return `tenant_id == ${JSON.stringify(tenantId)}`;
+}
+
 export function auditFilterFor(resourceName: string, nested = true): string {
   const own = `resource_name == ${JSON.stringify(resourceName)}`;
   if (!nested) return own;

@@ -9,6 +9,7 @@ import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 import {
   actorKind,
   auditFilterFor,
+  operationsFilterFor,
   historyFromAudit,
   historyFromOperation,
   mergeHistory,
@@ -142,5 +143,6 @@ describe("filters", () => {
     expect(auditFilterFor("storageBackends/b", false)).toBe(
       'resource_name == "storageBackends/b"',
     );
+    expect(operationsFilterFor("t-1")).toBe('tenant_id == "t-1"');
   });
 });
