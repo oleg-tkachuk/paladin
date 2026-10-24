@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { fireEvent, render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   getUsage: vi.fn(),
   getToken: vi.fn(),
   revoke: vi.fn(),
+  open: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
@@ -52,6 +53,7 @@ function open() {
       usageEntry="never"
       onClose={vi.fn()}
       onRevoke={h.revoke}
+      onOpen={h.open}
     />,
   );
 }
@@ -107,6 +109,7 @@ describe("CapabilityDetailsPanel", () => {
         usageEntry="never"
         onClose={vi.fn()}
         onRevoke={h.revoke}
+        onOpen={h.open}
       />,
     );
     await waitFor(() => expect(screen.getAllByText("rag-api")).toHaveLength(2));
@@ -166,6 +169,15 @@ describe("CapabilityDetailsPanel", () => {
     expect(link).toHaveAttribute("title", ancestor);
     expect(screen.getByText("run finished")).toBeInTheDocument();
     expect(screen.queryByText("not revoked itself")).toBeNull();
+
+    // A soft navigation to ?id= left the panel on this capability; the
+    // panel moves itself, and a modified click is the browser's.
+    h.open.mockReset();
+    await userEvent.click(link);
+    expect(h.open).toHaveBeenCalledWith(ancestor);
+    h.open.mockReset();
+    fireEvent.click(link, { metaKey: true });
+    expect(h.open).not.toHaveBeenCalled();
   });
 
   it("says when the capability has no revocation of its own", async () => {
@@ -207,6 +219,7 @@ describe("CapabilityDetailsPanel", () => {
           usageEntry={undefined}
           onClose={vi.fn()}
           onRevoke={h.revoke}
+          onOpen={h.open}
         />,
       );
 
@@ -238,6 +251,7 @@ describe("CapabilityDetailsPanel", () => {
           usageEntry={undefined}
           onClose={vi.fn()}
           onRevoke={h.revoke}
+          onOpen={h.open}
         />,
       );
     const value = (label: string) =>
@@ -285,6 +299,7 @@ describe("CapabilityDetailsPanel", () => {
         usageEntry="never"
         onClose={vi.fn()}
         onRevoke={h.revoke}
+        onOpen={h.open}
       />,
     );
     expect(screen.queryByRole("dialog")).toBeNull();

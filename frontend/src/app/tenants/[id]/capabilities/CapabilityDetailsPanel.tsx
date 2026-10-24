@@ -30,6 +30,7 @@ export function CapabilityDetailsPanel({
   usageEntry,
   onClose,
   onRevoke,
+  onOpen,
 }: {
   /** The capability to show; null keeps the panel closed. */
   id: string | null;
@@ -40,6 +41,8 @@ export function CapabilityDetailsPanel({
   onClose: () => void;
   /** Asks to revoke the capability shown; the page confirms it. */
   onRevoke: (cap: Capability) => void;
+  /** Moves the panel to another capability. */
+  onOpen: (id: string) => void;
 }) {
   const recordQuery = useQuery({
     ...capabilityDetailQuery(id ?? ""),
@@ -83,7 +86,12 @@ export function CapabilityDetailsPanel({
       }
     >
       {shown ? (
-        <DetailsBody cap={shown} usageEntry={usage} record={record} />
+        <DetailsBody
+          cap={shown}
+          usageEntry={usage}
+          record={record}
+          onOpen={onOpen}
+        />
       ) : (
         <p className={T.hint}>
           {recordQuery.isError

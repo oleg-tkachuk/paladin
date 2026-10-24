@@ -7,6 +7,7 @@ import type {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { isPlainClick } from "@/lib/ui/plainClick";
 import { T } from "@/lib/ui/typography";
 import type { CapabilityUsage } from "@/lib/queries/details";
 import { ABSTRACT_UNIT_CODE, formatMoney } from "@/lib/format/money";
@@ -44,10 +45,13 @@ export function DetailsBody({
   cap,
   usageEntry,
   record,
+  onOpen,
 }: {
   cap: Capability;
   usageEntry: UsageEntry;
   record: RecordEntry;
+  /** Moves the panel to another capability, such as the ancestor that stopped this one. */
+  onOpen: (id: string) => void;
 }) {
   // Capability without a budget unit (metering-only) renders as XXX, not
   // USD — the bare "$" would imply currency where none is pinned.
@@ -245,7 +249,11 @@ export function DetailsBody({
       </DetailsSection>
 
       <DetailsSection title="Issuance & revocation">
-        <IssuanceRows record={record} tenantId={cap.subject?.tenantId ?? ""} />
+        <IssuanceRows
+          record={record}
+          tenantId={cap.subject?.tenantId ?? ""}
+          onOpen={onOpen}
+        />
       </DetailsSection>
 
       <DetailsSection title="Identifiers">
@@ -280,10 +288,12 @@ export function DetailsBody({
 function IssuanceRows({
   record,
   tenantId,
+  onOpen,
 }: {
   record: RecordEntry;
   /** The capability's tenant: where an actor without one of its own is. */
   tenantId: string;
+  onOpen: (id: string) => void;
 }) {
   const pending = recordText(record);
   if (pending !== undefined || typeof record !== "object") {
@@ -350,6 +360,14 @@ function IssuanceRows({
                 through its ancestor{" "}
                 <Link
                   href={`?id=${encodeURIComponent(stopped.capabilityId)}`}
+                  // The panel moves itself: a soft navigation to the same
+                  // page left it on this capability with the ancestor's id
+                  // in the address bar. A modified click opens a new tab.
+                  onClick={(e) => {
+                    if (!isPlainClick(e)) return;
+                    e.preventDefault();
+                    onOpen(stopped.capabilityId);
+                  }}
                   className="font-mono text-xs text-primary hover:underline"
                   title={stopped.capabilityId}
                 >
