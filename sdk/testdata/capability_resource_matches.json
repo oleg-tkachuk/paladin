@@ -1,0 +1,190 @@
+{
+  "_comment": "Whether a capability's resource prefix reaches a resource, as limes.MatchResource decides it: at a \"/\" segment boundary, never for a resource with a \".\" or \"..\" segment however it is spelled — percent-encoded, behind an encoded or back slash, encoded twice, or before path parameters. Copied from limes's own TestMatchResourceRespectsSegmentBoundaries; the backend's tests hold the table to limes, and the Python fake, which has no limes, is held to it.",
+  "matches": [
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/a.txt",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public-secret/a.txt",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public/",
+      "uri": "corpus/public/a.txt",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public/",
+      "uri": "corpus/public",
+      "match": false
+    },
+    {
+      "prefix": "object://t/c/",
+      "uri": "object://t/c/k",
+      "match": true
+    },
+    {
+      "prefix": "",
+      "uri": "anything",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/../private/secret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/./x",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%2e%2E/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..x",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%2Fsecret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%2fsecret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..\\secret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%5Csecret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%2e%2e%2Fsecret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/a%2Fb",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%252e%252e/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%252E%252e/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%252fsecret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%255Csecret",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/100%25.txt",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%25%32%65%25%32%65/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%25%32e%25%32E/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/%252%65%252%65/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%25%32%66private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%25%35%63private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..;/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..;jsessionid=x/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/.;x/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%3B/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..%253b/private",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/a;b",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/..a;b",
+      "match": true
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/50%/..",
+      "match": false
+    },
+    {
+      "prefix": "corpus/public",
+      "uri": "corpus/public/50%x",
+      "match": true
+    }
+  ]
+}
