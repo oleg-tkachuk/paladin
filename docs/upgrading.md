@@ -15,7 +15,22 @@ To land a deliberate breaking change:
 2. Decide it is worth it. The common case is a field rename that keeps the
    number — gRPC clients survive that, JSON clients do not, and nothing at
    runtime will tell you which you broke.
-3. Note it here, under `## Unreleased — <title>`, in the commit that makes
+3. Note it here, under `## Unreleased — a platform admin reads another tenant's operations
+
+**Server:** the first release that carries this section. **SDKs:** the first
+release that carries it.
+
+- **`PlatformOperationService.ListOperations` takes `tenant_id`**: the tenant
+  whose operations to list, as `ListAuditLogRequest.tenant_id` names one.
+  Empty is the caller's own, as before. A caller other than a platform admin
+  that names another tenant is refused with `PermissionDenied`.
+- **The console's tenant History** names the tenant, so a platform admin on
+  another tenant's page sees the batches its collections ran, which it did
+  not before.
+
+Additive: no action needed.
+
+## Unreleased — <title>`, in the commit that makes
    the change. The release renames the heading to the tags that shipped it,
    reading which streams it belongs to from the commit that wrote it
    ([`.github/ci/upgrade-sections.ts`](../.github/ci/upgrade-sections.ts)): a

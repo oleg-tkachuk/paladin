@@ -58,18 +58,20 @@ class GetOperationRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ListOperationsRequest(_message.Message):
-    __slots__ = ("page", "filter", "sort_order", "mine", "include_dismissed")
+    __slots__ = ("page", "filter", "sort_order", "mine", "include_dismissed", "tenant_id")
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
     MINE_FIELD_NUMBER: _ClassVar[int]
     INCLUDE_DISMISSED_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     page: _pagination_pb2.PageRequest
     filter: str
     sort_order: _pagination_pb2.SortOrder
     mine: bool
     include_dismissed: bool
-    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ..., include_dismissed: _Optional[bool] = ...) -> None: ...
+    tenant_id: str
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ..., include_dismissed: _Optional[bool] = ..., tenant_id: _Optional[str] = ...) -> None: ...
 
 class ListOperationsResponse(_message.Message):
     __slots__ = ("operations", "page")

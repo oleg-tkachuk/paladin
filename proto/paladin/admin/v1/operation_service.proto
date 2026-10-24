@@ -14,7 +14,8 @@ import "google/api/field_behavior.proto";
 
 // OperationService exposes long-running operations on the admin plane.
 // Mirrors the data-plane OperationService. Both list the caller tenant's
-// operations; ListOperationsRequest.mine narrows that to the caller's own.
+// operations; ListOperationsRequest.mine narrows that to the caller's own,
+// and here a platform admin can name another tenant with tenant_id.
 service PlatformOperationService {
   // GetOperation returns the current state of a long-running operation. done
   // distinguishes finished from in-flight; result carries either the response
@@ -106,6 +107,13 @@ message ListOperationsRequest {
   bool mine = 4;
   // include_dismissed lists, with mine, the operations the caller cleared too.
   bool include_dismissed = 5;
+  // tenant_id lists another tenant's operations: those its principals started.
+  // Empty = the caller's own tenant. A caller other than a platform admin may
+  // name only its own tenant.
+  string tenant_id = 6 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 message ListOperationsResponse {
