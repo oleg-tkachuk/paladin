@@ -1,12 +1,13 @@
-"""The shared SDK scenarios (sdk/testdata/scenarios.json) against a live server —
-the compose stack backend/scripts/verify-stack.sh boots, phase sdk. The Go SDK
-runs the same scenarios.
+"""The shared SDK scenarios (sdk/testdata/scenarios.json) against paladin.testing
+on every run, and against a live server — the compose stack
+backend/scripts/verify-stack.sh boots, phase sdk. The Go SDK runs the same
+scenarios against its own fake and the same server.
 
     PALADIN_SDK_DATA_URL=… PALADIN_SDK_TOKEN=… PALADIN_SDK_COLLECTION=… \\
     PALADIN_SDK_CONFORMANCE=1 uv run pytest tests/conformance
 
-Without PALADIN_SDK_CONFORMANCE the scenarios are skipped, so the ordinary
-suite needs no server; with it, a missing variable is a failure.
+Without PALADIN_SDK_CONFORMANCE the live scenarios are skipped, so the
+ordinary suite needs no server; with it, a missing variable is a failure.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import json
 import os
 import secrets
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from paladin import (
 )
 from paladin.common.v1 import pagination_pb2
 from paladin.data.v1 import object_service_pb2
+from paladin.testing import FakePaladin
 
 SCENARIOS = Path(__file__).resolve().parents[3] / "testdata" / "scenarios.json"
 ENABLE = "PALADIN_SDK_CONFORMANCE"
@@ -179,3 +181,16 @@ def test_every_scenario_is_implemented() -> None:
 @pytest.mark.parametrize("name", sorted(RUNNERS))
 def test_scenario(env: Env, name: str) -> None:
     RUNNERS[name](env)
+
+
+@pytest.fixture(scope="module")
+def fake_env() -> Iterator[Env]:
+    with FakePaladin() as fake:
+        yield Env(fake.connect().data, fake.collection())
+
+
+@pytest.mark.parametrize("name", sorted(RUNNERS))
+def test_scenario_against_the_fake(fake_env: Env, name: str) -> None:
+    """The fake answers every scenario as the server does, so a consumer's
+    unit tests against it hold to what the stack gate holds the server to."""
+    RUNNERS[name](fake_env)

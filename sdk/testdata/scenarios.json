@@ -1,5 +1,5 @@
 {
-  "_comment": "The scenarios both SDKs run against a live server (backend/scripts/verify-stack.sh, phase sdk). Each SDK's runner implements every one, by these names, and its tests fail when it does not.",
+  "_comment": "The scenarios both SDKs run against their fakes in every test run, and against a live server (backend/scripts/verify-stack.sh, phase sdk). Each SDK's runner implements every one, by these names, and its tests fail when it does not.",
   "scenarios": [
     "upload_small",
     "upload_multipart",

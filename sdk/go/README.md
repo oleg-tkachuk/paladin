@@ -568,10 +568,11 @@ disposition. Another (`auth/sdk_fake_caveats_fidelity_test.go`) presents a
 capability to the data plane's interceptor chain and through this fake
 alike — the wrong plane, an operation or resource outside its caveats, a
 request past its ceiling — and requires the same code, reason and message.
-The data-plane calls are not otherwise run against it
-that way yet; the shared scenarios (`sdk/testdata/scenarios.json`) run
-against a real server only. See BACKLOG.md, "The shared SDK scenarios run
-against the server only".
+The shared data-plane scenarios (`sdk/testdata/scenarios.json`) run
+against this fake in every CI run, as they run against the server in the
+stack gate, so a scenario the fake answers differently is red where it
+changed. Every response names `ServerVersion` in `HeaderServerVersion`, as
+the server names its release.
 
 ### Concurrency
 
@@ -589,9 +590,9 @@ connection pools are what make many calls cheap — a `Transfer` keeps
 
 ### Parity with the Python SDK
 
-Both SDKs run the same scenarios against a live server
-([`sdk/testdata/scenarios.json`](../testdata/scenarios.json), in CI's stack
-gate) and parse names against the same table
+Both SDKs run the same scenarios against their fakes and a live server
+([`sdk/testdata/scenarios.json`](../testdata/scenarios.json), the server in
+CI's stack gate) and parse names against the same table
 ([`sdk/testdata/names.json`](../testdata/names.json)), which the server's
 tests hold its parsers to as well. Where they differ, it is on purpose:
 

@@ -92,7 +92,7 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceSync,
     StorageBootstrapServiceWSGIApplication,
 )
-from paladin.errors import ERROR_DOMAIN, error_details
+from paladin.errors import ERROR_DOMAIN, HEADER_SERVER_VERSION, error_details
 from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, ObjectName
 from paladin.transfer import CHECKSUM_SHA256
 
@@ -110,6 +110,9 @@ PART_SIZE = 5 << 20
 """The part size multipart uploads are told to use."""
 DEFAULT_PAGE_SIZE = 100
 """The page ``list_objects`` answers when asked for none."""
+SERVER_VERSION = "paladintest"
+"""The release the fake names on every response, in ``HEADER_SERVER_VERSION``,
+as the server names its own."""
 TESTING_EXTRA_HINT = "paladin.testing needs the 'testing' extra: uv add 'paladin-sdk[testing]'"
 """What ``FakePaladin`` raises, as an ``ImportError``, without the extra."""
 _VALIDATION_FAILED = "validation error"
@@ -1025,7 +1028,12 @@ class FakePaladin(
             CapabilityServiceWSGIApplication(_CapabilityService(self), interceptors=faults),
         ]
 
-        def route(environ, start_response):  # type: ignore[no-untyped-def]
+        def route(environ, respond):  # type: ignore[no-untyped-def]
+            def start_response(status, headers, *exc_info):  # type: ignore[no-untyped-def]
+                return respond(
+                    status, [*headers, (HEADER_SERVER_VERSION, SERVER_VERSION)], *exc_info
+                )
+
             if environ["PATH_INFO"].startswith(_STORAGE):
                 return self._storage(environ, start_response)
             if environ["PATH_INFO"].startswith(_PUBLIC):
