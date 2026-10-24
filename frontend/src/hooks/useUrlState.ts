@@ -43,6 +43,47 @@ function sameView<T>(codec: UrlCodec<T>, a: T, b: T): boolean {
 }
 
 /**
+ * How many of the page's own replaces the router may still be catching up
+ * with: one per keystroke typed faster than it answers, with room to spare.
+ */
+const WRITES_REMEMBERED = 32;
+
+/**
+ * The query strings this page's hooks wrote, as useSearchParams spells them
+ * (no leading "?"), each with the sequence number of its latest write, oldest
+ * first. Shared by every hook, since one hook's write carries the others'
+ * parameters too.
+ */
+const written = new Map<string, number>();
+/** The sequence number of the latest write. */
+let writes = 0;
+/** The latest write the router has reported. */
+let routerAt = 0;
+
+function recordWrite(search: string): void {
+  writes += 1;
+  written.delete(search);
+  written.set(search, writes);
+  if (written.size > WRITES_REMEMBERED) {
+    const oldest = written.keys().next().value;
+    if (oldest !== undefined) written.delete(oldest);
+  }
+}
+
+/**
+ * The router's query string is a write of this page it has not passed yet:
+ * it is catching up. One it passed already — a link back to a row opened
+ * before — is a navigation. Every hook on the page asks about the same
+ * signal, so reaching a write does not consume it.
+ */
+function catchingUp(signal: string): boolean {
+  const seq = written.get(signal);
+  if (seq === undefined || seq < routerAt) return false;
+  routerAt = seq;
+  return true;
+}
+
+/**
  * Replaces the URL's parameters without a navigation or a history entry, so
  * typing in a search does not fill the back button. Next.js syncs
  * useSearchParams with the native call.
@@ -52,6 +93,7 @@ function replaceParams(updates: ParamUpdates): void {
   const next = withParams(search, updates);
   if (next === search) return;
   window.history.replaceState(null, "", `${pathname}${next}${hash}`);
+  recordWrite(new URLSearchParams(next).toString());
 }
 
 /**
@@ -64,6 +106,12 @@ function replaceParams(updates: ParamUpdates): void {
  * round: the router answers a replace in a transition, and a search box whose
  * value waited for it would lose its caret on every keystroke.
  *
+ * The router is not always behind, though. A link to the same page
+ * (next/link) re-renders it with the new parameters before Next.js writes them
+ * to the address bar, so the address bar is stale then, not the router. A
+ * router query string this page wrote itself is the router catching up, and
+ * the address bar is read; any other is a navigation, and the router is.
+ *
  * A codec that keeps its identity between renders spares the effect that
  * writes the URL from running again for nothing.
  */
@@ -71,8 +119,6 @@ export function useUrlState<T>(
   codec: UrlCodec<T> | null,
   initial: T,
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
-  // Read only to learn that the URL changed; the address bar is the truth,
-  // since the router may still be catching up with a replace made here.
   const signal = useSearchParams()?.toString() ?? "";
   const [value, setValue] = useState<T>(() =>
     codec ? codec.read(currentParams()) : initial,
@@ -80,7 +126,9 @@ export function useUrlState<T>(
   const [seen, setSeen] = useState(signal);
   if (codec && seen !== signal) {
     setSeen(signal);
-    const fromUrl = codec.read(currentParams());
+    const fromUrl = codec.read(
+      catchingUp(signal) ? currentParams() : new URLSearchParams(signal),
+    );
     if (!sameView(codec, value, fromUrl)) setValue(fromUrl);
   }
   useEffect(() => {
