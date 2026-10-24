@@ -22,10 +22,12 @@ import (
 type refusal struct {
 	code    connect.Code
 	message string
+	// reason is the ErrorInfo reason the server sends, none for most.
+	reason commonv1.ErrorReason
 }
 
-// wantRefused fails the test unless err is the server's refusal, with no
-// ErrorInfo reason — the server's authentication sends none.
+// wantRefused fails the test unless err is the server's refusal, with the
+// ErrorInfo reason it sends: none for its authentication.
 func wantRefused(t *testing.T, err error, want refusal) {
 	t.Helper()
 	if connect.CodeOf(err) != want.code {
@@ -35,22 +37,25 @@ func wantRefused(t *testing.T, err error, want refusal) {
 	if !errors.As(err, &cerr) || cerr.Message() != want.message {
 		t.Errorf("message = %q, want the server's %q", cerr.Message(), want.message)
 	}
-	if got := paladin.Reason(err); got != commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
-		t.Errorf("reason = %s, want none, as the server sends", got)
+	if got := paladin.Reason(err); got != want.reason {
+		t.Errorf("reason = %s, want %s, as the server sends", got, want.reason)
 	}
 }
 
 var (
-	missingAuthorization = refusal{connect.CodeUnauthenticated, "missing Authorization header"}
-	expectedBearer       = refusal{connect.CodeUnauthenticated, "expected Bearer token"}
-	jwtMalformed         = refusal{connect.CodeUnauthenticated, "jwt: malformed token"}
-	jwtExpired           = refusal{connect.CodeUnauthenticated, "jwt: token expired"}
-	apiTokenNotFound     = refusal{connect.CodeUnauthenticated, "api_token: token not found"}
-	apiTokenRevoked      = refusal{connect.CodeUnauthenticated, "api_token: token revoked"}
-	capabilityInvalid    = refusal{connect.CodePermissionDenied, "capability: invalid signature"}
-	capabilityRevoked    = refusal{connect.CodePermissionDenied, "capability: revoked"}
-	tenantMismatch       = refusal{connect.CodePermissionDenied, "URL tenant does not match token tenant"}
-	uploadTenantMismatch = refusal{connect.CodePermissionDenied, "tenant mismatch"}
+	missingAuthorization = refusal{code: connect.CodeUnauthenticated, message: "missing Authorization header"}
+	expectedBearer       = refusal{code: connect.CodeUnauthenticated, message: "expected Bearer token"}
+	jwtMalformed         = refusal{code: connect.CodeUnauthenticated, message: "jwt: malformed token"}
+	jwtExpired           = refusal{code: connect.CodeUnauthenticated, message: "jwt: token expired"}
+	apiTokenNotFound     = refusal{code: connect.CodeUnauthenticated, message: "api_token: token not found"}
+	apiTokenRevoked      = refusal{code: connect.CodeUnauthenticated, message: "api_token: token revoked"}
+	// A capability the fake did not issue goes to the verifier, as on the
+	// server, which cannot read "not-issued" as a Biscuit.
+	capabilityNotIssued = refusal{connect.CodePermissionDenied, "invalid token: biscuit encoding: illegal base64 data at input byte 8",
+		commonv1.ErrorReason_ERROR_REASON_CAPABILITY_INVALID_TOKEN}
+	capabilityRevoked    = refusal{code: connect.CodePermissionDenied, message: "capability: revoked"}
+	tenantMismatch       = refusal{code: connect.CodePermissionDenied, message: "URL tenant does not match token tenant"}
+	uploadTenantMismatch = refusal{code: connect.CodePermissionDenied, message: "tenant mismatch"}
 )
 
 // Without WithStrictAuth the fake serves every call, as it always has: no
@@ -134,7 +139,7 @@ func TestStrictAuthRefusesWhatTheServerRefuses(t *testing.T) {
 		{"a basic credential", paladin.WithHeader(paladin.HeaderAuthorization, "Basic dXNlcjpwYXNz"), expectedBearer},
 		{"a bearer token not issued", paladin.WithBearerToken("not-issued"), jwtMalformed},
 		{"an API token not issued", paladin.WithAPIToken("paladin_pat_notissued"), apiTokenNotFound},
-		{"a capability not issued", paladin.WithCapability("not-issued"), capabilityInvalid},
+		{"a capability not issued", paladin.WithCapability("not-issued"), capabilityNotIssued},
 		{"a capability given as a bearer token", paladin.WithBearerToken(srv.IssueCapability(srv.Tenant())), jwtMalformed},
 		{"another tenant's bearer token", paladin.WithBearerToken(srv.IssueBearerToken(other)), tenantMismatch},
 		{"another tenant's API token", paladin.WithAPIToken(srv.IssueAPIToken(other)), tenantMismatch},

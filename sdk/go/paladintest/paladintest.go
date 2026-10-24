@@ -225,6 +225,8 @@ type Server struct {
 	credentials map[string]*credential
 	// capabilities are the ones CapabilityService issued, by id.
 	capabilities map[string]*capabilityRecord
+	// seal seals a capability's Biscuit and opens a copy of it.
+	seal *sealer
 	// replays are the responses memoised per procedure and idempotency key,
 	// with the fingerprint of the request each answered — as the server keeps.
 	replays map[string]replay
@@ -493,6 +495,11 @@ func Start(opts ...Option) (*Server, func()) {
 	for _, opt := range opts {
 		opt(s)
 	}
+	seal, err := newSealer()
+	if err != nil {
+		panic(fmt.Sprintf("paladintest: capability sealer: %v", err)) // a fresh key and an empty store always build
+	}
+	s.seal = seal
 	validator, err := protovalidate.New()
 	if err != nil {
 		panic(fmt.Sprintf("paladintest: protovalidate: %v", err)) // the contract's own rules always compile

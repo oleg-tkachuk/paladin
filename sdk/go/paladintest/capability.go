@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"github.com/oleg-tkachuk/limes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -28,10 +29,10 @@ import (
 // in HeaderCapability, which must allow share, be the parent_id named and not
 // be a Biscuit copy, and grants no operation the parent lacks.
 //
-// The fake checks only that. Its token and its Biscuit are the fake's own
-// credentials, not a JWT and a Biscuit — paladin.Attenuate refuses the
-// fake's Biscuit — and of the lifetime it checks only that a not_before
-// falls before the expiry. Under WithStrictAuth a call is held to the
+// The fake checks only that. Its token is the fake's own credential, not a
+// JWT; its Biscuit is a real one (seal.go), which paladin.Attenuate narrows.
+// Of the lifetime it checks only that a not_before falls before the expiry,
+// and that a narrowed copy has not outlived its own. Under WithStrictAuth a call is held to the
 // capability's planes, request ceiling, operations and resources
 // (caveats.go); its budget and copy quota are not counted. Both credentials are
 // accepted under WithStrictAuth for the subject's tenant until the
@@ -48,8 +49,6 @@ type capabilityService struct {
 
 // Prefixes and names of what the fake issues for a capability.
 const (
-	// biscuitPrefix marks the fake's stand-in for a capability's Biscuit.
-	biscuitPrefix = "paladintest_biscuit_"
 	// capabilityIssuer is the issuer the fake's capabilities name.
 	capabilityIssuer = "paladintest"
 	// DefaultCapabilityTTL is how long a capability lives when Issue names no
@@ -164,7 +163,7 @@ func (s capabilityService) Issue(ctx context.Context, req *adminv1.CapabilitySer
 		Audience:        slices.Clone(req.GetAudience()),
 		Caveats:         proto.CloneOf(caveats),
 		ConfirmationJkt: req.GetConfirmationJkt(),
-	}, now, nbf, expires, status, ""), nil
+	}, now, nbf, expires, status, "")
 }
 
 // Delegate narrows the capability the call presents.
@@ -180,6 +179,19 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	if ok {
 		parent = s.capabilities[cred.capability]
 	}
+	// A copy of a Biscuit delegates nothing, but is checked as the server
+	// checks it first: as the capability it narrows. A token the fake did not
+	// issue at all is the verifier's to refuse.
+	var copyOps []limes.Op
+	if !ok {
+		id, narrowed, err := s.seal.open(presented, paladin.PlaneAdmin)
+		if err != nil {
+			s.mu.Unlock()
+			return nil, err
+		}
+		cred, ok = s.biscuitOfLocked(id)
+		parent, copyOps = s.capabilities[id], narrowed.Caveats.Ops
+	}
 	s.mu.Unlock()
 	switch {
 	case !ok || parent == nil:
@@ -188,8 +200,12 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 		return nil, connect.NewError(connect.CodePermissionDenied, errCapabilityRevoked.Error()).WithCause(errCapabilityRevoked)
 	}
 	parentCaveats := parent.msg.GetCaveats()
+	allowed := parentCaveats.GetOps()
+	if copyOps != nil {
+		allowed = paladin.OpNames(opsOf(copyOps)...)
+	}
 	switch {
-	case !slices.Contains(parentCaveats.GetOps(), string(paladin.OpShare)):
+	case !slices.Contains(allowed, string(paladin.OpShare)):
 		return nil, withReason(connect.NewError(connect.CodePermissionDenied, msgLacksShare))
 	case parent.msg.GetId() != req.GetParentId():
 		return nil, withReason(connect.NewError(connect.CodePermissionDenied, msgNotOwnParent))
@@ -239,7 +255,7 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 		Audience:        slices.Clone(audience),
 		Caveats:         proto.CloneOf(caveats),
 		ConfirmationJkt: jkt,
-	}, now, nbf, expires, status, parent.msg.GetId()), nil
+	}, now, nbf, expires, status, parent.msg.GetId())
 }
 
 // Revoke revokes a capability the fake issued — its token and its Biscuit —
@@ -338,7 +354,7 @@ func notBefore(t *timestamppb.Timestamp) time.Time {
 
 // mint records c, issued at now and valid from nbf until expires, and
 // answers it with its token and, when status is ISSUED, its Biscuit.
-func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status adminv1.BiscuitStatus, parent string) *adminv1.CapabilityServiceIssueResponse {
+func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status adminv1.BiscuitStatus, parent string) (*adminv1.CapabilityServiceIssueResponse, error) {
 	// A UUIDv7, as the server's: List pages in id order, which is issue order.
 	c.Id = uuid.Must(uuid.NewV7()).String()
 	c.Issuer = capabilityIssuer
@@ -351,11 +367,16 @@ func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status
 	tenant := c.GetSubject().GetTenantId()
 	res := &adminv1.CapabilityServiceIssueResponse{BiscuitStatus: status}
 	res.Token = s.issueFor(c.GetId(), capabilityPrefix, tenant, false)
-	if status == adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
-		res.Biscuit = s.issueFor(c.GetId(), biscuitPrefix, tenant, true)
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if status == adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
+		b, err := s.seal.seal(c, now, expires)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, "paladintest: seal the Biscuit: "+err.Error()).WithCause(err)
+		}
+		res.Biscuit = b
+		s.credentials[b] = &credential{kind: kindCapability, tenant: tenant, capability: c.GetId(), biscuit: true}
+	}
 	rec := &capabilityRecord{msg: c, credentials: []string{res.GetToken()}}
 	if res.GetBiscuit() != "" {
 		rec.credentials = append(rec.credentials, res.GetBiscuit())
@@ -365,7 +386,7 @@ func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status
 		p.children = append(p.children, c.GetId())
 	}
 	res.Capability = proto.CloneOf(c)
-	return res
+	return res, nil
 }
 
 // issueFor is a capability credential of the capability id, its Biscuit when
