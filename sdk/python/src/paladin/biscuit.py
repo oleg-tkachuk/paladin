@@ -11,7 +11,7 @@ biscuit_vocabulary.json``): the operations, resources, planes and expiry the
 token keeps, a key to bind it to, and limits the copy counts on its own. A restriction that would widen the token
 is not refused here but by the server, which then refuses the whole token.
 
-Needs ``biscuit-python``: ``pip install paladin-sdk[biscuit]``.
+Needs ``biscuit-python``: ``uv add 'paladin-sdk[biscuit]'``.
 """
 
 from __future__ import annotations
@@ -27,6 +27,9 @@ from typing import Any
 
 from paladin.admin.v1 import capability_service_pb2
 from paladin.auth import Op, Plane
+
+EXTRA_HINT = "Biscuit attenuation needs the 'biscuit' extra: uv add 'paladin-sdk[biscuit]'"
+"""What attenuating raises, as an ``ImportError``, without the extra."""
 
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
 # the shared spec the server's tests read too.
@@ -141,9 +144,7 @@ def _biscuit() -> Any:
     try:
         import biscuit_auth
     except ImportError as err:  # pragma: no cover - exercised without the extra
-        raise ImportError(
-            "Biscuit attenuation needs 'biscuit-python': pip install paladin-sdk[biscuit]"
-        ) from err
+        raise ImportError(EXTRA_HINT) from err
     return biscuit_auth
 
 

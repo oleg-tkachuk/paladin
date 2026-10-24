@@ -149,7 +149,7 @@ requires one on `Create*` and `Issue*` calls.
 `CapabilityService.Issue` and `Delegate` return `biscuit` beside `token`: the
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
 no key and no call to the server — to hand a sub-agent less than it was given.
-Install the `biscuit` extra (`pip install "paladin-sdk[biscuit] @ git+…"`);
+Install the `biscuit` extra (`uv add "paladin-sdk[biscuit] @ git+…"`);
 `biscuit-python` ships a wheel for CPython 3.13, and elsewhere builds
 from source with Rust.
 

@@ -6,7 +6,7 @@ copy of the token is useless to anyone without the key. Pass the key as
 ``Client(..., capability=token, dpop_key=key)``.
 
 Keys are ``cryptography``'s Ed25519 or ECDSA P-256 private keys; install the
-``dpop`` extra (``pip install paladin-sdk[dpop]``).
+``dpop`` extra (``uv add 'paladin-sdk[dpop]'``).
 
 A server that asks for nonces (RFC 9449 §8) sends one with each response; the
 client keeps the latest and signs it into the next proof. A unary call refused
@@ -34,6 +34,9 @@ from paladin.relay import Captured, captured
 REQ = TypeVar("REQ")
 RES = TypeVar("RES")
 
+EXTRA_HINT = "DPoP needs the 'dpop' extra: uv add 'paladin-sdk[dpop]'"
+"""What signing a proof raises, as an ``ImportError``, without the extra."""
+
 HEADER_DPOP = "DPoP"
 # The nonce the server wants in the next proof, and the challenge of a refused
 # credential (RFC 9449 §8).
@@ -57,9 +60,7 @@ def _crypto() -> Any:
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils
     except ImportError as err:  # pragma: no cover - exercised without the extra
-        raise ImportError(
-            "DPoP needs the 'cryptography' package: pip install paladin-sdk[dpop]"
-        ) from err
+        raise ImportError(EXTRA_HINT) from err
     return hashes, serialization, ec, ed25519, utils
 
 

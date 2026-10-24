@@ -113,7 +113,7 @@ DEFAULT_PAGE_SIZE = 100
 SERVER_VERSION = "paladintest"
 """The release the fake names on every response, in ``HEADER_SERVER_VERSION``,
 as the server names its own."""
-TESTING_EXTRA_HINT = "paladin.testing needs the 'testing' extra: pip install 'paladin-sdk[testing]'"
+TESTING_EXTRA_HINT = "paladin.testing needs the 'testing' extra: uv add 'paladin-sdk[testing]'"
 """What ``FakePaladin`` raises, as an ``ImportError``, without the extra."""
 _VALIDATION_FAILED = "validation error"
 """How the server's answer to a request its contract's rules refuse begins."""
