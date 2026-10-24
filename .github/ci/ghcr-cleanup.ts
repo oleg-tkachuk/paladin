@@ -15,13 +15,15 @@
 import { setOutput, summarize } from "./lib/actions.ts";
 import { requireEnv } from "./lib/env.ts";
 import { runMain } from "./lib/main.ts";
-import { DEV_MARK } from "./lib/versions.ts";
+import { DEV_MARKS } from "./lib/versions.ts";
 
 // DEV_BUILDS_KEPT is how many dev builds each package keeps: the newest,
 // which the dev cluster follows.
 export const DEV_BUILDS_KEPT = 1;
 // DRY_RUN is false: the first dry run's list was read against the registry —
 // only dev builds and their children, no release, the newest kept.
+// DELETE_TAGS_SEPARATOR joins the action's delete-tags patterns.
+export const DELETE_TAGS_SEPARATOR = ",";
 export const DRY_RUN = false;
 
 // Output names the step outputs, which the cleanup action's inputs read.
@@ -34,8 +36,9 @@ export function cleanupPlan(image: string, chart: string): Record<string, string
   }
   return {
     [Output.Packages]: `${image},${chart}`,
-    // The action matches tags with shell-style wildcards.
-    [Output.DeleteTags]: `*${DEV_MARK}*`,
+    // The action matches tags with shell-style wildcards, one pattern per
+    // comma-separated entry.
+    [Output.DeleteTags]: DEV_MARKS.map((mark) => `*${mark}*`).join(DELETE_TAGS_SEPARATOR),
     [Output.Keep]: String(DEV_BUILDS_KEPT),
     [Output.DryRun]: String(DRY_RUN),
   };

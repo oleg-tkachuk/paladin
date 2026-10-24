@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { parse } from "yaml";
 
-import { DEV_BUILDS_KEPT, Output, cleanupPlan, cleanupSummary } from "./ghcr-cleanup.ts";
+import { DELETE_TAGS_SEPARATOR, DEV_BUILDS_KEPT, Output, cleanupPlan, cleanupSummary } from "./ghcr-cleanup.ts";
 import { Kind } from "./publish-plan.ts";
 
 const plan = cleanupPlan("paladin-core", "charts/paladin-core");
@@ -16,14 +16,20 @@ test("both packages, the newest dev build kept, deleting for real", () => {
   assert.throws(() => cleanupPlan("paladin-core", ""), /both/);
 });
 
-// The action matches tags with shell-style wildcards.
-const shellMatch = (pattern: string, text: string) =>
-  new RegExp(`^${pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(text);
+// The action matches tags with shell-style wildcards, any of its
+// comma-separated patterns.
+const shellMatch = (patterns: string, text: string) =>
+  patterns
+    .split(DELETE_TAGS_SEPARATOR)
+    .some((pattern) => new RegExp(`^${pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(text));
 
 test("dev builds only", () => {
   const glob = plan[Output.DeleteTags] ?? "";
-  for (const tag of ["38.1.1-dev.1792353836.gdab042fc", "0.1.0-dev.1.gabcdef12"]) assert.ok(shellMatch(glob, tag), tag);
-  for (const tag of ["38.1.0", "38.1.1", "v38.1.0", "sha256-eada85d13ca39a2939bf21479bfa2e6303f480a7ecd8f4997f3574eec93e2a12"]) {
+  // After a release, and after a release candidate.
+  for (const tag of ["38.1.1-dev.1792353836.gdab042fc", "0.1.0-dev.1.gabcdef12", "39.3.0-rc.1.dev.1792353836.gdab042fc"]) {
+    assert.ok(shellMatch(glob, tag), tag);
+  }
+  for (const tag of ["38.1.0", "38.1.1", "v38.1.0", "39.3.0-rc.1", "sha256-eada85d13ca39a2939bf21479bfa2e6303f480a7ecd8f4997f3574eec93e2a12"]) {
     assert.ok(!shellMatch(glob, tag), tag);
   }
 });

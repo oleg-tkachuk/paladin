@@ -1,0 +1,236 @@
+version: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# k8s — the cluster-side half: rolling a deployment, tailing it, looking at what
+# is running, installing the chart from disk.
+#
+#   includes:
+#     k8s:
+#       taskfile: '{{printf .TASKLIB "k8s"}}'
+#       dir: .
+#
+# Independent of the `release` module and usable without it — a repository that
+# only operates a cluster it does not build for needs this one alone. Include
+# both when a component does both; they share the same input names.
+#
+# Every task addresses the Deployment by name directly — `deploy/<name>` — not
+# by discovering it through a selector. That name must be exactly
+# K8S_DEPLOYMENT_NAME (PROJECT_NAME by default): `helm create`'s own scaffold
+# names it `<release>-<chart>` instead (its "fullname" helper), which this
+# module will not find. Name the Deployment's `metadata.name` literally
+# `{{ .Release.Name }}` — one component, one release, one name — the way this
+# library's own demo/ chart does, and skip the fullname helper.
+#
+# ── Inputs ───────────────────────────────────────────────────────────────────
+# Pass these at the include's own `vars:`, not the consumer's top-level
+# `vars:`. In a repository with more than one component the top level is
+# shared with every other component — see README.md#variable-scoping.
+#
+#   PROJECT_NAME         the label in every log line
+#   K8S_NAMESPACE        default "default"
+#   K8S_DEPLOYMENT_NAME  default PROJECT_NAME
+#   K8S_CONTEXT          pin a cluster                    (default: current)
+#   CHART_DIR            for k8s:upgrade  (default ./deploy/chart)
+#   VALUES               a values file for k8s:upgrade
+#   ROLLOUT_TIMEOUT      how long to wait for a roll      (default 2m)
+#   HELM_UPGRADE_FLAGS   extra flags for k8s:upgrade
+#
+# Nothing here is declared under a bare knob name: a var declared in an included
+# file shadows the including file's value of the same name, so every input is
+# read as `{{.NAME | default ...}}` and every derived value is prefixed `_`.
+# ─────────────────────────────────────────────────────────────────────────────
+# shell-verbatim: _K8S_KUBECTL HELM_UPGRADE_FLAGS
+
+silent: true
+
+vars:
+  _K8S_SVC: '{{.PROJECT_NAME | default "service"}}'
+  _K8S_NS: '{{.K8S_NAMESPACE | default "default"}}'
+  _K8S_DEPLOY: '{{.K8S_DEPLOYMENT_NAME | default .PROJECT_NAME | default "service"}}'
+  _K8S_CHART_DIR: '{{.CHART_DIR | default "./deploy/chart"}}'
+  # Empty = whatever kubectl's current-context is. Set it to pin a cluster.
+  # A command fragment spliced in as shell: the context is quoted here.
+  _K8S_KUBECTL: 'kubectl{{if .K8S_CONTEXT}} --context {{.K8S_CONTEXT | q}}{{end}}'
+  # How long restart's reachability probe waits before calling the cluster
+  # gone: a dead context would otherwise hang the chain it sits in.
+  _K8S_PROBE_TIMEOUT: 3s
+  # Status markers. The shape carries the meaning, so a line still reads in
+  # a monochrome log; the colour sits on top and drops out under NO_COLOR.
+  _K8S_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
+  _K8S_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
+  _K8S_SKIP: '{{if .NO_COLOR}}○{{else}}{{"\x1b[90m○\x1b[0m"}}{{end}}'
+  _K8S_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
+  _K8S_ERR: '{{if .NO_COLOR}}✖{{else}}{{"\x1b[31m✖\x1b[0m"}}{{end}}'
+
+tasks:
+
+  doctor:
+    desc: "Check that the context, namespace and deployment this component declares resolve"
+    # A report rather than a gate chain, the shape release:doctor uses.
+    #
+    # Every name below is an input, and in a monorepo a sibling component's
+    # top-level `vars:` can supply one (see README.md#variable-scoping). A
+    # wrong namespace is the expensive case: `restart` and `uninstall` both
+    # take one, and neither asks twice.
+    #
+    # The cluster half degrades to a warning rather than a failure. A
+    # kubeconfig that cannot be reached is the normal state on a laptop, and a
+    # doctor that fails there teaches people to stop running it.
+    cmds:
+      - cmd: |-
+          set -u
+          fail=0
+          svc={{._K8S_SVC | q}}
+          ctx={{.K8S_CONTEXT | q}}
+          ns={{._K8S_NS | q}}
+          deploy={{._K8S_DEPLOY | q}}
+          chart={{._K8S_CHART_DIR | q}}
+
+          say() { printf '%s %s · doctor · %s\n' "$1" "$svc" "$2"; }
+          bad() { say '{{._K8S_ERR}}' "$1" >&2; fail=1; }
+
+          command -v kubectl >/dev/null 2>&1 \
+            || { bad "kubectl is not installed — https://kubernetes.io/docs/tasks/tools/"; exit 1; }
+
+          # ─── context ──────────────────────────────────────────────────────
+          # Pinned or not is the thing worth printing: unpinned means every
+          # task here follows whatever `kubectl config use-context` last set,
+          # which is a different cluster tomorrow.
+          if [ -n "$ctx" ]; then
+            if kubectl config get-contexts -o name 2>/dev/null | grep -qxF -- "$ctx"; then
+              say '{{._K8S_OK}}' "context $ctx (pinned)"
+            else
+              bad "K8S_CONTEXT $ctx is not in the kubeconfig"
+            fi
+          else
+            cur=$(kubectl config current-context 2>/dev/null || true)
+            [ -n "$cur" ] \
+              && say '{{._K8S_WARN}}' "context $cur — not pinned, so this follows kubectl's current-context" \
+              || bad "no current context in the kubeconfig, and K8S_CONTEXT pins none"
+          fi
+
+          # ─── the chart these tasks upgrade from ───────────────────────────
+          [ -f "$chart/Chart.yaml" ] \
+            && say '{{._K8S_OK}}' "chart $chart" \
+            || say '{{._K8S_WARN}}' "CHART_DIR $chart has no Chart.yaml — upgrade would fail"
+
+          # ─── cluster ──────────────────────────────────────────────────────
+          if ! {{._K8S_KUBECTL}} version -o json >/dev/null 2>&1; then
+            say '{{._K8S_WARN}}' "cluster unreachable — namespace and deployment not checked"
+          elif ! {{._K8S_KUBECTL}} get ns "$ns" >/dev/null 2>&1; then
+            bad "namespace $ns does not exist on this cluster"
+          else
+            say '{{._K8S_OK}}' "namespace $ns"
+            if {{._K8S_KUBECTL}} -n "$ns" get deploy/"$deploy" >/dev/null 2>&1; then
+              say '{{._K8S_OK}}' "deployment $deploy"
+            else
+              say '{{._K8S_WARN}}' "no deployment $deploy in $ns yet — restart and logs have nothing to act on"
+            fi
+          fi
+
+          [ "$fail" = 0 ] && say '{{._K8S_OK}}' "ready"
+          exit "$fail"
+
+  restart:
+    desc: "Roll the deployment (no-op when the cluster, namespace or deployment is absent)"
+    # Skipped rather than failed when there is nothing to roll: this task sits
+    # in chains that must stay green on a laptop with no cluster running — and
+    # it says which of the two happened. Anything else the cluster answers
+    # fails: one `get` deciding both read RBAC denials and expired logins as
+    # "not found", and the old pods kept running behind a green step.
+    # --ignore-not-found turns "absent" into empty output and exit 0, so
+    # "absent" is told from an error without reading kubectl's prose.
+    cmds:
+      - cmd: |-
+          set -eu
+          if ! {{._K8S_KUBECTL}} version --request-timeout={{._K8S_PROBE_TIMEOUT | q}} >/dev/null 2>&1; then
+            printf '%s %s · k8s · cluster unreachable — skipping restart\n' "{{._K8S_SKIP}}" {{._K8S_SVC | q}}
+            exit 0
+          fi
+          if ! found=$({{._K8S_KUBECTL}} -n {{._K8S_NS | q}} get deploy/{{._K8S_DEPLOY | q}} --ignore-not-found -o name); then
+            printf '%s %s · k8s · could not look up deploy/%s in %s\n' "{{._K8S_ERR}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}} {{._K8S_NS | q}} >&2
+            exit 1
+          fi
+          if [ -z "$found" ]; then
+            printf '%s %s · k8s · deploy/%s not found in %s — skipping restart\n' "{{._K8S_SKIP}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}} {{._K8S_NS | q}}
+            exit 0
+          fi
+          printf '%s %s · k8s · roll deploy/%s in %s\n' "{{._K8S_RUN}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}} {{._K8S_NS | q}}
+          {{._K8S_KUBECTL}} -n {{._K8S_NS | q}} rollout restart deploy/{{._K8S_DEPLOY | q}}
+          {{._K8S_KUBECTL}} -n {{._K8S_NS | q}} rollout status deploy/{{._K8S_DEPLOY | q}} --timeout={{.ROLLOUT_TIMEOUT | default "2m" | q}}
+          printf '%s %s · k8s · rolled %s\n' "{{._K8S_OK}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}}
+
+  upgrade:
+    desc: "helm upgrade --install the release from the local chart directory"
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed — https://helm.sh/docs/intro/install/"
+    cmds:
+      - printf '%s %s · k8s · helm upgrade --install %s (%s)\n' "{{._K8S_RUN}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}} {{._K8S_NS | q}}
+      - >-
+        helm upgrade --install {{._K8S_DEPLOY | q}} {{._K8S_CHART_DIR | q}}
+        --namespace {{._K8S_NS | q}} --create-namespace
+        {{if .K8S_CONTEXT}}--kube-context {{.K8S_CONTEXT | q}}{{end}}
+        {{if .VALUES}}--values {{.VALUES | q}}{{end}}
+        {{.HELM_UPGRADE_FLAGS | default ""}}
+      - printf '%s %s · k8s · release %s upgraded\n' "{{._K8S_OK}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}}
+
+  uninstall:
+    desc: "helm uninstall this component's release — asks first"
+    prompt: "Uninstall {{._K8S_DEPLOY}} from {{._K8S_NS}}{{if .K8S_CONTEXT}} on {{.K8S_CONTEXT}}{{end}}? This cannot be undone."
+    preconditions:
+      - sh: command -v helm >/dev/null
+        msg: "helm is not installed — https://helm.sh/docs/intro/install/"
+    cmds:
+      - printf '%s %s · k8s · helm uninstall %s (%s)\n' "{{._K8S_RUN}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}} {{._K8S_NS | q}}
+      - >-
+        helm uninstall {{._K8S_DEPLOY | q}}
+        --namespace {{._K8S_NS | q}}
+        {{if .K8S_CONTEXT}}--kube-context {{.K8S_CONTEXT | q}}{{end}}
+      - printf '%s %s · k8s · %s uninstalled\n' "{{._K8S_OK}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}}
+
+  logs:
+    desc: "Tail the deployment's logs (Ctrl-C to stop)"
+    interactive: true
+    preconditions:
+      # Renamed from TAIL to match argocd's server:logs; refused rather than
+      # ignored, so an old call does not quietly get the default backlog.
+      - sh: '{{if .TAIL}}false{{else}}true{{end}}'
+        msg: "TAIL is now LOG_TAIL — task k8s:logs LOG_TAIL={{.TAIL}}"
+    cmds:
+      - "{{._K8S_KUBECTL}} -n {{._K8S_NS | q}} logs deploy/{{._K8S_DEPLOY | q}} -f --tail={{.LOG_TAIL | default \"100\" | q}}"
+
+  status:
+    desc: "Show the deployment and its pods"
+    # The pod list reads its selector from the Deployment itself rather than
+    # guessing a label convention (app.kubernetes.io/instance, /name, or
+    # something a chart invented) — whatever spec.selector.matchLabels says,
+    # because that is what actually decides which pods belong to it. Immune
+    # to what a consumer's chart happens to label things, by construction
+    # rather than by convention.
+    cmds:
+      - "{{._K8S_KUBECTL}} -n {{._K8S_NS | q}} get deploy/{{._K8S_DEPLOY | q}} -o wide"
+      - cmd: |-
+          set -eu
+          ns={{._K8S_NS | q}}
+          sel=$({{._K8S_KUBECTL}} -n "$ns" get deploy/{{._K8S_DEPLOY | q}} -o go-template='{{"{{"}}range $k,$v := .spec.selector.matchLabels{{"}}"}}{{"{{"}}$k{{"}}"}}={{"{{"}}$v{{"}}"}},{{"{{"}}end{{"}}"}}' | sed 's/,$//')
+          # A selector of matchExpressions alone leaves nothing here, and an
+          # empty -l lists every pod in the namespace as if it were this one's.
+          if [ -z "$sel" ]; then
+            printf '%s %s · k8s · deploy/%s selects by matchExpressions only — pods not listed\n' "{{._K8S_SKIP}}" {{._K8S_SVC | q}} {{._K8S_DEPLOY | q}}
+            exit 0
+          fi
+          {{._K8S_KUBECTL}} -n "$ns" get pods -l "$sel" -o wide
+
+  port-forward:
+    desc: "Port-forward the deployment (PORT local, TARGET_PORT in the pod)"
+    interactive: true
+    vars:
+      PORT: '{{.PORT | default "8080"}}'
+      # Defaults to PORT (already resolved above, never empty by the time
+      # this reads it), so a service listening on the same number needs no
+      # second knob; TEI-style containers on :80 set TARGET_PORT.
+      _K8S_TARGET: '{{.TARGET_PORT | default .PORT}}'
+    cmds:
+      - printf '%s %s · k8s · localhost:%s → deploy/%s:%s\n' "{{._K8S_RUN}}" {{._K8S_SVC | q}} {{.PORT | q}} {{._K8S_DEPLOY | q}} {{._K8S_TARGET | q}}
+      - "{{._K8S_KUBECTL}} -n {{._K8S_NS | q}} port-forward deploy/{{._K8S_DEPLOY | q}} {{.PORT | q}}:{{._K8S_TARGET | q}}"
