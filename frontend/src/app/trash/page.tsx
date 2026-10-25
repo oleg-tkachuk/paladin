@@ -35,14 +35,31 @@ function byDeletedAt(a: Tenant, b: Tenant): number {
 
 const COLUMN_COUNT = 4;
 
+// A trashed tenant and where it stands in the retention window, read against
+// the moment the list was fetched.
+interface TrashRow {
+  tenant: Tenant;
+  pastRetention: boolean;
+}
+
 // Which trashed tenants show, by where they stand in the retention window.
-type RetentionFilter = "all" | "past" | "within";
-const RETENTION_FILTERS: readonly ToolbarFilterOption<RetentionFilter>[] = [
-  { value: "all", label: "All" },
-  { value: "past", label: "Past retention" },
-  { value: "within", label: "Within retention" },
+const RETENTION_PAST = "past";
+const RETENTION_WITHIN = "within";
+const TRASH_FACETS: readonly Facet<TrashRow>[] = [
+  {
+    id: "retention",
+    label: "Retention",
+    values: (r) => [r.pastRetention ? RETENTION_PAST : RETENTION_WITHIN],
+    options: [
+      {
+        value: RETENTION_PAST,
+        label: "Past retention",
+        tone: StatusTone.Warning,
+      },
+      { value: RETENTION_WITHIN, label: "Within retention" },
+    ],
+  },
 ];
-const DEFAULT_RETENTION_FILTER: RetentionFilter = "all";
 
 type TrashColumn = "tenant" | "deleted" | "retention";
 const tsDate = (t: Tenant["deletedAt"]) => (t ? timestampDate(t) : undefined);
@@ -86,13 +103,14 @@ import {
   affectedByPurge,
 } from "@/lib/tenant/purgePreview";
 import { SortableHead } from "@/components/ui/SortHeader";
-import {
-  TableToolbar,
-  type ToolbarFilterOption,
-} from "@/components/ui/TableToolbar";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
-import { useTableFilter } from "@/hooks/useTableUrl";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
+import type { Facet } from "@/lib/table/facets";
+import { StatusTone } from "@/lib/ui/status";
 import type { SortAccessors } from "@/lib/table/view";
 import { useNotification } from "@/components/ui/Notification";
 import {
@@ -152,39 +170,36 @@ export default function TrashPage() {
   // Ages are read against the moment the list was fetched, so a row does not
   // change under the operator between refreshes.
   const now = useMemo(() => new Date(fetchedAt || Date.now()), [fetchedAt]);
-  const pastRetention = useMemo(
+  const rows = useMemo<TrashRow[]>(
     () =>
-      trashed.filter(
-        (t) => trashAge(t.deletedAt, t.purgeEligibleAt, now)?.pastRetention,
-      ).length,
+      trashed.map((tenant) => ({
+        tenant,
+        pastRetention: !!trashAge(tenant.deletedAt, tenant.purgeEligibleAt, now)
+          ?.pastRetention,
+      })),
     [trashed, now],
   );
+  const pastRetention = rows.filter((r) => r.pastRetention).length;
   const windowDays = useMemo(() => {
     const first = trashed[0];
     const info = first && trashAge(first.deletedAt, first.purgeEligibleAt, now);
     return info ? retentionDays(info) : null;
   }, [trashed, now]);
-  const [retention, setRetention] = useTableFilter(
-    RETENTION_FILTERS,
-    DEFAULT_RETENTION_FILTER,
-    PAGE_TABLE,
-  );
+  const facets = useTableFacets(rows, TRASH_FACETS, PAGE_TABLE);
   const inWindow = useMemo(
-    () =>
-      retention === DEFAULT_RETENTION_FILTER
-        ? trashed
-        : trashed.filter(
-            (t) =>
-              !!trashAge(t.deletedAt, t.purgeEligibleAt, now)?.pastRetention ===
-              (retention === "past"),
-          ),
-    [trashed, retention, now],
+    () => facets.rows.map((r) => r.tenant),
+    [facets.rows],
   );
   const view = useTableView(inWindow, {
     text: TRASH_SEARCH,
     accessors: TRASH_SORT,
     url: PAGE_TABLE,
     tableId: TABLE_ID,
+  });
+  const paged = useTablePage(view.rows, {
+    url: PAGE_TABLE,
+    tableId: TABLE_ID,
+    resetOn: [view.query, facets.selection],
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
 
@@ -287,12 +302,7 @@ export default function TrashPage() {
               onQueryChange={view.setQuery}
               searchLabel="Search the trash"
               placeholder="Search by name, slug or id…"
-              filter={{
-                label: "Retention",
-                options: RETENTION_FILTERS,
-                value: retention,
-                onChange: setRetention,
-              }}
+              facets={facets.controls}
               count={{ shown: view.rows.length, total: trashed.length }}
             />
             <Card className="p-0">
@@ -332,7 +342,7 @@ export default function TrashPage() {
                       </TableCell>
                     </TableRow>
                   ) : null}
-                  {view.rows.map((t) => {
+                  {paged.rows.map((t) => {
                     const busy = busyId === t.tenantId;
                     const info = trashAge(t.deletedAt, t.purgeEligibleAt, now);
                     const refusal = purgeRefusals[t.tenantId];
@@ -440,6 +450,7 @@ export default function TrashPage() {
                 </TableBody>
               </Table>
             </Card>
+            <TablePagination {...paged.pagination} />
           </div>
         )}
 

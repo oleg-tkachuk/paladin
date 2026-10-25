@@ -48,13 +48,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SelectRoot,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 
@@ -67,17 +60,19 @@ import { useRefetchWhile } from "@/hooks/useRefetchWhile";
 import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDialog";
 import {
   BucketTable,
+  BUCKET_FACETS,
   tenantLabelMap,
   BUCKET_SORT_COLUMNS,
   type BucketSortColumn,
 } from "@/components/features/buckets/BucketTable";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { useTenants } from "@/hooks/useTenants";
 import { bucketHref } from "@/lib/navigation/hrefs";
 
 /** The bucket tab the row menu opens. */
 const LIFECYCLE_TAB = "lifecycle";
-
-const ALL_BACKENDS = "__all__";
 
 /** The cross-tenant bucket index; a bucket's page there grants it. */
 const BUCKET_INDEX_HREF = "/buckets";
@@ -103,13 +98,7 @@ export default function TenantBucketsPage() {
     refetch: refetchBackends,
   } = useBackends();
 
-  const backends = useMemo(
-    () => backendRows.map((b) => b.backendId),
-    [backendRows],
-  );
-
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
-  const [filterBackend, setFilterBackend] = useState<string>(ALL_BACKENDS);
   const { sort, toggleSort: handleSort } = useTableSort<BucketSortColumn>(
     undefined,
     {
@@ -162,11 +151,9 @@ export default function TenantBucketsPage() {
     [tenants, tenant.tenantId, tenant.slug, tenant.displayName],
   );
 
+  const facets = useTableFacets(buckets, BUCKET_FACETS, PAGE_TABLE);
   const filtered = useMemo(() => {
-    let list = buckets;
-    if (filterBackend !== ALL_BACKENDS) {
-      list = list.filter((b) => b.backendId === filterBackend);
-    }
+    let list = facets.rows;
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -184,7 +171,12 @@ export default function TenantBucketsPage() {
       });
     }
     return list;
-  }, [buckets, filterBackend, search, sort]);
+  }, [facets.rows, search, sort]);
+  const paged = useTablePage(filtered, {
+    url: PAGE_TABLE,
+    resetOn: [search, facets.selection],
+  });
+  const hasFilters = search.trim() !== "" || facets.active > 0;
 
   return (
     <div className="space-y-4">
@@ -230,6 +222,7 @@ export default function TenantBucketsPage() {
         onQueryChange={setSearch}
         searchLabel="Search buckets"
         placeholder="Search by name or display label…"
+        facets={facets.controls}
         actions={
           <>
             <Button
@@ -244,24 +237,10 @@ export default function TenantBucketsPage() {
             </Button>
           </>
         }
-      >
-        <SelectRoot value={filterBackend} onValueChange={setFilterBackend}>
-          <SelectTrigger aria-label="Filter by backend" className="w-50">
-            <SelectValue placeholder="All backends" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_BACKENDS}>All backends</SelectItem>
-            {backends.map((b) => (
-              <SelectItem key={b} value={b}>
-                {b}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </SelectRoot>
-      </TableToolbar>
+      />
 
       <BucketTable
-        buckets={filtered}
+        buckets={paged.rows}
         tenants={tenantNames}
         perspective={tenant.tenantId}
         loading={loading}
@@ -273,14 +252,13 @@ export default function TenantBucketsPage() {
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
             <ArchiveBoxIcon className="size-10 opacity-40" />
             <p className="text-sm">
-              {search || filterBackend !== ALL_BACKENDS
+              {hasFilters
                 ? "No buckets match your filters."
                 : dedicated
                   ? "This tenant may bind to no bucket yet: it owns none and holds no grant."
                   : "This tenant may bind to no bucket yet: it holds no grant. A bucket's owner grants it from the bucket's page."}
             </p>
-            {!search &&
-              filterBackend === ALL_BACKENDS &&
+            {!hasFilters &&
               (dedicated ? (
                 <Button
                   size="sm"
@@ -347,6 +325,7 @@ export default function TenantBucketsPage() {
           </DropdownMenu>
         )}
       />
+      <TablePagination {...paged.pagination} />
 
       {dedicated && (
         <BucketCreateDialog

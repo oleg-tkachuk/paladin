@@ -836,21 +836,19 @@ order they are being taken up.
 
 #### Facets and pages for the remaining lists
 
-- **Status:** Aspirational.
-- **Reason:** counted facets (useTableFacets) and pages (useTablePage) came
-  to the lists loaded whole that are visited most: storage backends,
-  tenants, buckets, users and M2M tokens, and the connected applications
-  card takes facets. The rest do not yet. Operations, trash, MCP
-  authorization, configuration and objects keep their single-choice
-  toolbar filter; the capabilities page browses by kind, subject and two
-  server-side flags of its own; the tenant's and the backend's bucket lists
-  show every row. Audit, operations and collections page on the server with
-  Load more, so a count beside an answer would describe only the rows read
-  so far.
-- **Definition of Done:** every list either filters through facets and
-  pages through the shared hooks, or this entry names it and says why not;
-  no page keeps a single-choice filter beside facets; a list paged on the
-  server shows counts the API gives, not counts of what it loaded.
+- **Status:** Blocked.
+- **Reason:** counted facets (useTableFacets) and pages (useTablePage) reach
+  every list loaded whole that answers a question worth narrowing by:
+  storage backends, tenants, buckets (the platform's, a tenant's, a
+  backend's), users, M2M tokens, the trash and the MCP clients. What is
+  left is paged on the server — audit, operations, collections, objects —
+  where a count beside an answer would describe only the rows read so far,
+  and operations keep their single-choice state filter until then; the
+  capabilities page browses by kind and subject through two server-side
+  flags of its own; configuration is a document, not a list of rows.
+- **Definition of Done:** the server-paged lists filter through facets whose
+  counts the API gives, and operations drop their single-choice filter; or
+  this entry names each one left and why.
 - **Blockers:** per-answer counts for the server-paged lists, which no List
   RPC returns today.
 
