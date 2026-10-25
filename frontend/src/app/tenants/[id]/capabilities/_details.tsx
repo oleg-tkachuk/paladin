@@ -18,6 +18,7 @@ import { Timestamp } from "@/components/Timestamp";
 import { CopyableId } from "@/components/ui/CopyableId";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { Duration } from "@/components/Duration";
+import { CapabilityOpGrants } from "@/components/features/capabilities/CapabilityOpGrants";
 
 // UsageEntry is the capability's usage: undefined while loading,
 // "unavailable" when the read failed.
@@ -140,6 +141,12 @@ export function DetailsBody({
             )
           }
         />
+        {(cap.caveats?.ops ?? []).length > 0 && (
+          <DetailRow
+            label="Unlocks"
+            value={<CapabilityOpGrants ops={cap.caveats!.ops} />}
+          />
+        )}
       </DetailsSection>
 
       <DetailsSection title="Caveats">

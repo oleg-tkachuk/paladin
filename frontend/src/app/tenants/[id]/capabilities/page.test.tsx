@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   tenantId: "t-1",
   list: vi.fn(),
   getUsage: vi.fn(),
+  listOperationGrants: vi.fn(),
   issue: vi.fn(),
   revoke: vi.fn(),
   revokeBiscuit: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("@/lib/connect/client", () => ({
     revokeBiscuit: h.revokeBiscuit,
     getBiscuitUsage: h.getBiscuitUsage,
     get: h.get,
+    listOperationGrants: h.listOperationGrants,
   },
 }));
 vi.mock("../tenant-context", () => ({
@@ -93,6 +95,9 @@ const makeCap = (id: string) => ({
 beforeEach(() => {
   h.tenantId = "t-1";
   h.list.mockResolvedValue({ capabilities: [] });
+  h.listOperationGrants.mockResolvedValue({
+    grants: [{ op: "get", actions: ["GetObject", "PresignGet"] }],
+  });
   h.getUsage.mockResolvedValue({
     requestCount: 0n,
     spent: { currencyCode: "XXX", units: 0n, nanos: 0 },
