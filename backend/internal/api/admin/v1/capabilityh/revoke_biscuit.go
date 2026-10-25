@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -47,11 +48,12 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 	if err != nil {
 		return nil, err
 	}
-	if err := h.copies.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
+	res, err := h.copies.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
 		Copy:  c,
 		Note:  req.GetReason(),
 		Actor: caller.Subject,
-	}); err != nil {
+	})
+	if err != nil {
 		// As in Revoke: no such capability and another tenant's are one
 		// answer, so the endpoint is no oracle.
 		if errors.Is(err, limes.ErrNotFound) {
@@ -61,6 +63,14 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 	}
 	stashCapabilityInScope(ctx, c.CapabilityID())
 	return &adminv1.CapabilityServiceRevokeBiscuitResponse{
-		CapabilityId: c.CapabilityID().String(),
+		CapabilityId:   c.CapabilityID().String(),
+		AlreadyRevoked: res.AlreadyRevoked,
+		Revocation:     biscuitRevocationToProto(res.Revocation),
 	}, nil
+}
+
+// biscuitRevocationToProto is a copy's revocation entry as the API carries
+// it: a copy is revoked alone, never by a cascade.
+func biscuitRevocationToProto(r limes.BiscuitRevocation) *adminv1.CapabilityRevocation {
+	return &adminv1.CapabilityRevocation{RevokedAt: timestamppb.New(r.RevokedAt), Reason: r.Note, Actor: r.Actor}
 }

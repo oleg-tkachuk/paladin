@@ -574,10 +574,11 @@ metrics:
         severity: warning
         # A tenant's share of charges refused with one of refusedOutcomes.
         refusedFraction: 0.9
+        # limes_outcome values of limes_charge_decisions_total, limes's
+        # Reason names: a capability's (or an ancestor's) budget, the tenant's.
         refusedOutcomes:
-          - capability_exhausted
-          - tenant_exhausted
-          - unit_mismatch
+          - budget_exceeded
+          - tenant_budget_exceeded
         # Floor under the charge rate, so a tenant with no charges divides
         # by it instead of by zero.
         minRate: 0.001

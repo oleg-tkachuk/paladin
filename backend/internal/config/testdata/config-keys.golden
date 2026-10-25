@@ -436,8 +436,10 @@ worker.jobs.api_token
 worker.jobs.api_token.expired_for
 worker.jobs.api_token.interval
 worker.jobs.capability
+worker.jobs.capability.charges_older_than
 worker.jobs.capability.expired_for
 worker.jobs.capability.interval
+worker.jobs.capability.purge_charges
 worker.jobs.housekeeping
 worker.jobs.housekeeping.audit_log_ttl
 worker.jobs.housekeeping.event_deliveries_ttl

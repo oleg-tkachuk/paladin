@@ -339,9 +339,9 @@ func TestRevokeSaysWhatItDid(t *testing.T) {
 			before = limes.RecordDispositionRevoked
 		}
 		store := &recordingStore{revokeResult: limes.RevokeResult{
-			AlreadyRevoked: already,
-			Revocation:     limes.Revocation{RevokedAt: revokedAt, Note: "first", Actor: "sec", Cascaded: true},
-			Before:         before,
+			AlreadyRevoked:   already,
+			Revocation:       limes.Revocation{RevokedAt: revokedAt, Note: "first", Actor: "sec", Cascaded: true},
+			PriorDisposition: before,
 		}}
 		h := mkHandler(t, store, nil, &allowAuthorizer{})
 		resp, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString(), Reason: "second"})

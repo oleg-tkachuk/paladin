@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
@@ -33,6 +34,7 @@ func (c *fakeCopier) BiscuitCopy(_ context.Context, token string) (limes.Biscuit
 type copyStore struct {
 	args *limes.RevokeBiscuitRequest
 	ctx  context.Context
+	res  limes.RevokeBiscuitResult
 	err  error
 }
 
@@ -40,9 +42,9 @@ func (s *copyStore) IsBiscuitRevoked(context.Context, [][]byte) (bool, error) { 
 func (s *copyStore) GetBiscuitRevocation(context.Context, limes.BiscuitCopy) (limes.BiscuitRevocation, error) {
 	return limes.BiscuitRevocation{}, limes.ErrNotFound
 }
-func (s *copyStore) RevokeBiscuit(ctx context.Context, args limes.RevokeBiscuitRequest) error {
+func (s *copyStore) RevokeBiscuit(ctx context.Context, args limes.RevokeBiscuitRequest) (limes.RevokeBiscuitResult, error) {
 	s.args, s.ctx = &args, ctx
-	return s.err
+	return s.res, s.err
 }
 
 // mintCopy mints a capability for owner shaped as template, seals it as a
@@ -112,6 +114,31 @@ func TestRevokeBiscuitListsTheCopy(t *testing.T) {
 	// A platform admin acts on the capability's own tenant, or RLS hides it.
 	if acting, ok := auth.ActingTenant(copies.ctx); !ok || acting != owner {
 		t.Errorf("listed acting on %v (set=%v), want the owner %v", acting, ok, owner)
+	}
+}
+
+// A repeated revoke keeps the first entry, and the answer says so with that
+// entry, as Revoke's does for a capability.
+func TestRevokeBiscuitSaysWhatStands(t *testing.T) {
+	const firstReason, firstActor = "leaked first", "first.operator"
+	first := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	for _, already := range []bool{false, true} {
+		target, copied := mintCopy(t, uuid.New(), limes.Capability{})
+		store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
+		copies := &copyStore{res: limes.RevokeBiscuitResult{
+			AlreadyRevoked: already,
+			Revocation:     limes.BiscuitRevocation{RevokedAt: first, Note: firstReason, Actor: firstActor},
+		}}
+		h := mkHandler(t, store, nil, &allowAuthorizer{}).WithBiscuitCopies(&fakeCopier{copy: copied}, copies)
+		resp, err := h.RevokeBiscuit(callerCtx(uuid.New(), "platform.admin"), revokeBiscuitReq())
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := resp.GetRevocation()
+		if resp.GetAlreadyRevoked() != already || !r.GetRevokedAt().AsTime().Equal(first) ||
+			r.GetReason() != firstReason || r.GetActor() != firstActor || r.GetCascade() {
+			t.Errorf("already %t: answered %v", already, resp)
+		}
 	}
 }
 

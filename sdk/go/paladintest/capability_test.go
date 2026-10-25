@@ -212,6 +212,52 @@ func TestDelegate(t *testing.T) {
 	}
 }
 
+// Delegate refuses what limes refuses as too wide — an audience, a resource
+// or a binding the parent lacks — and cuts a child that would outlive its
+// parent to the parent's end, as the server's issuer does.
+func TestDelegateNarrowsByLimes(t *testing.T) {
+	srv := paladintest.New(t, paladintest.WithStrictAuth())
+	admin := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant()))).Admin.Capability
+	c := srv.Collection()
+	prefix := paladin.ObjectResource(c.Tenant, c.Collection, "")
+	req := issueRequest(srv, paladin.OpGet, paladin.OpShare)
+	// Delegate is an admin call, so the parent holds the admin plane alone.
+	req.Audience = paladin.PlaneNames(paladin.PlaneAdmin)
+	req.Caveats.ResourcePrefixes = []string{prefix}
+	parent := issue(t, admin, req)
+	as := srv.Connect(paladin.WithCapability(parent.GetToken())).Admin.Capability
+	ctx := context.Background()
+	scoped := func() *adminv1.CapabilityServiceDelegateRequest {
+		return &adminv1.CapabilityServiceDelegateRequest{
+			ParentId: parent.GetCapability().GetId(),
+			Caveats:  &adminv1.CapabilityCaveats{Ops: paladin.OpNames(paladin.OpGet), ResourcePrefixes: []string{prefix}},
+		}
+	}
+
+	wider := scoped()
+	wider.Audience = paladin.PlaneNames(paladin.PlaneData, paladin.PlaneAdmin)
+	unscoped := scoped()
+	unscoped.Caveats.ResourcePrefixes = nil
+	for name, r := range map[string]*adminv1.CapabilityServiceDelegateRequest{
+		"an audience the parent lacks": wider,
+		"no resource restriction":      unscoped,
+	} {
+		if _, err := as.Delegate(ctx, r); !errors.Is(err, paladin.ErrPermissionDenied) || !strings.Contains(err.Error(), "wider than parent") {
+			t.Errorf("%s: %v, want PermissionDenied as too wide", name, err)
+		}
+	}
+
+	long := scoped()
+	long.TtlSeconds = int64((paladintest.DefaultCapabilityTTL + time.Hour) / time.Second)
+	child, err := as.Delegate(ctx, long)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := child.GetCapability().GetExpiresAt().AsTime(), parent.GetCapability().GetExpiresAt().AsTime(); !got.Equal(want) {
+		t.Errorf("child expires %s, want the parent's %s", got, want)
+	}
+}
+
 // Revoke refuses a capability's token and Biscuit from then on, and with
 // cascade_children its children's; Get reads what the fake issued.
 func TestRevokeAndGet(t *testing.T) {
@@ -310,5 +356,27 @@ func TestStrictListStaysInTheCallersTenant(t *testing.T) {
 	_, err := admin.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
 	if !errors.Is(err, paladin.ErrPermissionDenied) {
 		t.Errorf("another tenant: %v, want PermissionDenied", err)
+	}
+}
+
+// limes binds a listing's cursor to its tenant: one handed back for another
+// tenant is refused rather than paged on, as the server refuses it.
+func TestListRefusesACursorOfAnotherTenant(t *testing.T) {
+	srv := paladintest.New(t)
+	admin := srv.Connect().Admin.Capability
+	ctx := context.Background()
+	for range 2 {
+		issue(t, admin, issueRequest(srv, paladin.OpGet))
+	}
+	first, err := admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant(), PageSize: 1})
+	if err != nil || first.GetNextPageToken() == "" {
+		t.Fatalf("first page: %v, next %q", err, first.GetNextPageToken())
+	}
+	_, err = admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString(), PageToken: first.GetNextPageToken()})
+	if !errors.Is(err, paladin.ErrInvalidArgument) {
+		t.Errorf("another tenant's cursor: %v, want InvalidArgument", err)
+	}
+	if _, err := admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant(), PageToken: first.GetNextPageToken()}); err != nil {
+		t.Errorf("its own tenant's cursor: %v", err)
 	}
 }

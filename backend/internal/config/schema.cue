@@ -358,9 +358,14 @@ worker: {
   // rows, so both stay bounded. interval=0 disables; expired_for is how
   // long a record stays past its capability's expiry — at least 6m
   // (limes.MinPurgeRetention, checked by Config.Validate).
+  // purge_charges also removes the ledger's charges older than
+  // charges_older_than — at least 9624h (meter.MinChargeRetention, 401
+  // days, checked by Config.Validate). Off by default.
   capability: {
-    interval:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
-    expired_for: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
+    interval:           =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    expired_for:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"24h"
+    purge_charges:      bool | *false
+    charges_older_than: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"9624h"
   }
   // APIToken: drop expired api_tokens rows. Same shape as Capability
   // — interval=0 disables.

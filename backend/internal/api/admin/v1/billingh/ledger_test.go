@@ -180,3 +180,40 @@ func TestEveryGranularityIsComplete(t *testing.T) {
 		t.Error("the granularity tables disagree")
 	}
 }
+
+// repeatingLedger hands back the cursor it was asked for, as a broken ledger
+// might: a walk that trusted it would never end.
+type repeatingLedger struct{ calls int }
+
+func (l *repeatingLedger) SumCharges(context.Context, meter.SumChargesRequest) (limes.Page[meter.ChargeSum], error) {
+	l.calls++
+	return limes.Page[meter.ChargeSum]{Items: []meter.ChargeSum{{UnitCode: usd}}, Next: "again"}, nil
+}
+
+// The sums are read through meter's walk: every page in turn, a stop when
+// keep says so, and a refusal of a ledger that repeats its cursor.
+func TestSumChargesWalksThePages(t *testing.T) {
+	ledger := &fakeLedger{pageSize: 1, sums: func(meter.SumChargesRequest) []meter.ChargeSum {
+		return []meter.ChargeSum{{UnitCode: usd}, {UnitCode: eur}, {UnitCode: usd}}
+	}}
+	h := &Handler{ledger: ledger}
+	var seen int
+	if err := h.sumCharges(context.Background(), meter.SumChargesRequest{}, func(meter.ChargeSum) bool { seen++; return true }); err != nil {
+		t.Fatal(err)
+	}
+	if seen != 3 || len(ledger.requests) != 3 || ledger.requests[0].Limit != ledgerPage {
+		t.Errorf("saw %d sums over %d requests (%+v)", seen, len(ledger.requests), ledger.requests)
+	}
+
+	seen = 0
+	_ = h.sumCharges(context.Background(), meter.SumChargesRequest{}, func(meter.ChargeSum) bool { seen++; return false })
+	if seen != 1 {
+		t.Errorf("kept reading after keep said stop: %d sums", seen)
+	}
+
+	repeating := &repeatingLedger{}
+	err := (&Handler{ledger: repeating}).sumCharges(context.Background(), meter.SumChargesRequest{}, func(meter.ChargeSum) bool { return true })
+	if !errors.Is(err, limes.ErrCursorRepeated) || connect.CodeOf(err) != connect.CodeInternal {
+		t.Errorf("a repeated cursor: err = %v after %d calls, want ErrCursorRepeated as Internal", err, repeating.calls)
+	}
+}

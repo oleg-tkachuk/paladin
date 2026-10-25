@@ -283,3 +283,51 @@ func TestCapabilityPurgerWritesEveryTenant(t *testing.T) {
 		t.Errorf("%s = %q, want %q", allTenantsSetting, got, allTenantsWrite)
 	}
 }
+
+// purgingLedger answers PurgeCharges from purged and records each request
+// and its context.
+type purgingLedger struct {
+	purged   batches
+	requests []meter.PurgeChargesRequest
+	ctx      context.Context
+}
+
+func (l *purgingLedger) PurgeCharges(ctx context.Context, req meter.PurgeChargesRequest) (meter.PurgeChargesResult, error) {
+	l.ctx = ctx
+	l.requests = append(l.requests, req)
+	n, err := l.purged.next()
+	return meter.PurgeChargesResult{Purged: n}, err
+}
+
+// Wired, the ledger's old charges go in batches, with the configured
+// retention, across every tenant; a failure is the tick's.
+func TestCapabilityPurgerPurgesOldCharges(t *testing.T) {
+	retention := meter.MinChargeRetention + 24*time.Hour
+	ledger := &purgingLedger{purged: batches{sizes: []int64{fullBatch, shortBatch}}}
+	p := &CapabilityPurger{Store: &purgingStore{}, Ledger: ledger, ChargesOlderThan: retention}
+	if err := p.tick(context.Background()); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+	if ledger.purged.calls != 2 {
+		t.Fatalf("PurgeCharges called %d times, want 2 (a full batch, then a short one)", ledger.purged.calls)
+	}
+	for i, req := range ledger.requests {
+		if req.OlderThan != retention {
+			t.Errorf("request %d: OlderThan = %v, want %v", i, req.OlderThan, retention)
+		}
+	}
+	tx := &settingsTx{set: map[string]string{}}
+	if err := capabilitypg.Scope(ledger.ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if got := tx.set[allTenantsSetting]; got != allTenantsWrite {
+		t.Errorf("charges purged under %s = %q, want %q: under no tenant pgstore refuses", allTenantsSetting, got, allTenantsWrite)
+	}
+
+	failure := errors.New("database unreachable")
+	failing := &purgingLedger{purged: batches{err: failure}}
+	p = &CapabilityPurger{Store: &purgingStore{}, Ledger: failing}
+	if err := p.tick(context.Background()); !errors.Is(err, failure) || failing.purged.calls != 1 {
+		t.Errorf("a failed purge: err = %v after %d calls, want %v once", err, failing.purged.calls, failure)
+	}
+}

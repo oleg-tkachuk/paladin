@@ -101,8 +101,8 @@ func TestSubsystemComponentsCheckTheirStore(t *testing.T) {
 // cache, built with RequireLineage, asks of its upstream.
 type lineageStore struct{ capStore }
 
-func (lineageStore) RevocationLineage(context.Context, uuid.UUID) (bool, []uuid.UUID, error) {
-	return false, nil, nil
+func (lineageStore) RevocationLineage(context.Context, uuid.UUID) (limes.RevocationAnswer, error) {
+	return limes.RevocationAnswer{}, nil
 }
 
 // The revocations row follows the watcher as the cache hears of it: down
@@ -129,13 +129,18 @@ func TestCapabilityRevocationsFollowTheWatcher(t *testing.T) {
 		t.Errorf("before the first LISTEN: component = %+v, want unhealthy, not listening yet", got)
 	}
 
-	cache.Listening()
-	cache.Signal(uuid.New())
+	signal := cache.NewSignal()
+	defer signal.Close()
+	signal.Listening()
+	signal.Revoked(uuid.New())
 	got = componentOf(t, c)
 	if got.Status != health.StatusHealthy {
 		t.Errorf("listening: component = %+v, want healthy", got)
 	}
-	want := map[string]string{"connections": "1", "connections lost": "0", "notifications": "1", "narrow clears": "true"}
+	want := map[string]string{
+		"connections": "1", "connections lost": "0", "notifications": "1", "notifications clearing whole": "0",
+		"narrow clears": "true", "clears made narrowly": "1", "whole clears without lineage": "0",
+	}
 	for _, d := range got.Details {
 		if v, ok := want[d.Name]; ok && v != d.Value {
 			t.Errorf("detail %s = %s, want %s", d.Name, d.Value, v)
@@ -146,7 +151,7 @@ func TestCapabilityRevocationsFollowTheWatcher(t *testing.T) {
 		t.Errorf("details %v missing from %+v", want, got.Details)
 	}
 
-	cache.NotListening()
+	signal.NotListening()
 	got = componentOf(t, c)
 	if got.Status != health.StatusUnhealthy || !strings.Contains(got.Message, "lost its connection at") {
 		t.Errorf("connection lost: component = %+v, want unhealthy, dated", got)

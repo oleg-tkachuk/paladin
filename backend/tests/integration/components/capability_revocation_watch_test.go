@@ -121,7 +121,7 @@ func TestRevocationNotificationClearsOnlyWhatItOutdates(t *testing.T) {
 		time.Sleep(notifyPoll)
 	}
 
-	if cache.Stats().ClearsRevoked == 0 {
+	if cache.Stats().NarrowClears == 0 {
 		t.Errorf("stats = %+v, want the revocation cleared narrowly", cache.Stats())
 	}
 	hits := cache.Stats().Capabilities.Hits

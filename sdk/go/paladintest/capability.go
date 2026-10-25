@@ -242,6 +242,10 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	if err != nil {
 		return nil, err
 	}
+	// A child outliving its parent is cut to the parent's end, as limes does.
+	if pe := parent.msg.GetExpiresAt().AsTime(); expires.After(pe) {
+		expires = pe
+	}
 	subject := parent.msg.GetSubject()
 	if req.GetSubject() != nil {
 		subject = req.GetSubject()
@@ -250,12 +254,41 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	if len(req.GetAudience()) > 0 {
 		audience = req.GetAudience()
 	}
-	return s.mint(&adminv1.Capability{
+	child := &adminv1.Capability{
 		Subject:         proto.CloneOf(subject),
 		Audience:        slices.Clone(audience),
 		Caveats:         proto.CloneOf(caveats),
 		ConfirmationJkt: jkt,
-	}, now, nbf, expires, status, parent.msg.GetId())
+		IssuedAt:        timestamppb.New(now),
+		ExpiresAt:       timestamppb.New(expires),
+	}
+	if !nbf.IsZero() {
+		child.NotBefore = timestamppb.New(nbf)
+	}
+	// What the server's issuer refuses as too wide, by limes's own rule.
+	if err := limes.Narrows(narrowedTerms(parent.msg), narrowedTerms(child)); err != nil {
+		return nil, withReason(connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err))
+	}
+	return s.mint(child, now, nbf, expires, status, parent.msg.GetId())
+}
+
+// narrowedTerms is what of c limes.Narrows compares a delegation by: its
+// tenant, audience, window, key binding and the caveats limes checks a call
+// against. The ceilings the fake counts itself are left to it.
+func narrowedTerms(c *adminv1.Capability) limes.Capability {
+	tenant, _ := uuid.Parse(c.GetSubject().GetTenantId())
+	out := limes.Capability{
+		Subject:         limes.Principal{TenantID: tenant},
+		Audience:        c.GetAudience(),
+		Caveats:         limesCaveats(c.GetCaveats()),
+		ConfirmationJKT: c.GetConfirmationJkt(),
+		IssuedAt:        c.GetIssuedAt().AsTime(),
+		ExpiresAt:       c.GetExpiresAt().AsTime(),
+	}
+	if c.GetNotBefore().IsValid() {
+		out.NotBefore = c.GetNotBefore().AsTime()
+	}
+	return out
 }
 
 // Revoke revokes a capability the fake issued — its token and its Biscuit —

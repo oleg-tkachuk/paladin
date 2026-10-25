@@ -332,7 +332,7 @@
     {
       "type": "timeseries",
       "title": "Capability charges by outcome",
-      "description": "Charge attempts made under a capability. outcome is charged, capability_exhausted, tenant_exhausted, unit_mismatch or error.",
+      "description": "Charge attempts made under a capability, as limes counts them. limes_outcome is allowed, overrun, budget_exceeded, tenant_budget_exceeded, request_limit_exceeded or error.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,
@@ -343,8 +343,8 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "sum by (outcome) (rate(paladin_capability_charges_total[$__rate_interval]))",
-          "legendFormat": "{{outcome}}"
+          "expr": "sum by (limes_outcome) (rate(limes_charge_decisions_total[$__rate_interval]))",
+          "legendFormat": "{{limes_outcome}}"
         }
       ],
       "fieldConfig": {
@@ -407,7 +407,7 @@
     {
       "type": "timeseries",
       "title": "Refused capability charges by tenant",
-      "description": "Every outcome except charged, per tenant. Empty is the normal state.",
+      "description": "Every outcome except allowed, per tenant. Empty is the normal state.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,
@@ -418,8 +418,8 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "sum by (tenant_id, outcome) (rate(paladin_capability_charges_total{outcome!=\"charged\"}[$__rate_interval]))",
-          "legendFormat": "{{tenant_id}} {{outcome}}"
+          "expr": "sum by (limes_tenant_id, limes_outcome) (rate(limes_charge_decisions_total{limes_outcome!=\"allowed\"}[$__rate_interval]))",
+          "legendFormat": "{{limes_tenant_id}} {{limes_outcome}}"
         }
       ],
       "fieldConfig": {

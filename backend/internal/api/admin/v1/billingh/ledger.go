@@ -46,25 +46,19 @@ var granularitySteps = map[string]time.Duration{
 // ledgerPage is the page the ledger is read in: the most one page holds.
 const ledgerPage = limes.MaxListLimit
 
-// sumCharges reads req's sums page by page, handing each to keep until keep
-// returns false or the pages end.
+// sumCharges reads req's sums page by page, through meter's walk, handing
+// each to keep until keep returns false or the pages end.
 func (h *Handler) sumCharges(ctx context.Context, req meter.SumChargesRequest, keep func(meter.ChargeSum) bool) error {
 	req.Limit = ledgerPage
-	for {
-		page, err := h.ledger.SumCharges(ctx, req)
+	for s, err := range meter.AllChargeSums(ctx, h.ledger, req) {
 		if err != nil {
 			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: sum charges: %w", err))
 		}
-		for _, s := range page.Items {
-			if !keep(s) {
-				return nil
-			}
-		}
-		if page.Next == "" {
+		if !keep(s) {
 			return nil
 		}
-		req.Cursor = page.Next
 	}
+	return nil
 }
 
 // net is what a group's charges took less what was refunded from them.

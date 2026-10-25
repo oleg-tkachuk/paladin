@@ -1023,9 +1023,12 @@ class _CapabilityService(CapabilityServiceSync):
 def _list_filters(
     request: capability_service_pb2.CapabilityServiceListRequest, wanted: set[int]
 ) -> str:
-    """What ``request`` lists, as the server's cursor holds it: the principal
-    kind, the subject and the set of dispositions."""
-    key = f"{request.principal_kind}\x00{request.subject}\x00{sorted(wanted)}"
+    """What ``request`` lists, as the server's cursor holds it: the tenant
+    (limes binds a cursor to it), the principal kind, the subject and the set
+    of dispositions."""
+    key = (
+        f"{request.tenant_id}\x00{request.principal_kind}\x00{request.subject}\x00{sorted(wanted)}"
+    )
     return hashlib.sha256(key.encode()).hexdigest()
 
 

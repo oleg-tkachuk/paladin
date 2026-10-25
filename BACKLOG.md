@@ -60,6 +60,21 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
+### The Python fake delegates wider than the server allows
+
+- **Status:** Deferred.
+- **Reason:** the Go fake (`paladintest`) refuses a delegation as the
+  server's issuer does, through `limes.Narrows`, and cuts a child that would
+  outlive its parent to the parent's end. The Python fake
+  (`paladin.testing`) checks only the ops: it accepts a child with an
+  audience, a resource or a start its parent lacks, and lets it outlive the
+  parent. limes is Go only, so the Python fake needs the rule written out.
+- **Definition of Done:** the Python fake refuses what `limes.Narrows`
+  refuses — audience, window, tenant, key binding, resources, tainted-read,
+  idempotency — and clamps the expiry, with the Go fake's cases in a shared
+  table both fakes run.
+- **Blockers:** none.
+
 ---
 ## Deploy cutover: rename to `paladin`
 
@@ -220,7 +235,7 @@ the same commit. Treat this file like a runtime invariant.
   collector is healthy again — `up{namespace="paladin"}` returns a series per
   pod and Grafana evaluates every rule with health=ok. Two of the signals the
   original entry named are still uncharted: `paladin_presign_total` and
-  `paladin_capability_charges_total` exist in the binary but no presign or
+  `limes_charge_decisions_total` exist in the binary but no presign or
   capability charge has run in this cluster, so a panel would show a flat zero
   that reads as "broken" rather than "unused". The alert on capability charges
   is written anyway, because a rule costs nothing while idle and a panel costs

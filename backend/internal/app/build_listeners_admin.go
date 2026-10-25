@@ -24,7 +24,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auditstream"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -308,11 +307,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// subsystem is wired.
 		var billingHandler *billingh.Handler
 		if deps.Capability != nil {
-			ledger, err := capabilitypg.NewLedger(deps.Pool)
-			if err != nil {
-				return nil, nil, fmt.Errorf("app: charges ledger: %w", err)
-			}
-			billingHandler = billingh.NewHandler(ledger, usageStore, polEngine).
+			billingHandler = billingh.NewHandler(deps.Capability.Ledger, usageStore, polEngine).
 				WithCurrency(deps.Cfg.Capability.Currency)
 		}
 		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))

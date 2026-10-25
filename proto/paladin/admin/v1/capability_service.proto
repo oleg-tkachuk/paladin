@@ -329,6 +329,13 @@ message CapabilityServiceRevokeBiscuitRequest {
 message CapabilityServiceRevokeBiscuitResponse {
   // capability_id is the capability the revoked copy belongs to.
   string capability_id = 1;
+  // already_revoked is a copy that had a revocation entry before the call,
+  // so the call wrote none: the first entry stands.
+  bool already_revoked = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // revocation is the copy's entry as it stands after the call: the one this
+  // call wrote, or the earlier one it kept. A copy's entry is never a
+  // cascade's, so cascade is false.
+  CapabilityRevocation revocation = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message CapabilityServiceGetBiscuitUsageRequest {

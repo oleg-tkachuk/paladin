@@ -503,23 +503,24 @@ func capabilityCensus(ctx context.Context, pool *pgxpool.Pool) (context.Context,
 	return auth.WithCrossTenantRead(ctx), census, nil
 }
 
-// countRecords reads every page of req's counts.
+// countRecords reads every page of req's counts, through limes's walk, which
+// also refuses a page handing back a cursor it already read.
 func countRecords(ctx context.Context, census limes.RecordCensus, req limes.CountRecordsRequest) ([]limes.RecordCount, error) {
 	var out []limes.RecordCount
 	req.AllTenants = true
 	req.ExpiringWithin = capabilityExpiringWindow
 	req.Limit = limes.MaxListLimit
-	for {
-		page, err := census.CountRecords(ctx, req)
+	for c, err := range limes.AllPages(ctx, req.Cursor, func(ctx context.Context, cursor string) (limes.Page[limes.RecordCount], error) {
+		page := req
+		page.Cursor = cursor
+		return census.CountRecords(ctx, page)
+	}) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, page.Items...)
-		if page.Next == "" {
-			return out, nil
-		}
-		req.Cursor = page.Next
+		out = append(out, c)
 	}
+	return out, nil
 }
 
 func collectCapabilities(ctx context.Context, pool *pgxpool.Pool, out *CapabilityCensus) error {
