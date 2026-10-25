@@ -218,8 +218,12 @@ type AuditEntry struct {
 	// RequestJSON is what the action was asked to do, secrets redacted: an
 	// RPC's request, an OAuth endpoint's, or the storage event behind an
 	// ingest. Not the resource's state.
-	RequestJSON  []byte
-	ErrorMessage string
+	RequestJSON []byte
+	// StateBefore and StateAfter are the resource the action changed, as its
+	// own Get read it before and after, secrets redacted; nil when there is
+	// no such read (AuditLogEntry.state_before_json).
+	StateBefore, StateAfter []byte
+	ErrorMessage            string
 
 	// CapabilityID is the ID of the capability token attached to the
 	// request, if any. Threaded by middleware.Audit from

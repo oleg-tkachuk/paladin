@@ -537,3 +537,13 @@ func TestAuditEntryToProto_Request(t *testing.T) {
 		t.Errorf("before_json %q, after_json %q: want both empty", got.GetBeforeJson(), got.GetAfterJson())
 	}
 }
+
+// The resource's state around the action reaches the caller in fields of its
+// own, apart from the request.
+func TestAuditEntryToProto_State(t *testing.T) {
+	const before, after = `{"display_name":"a"}`, `{"display_name":"b"}`
+	got := auditEntryToProto(&admindomain.AuditEntry{StateBefore: []byte(before), StateAfter: []byte(after)})
+	if string(got.GetStateBeforeJson()) != before || string(got.GetStateAfterJson()) != after {
+		t.Errorf("state %s → %s, want %s → %s", got.GetStateBeforeJson(), got.GetStateAfterJson(), before, after)
+	}
+}

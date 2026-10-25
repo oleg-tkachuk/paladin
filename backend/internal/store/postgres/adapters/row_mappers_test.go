@@ -367,18 +367,20 @@ func TestAuditEntryFromModel(t *testing.T) {
 	sourceIP, errMsg := "203.0.113.7", "permission denied"
 
 	got := auditEntryFromModel(sqlc.AuditLog{
-		ID:            pgUUID(entryID),
-		At:            pgTS(at),
-		ActorSubject:  "actor-subject",
-		ActorTenantID: pgUUID(actorTenant),
-		ActorAudience: "actor-audience",
-		Action:        "action-name",
-		ResourceName:  "resource-name",
-		RequestID:     "request-id",
-		SourceIp:      &sourceIP,
-		CapabilityID:  pgUUID(capability),
-		ErrorMessage:  &errMsg,
-		RequestJson:   []byte(`{"name":"tenants/t"}`),
+		ID:              pgUUID(entryID),
+		At:              pgTS(at),
+		ActorSubject:    "actor-subject",
+		ActorTenantID:   pgUUID(actorTenant),
+		ActorAudience:   "actor-audience",
+		Action:          "action-name",
+		ResourceName:    "resource-name",
+		RequestID:       "request-id",
+		SourceIp:        &sourceIP,
+		CapabilityID:    pgUUID(capability),
+		ErrorMessage:    &errMsg,
+		RequestJson:     []byte(`{"name":"tenants/t"}`),
+		StateBeforeJson: []byte(`{"display_name":"a"}`),
+		StateAfterJson:  []byte(`{"display_name":"b"}`),
 
 		ResourceTenantID: pgUUID(resourceTenant),
 	})
@@ -407,6 +409,9 @@ func TestAuditEntryFromModel(t *testing.T) {
 	}
 	if string(got.RequestJSON) != `{"name":"tenants/t"}` {
 		t.Errorf("RequestJSON = %s", got.RequestJSON)
+	}
+	if string(got.StateBefore) != `{"display_name":"a"}` || string(got.StateAfter) != `{"display_name":"b"}` {
+		t.Errorf("state %s → %s", got.StateBefore, got.StateAfter)
 	}
 	if !got.At.Equal(at) {
 		t.Errorf("At = %v, want %v", got.At, at)

@@ -2386,9 +2386,17 @@ type AuditLogEntry struct {
 	// fields redacted: an RPC's request, an OAuth endpoint's, or the storage
 	// event that drove an ingest. Not the resource's state. Empty when the
 	// action recorded none.
-	RequestJson   []byte `protobuf:"bytes,16,opt,name=request_json,json=requestJson,proto3" json:"request_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RequestJson []byte `protobuf:"bytes,16,opt,name=request_json,json=requestJson,proto3" json:"request_json,omitempty"`
+	// state_before_json and state_after_json are the resource the action
+	// changed, as JSON with secret fields redacted, as its own Get read it just
+	// before the action and just after it. The reads are not in the action's
+	// transaction, so a concurrent change can fall between them. Empty when the
+	// action has no reader — a create, a batch — when the resource did not
+	// exist on that side, when the read failed, and on a failed action's after.
+	StateBeforeJson []byte `protobuf:"bytes,17,opt,name=state_before_json,json=stateBeforeJson,proto3" json:"state_before_json,omitempty"`
+	StateAfterJson  []byte `protobuf:"bytes,18,opt,name=state_after_json,json=stateAfterJson,proto3" json:"state_after_json,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AuditLogEntry) Reset() {
@@ -2531,6 +2539,20 @@ func (x *AuditLogEntry) GetUserAgent() string {
 func (x *AuditLogEntry) GetRequestJson() []byte {
 	if x != nil {
 		return x.RequestJson
+	}
+	return nil
+}
+
+func (x *AuditLogEntry) GetStateBeforeJson() []byte {
+	if x != nil {
+		return x.StateBeforeJson
+	}
+	return nil
+}
+
+func (x *AuditLogEntry) GetStateAfterJson() []byte {
+	if x != nil {
+		return x.StateAfterJson
 	}
 	return nil
 }
@@ -3442,7 +3464,7 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"\vbytes_today\x18\x03 \x01(\x03R\n" +
 	"bytesToday\x12#\n" +
 	"\robjects_today\x18\x04 \x01(\x03R\fobjectsToday\x12C\n" +
-	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\xbb\x04\n" +
+	"\rlast_reset_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vlastResetAt\"\x91\x05\n" +
 	"\rAuditLogEntry\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12/\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x02at\x12#\n" +
@@ -3465,7 +3487,9 @@ const file_paladin_admin_v1_types_proto_rawDesc = "" +
 	"relayed_by\x18\x0e \x01(\tR\trelayedBy\x12\x1d\n" +
 	"\n" +
 	"user_agent\x18\x0f \x01(\tR\tuserAgent\x12!\n" +
-	"\frequest_json\x18\x10 \x01(\fR\vrequestJson\"\xde\x02\n" +
+	"\frequest_json\x18\x10 \x01(\fR\vrequestJson\x12*\n" +
+	"\x11state_before_json\x18\x11 \x01(\fR\x0fstateBeforeJson\x12(\n" +
+	"\x10state_after_json\x18\x12 \x01(\fR\x0estateAfterJson\"\xde\x02\n" +
 	"\x11EventSubscription\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x16\n" +

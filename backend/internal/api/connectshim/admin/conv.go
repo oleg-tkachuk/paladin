@@ -373,17 +373,19 @@ func auditEntryToProto(e *admindomain.AuditEntry) *pb.AuditLogEntry {
 		return nil
 	}
 	return &pb.AuditLogEntry{
-		EntryId:       e.EntryID.String(),
-		At:            convx.TsProto(e.At),
-		ActorSubject:  e.ActorSubject,
-		ActorTenantId: uuidStrEmpty(e.ActorTenantID.String()),
-		ActorAudience: e.ActorAudience,
-		Action:        e.Action,
-		ResourceName:  e.ResourceName,
-		RequestId:     e.RequestID,
-		SourceIp:      e.SourceIP,
-		RequestJson:   e.RequestJSON,
-		ErrorMessage:  e.ErrorMessage,
+		EntryId:         e.EntryID.String(),
+		At:              convx.TsProto(e.At),
+		ActorSubject:    e.ActorSubject,
+		ActorTenantId:   uuidStrEmpty(e.ActorTenantID.String()),
+		ActorAudience:   e.ActorAudience,
+		Action:          e.Action,
+		ResourceName:    e.ResourceName,
+		RequestId:       e.RequestID,
+		SourceIp:        e.SourceIP,
+		RequestJson:     e.RequestJSON,
+		StateBeforeJson: e.StateBefore,
+		StateAfterJson:  e.StateAfter,
+		ErrorMessage:    e.ErrorMessage,
 		// CapabilityID is uuid.Nil for JWT/api-token paths;
 		// uuidStrEmpty maps the zero UUID to "" so the wire payload
 		// is tight and the UI can render with a falsy check.
