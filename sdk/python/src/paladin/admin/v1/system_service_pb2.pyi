@@ -62,12 +62,14 @@ class GetConfigRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class GetConfigResponse(_message.Message):
-    __slots__ = ("yaml", "source_path")
+    __slots__ = ("yaml", "source_path", "defaults_yaml")
     YAML_FIELD_NUMBER: _ClassVar[int]
     SOURCE_PATH_FIELD_NUMBER: _ClassVar[int]
+    DEFAULTS_YAML_FIELD_NUMBER: _ClassVar[int]
     yaml: str
     source_path: str
-    def __init__(self, yaml: _Optional[str] = ..., source_path: _Optional[str] = ...) -> None: ...
+    defaults_yaml: str
+    def __init__(self, yaml: _Optional[str] = ..., source_path: _Optional[str] = ..., defaults_yaml: _Optional[str] = ...) -> None: ...
 
 class GetDispatcherStatsRequest(_message.Message):
     __slots__ = ()

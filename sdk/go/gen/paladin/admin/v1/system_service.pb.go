@@ -329,7 +329,12 @@ type GetConfigResponse struct {
 	// Optional: filesystem path the binary loaded the config from
 	// ("/app/configs/config.yaml" in production, "—" otherwise). Helps
 	// the UI label the panel.
-	SourcePath    string `protobuf:"bytes,2,opt,name=source_path,json=sourcePath,proto3" json:"source_path,omitempty"`
+	SourcePath string `protobuf:"bytes,2,opt,name=source_path,json=sourcePath,proto3" json:"source_path,omitempty"`
+	// defaults_yaml is the configuration a deployment runs on where it sets
+	// nothing — every field the schema gives a default, the rest at their
+	// zero value — in the same shape and redaction as yaml, so the two diff
+	// into what this deployment changed.
+	DefaultsYaml  string `protobuf:"bytes,3,opt,name=defaults_yaml,json=defaultsYaml,proto3" json:"defaults_yaml,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -374,6 +379,13 @@ func (x *GetConfigResponse) GetYaml() string {
 func (x *GetConfigResponse) GetSourcePath() string {
 	if x != nil {
 		return x.SourcePath
+	}
+	return ""
+}
+
+func (x *GetConfigResponse) GetDefaultsYaml() string {
+	if x != nil {
+		return x.DefaultsYaml
 	}
 	return ""
 }
@@ -1886,11 +1898,12 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x14\n" +
 	"\x05count\x18\x04 \x01(\x03R\x05count\"\x12\n" +
-	"\x10GetConfigRequest\"H\n" +
+	"\x10GetConfigRequest\"m\n" +
 	"\x11GetConfigResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1f\n" +
 	"\vsource_path\x18\x02 \x01(\tR\n" +
-	"sourcePath\"\x1b\n" +
+	"sourcePath\x12#\n" +
+	"\rdefaults_yaml\x18\x03 \x01(\tR\fdefaultsYaml\"\x1b\n" +
 	"\x19GetDispatcherStatsRequest\"\xf4\x01\n" +
 	"\x1aGetDispatcherStatsResponse\x12\x1c\n" +
 	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x18\n" +

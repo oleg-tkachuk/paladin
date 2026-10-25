@@ -39,7 +39,8 @@ import { FROSTED_MUTED, STICKY_BELOW_TOPBAR } from "@/lib/ui/states";
 // every secret redacted by the server. Read as sections — one per top-level
 // key, each setting a dotted path and its value — with a search over names
 // and values; the YAML stays one toggle away for copying, and Compare diffs
-// it against a config.yaml pasted in, such as the one checked in.
+// it against the defaults — what this deployment changed — or a config.yaml
+// pasted in, such as the one checked in.
 
 type View = "sections" | "yaml" | "compare";
 const VIEWS: { value: View; label: string }[] = [
@@ -58,7 +59,7 @@ const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
 
 export default function ConfigPage() {
-  const { config, path, loading, error, refresh } = useConfig();
+  const { config, defaults, path, loading, error, refresh } = useConfig();
   const { showNotification } = useNotification();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("sections");
@@ -234,7 +235,7 @@ export default function ConfigPage() {
           ) : null}
 
           {effectiveView === "compare" ? (
-            <CompareView running={config ?? ""} />
+            <CompareView running={config ?? ""} defaults={defaults} />
           ) : effectiveView === "yaml" ? (
             <Card className="p-0">
               <pre className="paladin-scroll max-h-[70vh] overflow-auto px-6 py-5 font-mono text-xs leading-relaxed">
@@ -264,38 +265,79 @@ export default function ConfigPage() {
   );
 }
 
+/** What the running configuration is compared with. */
+type CompareSource = "defaults" | "pasted";
+
 /**
- * The running configuration diffed against one pasted in. Both are written
- * out alike first (comparableConfigs), so the diff holds settings that
- * differ, not comments or key order. Nothing pasted is sent anywhere.
+ * The running configuration diffed against the defaults — what this
+ * deployment changed — or against one pasted in. Both sides are written out
+ * alike first (comparableConfigs), so the diff holds settings that differ,
+ * not comments or key order. Nothing pasted is sent anywhere.
  */
-function CompareView({ running }: { running: string }) {
+function CompareView({
+  running,
+  defaults,
+}: {
+  running: string;
+  defaults: string | null;
+}) {
+  const [source, setSource] = useState<CompareSource>(
+    defaults ? "defaults" : "pasted",
+  );
   const [pasted, setPasted] = useState("");
+  const other = source === "defaults" ? (defaults ?? "") : pasted;
   const compared = useMemo(() => {
-    if (!pasted.trim()) return null;
+    if (!other.trim()) return null;
     try {
-      return comparableConfigs(running, pasted);
+      return comparableConfigs(running, other);
     } catch {
       return "invalid" as const;
     }
-  }, [running, pasted]);
+  }, [running, other]);
   return (
     <Card className="space-y-3 p-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="config-compare">Compare with</Label>
-        <Textarea
-          id="config-compare"
-          value={pasted}
-          onChange={(e) => setPasted(e.target.value)}
-          placeholder="Paste a config.yaml, such as the one checked in"
-          className="min-h-32 font-mono text-xs"
-          spellCheck={false}
-        />
-        <p className={T.hint}>
-          Comments, quoting and key order are not counted, and a secret the
-          server redacts is redacted in the pasted copy too.
-        </p>
+      <div role="group" aria-label="Compare against" className="flex gap-1">
+        {(
+          [
+            ["defaults", "Defaults"],
+            ["pasted", "A pasted config.yaml"],
+          ] as const
+        ).map(([value, label]) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={source === value ? "secondary" : "ghost"}
+            aria-pressed={source === value}
+            disabled={value === "defaults" && !defaults}
+            onClick={() => setSource(value)}
+          >
+            {label}
+          </Button>
+        ))}
       </div>
+      {source === "defaults" ? (
+        <p className={T.hint}>
+          What this deployment changed: every setting the schema defaults,
+          beside the value running. A setting with no default shows as set.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          <Label htmlFor="config-compare">Compare with</Label>
+          <Textarea
+            id="config-compare"
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder="Paste a config.yaml, such as the one checked in"
+            className="min-h-32 font-mono text-xs"
+            spellCheck={false}
+          />
+          <p className={T.hint}>
+            Comments, quoting and key order are not counted, and a secret the
+            server redacts is redacted in the pasted copy too.
+          </p>
+        </div>
+      )}
       {compared === "invalid" ? (
         <p className="flex items-center gap-2 text-sm text-warning">
           <ExclamationTriangleIcon className="size-4" />
@@ -305,7 +347,7 @@ function CompareView({ running }: { running: string }) {
         <DiffView
           before={compared.other}
           after={compared.running}
-          beforeLabel="Pasted"
+          beforeLabel={source === "defaults" ? "Defaults" : "Pasted"}
           afterLabel="Running"
         />
       ) : null}

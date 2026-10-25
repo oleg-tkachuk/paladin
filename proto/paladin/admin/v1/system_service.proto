@@ -119,6 +119,11 @@ message GetConfigResponse {
   // ("/app/configs/config.yaml" in production, "—" otherwise). Helps
   // the UI label the panel.
   string source_path = 2;
+  // defaults_yaml is the configuration a deployment runs on where it sets
+  // nothing — every field the schema gives a default, the rest at their
+  // zero value — in the same shape and redaction as yaml, so the two diff
+  // into what this deployment changed.
+  string defaults_yaml = 3;
 }
 
 message GetDispatcherStatsRequest {}

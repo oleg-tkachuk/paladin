@@ -37,13 +37,14 @@ func (s *SystemServer) GetConfig(ctx context.Context, _ *pb.GetConfigRequest) (*
 	if s.H == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
 	}
-	yamlBlob, sourcePath, err := s.H.MarshalRedacted(ctx)
+	yamlBlob, defaults, sourcePath, err := s.H.MarshalRedacted(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &pb.GetConfigResponse{
-		Yaml:       yamlBlob,
-		SourcePath: sourcePath,
+		Yaml:         yamlBlob,
+		DefaultsYaml: defaults,
+		SourcePath:   sourcePath,
 	}, nil
 }
 
