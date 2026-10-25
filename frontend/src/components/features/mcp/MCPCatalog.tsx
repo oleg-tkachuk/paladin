@@ -25,11 +25,13 @@ import type {
   MCPProfile,
   MCPTool,
 } from "@/gen/paladin/admin/v1/mcp_inspect_service_pb";
+import { DetailPanel } from "@/components/ui/DetailPanel";
 import {
-  RecordDialog,
   RecordField,
+  RecordFields,
   openableRow,
 } from "@/components/ui/RecordDialog";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { useTableView } from "@/hooks/useTableView";
 import type { TableUrl } from "@/lib/table/urlState";
 import type { SortAccessors } from "@/lib/table/view";
@@ -38,9 +40,12 @@ import { cn } from "@/lib/utils";
 
 import { MCP_PLANES, planeTone } from "./mcp-status";
 
-// The catalog keeps its search and sort in the URL under its own names, beside the
-// page's other tables.
-const TOOLS_TABLE: TableUrl = { namespace: "tools" };
+// Each table on the tools page keeps its view and its open record in the URL
+// under its own names: the catalog and the always-deny list both open tools,
+// and an id one of them holds must not open the other's panel.
+export const TOOLS_TABLE: TableUrl = { namespace: "tools" };
+export const PROFILES_TABLE: TableUrl = { namespace: "profiles" };
+export const DENIED_TABLE: TableUrl = { namespace: "denied" };
 
 const ALL = "__all__";
 
@@ -89,7 +94,7 @@ export function EffectBadge({
 const PATTERNS_SHOWN = 4;
 
 /** Each tool's record: everything the row shows and what it cuts. */
-export function ToolDialog({
+export function ToolPanel({
   tool,
   inspect,
   onClose,
@@ -103,14 +108,15 @@ export function ToolDialog({
     : [];
   const denied = tool ? inspect.alwaysDeny.includes(tool.name) : false;
   return (
-    <RecordDialog
+    <DetailPanel
       open={tool !== null}
-      onOpenChange={(o) => !o && onClose()}
+      onClose={onClose}
+      rowId={tool?.name}
       title="Tool"
-      subtitle={tool?.name}
+      identifier={tool?.name}
     >
       {tool ? (
-        <>
+        <RecordFields>
           <RecordField label="Plane">
             <Badge variant={planeTone(tool.audience)}>{tool.audience}</Badge>
           </RecordField>
@@ -138,14 +144,14 @@ export function ToolDialog({
               </span>
             )}
           </RecordField>
-        </>
+        </RecordFields>
       ) : null}
-    </RecordDialog>
+    </DetailPanel>
   );
 }
 
 /** A profile's record: its patterns and denials whole, and what they leave. */
-function ProfileDialog({
+function ProfilePanel({
   profile,
   inspect,
   onClose,
@@ -155,14 +161,15 @@ function ProfileDialog({
   onClose: () => void;
 }) {
   return (
-    <RecordDialog
+    <DetailPanel
       open={profile !== null}
-      onOpenChange={(o) => !o && onClose()}
+      onClose={onClose}
+      rowId={profile?.name}
       title="Profile"
-      subtitle={profile?.name}
+      identifier={profile?.name}
     >
       {profile ? (
-        <>
+        <RecordFields>
           <RecordField label="Source">
             <Badge variant="outline">{profile.source.replace("_", " ")}</Badge>
           </RecordField>
@@ -181,9 +188,9 @@ function ProfileDialog({
           >
             <PatternList patterns={profile.tools} />
           </RecordField>
-        </>
+        </RecordFields>
       ) : null}
-    </RecordDialog>
+    </DetailPanel>
   );
 }
 
@@ -223,7 +230,10 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
     () => new Set(inspect.alwaysDeny),
     [inspect.alwaysDeny],
   );
-  const [opened, setOpened] = useState<MCPTool | null>(null);
+  // Looked up in the whole catalog, so a link opens a tool the filters hide.
+  const detail = useDetailPanel(undefined, TOOLS_TABLE);
+  const opened =
+    inspect.toolCatalog.find((t) => t.name === detail.openId) ?? null;
 
   const narrowed = inspect.toolCatalog.filter(
     (t: MCPTool) =>
@@ -304,7 +314,11 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
               </TableRow>
             ) : (
               rows.map((t) => (
-                <TableRow key={t.name} {...openableRow(() => setOpened(t))}>
+                <TableRow
+                  key={t.name}
+                  {...openableRow(() => detail.open(t.name))}
+                  {...detail.rowProps(t.name)}
+                >
                   <TableCell className={T.code}>
                     {t.name}
                     {denied.has(t.name) ? (
@@ -333,11 +347,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
           </TableBody>
         </Table>
       </Card>
-      <ToolDialog
-        tool={opened}
-        inspect={inspect}
-        onClose={() => setOpened(null)}
-      />
+      <ToolPanel tool={opened} inspect={inspect} onClose={detail.close} />
     </div>
   );
 }
@@ -350,7 +360,8 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
       inspect.transports?.stdio?.profile,
     ].filter(Boolean),
   );
-  const [opened, setOpened] = useState<MCPProfile | null>(null);
+  const detail = useDetailPanel(undefined, PROFILES_TABLE);
+  const opened = inspect.profiles.find((p) => p.name === detail.openId) ?? null;
   return (
     <Card className="p-0">
       <Table>
@@ -364,7 +375,11 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
         </TableHeader>
         <TableBody>
           {inspect.profiles.map((p) => (
-            <TableRow key={p.name} {...openableRow(() => setOpened(p))}>
+            <TableRow
+              key={p.name}
+              {...openableRow(() => detail.open(p.name))}
+              {...detail.rowProps(p.name)}
+            >
               <TableCell>
                 <span className={T.code}>{p.name}</span>
                 {inUse.has(p.name) ? (
@@ -410,11 +425,7 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
         Tools visible is after the always-deny list. Open a profile to see
         exactly which.
       </p>
-      <ProfileDialog
-        profile={opened}
-        inspect={inspect}
-        onClose={() => setOpened(null)}
-      />
+      <ProfilePanel profile={opened} inspect={inspect} onClose={detail.close} />
     </Card>
   );
 }
@@ -422,7 +433,8 @@ export function MCPProfiles({ inspect }: { inspect: MCPInspectResponse }) {
 /** The global deny list, joined to the catalog. */
 export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
   const byName = new Map(inspect.toolCatalog.map((t) => [t.name, t]));
-  const [opened, setOpened] = useState<MCPTool | null>(null);
+  const detail = useDetailPanel(undefined, DENIED_TABLE);
+  const opened = (detail.openId && byName.get(detail.openId)) || null;
   if (inspect.alwaysDeny.length === 0) {
     return (
       <Card className="p-8 text-center">
@@ -450,7 +462,15 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
           {inspect.alwaysDeny.map((d) => {
             const t = byName.get(d);
             return (
-              <TableRow key={d} {...(t ? openableRow(() => setOpened(t)) : {})}>
+              <TableRow
+                key={d}
+                {...(t
+                  ? {
+                      ...openableRow(() => detail.open(d)),
+                      ...detail.rowProps(d),
+                    }
+                  : {})}
+              >
                 {/* A long name wraps, so the plane chip beside it keeps
                     its width on a phone instead of running off the card. */}
                 <TableCell
@@ -482,11 +502,7 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
         Applied after every profile, admin included: an agent never sees these
         tools.
       </p>
-      <ToolDialog
-        tool={opened}
-        inspect={inspect}
-        onClose={() => setOpened(null)}
-      />
+      <ToolPanel tool={opened} inspect={inspect} onClose={detail.close} />
     </Card>
   );
 }

@@ -7,14 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useNotification } from "@/components/ui/Notification";
+import { DetailPanel } from "@/components/ui/DetailPanel";
 import {
-  RecordDialog,
   RecordField,
+  RecordFields,
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
 import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableToolbar } from "@/components/ui/TableToolbar";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { useTableFacets } from "@/hooks/useTableFacets";
@@ -169,7 +171,11 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
   });
   const clients = paged.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };
-  const [opened, setOpened] = useState<MCPOAuthClient | null>(null);
+  // The open client is in the URL, looked up among every client shown, so a
+  // link opens one the search or a facet hides. The page's only list, so it
+  // takes the bare names like the rest of its view.
+  const detail = useDetailPanel(undefined, PAGE_TABLE);
+  const opened = all.find((c) => c.clientId === detail.openId) ?? null;
   const [deleting, setDeleting] = useState<MCPOAuthClient | null>(null);
   const queryClient = useQueryClient();
   const { showNotification } = useNotification();
@@ -298,7 +304,11 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
               </TableRow>
             ) : (
               clients.map((c) => (
-                <TableRow key={c.clientId} {...openableRow(() => setOpened(c))}>
+                <TableRow
+                  key={c.clientId}
+                  {...openableRow(() => detail.open(c.clientId))}
+                  {...detail.rowProps(c.clientId)}
+                >
                   <TableCell
                     className={cn(T.code, "whitespace-normal break-all")}
                   >
@@ -329,14 +339,29 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
         </Table>
       </Card>
       <TablePagination {...paged.pagination} />
-      <RecordDialog
+      <DetailPanel
         open={opened !== null}
-        onOpenChange={(o) => !o && setOpened(null)}
+        onClose={detail.close}
+        rowId={opened?.clientId}
         title="OAuth client"
-        subtitle={opened?.clientId}
+        identifier={opened?.clientId}
+        footer={
+          opened && deletable(opened) ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setDeleting(opened);
+                detail.close();
+              }}
+            >
+              Delete client
+            </Button>
+          ) : null
+        }
       >
         {opened ? (
-          <>
+          <RecordFields>
             <RecordField label="Kind">{clientKind(opened)}</RecordField>
             <RecordField label="Registered">
               {clientOrigin(opened)}
@@ -359,27 +384,14 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
             <RecordField label="Token exchange">
               {opened.tokenExchange ? "may exchange tokens" : "—"}
             </RecordField>
-            {deletable(opened) ? (
-              <div className="flex justify-end pt-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => {
-                    setDeleting(opened);
-                    setOpened(null);
-                  }}
-                >
-                  Delete client
-                </Button>
-              </div>
-            ) : opened.configured ? (
+            {!deletable(opened) && opened.configured ? (
               <p className={T.hint}>
                 Seeded by auth.oauth.seed_clients: remove it there to delete it.
               </p>
             ) : null}
-          </>
+          </RecordFields>
         ) : null}
-      </RecordDialog>
+      </DetailPanel>
       <ConfirmModal
         isOpen={deleting !== null}
         onClose={() => setDeleting(null)}

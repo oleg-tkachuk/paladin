@@ -85,7 +85,11 @@ const INSPECT = {
   },
 };
 
+// An open record is kept in the URL, so every test starts at a bare address.
+const TOOLS_PATH = "/mcp/tools";
+
 beforeEach(() => {
+  window.history.replaceState(null, "", "/mcp");
   h.inspect.mockReset().mockResolvedValue(INSPECT);
   h.list.mockReset().mockResolvedValue({ sessions: [] });
   h.status.mockReset().mockResolvedValue({
@@ -156,6 +160,49 @@ describe("MCP tools page", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("paladin_query_*");
     expect(dialog).toHaveTextContent("Tools (2 of 4)");
+  });
+
+  it("lands on the Profiles tab from a link to a profile", async () => {
+    window.history.replaceState(null, "", `${TOOLS_PATH}?profiles.id=admin`);
+    render(<MCPToolsPage />);
+    const panel = await screen.findByRole("dialog", { name: "Profile" });
+    expect(panel).toHaveAccessibleDescription("admin");
+    expect(screen.getByRole("tab", { name: "Profiles" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("lands on the Profiles tab from a link to a denied tool", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${TOOLS_PATH}?denied.id=paladin_create_user`,
+    );
+    render(<MCPToolsPage />);
+    const panel = await screen.findByRole("dialog", { name: "Tool" });
+    expect(panel).toHaveTextContent("always denied");
+  });
+
+  // The catalog and the profiles share the page: the catalog's open tool
+  // opens nothing on the other tab, and is still in the URL to come back to.
+  it("keeps the catalog's open tool to itself", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${TOOLS_PATH}?tools.id=paladin_query_objects`,
+    );
+    render(<MCPToolsPage />);
+    expect(
+      await screen.findByRole("dialog", { name: "Tool" }),
+    ).toHaveAccessibleDescription("paladin_query_objects");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Profiles" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Profiles" }));
+    expect(
+      await screen.findByRole("heading", { name: "Always denied" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(window.location.search).toBe("?tools.id=paladin_query_objects");
   });
 
   // The always-deny list applies after every profile, so it is shown with them.
@@ -261,5 +308,6 @@ describe("MCP sessions", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("ABCDEFGHIJKLMNOP");
     expect(dialog).toHaveTextContent("Tool calls3");
+    expect(window.location.search).toBe("?sessions.id=ABCDEFGHIJKLMNOP");
   });
 });
