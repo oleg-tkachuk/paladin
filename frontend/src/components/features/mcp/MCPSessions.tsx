@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
+import { DetailPanel } from "@/components/ui/DetailPanel";
 import {
-  RecordDialog,
   RecordField,
+  RecordFields,
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
@@ -23,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { useTableView } from "@/hooks/useTableView";
 import type { TableUrl } from "@/lib/table/urlState";
 import type { SortAccessors } from "@/lib/table/view";
@@ -31,8 +33,8 @@ import { T } from "@/lib/ui/typography";
 import { useMcpLive } from "./mcp-status";
 import { errorMessage } from "@/hooks/errorContract";
 
-// The session list keeps its search and sort in the URL under its own names, beside the
-// page's other tables.
+// The session list keeps its search, sort and open session in the URL under
+// its own names, beside the page's other tables.
 const SESSIONS_TABLE: TableUrl = { namespace: "sessions" };
 
 /** Characters of a session id shown; enough to tell rows apart. */
@@ -70,7 +72,14 @@ export function MCPSessions() {
       ? status.data.error || "the MCP server could not be reached"
       : null;
   const all = sessions.data?.sessions ?? [];
-  const [opened, setOpened] = useState<MCPSession | null>(null);
+  // The open session is in the URL. The row clicked stays at hand for a
+  // session the live list has since dropped.
+  const detail = useDetailPanel(undefined, SESSIONS_TABLE);
+  const [clicked, setClicked] = useState<MCPSession | null>(null);
+  const opened = detail.openId
+    ? (all.find((s) => s.id === detail.openId) ??
+      (clicked?.id === detail.openId ? clicked : null))
+    : null;
   const view = useTableView(all, {
     text: SESSION_SEARCH,
     accessors: SESSION_SORT,
@@ -142,7 +151,14 @@ export function MCPSessions() {
               </TableRow>
             ) : null}
             {view.rows.map((s) => (
-              <TableRow key={s.id} {...openableRow(() => setOpened(s))}>
+              <TableRow
+                key={s.id}
+                {...openableRow(() => {
+                  setClicked(s);
+                  detail.open(s.id);
+                })}
+                {...detail.rowProps(s.id)}
+              >
                 <TableCell className={T.code} title={s.id}>
                   {s.id.slice(0, SESSION_ID_SHOWN)}…
                 </TableCell>
@@ -167,33 +183,47 @@ export function MCPSessions() {
             ))}
           </TableBody>
         </Table>
-        <RecordDialog
-          open={opened !== null}
-          onOpenChange={(o) => !o && setOpened(null)}
-          title="Session"
-          subtitle={opened?.id}
-        >
-          {opened ? (
-            <>
-              <RecordField label="Agent" mono>
-                {opened.agentSubject || "unknown"}
-              </RecordField>
-              <RecordField label="Started">
-                <Timestamp ts={opened.startedAt} />
-              </RecordField>
-              <RecordField label="Last seen">
-                <Timestamp ts={opened.lastSeen} />
-              </RecordField>
-              <RecordField label="Tool calls">
-                {opened.toolCallCount.toString()}
-              </RecordField>
-              <RecordField label="Requests">
-                {opened.requestCount.toString()}
-              </RecordField>
-            </>
-          ) : null}
-        </RecordDialog>
+        <SessionPanel session={opened} onClose={detail.close} />
       </Card>
     </div>
+  );
+}
+
+/** One session's record, in a panel beside the list. */
+function SessionPanel({
+  session,
+  onClose,
+}: {
+  session: MCPSession | null;
+  onClose: () => void;
+}) {
+  return (
+    <DetailPanel
+      open={session !== null}
+      onClose={onClose}
+      rowId={session?.id}
+      title="Session"
+      identifier={session?.id}
+    >
+      {session ? (
+        <RecordFields>
+          <RecordField label="Agent" mono>
+            {session.agentSubject || "unknown"}
+          </RecordField>
+          <RecordField label="Started">
+            <Timestamp ts={session.startedAt} />
+          </RecordField>
+          <RecordField label="Last seen">
+            <Timestamp ts={session.lastSeen} />
+          </RecordField>
+          <RecordField label="Tool calls">
+            {session.toolCallCount.toString()}
+          </RecordField>
+          <RecordField label="Requests">
+            {session.requestCount.toString()}
+          </RecordField>
+        </RecordFields>
+      ) : null}
+    </DetailPanel>
   );
 }

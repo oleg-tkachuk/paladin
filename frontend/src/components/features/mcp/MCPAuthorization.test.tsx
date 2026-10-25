@@ -69,6 +69,12 @@ function inspect(oauth: Partial<MCPInspectResponse["oauth"]>) {
   } as unknown as MCPInspectResponse;
 }
 
+// Every test starts at a bare address: an open record is kept in the URL.
+const ACCESS_PATH = "/mcp/access";
+beforeEach(() => {
+  window.history.replaceState(null, "", ACCESS_PATH);
+});
+
 describe("MCPAuthorization", () => {
   it("names the audience and the client the MCP server exchanges as", () => {
     render(
@@ -217,6 +223,37 @@ describe("a client's record", () => {
     expect(dialog).toHaveTextContent("by the configuration");
     expect(dialog).toHaveTextContent("paladin.read");
     expect(dialog).toHaveTextContent("asked");
+    // The page's only list: the open client is the bare ?id=.
+    expect(window.location.search).toBe(`?id=${AGENT.clientId}`);
+  });
+
+  it("opens from a link, even to a client the search hides", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${ACCESS_PATH}?q=nothing-matches&id=${MCP_SERVER.clientId}`,
+    );
+    render(
+      <MCPAuthorization
+        inspect={inspect({ seedClients: [AGENT, MCP_SERVER] } as never)}
+      />,
+    );
+    const panel = await screen.findByRole("dialog", { name: "OAuth client" });
+    expect(panel).toHaveAccessibleDescription(MCP_SERVER.clientId);
+    expect(panel).toHaveTextContent("may exchange tokens");
+  });
+
+  it("closes from its own button and leaves the URL", async () => {
+    render(
+      <MCPAuthorization inspect={inspect({ seedClients: [AGENT] } as never)} />,
+    );
+    fireEvent.click(
+      screen.getByRole("row", { name: new RegExp(AGENT.clientId) }),
+    );
+    const panel = await screen.findByRole("dialog");
+    fireEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(window.location.search).toBe("");
   });
 });
 

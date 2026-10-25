@@ -888,20 +888,6 @@ order they are being taken up.
   `DiffView`.
 - **Blockers:** the backend keeping a policy's history.
 
-#### Detail panels for the remaining record dialogs
-
-- **Status:** Aspirational.
-- **Reason:** `DetailPanel` took over the record dialogs of the audit log
-  (both), capabilities, M2M tokens and operations. A collection's trash, the
-  MCP sessions, tool catalogue and authorisation tables, and connected
-  applications still open a dialog: their open row lives in component state,
-  the MCP tables share one page and need namespaced parameters, and the
-  trash's paged list may not hold a linked object after a reload, so it has
-  to be read by id first.
-- **Definition of Done:** each opens in `DetailPanel` through
-  `useDetailPanel`, namespaced where a page holds more than one table, and a
-  linked record the loaded page does not hold is read by its id.
-- **Blockers:** none.
 #### The tenants list cannot tell a tenant near its limits
 
 - **Status:** Blocked.
