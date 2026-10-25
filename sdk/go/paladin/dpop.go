@@ -3,23 +3,15 @@ package paladin
 import (
 	"context"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/asn1"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"math/big"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect/v2"
+
+	"github.com/oleg-tkachuk/limes/dpop"
 )
 
 // WithDPoP proves possession of key on every call that presents a
@@ -43,123 +35,29 @@ func WithDPoP(key crypto.Signer) Option {
 
 // DPoPThumbprint is the RFC 7638 thumbprint of pub: the confirmation_jkt to
 // issue or delegate a capability with, binding it to the holder of the
-// matching private key.
+// matching private key. It is limes's, which the server checks it against.
 func DPoPThumbprint(pub crypto.PublicKey) (string, error) {
-	j, err := dpopPublicJWK(pub)
+	jkt, err := dpop.Thumbprint(pub)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("paladin: %w", err)
 	}
-	var canonical string // RFC 7638: required members, lexicographic order
-	if j.Kty == "OKP" {
-		canonical = fmt.Sprintf(`{"crv":%q,"kty":"OKP","x":%q}`, j.Crv, j.X)
-	} else {
-		canonical = fmt.Sprintf(`{"crv":%q,"kty":"EC","x":%q,"y":%q}`, j.Crv, j.X, j.Y)
-	}
-	sum := sha256.Sum256([]byte(canonical))
-	return b64url(sum[:]), nil
+	return jkt, nil
 }
-
-type dpopJWK struct {
-	Kty string `json:"kty"`
-	Crv string `json:"crv"`
-	X   string `json:"x"`
-	Y   string `json:"y,omitempty"`
-}
-
-func dpopPublicJWK(pub crypto.PublicKey) (dpopJWK, error) {
-	switch k := pub.(type) {
-	case ed25519.PublicKey:
-		return dpopJWK{Kty: "OKP", Crv: "Ed25519", X: b64url(k)}, nil
-	case *ecdsa.PublicKey:
-		if k.Curve != elliptic.P256() {
-			return dpopJWK{}, errors.New("paladin: DPoP EC keys must be P-256")
-		}
-		raw, err := k.Bytes() // 0x04 || X || Y
-		if err != nil {
-			return dpopJWK{}, fmt.Errorf("paladin: DPoP EC key: %w", err)
-		}
-		return dpopJWK{Kty: "EC", Crv: "P-256", X: b64url(raw[1:33]), Y: b64url(raw[33:])}, nil
-	}
-	return dpopJWK{}, fmt.Errorf("paladin: unsupported DPoP key type %T", pub)
-}
-
-// The proof algorithms, as RFC 9864 names them: Ed25519 is the fully
-// specified name for what the deprecated "EdDSA" covered with this key type.
-const (
-	dpopAlgEd25519 = "Ed25519"
-	dpopAlgES256   = "ES256"
-)
 
 // dpopNonceChallenge is the error a DPoP challenge names when the proof
 // lacked the nonce the server asks for (RFC 9449 §8).
 const dpopNonceChallenge = "use_dpop_nonce"
 
-// dpopProof signs one proof, with the server's nonce when there is one. The
-// server compares htu by path, so the base URL's scheme and host need not be
-// the ones it sees behind a proxy.
-func dpopProof(key crypto.Signer, method, htu, token, nonce string, now time.Time) (string, error) {
-	jwk, err := dpopPublicJWK(key.Public())
+// dpopProof signs one proof through limes, with the server's nonce when
+// there is one. The server compares htu by path, so the base URL's scheme
+// and host need not be the ones it sees behind a proxy.
+func dpopProof(ctx context.Context, key crypto.Signer, method, htu, token, nonce string, now time.Time) (string, error) {
+	proof, err := dpop.Sign(ctx, key, dpop.SignRequest{Method: method, URL: htu, Token: token, Nonce: nonce, IssuedAt: now})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("paladin: DPoP proof: %w", err)
 	}
-	alg := dpopAlgEd25519
-	if jwk.Kty == "EC" {
-		alg = dpopAlgES256
-	}
-	jti := make([]byte, 16)
-	if _, err := rand.Read(jti); err != nil {
-		return "", fmt.Errorf("paladin: DPoP jti: %w", err)
-	}
-	ath := sha256.Sum256([]byte(token))
-	header, err := json.Marshal(struct {
-		Typ string  `json:"typ"`
-		Alg string  `json:"alg"`
-		JWK dpopJWK `json:"jwk"`
-	}{"dpop+jwt", alg, jwk})
-	if err != nil {
-		return "", err
-	}
-	claims, err := json.Marshal(struct {
-		JTI   string `json:"jti"`
-		HTM   string `json:"htm"`
-		HTU   string `json:"htu"`
-		IAT   int64  `json:"iat"`
-		ATH   string `json:"ath"`
-		Nonce string `json:"nonce,omitempty"`
-	}{b64url(jti), method, htu, now.Unix(), b64url(ath[:]), nonce})
-	if err != nil {
-		return "", err
-	}
-	input := b64url(header) + "." + b64url(claims)
-	var sig []byte
-	if jwk.Kty == "OKP" {
-		sig, err = key.Sign(rand.Reader, []byte(input), crypto.Hash(0))
-	} else {
-		digest := sha256.Sum256([]byte(input))
-		var der []byte
-		if der, err = key.Sign(rand.Reader, digest[:], crypto.SHA256); err == nil {
-			sig, err = ecdsaRaw(der)
-		}
-	}
-	if err != nil {
-		return "", fmt.Errorf("paladin: DPoP sign: %w", err)
-	}
-	return input + "." + b64url(sig), nil
+	return proof, nil
 }
-
-// ecdsaRaw turns a DER ECDSA signature into JWS ES256's r || s.
-func ecdsaRaw(der []byte) ([]byte, error) {
-	var rs struct{ R, S *big.Int }
-	if rest, err := asn1.Unmarshal(der, &rs); err != nil || len(rest) > 0 {
-		return nil, errors.New("malformed ECDSA signature")
-	}
-	sig := make([]byte, 64)
-	rs.R.FillBytes(sig[:32])
-	rs.S.FillBytes(sig[32:])
-	return sig, nil
-}
-
-func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 // dpopAuth signs a proof for each call that carries a capability. It sits
 // inside the retry interceptor, so every attempt gets its own.
@@ -172,7 +70,7 @@ type dpopAuth struct {
 	nonce atomic.Pointer[string]
 }
 
-func (a *dpopAuth) set(h *connect.Header, procedure string) error {
+func (a *dpopAuth) set(ctx context.Context, h *connect.Header, procedure string) error {
 	token := h.Get(HeaderCapability)
 	if token == "" {
 		return nil
@@ -181,7 +79,7 @@ func (a *dpopAuth) set(h *connect.Header, procedure string) error {
 	if n := a.nonce.Load(); n != nil {
 		nonce = *n
 	}
-	proof, err := dpopProof(a.key, http.MethodPost, a.baseURL+procedure, token, nonce, a.now())
+	proof, err := dpopProof(ctx, a.key, http.MethodPost, a.baseURL+procedure, token, nonce, a.now())
 	if err != nil {
 		return err
 	}
@@ -212,7 +110,7 @@ func (a *dpopAuth) unary(next unaryFunc) unaryFunc {
 // back, refused or not.
 func (a *dpopAuth) attempt(ctx context.Context, spec connect.Spec, req, res any, next unaryFunc) error {
 	info := callInfo(ctx)
-	if err := a.set(info.RequestHeader(), spec.Procedure); err != nil {
+	if err := a.set(ctx, info.RequestHeader(), spec.Procedure); err != nil {
 		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	err := next(ctx, spec, req, res)
@@ -240,7 +138,7 @@ func nonceChallenged(info *connect.CallInfo, err error) bool {
 
 func (a *dpopAuth) stream(next connect.ClientFunc) connect.ClientFunc {
 	return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
-		if err := a.set(callInfo(ctx).RequestHeader(), spec.Procedure); err != nil {
+		if err := a.set(ctx, callInfo(ctx).RequestHeader(), spec.Procedure); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		return next(ctx, spec)

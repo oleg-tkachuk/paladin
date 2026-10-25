@@ -1,6 +1,7 @@
 package paladin
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -11,6 +12,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+)
+
+// The proof algorithms, as RFC 9864 names them.
+const (
+	algEd25519 = "Ed25519"
+	algES256   = "ES256"
 )
 
 // A proof names its algorithm as RFC 9864 does: Ed25519, not the deprecated
@@ -24,8 +31,8 @@ func TestDPoPProofNamesItsAlgorithm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for want, key := range map[string]crypto.Signer{dpopAlgEd25519: ed, dpopAlgES256: ec} {
-		proof, err := dpopProof(key, "POST", "https://data.example.com/svc/M", "token", "", time.Now())
+	for want, key := range map[string]crypto.Signer{algEd25519: ed, algES256: ec} {
+		proof, err := dpopProof(context.Background(), key, "POST", "https://data.example.com/svc/M", "token", "", time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -52,7 +59,7 @@ func TestDPoPProofCarriesTheNonce(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, nonce := range []string{"", "server-nonce"} {
-		proof, err := dpopProof(key, "POST", "https://data.example.com/svc/M", "token", nonce, time.Now())
+		proof, err := dpopProof(context.Background(), key, "POST", "https://data.example.com/svc/M", "token", nonce, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
