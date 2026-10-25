@@ -6,6 +6,9 @@ import { ScrollArea as ScrollAreaPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { FOCUS_RING } from "@/lib/ui/states";
 
+/** Holds Radix's content box to the viewport's width (see ScrollArea). */
+export const CONTENT_FITS_WIDTH = "*:block!";
+
 function ScrollArea({
   className,
   children,
@@ -21,6 +24,11 @@ function ScrollArea({
         data-slot="scroll-area-viewport"
         className={cn(
           "size-full rounded-[inherit] transition-[color,box-shadow] outline-none",
+          // Radix wraps the content in a display: table box, which grows to
+          // its widest line: a long name then pushes everything beside it
+          // past the edge, and truncate never applies. The area scrolls
+          // vertically only, so its content takes the viewport's width.
+          CONTENT_FITS_WIDTH,
           FOCUS_RING,
         )}
       >

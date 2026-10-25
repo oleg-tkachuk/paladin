@@ -109,6 +109,27 @@ describe("SidebarResourceLinks", () => {
     render(<SidebarResourceLinks groupLabelClass="" />);
     expect(screen.queryByTestId("resource-links")).toBeNull();
   });
+
+  // A long name shrinks to its ellipsis, so the kind beside it and the
+  // section's options stay in view: a flex item does not shrink below its
+  // text without min-w-0.
+  it("lets a long name give way to the kind and the options", () => {
+    const long = {
+      href: "/tenants/acme/collections/docs/objects/jgjvugm2qj2ulhgbqqnpmrneaa",
+      label: "jgjvugm2qj2ulhgbqqnpmrneaa-and-then-some-more",
+      kind: "Object",
+    };
+    h.recent = [long];
+    render(<SidebarResourceLinks groupLabelClass="" />);
+    const name = screen.getByText(long.label);
+    expect(name.className).toMatch(/\bmin-w-0\b/);
+    expect(name.className).toMatch(/\btruncate\b/);
+    expect(name.className).toMatch(/\bflex-1\b/);
+    expect(screen.getByText(long.kind).className).toMatch(/\bshrink-0\b/);
+    expect(
+      screen.getByRole("button", { name: "Pinned and recent options" }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("SidebarResourceLinks options", () => {
