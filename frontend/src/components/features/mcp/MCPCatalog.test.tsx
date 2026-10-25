@@ -148,3 +148,63 @@ describe("the tools page's panels", () => {
     expect(screen.getByRole("dialog", { name: "Tool" })).toBeInTheDocument();
   });
 });
+
+// A pattern on the always-deny list names a family of tools, not one: its row
+// opens the list of registered tools it keeps out.
+describe("deny patterns", () => {
+  const WITH_PATTERNS = {
+    ...INSPECT,
+    alwaysDeny: ["paladin_update_*", "paladin_revoke_*", "paladin_ghost"],
+  } as unknown as MCPInspectResponse;
+
+  it("opens a pattern's matching tools from its row", async () => {
+    render(<MCPAlwaysDeny inspect={WITH_PATTERNS} />);
+    fireEvent.click(screen.getByRole("row", { name: /paladin_update_\*/ }));
+    const panel = await screen.findByRole("dialog", { name: "Deny pattern" });
+    expect(panel).toHaveTextContent("Tools (1 of 3)");
+    expect(panel).toHaveTextContent("paladin_update_object");
+    expect(panel).not.toHaveTextContent("paladin_list_objects");
+    expect(window.location.search).toBe("?denied.id=paladin_update_*");
+  });
+
+  it("says when a pattern matches no registered tool", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${TOOLS_PATH}?denied.id=paladin_revoke_*`,
+    );
+    render(<MCPAlwaysDeny inspect={WITH_PATTERNS} />);
+    const panel = await screen.findByRole("dialog", { name: "Deny pattern" });
+    expect(panel).toHaveTextContent("No registered tool matches");
+  });
+
+  it("leaves an unregistered literal name closed", () => {
+    render(<MCPAlwaysDeny inspect={WITH_PATTERNS} />);
+    fireEvent.click(screen.getByRole("row", { name: /paladin_ghost/ }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
+  it("does not open a pattern panel for an id off the deny list", () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${TOOLS_PATH}?denied.id=paladin_list_*`,
+    );
+    render(<MCPAlwaysDeny inspect={WITH_PATTERNS} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("marks a tool a pattern denies, in the catalog and its record", async () => {
+    render(<MCPTools inspect={WITH_PATTERNS} />);
+    const row = screen.getByRole("row", { name: /paladin_update_object/ });
+    expect(row).toHaveTextContent("always denied");
+    expect(
+      screen.getByRole("row", { name: /paladin_list_objects/ }),
+    ).not.toHaveTextContent("always denied");
+    fireEvent.click(row);
+    const panel = await screen.findByRole("dialog", { name: "Tool" });
+    expect(within(panel).getByText("always denied")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("by paladin_update_*");
+  });
+});

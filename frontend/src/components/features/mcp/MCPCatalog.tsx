@@ -33,6 +33,12 @@ import {
 } from "@/components/ui/RecordDialog";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { useTableView } from "@/hooks/useTableView";
+import {
+  isPattern,
+  matchingEntry,
+  patternMatches,
+  patternPrefix,
+} from "@/lib/mcpPattern";
 import type { TableUrl } from "@/lib/table/urlState";
 import type { SortAccessors } from "@/lib/table/view";
 import { T } from "@/lib/ui/typography";
@@ -106,7 +112,9 @@ export function ToolPanel({
   const profiles = tool
     ? inspect.profiles.filter((p) => p.tools.includes(tool.name))
     : [];
-  const denied = tool ? inspect.alwaysDeny.includes(tool.name) : false;
+  const deniedBy = tool
+    ? matchingEntry(inspect.alwaysDeny, tool.name)
+    : undefined;
   return (
     <DetailPanel
       open={tool !== null}
@@ -130,8 +138,15 @@ export function ToolPanel({
             {tool.capabilityOp || "— (a JWT is enough)"}
           </RecordField>
           <RecordField label="Offered by">
-            {denied ? (
-              <Badge variant="destructive">always denied</Badge>
+            {deniedBy ? (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                <Badge variant="destructive">always denied</Badge>
+                {deniedBy !== tool.name ? (
+                  <span className="text-muted-foreground">
+                    by <span className={T.code}>{deniedBy}</span>
+                  </span>
+                ) : null}
+              </span>
             ) : profiles.length === 0 ? (
               <span className="text-muted-foreground">no profile</span>
             ) : (
@@ -142,6 +157,75 @@ export function ToolPanel({
                   </Badge>
                 ))}
               </span>
+            )}
+          </RecordField>
+        </RecordFields>
+      ) : null}
+    </DetailPanel>
+  );
+}
+
+/** A deny pattern's record: every registered tool it keeps from agents. */
+function DenyPatternPanel({
+  pattern,
+  inspect,
+  onClose,
+}: {
+  pattern: string | null;
+  inspect: MCPInspectResponse;
+  onClose: () => void;
+}) {
+  const matched = pattern
+    ? inspect.toolCatalog.filter((t) => patternMatches(pattern, t.name))
+    : [];
+  return (
+    <DetailPanel
+      open={pattern !== null}
+      onClose={onClose}
+      rowId={pattern ?? undefined}
+      title="Deny pattern"
+      identifier={pattern ?? undefined}
+    >
+      {pattern ? (
+        <RecordFields>
+          <RecordField label="Matches">
+            {patternPrefix(pattern) ? (
+              <>
+                Every tool whose name starts with{" "}
+                <span className={T.code}>{patternPrefix(pattern)}</span>
+              </>
+            ) : (
+              "Every tool"
+            )}
+            , in every profile, admin included.
+          </RecordField>
+          <RecordField
+            label={`Tools (${matched.length} of ${inspect.toolCatalog.length})`}
+          >
+            {matched.length === 0 ? (
+              <span className="text-muted-foreground">
+                No registered tool matches: the pattern keeps out tools a later
+                release may add.
+              </span>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {matched.map((t) => (
+                  <li key={t.name} className="flex flex-col gap-1">
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      <span className={cn(T.code, "break-all")}>{t.name}</span>
+                      <Badge variant={planeTone(t.audience)}>
+                        {t.audience}
+                      </Badge>
+                      <EffectBadge tool={t} />
+                    </span>
+                    {t.description ? (
+                      <span className="text-muted-foreground">
+                        {t.description}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             )}
           </RecordField>
         </RecordFields>
@@ -226,10 +310,6 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
     const p = inspect.profiles.find((x) => x.name === profile);
     return p ? new Set(p.tools) : null;
   }, [inspect.profiles, profile]);
-  const denied = useMemo(
-    () => new Set(inspect.alwaysDeny),
-    [inspect.alwaysDeny],
-  );
   // Looked up in the whole catalog, so a link opens a tool the filters hide.
   const detail = useDetailPanel(undefined, TOOLS_TABLE);
   const opened =
@@ -321,7 +401,7 @@ export function MCPTools({ inspect }: { inspect: MCPInspectResponse }) {
                 >
                   <TableCell className={T.code}>
                     {t.name}
-                    {denied.has(t.name) ? (
+                    {matchingEntry(inspect.alwaysDeny, t.name) ? (
                       <Badge variant="destructive" className="ml-2">
                         always denied
                       </Badge>
@@ -435,6 +515,15 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
   const byName = new Map(inspect.toolCatalog.map((t) => [t.name, t]));
   const detail = useDetailPanel(undefined, DENIED_TABLE);
   const opened = (detail.openId && byName.get(detail.openId)) || null;
+  // A pattern opens its own record; a literal name nobody registers has
+  // nothing more to show than its row.
+  const openedPattern =
+    detail.openId &&
+    !opened &&
+    isPattern(detail.openId) &&
+    inspect.alwaysDeny.includes(detail.openId)
+      ? detail.openId
+      : null;
   if (inspect.alwaysDeny.length === 0) {
     return (
       <Card className="p-8 text-center">
@@ -464,7 +553,7 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
             return (
               <TableRow
                 key={d}
-                {...(t
+                {...(t || isPattern(d)
                   ? {
                       ...openableRow(() => detail.open(d)),
                       ...detail.rowProps(d),
@@ -483,13 +572,13 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
                     <Badge variant={planeTone(t.audience)}>{t.audience}</Badge>
                   ) : (
                     <Badge variant="outline">
-                      {d.includes("*") ? "pattern" : "not registered"}
+                      {isPattern(d) ? "pattern" : "not registered"}
                     </Badge>
                   )}
                 </TableCell>
                 <TableCell className="hidden @2xl:table-cell whitespace-normal text-muted-foreground">
                   {t?.description ??
-                    (d.includes("*")
+                    (isPattern(d)
                       ? "Every tool whose name starts with this prefix."
                       : "No tool by this name is registered.")}
                 </TableCell>
@@ -503,6 +592,11 @@ export function MCPAlwaysDeny({ inspect }: { inspect: MCPInspectResponse }) {
         tools.
       </p>
       <ToolPanel tool={opened} inspect={inspect} onClose={detail.close} />
+      <DenyPatternPanel
+        pattern={openedPattern}
+        inspect={inspect}
+        onClose={detail.close}
+      />
     </Card>
   );
 }
