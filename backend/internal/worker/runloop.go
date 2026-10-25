@@ -26,6 +26,7 @@ func RunTicker(ctx context.Context, name string, interval time.Duration, fn func
 		return nil
 	}
 	metrics.SetWorkerInterval(ctx, name, interval)
+	Ticks.register(name, interval)
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -35,7 +36,9 @@ func RunTicker(ctx context.Context, name string, interval time.Duration, fn func
 		case <-t.C:
 			start := time.Now()
 			err := fn(ctx)
-			metrics.RecordWorkerTick(ctx, name, err, time.Since(start))
+			took := time.Since(start)
+			metrics.RecordWorkerTick(ctx, name, err, took)
+			Ticks.record(name, start, took, err)
 		}
 	}
 }

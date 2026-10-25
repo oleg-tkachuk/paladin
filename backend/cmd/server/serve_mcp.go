@@ -449,11 +449,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 			l.Warn("mcp /status: falling back to the default probe client", zap.Error(perr))
 			probeClient = nil
 		}
-		mux.Handle("GET /status", mcp.StatusHandler(sessions, verifier, []mcp.UpstreamTarget{
-			{Name: "admin", URL: cfg.MCP.Upstreams.AdminURL},
-			{Name: "data", URL: cfg.MCP.Upstreams.DataURL},
-			{Name: "iam", URL: cfg.MCP.Upstreams.IAMURL},
-		}, mcp.HealthProbe(probeClient)))
+		mux.Handle("GET /status", mcp.StatusHandler(sessions, verifier, mcpUpstreamTargets(cfg.MCP.Upstreams), mcp.HealthProbe(probeClient)))
 	}
 
 	// The streamable transport has no reliable disconnect signal (clients can
@@ -483,18 +479,27 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// (bridge → no DB, embedded → has DB). Bridge can't probe DB; we
 	// expose a "process" component so the snapshot is non-empty and the
 	// UI can show "mcp: healthy" rather than treating an empty
-	// components list as missing data. Upstream probes (admin / data /
-	// iam reachability from the bridge) are BACKLOG — needs an MCP
-	// client Ping method.
+	// components list as missing data. Beside it, the sessions the bridge
+	// holds and whether it reaches the planes it proxies to, probed over
+	// the client its upstream calls use, as /status probes them.
+	healthProbeClient, hperr := upstreamHTTPClient(cfg.MCP.Upstreams)
+	if hperr != nil {
+		l.Warn("mcp health: falling back to the default probe client", zap.Error(hperr))
+		healthProbeClient = nil
+	}
 	healthH := &health.Handler{
 		Logger:       l.Named("health"),
 		LogSuccesses: cfg.Runtime.LogProbes,
-		Ready: []health.Probe{health.Check{
-			Name:     "process",
-			Category: health.CategorySubsystem,
-			Critical: true,
-			Func:     func(context.Context) error { return nil },
-		}},
+		Ready: []health.Probe{
+			health.Check{
+				Name:     "process",
+				Category: health.CategorySubsystem,
+				Critical: true,
+				Func:     func(context.Context) error { return nil },
+			},
+			mcp.SessionsComponent(sessions),
+			mcp.UpstreamsComponent(mcpUpstreamTargets(cfg.MCP.Upstreams), mcp.HealthProbe(healthProbeClient)),
+		},
 	}
 	healthH.WithRole("mcp")
 	healthH.Register(mux)
@@ -639,4 +644,14 @@ func upstreamHTTPClient(up config.MCPUpstreams) (*http.Client, error) {
 	tr.TLSClientConfig = tlsCfg
 	c.Transport = tr
 	return c, nil
+}
+
+// mcpUpstreamTargets are the planes the bridge proxies to, by name, as
+// /status and the health page probe them.
+func mcpUpstreamTargets(up config.MCPUpstreams) []mcp.UpstreamTarget {
+	return []mcp.UpstreamTarget{
+		{Name: "admin", URL: up.AdminURL},
+		{Name: "data", URL: up.DataURL},
+		{Name: "iam", URL: up.IAMURL},
+	}
 }

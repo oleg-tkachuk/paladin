@@ -38,6 +38,7 @@ import {
   type ComponentStatus,
   type Control,
   type Detail,
+  detailLines,
   type HealthAll,
   type RoleStatus,
   type Snapshot,
@@ -167,9 +168,16 @@ function ComponentRow({ c }: { c: Component }) {
   const m = META[c.status];
   const preview = useRef<HTMLParagraphElement>(null);
   const cutOff = useCutOff(preview, c.message);
-  // Expanding is only offered when the preview does not already show the
-  // whole message: a toggle that reveals the same text again is noise.
-  const expandable = !!c.message && (cutOff || open);
+  // A healthy component's details wait behind the toggle, so a card of
+  // healthy rows stays one line each; one in trouble shows them at once.
+  const hasDetails = !!c.details?.length;
+  const healthy = c.status === "healthy";
+  const showDetails = hasDetails && (open || !healthy);
+  // Expanding is only offered when it reveals something: details held back,
+  // or a message the preview cut off. A toggle that shows the same again is
+  // noise.
+  const expandable =
+    (hasDetails && healthy) || (!!c.message && (cutOff || open));
   const control = c.control && CONTROL_BADGE[c.control];
 
   return (
@@ -185,22 +193,21 @@ function ComponentRow({ c }: { c: Component }) {
       >
         <div className="flex min-w-0 items-center gap-2">
           <StatusDot tone={m.status} />
-          <span className="truncate font-mono text-sm">{c.name}</span>
-          {c.critical && (
+          <span
+            className="truncate font-mono text-sm"
+            title={control ? control.title : undefined}
+          >
+            {c.name}
+          </span>
+          {/* Nearly every component is required, so the exception is
+              what is marked: one the role keeps serving without. */}
+          {!c.critical && (
             <Badge
               variant="outline"
-              className="shrink-0 px-1.5 py-0 font-normal"
+              title="The role keeps serving while it is down"
+              className="shrink-0 px-1.5 py-0 font-normal text-muted-foreground"
             >
-              required
-            </Badge>
-          )}
-          {control && (
-            <Badge
-              variant="secondary"
-              title={control.title}
-              className="shrink-0 px-1.5 py-0 font-normal"
-            >
-              {control.label}
+              optional
             </Badge>
           )}
         </div>
@@ -253,7 +260,7 @@ function ComponentRow({ c }: { c: Component }) {
         </pre>
       )}
 
-      {!!c.details?.length && <DetailList details={c.details} />}
+      {showDetails && <DetailList details={c.details!} />}
     </div>
   );
 }
@@ -265,11 +272,27 @@ function ComponentRow({ c }: { c: Component }) {
 function DetailList({ details }: { details: Detail[] }) {
   if (details.some((d) => d.role)) return <DetailTable details={details} />;
   return (
-    <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
-      {details.map((d) => (
-        <div key={d.name} className="flex gap-1.5">
-          <dt>{d.name}</dt>
-          <dd className="font-mono tabular-nums text-foreground">{d.value}</dd>
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+      {detailLines(details).map((line) => (
+        <div key={line.label} className="contents">
+          <dt className="text-muted-foreground first-letter:uppercase">
+            {line.label}
+          </dt>
+          <dd className="flex flex-wrap gap-x-1.5">
+            {line.facts.map((f, i) => (
+              <span key={f.name || i} className="whitespace-nowrap">
+                {i > 0 && (
+                  <span aria-hidden className="pr-1.5 text-muted-foreground">
+                    ·
+                  </span>
+                )}
+                {f.name && (
+                  <span className="text-muted-foreground">{f.name} </span>
+                )}
+                <span className="font-mono tabular-nums">{f.value}</span>
+              </span>
+            ))}
+          </dd>
         </div>
       ))}
     </dl>

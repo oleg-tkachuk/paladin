@@ -25,9 +25,12 @@ type Describer interface {
 }
 
 // Detail is one fact a component reports, in the order it reports them.
+// Facts about one thing share a Group, which the console shows as one line —
+// "Watcher: connected 1 · lost 0" — rather than a run of loose pairs.
 type Detail struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+	Group string `json:"group,omitempty"`
 }
 
 // Spec names a component and says how much it matters.

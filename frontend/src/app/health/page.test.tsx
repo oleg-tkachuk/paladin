@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { render, screen, within } from "@/test/utils";
 
 vi.mock("next/navigation", () => ({
@@ -174,12 +175,13 @@ describe("HealthPage component switch", () => {
     const postgres = await row("postgres");
     expect(postgres).not.toHaveTextContent("db");
     expect(postgres).not.toHaveTextContent("config");
+    expect(screen.getByText("postgres")).not.toHaveAttribute("title");
   });
 });
 
-// The pool's use and the schema version are details: their own line under
-// the row, not a message to expand.
-describe("HealthPage component details", () => {
+// Nearly every component is required, so the exception is marked: one the
+// role keeps serving without. What switches a component is said on hover.
+describe("HealthPage component marks", () => {
   beforeEach(() => {
     payload = {
       roles: [
@@ -187,31 +189,78 @@ describe("HealthPage component details", () => {
           role: "api",
           status: "healthy",
           components: [
-            {
-              ...component("postgres", true),
-              details: [
-                { name: "in use", value: "3/20" },
-                { name: "idle", value: "2" },
-              ],
-            },
+            component("postgres", true),
+            { ...component("api_token", false), control: "config" },
           ],
         },
       ],
     };
   });
 
-  it("lists each detail as name and value, in order", async () => {
+  it("marks an optional component, not a required one", async () => {
     render(<HealthPage />);
-    const row = (await screen.findByText("postgres")).closest("button")!;
-    const list = row.parentElement!.querySelector("dl")!;
-    expect(list).toHaveTextContent("in use3/20idle2");
+    const card = await roleCard("api");
+    expect(card).not.toHaveTextContent("required");
+    const optional = Array.from(card.querySelectorAll("button")).filter((b) =>
+      b.textContent!.includes("optional"),
+    );
+    expect(optional).toHaveLength(1);
+    expect(optional[0]).toHaveTextContent("api_token");
   });
 
-  it("offers nothing to expand for details alone", async () => {
+  it("says what switches a component on hover, with no badge", async () => {
+    render(<HealthPage />);
+    const name = await screen.findByText("api_token");
+    expect(name).toHaveAttribute("title", "Switched by a configuration key");
+    expect(name.closest("button")).not.toHaveTextContent("config");
+  });
+});
+
+// A healthy component's details wait behind its toggle, so a card of
+// healthy rows is a line each; one in trouble shows them at once. A group's
+// facts are one line.
+describe("HealthPage component details", () => {
+  const withDetails = (status: string) => ({
+    roles: [
+      {
+        role: "api",
+        status: "healthy",
+        components: [
+          {
+            ...component("postgres", true),
+            status,
+            details: [
+              { name: "in use", value: "3/20" },
+              { group: "watcher", name: "connected", value: "1" },
+              { group: "watcher", name: "lost", value: "0" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  it("holds a healthy component's details behind its toggle", async () => {
+    payload = withDetails("healthy");
     render(<HealthPage />);
     const row = (await screen.findByText("postgres")).closest("button")!;
-    expect(row).not.toHaveAttribute("aria-expanded");
-    expect(row.querySelector("svg")).toBeNull();
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    expect(row.parentElement!.querySelector("dl")).toBeNull();
+    await userEvent.click(row);
+    const list = row.parentElement!.querySelector("dl")!;
+    expect(list).toHaveTextContent("in use3/20");
+    // One line for the group, its facts in order.
+    expect(list).toHaveTextContent("watcherconnected 1·lost 0");
+  });
+
+  it("shows a component's details at once when it is in trouble", async () => {
+    payload = withDetails("degraded");
+    render(<HealthPage />);
+    const card = await roleCard("api");
+    const row = Array.from(card.querySelectorAll("button")).find((b) =>
+      b.textContent!.startsWith("postgres"),
+    )!;
+    expect(row.parentElement!.querySelector("dl")).not.toBeNull();
   });
 });
 
@@ -258,6 +307,10 @@ describe("HealthPage database card", () => {
   it("gathers the database components into one card", async () => {
     render(<HealthPage />);
     const card = await roleCard("database");
+    // Healthy, so their details wait behind each row's toggle.
+    for (const toggle of card.querySelectorAll("button[aria-expanded]")) {
+      await userEvent.click(toggle);
+    }
     for (const name of ["postgres", "postgres-schema", "postgres-replica"]) {
       expect(card).toHaveTextContent(name);
     }

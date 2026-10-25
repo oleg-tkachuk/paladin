@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker/lease"
 )
 
@@ -253,9 +254,10 @@ func jobLeaseName(j app.BackgroundJob, idx int) string {
 // workerOpsMux assembles the worker pod's ops surface — /livez, /readyz,
 // /startupz, /system/health.json — off a real *health.Handler so the
 // per-component contract matches every other role. Worker probe set: Postgres
-// only; lease state is surfaced through metrics, not /readyz.
+// and its jobs' ticks; lease state is surfaced through metrics, not /readyz.
 func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http.Handler, *health.Handler) {
 	healthH := app.NewHealthHandler(deps.DB, cfg, l).WithRole("worker")
+	app.AddComponent(healthH, worker.JobsComponent(worker.Ticks))
 	mux := http.NewServeMux()
 	healthH.Register(mux)
 

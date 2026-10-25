@@ -303,22 +303,16 @@ func newDispatcherPool(ctx context.Context, dsn, password, appName string, l *za
 
 // dispatcherOpsMux assembles the dispatcher pod's ops surface. Same
 // shape as the worker / api / admin planes. Subsystem checks:
-//   - outbox: table reachable (a backlog is not a probe failure —
-//     operators route on the count metric instead).
+//   - outbox: table reachable, and the events waiting (a backlog is not a
+//     probe failure — operators route on the count metric instead).
+//   - deliveries: what waits and what failed, and the oldest pending.
 //   - nats, rabbitmq: worker.BrokerComponent — switched by the config's
 //     dispatcher.sinks, then by the database: in use while an enabled
 //     subscription delivers to the kind.
 func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, subs sinkSubscriptions, natsPool *worker.NatsConnPool, rabbitPool *worker.RabbitMQConnPool, l *zap.Logger) (http.Handler, *health.Handler) {
 	healthH := app.NewHealthHandler(deps.DB, deps.Cfg.Runtime, l).WithRole("dispatcher")
-	app.AddComponent(healthH, health.Check{
-		Name:     "outbox",
-		Category: health.CategorySubsystem,
-		Critical: true,
-		Func: func(ctx context.Context) error {
-			_, err := runner.PendingCount(ctx)
-			return err
-		},
-	})
+	app.AddComponent(healthH, worker.OutboxComponent(runner.PendingCount))
+	app.AddComponent(healthH, worker.DeliveriesComponent(runner.DeliveryStats))
 	app.AddComponent(healthH, worker.BrokerComponent(sinkkind.NATS, deps.Cfg.Dispatcher.Sinks, subs.count(sinkkind.NATS), natsPool.Conns))
 	app.AddComponent(healthH, worker.BrokerComponent(sinkkind.RabbitMQ, deps.Cfg.Dispatcher.Sinks, subs.count(sinkkind.RabbitMQ), rabbitPool.Conns))
 	mux := http.NewServeMux()
