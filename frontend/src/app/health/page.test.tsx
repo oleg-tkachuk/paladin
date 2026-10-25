@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@/test/utils";
+import { render, screen, within } from "@/test/utils";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/health",
