@@ -21,7 +21,6 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
-	"github.com/oleg-tkachuk/limes/dpop"
 )
 
 // Message size limits, in bytes, that the server and this client share. The
@@ -46,7 +45,7 @@ const (
 	HeaderCapability = "X-Paladin-Capability"
 	// HeaderDPoP carries the RFC 9449 proof that the caller holds the key a
 	// capability is bound to; see WithDPoP.
-	HeaderDPoP = dpop.Header
+	HeaderDPoP = "DPoP"
 	// HeaderDPoPNonce carries the nonce the server wants in the next DPoP
 	// proof (RFC 9449 §8).
 	HeaderDPoPNonce = "DPoP-Nonce"

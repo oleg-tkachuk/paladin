@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/oleg-tkachuk/limes/dpop"
 )
 
 // The proof algorithms, as RFC 9864 names them.
@@ -75,5 +77,13 @@ func TestDPoPProofCarriesTheNonce(t *testing.T) {
 		if nonce == "" && has || nonce != "" && got != nonce {
 			t.Errorf("nonce claim = %v (present %v), want %q", got, has, nonce)
 		}
+	}
+}
+
+// The header the SDK sends its proof in is the one limes reads it from. A
+// literal in client.go, which the Python SDK's parity test reads.
+func TestDPoPHeaderIsLimes(t *testing.T) {
+	if HeaderDPoP != dpop.Header {
+		t.Errorf("HeaderDPoP = %q, limes reads %q", HeaderDPoP, dpop.Header)
 	}
 }
