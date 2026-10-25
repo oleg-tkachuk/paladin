@@ -23,8 +23,17 @@ import { useBuckets } from "@/hooks/useBuckets";
 import { useTenants } from "@/hooks/useTenants";
 import {
   BucketTable,
+  BUCKET_FACETS,
   tenantLabelMap,
 } from "@/components/features/buckets/BucketTable";
+import { TableToolbar } from "@/components/ui/TableToolbar";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import type { Facet } from "@/lib/table/facets";
+import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
+import { PAGE_TABLE } from "@/lib/table/urlState";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BackendActions } from "./BackendActions";
 import { BackendHeader, kindLabel } from "./BackendHeader";
@@ -43,6 +52,19 @@ import {
 } from "@/lib/resourceStatus";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+
+/** The bucket facets but the backend: every bucket here is on this one. */
+const BACKEND_BUCKET_FACETS: readonly Facet<Bucket>[] = BUCKET_FACETS.filter(
+  (f) => f.id !== "backend",
+);
+
+/** Whether a bucket's name or label holds q, lower-cased. */
+function bucketMatches(b: Bucket, q: string): boolean {
+  return (
+    b.bucketId.toLowerCase().includes(q) ||
+    (b.displayName || "").toLowerCase().includes(q)
+  );
+}
 
 export default function StorageBackendDetailPage() {
   const params = useParams<{ backendId: string }>();
@@ -74,6 +96,16 @@ export default function StorageBackendDetailPage() {
     () => buckets.filter((b) => b.backendId === backendId),
     [buckets, backendId],
   );
+  const [search, setSearch] = useTableQuery(PAGE_TABLE);
+  const facets = useTableFacets(bucketsHere, BACKEND_BUCKET_FACETS, PAGE_TABLE);
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? facets.rows.filter((b) => bucketMatches(b, q)) : facets.rows;
+  }, [facets.rows, search]);
+  const paged = useTablePage(shown, {
+    url: PAGE_TABLE,
+    resetOn: [search, facets.selection],
+  });
 
   return (
     <div className="space-y-6">
@@ -173,8 +205,16 @@ export default function StorageBackendDetailPage() {
         </Button>
       </div>
 
+      <TableToolbar
+        query={search}
+        onQueryChange={setSearch}
+        searchLabel="Search this backend's buckets"
+        placeholder="Search by name or display label…"
+        facets={facets.controls}
+        count={{ shown: shown.length, total: bucketsHere.length }}
+      />
       <BucketTable
-        buckets={bucketsHere}
+        buckets={paged.rows}
         tenants={tenantNames}
         loading={loadingBuckets}
         error={bucketsError}
@@ -192,6 +232,7 @@ export default function StorageBackendDetailPage() {
           </div>
         }
       />
+      <TablePagination {...paged.pagination} />
     </div>
   );
 }

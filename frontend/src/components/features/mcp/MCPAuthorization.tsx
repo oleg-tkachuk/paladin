@@ -14,13 +14,13 @@ import {
 } from "@/components/ui/RecordDialog";
 import { Timestamp } from "@/components/Timestamp";
 import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
-import {
-  TableToolbar,
-  type ToolbarFilterOption,
-} from "@/components/ui/TableToolbar";
+import { TableToolbar } from "@/components/ui/TableToolbar";
 import { useTableView } from "@/hooks/useTableView";
 import { PAGE_TABLE } from "@/lib/table/urlState";
-import { useTableFilter } from "@/hooks/useTableUrl";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { useTablePage } from "@/hooks/useTablePage";
+import { TablePagination } from "@/components/ui/TablePagination";
+import type { Facet } from "@/lib/table/facets";
 import type { SortAccessors } from "@/lib/table/view";
 import { cn } from "@/lib/utils";
 
@@ -98,21 +98,42 @@ function ClientSource({ client }: { client: MCPOAuthClient }) {
   );
 }
 
-/** What a client is, in the words an operator needs. */
-function clientKind(c: MCPOAuthClient): string {
-  if (c.tokenExchange) return "MCP server";
-  return c.public ? "public (PKCE)" : "confidential";
+// What a client is, in the words an operator needs.
+const CLIENT_KIND = {
+  server: "MCP server",
+  public: "public (PKCE)",
+  confidential: "confidential",
+} as const;
+
+function clientKindKey(c: MCPOAuthClient): keyof typeof CLIENT_KIND {
+  if (c.tokenExchange) return "server";
+  return c.public ? "public" : "confidential";
 }
 
-// Which clients show: every one, or those from one source.
-type SourceFilter = keyof typeof CLIENT_SOURCE | "all";
-const SOURCE_FILTERS: readonly ToolbarFilterOption<SourceFilter>[] = [
-  { value: "all", label: "All" },
-  ...(Object.keys(CLIENT_SOURCE) as (keyof typeof CLIENT_SOURCE)[]).map(
-    (k) => ({ value: k, label: CLIENT_SOURCE[k].label }),
-  ),
+/** What a client is, in the words an operator needs. */
+function clientKind(c: MCPOAuthClient): string {
+  return CLIENT_KIND[clientKindKey(c)];
+}
+
+// Which clients show: by where they came from, and by what they are.
+const CLIENT_FACETS: readonly Facet<MCPOAuthClient>[] = [
+  {
+    id: "source",
+    label: "Source",
+    values: (c) => [clientSource(c)],
+    options: (Object.keys(CLIENT_SOURCE) as (keyof typeof CLIENT_SOURCE)[]).map(
+      (k) => ({ value: k, label: CLIENT_SOURCE[k].label }),
+    ),
+  },
+  {
+    id: "kind",
+    label: "Kind",
+    values: (c) => [clientKindKey(c)],
+    options: (Object.keys(CLIENT_KIND) as (keyof typeof CLIENT_KIND)[]).map(
+      (k) => ({ value: k, label: CLIENT_KIND[k] }),
+    ),
+  },
 ];
-const DEFAULT_SOURCE_FILTER: SourceFilter = "all";
 
 type ClientColumn = "client" | "source" | "kind";
 const CLIENT_SORT: SortAccessors<MCPOAuthClient, ClientColumn> = {
@@ -135,19 +156,18 @@ const CLIENT_SEARCH = (c: MCPOAuthClient) => [
 export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
   const oauth = inspect.oauth;
   const exchanging = !!oauth?.edgeAudience;
-  const [source, setSource] = useTableFilter(
-    SOURCE_FILTERS,
-    DEFAULT_SOURCE_FILTER,
-    PAGE_TABLE,
-  );
   const all = shownClients(oauth);
-  const view = useTableView(
-    source === DEFAULT_SOURCE_FILTER
-      ? all
-      : all.filter((c) => clientSource(c) === source),
-    { text: CLIENT_SEARCH, accessors: CLIENT_SORT, url: PAGE_TABLE },
-  );
-  const clients = view.rows;
+  const facets = useTableFacets(all, CLIENT_FACETS, PAGE_TABLE);
+  const view = useTableView(facets.rows, {
+    text: CLIENT_SEARCH,
+    accessors: CLIENT_SORT,
+    url: PAGE_TABLE,
+  });
+  const paged = useTablePage(view.rows, {
+    url: PAGE_TABLE,
+    resetOn: [view.query, facets.selection],
+  });
+  const clients = paged.rows;
   const sortProps = { current: view.sort, onSort: view.toggleSort };
   const [opened, setOpened] = useState<MCPOAuthClient | null>(null);
   const [deleting, setDeleting] = useState<MCPOAuthClient | null>(null);
@@ -243,13 +263,8 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
         onQueryChange={view.setQuery}
         searchLabel="Search OAuth clients"
         placeholder="Search by client, kind, scope or audience…"
-        filter={{
-          label: "Client source",
-          options: SOURCE_FILTERS,
-          value: source,
-          onChange: setSource,
-        }}
-        count={{ shown: clients.length, total: all.length }}
+        facets={facets.controls}
+        count={{ shown: view.rows.length, total: all.length }}
       />
       <Card className="p-0">
         <Table>
@@ -313,6 +328,7 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
           </TableBody>
         </Table>
       </Card>
+      <TablePagination {...paged.pagination} />
       <RecordDialog
         open={opened !== null}
         onOpenChange={(o) => !o && setOpened(null)}

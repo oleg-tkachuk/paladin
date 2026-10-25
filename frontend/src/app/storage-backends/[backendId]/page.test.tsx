@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
 
 // A failed backend or bucket read used to render as a claim about the data:
 // "Backend not found." for a backend that may exist, and "No buckets on this
@@ -126,6 +127,49 @@ describe("StorageBackendDetailPage bucket rows", () => {
     expect(screen.getByRole("link", { name: "Owner Co" })).toBeInTheDocument();
     expect(screen.getByText("tenant-a")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Region" })).toBeNull();
+  });
+});
+
+describe("StorageBackendDetailPage bucket list", () => {
+  const bucket = (bucketId: string, grantedTenantIds: string[] = []) => ({
+    backendId: "primary",
+    bucketId,
+    displayName: "",
+    ownerTenantId: "t-owner",
+    grantedTenantIds,
+    provisionState: "ready",
+  });
+
+  // A list the backend's buckets fill as they grow: searched, narrowed by
+  // the facets the platform's list has but the backend, and paged.
+  it("narrows by sharing, and searches by name", async () => {
+    h.buckets.buckets = [bucket("shared-pool", ["t-a"]), bucket("private")];
+    render(<StorageBackendDetailPage />);
+    expect(
+      screen.queryByRole("button", { name: "Filter by backend" }),
+    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by sharing" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Owner only/ }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByText("private")).toBeInTheDocument();
+    expect(screen.queryByText("shared-pool")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by sharing, 1 chosen" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Owner only/ }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Search this backend's buckets" }),
+      "shared",
+    );
+    expect(screen.getByText("shared-pool")).toBeInTheDocument();
+    expect(screen.queryByText("private")).toBeNull();
   });
 });
 

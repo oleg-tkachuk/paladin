@@ -123,6 +123,26 @@ describe("TenantBucketsPage", () => {
     }
   });
 
+  // The backend choice was a select of its own; it is a facet now, as on the
+  // platform's bucket list, counted over the buckets loaded.
+  it("narrows the buckets by backend, counting each", async () => {
+    h.buckets = [
+      makeBucket("on-one"),
+      { ...makeBucket("on-two"), backendId: "be-2" },
+    ];
+    render(<TenantBucketsPage />);
+    expect(screen.getByText("on-two")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by backend" }),
+    );
+    const two = screen.getByRole("menuitemcheckbox", { name: /be-2/ });
+    expect(two).toHaveTextContent("1");
+    await userEvent.click(two);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByText("on-two")).toBeInTheDocument();
+    expect(screen.queryByText("on-one")).toBeNull();
+  });
+
   // Refresh called fetchBuckets() bare, which lists every tenant's buckets.
   it("refreshes this tenant's buckets, not everyone's", () => {
     render(<TenantBucketsPage />);

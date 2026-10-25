@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import {
   fireEvent,
   render,
@@ -111,13 +112,35 @@ describe("MCPAuthorization client table", () => {
       />,
     );
 
-  it("narrows the clients to one source", () => {
+  it("narrows the clients by source and by kind, counting each", async () => {
     shown();
-    fireEvent.click(screen.getByRole("button", { name: "registered itself" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by source" }),
+    );
+    const registered = screen.getByRole("menuitemcheckbox", {
+      name: /registered itself/,
+    });
+    expect(registered).toHaveTextContent("1");
+    await userEvent.click(registered);
+    await userEvent.keyboard("{Escape}");
     expect(clientColumn()).toEqual([REGISTERED.clientId]);
     expect(screen.getByText("1 of 3")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by source, 1 chosen" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /registered itself/ }),
+    );
+    await userEvent.keyboard("{Escape}");
     expect(clientColumn()).toHaveLength(3);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by kind" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /MCP server/ }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(clientColumn()).toHaveLength(1);
   });
 
   it("searches the scopes and audiences too, and sorts by client", () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { create } from "@bufbuild/protobuf";
 
@@ -102,12 +103,29 @@ describe("TrashPage", () => {
           within(r).getAllByRole("cell")[0].querySelector("p")?.textContent,
       );
 
-  it("narrows to the tenants past or within retention", async () => {
+  it("narrows to the tenants past or within retention, counting each", async () => {
     render(<TrashPage />);
     await screen.findByText("Older");
-    fireEvent.click(screen.getByRole("button", { name: "Past retention" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by retention" }),
+    );
+    const past = screen.getByRole("menuitemcheckbox", {
+      name: /Past retention/,
+    });
+    expect(past).toHaveTextContent("2");
+    await userEvent.click(past);
+    await userEvent.keyboard("{Escape}");
     expect(tenantColumn()).toEqual(["Oldest", "Older"]);
-    fireEvent.click(screen.getByRole("button", { name: "Within retention" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by retention, 1 chosen" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Past retention/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Within retention/ }),
+    );
+    await userEvent.keyboard("{Escape}");
     expect(tenantColumn()).toEqual(["Newer"]);
     expect(screen.getByText("1 of 3")).toBeInTheDocument();
   });
