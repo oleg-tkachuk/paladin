@@ -894,19 +894,6 @@ order they are being taken up.
   rebuilds those two as well, with tests on both sides.
 - **Blockers:** none.
 
-#### A tenant purge names what it takes by row, not by kind
-
-- **Status:** Deferred.
-- **Reason:** the purge confirmation on the Trash page asks for the slug and
-  lists the kinds the cascade removes (API tokens, event subscriptions,
-  capabilities, quotas, operations), but not which of them this tenant
-  holds: the page reads no tenant's tokens or subscriptions, and three list
-  reads per dialog, each paged, would count only what they happened to load.
-- **Definition of Done:** the purge dialog lists the tenant's API tokens and
-  event subscriptions by name, and how many capabilities it holds, with
-  counts that are exact past the first page — from one server-side preview of
-  what `PurgeTenant` would remove rather than reads assembled in the browser.
-- **Blockers:** a preview (dry-run) read for `PurgeTenant` on the admin API.
 #### Topology: a tenant's policies and capabilities as a side branch
 
 - **Status:** Deferred.
