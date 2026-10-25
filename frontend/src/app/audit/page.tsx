@@ -2,7 +2,7 @@
 
 import { ListPage } from "@/components/layout/templates/ListPage";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   ArrowDownTrayIcon,
@@ -21,6 +21,8 @@ import { ExportAuditLogDialog } from "./ExportAuditLogDialog";
 import { Button } from "@/components/ui/button";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
+import { useServerFacets } from "@/hooks/useTableFacets";
+import { AUDIT_FACETS, auditFacetCounts } from "@/lib/auditFacets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { AUDIT_ORDER_FIELDS, type AuditOrderField } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
@@ -58,8 +60,29 @@ export default function AuditPage() {
     tableId: TABLE_ID,
     columns: AUDIT_ORDER_FIELDS,
   });
-  const { entries, loading, error, nextCursor, refresh, loadMore } =
-    useAuditLogs(AUDIT_PAGE_SIZE, searchFilter(debouncedSearch), "", sort);
+  // The facets narrow the log on the server, which counts them with its
+  // first page.
+  const facets = useServerFacets(AUDIT_FACETS, PAGE_TABLE);
+  const {
+    entries,
+    facetCounts,
+    loading,
+    error,
+    nextCursor,
+    refresh,
+    loadMore,
+  } = useAuditLogs(
+    AUDIT_PAGE_SIZE,
+    searchFilter(debouncedSearch),
+    "",
+    sort,
+    facets.selection,
+  );
+  const { controls: controlsFor } = facets;
+  const facetControls = useMemo(
+    () => controlsFor(auditFacetCounts(facetCounts)),
+    [controlsFor, facetCounts],
+  );
 
   // Live feed — SSE events are an invalidation signal, not a data source:
   // each push triggers a trailing-debounced refresh() so a burst of audit
@@ -126,6 +149,7 @@ export default function AuditPage() {
               onQueryChange={setSearch}
               searchLabel="Filter the audit log"
               placeholder="Filter by action, actor, resource, client, request id…"
+              facets={facetControls}
             >
               <span className={T.hint}>
                 {entries.length} loaded

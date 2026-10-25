@@ -2,21 +2,33 @@ import { create } from "@bufbuild/protobuf";
 import { AuditLogEntrySchema } from "@/gen/paladin/admin/v1/types_pb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/utils";
+import userEvent from "@testing-library/user-event";
+import { AUDIT_FACET_OUTCOME, AUDIT_FACET_PLANE } from "@/lib/auditFacets";
 
 const h = vi.hoisted(() => ({
   search: "",
   filters: [] as string[],
+  facets: [] as unknown[],
   entries: [] as unknown[],
+  facetCounts: [] as unknown[],
 }));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(h.search),
 }));
 vi.mock("@/hooks/useAuditLogs", () => ({
-  useAuditLogs: (_pageSize: number, filter: string) => (
+  useAuditLogs: (
+    _pageSize: number,
+    filter: string,
+    _tenant: string,
+    _sort: unknown,
+    facets: unknown,
+  ) => (
     h.filters.push(filter),
+    h.facets.push(facets),
     {
       entries: h.entries,
+      facetCounts: h.facetCounts,
       loading: false,
       error: null,
       nextCursor: "",
@@ -86,6 +98,39 @@ describe("AuditPage search", () => {
     render(<AuditPage />);
     expect(screen.getByPlaceholderText(SEARCH_BOX)).toHaveValue("paladin-mcp");
     expect(h.filters[0]).toBe('search.contains("paladin-mcp")');
+  });
+});
+
+// The log is paged on the server, so its facets are counted there: the menus
+// show the server's counts, and a choice goes to it to narrow by.
+describe("AuditPage facets", () => {
+  beforeEach(() => {
+    h.search = "";
+    h.facets = [];
+    h.facetCounts = [
+      { facet: AUDIT_FACET_OUTCOME, value: "AUDIT_OUTCOME_ERROR", count: 7n },
+      { facet: AUDIT_FACET_PLANE, value: "paladin-iam", count: 4n },
+    ];
+  });
+
+  it("narrows on the server by facets it counted", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<AuditPage />);
+    await user.click(screen.getByRole("button", { name: "Filter by outcome" }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Failed, 7 rows" }),
+    );
+    expect(
+      (h.facets.at(-1) as Record<string, string[]>)[AUDIT_FACET_OUTCOME],
+    ).toEqual(["ERROR"]);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Filter by plane" }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: "iam, 4 rows" }),
+    );
+    expect(
+      (h.facets.at(-1) as Record<string, string[]>)[AUDIT_FACET_PLANE],
+    ).toEqual(["paladin-iam"]);
   });
 });
 

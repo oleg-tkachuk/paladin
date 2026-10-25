@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   entries: [] as unknown[],
   useAuditLogs: vi.fn((..._args: unknown[]) => ({
     entries: h.entries,
+    facetCounts: [],
     loading: false,
     error: null,
     nextCursor: "",
@@ -26,6 +27,12 @@ vi.mock("@/components/features/audit/AuditEntryPanel", () => ({
     entryId ? <div role="dialog">{entryId}</div> : null,
 }));
 
+import {
+  AUDIT_FACET_OUTCOME,
+  AUDIT_FACET_PLANE,
+  AUDIT_FACET_SERVICE,
+} from "@/lib/auditFacets";
+
 import TenantAuditLogPage from "./page";
 
 // The page reads the tenant's trail from the server rather than filtering a
@@ -38,10 +45,18 @@ describe("TenantAuditLogPage", () => {
     expect(
       screen.getByRole("heading", { name: /^Audit log$/ }),
     ).toBeInTheDocument();
-    expect(h.useAuditLogs).toHaveBeenCalledWith(expect.any(Number), "", "t-1", {
-      column: null,
-      direction: null,
-    });
+    // With the facets, none chosen, which the server narrows and counts by.
+    expect(h.useAuditLogs).toHaveBeenCalledWith(
+      expect.any(Number),
+      "",
+      "t-1",
+      { column: null, direction: null },
+      {
+        [AUDIT_FACET_PLANE]: [],
+        [AUDIT_FACET_OUTCOME]: [],
+        [AUDIT_FACET_SERVICE]: [],
+      },
+    );
   });
 
   // The trail loads a page at a time, so its headers ask the server for the
