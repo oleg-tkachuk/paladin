@@ -820,20 +820,19 @@ order they are being taken up.
 #### Facets and pages for the remaining lists
 
 - **Status:** Blocked.
-- **Reason:** counted facets (useTableFacets) and pages (useTablePage) reach
-  every list loaded whole that answers a question worth narrowing by:
-  storage backends, tenants, buckets (the platform's, a tenant's, a
-  backend's), users, M2M tokens, the trash and the MCP clients. What is
-  left is paged on the server — audit, operations, collections, objects —
-  where a count beside an answer would describe only the rows read so far,
-  and operations keep their single-choice state filter until then; the
-  capabilities page browses by kind and subject through two server-side
-  flags of its own; configuration is a document, not a list of rows.
-- **Definition of Done:** the server-paged lists filter through facets whose
-  counts the API gives, and operations drop their single-choice filter; or
-  this entry names each one left and why.
-- **Blockers:** per-answer counts for the server-paged lists, which no List
-  RPC returns today.
+- **Reason:** counted facets reach every list loaded whole that answers a
+  question worth narrowing by (useTableFacets), and the operations page,
+  which the server pages, through counts its listing gives with the first
+  page (useServerFacets). What is left is paged on the server too — audit,
+  collections, objects — and no List RPC of theirs counts yet, so a count
+  beside them would describe only the rows read so far; the capabilities
+  page browses by kind and subject through two server-side flags of its own;
+  configuration is a document, not a list of rows.
+- **Definition of Done:** audit, collections and objects filter through
+  facets whose counts their List RPCs give, as ListOperations' facets and
+  facet_counts do; or this entry names each one left and why.
+- **Blockers:** facets and counts on ListAuditLog, ListCollections and
+  ListObjects.
 
 #### Facet choices remembered between visits
 

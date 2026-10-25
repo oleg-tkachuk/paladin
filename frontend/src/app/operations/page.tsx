@@ -4,7 +4,8 @@ import { EmptyTableRow } from "@/components/ui/EmptyState";
 import { emptyReason } from "@/lib/emptyState";
 import { useCallback, useMemo, useState } from "react";
 
-import { useTableFilter, useTableQuery } from "@/hooks/useTableUrl";
+import { useTableQuery } from "@/hooks/useTableUrl";
+import { useServerFacets } from "@/hooks/useTableFacets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import {
   ArrowPathIcon,
@@ -53,14 +54,14 @@ import { errorMessage } from "@/hooks/errorContract";
 import { adminOperationClient } from "@/lib/connect/client";
 import { formatDuration } from "@/lib/format/duration";
 import {
+  OPERATION_FACETS,
   OP_STATUS_BADGE,
-  DEFAULT_OP_VIEW,
-  OP_VIEWS,
   isActive,
   objectCountLabel,
   operationElapsedMs,
   operationError,
   operationLabel,
+  operationFacetCounts,
   operationMatches,
   operationProgress,
   operationStatus,
@@ -89,9 +90,9 @@ const COL_STARTED_BY = "hidden @5xl:table-cell";
 const SKELETON_ROWS = [0, 1, 2, 3];
 
 export default function OperationsPage() {
-  const [view, setView] = useTableFilter(OP_VIEWS, DEFAULT_OP_VIEW, PAGE_TABLE);
   const [scope, setScope] = useState<OpScope>("mine");
   const [includeDismissed, setIncludeDismissed] = useState(false);
+  const [failuresOnly, setFailuresOnly] = useState(false);
   const [live, setLive] = useState(true);
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // The open record is in the URL, so an open record's address links to it.
@@ -100,8 +101,29 @@ export default function OperationsPage() {
   const [clicked, setClicked] = useState<Operation | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
 
-  const { operations, loading, error, hasMore, refresh, loadMore } =
-    useOperations({ view, scope, includeDismissed, live });
+  // The facets narrow the listing on the server, which counts them with its
+  // first page.
+  const facets = useServerFacets(OPERATION_FACETS, PAGE_TABLE);
+  const {
+    operations,
+    facetCounts,
+    loading,
+    error,
+    hasMore,
+    refresh,
+    loadMore,
+  } = useOperations({
+    facets: facets.selection,
+    failuresOnly,
+    scope,
+    includeDismissed,
+    live,
+  });
+  const { controls: controlsFor } = facets;
+  const facetControls = useMemo(
+    () => controlsFor(operationFacetCounts(facetCounts)),
+    [controlsFor, facetCounts],
+  );
   const shown = useMemo(
     () => operations.filter((op) => operationMatches(op, search)),
     [operations, search],
@@ -182,12 +204,7 @@ export default function OperationsPage() {
               onQueryChange={setSearch}
               searchLabel="Search the operations"
               placeholder="Search by operation, collection, error…"
-              filter={{
-                label: "Show",
-                options: OP_VIEWS,
-                value: view,
-                onChange: setView,
-              }}
+              facets={facetControls}
               count={{ shown: shown.length, total: operations.length }}
             >
               <div role="group" aria-label="Whose" className="flex gap-1">
@@ -204,6 +221,14 @@ export default function OperationsPage() {
                   </Button>
                 ))}
               </div>
+              <label className={cn(T.hint, "flex items-center gap-2")}>
+                <Switch
+                  checked={failuresOnly}
+                  onCheckedChange={setFailuresOnly}
+                  aria-label="With failures"
+                />
+                With failures
+              </label>
               {mine ? (
                 <label className={cn(T.hint, "flex items-center gap-2")}>
                   <Switch
@@ -280,7 +305,8 @@ export default function OperationsPage() {
                 icon={QueueListIcon}
                 what="operations"
                 reason={emptyReason({
-                  filtered: operations.length > 0 || view !== DEFAULT_OP_VIEW,
+                  filtered:
+                    operations.length > 0 || facets.active > 0 || failuresOnly,
                 })}
               />
             ) : (

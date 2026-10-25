@@ -13,7 +13,18 @@ import {
   progressFromMetadata,
   type OpProgress,
 } from "@/lib/operationProgress";
-import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
+import type { FacetCount } from "@/gen/paladin/common/v1/facet_pb";
+import {
+  OperationState,
+  OperationStateSchema,
+} from "@/gen/paladin/common/v1/operation_pb";
+import {
+  groupFacetCounts,
+  type Facet,
+  type FacetCounts,
+  type FacetOption,
+  type FacetSelection,
+} from "@/lib/table/facets";
 import { StatusTone } from "@/lib/ui/status";
 
 /**
@@ -238,8 +249,6 @@ export function progressPercent(p: OpProgress): number {
 
 /** Which operations a list shows, by where they stand. */
 export type OpView = "all" | "active" | "failed" | "done";
-/** The view the operations list opens on. */
-export const DEFAULT_OP_VIEW: OpView = "all";
 export const OP_VIEWS: readonly { value: OpView; label: string }[] = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
@@ -288,4 +297,79 @@ export function operationMatches(op: Operation, query: string): boolean {
     op.target?.destination ?? "",
     operationError(op),
   ].some((s) => s.toLowerCase().includes(q));
+}
+
+// ─── facets ────────────────────────────────────────────────────────────────
+
+// The facets the server narrows and counts an operation listing by, as it
+// names them (operationh.FacetState, operationh.FacetType).
+export const OP_FACET_STATE = "state";
+export const OP_FACET_TYPE = "type";
+
+/** A state's value as the facet names it: the enum's own name, "FAILED". */
+function stateValue(state: OperationState): string {
+  return OperationStateSchema.value[state]?.localName ?? "";
+}
+
+/**
+ * Each state the state facet offers, in the order an operation moves, toned
+ * as its status is. Succeeded holds the partly failed too: the server counts
+ * by state, which has no partial.
+ */
+const OP_STATE_OPTIONS: readonly FacetOption[] = (
+  [
+    [OperationState.PENDING, "Queued"],
+    [OperationState.RUNNING, "Running"],
+    [OperationState.SUCCEEDED, "Succeeded"],
+    [OperationState.FAILED, "Failed"],
+    [OperationState.CANCELLED, "Cancelled"],
+  ] as const
+).map(([state, label]) => ({
+  value: stateValue(state),
+  label,
+  tone: OP_STATUS_TONE[FROM_STATE[state] ?? "pending"],
+}));
+
+/** The operations page's facets: where an operation stands, what it does. */
+export const OPERATION_FACETS: readonly Facet<Operation>[] = [
+  {
+    id: OP_FACET_STATE,
+    label: "State",
+    values: (op) => [stateValue(op.state)],
+    options: OP_STATE_OPTIONS,
+  },
+  {
+    id: OP_FACET_TYPE,
+    label: "Type",
+    values: (op) => [op.type],
+    optionLabel: camelWords,
+  },
+];
+
+/**
+ * The server's counts as the facets name their answers: a state comes by
+ * its wire name, "OPERATION_STATE_FAILED", and is offered as "FAILED".
+ */
+export function operationFacetCounts(
+  counts: readonly FacetCount[],
+): FacetCounts {
+  return groupFacetCounts(counts, (c) => {
+    if (c.facet !== OP_FACET_STATE) return c.value;
+    return (
+      OperationStateSchema.values.find((v) => v.name === c.value)?.localName ??
+      c.value
+    );
+  });
+}
+
+/** The facet choices as the request names them. */
+export function operationFacetsRequest(selection: FacetSelection): {
+  states: OperationState[];
+  types: string[];
+} {
+  const states = (selection[OP_FACET_STATE] ?? []).flatMap((value) => {
+    const v = OperationStateSchema.values.find((e) => e.localName === value);
+    return v ? [v.number as OperationState] : [];
+  });
+  return { states, types: [...(selection[OP_FACET_TYPE] ?? [])] };
 }

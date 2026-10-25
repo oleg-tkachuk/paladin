@@ -7,10 +7,12 @@ import { render, screen, waitFor, within } from "@/test/utils";
 import { OperationSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 import type { UseOperationsArgs } from "@/hooks/useOperations";
+import { OP_BATCH_COPY, OP_FACET_STATE, OP_FACET_TYPE } from "@/lib/operations";
 
 const h = vi.hoisted(() => ({
   args: [] as unknown[],
   operations: [] as unknown[],
+  facetCounts: [] as unknown[],
   error: null as string | null,
   refresh: vi.fn(),
   cancel: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/hooks/useOperations", () => ({
     h.args.push(args),
     {
       operations: h.operations,
+      facetCounts: h.facetCounts,
       loading: false,
       error: h.error,
       hasMore: false,
@@ -73,6 +76,10 @@ const lastArgs = () => h.args.at(-1) as UseOperationsArgs;
 beforeEach(() => {
   h.args = [];
   h.operations = [running, finished];
+  h.facetCounts = [
+    { facet: OP_FACET_STATE, value: "OPERATION_STATE_FAILED", count: 3n },
+    { facet: OP_FACET_TYPE, value: OP_BATCH_COPY, count: 2n },
+  ];
   h.error = null;
   h.refresh.mockReset().mockResolvedValue(undefined);
   h.cancel.mockReset().mockResolvedValue({});
@@ -83,7 +90,8 @@ describe("OperationsPage", () => {
   it("lists the user's own, live, with who started each", () => {
     render(<OperationsPage />);
     expect(lastArgs()).toEqual({
-      view: "all",
+      facets: { [OP_FACET_STATE]: [], [OP_FACET_TYPE]: [] },
+      failuresOnly: false,
       scope: "mine",
       includeDismissed: false,
       live: true,
@@ -92,10 +100,32 @@ describe("OperationsPage", () => {
     expect(within(row).getByText("0199-alice")).toBeInTheDocument();
   });
 
-  it("asks the server for the view, the scope and the cleared", async () => {
+  // The server counts over the whole listing, not the rows loaded: the
+  // menus show its counts, and a choice goes to it to narrow by.
+  it("narrows on the server by facets it counted", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     render(<OperationsPage />);
-    await userEvent.click(screen.getByRole("button", { name: "Failed" }));
-    expect(lastArgs().view).toBe("failed");
+    await user.click(screen.getByRole("button", { name: "Filter by state" }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: "Failed, 3 rows" }),
+    );
+    expect(lastArgs().facets[OP_FACET_STATE]).toEqual(["FAILED"]);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Filter by type" }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", {
+        name: "Batch copy, 2 rows",
+      }),
+    );
+    expect(lastArgs().facets[OP_FACET_TYPE]).toEqual([OP_BATCH_COPY]);
+  });
+
+  it("asks the server for the failures, the scope and the cleared", async () => {
+    render(<OperationsPage />);
+    await userEvent.click(
+      screen.getByRole("switch", { name: "With failures" }),
+    );
+    expect(lastArgs().failuresOnly).toBe(true);
     await userEvent.click(screen.getByRole("switch", { name: "Show cleared" }));
     expect(lastArgs().includeDismissed).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "Tenant" }));

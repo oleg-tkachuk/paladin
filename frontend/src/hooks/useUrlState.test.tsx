@@ -8,16 +8,12 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { textParam, useUrlState } from "./useUrlState";
-import { useTableFilter, useTableQuery } from "./useTableUrl";
+import { useTableQuery } from "./useTableUrl";
 import { useTableSort } from "./useTableSort";
 import { useTableView } from "./useTableView";
 import { PAGE_TABLE, type TableUrl } from "@/lib/table/urlState";
 
 const GRANTS: TableUrl = { namespace: "grants" };
-const OPTIONS = [
-  { value: "all", label: "All" },
-  { value: "frozen", label: "Frozen" },
-] as const;
 const COLUMNS = ["name"] as const;
 
 /** Moves the address bar as a link to this page would, router included. */
@@ -88,26 +84,6 @@ describe("useTableSort in the URL", () => {
     act(() => result.current.toggleSort("name"));
     expect(result.current.sort.column).toBeNull();
     expect(window.location.search).toBe("");
-  });
-});
-
-describe("useTableFilter", () => {
-  it("restores an offered choice and leaves the default out of the URL", () => {
-    navigate("?filter=frozen");
-    const { result } = renderHook(() =>
-      useTableFilter(OPTIONS, "all", PAGE_TABLE),
-    );
-    expect(result.current[0]).toBe("frozen");
-    act(() => result.current[1]("all"));
-    expect(window.location.search).toBe("");
-  });
-
-  it("ignores a choice the table does not offer", () => {
-    navigate("?filter=deleted");
-    const { result } = renderHook(() =>
-      useTableFilter(OPTIONS, "all", PAGE_TABLE),
-    );
-    expect(result.current[0]).toBe("all");
   });
 });
 
