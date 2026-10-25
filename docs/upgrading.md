@@ -15,12 +15,16 @@ To land a deliberate breaking change:
 2. Decide it is worth it. The common case is a field rename that keeps the
    number — gRPC clients survive that, JSON clients do not, and nothing at
    runtime will tell you which you broke.
-3. Note it here, under `## Unreleased — <title>`, in the commit that makes
-   the change. The release renames the heading to the tags that shipped it,
-   reading which streams it belongs to from the commit that wrote it
-   ([`.github/ci/upgrade-sections.ts`](../.github/ci/upgrade-sections.ts)): a
-   section written in a commit of documentation alone reads as the product's
-   and stays Unreleased through every SDK release.
+3. Note it in a file of its own, `docs/upgrading/<slug>.md`, headed
+   `## Unreleased — <title>`, in the commit that makes the change; do not
+   edit this guide. The release renames the heading to the tags that shipped
+   it, reading which streams it belongs to from the commit that added the
+   file ([`.github/ci/upgrade-sections.ts`](../.github/ci/upgrade-sections.ts)),
+   and writes every file into this guide below, newest first: a section
+   written in a commit of documentation alone reads as the product's and
+   stays Unreleased through every SDK release. Until a release has run, a
+   change's note is in `docs/upgrading/` alone. A note written straight into
+   this guide conflicted with every release that named a section beside it.
 4. Cut the next baseline once the change is merged:
 
    ```
@@ -82,6 +86,9 @@ here.
 
 
 
+
+<!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
+<!-- end of sections -->
 
 ## sdk/go/v0.115.1, sdk/python/v0.116.1 — the Python fake refuses an unknown capability as the server does
 

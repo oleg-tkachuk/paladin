@@ -8,7 +8,23 @@ import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
 import { git } from "./lib/git.ts";
 import { streamOf, streams } from "./lib/release-config.ts";
 import { tempRepo } from "./lib/temp-repo.ts";
-import { BRANCH_PREFIX, UPGRADING, nameGuide, nameSections, parseSection, proposalTitle, propose, splitTags, tagsFor, unreleasedHeading } from "./upgrade-sections.ts";
+import {
+  BRANCH_PREFIX,
+  SECTIONS,
+  SECTIONS_BEGIN,
+  SECTIONS_END,
+  UPGRADING,
+  nameGuide,
+  nameSections,
+  parseSection,
+  proposalTitle,
+  propose,
+  sectionsBlock,
+  splitTags,
+  tagsFor,
+  unreleasedHeading,
+  withSections,
+} from "./upgrade-sections.ts";
 
 // A section named with the wrong tag sends the release notes' migration link
 // to the wrong place, or to none: the SDK's Python 3.13 section was cut in the
@@ -133,13 +149,81 @@ test("nameGuide adds the product's tag to a section the SDK released first", asy
   }
 });
 
+// A pull request adds a section file and never edits the guide, so a release
+// naming another section cannot conflict with it.
+describe("section files", () => {
+  const GUIDE = `# Upgrading\n\n${SECTIONS_BEGIN}\n${SECTIONS_END}\n\n## Unreleased — in the guide\n`;
+  const PYTHON_FILE = `${SECTIONS}/python-change.md`;
+  const SERVER_FILE = `${SECTIONS}/server-change.md`;
+
+  test("withSections writes between the markers, and leaves a guide without them", () => {
+    assert.equal(withSections(`a\n${SECTIONS_BEGIN}\nold\n${SECTIONS_END}\nb`, "new"), `a\n${SECTIONS_BEGIN}\n\nnew\n\n${SECTIONS_END}\nb`);
+    assert.equal(withSections("no markers", "new"), "no markers");
+  });
+
+  test("sectionsBlock puts the newest first", () => {
+    assert.equal(
+      sectionsBlock([
+        { path: "a.md", text: "## old\n", age: 1 },
+        { path: "b.md", text: "## new\n", age: 0 },
+      ]),
+      "## new\n\n## old",
+    );
+  });
+
+  test("nameGuide names each file by the commit that added it, and writes the files into the guide", async () => {
+    const repo = await tempRepo();
+    try {
+      repo.write(UPGRADING, GUIDE);
+      repo.write(BACKEND, "x");
+      await repo.commit("feat(api): in the guide");
+      repo.write(PYTHON_FILE, "## Unreleased — python\n\nBody.\n");
+      repo.write(PYTHON_SDK, "x");
+      await repo.commit("feat(sdk): python");
+      repo.write(SERVER_FILE, "## Unreleased — server\n");
+      repo.write(BACKEND, "y");
+      await repo.commit("feat(api): server");
+
+      assert.equal(await nameGuide(repo.dir, EVERY), true);
+      assert.match(await repo.run("diff", "--", PYTHON_FILE), new RegExp(`^\\+## ${PYTHON_TAG.replaceAll("/", "\\/")} — python$`, "m"));
+      assert.match(await repo.run("diff", "--", SERVER_FILE), new RegExp(`^\\+## ${PRODUCT_TAG} — server$`, "m"));
+      const guide = await repo.run("diff", "--", UPGRADING);
+      // The newest file first, then the older, between the markers; the
+      // section the guide holds is named where it is.
+      assert.match(guide, new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${PYTHON_TAG.replaceAll("/", "\\/")} — python[\\s\\S]*\\+Body\\.`));
+      assert.match(guide, new RegExp(`^\\+## ${PRODUCT_TAG} — in the guide$`, "m"));
+
+      await repo.commit("docs(upgrading): name the sections");
+      assert.equal(await nameGuide(repo.dir, EVERY), false, "a named guide is written once");
+    } finally {
+      repo.cleanup();
+    }
+  });
+
+  test("a file the release has not reached stays Unreleased, and still reaches the guide", async () => {
+    const repo = await tempRepo();
+    try {
+      repo.write(UPGRADING, GUIDE);
+      await repo.commit("docs: guide");
+      repo.write(PYTHON_FILE, "## Unreleased — python\n");
+      repo.write(PYTHON_SDK, "x");
+      await repo.commit("feat(sdk): python");
+      assert.equal(await nameGuide(repo.dir, [PRODUCT_TAG]), true);
+      assert.equal(await repo.run("diff", "--name-only"), `${UPGRADING}\n`);
+      assert.match(await repo.run("diff"), /^\+## Unreleased — python$/m);
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
 describe("propose", () => {
   const tags = splitTags(" v2.0.0  sdk/go/v0.3.0 ");
   const branch = BRANCH_PREFIX + "v2.0.0-sdk/go/v0.3.0";
 
   test("the tags are read from one line", () => assert.deepEqual(tags, ["v2.0.0", "sdk/go/v0.3.0"]));
 
-  test("pushes the renamed guide alone, opens its pull request once, and nothing when nothing is renamed", async () => {
+  test("pushes the renamed guide and section files alone, opens its pull request once, and nothing when nothing is renamed", async () => {
     const base = mkdtempSync(join(tmpdir(), "paladin-ci-"));
     const remote = join(base, "remote.git");
     const repo = await tempRepo();
@@ -156,11 +240,12 @@ describe("propose", () => {
       assert.equal(data.created.length, 0);
 
       repo.write(UPGRADING, "## v2.0.0, sdk/go/v0.3.0 — a change\n");
+      repo.write(`${SECTIONS}/another.md`, "## v2.0.0 — another\n");
       repo.write("stray.txt", "not the guide");
       await propose(github, repo.dir, tags, remote);
       assert.equal(await pushed(), proposalTitle(tags));
       assert.equal(proposalTitle(tags), "docs(upgrading): name the sections v2.0.0, sdk/go/v0.3.0 shipped");
-      assert.equal((await git(["diff-tree", "--no-commit-id", "--name-only", "-r", branch], remote)).trim(), UPGRADING);
+      assert.equal((await git(["diff-tree", "--no-commit-id", "--name-only", "-r", branch], remote)).trim(), `${UPGRADING}\n${SECTIONS}/another.md`);
       assert.deepEqual(data.created.map((c) => [c.head, c.base]), [[branch, "main"]]);
 
       // A re-run of the release: the pull request is already open.
