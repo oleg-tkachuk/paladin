@@ -8,6 +8,8 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
@@ -106,6 +108,29 @@ func TestAuditRecordsTheStateAroundAnAction(t *testing.T) {
 		}
 		if row := w.rows[0]; row.StateBefore != nil || row.StateAfter != nil {
 			t.Errorf("before %s, after %s; want neither", row.StateBefore, row.StateAfter)
+		}
+	})
+
+	// A capability narrowed to the change, without the read: the entry
+	// goes without the image, and the log is not told of a fault.
+	t.Run("a read the caller may not make leaves its side empty, unlogged", func(t *testing.T) {
+		core, logs := observer.New(zap.WarnLevel)
+		// The server reads its logger from its own context, which the
+		// client's does not reach: the global one is what it falls back to.
+		t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
+		client, w := settingsWith(t, StateReaders{
+			paladiniamv1connect.UserSettingsServiceUpdateMineProcedure: func(context.Context, proto.Message) (proto.Message, error) {
+				return nil, connect.NewError(connect.CodePermissionDenied, "op get not allowed")
+			},
+		})
+		if _, err := client.UpdateMine(ctx, &iamv1.UpdateMineRequest{}); err != nil {
+			t.Fatalf("a refused read failed the action: %v", err)
+		}
+		if row := w.rows[0]; row.StateBefore != nil || row.StateAfter != nil {
+			t.Errorf("before %s, after %s; want neither", row.StateBefore, row.StateAfter)
+		}
+		if logs.Len() != 0 {
+			t.Errorf("%d warnings for a read the caller may not make", logs.Len())
 		}
 	})
 
