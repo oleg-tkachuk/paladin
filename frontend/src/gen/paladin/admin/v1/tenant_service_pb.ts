@@ -3,11 +3,13 @@
 /* eslint-disable */
 
 import type {
+  GenEnum,
   GenFile,
   GenMessage,
   GenService,
 } from "@bufbuild/protobuf/codegenv2";
 import {
+  enumDesc,
   fileDesc,
   messageDesc,
   serviceDesc,
@@ -31,7 +33,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3RlbmFudF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxInIKE0NyZWF0ZVRlbmFudFJlcXVlc3QSEQoJdGVuYW50X2lkGAEgASgJEjAKBnRlbmFudBgCIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrIBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIoCgZ0ZW5hbnQYBCABKAsyGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCJcChNEZWxldGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQAUoECAMQBFIFZm9yY2UiFgoURGVsZXRlVGVuYW50UmVzcG9uc2UigQEKEkxpc3RUZW5hbnRzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibwoTTGlzdFRlbmFudHNSZXNwb25zZRIpCgd0ZW5hbnRzGAEgAygLMhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJrChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlIm4KF1JlbmFtZVRlbmFudFNsdWdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIZCghuZXdfc2x1ZxgDIAEoCUIHukgEcgIQASI2ChlSZXNvbHZlUmVuYW1lZFNsdWdSZXF1ZXN0EhkKCG9sZF9zbHVnGAEgASgJQge6SARyAhABIl4KGlJlc29sdmVSZW5hbWVkU2x1Z1Jlc3BvbnNlEhAKCG5ld19zbHVnGAEgASgJEi4KCnJlbmFtZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIngKIU1pZ3JhdGVUZW5hbnRTdG9yYWdlTGF5b3V0UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhkKEXRhcmdldF9iYWNrZW5kX2lkGAIgASgJEiEKGWNsZWFudXBfcmV0ZW50aW9uX3NlY29uZHMYAyABKAMiOQogR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKvAQoWU3RvcmFnZU1pZ3JhdGlvblN0YXR1cxIOCgZ0ZW5hbnQYASABKAkSDQoFc3RhdGUYAiABKAkSFQoNb2JqZWN0c190b3RhbBgDIAEoAxIWCg5vYmplY3RzX2NvcGllZBgEIAEoAxIVCg1zb3VyY2VfYnVja2V0GAUgASgJEhUKDXRhcmdldF9idWNrZXQYBiABKAkSDQoFZXJyb3IYCSABKAlKBAgHEAhKBAgIEAkiegoUVGVuYW50RGVmYXVsdEJpbmRpbmcSEQoEbmFtZRgBIAEoCUID4EEIEg4KBmJ1Y2tldBgCIAEoCRIvCgZzZXRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSDgoGc2V0X2J5GAUgASgJIjcKHkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIlAKHlNldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhcKBmJ1Y2tldBgCIAEoCUIHukgEcgIQASI5CiBDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIiMKIUNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXNwb25zZTKyDAoNVGVuYW50U2VydmljZRJPCgxDcmVhdGVUZW5hbnQSJS5wYWxhZGluLmFkbWluLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudBJOCglHZXRUZW5hbnQSIi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAIBElQKDFVwZGF0ZVRlbmFudBIlLnBhbGFkaW4uYWRtaW4udjEuVXBkYXRlVGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgISYgoMRGVsZXRlVGVuYW50EiUucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZSIDkAICEl8KC0xpc3RUZW5hbnRzEiQucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVzcG9uc2UiA5ACARJgChJTZXRJbmhlcml0ZWRQb2xpY3kSKy5wYWxhZGluLmFkbWluLnYxLlNldEluaGVyaXRlZFBvbGljeVJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAICElEKDVJlc3RvcmVUZW5hbnQSJi5wYWxhZGluLmFkbWluLnYxLlJlc3RvcmVUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSXwoLUHVyZ2VUZW5hbnQSJC5wYWxhZGluLmFkbWluLnYxLlB1cmdlVGVuYW50UmVxdWVzdBolLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXNwb25zZSIDkAICElwKEFJlbmFtZVRlbmFudFNsdWcSKS5wYWxhZGluLmFkbWluLnYxLlJlbmFtZVRlbmFudFNsdWdSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQiA5ACAhJ7ChpNaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dBIzLnBhbGFkaW4uYWRtaW4udjEuTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzEn4KGUdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb24SMi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb25SZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzIgOQAgESdAoSUmVzb2x2ZVJlbmFtZWRTbHVnEisucGFsYWRpbi5hZG1pbi52MS5SZXNvbHZlUmVuYW1lZFNsdWdSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5SZXNvbHZlUmVuYW1lZFNsdWdSZXNwb25zZSIDkAIBEngKF0dldFRlbmFudERlZmF1bHRCaW5kaW5nEjAucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLlRlbmFudERlZmF1bHRCaW5kaW5nIgOQAgESeAoXU2V0VGVuYW50RGVmYXVsdEJpbmRpbmcSMC5wYWxhZGluLmFkbWluLnYxLlNldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBomLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50RGVmYXVsdEJpbmRpbmciA5ACAhKJAQoZQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZxIyLnBhbGFkaW4uYWRtaW4udjEuQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaMy5wYWxhZGluLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXNwb25zZSIDkAICQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CiVwYWxhZGluL2FkbWluL3YxL3RlbmFudF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxInIKE0NyZWF0ZVRlbmFudFJlcXVlc3QSEQoJdGVuYW50X2lkGAEgASgJEjAKBnRlbmFudBgCIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrIBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIoCgZ0ZW5hbnQYBCABKAsyGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCJcChNEZWxldGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQAUoECAMQBFIFZm9yY2UiFgoURGVsZXRlVGVuYW50UmVzcG9uc2UigQEKEkxpc3RUZW5hbnRzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibwoTTGlzdFRlbmFudHNSZXNwb25zZRIpCgd0ZW5hbnRzGAEgAygLMhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJrChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlIjIKGVByZXZpZXdQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKYAgoaUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2USNAoKYXBpX3Rva2VucxgBIAMoCzIgLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VkUmVzb3VyY2USFwoPYXBpX3Rva2VuX2NvdW50GAIgASgDEj0KE2V2ZW50X3N1YnNjcmlwdGlvbnMYAyADKAsyIC5wYWxhZGluLmFkbWluLnYxLlB1cmdlZFJlc291cmNlEiAKGGV2ZW50X3N1YnNjcmlwdGlvbl9jb3VudBgEIAEoAxIYChBjYXBhYmlsaXR5X2NvdW50GAUgASgDEjAKCGJsb2NrZXJzGAYgAygLMh4ucGFsYWRpbi5hZG1pbi52MS5QdXJnZUJsb2NrZXIiNAoOUHVyZ2VkUmVzb3VyY2USDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkiTwoMUHVyZ2VCbG9ja2VyEjAKBGtpbmQYASABKA4yIi5wYWxhZGluLmFkbWluLnYxLlB1cmdlQmxvY2tlcktpbmQSDQoFY291bnQYAiABKAMibgoXUmVuYW1lVGVuYW50U2x1Z1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEhkKCG5ld19zbHVnGAMgASgJQge6SARyAhABIjYKGVJlc29sdmVSZW5hbWVkU2x1Z1JlcXVlc3QSGQoIb2xkX3NsdWcYASABKAlCB7pIBHICEAEiXgoaUmVzb2x2ZVJlbmFtZWRTbHVnUmVzcG9uc2USEAoIbmV3X3NsdWcYASABKAkSLgoKcmVuYW1lZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAieAohTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGQoRdGFyZ2V0X2JhY2tlbmRfaWQYAiABKAkSIQoZY2xlYW51cF9yZXRlbnRpb25fc2Vjb25kcxgDIAEoAyI5CiBHZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIq8BChZTdG9yYWdlTWlncmF0aW9uU3RhdHVzEg4KBnRlbmFudBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIVCg1vYmplY3RzX3RvdGFsGAMgASgDEhYKDm9iamVjdHNfY29waWVkGAQgASgDEhUKDXNvdXJjZV9idWNrZXQYBSABKAkSFQoNdGFyZ2V0X2J1Y2tldBgGIAEoCRINCgVlcnJvchgJIAEoCUoECAcQCEoECAgQCSJ6ChRUZW5hbnREZWZhdWx0QmluZGluZxIRCgRuYW1lGAEgASgJQgPgQQgSDgoGYnVja2V0GAIgASgJEi8KBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIOCgZzZXRfYnkYBSABKAkiNwoeR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiUAoeU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESFwoGYnVja2V0GAIgASgJQge6SARyAhABIjkKIENsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiIwohQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlKpgBChBQdXJnZUJsb2NrZXJLaW5kEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9VTlNQRUNJRklFRBAAEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9DT0xMRUNUSU9OUxABEh4KGlBVUkdFX0JMT0NLRVJfS0lORF9CVUNLRVRTEAISHAoYUFVSR0VfQkxPQ0tFUl9LSU5EX1VTRVJTEAMyqA0KDVRlbmFudFNlcnZpY2USTwoMQ3JlYXRlVGVuYW50EiUucGFsYWRpbi5hZG1pbi52MS5DcmVhdGVUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSTgoJR2V0VGVuYW50EiIucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQiA5ACARJUCgxVcGRhdGVUZW5hbnQSJS5wYWxhZGluLmFkbWluLnYxLlVwZGF0ZVRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAICEmIKDERlbGV0ZVRlbmFudBIlLnBhbGFkaW4uYWRtaW4udjEuRGVsZXRlVGVuYW50UmVxdWVzdBomLnBhbGFkaW4uYWRtaW4udjEuRGVsZXRlVGVuYW50UmVzcG9uc2UiA5ACAhJfCgtMaXN0VGVuYW50cxIkLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudHNSZXF1ZXN0GiUucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50c1Jlc3BvbnNlIgOQAgESYAoSU2V0SW5oZXJpdGVkUG9saWN5EisucGFsYWRpbi5hZG1pbi52MS5TZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQiA5ACAhJRCg1SZXN0b3JlVGVuYW50EiYucGFsYWRpbi5hZG1pbi52MS5SZXN0b3JlVGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50El8KC1B1cmdlVGVuYW50EiQucGFsYWRpbi5hZG1pbi52MS5QdXJnZVRlbmFudFJlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLlB1cmdlVGVuYW50UmVzcG9uc2UiA5ACAhJ0ChJQcmV2aWV3UHVyZ2VUZW5hbnQSKy5wYWxhZGluLmFkbWluLnYxLlByZXZpZXdQdXJnZVRlbmFudFJlcXVlc3QaLC5wYWxhZGluLmFkbWluLnYxLlByZXZpZXdQdXJnZVRlbmFudFJlc3BvbnNlIgOQAgESXAoQUmVuYW1lVGVuYW50U2x1ZxIpLnBhbGFkaW4uYWRtaW4udjEuUmVuYW1lVGVuYW50U2x1Z1JlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAICEnsKGk1pZ3JhdGVUZW5hbnRTdG9yYWdlTGF5b3V0EjMucGFsYWRpbi5hZG1pbi52MS5NaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dFJlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMSfgoZR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvbhIyLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvblJlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMiA5ACARJ0ChJSZXNvbHZlUmVuYW1lZFNsdWcSKy5wYWxhZGluLmFkbWluLnYxLlJlc29sdmVSZW5hbWVkU2x1Z1JlcXVlc3QaLC5wYWxhZGluLmFkbWluLnYxLlJlc29sdmVSZW5hbWVkU2x1Z1Jlc3BvbnNlIgOQAgESeAoXR2V0VGVuYW50RGVmYXVsdEJpbmRpbmcSMC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBomLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50RGVmYXVsdEJpbmRpbmciA5ACARJ4ChdTZXRUZW5hbnREZWZhdWx0QmluZGluZxIwLnBhbGFkaW4uYWRtaW4udjEuU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZyIDkAICEokBChlDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nEjIucGFsYWRpbi5hZG1pbi52MS5DbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBozLnBhbGFkaW4uYWRtaW4udjEuQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlIgOQAgJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -351,6 +353,143 @@ export const PurgeTenantResponseSchema: GenMessage<PurgeTenantResponse> =
   messageDesc(file_paladin_admin_v1_tenant_service, 10);
 
 /**
+ * @generated from message paladin.admin.v1.PreviewPurgeTenantRequest
+ */
+export type PreviewPurgeTenantRequest =
+  Message<"paladin.admin.v1.PreviewPurgeTenantRequest"> & {
+    /**
+     * name — "tenants/{tenant_id_or_slug}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.PreviewPurgeTenantRequest.
+ * Use `create(PreviewPurgeTenantRequestSchema)` to create a new message.
+ */
+export const PreviewPurgeTenantRequestSchema: GenMessage<PreviewPurgeTenantRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 11);
+
+/**
+ * What a purge of the tenant would take and what would stop it, read in one
+ * snapshot. Each list names at most the first 50, by name; its count is all
+ * of them.
+ *
+ * @generated from message paladin.admin.v1.PreviewPurgeTenantResponse
+ */
+export type PreviewPurgeTenantResponse =
+  Message<"paladin.admin.v1.PreviewPurgeTenantResponse"> & {
+    /**
+     * The tenant's API tokens, revoked or not: integrations using them stop at
+     * once.
+     *
+     * @generated from field: repeated paladin.admin.v1.PurgedResource api_tokens = 1;
+     */
+    apiTokens: PurgedResource[];
+
+    /**
+     * @generated from field: int64 api_token_count = 2;
+     */
+    apiTokenCount: bigint;
+
+    /**
+     * The tenant's event subscriptions: their deliveries stop, silently.
+     *
+     * @generated from field: repeated paladin.admin.v1.PurgedResource event_subscriptions = 3;
+     */
+    eventSubscriptions: PurgedResource[];
+
+    /**
+     * @generated from field: int64 event_subscription_count = 4;
+     */
+    eventSubscriptionCount: bigint;
+
+    /**
+     * The tenant's capabilities on record, revoked and expired included; each
+     * is revoked and its counters, holds and charges are deleted.
+     *
+     * @generated from field: int64 capability_count = 5;
+     */
+    capabilityCount: bigint;
+
+    /**
+     * What the tenant still owns that refuses the purge, one entry for each
+     * kind it holds any of; none when nothing does. An object under a legal
+     * hold or an unexpired retention refuses it too, and is not counted here.
+     *
+     * @generated from field: repeated paladin.admin.v1.PurgeBlocker blockers = 6;
+     */
+    blockers: PurgeBlocker[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.PreviewPurgeTenantResponse.
+ * Use `create(PreviewPurgeTenantResponseSchema)` to create a new message.
+ */
+export const PreviewPurgeTenantResponseSchema: GenMessage<PreviewPurgeTenantResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 12);
+
+/**
+ * One resource a purge removes.
+ *
+ * @generated from message paladin.admin.v1.PurgedResource
+ */
+export type PurgedResource = Message<"paladin.admin.v1.PurgedResource"> & {
+  /**
+   * name — the resource's name, "tenants/{id}/apiTokens/{id}" and the like.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * display_name — what the console shows for it; may be empty.
+   *
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+};
+
+/**
+ * Describes the message paladin.admin.v1.PurgedResource.
+ * Use `create(PurgedResourceSchema)` to create a new message.
+ */
+export const PurgedResourceSchema: GenMessage<PurgedResource> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 13);
+
+/**
+ * One kind of row that refuses the purge while the tenant owns any.
+ *
+ * @generated from message paladin.admin.v1.PurgeBlocker
+ */
+export type PurgeBlocker = Message<"paladin.admin.v1.PurgeBlocker"> & {
+  /**
+   * @generated from field: paladin.admin.v1.PurgeBlockerKind kind = 1;
+   */
+  kind: PurgeBlockerKind;
+
+  /**
+   * count — how many the tenant owns.
+   *
+   * @generated from field: int64 count = 2;
+   */
+  count: bigint;
+};
+
+/**
+ * Describes the message paladin.admin.v1.PurgeBlocker.
+ * Use `create(PurgeBlockerSchema)` to create a new message.
+ */
+export const PurgeBlockerSchema: GenMessage<PurgeBlocker> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 14);
+
+/**
  * @generated from message paladin.admin.v1.RenameTenantSlugRequest
  */
 export type RenameTenantSlugRequest =
@@ -387,7 +526,7 @@ export type RenameTenantSlugRequest =
  */
 export const RenameTenantSlugRequestSchema: GenMessage<RenameTenantSlugRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 11);
+  messageDesc(file_paladin_admin_v1_tenant_service, 15);
 
 /**
  * @generated from message paladin.admin.v1.ResolveRenamedSlugRequest
@@ -408,7 +547,7 @@ export type ResolveRenamedSlugRequest =
  */
 export const ResolveRenamedSlugRequestSchema: GenMessage<ResolveRenamedSlugRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 12);
+  messageDesc(file_paladin_admin_v1_tenant_service, 16);
 
 /**
  * @generated from message paladin.admin.v1.ResolveRenamedSlugResponse
@@ -436,7 +575,7 @@ export type ResolveRenamedSlugResponse =
  */
 export const ResolveRenamedSlugResponseSchema: GenMessage<ResolveRenamedSlugResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 13);
+  messageDesc(file_paladin_admin_v1_tenant_service, 17);
 
 /**
  * @generated from message paladin.admin.v1.MigrateTenantStorageLayoutRequest
@@ -476,7 +615,7 @@ export type MigrateTenantStorageLayoutRequest =
  */
 export const MigrateTenantStorageLayoutRequestSchema: GenMessage<MigrateTenantStorageLayoutRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 14);
+  messageDesc(file_paladin_admin_v1_tenant_service, 18);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantStorageMigrationRequest
@@ -497,7 +636,7 @@ export type GetTenantStorageMigrationRequest =
  */
 export const GetTenantStorageMigrationRequestSchema: GenMessage<GetTenantStorageMigrationRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 15);
+  messageDesc(file_paladin_admin_v1_tenant_service, 19);
 
 /**
  * StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0015
@@ -558,7 +697,7 @@ export type StorageMigrationStatus =
  */
 export const StorageMigrationStatusSchema: GenMessage<StorageMigrationStatus> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 16);
+  messageDesc(file_paladin_admin_v1_tenant_service, 20);
 
 /**
  * TenantDefaultBinding is a tenant's default (backend, bucket) route for the
@@ -603,7 +742,7 @@ export type TenantDefaultBinding =
  */
 export const TenantDefaultBindingSchema: GenMessage<TenantDefaultBinding> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 17);
+  messageDesc(file_paladin_admin_v1_tenant_service, 21);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantDefaultBindingRequest
@@ -624,7 +763,7 @@ export type GetTenantDefaultBindingRequest =
  */
 export const GetTenantDefaultBindingRequestSchema: GenMessage<GetTenantDefaultBindingRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 18);
+  messageDesc(file_paladin_admin_v1_tenant_service, 22);
 
 /**
  * @generated from message paladin.admin.v1.SetTenantDefaultBindingRequest
@@ -652,7 +791,7 @@ export type SetTenantDefaultBindingRequest =
  */
 export const SetTenantDefaultBindingRequestSchema: GenMessage<SetTenantDefaultBindingRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 19);
+  messageDesc(file_paladin_admin_v1_tenant_service, 23);
 
 /**
  * @generated from message paladin.admin.v1.ClearTenantDefaultBindingRequest
@@ -673,7 +812,7 @@ export type ClearTenantDefaultBindingRequest =
  */
 export const ClearTenantDefaultBindingRequestSchema: GenMessage<ClearTenantDefaultBindingRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 20);
+  messageDesc(file_paladin_admin_v1_tenant_service, 24);
 
 /**
  * @generated from message paladin.admin.v1.ClearTenantDefaultBindingResponse
@@ -687,7 +826,48 @@ export type ClearTenantDefaultBindingResponse =
  */
 export const ClearTenantDefaultBindingResponseSchema: GenMessage<ClearTenantDefaultBindingResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 21);
+  messageDesc(file_paladin_admin_v1_tenant_service, 25);
+
+/**
+ * The rows that keep a tenant alive: ON DELETE RESTRICT children of tenants
+ * (docs/deletion-semantics.md). Remove them first, in this order.
+ *
+ * @generated from enum paladin.admin.v1.PurgeBlockerKind
+ */
+export enum PurgeBlockerKind {
+  /**
+   * @generated from enum value: PURGE_BLOCKER_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Collections, and with them the objects they hold.
+   *
+   * @generated from enum value: PURGE_BLOCKER_KIND_COLLECTIONS = 1;
+   */
+  COLLECTIONS = 1,
+
+  /**
+   * Buckets the tenant owns.
+   *
+   * @generated from enum value: PURGE_BLOCKER_KIND_BUCKETS = 2;
+   */
+  BUCKETS = 2,
+
+  /**
+   * The tenant's users.
+   *
+   * @generated from enum value: PURGE_BLOCKER_KIND_USERS = 3;
+   */
+  USERS = 3,
+}
+
+/**
+ * Describes the enum paladin.admin.v1.PurgeBlockerKind.
+ */
+export const PurgeBlockerKindSchema: GenEnum<PurgeBlockerKind> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_admin_v1_tenant_service, 0);
 
 /**
  * TenantService manages tenants. Platform-admin only.
@@ -797,6 +977,19 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof PurgeTenantRequestSchema;
     output: typeof PurgeTenantResponseSchema;
+  };
+  /**
+   * PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+   * remove with the tenant and what would refuse it: for the confirmation
+   * an operator reads before a delete nothing undoes. The tenant may be
+   * active or trashed; the answer is the same either way.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.PreviewPurgeTenant
+   */
+  previewPurgeTenant: {
+    methodKind: "unary";
+    input: typeof PreviewPurgeTenantRequestSchema;
+    output: typeof PreviewPurgeTenantResponseSchema;
   };
   /**
    * RenameTenantSlug rewrites the tenant's `slug` and rewrites every

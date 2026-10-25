@@ -83,6 +83,16 @@ here.
 
 
 
+## Unreleased — preview what a tenant purge removes
+
+- **`TenantService.PreviewPurgeTenant`** answers, changing nothing, what
+  `PurgeTenant` would remove with a tenant — its API tokens and event
+  subscriptions by name (the first 50 of each, with counts of all), how many
+  capabilities — and what would refuse it: one `PurgeBlocker` for each kind
+  of row the tenant still owns (collections, buckets, users). It asks what
+  `PurgeTenant` asks of the caller, and reads an active tenant as well as a
+  trashed one. Nothing else changes.
+
 ## sdk/go/v0.114.0, sdk/python/v0.115.0 — the fakes seal a real Biscuit
 
 - **`paladin.testing`'s Biscuit is a real one with the `biscuit` extra**,

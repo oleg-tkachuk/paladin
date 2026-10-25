@@ -47,6 +47,7 @@ would verify again. Billing history does not outlive the tenant it belongs to.
 | --- | --- | --- |
 | `DeleteTenant` | Moves to trash (`deleted_at` set). Nothing is destroyed. | `RestoreTenant` |
 | `PurgeTenant` | Hard delete of a **trashed** tenant. Refuses while the tenant owns anything (`RESTRICT`). | No |
+| `PreviewPurgeTenant` | Changes nothing: names the API tokens and event subscriptions a purge would remove, counts them and the capabilities, and counts the `RESTRICT` children that would refuse it. | — |
 
 **A tenant in the trash is frozen.** Every change to it is refused with
 `FAILED_PRECONDITION` and reason `TENANT_ALREADY_DELETED`, whoever asks —
