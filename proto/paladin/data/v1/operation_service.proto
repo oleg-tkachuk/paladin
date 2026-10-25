@@ -5,6 +5,8 @@ package paladin.data.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1";
 
 import "buf/validate/validate.proto";
+import "paladin/common/v1/facet.proto";
+import "paladin/common/v1/operation.proto";
 import "paladin/common/v1/pagination.proto";
 import "paladin/data/v1/batch_service.proto";
 
@@ -60,11 +62,22 @@ message ListOperationsRequest {
   bool mine = 4;
   // include_dismissed lists, with mine, the operations the caller cleared too.
   bool include_dismissed = 5;
+  // facets narrows the listing by state and type, apart from filter, so the
+  // listing can count each facet without its own choices (facet_counts).
+  paladin.common.v1.OperationFacets facets = 6;
+  // count_facets asks for facet_counts with the first page. Counted in the
+  // query over what filter pushes down; the conjuncts it cannot push down run
+  // over each page after, so a count can exceed what the pages then hold.
+  bool count_facets = 7;
 }
 
 message ListOperationsResponse {
   repeated Operation operations = 1;
   paladin.common.v1.PageResponse page = 2;
+  // facet_counts, when count_facets asked for them on the first page: for
+  // facet "state" each OperationState's name, for "type" each type, with how
+  // many operations of the listing give it.
+  repeated paladin.common.v1.FacetCount facet_counts = 3;
 }
 
 message CancelOperationRequest {

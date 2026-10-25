@@ -90,6 +90,12 @@ type Querier interface {
 	CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, liveOnly bool) (int64, error)
+	// How many operations of a listing are in each state: ListOperations' own
+	// predicates, without its cursor, grouped. The caller leaves out the state
+	// facet's own choices, so each count says what choosing that state gives.
+	CountOperationsByState(ctx context.Context, tenantID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz) ([]CountOperationsByStateRow, error)
+	// As CountOperationsByState, by type.
+	CountOperationsByType(ctx context.Context, tenantID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz) ([]CountOperationsByTypeRow, error)
 	CountPendingMultipartAborts(ctx context.Context) (int64, error)
 	CountPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// The ON DELETE RESTRICT children of the tenant, which refuse its purge

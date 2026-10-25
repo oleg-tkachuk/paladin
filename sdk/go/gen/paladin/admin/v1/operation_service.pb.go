@@ -309,7 +309,14 @@ type ListOperationsRequest struct {
 	// tenant_id lists another tenant's operations: those its principals started.
 	// Empty = the caller's own tenant. A caller other than a platform admin may
 	// name only its own tenant.
-	TenantId      string `protobuf:"bytes,6,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	TenantId string `protobuf:"bytes,6,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// facets narrows the listing by state and type, apart from filter, so the
+	// listing can count each facet without its own choices (facet_counts).
+	Facets *v1.OperationFacets `protobuf:"bytes,7,opt,name=facets,proto3" json:"facets,omitempty"`
+	// count_facets asks for facet_counts with the first page. Counted in the
+	// query over what filter pushes down; the conjuncts it cannot push down run
+	// over each page after, so a count can exceed what the pages then hold.
+	CountFacets   bool `protobuf:"varint,8,opt,name=count_facets,json=countFacets,proto3" json:"count_facets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -386,10 +393,28 @@ func (x *ListOperationsRequest) GetTenantId() string {
 	return ""
 }
 
+func (x *ListOperationsRequest) GetFacets() *v1.OperationFacets {
+	if x != nil {
+		return x.Facets
+	}
+	return nil
+}
+
+func (x *ListOperationsRequest) GetCountFacets() bool {
+	if x != nil {
+		return x.CountFacets
+	}
+	return false
+}
+
 type ListOperationsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Operations    []*Operation           `protobuf:"bytes,1,rep,name=operations,proto3" json:"operations,omitempty"`
-	Page          *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Operations []*Operation           `protobuf:"bytes,1,rep,name=operations,proto3" json:"operations,omitempty"`
+	Page       *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	// facet_counts, when count_facets asked for them on the first page: for
+	// facet "state" each OperationState's name, for "type" each type, with how
+	// many operations of the listing give it.
+	FacetCounts   []*v1.FacetCount `protobuf:"bytes,3,rep,name=facet_counts,json=facetCounts,proto3" json:"facet_counts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -434,6 +459,13 @@ func (x *ListOperationsResponse) GetOperations() []*Operation {
 func (x *ListOperationsResponse) GetPage() *v1.PageResponse {
 	if x != nil {
 		return x.Page
+	}
+	return nil
+}
+
+func (x *ListOperationsResponse) GetFacetCounts() []*v1.FacetCount {
+	if x != nil {
+		return x.FacetCounts
 	}
 	return nil
 }
@@ -576,7 +608,7 @@ var File_paladin_admin_v1_operation_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\n" +
-	"(paladin/admin/v1/operation_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a!paladin/common/v1/operation.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xbb\x06\n" +
+	"(paladin/admin/v1/operation_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x19google/protobuf/any.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x1dpaladin/common/v1/facet.proto\x1a!paladin/common/v1/operation.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xbb\x06\n" +
 	"\tOperation\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x17\n" +
 	"\x04type\x18\x02 \x01(\tB\x03\xe0A\x03R\x04type\x120\n" +
@@ -600,7 +632,7 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"\ffailed_count\x18\x10 \x01(\x03B\x03\xe0A\x03R\vfailedCountB\b\n" +
 	"\x06result\"2\n" +
 	"\x13GetOperationRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x8b\x02\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\xea\x02\n" +
 	"\x15ListOperationsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12;\n" +
@@ -608,12 +640,15 @@ const file_paladin_admin_v1_operation_service_proto_rawDesc = "" +
 	"sort_order\x18\x03 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x12\n" +
 	"\x04mine\x18\x04 \x01(\bR\x04mine\x12+\n" +
 	"\x11include_dismissed\x18\x05 \x01(\bR\x10includeDismissed\x12(\n" +
-	"\ttenant_id\x18\x06 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\"\x8a\x01\n" +
+	"\ttenant_id\x18\x06 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\x12:\n" +
+	"\x06facets\x18\a \x01(\v2\".paladin.common.v1.OperationFacetsR\x06facets\x12!\n" +
+	"\fcount_facets\x18\b \x01(\bR\vcountFacets\"\xcc\x01\n" +
 	"\x16ListOperationsResponse\x12;\n" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1b.paladin.admin.v1.OperationR\n" +
 	"operations\x123\n" +
-	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"5\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\x12@\n" +
+	"\ffacet_counts\x18\x03 \x03(\v2\x1d.paladin.common.v1.FacetCountR\vfacetCounts\"5\n" +
 	"\x16CancelOperationRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"A\n" +
 	"\x18DismissOperationsRequest\x12%\n" +
@@ -654,7 +689,9 @@ var file_paladin_admin_v1_operation_service_proto_goTypes = []any{
 	(*v1.OperationTarget)(nil),        // 11: paladin.common.v1.OperationTarget
 	(*v1.PageRequest)(nil),            // 12: paladin.common.v1.PageRequest
 	(v1.SortOrder)(0),                 // 13: paladin.common.v1.SortOrder
-	(*v1.PageResponse)(nil),           // 14: paladin.common.v1.PageResponse
+	(*v1.OperationFacets)(nil),        // 14: paladin.common.v1.OperationFacets
+	(*v1.PageResponse)(nil),           // 15: paladin.common.v1.PageResponse
+	(*v1.FacetCount)(nil),             // 16: paladin.common.v1.FacetCount
 }
 var file_paladin_admin_v1_operation_service_proto_depIdxs = []int32{
 	7,  // 0: paladin.admin.v1.Operation.metadata:type_name -> google.protobuf.Any
@@ -669,21 +706,23 @@ var file_paladin_admin_v1_operation_service_proto_depIdxs = []int32{
 	9,  // 9: paladin.admin.v1.Operation.expire_time:type_name -> google.protobuf.Timestamp
 	12, // 10: paladin.admin.v1.ListOperationsRequest.page:type_name -> paladin.common.v1.PageRequest
 	13, // 11: paladin.admin.v1.ListOperationsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	0,  // 12: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
-	14, // 13: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
-	1,  // 14: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
-	2,  // 15: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
-	4,  // 16: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
-	5,  // 17: paladin.admin.v1.PlatformOperationService.DismissOperations:input_type -> paladin.admin.v1.DismissOperationsRequest
-	0,  // 18: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
-	3,  // 19: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
-	0,  // 20: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
-	6,  // 21: paladin.admin.v1.PlatformOperationService.DismissOperations:output_type -> paladin.admin.v1.DismissOperationsResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	14, // 12: paladin.admin.v1.ListOperationsRequest.facets:type_name -> paladin.common.v1.OperationFacets
+	0,  // 13: paladin.admin.v1.ListOperationsResponse.operations:type_name -> paladin.admin.v1.Operation
+	15, // 14: paladin.admin.v1.ListOperationsResponse.page:type_name -> paladin.common.v1.PageResponse
+	16, // 15: paladin.admin.v1.ListOperationsResponse.facet_counts:type_name -> paladin.common.v1.FacetCount
+	1,  // 16: paladin.admin.v1.PlatformOperationService.GetOperation:input_type -> paladin.admin.v1.GetOperationRequest
+	2,  // 17: paladin.admin.v1.PlatformOperationService.ListOperations:input_type -> paladin.admin.v1.ListOperationsRequest
+	4,  // 18: paladin.admin.v1.PlatformOperationService.CancelOperation:input_type -> paladin.admin.v1.CancelOperationRequest
+	5,  // 19: paladin.admin.v1.PlatformOperationService.DismissOperations:input_type -> paladin.admin.v1.DismissOperationsRequest
+	0,  // 20: paladin.admin.v1.PlatformOperationService.GetOperation:output_type -> paladin.admin.v1.Operation
+	3,  // 21: paladin.admin.v1.PlatformOperationService.ListOperations:output_type -> paladin.admin.v1.ListOperationsResponse
+	0,  // 22: paladin.admin.v1.PlatformOperationService.CancelOperation:output_type -> paladin.admin.v1.Operation
+	6,  // 23: paladin.admin.v1.PlatformOperationService.DismissOperations:output_type -> paladin.admin.v1.DismissOperationsResponse
+	20, // [20:24] is the sub-list for method output_type
+	16, // [16:20] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_operation_service_proto_init() }

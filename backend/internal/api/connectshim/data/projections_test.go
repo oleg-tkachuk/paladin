@@ -28,11 +28,53 @@ const (
 type recordingOperations struct {
 	failingOperations
 	newestFirst *bool
+	listed      operationh.Facets
+	counted     *operationh.ListInput
 }
 
 func (r *recordingOperations) ListOperations(_ context.Context, in operationh.ListInput) ([]operationh.Operation, string, error) {
 	r.newestFirst = &in.NewestFirst
+	r.listed = in.Facets
 	return nil, "", nil
+}
+
+func (r *recordingOperations) CountOperationFacets(_ context.Context, in operationh.ListInput) ([]operationh.FacetCount, error) {
+	r.counted = &in
+	return []operationh.FacetCount{{Facet: operationh.FacetState, Value: string(operationh.StateFailed), Count: 1}}, nil
+}
+
+// The facets narrow the listing, and are counted only when asked and only
+// with the first page: a later page is the same listing.
+func TestListOperationsFacetCounts(t *testing.T) {
+	failed := commonpb.OperationState_OPERATION_STATE_FAILED
+	facets := &commonpb.OperationFacets{States: []commonpb.OperationState{failed}}
+	for _, tc := range []struct {
+		name    string
+		count   bool
+		token   string
+		counted bool
+	}{
+		{"asked, first page", true, "", true},
+		{"asked, a later page", true, uuid.NewString(), false},
+		{"not asked", false, "", false},
+	} {
+		h := &recordingOperations{}
+		out, err := (&OperationServer{H: h}).ListOperations(context.Background(), &pb.ListOperationsRequest{
+			Facets: facets, CountFacets: tc.count, Page: &commonpb.PageRequest{PageToken: tc.token},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(h.listed.States) != 1 || h.listed.States[0] != operationh.StateFailed {
+			t.Errorf("%s: listed with facets %+v", tc.name, h.listed)
+		}
+		if (h.counted != nil) != tc.counted || (len(out.GetFacetCounts()) != 0) != tc.counted {
+			t.Errorf("%s: counted %t with %d counts, want %t", tc.name, h.counted != nil, len(out.GetFacetCounts()), tc.counted)
+		}
+		if tc.counted && (len(h.counted.Facets.States) != 1 || out.GetFacetCounts()[0].GetValue() != failed.String()) {
+			t.Errorf("%s: counted %+v, answered %v", tc.name, h.counted.Facets, out.GetFacetCounts())
+		}
+	}
 }
 
 func TestListOperationsSortOrder(t *testing.T) {

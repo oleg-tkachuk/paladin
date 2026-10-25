@@ -190,6 +190,62 @@ func (x *OperationTarget) GetTags() map[string]string {
 	return nil
 }
 
+// OperationFacets narrows an operation listing by state and by type, each a
+// facet the listing can count (FacetCount, facets "state" and "type"): an
+// operation passes when its state is one of states and its type one of
+// types, either left empty for any.
+type OperationFacets struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	States        []OperationState       `protobuf:"varint,1,rep,packed,name=states,proto3,enum=paladin.common.v1.OperationState" json:"states,omitempty"`
+	Types         []string               `protobuf:"bytes,2,rep,name=types,proto3" json:"types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OperationFacets) Reset() {
+	*x = OperationFacets{}
+	mi := &file_paladin_common_v1_operation_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OperationFacets) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OperationFacets) ProtoMessage() {}
+
+func (x *OperationFacets) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_common_v1_operation_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OperationFacets.ProtoReflect.Descriptor instead.
+func (*OperationFacets) Descriptor() ([]byte, []int) {
+	return file_paladin_common_v1_operation_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *OperationFacets) GetStates() []OperationState {
+	if x != nil {
+		return x.States
+	}
+	return nil
+}
+
+func (x *OperationFacets) GetTypes() []string {
+	if x != nil {
+		return x.Types
+	}
+	return nil
+}
+
 var File_paladin_common_v1_operation_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_operation_proto_rawDesc = "" +
@@ -207,7 +263,10 @@ const file_paladin_common_v1_operation_proto_rawDesc = "" +
 	"\x04tags\x18\a \x03(\v2,.paladin.common.v1.OperationTarget.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xc5\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"b\n" +
+	"\x0fOperationFacets\x129\n" +
+	"\x06states\x18\x01 \x03(\x0e2!.paladin.common.v1.OperationStateR\x06states\x12\x14\n" +
+	"\x05types\x18\x02 \x03(\tR\x05types*\xc5\x01\n" +
 	"\x0eOperationState\x12\x1f\n" +
 	"\x1bOPERATION_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17OPERATION_STATE_PENDING\x10\x01\x12\x1b\n" +
@@ -229,19 +288,21 @@ func file_paladin_common_v1_operation_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_common_v1_operation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_common_v1_operation_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_paladin_common_v1_operation_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_paladin_common_v1_operation_proto_goTypes = []any{
 	(OperationState)(0),     // 0: paladin.common.v1.OperationState
 	(*OperationTarget)(nil), // 1: paladin.common.v1.OperationTarget
-	nil,                     // 2: paladin.common.v1.OperationTarget.TagsEntry
+	(*OperationFacets)(nil), // 2: paladin.common.v1.OperationFacets
+	nil,                     // 3: paladin.common.v1.OperationTarget.TagsEntry
 }
 var file_paladin_common_v1_operation_proto_depIdxs = []int32{
-	2, // 0: paladin.common.v1.OperationTarget.tags:type_name -> paladin.common.v1.OperationTarget.TagsEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: paladin.common.v1.OperationTarget.tags:type_name -> paladin.common.v1.OperationTarget.TagsEntry
+	0, // 1: paladin.common.v1.OperationFacets.states:type_name -> paladin.common.v1.OperationState
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_paladin_common_v1_operation_proto_init() }
@@ -255,7 +316,7 @@ func file_paladin_common_v1_operation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_common_v1_operation_proto_rawDesc), len(file_paladin_common_v1_operation_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

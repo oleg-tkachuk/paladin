@@ -118,3 +118,32 @@ func OperationTarget(opType string, metadata []byte) *commonpb.OperationTarget {
 		Tags:                 t.Tags,
 	}
 }
+
+// OperationFacetsFromProto is f in the domain's terms; a state the domain
+// does not know is left out, which narrows to nothing it does.
+func OperationFacetsFromProto(f *commonpb.OperationFacets) operationh.Facets {
+	var out operationh.Facets
+	for _, st := range f.GetStates() {
+		for domain, wire := range operationStates {
+			if wire == st {
+				out.States = append(out.States, domain)
+			}
+		}
+	}
+	out.Types = append(out.Types, f.GetTypes()...)
+	return out
+}
+
+// FacetCountsToProto is counts on the wire: a state by its OperationState
+// name, as OperationFacets names it.
+func FacetCountsToProto(counts []operationh.FacetCount) []*commonpb.FacetCount {
+	out := make([]*commonpb.FacetCount, 0, len(counts))
+	for _, c := range counts {
+		value := c.Value
+		if c.Facet == operationh.FacetState {
+			value = OperationState(operationh.State(c.Value)).String()
+		}
+		out = append(out, &commonpb.FacetCount{Facet: c.Facet, Value: value, Count: c.Count})
+	}
+	return out
+}

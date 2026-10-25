@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package paladin.common.v1;
+
+option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1";
+
+// FacetCount is how many of a list's rows answer one of its facets one way:
+// the number beside a choice in a filter menu. A list that pages on the
+// server counts the rows its query would return, not the rows sent so far.
+// Each facet is counted with every constraint of the request applied except
+// that facet's own choices, so a count says how many rows choosing its value
+// would add or keep.
+message FacetCount {
+  // facet — which question: the list's documentation names its facets.
+  string facet = 1;
+  // value — the answer, in the form the list's facet takes it.
+  string value = 2;
+  // count — how many rows give it.
+  int64 count = 3;
+}

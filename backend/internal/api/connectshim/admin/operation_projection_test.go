@@ -31,6 +31,42 @@ type recordingOperation struct {
 	newestFirst *bool
 	mine        bool
 	tenant      uuid.UUID
+	counted     *operationh.ListInput
+}
+
+func (r *recordingOperation) CountOperationFacets(_ context.Context, in operationh.ListInput) ([]operationh.FacetCount, error) {
+	r.counted = &in
+	return []operationh.FacetCount{{Facet: operationh.FacetType, Value: batchh.OpBatchCopy, Count: 1}}, nil
+}
+
+// The counts are of the listing asked for, with its first page only.
+func TestListPlatformOperationsFacetCounts(t *testing.T) {
+	named := uuid.New()
+	for _, tc := range []struct {
+		name    string
+		count   bool
+		token   string
+		counted bool
+	}{
+		{"asked, first page", true, "", true},
+		{"asked, a later page", true, uuid.NewString(), false},
+		{"not asked", false, "", false},
+	} {
+		h := &recordingOperation{}
+		out, err := (&OperationServer{H: h}).ListOperations(context.Background(), &pb.ListOperationsRequest{
+			TenantId: named.String(), CountFacets: tc.count, Page: &commonpb.PageRequest{PageToken: tc.token},
+			Facets: &commonpb.OperationFacets{Types: []string{batchh.OpBatchCopy}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (h.counted != nil) != tc.counted || (len(out.GetFacetCounts()) != 0) != tc.counted {
+			t.Errorf("%s: counted %t with %d counts, want %t", tc.name, h.counted != nil, len(out.GetFacetCounts()), tc.counted)
+		}
+		if tc.counted && (h.counted.TenantID != named || len(h.counted.Facets.Types) != 1) {
+			t.Errorf("%s: counted %+v, want the named tenant's listing", tc.name, h.counted)
+		}
+	}
 }
 
 func (r *recordingOperation) ListOperations(_ context.Context, in operationh.ListInput) ([]operationh.Operation, string, error) {

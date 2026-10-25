@@ -22,10 +22,12 @@ type fakeRepo struct {
 	cancelFn  func(ctx context.Context, opID, tenantID uuid.UUID) error
 	listFn    func(ctx context.Context, args ListArgs) ([]Operation, string, error)
 	dismissFn func(ctx context.Context, tenantID uuid.UUID, initiator string, ids []uuid.UUID) (int64, error)
+	countFn   func(ctx context.Context, args ListArgs) ([]FacetCount, error)
 
 	lastCreate Operation
 	lastGet    struct{ opID, tenantID uuid.UUID }
 	lastCancel struct{ opID, tenantID uuid.UUID }
+	lastCount  *ListArgs
 	lastList   struct {
 		tenantID    uuid.UUID
 		state       *State
@@ -75,6 +77,14 @@ func (f *fakeRepo) List(ctx context.Context, args ListArgs) ([]Operation, string
 	f.lastList.filter = args.Filter
 	f.lastList.newestFirst = args.NewestFirst
 	return f.listFn(ctx, args)
+}
+
+func (f *fakeRepo) CountFacets(ctx context.Context, args ListArgs) ([]FacetCount, error) {
+	f.lastCount = &args
+	if f.countFn != nil {
+		return f.countFn(ctx, args)
+	}
+	return nil, nil
 }
 
 func (f *fakeRepo) ClaimNext(context.Context) (Operation, error) {

@@ -28,6 +28,130 @@ func (q *Queries) CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID 
 	return result.RowsAffected(), nil
 }
 
+const countOperationsByState = `-- name: CountOperationsByState :many
+SELECT state::text AS value, count(*)::bigint AS count
+FROM operations
+WHERE tenant_id = $1
+  AND ($2::text IS NULL OR initiator_subject = $2::text)
+  AND (NOT $3::boolean OR dismissed_at IS NULL)
+  AND ($4::text[] IS NULL OR type = ANY($4::text[]))
+  AND ($5::text IS NULL OR type LIKE $5::text)
+  AND ($6::text[] IS NULL OR error_code = ANY($6::text[]))
+  AND ($7::text[] IS NULL OR state::text = ANY($7::text[]))
+  AND ($8::bool IS NULL OR (done_at IS NOT NULL) = $8::bool)
+  AND ($9::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = $9::bool)
+  AND ($10::text IS NULL
+       OR coalesce(error_message, '') <> $10::text)
+  AND ($11::timestamptz IS NULL
+       OR created_at >= $11::timestamptz)
+  AND ($12::timestamptz IS NULL
+       OR created_at <= $12::timestamptz)
+GROUP BY state
+`
+
+type CountOperationsByStateRow struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// How many operations of a listing are in each state: ListOperations' own
+// predicates, without its cursor, grouped. The caller leaves out the state
+// facet's own choices, so each count says what choosing that state gives.
+func (q *Queries) CountOperationsByState(ctx context.Context, tenantID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz) ([]CountOperationsByStateRow, error) {
+	rows, err := q.db.Query(ctx, countOperationsByState,
+		tenantID,
+		initiatorSubject,
+		hideDismissed,
+		typeIn,
+		typeLike,
+		errorCodeIn,
+		stateIn,
+		done,
+		hasFailures,
+		errorMessageNeq,
+		createdAtGte,
+		createdAtLte,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountOperationsByStateRow
+	for rows.Next() {
+		var i CountOperationsByStateRow
+		if err := rows.Scan(&i.Value, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countOperationsByType = `-- name: CountOperationsByType :many
+SELECT type AS value, count(*)::bigint AS count
+FROM operations
+WHERE tenant_id = $1
+  AND ($2::text IS NULL OR initiator_subject = $2::text)
+  AND (NOT $3::boolean OR dismissed_at IS NULL)
+  AND ($4::text[] IS NULL OR type = ANY($4::text[]))
+  AND ($5::text IS NULL OR type LIKE $5::text)
+  AND ($6::text[] IS NULL OR error_code = ANY($6::text[]))
+  AND ($7::text[] IS NULL OR state::text = ANY($7::text[]))
+  AND ($8::bool IS NULL OR (done_at IS NOT NULL) = $8::bool)
+  AND ($9::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = $9::bool)
+  AND ($10::text IS NULL
+       OR coalesce(error_message, '') <> $10::text)
+  AND ($11::timestamptz IS NULL
+       OR created_at >= $11::timestamptz)
+  AND ($12::timestamptz IS NULL
+       OR created_at <= $12::timestamptz)
+GROUP BY type
+`
+
+type CountOperationsByTypeRow struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// As CountOperationsByState, by type.
+func (q *Queries) CountOperationsByType(ctx context.Context, tenantID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz) ([]CountOperationsByTypeRow, error) {
+	rows, err := q.db.Query(ctx, countOperationsByType,
+		tenantID,
+		initiatorSubject,
+		hideDismissed,
+		typeIn,
+		typeLike,
+		errorCodeIn,
+		stateIn,
+		done,
+		hasFailures,
+		errorMessageNeq,
+		createdAtGte,
+		createdAtLte,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountOperationsByTypeRow
+	for rows.Next() {
+		var i CountOperationsByTypeRow
+		if err := rows.Scan(&i.Value, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createOperation = `-- name: CreateOperation :exec
 
 INSERT INTO operations (id, tenant_id, type, state, metadata, initiator_subject)

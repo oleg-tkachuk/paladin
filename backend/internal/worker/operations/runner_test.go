@@ -78,6 +78,9 @@ func (m *memRepo) Dismiss(context.Context, uuid.UUID, string, []uuid.UUID) (int6
 func (m *memRepo) List(context.Context, operationh.ListArgs) ([]operationh.Operation, string, error) {
 	return nil, "", nil
 }
+func (m *memRepo) CountFacets(context.Context, operationh.ListArgs) ([]operationh.FacetCount, error) {
+	return nil, nil
+}
 func (m *memRepo) ClaimNext(_ context.Context) (operationh.Operation, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
