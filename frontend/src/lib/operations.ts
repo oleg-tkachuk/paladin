@@ -5,7 +5,7 @@
 import { toJson } from "@bufbuild/protobuf";
 import { anyUnpackTo, StructSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { create } from "@bufbuild/protobuf";
-import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { spanMs } from "@/lib/format/duration";
 
 import type { Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
 import {
@@ -203,10 +203,7 @@ export function operationOutcome(op: Operation): OperationOutcome | null {
 
 /** How long op took, or has taken so far as of now. */
 export function operationElapsedMs(op: Operation, now: Date): number | null {
-  if (!op.createdAt) return null;
-  const end = op.doneAt ? timestampDate(op.doneAt) : op.done ? null : now;
-  if (!end) return null;
-  return end.getTime() - timestampDate(op.createdAt).getTime();
+  return spanMs(op.createdAt, op.doneAt ?? (op.done ? undefined : now));
 }
 
 /** Why op failed, in its own words; "" for one that did not. */

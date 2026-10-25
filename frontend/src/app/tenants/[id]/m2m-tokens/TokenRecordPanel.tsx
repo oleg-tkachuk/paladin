@@ -11,6 +11,7 @@ import { T } from "@/lib/ui/typography";
 
 import { isRevoked, tokenLifecycle } from "./_constants";
 import { LifecycleBadge } from "@/components/ui/LifecycleBadge";
+import { Duration } from "@/components/Duration";
 
 // The share of its cap past which a token's usage reads as a warning.
 const NEAR_CAP_RATIO = 0.9;
@@ -153,10 +154,22 @@ export function TokenRecordPanel({
           <RecordField label="Expires">
             {token.expiresAt ? <Timestamp ts={token.expiresAt} /> : "never"}
           </RecordField>
+          <RecordField label="Valid for">
+            {token.expiresAt ? (
+              <Duration from={token.createdAt} to={token.expiresAt} />
+            ) : (
+              "no expiry"
+            )}
+          </RecordField>
           {token.revokedAt ? (
-            <RecordField label="Revoked">
-              <Timestamp ts={token.revokedAt} />
-            </RecordField>
+            <>
+              <RecordField label="Revoked">
+                <Timestamp ts={token.revokedAt} />
+              </RecordField>
+              <RecordField label="Revoked after">
+                <Duration from={token.createdAt} to={token.revokedAt} />
+              </RecordField>
+            </>
           ) : null}
         </RecordFields>
       ) : null}

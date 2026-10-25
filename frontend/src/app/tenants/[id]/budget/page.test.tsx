@@ -89,6 +89,36 @@ describe("TenantBudgetPage period close", () => {
   });
 });
 
+describe("TenantBudgetPage period length", () => {
+  const PERIOD_START_S = 1_700_000_000;
+  const DAY_S = 86_400;
+  const PERIOD_S = 30 * DAY_S;
+  const at = (seconds: number) => ({ seconds: BigInt(seconds), nanos: 0 });
+  // Each label's value is the element after it.
+  const value = (label: string) =>
+    screen.queryByText(label)?.nextElementSibling?.textContent;
+
+  beforeEach(() => {
+    h.get.mockReset();
+  });
+
+  it.each([
+    [
+      "a closed period runs start to end",
+      at(PERIOD_START_S + PERIOD_S),
+      "30 d",
+    ],
+    ["an open-ended period has no length", undefined, undefined],
+  ])("%s", async (_, periodEnd, want) => {
+    h.get.mockResolvedValue({
+      budget: { ...budget, periodStart: at(PERIOD_START_S), periodEnd },
+    });
+    render(<BudgetPage />);
+    await screen.findByText("Period end");
+    expect(value("Period length")).toBe(want);
+  });
+});
+
 describe("TenantBudgetPage OCC", () => {
   beforeEach(() => {
     h.get.mockReset();
