@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,9 +39,13 @@ func TestSessionsComponent(t *testing.T) {
 // named; a plane with no URL is not probed at all.
 func TestUpstreamsComponent(t *testing.T) {
 	down := errors.New("connection refused")
+	// The planes are probed at once, so the record of them is locked.
+	var mu sync.Mutex
 	probed := map[string]bool{}
 	probe := func(_ context.Context, url string) error {
+		mu.Lock()
 		probed[url] = true
+		mu.Unlock()
 		if url == "http://data" {
 			return down
 		}
