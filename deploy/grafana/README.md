@@ -86,8 +86,9 @@ The work that does not show up in RPC metrics.
 | Postgres errors, Postgres operation latency | `db_client_operation_errors_total`, `db_client_operation_duration_seconds` (label `pgx_operation_type`) | otelpgx |
 | Rate limiting failing open, Per-tenant rate-limit decisions | `paladin_tenant_ratelimit_*`, `paladin_api_token_ratelimit_fail_open_total` | `internal/middleware/tenant_ratelimit.go`, `internal/auth/api_token_metrics.go` |
 | Presigns, Presign latency | `paladin_presign_total`, `paladin_presign_duration_seconds` (labels `op`, `outcome`) | `internal/metrics/domain.go` |
-| Capability charges | `paladin_capability_charges_total` (labels `outcome`, `tenant_id`) | `internal/metrics/domain.go` |
+| Capability charges | `limes_charge_decisions_total` (labels `limes_outcome`, `limes_tenant_id`) | limes otelmetric, wired in `internal/app/build_capability.go` |
 | Overdue uploads | `paladin_objects_pending_overdue`, `paladin_objects_pending_overdue_age_seconds` | `internal/worker/metrics.go`, sampled by the reconciler |
 
-`tenant_id` appears on the rate-limit and capability-charge series only; the
+`tenant_id` appears on the rate-limit series only, `limes_tenant_id` on the
+capability-charge series; the
 outbox gauge carries the deepest tenant's depth, not a per-tenant series.

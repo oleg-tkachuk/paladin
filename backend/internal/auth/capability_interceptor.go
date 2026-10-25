@@ -688,23 +688,11 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 		Actor:   actor,
 	}, onCharged)
 	if err != nil {
-		// The two exhaustion cases are separated because they need different
-		// answers: a capability at its cap is reissued, a tenant at its cap
-		// is a billing conversation. Collapsed into one counter they are
-		// indistinguishable, and both look like "the API is rejecting us".
-		switch {
-		case errors.Is(err, limes.ErrBudgetExceeded):
-			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeCapabilityExhausted, 0)
-		case errors.Is(err, limes.ErrTenantBudgetExceeded):
-			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeTenantExhausted, 0)
-		case errors.Is(err, limes.ErrUnitCodeMismatch):
-			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeUnitMismatch, 0)
-		default:
-			metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeError, 0)
-		}
+		// The store is otelmetric's, which counts the attempt by outcome —
+		// a capability at its cap apart from a tenant at its cap.
 		return meterError(err)
 	}
-	metrics.RecordCapabilityCharge(ctx, tenantID.String(), metrics.ChargeCharged, amount.Float64())
+	metrics.RecordCapabilityChargeAmount(ctx, tenantID.String(), amount.Float64())
 	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
 }

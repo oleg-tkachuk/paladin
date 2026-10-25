@@ -56,9 +56,6 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	if presignSeconds, err = newPresignDuration(meterDomain); err != nil {
 		t.Fatalf("histogram: %v", err)
 	}
-	if capabilityCharges, err = meterDomain.Int64Counter("paladin_capability_charges_total"); err != nil {
-		t.Fatalf("counter: %v", err)
-	}
 	if capabilityAmount, err = meterDomain.Float64Histogram("paladin_capability_charge_amount"); err != nil {
 		t.Fatalf("histogram: %v", err)
 	}
@@ -83,8 +80,7 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 
 	ctx := context.Background()
 	RecordPresign(ctx, "put", "ok", 0.012)
-	RecordCapabilityCharge(ctx, "t1", "charged", 2.5)
-	RecordCapabilityCharge(ctx, "t1", "tenant_exhausted", 0)
+	RecordCapabilityChargeAmount(ctx, "t1", 2.5)
 	RecordObjectLock(ctx, "retention", "COMPLIANCE", "applied")
 	RecordStorageCall(ctx, "primary", "HeadObject", "ok", 0.004)
 	RecordQuotaDecision(ctx, "t1", "tenant", "allowed")
@@ -95,7 +91,6 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	for _, want := range []string{
 		"paladin_presign_total",
 		"paladin_presign_duration_seconds",
-		"paladin_capability_charges_total",
 		"paladin_capability_charge_amount",
 		"paladin_object_lock_operations_total",
 		"paladin_storage_calls_total",
@@ -110,45 +105,13 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	}
 }
 
-// A rejected charge has no amount. Folding a zero into the histogram would
-// drag the spend distribution toward a number nobody spent — an operator
-// reading a p50 would see the rejection rate, not the typical charge.
-func TestRejectedChargeRecordsNoAmount(t *testing.T) {
-	reader := metric.NewManualReader()
-	prev := otel.GetMeterProvider()
-	otel.SetMeterProvider(metric.NewMeterProvider(metric.WithReader(reader)))
-	t.Cleanup(func() { otel.SetMeterProvider(prev) })
-
-	meterDomain = otel.Meter("test")
-	var err error
-	if capabilityCharges, err = meterDomain.Int64Counter("paladin_capability_charges_total"); err != nil {
-		t.Fatalf("counter: %v", err)
-	}
-	if capabilityAmount, err = meterDomain.Float64Histogram("paladin_capability_charge_amount"); err != nil {
-		t.Fatalf("histogram: %v", err)
-	}
-
-	RecordCapabilityCharge(context.Background(), "t1", "capability_exhausted", 0)
-
-	for _, sm := range collect(t, reader).ScopeMetrics {
-		for _, m := range sm.Metrics {
-			if m.Name != "paladin_capability_charge_amount" {
-				continue
-			}
-			if h, ok := m.Data.(metricdata.Histogram[float64]); ok && len(h.DataPoints) > 0 {
-				t.Errorf("a rejected charge recorded an amount: %d datapoints", len(h.DataPoints))
-			}
-		}
-	}
-}
-
 // The guard clauses return early on a nil instrument, which is what keeps a
 // test or a tool that never called InitOTel from panicking. Worth pinning:
 // without it, importing this package from anywhere without a MeterProvider
 // would crash on the first record.
 func TestRecordingWithNilInstrumentsIsSafe(t *testing.T) {
 	presignIssued, presignSeconds = nil, nil
-	capabilityCharges, capabilityAmount = nil, nil
+	capabilityAmount = nil
 	objectLockOps = nil
 	storageCalls, storageSeconds = nil, nil
 	quotaDecisions = nil
@@ -157,7 +120,7 @@ func TestRecordingWithNilInstrumentsIsSafe(t *testing.T) {
 
 	ctx := context.Background()
 	RecordPresign(ctx, "get", "ok", 1)
-	RecordCapabilityCharge(ctx, "t1", "charged", 1)
+	RecordCapabilityChargeAmount(ctx, "t1", 1)
 	RecordObjectLock(ctx, "legal_hold", "", "placed")
 	RecordStorageCall(ctx, "primary", "HeadObject", "error", 1)
 	RecordQuotaDecision(ctx, "t1", "bucket", "rejected")

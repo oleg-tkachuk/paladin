@@ -18,45 +18,48 @@ quiet.
 
 ## Signal source
 
-`paladin_capability_charges_total{tenant_id, outcome}`
-(`auth.ChargeCapability`, `internal/auth/capability_interceptor.go`):
+`limes_charge_decisions_total{limes_tenant_id, limes_outcome}`, limes's own
+counter of every charge attempt (its otelmetric package, wired around the
+usage store in `internal/app/build_capability.go`):
 
-| `outcome` | Refused by | Code to the client |
-|-----------|-----------|--------------------|
-| `charged` | — | — |
-| `capability_exhausted` | the capability's budget, or a delegating ancestor's | `ResourceExhausted` |
-| `tenant_exhausted` | the tenant's budget | `ResourceExhausted` |
-| `unit_mismatch` | a counter that holds another currency | `FailedPrecondition` |
-| `error` | the charge itself failed | `Unavailable`; `FailedPrecondition` for a capability no longer on record or a counter overflow, `InvalidArgument` for an invalid charge |
+| `limes_outcome` | Refused by | Code to the client |
+|-----------------|-----------|--------------------|
+| `allowed` | — | — |
+| `overrun` | — (committed past a ceiling under a record-overrun policy) | — |
+| `budget_exceeded` | the capability's budget, a delegating ancestor's or a Biscuit copy's | `ResourceExhausted` |
+| `tenant_budget_exceeded` | the tenant's budget | `ResourceExhausted` |
+| `request_limit_exceeded` | a request limit or a copy quota | `ResourceExhausted` |
+| `error` | anything else: a charge in another currency, a failed charge | `FailedPrecondition` for another currency, a capability no longer on record or a counter overflow; `Unavailable` or `InvalidArgument` otherwise |
 
-The rule counts the two `*_exhausted` outcomes and `unit_mismatch`, which are
-`metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes`. `error`
-only adds to the total. A capability over its `max_requests` caveat is
-refused before any charge and does not appear here.
+The rule counts `budget_exceeded` and `tenant_budget_exceeded`, which are
+`metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes`. The other
+outcomes only add to the total. limes counts a charge in another currency as
+`error`, so the rule no longer fires on it; the client's
+`FailedPrecondition` is the signal.
 
 ## Triage
 
 1. **Which budget.** Split the tenant's refusals by outcome:
 
    ```
-   sum by (outcome) (rate(paladin_capability_charges_total{tenant_id="<tenant>"}[15m]))
+   sum by (limes_outcome) (rate(limes_charge_decisions_total{limes_tenant_id="<tenant>"}[15m]))
    ```
 
-2. **`tenant_exhausted`: the tenant's budget is spent.** This is the tenant
+2. **`tenant_budget_exceeded`: the tenant's budget is spent.** This is the tenant
    budget (`TenantBudgetService`), not storage quotas (`QuotaService`).
    Read it in the console (*Tenants → \<tenant\> → Budget*) or with
    `TenantBudgetService.Get` / `Summarize`: `max_budget` against `spent`.
    A `max_budget` of zero refuses every charge; `unlimited_budget` refuses
    none.
 
-3. **`unit_mismatch`: the charge is in another currency.** A capability's
+3. **`error` with `FailedPrecondition`: the charge is in another currency.** A capability's
    counter, an ancestor's or the tenant's budget already counts in one unit,
    and the charge — always in the capability's own unit — names another.
    Every retry fails the same way. Issue the capability in the tenant's unit,
    or reset the tenant budget's spend with `TenantBudgetService.Set` before
    moving it to the new one.
 
-4. **`capability_exhausted`: a capability's budget is spent.** Find which
+4. **`budget_exceeded`: a capability's budget is spent.** Find which
    one in the console (*Tenants → \<tenant\> → Capabilities*) or with
    `CapabilityService.List` and `GetUsage`. For a delegated capability the
    refusing budget may be an ancestor's; `GetUsage` on each in the chain

@@ -67,8 +67,7 @@ var (
 	presignIssued  metric.Int64Counter
 	presignSeconds metric.Float64Histogram
 
-	capabilityCharges metric.Int64Counter
-	capabilityAmount  metric.Float64Histogram
+	capabilityAmount metric.Float64Histogram
 
 	objectLockOps metric.Int64Counter
 
@@ -103,18 +102,10 @@ func init() {
 	if presignSeconds, err = newPresignDuration(meterDomain); err != nil {
 		otel.Handle(err)
 	}
-	if capabilityCharges, err = meterDomain.Int64Counter(
-		"paladin_capability_charges_total",
-		metric.WithDescription(
-			"Capability charge attempts by outcome (charged|capability_exhausted|"+
-				"tenant_exhausted|unit_mismatch|error). A tenant whose charges are all rejected "+
-				"cannot work, and looks identical to an idle one without this."),
-	); err != nil {
-		otel.Handle(err)
-	}
 	if capabilityAmount, err = meterDomain.Float64Histogram(
 		"paladin_capability_charge_amount",
-		metric.WithDescription("Amount per successful charge, in the capability's unit."),
+		metric.WithDescription("Amount per successful charge, in the capability's unit. "+
+			"Charge attempts by outcome are limes's own, limes_charge_decisions_total."),
 		metric.WithUnit("1"),
 	); err != nil {
 		otel.Handle(err)
@@ -210,32 +201,20 @@ func RecordPresign(ctx context.Context, op, outcome string, seconds float64) {
 	}
 }
 
-// The outcomes of a capability charge attempt.
-const (
-	ChargeCharged             = "charged"
-	ChargeCapabilityExhausted = "capability_exhausted"
-	ChargeTenantExhausted     = "tenant_exhausted"
-	// ChargeUnitMismatch is a charge in a unit other than the one a counter
-	// already holds: refused, and refused again on every retry.
-	ChargeUnitMismatch = "unit_mismatch"
-	ChargeError        = "error"
-)
-
-// RecordCapabilityCharge counts a charge attempt. Amount is recorded only for
-// a successful one — a rejected charge has no amount, and folding zeros into
-// the histogram would drag the distribution toward a number nobody spent.
-func RecordCapabilityCharge(ctx context.Context, tenantID, outcome string, amount float64) {
-	if capabilityCharges == nil {
+// RecordCapabilityChargeAmount records the amount of a successful charge.
+// Charge attempts by outcome, refused ones among them, are limes's own
+// (otelmetric's limes.charge.decisions); limes counts only the amounts'
+// sum, so the distribution of one charge is Paladin's. A refused charge has
+// no amount, and folding zeros in would drag it toward a number nobody spent.
+func RecordCapabilityChargeAmount(ctx context.Context, tenantID string, amount float64) {
+	if capabilityAmount == nil {
 		return
 	}
-	attrs := []attribute.KeyValue{attribute.String("outcome", outcome)}
+	var attrs []attribute.KeyValue
 	if tenantID != "" {
 		attrs = append(attrs, attribute.String("tenant_id", tenantID))
 	}
-	capabilityCharges.Add(ctx, 1, metric.WithAttributes(attrs...))
-	if outcome == ChargeCharged && capabilityAmount != nil {
-		capabilityAmount.Record(ctx, amount, metric.WithAttributes(attrs...))
-	}
+	capabilityAmount.Record(ctx, amount, metric.WithAttributes(attrs...))
 }
 
 // RecordObjectLock counts an object-lock write. mode is GOVERNANCE,

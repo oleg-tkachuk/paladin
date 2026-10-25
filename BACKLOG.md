@@ -235,7 +235,7 @@ the same commit. Treat this file like a runtime invariant.
   collector is healthy again — `up{namespace="paladin"}` returns a series per
   pod and Grafana evaluates every rule with health=ok. Two of the signals the
   original entry named are still uncharted: `paladin_presign_total` and
-  `paladin_capability_charges_total` exist in the binary but no presign or
+  `limes_charge_decisions_total` exist in the binary but no presign or
   capability charge has run in this cluster, so a panel would show a flat zero
   that reads as "broken" rather than "unused". The alert on capability charges
   is written anyway, because a rule costs nothing while idle and a panel costs

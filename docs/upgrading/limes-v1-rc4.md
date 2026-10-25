@@ -15,3 +15,12 @@
 - **A capability listing's page token is bound to its tenant**: one handed
   back for another tenant is refused. A token issued before the upgrade is
   refused once; start again from the first page.
+- **`paladin_capability_charges_total` is gone**: limes counts every charge
+  attempt itself, as `limes_charge_decisions_total` with `limes_outcome`
+  (`allowed`, `budget_exceeded`, `tenant_budget_exceeded`, …, `error`) and
+  `limes_tenant_id`. The chart's `PaladinCapabilityChargesRefused` and the
+  bundled dashboard read it; `capabilityChargesRefused.refusedOutcomes`
+  defaults to `budget_exceeded` and `tenant_budget_exceeded`, so an override
+  naming the old outcomes needs the new ones. A charge in another currency
+  is `error` there, and no longer fires the alert. Point your own queries and
+  alerts at the new series; `paladin_capability_charge_amount` stays.

@@ -324,17 +324,17 @@ tests:
         alertname: PaladinRateLimitFailingOpen
         exp_alerts: []
 
-  # t1: every charge refused → fires. t3: every charge in another unit →
-  # fires. t2: charges succeed → silent.
+  # t1: every charge refused by the tenant's budget → fires. t3: by the
+  # capability's → fires. t2: charges succeed → silent.
   - interval: 1m
     input_series:
-      - series: 'paladin_capability_charges_total{tenant_id="t1", outcome="tenant_exhausted"}'
+      - series: 'limes_charge_decisions_total{limes_tenant_id="t1", limes_outcome="tenant_budget_exceeded"}'
         values: "0+10x60"
-      - series: 'paladin_capability_charges_total{tenant_id="t3", outcome="unit_mismatch"}'
+      - series: 'limes_charge_decisions_total{limes_tenant_id="t3", limes_outcome="budget_exceeded"}'
         values: "0+10x60"
-      - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="charged"}'
+      - series: 'limes_charge_decisions_total{limes_tenant_id="t2", limes_outcome="allowed"}'
         values: "0+10x60"
-      - series: 'paladin_capability_charges_total{tenant_id="t2", outcome="capability_exhausted"}'
+      - series: 'limes_charge_decisions_total{limes_tenant_id="t2", limes_outcome="budget_exceeded"}'
         values: "0+1x60"
     alert_rule_test:
       - eval_time: 45m
@@ -342,7 +342,7 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: warning
-              tenant_id: t1
+              limes_tenant_id: t1
             exp_annotations:
               summary: "Tenant t1 has nearly every capability charge refused"
               description: >-
@@ -351,7 +351,7 @@ tests:
               runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
           - exp_labels:
               severity: warning
-              tenant_id: t3
+              limes_tenant_id: t3
             exp_annotations:
               summary: "Tenant t3 has nearly every capability charge refused"
               description: >-

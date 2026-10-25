@@ -233,7 +233,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if err != nil {
 		return nil, fmt.Errorf("app: capability usage store: %w", err)
 	}
-	usage, err := otelmetric.Instrument(usageStore, otelmetric.WithTenantAttribute())
+	usage, err := meteredUsage(usageStore)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
@@ -304,4 +304,11 @@ func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (dpop.Nonces,
 		return nil, fmt.Errorf("app: DPoP nonces: %w", err)
 	}
 	return nonces, nil
+}
+
+// meteredUsage is store counted by limes's own instruments, by tenant: each
+// charge, bump and reservation by outcome, and the amounts charged and
+// refunded. Paladin counts none of them itself.
+func meteredUsage(store meter.UsageStore) (meter.UsageStore, error) {
+	return otelmetric.Instrument(store, otelmetric.WithTenantAttribute())
 }
