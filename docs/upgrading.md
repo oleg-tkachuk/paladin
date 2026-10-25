@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.117.0, sdk/python/v0.118.0 — operation listings narrow and count by state and type
+## v39.4.0, sdk/go/v0.117.0, sdk/python/v0.118.0 — operation listings narrow and count by state and type
 
 - **`ListOperationsRequest` gains `facets` and `count_facets`** on both the
   admin and the data plane. `facets` (`OperationFacets`) narrows the listing
@@ -100,7 +100,7 @@ here.
 - The console's operations page filters by state and type with counts in
   place of its single-choice state filter.
 
-## Unreleased — the data and IAM planes record what an action changed
+## v39.4.0 — the data and IAM planes record what an action changed
 
 - **An audit entry of the data or IAM plane carries `state_before_json` and
   `state_after_json`**, as the admin plane's does: the object, its lock or
@@ -110,7 +110,7 @@ here.
 - Each audited action that records no state says why in
   `backend/internal/app/audit_state_test.go`.
 
-## sdk/go/v0.116.0, sdk/python/v0.117.0 — an audit entry records the resource before and after
+## v39.4.0, sdk/go/v0.116.0, sdk/python/v0.117.0 — an audit entry records the resource before and after
 
 - **`AuditLogEntry` carries `state_before_json` and `state_after_json`**:
   the resource an admin action changed, as its own Get read it just before
@@ -124,7 +124,7 @@ here.
 
 <!-- end of sections -->
 
-## sdk/go/v0.115.1, sdk/python/v0.116.1 — the Python fake refuses an unknown capability as the server does
+## v39.4.0, sdk/go/v0.115.1, sdk/python/v0.116.1 — the Python fake refuses an unknown capability as the server does
 
 - **`paladin.testing` under `strict_auth` refuses a capability it did not
   issue with `PERMISSION_DENIED` and reason `CAPABILITY_INVALID_TOKEN`**, as
@@ -132,7 +132,7 @@ here.
   signature` with no reason. A test that matched the old message must match
   the reason instead; the message stays the fake's own.
 
-## sdk/go/v0.115.0, sdk/python/v0.116.0 — an operation names a copy's key prefix and a tag update's tags
+## v39.4.0, sdk/go/v0.115.0, sdk/python/v0.116.0 — an operation names a copy's key prefix and a tag update's tags
 
 - **`OperationTarget` carries `destination_key_prefix` and `tags`**: what
   a copy and a tag update asked for, beside the collections and `replace`
@@ -140,7 +140,7 @@ here.
   on asks for the same thing. The console's Retry failed now offers it for
   both. Nothing else changes.
 
-## sdk/go/v0.115.0, sdk/python/v0.116.0 — preview what a tenant purge removes
+## v39.4.0, sdk/go/v0.115.0, sdk/python/v0.116.0 — preview what a tenant purge removes
 
 - **`TenantService.PreviewPurgeTenant`** answers, changing nothing, what
   `PurgeTenant` would remove with a tenant — its API tokens and event
@@ -150,7 +150,7 @@ here.
   `PurgeTenant` asks of the caller, and reads an active tenant as well as a
   trashed one. Nothing else changes.
 
-## sdk/go/v0.114.0, sdk/python/v0.115.0 — the fakes seal a real Biscuit
+## v39.4.0, sdk/go/v0.114.0, sdk/python/v0.115.0 — the fakes seal a real Biscuit
 
 - **`paladin.testing`'s Biscuit is a real one with the `biscuit` extra**,
   as `paladintest`'s is, so `paladin.attenuate` narrows it and a narrowed
@@ -165,7 +165,7 @@ here.
   with an `ErrorInfo` reason such as `CAPABILITY_INVALID_TOKEN` — rather
   than `capability: invalid signature`, which the server never sent.
 
-## sdk/go/v0.113.0, sdk/python/v0.114.0 — the fakes name a release on every response
+## v39.4.0, sdk/go/v0.113.0, sdk/python/v0.114.0 — the fakes name a release on every response
 
 - **`paladintest` and `paladin.testing` set `X-Paladin-Version` on every
   response**, as the server does, so an error from either fake carries a
@@ -190,7 +190,7 @@ here.
   before and fails on the cluster; it now fails in the test too. Fix the
   capability, not the test.
 
-## sdk/go/v0.112.0, sdk/python/v0.112.0 — a platform admin reads another tenant's operations
+## v39.4.0, sdk/go/v0.112.0, sdk/python/v0.112.0 — a platform admin reads another tenant's operations
 
 **Server:** the first release that carries this section. **SDKs:** the first
 release that carries it.
@@ -205,7 +205,7 @@ release that carries it.
 
 Additive: no action needed.
 
-## sdk/go/v0.112.0 — the Go fake holds a capability to its caveats
+## v39.4.0, sdk/go/v0.112.0 — the Go fake holds a capability to its caveats
 
 **Go SDK:** the first release that carries this section.
 
@@ -223,7 +223,7 @@ Additive: no action needed.
   checked as before. The budget is not counted, as the server counts none
   unless a price per request is set.
 
-## sdk/go/v0.112.0 — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
+## v39.4.0, sdk/go/v0.112.0 — limes v1.0.0-rc.1: a revoke is written whatever the capability's state
 
 **Server:** the first release that carries this section.
 

@@ -1,4 +1,4 @@
-## Unreleased — the data and IAM planes record what an action changed
+## v39.4.0 — the data and IAM planes record what an action changed
 
 - **An audit entry of the data or IAM plane carries `state_before_json` and
   `state_after_json`**, as the admin plane's does: the object, its lock or
