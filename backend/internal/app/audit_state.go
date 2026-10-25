@@ -2,13 +2,20 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
+	connectdata "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/data"
+	connectiam "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/iam"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	adminconnect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
+	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
+	dataconnect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
+	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
+	iamconnect "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
 
 // named is a request that names the resource it acts on.
@@ -126,4 +133,84 @@ func (s adminStateServers) fill(readers middleware.StateReaders) {
 			return s.budget.Get(ctx, &adminv1.TenantBudgetServiceGetRequest{TenantId: set.GetTenantId()})
 		}
 	}
+}
+
+// versionSegment separates an object's name from one of its versions'.
+const versionSegment = "/versions/"
+
+// objectOfVersion is the name of the object a version's name names: the
+// name itself when it names no version.
+func objectOfVersion(name string) string {
+	object, _, _ := strings.Cut(name, versionSegment)
+	return object
+}
+
+// dataStateServers are the data plane's servers the audit log reads an
+// object through, as its caller would.
+type dataStateServers struct {
+	object *connectdata.ObjectServer
+	tags   *connectdata.ObjectTagServer
+}
+
+// fill puts into readers the reader of each data-plane action that changes
+// one object: the object, its lock or its tags, by the object's name.
+func (s dataStateServers) fill(readers middleware.StateReaders) {
+	object := byName(s.object.GetObject, func(n string) *datav1.GetObjectRequest { return &datav1.GetObjectRequest{Name: n} })
+	for _, p := range []string{
+		dataconnect.ObjectServiceUpdateObjectProcedure,
+		dataconnect.ObjectServiceDeleteObjectProcedure,
+		dataconnect.ObjectServiceRestoreObjectProcedure,
+		dataconnect.ObjectServiceSetObjectTaintProcedure,
+	} {
+		readers[p] = object
+	}
+	// Restoring a version changes the object it is a version of.
+	readers[dataconnect.ObjectServiceRestoreObjectVersionProcedure] = byName(s.object.GetObject, func(n string) *datav1.GetObjectRequest {
+		return &datav1.GetObjectRequest{Name: objectOfVersion(n)}
+	})
+	lock := byName(s.object.GetObjectLock, func(n string) *datav1.GetObjectLockRequest { return &datav1.GetObjectLockRequest{Name: n} })
+	readers[dataconnect.ObjectServiceSetObjectRetentionProcedure] = lock
+	readers[dataconnect.ObjectServiceSetObjectLegalHoldProcedure] = lock
+	tags := byName(s.tags.GetObjectTags, func(n string) *datav1.GetObjectTagsRequest { return &datav1.GetObjectTagsRequest{Name: n} })
+	readers[dataconnect.ObjectTagServicePutObjectTagsProcedure] = tags
+	readers[dataconnect.ObjectTagServiceDeleteObjectTagsProcedure] = tags
+	// Creates: the answer is the object made, and there was none before.
+	for _, p := range []string{
+		dataconnect.ObjectServiceUploadObjectProcedure,
+		dataconnect.ObjectServiceCompleteObjectProcedure,
+		dataconnect.ObjectServiceCopyObjectProcedure,
+		dataconnect.MultipartUploadServiceInitiateMultipartUploadProcedure,
+		dataconnect.MultipartUploadServiceCompleteMultipartUploadProcedure,
+	} {
+		readers[p] = nil
+	}
+}
+
+// iamStateServers are the IAM plane's servers the audit log reads a user
+// through, as its caller would.
+type iamStateServers struct {
+	user     *connectiam.UserServer
+	settings *connectiam.UserSettingsServer
+}
+
+// fill puts into readers the reader of each IAM action that changes one user
+// or a user's settings.
+func (s iamStateServers) fill(readers middleware.StateReaders) {
+	user := byName(s.user.GetUser, func(n string) *iamv1.GetUserRequest { return &iamv1.GetUserRequest{Name: n} })
+	for _, p := range []string{
+		iamconnect.UserServiceUpdateUserProcedure,
+		iamconnect.UserServiceDeleteUserProcedure,
+		iamconnect.UserServiceGrantScopesProcedure,
+		iamconnect.UserServiceRevokeScopesProcedure,
+	} {
+		readers[p] = user
+	}
+	readers[iamconnect.UserServiceCreateUserProcedure] = nil
+	// The caller's own settings, which the request does not name.
+	readers[iamconnect.UserSettingsServiceUpdateMineProcedure] = func(ctx context.Context, _ proto.Message) (proto.Message, error) {
+		return s.settings.GetMine(ctx, &iamv1.GetMineRequest{})
+	}
+	readers[iamconnect.UserSettingsServiceDeleteForUserProcedure] = byName(s.settings.GetForUser, func(n string) *iamv1.GetForUserRequest {
+		return &iamv1.GetForUserRequest{Name: n}
+	})
 }
