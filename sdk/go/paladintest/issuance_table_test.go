@@ -35,16 +35,22 @@ type issuanceWant struct {
 }
 
 type issuanceCase struct {
-	Name             string       `json:"name"`
-	Ops              *[]string    `json:"ops"`
-	ParentOps        []string     `json:"parent_ops"`
-	ChildOps         *[]string    `json:"child_ops"`
-	KeyBound         bool         `json:"key_bound"`
-	NotBefore        string       `json:"not_before"`
-	RequireBiscuit   bool         `json:"require_biscuit"`
-	NoRequestCeiling bool         `json:"no_request_ceiling"`
-	NoBudgetCeiling  bool         `json:"no_budget_ceiling"`
-	Want             issuanceWant `json:"want"`
+	Name             string    `json:"name"`
+	Ops              *[]string `json:"ops"`
+	ParentOps        []string  `json:"parent_ops"`
+	ChildOps         *[]string `json:"child_ops"`
+	KeyBound         bool      `json:"key_bound"`
+	NotBefore        string    `json:"not_before"`
+	RequireBiscuit   bool      `json:"require_biscuit"`
+	NoRequestCeiling bool      `json:"no_request_ceiling"`
+	NoBudgetCeiling  bool      `json:"no_budget_ceiling"`
+	// What a delegation's parent restricts, and its child asks for.
+	ParentPrefixes       []string     `json:"parent_prefixes"`
+	ParentIdempotencyKey bool         `json:"parent_idempotency_key"`
+	ChildPrefixes        []string     `json:"child_prefixes"`
+	ChildTaintedRead     bool         `json:"child_tainted_read"`
+	ChildAudience        []string     `json:"child_audience"`
+	Want                 issuanceWant `json:"want"`
 }
 
 func answerOf(resp *adminv1.CapabilityServiceIssueResponse, err error) issuanceWant {
@@ -112,10 +118,13 @@ func TestIssueAndDelegateAnswerAsTheTableSays(t *testing.T) {
 	}
 	for _, tc := range table.Delegate {
 		t.Run("delegate/"+tc.Name, func(t *testing.T) {
+			parentCaveats := tableCaveats(tc.ParentOps)
+			parentCaveats.ResourcePrefixes = tc.ParentPrefixes
+			parentCaveats.IdempotencyKeyRequired = tc.ParentIdempotencyKey
 			parent, err := admin.Issue(ctx, &adminv1.CapabilityServiceIssueRequest{
 				Subject:  &adminv1.CapabilityPrincipal{Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: srv.Tenant(), Subject: "agent:parent"},
 				Audience: paladin.PlaneNames(paladin.PlaneData, paladin.PlaneAdmin),
-				Caveats:  tableCaveats(tc.ParentOps),
+				Caveats:  parentCaveats,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -125,7 +134,10 @@ func TestIssueAndDelegateAnswerAsTheTableSays(t *testing.T) {
 			}
 			if tc.ChildOps != nil {
 				req.Caveats = tableCaveats(*tc.ChildOps)
+				req.Caveats.ResourcePrefixes = tc.ChildPrefixes
+				req.Caveats.AllowTaintedRead = tc.ChildTaintedRead
 			}
+			req.Audience = tc.ChildAudience
 			if tc.KeyBound {
 				req.ConfirmationJkt = testJKT
 			}

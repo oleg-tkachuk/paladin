@@ -570,7 +570,8 @@ hold that fake to the same answers:
 | A key-bound capability, or one valid only from a later `not_before` | Its token alone, `biscuit_status` `KEY_BOUND` or `NOT_YET_VALID`; with `require_biscuit`, `FAILED_PRECONDITION` |
 | Any other, `share` or no `share` | Its token and its Biscuit, `ISSUED` |
 | `delegate` with no capability presented, or from a Biscuit copy | `FAILED_PRECONDITION` |
-| `delegate` from a parent without `share`, of another `parent_id`, or wider than the parent's ops | `PERMISSION_DENIED` |
+| `delegate` from a parent without `share`, of another `parent_id`, or wider than the parent by limes's rule — an op, a plane, a resource, tainted reads or an idempotency key the parent does not allow | `PERMISSION_DENIED` |
+| `delegate` with a TTL past the parent's expiry | The child, ending when its parent does |
 | `list` of a tenant, alone or with a principal kind, a subject, dispositions and `sort_order` | Its capabilities in issue order, each with its `disposition`: revoked — itself or through a revoked ancestor — over expired over active; no dispositions named lists the active ones and those `include_expired` and `include_revoked` add |
 | `get` of a capability it issued | It, with its `disposition` as `list` gives it, its own `revocation`, and `stopped_by`: the entry that revokes it, its own or its nearest revoked ancestor's |
 | `revoke` of a capability revoked already | `already_revoked`, and the first entry, which stands |

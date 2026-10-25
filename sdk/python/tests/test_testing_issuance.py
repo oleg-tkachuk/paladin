@@ -35,9 +35,20 @@ def fake():  # type: ignore[no-untyped-def]
         yield f
 
 
-def _caveats(ops: list[str]) -> pb.CapabilityCaveats:
+def _caveats(
+    ops: list[str],
+    *,
+    prefixes: list[str] | None = None,
+    tainted_read: bool = False,
+    idempotency_key: bool = False,
+) -> pb.CapabilityCaveats:
     return pb.CapabilityCaveats(
-        ops=ops, unlimited_requests=True, unlimited_budget=admin_types.UnlimitedBudget()
+        ops=ops,
+        unlimited_requests=True,
+        unlimited_budget=admin_types.UnlimitedBudget(),
+        resource_prefixes=prefixes or [],
+        allow_tainted_read=tainted_read,
+        idempotency_key_required=idempotency_key,
     )
 
 
@@ -90,7 +101,11 @@ def test_delegate_answers_as_the_table_says(fake: FakePaladin, case: dict[str, A
                 kind=pb.PRINCIPAL_KIND_AGENT, tenant_id=fake.tenant, subject="agent:parent"
             ),
             audience=[str(Plane.DATA), str(Plane.ADMIN)],
-            caveats=_caveats(case["parent_ops"]),
+            caveats=_caveats(
+                case["parent_ops"],
+                prefixes=case.get("parent_prefixes", []),
+                idempotency_key=case.get("parent_idempotency_key", False),
+            ),
         )
     )
     req = pb.CapabilityServiceDelegateRequest(
@@ -99,7 +114,14 @@ def test_delegate_answers_as_the_table_says(fake: FakePaladin, case: dict[str, A
         require_biscuit=case.get("require_biscuit", False),
     )
     if "child_ops" in case:
-        req.caveats.CopyFrom(_caveats(case["child_ops"]))
+        req.caveats.CopyFrom(
+            _caveats(
+                case["child_ops"],
+                prefixes=case.get("child_prefixes", []),
+                tainted_read=case.get("child_tainted_read", False),
+            )
+        )
+    req.audience.extend(case.get("child_audience", []))
     if case.get("key_bound"):
         req.confirmation_jkt = JKT
     delegate = fake.connect(capability=parent.token).admin.capability.delegate
