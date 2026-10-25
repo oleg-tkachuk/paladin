@@ -271,6 +271,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 
 	// The plane's interceptors; the codec, size limits and compression it
 	// shares with the others are rpcMountOptions.
+	// The readers the audit log takes each change's before and after with,
+	// filled once the servers they read through exist (dataStateServers,
+	// iamStateServers).
+	dataStateReaders := middleware.StateReaders{}
+	iamStateReaders := middleware.StateReaders{}
 	dataServer := connect.NewServer(
 		// Outermost of all: a panic anywhere below is answered as an
 		// internal error and logged with its stack.
@@ -332,7 +337,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// a platform admin acting in the tenant it named. After idempotency,
 		// so a replayed response writes no second row. No mirror: an object
 		// write already emits its own paladin.object.* event.
-		middleware.AuditWithMirror(repos.Audit, auth.AudienceData, false, nil),
+		middleware.AuditWithState(repos.Audit, auth.AudienceData, false, nil, dataStateReaders),
 	)
 	// The plane's interceptors; the codec, size limits and compression it
 	// shares with the others are rpcMountOptions.
@@ -377,7 +382,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// (SOC 2 / ISO 27001 / PCI). No dispatcher mirror on this plane.
 		// Synchronous + crash-durable (ADR-0004): the row commits before
 		// the RPC returns, so a kill can't drop a credential-misuse trail.
-		middleware.AuditWithMirror(repos.Audit, auth.AudienceIAM, false, nil),
+		middleware.AuditWithState(repos.Audit, auth.AudienceIAM, false, nil, iamStateReaders),
 		// Tenant-scoped IAM calls (memberships, password change) are charged
 		// to their tenant; Login and RefreshToken carry no tenant yet and are
 		// covered by the login limiter above.
@@ -435,10 +440,15 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	healthH.Register(dataMux)
 	dataServices := servicesIn(protoregistry.GlobalFiles, dataPackage)
 	mountGRPCStandards(dataMux, healthH.GRPCChecker(dataServices...), dataServices)
-	paladindatav1connect.RegisterObjectServiceHandler(dataServer, connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH))
+	dataState := dataStateServers{
+		object: connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH),
+		tags:   connectdata.NewObjectTagServer(objH),
+	}
+	dataState.fill(dataStateReaders)
+	paladindatav1connect.RegisterObjectServiceHandler(dataServer, dataState.object)
 	paladindatav1connect.RegisterMultipartUploadServiceHandler(dataServer, connectdata.NewMultipartServer(mpH))
 	paladindatav1connect.RegisterPresignServiceHandler(dataServer, connectdata.NewPresignServer(presignH))
-	paladindatav1connect.RegisterObjectTagServiceHandler(dataServer, connectdata.NewObjectTagServer(objH))
+	paladindatav1connect.RegisterObjectTagServiceHandler(dataServer, dataState.tags)
 	paladindatav1connect.RegisterBatchServiceHandler(dataServer, connectdata.NewBatchServer(batchH))
 	paladindatav1connect.RegisterOperationServiceHandler(dataServer, connectdata.NewOperationServer(opH))
 	// StorageBootstrapService shares the data-plane interceptor stack
@@ -453,10 +463,15 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	iamServices := servicesIn(protoregistry.GlobalFiles, iamPackage)
 	mountGRPCStandards(iamMux, healthH.GRPCChecker(iamServices...), iamServices)
 	paladiniamv1connect.RegisterAuthServiceHandler(iamServer, connectiam.NewAuthServer(authH))
-	paladiniamv1connect.RegisterUserServiceHandler(iamServer, connectiam.NewUserServer(userH, repos.Tenant))
+	iamState := iamStateServers{
+		user:     connectiam.NewUserServer(userH, repos.Tenant),
+		settings: connectiam.NewUserSettingsServer(userSettingsH),
+	}
+	iamState.fill(iamStateReaders)
+	paladiniamv1connect.RegisterUserServiceHandler(iamServer, iamState.user)
 	paladiniamv1connect.RegisterHealthServiceHandler(iamServer, connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH))
 
-	paladiniamv1connect.RegisterUserSettingsServiceHandler(iamServer, connectiam.NewUserSettingsServer(userSettingsH))
+	paladiniamv1connect.RegisterUserSettingsServiceHandler(iamServer, iamState.settings)
 	connecthttp.Mount(iamMux, iamServer, rpcMountOptions()...)
 
 	// OAuth 2.1 Authorization Server (ADR-0009): mount the raw-HTTP /oauth/*

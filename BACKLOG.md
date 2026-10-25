@@ -30,23 +30,6 @@ When work lands that surfaces *new* deferred items, add them here in
 the same commit. Treat this file like a runtime invariant.
 
 ---
-## Audit log
-
-### Only the admin plane records the state an action changed
-
-- **Status:** Deferred.
-- **Reason:** the admin plane's audit records each action's resource before
-  and after (`state_before_json`, `state_after_json`) through the resource's
-  own Get. The data and IAM planes record the request alone, and of the
-  admin actions a bucket grant's revoke and an OAuth client's delete have no
-  Get to read through (`internal/app/audit_state_test.go` says why for each).
-- **Definition of Done:** the data and IAM planes' audited actions that
-  change one resource record its state as the admin plane does, each other
-  one saying why not in a test that enumerates them; a Get for bucket grants
-  and OAuth clients, or a reason to go without.
-- **Blockers:** none.
-
----
 ## SDKs
 
 ### The Python SDK holds protobuf-py below its latest release

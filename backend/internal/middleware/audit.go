@@ -131,14 +131,18 @@ type auditInterceptor struct {
 }
 
 // readState is what read answers for req, nil when it answers nothing: a
-// resource that does not exist on that side of the action, or a read that
-// failed, which is logged.
+// resource that does not exist on that side of the action; one the caller
+// may change but not read — a capability narrowed to delete, say — which is
+// the caller's to be refused, not a fault; or a read that failed, which is
+// logged.
 func readState(ctx context.Context, spec connect.Spec, read StateReader, req proto.Message) proto.Message {
 	m, err := read(ctx, req)
 	switch {
 	case err == nil && m != nil && m.ProtoReflect().IsValid():
 		return m
-	case err == nil, connect.CodeOf(err) == connect.CodeNotFound:
+	case err == nil,
+		connect.CodeOf(err) == connect.CodeNotFound,
+		connect.CodeOf(err) == connect.CodePermissionDenied:
 		return nil
 	}
 	logger.FromContext(ctx).Warn("audit state not read",
