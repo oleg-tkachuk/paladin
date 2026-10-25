@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fireEvent,
   render,
@@ -303,6 +303,42 @@ describe("CollectionTrashPage record", () => {
         expect.objectContaining({ objectId: "o2" }),
       ),
     );
+  });
+
+  describe("time in the trash", () => {
+    const MS_PER_SECOND = 1000;
+    const TERMINATED_S = 1_700_000_000;
+    const HOUR_S = 3_600;
+    const DAY_S = 24 * HOUR_S;
+    const IN_TRASH_S = 3 * DAY_S + 4 * HOUR_S;
+
+    // Only Date is faked, so findBy's polling keeps its real timers.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime((TERMINATED_S + IN_TRASH_S) * MS_PER_SECOND);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("counts from its deletion up to now", async () => {
+      h.getObject.mockResolvedValue({
+        objectId: "o4",
+        key: "stale.txt",
+        name: `${COLLECTION_NAME}/objects/o4`,
+        collection: "docs",
+        sizeBytes: 1n,
+        state: ObjectState.DELETED,
+        terminatedAt: { seconds: BigInt(TERMINATED_S), nanos: 0 },
+        tags: {},
+      });
+      window.history.replaceState(null, "", "/?id=o4");
+      renderPage();
+      const panel = await screen.findByRole("dialog", { name: "stale.txt" });
+      expect(
+        within(panel).getByText("In trash for").nextElementSibling?.textContent,
+      ).toBe("3 d 4 h");
+    });
   });
 
   it("says so when the linked object is gone", async () => {

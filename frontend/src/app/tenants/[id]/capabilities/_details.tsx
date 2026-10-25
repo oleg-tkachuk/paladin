@@ -17,6 +17,7 @@ import { capabilityStatus } from "./_disposition";
 import { Timestamp } from "@/components/Timestamp";
 import { CopyableId } from "@/components/ui/CopyableId";
 import { ActorName } from "@/components/features/audit/ActorName";
+import { Duration } from "@/components/Duration";
 
 // UsageEntry is the capability's usage: undefined while loading,
 // "unavailable" when the read failed.
@@ -86,6 +87,13 @@ export function DetailsBody({
         <DetailRow
           label="Expires"
           value={<Timestamp ts={cap.expiresAt} />}
+          mono
+        />
+        <DetailRow
+          label="Valid for"
+          value={
+            <Duration from={cap.notBefore ?? cap.issuedAt} to={cap.expiresAt} />
+          }
           mono
         />
       </DetailsSection>

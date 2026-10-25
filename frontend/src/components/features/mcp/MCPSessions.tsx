@@ -32,6 +32,7 @@ import { T } from "@/lib/ui/typography";
 
 import { useMcpLive } from "./mcp-status";
 import { errorMessage } from "@/hooks/errorContract";
+import { Duration, UNTIL_NOW } from "@/components/Duration";
 
 // The session list keeps its search, sort and open session in the URL under
 // its own names, beside the page's other tables.
@@ -215,6 +216,9 @@ function SessionPanel({
           </RecordField>
           <RecordField label="Last seen">
             <Timestamp ts={session.lastSeen} />
+          </RecordField>
+          <RecordField label="Connected for">
+            <Duration from={session.startedAt} to={UNTIL_NOW} />
           </RecordField>
           <RecordField label="Tool calls">
             {session.toolCallCount.toString()}

@@ -65,6 +65,7 @@ import { isAbortError, errorMessage } from "@/hooks/errorContract";
 import { useTenant, useTenantChangesBlocked } from "../tenant-context";
 import { Timestamp } from "@/components/Timestamp";
 import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
+import { Duration } from "@/components/Duration";
 
 function progressColour(
   spent: Money | undefined,
@@ -339,6 +340,16 @@ export default function TenantBudgetPage() {
                   )}
                 </div>
               </div>
+              {budget.periodEnd ? (
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    Period length
+                  </Label>
+                  <div className="font-mono text-sm text-muted-foreground">
+                    <Duration from={budget.periodStart} to={budget.periodEnd} />
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {capped && (

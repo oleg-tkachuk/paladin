@@ -189,6 +189,48 @@ describe("CapabilityDetailsPanel", () => {
     expect(value("Max budget")).toBe("unlimited");
   });
 
+  // Its lifetime runs from when it may first be used: notBefore when the
+  // issuer delayed it, else the moment it was issued.
+  describe("validity span", () => {
+    const ISSUED_S = 1_700_000_000;
+    const HOUR_S = 3_600;
+    const DAY_S = 24 * HOUR_S;
+    const NOT_BEFORE_DELAY_S = 2 * HOUR_S;
+    const LIFETIME_S = 7 * DAY_S;
+    const at = (seconds: number) => ({ seconds: BigInt(seconds), nanos: 0 });
+
+    it.each([
+      ["from issue with no notBefore", undefined, "7 d"],
+      [
+        "from notBefore over issue",
+        at(ISSUED_S + NOT_BEFORE_DELAY_S),
+        "6 d 22 h",
+      ],
+    ])("is measured %s", async (_, notBefore, want) => {
+      const cap = {
+        ...CAP,
+        issuedAt: at(ISSUED_S),
+        notBefore,
+        expiresAt: at(ISSUED_S + LIFETIME_S),
+      } as unknown as Capability;
+      h.get.mockResolvedValue({ capability: cap });
+      render(
+        <CapabilityDetailsPanel
+          id={cap.id}
+          cap={cap}
+          usageEntry="never"
+          onClose={vi.fn()}
+          onRevoke={h.revoke}
+        />,
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByText("Valid for").nextElementSibling?.textContent,
+        ).toBe(want),
+      );
+    });
+  });
+
   it("marks the record unavailable when the read fails", async () => {
     h.get.mockRejectedValue(new Error("boom"));
     open();

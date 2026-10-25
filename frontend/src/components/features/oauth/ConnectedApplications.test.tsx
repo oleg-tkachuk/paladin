@@ -158,6 +158,19 @@ describe("ConnectedApplications", () => {
     expect(within(dialog).getByText(GRANT.audience)).toBeInTheDocument();
   });
 
+  // GRANT runs a week, from grantedAt to expiresAt.
+  it("says how long the grant is valid for", async () => {
+    h.list.mockResolvedValue({ grants: [GRANT] });
+    render(<ConnectedApplications userName={USER} own />);
+    fireEvent.click(await row(GRANT.clientId));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Connected application",
+    });
+    expect(
+      within(dialog).getByText("Valid for").nextElementSibling?.textContent,
+    ).toBe("7 d");
+  });
+
   it("puts the open grant in the address, under the table's namespace", async () => {
     h.list.mockResolvedValue({ grants: [GRANT] });
     render(<ConnectedApplications userName={USER} own />);

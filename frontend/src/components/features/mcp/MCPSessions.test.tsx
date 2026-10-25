@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@/test/utils";
 
 const h = vi.hoisted(() => ({ live: vi.fn() }));
@@ -6,10 +6,11 @@ vi.mock("./mcp-status", () => ({ useMcpLive: h.live }));
 
 import { MCPSessions } from "./MCPSessions";
 
+const STARTED_S = 1_700_000_000;
 const session = (id: string, agentSubject: string, toolCallCount: bigint) => ({
   id,
   agentSubject,
-  startedAt: { seconds: 1_700_000_000n },
+  startedAt: { seconds: BigInt(STARTED_S) },
   lastSeen: { seconds: 1_700_000_600n },
   toolCallCount,
   requestCount: toolCallCount,
@@ -63,6 +64,32 @@ describe("MCPSessions", () => {
     expect(panel).toHaveAccessibleDescription("cccc3333-session");
     expect(panel).toHaveTextContent("Tool calls7");
     expect(window.location.search).toBe("?sessions.id=cccc3333-session");
+  });
+
+  describe("connected for", () => {
+    const MS_PER_SECOND = 1000;
+    const MINUTE_S = 60;
+    const HOUR_S = 60 * MINUTE_S;
+    const CONNECTED_S = 2 * HOUR_S + 5 * MINUTE_S;
+
+    // Only Date is faked, so findBy's polling keeps its real timers.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime((STARTED_S + CONNECTED_S) * MS_PER_SECOND);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("counts from the session's start up to now", async () => {
+      render(<MCPSessions />);
+      fireEvent.click(screen.getByRole("row", { name: /bob/ }));
+      const panel = await screen.findByRole("dialog", { name: "Session" });
+      expect(
+        within(panel).getByText("Connected for").nextElementSibling
+          ?.textContent,
+      ).toBe("2 h 5 min");
+    });
   });
 
   it("opens the session a link names", async () => {

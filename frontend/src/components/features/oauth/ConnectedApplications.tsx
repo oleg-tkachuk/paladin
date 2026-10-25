@@ -51,6 +51,7 @@ import type { SortAccessors } from "@/lib/table/view";
 import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
+import { Duration } from "@/components/Duration";
 
 // The list of applications keeps its search, sort and open grant in the URL
 // under its own names, beside the page's other tables.
@@ -415,6 +416,9 @@ function ApplicationPanel({
           </RecordField>
           <RecordField label="Expires">
             <Timestamp ts={grant.expiresAt} />
+          </RecordField>
+          <RecordField label="Valid for">
+            <Duration from={grant.grantedAt} to={grant.expiresAt} />
           </RecordField>
         </RecordFields>
       ) : (

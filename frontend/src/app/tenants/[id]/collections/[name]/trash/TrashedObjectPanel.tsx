@@ -16,6 +16,7 @@ import { notFoundIsAnswer } from "@/lib/connect/expected";
 import { formatDateTime } from "@/lib/format/locale";
 import { T } from "@/lib/ui/typography";
 import { timestampToDate } from "@/lib/utils";
+import { Duration, UNTIL_NOW } from "@/components/Duration";
 
 /** What an object with no content type is served as. */
 export const DEFAULT_CONTENT_TYPE = "binary/octet-stream";
@@ -150,6 +151,9 @@ export function TrashedObjectPanel({
             {object.terminatedAt
               ? formatDateTime(timestampToDate(object.terminatedAt))
               : "—"}
+          </RecordField>
+          <RecordField label="In trash for">
+            <Duration from={object.terminatedAt} to={UNTIL_NOW} />
           </RecordField>
           <RecordField label="Version" mono>
             {object.resourceVersion || "—"}
