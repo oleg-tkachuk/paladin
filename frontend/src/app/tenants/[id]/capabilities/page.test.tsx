@@ -50,6 +50,7 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import { LINKED_ROW_ATTR } from "@/components/ui/table";
 import {
+  BiscuitStatus,
   CapabilityDisposition,
   PrincipalKind,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -425,6 +426,39 @@ describe("CapabilitiesPage", () => {
     // operator lands on shows it (the success path's setSubject + setItems).
     expect(screen.getByDisplayValue("agent-x")).toBeInTheDocument();
   });
+
+  // The Biscuit is the only way to a copy: revoking one or reading its usage
+  // pastes a copy, so it is shown beside the token, once — or why it is not.
+  it.each([
+    [BiscuitStatus.ISSUED, "cap-biscuit-abc", "cap-biscuit-abc", null],
+    [BiscuitStatus.KEY_BOUND, "", null, /bound to a key/],
+  ])(
+    "shows the issued Biscuit, or why there is none (status %s)",
+    async (biscuitStatus, biscuit, shown, why) => {
+      h.issue.mockResolvedValue({
+        token: "cap-jwt-xyz",
+        biscuit,
+        biscuitStatus,
+        capability: {
+          id: "cap-new-2",
+          subject: { kind: 2, subject: "agent-y" },
+        },
+      });
+      render(<CapabilitiesPage />);
+      await userEvent.click(issueButtons()[0]);
+      await userEvent.type(dialogSubject(), "agent-y");
+      fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+      expect(
+        await screen.findByDisplayValue("cap-jwt-xyz"),
+      ).toBeInTheDocument();
+      if (shown) {
+        expect(screen.getByLabelText("Biscuit")).toHaveValue(shown);
+      } else {
+        expect(screen.queryByLabelText("Biscuit")).not.toBeInTheDocument();
+        expect(screen.getByText(why!)).toBeInTheDocument();
+      }
+    },
+  );
 
   // ── row-menu flows (Details + Revoke) ─────────────────────────────────
   it("opens the details dialog from the row menu", async () => {
