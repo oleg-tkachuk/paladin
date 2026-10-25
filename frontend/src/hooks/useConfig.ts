@@ -22,7 +22,12 @@ export function useConfig() {
     queryFn: async () => {
       try {
         const res = await adminSystemClient.getConfig({});
-        return { config: res.yaml, path: res.sourcePath || null };
+        return {
+          config: res.yaml,
+          // Empty from a server too old to send them.
+          defaults: res.defaultsYaml || null,
+          path: res.sourcePath || null,
+        };
       } catch (err) {
         throw normalizeError(err);
       }
@@ -31,6 +36,8 @@ export function useConfig() {
 
   return {
     config: query.data?.config ?? null,
+    /** What the deployment runs on where it sets nothing, in config's shape. */
+    defaults: query.data?.defaults ?? null,
     path: query.data?.path ?? null,
     // isFetching (not isLoading) preserves the old hook's "loading is true
     // on mount AND on every refresh" semantics.

@@ -888,18 +888,6 @@ order they are being taken up.
   `DiffView`.
 - **Blockers:** the backend keeping a policy's history.
 
-#### Diff the running configuration against its defaults
-
-- **Status:** Blocked.
-- **Reason:** `/config` diffs the running configuration against a
-  config.yaml pasted in, but not against the defaults: GetConfig returns
-  only the loaded YAML, and the defaults live in the Go config loader.
-- **Definition of Done:** the API serves the defaults, redacted as the
-  running configuration is, and `/config` diffs the two in `DiffView`, so
-  an operator sees every setting their deployment changed.
-- **Blockers:** a field on GetConfigResponse (or a sibling RPC) carrying
-  the defaults.
-
 #### Detail panels for the remaining record dialogs
 
 - **Status:** Aspirational.
@@ -927,16 +915,3 @@ order they are being taken up.
   shown on the tiles, from usage the list read serves.
 - **Blockers:** the cross-tenant read in "Dashboard: a trend for the tenants
   nearest their limits".
-
-#### A bucket's notice is set through the API only
-
-- **Status:** Deferred.
-- **Reason:** a bucket shows the notice its `notice.paladin.io/*` labels
-  carry, on its page and in every bucket list, but the console has no form
-  that edits a bucket's labels; `UpdateBucket` with `labels` in the mask is
-  the only way to set one. The tenant's edit dialog has the form.
-- **Definition of Done:** the bucket's settings edit its notice as the
-  tenant's edit dialog does, keeping its other labels as they are.
-- **Blockers:** none. Storage backends carry no labels at all, so a notice
-  on one would need a field in the API first.
-

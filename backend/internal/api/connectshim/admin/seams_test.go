@@ -246,8 +246,8 @@ type failingSystem struct{}
 func (failingSystem) DispatcherStats(context.Context) (*worker.DeliveryStats, bool, error) {
 	return nil, false, errBoom
 }
-func (failingSystem) MarshalRedacted(context.Context) (string, string, error) {
-	return "", "", errBoom
+func (failingSystem) MarshalRedacted(context.Context) (string, string, string, error) {
+	return "", "", "", errBoom
 }
 func (failingSystem) PlatformStats(context.Context, platformstats.TenantPage) (*systemh.PlatformStatsResult, error) {
 	return nil, errBoom

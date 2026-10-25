@@ -6,6 +6,7 @@ import { render, screen, within } from "@/test/utils";
 const h = vi.hoisted(() => ({
   config: {
     config: "" as string | null,
+    defaults: null as string | null,
     path: "/app/configs/config.yaml" as string | null,
     loading: false,
     error: null as Error | null,
@@ -44,6 +45,7 @@ datastores:
 
 beforeEach(() => {
   h.config.config = YAML;
+  h.config.defaults = null;
   h.config.error = null;
   h.config.loading = false;
   h.copy.mockReset().mockResolvedValue(true);
@@ -143,6 +145,35 @@ describe("ConfigPage", () => {
     expect(diff).toHaveTextContent("level: info");
     expect(diff).not.toHaveTextContent("s3cret");
     expect(screen.getByText("1 added, 1 removed")).toBeInTheDocument();
+  });
+
+  // The defaults come from the server, so Compare opens on what this
+  // deployment changed, and a pasted copy is one click away.
+  it("diffs the running configuration against the defaults", async () => {
+    h.config.defaults = YAML.replace("paladin-core", "''").replace(
+      "dsn: postgres://paladin_app@pg/paladin",
+      "dsn: ''",
+    );
+    render(<ConfigPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Compare" }));
+    expect(
+      screen.getByRole("button", { name: "Defaults", pressed: true }),
+    ).toBeInTheDocument();
+    const diff = screen.getByRole("table", {
+      name: "Changes from defaults to running",
+    });
+    expect(diff).toHaveTextContent("name: paladin-core");
+    expect(diff).not.toHaveTextContent("level: info");
+    await userEvent.click(
+      screen.getByRole("button", { name: "A pasted config.yaml" }),
+    );
+    expect(screen.getByLabelText("Compare with")).toBeInTheDocument();
+  });
+
+  it("offers no defaults a server did not send", async () => {
+    render(<ConfigPage />);
+    await userEvent.click(screen.getByRole("button", { name: "Compare" }));
+    expect(screen.getByRole("button", { name: "Defaults" })).toBeDisabled();
   });
 
   it("says when the pasted text is not YAML", async () => {

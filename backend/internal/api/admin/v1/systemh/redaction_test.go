@@ -43,7 +43,7 @@ func TestMarshalRedactedRequiresPlatformAdmin(t *testing.T) {
 		ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
 			Subject: "someone", Roles: roles,
 		})
-		_, _, err := h.MarshalRedacted(ctx)
+		_, _, _, err := h.MarshalRedacted(ctx)
 		if connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Errorf("roles=%v: code = %v, want PermissionDenied — this method returns the whole running config",
 				roles, connect.CodeOf(err))
@@ -55,7 +55,7 @@ func TestMarshalRedactedDoesNotEmitSecrets(t *testing.T) {
 	cfg := secretBearingConfig()
 	h := New(cfg, "/app/configs/paladin.yaml")
 
-	blob, path, err := h.MarshalRedacted(adminCtx())
+	blob, _, path, err := h.MarshalRedacted(adminCtx())
 	if err != nil {
 		t.Fatalf("MarshalRedacted: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestMarshalRedactedStillDescribesTheConfig(t *testing.T) {
 	cfg.App.Env = "local"
 	h := New(cfg, "/app/configs/paladin.yaml")
 
-	blob, _, err := h.MarshalRedacted(adminCtx())
+	blob, _, _, err := h.MarshalRedacted(adminCtx())
 	if err != nil {
 		t.Fatalf("MarshalRedacted: %v", err)
 	}
@@ -98,5 +98,30 @@ func TestMarshalRedactedStillDescribesTheConfig(t *testing.T) {
 		if !strings.Contains(blob, want) {
 			t.Errorf("payload is missing %q — redaction removed more than the secrets", want)
 		}
+	}
+}
+
+// The defaults come beside the running configuration in its shape and its
+// redaction, so the two diff into what the deployment changed: a value the
+// deployment set shows only in the running one, and no secret in either.
+func TestMarshalRedactedServesTheDefaults(t *testing.T) {
+	cfg := secretBearingConfig()
+	cfg.Logger.Level = "debug"
+	h := New(cfg, "/app/configs/paladin.yaml")
+	running, defaults, _, err := h.MarshalRedacted(adminCtx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(defaults, "level: info") || !strings.Contains(running, "level: debug") {
+		t.Errorf("logger.level: defaults should say info and running debug")
+	}
+	for _, secret := range []string{cfg.Auth.SigningKey, cfg.APIToken.HMACKey, cfg.Datastores.Postgres.Password} {
+		if strings.Contains(defaults, secret) {
+			t.Errorf("the defaults carry %q", secret)
+		}
+	}
+	// Same top-level layout, or the diff is all noise.
+	if strings.Count(defaults, "\n") < strings.Count(running, "\n")/2 {
+		t.Errorf("defaults hold %d lines against the running %d", strings.Count(defaults, "\n"), strings.Count(running, "\n"))
 	}
 }

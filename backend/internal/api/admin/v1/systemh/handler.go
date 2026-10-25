@@ -67,16 +67,31 @@ func (h *Handler) WithPool(pool *pgxpool.Pool) *Handler {
 // Gated to platform.admin — this method is the only entry-point the
 // connectshim uses, so the role check lives here so the connectshim-
 // gating coverage test sees it (rather than tucked into the shim).
-func (h *Handler) MarshalRedacted(ctx context.Context) (yamlBlob string, sourcePath string, err error) {
+func (h *Handler) MarshalRedacted(ctx context.Context) (yamlBlob, defaultsYAML, sourcePath string, err error) {
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
-		return "", "", connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
+		return "", "", "", connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
-	redacted := h.cfg.Obfuscated()
-	out, err := yaml.Marshal(&redacted)
+	running, err := marshalObfuscated(&h.cfg)
 	if err != nil {
-		return "", "", rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal config: %w", err))
+		return "", "", "", rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal config: %w", err))
 	}
-	return string(out), h.sourcePath, nil
+	defaults, err := config.Defaults()
+	if err != nil {
+		return "", "", "", rpcerr.New(connect.CodeInternal, fmt.Errorf("config defaults: %w", err))
+	}
+	defaultsBlob, err := marshalObfuscated(&defaults)
+	if err != nil {
+		return "", "", "", rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal config defaults: %w", err))
+	}
+	return running, defaultsBlob, h.sourcePath, nil
+}
+
+// marshalObfuscated is cfg as YAML with every secret replaced, the shape
+// both the running configuration and its defaults are served in.
+func marshalObfuscated(cfg *config.Config) (string, error) {
+	redacted := cfg.Obfuscated()
+	out, err := yaml.Marshal(&redacted)
+	return string(out), err
 }
 
 // DispatcherStats proxies the dispatcher pod's operator view

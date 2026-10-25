@@ -3,34 +3,23 @@
 import React, { useState } from "react";
 
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import {
-  SelectContent,
-  SelectItem,
-  SelectRoot,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import {
   FormDialog,
   FormField,
-  FormRow,
   FormSection,
 } from "@/components/ui/form-dialog";
 import { IdentityField } from "@/components/IdentityField";
+import { NoticeFields } from "@/components/features/notice/NoticeFields";
 import { useNotification } from "@/components/ui/Notification";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import {
-  NOTICE_SEVERITIES,
-  noticeFromLabels,
-  noticeUrl,
-  readNotice,
-  withNoticeLabels,
-  type NoticeSeverity,
-} from "@/lib/notice";
-import { T } from "@/lib/ui/typography";
+  labelsWithNoticeForm,
+  noticeFormFor,
+  noticeLinkError,
+  sameLabels,
+  type NoticeForm,
+} from "@/lib/noticeForm";
 
 type UpdateTenantFn = (
   tenantId: string,
@@ -46,48 +35,18 @@ interface TenantEditDialogProps {
   updateTenantMetadata: UpdateTenantFn;
 }
 
-const SEVERITY_LABEL: Record<NoticeSeverity, string> = {
-  info: "Info",
-  warning: "Warning",
-  critical: "Critical",
-};
-
-/** The form's fields, seeded from a tenant. */
+/** The form's fields, seeded from a tenant: its name and its notice. */
 interface Form {
   displayName: string;
-  notice: string;
-  severity: NoticeSeverity;
-  url: string;
-  permanent: boolean;
+  notice: NoticeForm;
 }
 
 function formFor(tenant: Tenant | null): Form {
-  const notice = noticeFromLabels(tenant?.labels);
   return {
     displayName: tenant?.displayName || "",
-    notice: notice?.content ?? "",
-    severity: notice?.severity ?? "info",
-    url: notice?.url ?? "",
-    permanent: notice?.permanent ?? false,
+    notice: noticeFormFor(tenant?.labels),
   };
 }
-
-/** The tenant's labels as the form would leave them. */
-function labelsFor(tenant: Tenant, form: Form): Record<string, string> {
-  return withNoticeLabels(
-    tenant.labels,
-    readNotice({
-      content: form.notice,
-      severity: form.severity,
-      url: form.url,
-      permanent: form.permanent,
-    }),
-  );
-}
-
-const sameLabels = (a: Record<string, string>, b: Record<string, string>) =>
-  Object.keys(a).length === Object.keys(b).length &&
-  Object.entries(a).every(([k, v]) => b[k] === v);
 
 /**
  * The tenant's edit dialog, extracted from tenants/page.tsx: its display
@@ -119,17 +78,13 @@ export function TenantEditDialog({
   const set = <K extends keyof Form>(key: K, value: Form[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const labels = editing ? labelsFor(editing, form) : {};
+  const labels = editing
+    ? labelsWithNoticeForm(editing.labels, form.notice)
+    : {};
   const unchanged =
     form.displayName === (editing?.displayName || "") &&
     sameLabels(labels, editing?.labels ?? {});
-  // The server stores any text; the console would drop a link it cannot
-  // show safely, so it says so before saving rather than losing it quietly.
-  const hasNotice = form.notice.trim() !== "";
-  const badUrl =
-    hasNotice && form.url.trim() !== "" && noticeUrl(form.url) === undefined
-      ? "Give an http(s) address or a path in the console, such as /trash."
-      : null;
+  const badUrl = noticeLinkError(form.notice);
 
   const handleUpdate = async () => {
     if (!editing) return;
@@ -201,68 +156,11 @@ export function TenantEditDialog({
           )}
         </FormField>
       </FormSection>
-      <FormSection title="Notice">
-        <FormField
-          label="Notice"
-          hint="Shown across the tenant's pages and beside it in the list. Empty for none."
-        >
-          {(control) => (
-            <Textarea
-              {...control}
-              rows={2}
-              placeholder="Read-only while it moves to the new backend."
-              value={form.notice}
-              onChange={(e) => set("notice", e.target.value)}
-            />
-          )}
-        </FormField>
-        <FormRow>
-          <FormField label="Severity">
-            {(control) => (
-              <SelectRoot
-                value={form.severity}
-                onValueChange={(v) => set("severity", v as NoticeSeverity)}
-                disabled={!hasNotice}
-              >
-                <SelectTrigger {...control}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {NOTICE_SEVERITIES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {SEVERITY_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </SelectRoot>
-            )}
-          </FormField>
-          <FormField label="Link" error={badUrl} hint="Where Read more goes.">
-            {(control) => (
-              <Input
-                {...control}
-                placeholder="https://status.example.com"
-                value={form.url}
-                disabled={!hasNotice}
-                onChange={(e) => set("url", e.target.value)}
-              />
-            )}
-          </FormField>
-        </FormRow>
-        <div className="flex items-center gap-2">
-          <Switch
-            aria-label="Permanent"
-            checked={form.permanent}
-            disabled={!hasNotice}
-            onCheckedChange={(v) => set("permanent", v)}
-          />
-          <span className={T.hint}>
-            {form.permanent
-              ? "Permanent: nobody can dismiss it"
-              : "Each reader can dismiss it"}
-          </span>
-        </div>
-      </FormSection>
+      <NoticeFields
+        form={form.notice}
+        onChange={(notice) => set("notice", notice)}
+        where="Shown across the tenant's pages and beside it in the list."
+      />
     </FormDialog>
   );
 }
