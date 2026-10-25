@@ -206,13 +206,19 @@ func revocationSignalErr(st limes.RevocationCacheStats) error {
 
 // revocationSignalDetails is what the health page shows of the signal: how
 // often the watcher connected and lost its connection, what it passed on,
-// and whether a revocation clears narrowly.
+// whether a revocation clears narrowly, and how often the cache was cleared
+// narrowly or whole — a count of whole clears for want of lineage that grows
+// says narrow invalidation is off.
 func revocationSignalDetails(st limes.RevocationCacheStats) []health.Detail {
 	d := []health.Detail{
 		{Name: "connections", Value: strconv.FormatUint(st.Syncs, 10)},
 		{Name: "connections lost", Value: strconv.FormatUint(st.SyncsLost, 10)},
 		{Name: "notifications", Value: strconv.FormatUint(st.Signals, 10)},
+		{Name: "notifications clearing whole", Value: strconv.FormatUint(st.SignalsWhole, 10)},
 		{Name: "narrow clears", Value: strconv.FormatBool(st.Lineage)},
+		{Name: "clears made narrowly", Value: strconv.FormatUint(st.NarrowClears, 10)},
+		{Name: "clears made whole", Value: strconv.FormatUint(st.Clears, 10)},
+		{Name: "whole clears without lineage", Value: strconv.FormatUint(st.ClearsWithoutLineage, 10)},
 	}
 	if !st.LastSyncLoss.IsZero() {
 		d = append(d, health.Detail{Name: "last lost", Value: st.LastSyncLoss.UTC().Format(time.RFC3339)})
