@@ -1,4 +1,4 @@
-## Unreleased — an audit entry records the resource before and after
+## sdk/go/v0.116.0, sdk/python/v0.117.0 — an audit entry records the resource before and after
 
 - **`AuditLogEntry` carries `state_before_json` and `state_after_json`**:
   the resource an admin action changed, as its own Get read it just before
