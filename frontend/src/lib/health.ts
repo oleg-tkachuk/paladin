@@ -12,9 +12,42 @@ export type Control = "always_on" | "config" | "database";
 export type Detail = {
   name: string;
   value: string;
+  // The thing a detail is about, when a component reports several facts of
+  // it: the console shows a group on one line.
+  group?: string;
   // The role a detail is about, when a merged component carries several.
   role?: string;
 };
+
+/** One line of a component's details: a group's facts, or one loose fact. */
+export type DetailLine = {
+  label: string;
+  facts: { name: string; value: string }[];
+};
+
+/**
+ * A component's details as lines, in the order they came: the facts of one
+ * group on one line, under the group's name, and each loose fact on its own,
+ * under its name.
+ */
+export function detailLines(details: readonly Detail[]): DetailLine[] {
+  const lines: DetailLine[] = [];
+  const byGroup = new Map<string, DetailLine>();
+  for (const d of details) {
+    if (!d.group) {
+      lines.push({ label: d.name, facts: [{ name: "", value: d.value }] });
+      continue;
+    }
+    let line = byGroup.get(d.group);
+    if (!line) {
+      line = { label: d.group, facts: [] };
+      byGroup.set(d.group, line);
+      lines.push(line);
+    }
+    line.facts.push({ name: d.name, value: d.value });
+  }
+  return lines;
+}
 
 export type Component = {
   name: string;

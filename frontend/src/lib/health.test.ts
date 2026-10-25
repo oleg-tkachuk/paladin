@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  detailLines,
   countByStatus,
   needsAttention,
   splitDatabase,
@@ -199,5 +200,28 @@ describe("countByStatus", () => {
       unhealthy: 0,
       disabled: 1,
     });
+  });
+});
+
+describe("detailLines", () => {
+  it("puts a group's facts on one line, loose facts each on their own, in order", () => {
+    expect(
+      detailLines([
+        { name: "in use", value: "3/20" },
+        { group: "watcher", name: "connected", value: "1" },
+        { name: "idle", value: "2" },
+        { group: "watcher", name: "lost", value: "0" },
+      ]),
+    ).toEqual([
+      { label: "in use", facts: [{ name: "", value: "3/20" }] },
+      {
+        label: "watcher",
+        facts: [
+          { name: "connected", value: "1" },
+          { name: "lost", value: "0" },
+        ],
+      },
+      { label: "idle", facts: [{ name: "", value: "2" }] },
+    ]);
   });
 });

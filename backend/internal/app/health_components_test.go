@@ -138,14 +138,16 @@ func TestCapabilityRevocationsFollowTheWatcher(t *testing.T) {
 		t.Errorf("listening: component = %+v, want healthy", got)
 	}
 	want := map[string]string{
-		"connections": "1", "connections lost": "0", "notifications": "1", "notifications clearing whole": "0",
-		"narrow clears": "true", "clears made narrowly": "1", "whole clears without lineage": "0",
+		"watcher/connected": "1", "watcher/lost": "0",
+		"notifications/received": "1", "notifications/clearing whole": "0",
+		"cache clears/narrow": "on", "cache clears/made narrowly": "1", "cache clears/whole without lineage": "0",
 	}
 	for _, d := range got.Details {
-		if v, ok := want[d.Name]; ok && v != d.Value {
-			t.Errorf("detail %s = %s, want %s", d.Name, d.Value, v)
+		key := d.Group + "/" + d.Name
+		if v, ok := want[key]; ok && v != d.Value {
+			t.Errorf("detail %s = %s, want %s", key, d.Value, v)
 		}
-		delete(want, d.Name)
+		delete(want, key)
 	}
 	if len(want) != 0 {
 		t.Errorf("details %v missing from %+v", want, got.Details)
