@@ -86,15 +86,18 @@ func audienceRefusal(audience []string, plane paladin.Plane) error {
 }
 
 // requestLimitAdmits reports whether a capability with caveats admits its
-// next request, the count-th.
+// next request, the count-th, by limes's own ceiling.
 func requestLimitAdmits(caveats *adminv1.CapabilityCaveats, count int64) bool {
-	if caveats.GetUnlimitedRequests() {
-		return true
+	return requestCeiling(caveats).Admits(count)
+}
+
+// requestCeiling is the request ceiling caveats set; one that sets none
+// counts without a limit.
+func requestCeiling(caveats *adminv1.CapabilityCaveats) limes.RequestCeiling {
+	if r, ok := caveats.GetRequestCeiling().(*adminv1.CapabilityCaveats_MaxRequests); ok {
+		return limes.RequestCeiling{Max: r.MaxRequests}
 	}
-	if _, ok := caveats.GetRequestCeiling().(*adminv1.CapabilityCaveats_MaxRequests); !ok {
-		return true
-	}
-	return count <= caveats.GetMaxRequests()
+	return limes.RequestCeiling{Unlimited: true}
 }
 
 // bumpRequestsLocked counts a request against rec and each of its ancestors,

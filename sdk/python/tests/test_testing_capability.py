@@ -343,6 +343,19 @@ def test_list_refuses_a_token_of_other_filters(listed: FakePaladin, other) -> No
     assert _code(lambda: admin.list(again)) == Code.INVALID_ARGUMENT
 
 
+def test_list_refuses_a_token_of_another_tenant(listed: FakePaladin) -> None:
+    """limes binds a listing's cursor to its tenant: one handed back for
+    another tenant is refused, not paged on."""
+    admin = listed.connect().admin.capability
+    first = admin.list(
+        pb.CapabilityServiceListRequest(tenant_id=listed.tenant, dispositions=_ALL, page_size=1)
+    )
+    again = pb.CapabilityServiceListRequest(
+        tenant_id=str(uuid.uuid4()), dispositions=_ALL, page_token=first.next_page_token
+    )
+    assert _code(lambda: admin.list(again)) == Code.INVALID_ARGUMENT
+
+
 def test_list_counts_a_child_of_a_revoked_parent_revoked(fake: FakePaladin) -> None:
     admin = fake.connect().admin.capability
     parent = admin.issue(_issue_request(fake, Op.GET, Op.SHARE))

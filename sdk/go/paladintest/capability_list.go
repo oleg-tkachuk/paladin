@@ -118,11 +118,12 @@ func listDispositions(req *adminv1.CapabilityServiceListRequest) []adminv1.Capab
 const cursorSeparator = "_"
 
 // listFilters names what req lists, as the server's cursor holds it: the
-// principal kind, the subject and the set of dispositions, in any order.
+// tenant (limes binds a cursor to it), the principal kind, the subject and
+// the set of dispositions, in any order.
 func listFilters(req *adminv1.CapabilityServiceListRequest) string {
 	ds := slices.Clone(listDispositions(req))
 	slices.Sort(ds)
-	sum := sha256.Sum256(fmt.Appendf(nil, "%d\x00%s\x00%v", req.GetPrincipalKind(), req.GetSubject(), ds))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d\x00%s\x00%v", req.GetTenantId(), req.GetPrincipalKind(), req.GetSubject(), ds))
 	return hex.EncodeToString(sum[:])
 }
 

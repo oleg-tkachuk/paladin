@@ -60,6 +60,21 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
+### The Python fake delegates wider than the server allows
+
+- **Status:** Deferred.
+- **Reason:** the Go fake (`paladintest`) refuses a delegation as the
+  server's issuer does, through `limes.Narrows`, and cuts a child that would
+  outlive its parent to the parent's end. The Python fake
+  (`paladin.testing`) checks only the ops: it accepts a child with an
+  audience, a resource or a start its parent lacks, and lets it outlive the
+  parent. limes is Go only, so the Python fake needs the rule written out.
+- **Definition of Done:** the Python fake refuses what `limes.Narrows`
+  refuses — audience, window, tenant, key binding, resources, tainted-read,
+  idempotency — and clamps the expiry, with the Go fake's cases in a shared
+  table both fakes run.
+- **Blockers:** none.
+
 ---
 ## Deploy cutover: rename to `paladin`
 
