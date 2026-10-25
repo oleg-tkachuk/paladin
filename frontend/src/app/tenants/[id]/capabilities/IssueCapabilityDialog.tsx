@@ -45,6 +45,7 @@ import {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { ToggleRow } from "./_form-fields";
+import { missingBiscuitReason } from "./_biscuit";
 import { LimitInput } from "@/components/ui/LimitInput";
 import { copyCeiling, requestCeiling, wholeNumber } from "./_ceilings";
 import { budgetCeiling } from "@/lib/format/budgetCeiling";
@@ -117,9 +118,12 @@ export function IssueCapabilityDialog({
   const [issuing, setIssuing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // After success: { token, capability } reveal panel — one-shot view.
+  // After success: the token, the Biscuit or why there is none, and the
+  // capability's id — a one-shot view.
   const [reveal, setReveal] = useState<{
     token: string;
+    biscuit: string;
+    missingBiscuit: string | null;
     capabilityId: string;
   } | null>(null);
   const [revealAcknowledged, setRevealAcknowledged] = useState(false);
@@ -234,6 +238,8 @@ export function IssueCapabilityDialog({
       });
       setReveal({
         token: res.token,
+        biscuit: res.biscuit,
+        missingBiscuit: missingBiscuitReason(res.biscuitStatus),
         capabilityId: res.capability?.id ?? "",
       });
       // Let the page sync its browse filter to the just-issued (kind, subject)
@@ -261,17 +267,17 @@ export function IssueCapabilityDialog({
     onClose();
   };
 
-  const copyToken = useCallback(async () => {
-    if (!reveal) return;
-    const ok = await copyToClipboard(reveal.token);
-    showNotification({
-      type: ok ? "success" : "error",
-      title: ok ? "Copied" : "Copy failed",
-      message: ok
-        ? "Capability token copied to clipboard."
-        : "Clipboard unavailable.",
-    });
-  }, [reveal, showNotification]);
+  const copySecret = useCallback(
+    async (value: string, what: string) => {
+      const ok = await copyToClipboard(value);
+      showNotification({
+        type: ok ? "success" : "error",
+        title: ok ? "Copied" : "Copy failed",
+        message: ok ? `${what} copied to clipboard.` : "Clipboard unavailable.",
+      });
+    },
+    [showNotification],
+  );
 
   if (reveal) {
     return (
@@ -293,32 +299,32 @@ export function IssueCapabilityDialog({
               Hand it over a secure channel: anyone holding it can act under its
               caveats until it expires.
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cap-token">Capability JWT</Label>
-              <div className="flex gap-2">
-                <textarea
-                  id="cap-token"
-                  readOnly
-                  value={reveal.token}
-                  className="flex-1 rounded-md border border-input bg-background px-2 py-2 font-mono text-xs"
-                  rows={4}
-                  onFocus={(e) => e.currentTarget.select()}
-                />
-                <Button variant="outline" onClick={copyToken} type="button">
-                  <ClipboardDocumentIcon className="size-4" />
-                  Copy
-                </Button>
-              </div>
-              <p className={cn(T.code, "text-muted-foreground")}>
-                id: {reveal.capabilityId}
-              </p>
-            </div>
+            <RevealedSecret
+              id="cap-token"
+              label="Capability JWT"
+              value={reveal.token}
+              onCopy={() => void copySecret(reveal.token, "Capability token")}
+            />
+            {reveal.biscuit ? (
+              <RevealedSecret
+                id="cap-biscuit"
+                label="Biscuit"
+                hint="The same capability, which its holder narrows offline into copies; revoke or read the usage of one through Revoke a copy and Copy usage."
+                value={reveal.biscuit}
+                onCopy={() => void copySecret(reveal.biscuit, "Biscuit")}
+              />
+            ) : (
+              <p className={cn(T.hint)}>{reveal.missingBiscuit}</p>
+            )}
+            <p className={cn(T.code, "text-muted-foreground")}>
+              id: {reveal.capabilityId}
+            </p>
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Checkbox
                 checked={revealAcknowledged}
                 onCheckedChange={(v) => setRevealAcknowledged(v === true)}
               />
-              <span>I&apos;ve handed this token to the agent.</span>
+              <span>I&apos;ve handed these tokens to the agent.</span>
             </label>
           </div>
           <DialogFooter>
@@ -492,7 +498,7 @@ export function IssueCapabilityDialog({
           <FormField
             label="Max Biscuit copies"
             error={maxCopiesError}
-            hint="Copies whose holders set limits of their own, counted with those of every capability delegated from this one. A Biscuit is issued only with the share op."
+            hint="Copies whose holders set limits of their own, counted with those of every capability delegated from this one."
           >
             {(control) => (
               <LimitInput
@@ -508,5 +514,41 @@ export function IssueCapabilityDialog({
         </FormRow>
       </FormSection>
     </FormDialog>
+  );
+}
+
+/** One secret the reveal panel shows once: read-only, selected on focus. */
+function RevealedSecret({
+  id,
+  label,
+  hint,
+  value,
+  onCopy,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  value: string;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex gap-2">
+        <textarea
+          id={id}
+          readOnly
+          value={value}
+          className="flex-1 rounded-md border border-input bg-background px-2 py-2 font-mono text-xs"
+          rows={4}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+        <Button variant="outline" onClick={onCopy} type="button">
+          <ClipboardDocumentIcon className="size-4" />
+          Copy
+        </Button>
+      </div>
+      {hint ? <p className={cn(T.hint)}>{hint}</p> : null}
+    </div>
   );
 }
