@@ -369,7 +369,11 @@ _JWT_MALFORMED = "jwt: malformed token"
 _JWT_EXPIRED = "jwt: token expired"
 _API_TOKEN_NOT_FOUND = "api_token: token not found"
 _API_TOKEN_REVOKED = "api_token: token revoked"
-_CAPABILITY_INVALID = "capability: invalid signature"
+_CAPABILITY_UNKNOWN = "invalid token: not a capability this server issued"
+"""The fake's words for a capability it did not issue. The server's code and
+reason, not its message: that is its library's account of why the token
+would not decode or verify, often in Go's own wording
+(sdk/testdata/unknown_capabilities.json)."""
 _CAPABILITY_REVOKED = "capability: revoked"
 _TENANT_MISMATCH = "URL tenant does not match token tenant"
 _NAMES_SPAN_TENANTS = "resource names in one request must name the same tenant"
@@ -563,6 +567,16 @@ def _capability_refusal(
         reason=error_reason_pb2.ErrorReason.Name(reason), domain=ERROR_DOMAIN
     )
     return ConnectError(code, message, error_details([info]))
+
+
+def _unknown_capability() -> ConnectError:
+    """The server's refusal of a capability it did not issue: its verifier's
+    code and reason."""
+    return _capability_refusal(
+        Code.PERMISSION_DENIED,
+        error_reason_pb2.ERROR_REASON_CAPABILITY_INVALID_TOKEN,
+        _CAPABILITY_UNKNOWN,
+    )
 
 
 def _audience_refusal(audience: Iterable[str], plane: str) -> ConnectError | None:
@@ -865,7 +879,7 @@ class _CapabilityService(CapabilityServiceSync):
                 credential = fake._biscuit_of_copy_locked(presented)
             parent = fake._capabilities.get(credential.capability) if credential else None
         if credential is None or parent is None:
-            raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_INVALID)
+            raise _unknown_capability()
         if credential.revoked:
             raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_REVOKED)
         parent_ops = list(copy.caveats.ops if copy is not None else parent.msg.caveats.ops)
@@ -1504,11 +1518,15 @@ class FakePaladin(
             )
         token = _capability_token(headers.get(HEADER_CAPABILITY.lower(), ""), authz)
         if token:
+            with self._lock:
+                known = token in self._credentials or self._biscuit_of_copy_locked(token)
+            if not known:
+                raise _unknown_capability()
             return self._verify(
                 token,
                 _CAPABILITY_PREFIX,
                 Code.PERMISSION_DENIED,
-                _CAPABILITY_INVALID,
+                _CAPABILITY_UNKNOWN,
                 _CAPABILITY_REVOKED,
             )
         if not authz:

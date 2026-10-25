@@ -83,6 +83,14 @@ here.
 
 
 
+## Unreleased — the Python fake refuses an unknown capability as the server does
+
+- **`paladin.testing` under `strict_auth` refuses a capability it did not
+  issue with `PERMISSION_DENIED` and reason `CAPABILITY_INVALID_TOKEN`**, as
+  the server and `paladintest` do, rather than `capability: invalid
+  signature` with no reason. A test that matched the old message must match
+  the reason instead; the message stays the fake's own.
+
 ## sdk/go/v0.114.0, sdk/python/v0.115.0 — the fakes seal a real Biscuit
 
 - **`paladin.testing`'s Biscuit is a real one with the `biscuit` extra**,

@@ -567,7 +567,9 @@ verifier, and is refused in its words, as on the server.
 Every narrowing of a copy is a row of
 `sdk/testdata/biscuit_attenuations.json`, which the server's interceptor
 chain, this fake and the Python SDK's run alike (`auth/sdk_fake_biscuit_fidelity_test.go`),
-each required to give the row's code, reason and message.
+each required to give the row's code, reason and message. A capability it did
+not issue is refused in the verifier's words, as the server refuses it,
+held by `sdk/testdata/unknown_capabilities.json`.
 
 Where it is checked against the server: a backend test
 (`capabilityh/sdk_fake_fidelity_test.go`) runs every `Issue` and `Delegate`
