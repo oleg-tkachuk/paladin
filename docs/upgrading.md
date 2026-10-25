@@ -83,6 +83,14 @@ here.
 
 
 
+## Unreleased — the Python fake refuses an unknown capability as the server does
+
+- **`paladin.testing` under `strict_auth` refuses a capability it did not
+  issue with `PERMISSION_DENIED` and reason `CAPABILITY_INVALID_TOKEN`**, as
+  the server and `paladintest` do, rather than `capability: invalid
+  signature` with no reason. A test that matched the old message must match
+  the reason instead; the message stays the fake's own.
+
 ## sdk/go/v0.115.0, sdk/python/v0.116.0 — an operation names a copy's key prefix and a tag update's tags
 
 - **`OperationTarget` carries `destination_key_prefix` and `tags`**: what

@@ -82,19 +82,6 @@ the same commit. Treat this file like a runtime invariant.
   after the newest `protobuf-py`, and the wheel compatibility cells green.
 - **Blockers:** connectrpc/connect-py#423.
 
-### The Python fake refuses an unknown capability in its own words
-
-- **Status:** Deferred.
-- **Reason:** under `strict_auth`, `paladin.testing` answers a capability it
-  did not issue with `capability: invalid signature` and no reason. The
-  server hands such a token to its verifier and answers in limes's words
-  with `CAPABILITY_INVALID_TOKEN` or another reason, as `paladintest` now
-  does; the Python fake has no limes to give those words.
-- **Definition of Done:** a shared table of malformed and foreign
-  capabilities, held by the server's interceptor chain and both fakes, and
-  the Python fake giving its answers.
-- **Blockers:** none.
-
 ### The Python SDK still supports Python 3.13
 
 - **Status:** Blocked.

@@ -168,7 +168,6 @@ JWT_MALFORMED = (Code.UNAUTHENTICATED, "jwt: malformed token")
 JWT_EXPIRED = (Code.UNAUTHENTICATED, "jwt: token expired")
 API_TOKEN_NOT_FOUND = (Code.UNAUTHENTICATED, "api_token: token not found")
 API_TOKEN_REVOKED = (Code.UNAUTHENTICATED, "api_token: token revoked")
-CAPABILITY_INVALID = (Code.PERMISSION_DENIED, "capability: invalid signature")
 CAPABILITY_REVOKED = (Code.PERMISSION_DENIED, "capability: revoked")
 TENANT_MISMATCH = (Code.PERMISSION_DENIED, "URL tenant does not match token tenant")
 UPLOAD_TENANT_MISMATCH = (Code.PERMISSION_DENIED, "tenant mismatch")
@@ -237,7 +236,6 @@ def test_strict_auth_refuses_what_the_server_refuses(strict: FakePaladin) -> Non
         ({"headers": {"Authorization": BASIC_CREDENTIAL}}, EXPECTED_BEARER),
         ({"bearer_token": "not-issued"}, JWT_MALFORMED),
         ({"api_token": "paladin_pat_notissued"}, API_TOKEN_NOT_FOUND),
-        ({"capability": "not-issued"}, CAPABILITY_INVALID),
         ({"bearer_token": strict.issue_capability(strict.tenant)}, JWT_MALFORMED),
         ({"bearer_token": strict.issue_bearer_token(other)}, TENANT_MISMATCH),
         ({"api_token": strict.issue_api_token(other)}, TENANT_MISMATCH),

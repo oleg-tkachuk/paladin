@@ -547,7 +547,11 @@ charges a request only when a deployment sets a price per request, which it
 does not by default. The server, the Go SDK's fake and this one are held to
 the same answers by `sdk/testdata/capability_refusals.json`, and this fake's
 reading of a resource prefix to limes's by
-`sdk/testdata/capability_resource_matches.json`.
+`sdk/testdata/capability_resource_matches.json`. A capability it did not
+issue is refused with the server's code and reason —
+`PERMISSION_DENIED`, `CAPABILITY_INVALID_TOKEN` — held by
+`sdk/testdata/unknown_capabilities.json`; the message is the fake's own,
+where the server's is its library's account of the decoding error.
 
 It checks only that: the credential is one it issued, not revoked, of the
 tenant the call names, and a capability's caveats as above. It verifies no
