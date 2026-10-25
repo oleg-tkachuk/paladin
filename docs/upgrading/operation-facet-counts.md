@@ -1,4 +1,4 @@
-## Unreleased — operation listings narrow and count by state and type
+## sdk/go/v0.117.0, sdk/python/v0.118.0 — operation listings narrow and count by state and type
 
 - **`ListOperationsRequest` gains `facets` and `count_facets`** on both the
   admin and the data plane. `facets` (`OperationFacets`) narrows the listing
