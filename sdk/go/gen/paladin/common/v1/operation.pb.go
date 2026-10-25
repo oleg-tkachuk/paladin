@@ -99,7 +99,14 @@ type OperationTarget struct {
 	// A delete that removes the objects for good rather than to the trash.
 	Permanent bool `protobuf:"varint,4,opt,name=permanent,proto3" json:"permanent,omitempty"`
 	// A tag update that replaces each object's tags rather than merging.
-	Replace       bool `protobuf:"varint,5,opt,name=replace,proto3" json:"replace,omitempty"`
+	Replace bool `protobuf:"varint,5,opt,name=replace,proto3" json:"replace,omitempty"`
+	// A copy's destination key prefix, as its request named it; empty for a
+	// copy that keeps the source's keys, and for the rest.
+	DestinationKeyPrefix string `protobuf:"bytes,6,opt,name=destination_key_prefix,json=destinationKeyPrefix,proto3" json:"destination_key_prefix,omitempty"`
+	// A tag update's tags, as its request named them; empty for the rest. With
+	// the fields above, what a retry of the objects it could not act on asks
+	// for again.
+	Tags          map[string]string `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,11 +176,25 @@ func (x *OperationTarget) GetReplace() bool {
 	return false
 }
 
+func (x *OperationTarget) GetDestinationKeyPrefix() string {
+	if x != nil {
+		return x.DestinationKeyPrefix
+	}
+	return ""
+}
+
+func (x *OperationTarget) GetTags() map[string]string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
 var File_paladin_common_v1_operation_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_operation_proto_rawDesc = "" +
 	"\n" +
-	"!paladin/common/v1/operation.proto\x12\x11paladin.common.v1\"\xae\x01\n" +
+	"!paladin/common/v1/operation.proto\x12\x11paladin.common.v1\"\xdf\x02\n" +
 	"\x0fOperationTarget\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x01 \x01(\tR\n" +
@@ -181,7 +202,12 @@ const file_paladin_common_v1_operation_proto_rawDesc = "" +
 	"\vdestination\x18\x02 \x01(\tR\vdestination\x12!\n" +
 	"\fobject_count\x18\x03 \x01(\x05R\vobjectCount\x12\x1c\n" +
 	"\tpermanent\x18\x04 \x01(\bR\tpermanent\x12\x18\n" +
-	"\areplace\x18\x05 \x01(\bR\areplace*\xc5\x01\n" +
+	"\areplace\x18\x05 \x01(\bR\areplace\x124\n" +
+	"\x16destination_key_prefix\x18\x06 \x01(\tR\x14destinationKeyPrefix\x12@\n" +
+	"\x04tags\x18\a \x03(\v2,.paladin.common.v1.OperationTarget.TagsEntryR\x04tags\x1a7\n" +
+	"\tTagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xc5\x01\n" +
 	"\x0eOperationState\x12\x1f\n" +
 	"\x1bOPERATION_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17OPERATION_STATE_PENDING\x10\x01\x12\x1b\n" +
@@ -203,17 +229,19 @@ func file_paladin_common_v1_operation_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_common_v1_operation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_common_v1_operation_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_paladin_common_v1_operation_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_paladin_common_v1_operation_proto_goTypes = []any{
 	(OperationState)(0),     // 0: paladin.common.v1.OperationState
 	(*OperationTarget)(nil), // 1: paladin.common.v1.OperationTarget
+	nil,                     // 2: paladin.common.v1.OperationTarget.TagsEntry
 }
 var file_paladin_common_v1_operation_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: paladin.common.v1.OperationTarget.tags:type_name -> paladin.common.v1.OperationTarget.TagsEntry
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_paladin_common_v1_operation_proto_init() }
@@ -227,7 +255,7 @@ func file_paladin_common_v1_operation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_common_v1_operation_proto_rawDesc), len(file_paladin_common_v1_operation_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

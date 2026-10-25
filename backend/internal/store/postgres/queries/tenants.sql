@@ -154,3 +154,37 @@ SELECT count(*) FROM tenants
 WHERE deleted_at IS NOT NULL
   AND deleted_at + make_interval(secs => sqlc.arg('trash_retention_seconds')::float8)
       <= sqlc.arg('as_of')::timestamptz;
+
+-- name: ListPurgeAPITokens :many
+-- The tenant's API tokens a purge would remove, revoked ones included, in
+-- issue order, up to the preview's limit. Under RLS: the caller acts on the
+-- tenant (auth.WithActingTenant).
+SELECT id, name
+FROM api_tokens
+WHERE tenant_id = sqlc.arg('tenant_id')
+ORDER BY created_at, id
+LIMIT sqlc.arg('max_rows');
+
+-- name: CountPurgeAPITokens :one
+SELECT count(*) FROM api_tokens WHERE tenant_id = sqlc.arg('tenant_id');
+
+-- name: ListPurgeEventSubscriptions :many
+-- The tenant's event subscriptions a purge would remove, in creation order,
+-- up to the preview's limit.
+SELECT id, sink_kind
+FROM event_subscriptions
+WHERE tenant_id = sqlc.arg('tenant_id')
+ORDER BY created_at, id
+LIMIT sqlc.arg('max_rows');
+
+-- name: CountPurgeEventSubscriptions :one
+SELECT count(*) FROM event_subscriptions WHERE tenant_id = sqlc.arg('tenant_id');
+
+-- name: CountPurgeBlockers :one
+-- The ON DELETE RESTRICT children of the tenant, which refuse its purge
+-- while any is left (docs/deletion-semantics.md). Trashed collections count:
+-- the foreign key does not tell them apart.
+SELECT
+    (SELECT count(*) FROM collections c WHERE c.tenant_id = sqlc.arg('tenant_id'))::bigint AS collections,
+    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id'))::bigint AS buckets,
+    (SELECT count(*) FROM users u WHERE u.tenant_id = sqlc.arg('tenant_id'))::bigint AS users;

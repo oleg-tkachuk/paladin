@@ -395,6 +395,31 @@ describe("ConfirmModal affected list", () => {
     ]);
   });
 
+  // A purge removes several kinds, each listed under its own heading.
+  it("lists several in the order given", () => {
+    render(
+      <ConfirmModal
+        {...baseProps}
+        affected={[
+          { heading: "2 API tokens", items: ["ci", "deploy"] },
+          { heading: "Also removed", items: ["Quotas"], mono: false },
+        ]}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    const lists = screen.getAllByRole("list");
+    expect(
+      lists.map((l) => l.getAttribute("aria-labelledby") && l.textContent),
+    ).toEqual(["cideploy", "Quotas"]);
+    expect(
+      screen.getByRole("list", { name: "2 API tokens" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "Also removed" }),
+    ).toBeInTheDocument();
+  });
+
   // A selection can reach past the rows the page has loaded.
   it("counts a total beyond the names it was given", () => {
     render(

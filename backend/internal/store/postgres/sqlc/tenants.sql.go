@@ -11,6 +11,51 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPurgeAPITokens = `-- name: CountPurgeAPITokens :one
+SELECT count(*) FROM api_tokens WHERE tenant_id = $1
+`
+
+func (q *Queries) CountPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPurgeAPITokens, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPurgeBlockers = `-- name: CountPurgeBlockers :one
+SELECT
+    (SELECT count(*) FROM collections c WHERE c.tenant_id = $1)::bigint AS collections,
+    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = $1)::bigint AS buckets,
+    (SELECT count(*) FROM users u WHERE u.tenant_id = $1)::bigint AS users
+`
+
+type CountPurgeBlockersRow struct {
+	Collections int64 `json:"collections"`
+	Buckets     int64 `json:"buckets"`
+	Users       int64 `json:"users"`
+}
+
+// The ON DELETE RESTRICT children of the tenant, which refuse its purge
+// while any is left (docs/deletion-semantics.md). Trashed collections count:
+// the foreign key does not tell them apart.
+func (q *Queries) CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error) {
+	row := q.db.QueryRow(ctx, countPurgeBlockers, tenantID)
+	var i CountPurgeBlockersRow
+	err := row.Scan(&i.Collections, &i.Buckets, &i.Users)
+	return i, err
+}
+
+const countPurgeEventSubscriptions = `-- name: CountPurgeEventSubscriptions :one
+SELECT count(*) FROM event_subscriptions WHERE tenant_id = $1
+`
+
+func (q *Queries) CountPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPurgeEventSubscriptions, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTenantsPastTrashRetention = `-- name: CountTenantsPastTrashRetention :one
 SELECT count(*) FROM tenants
 WHERE deleted_at IS NOT NULL
@@ -185,6 +230,77 @@ func (q *Queries) HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expected
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const listPurgeAPITokens = `-- name: ListPurgeAPITokens :many
+SELECT id, name
+FROM api_tokens
+WHERE tenant_id = $1
+ORDER BY created_at, id
+LIMIT $2
+`
+
+type ListPurgeAPITokensRow struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+}
+
+// The tenant's API tokens a purge would remove, revoked ones included, in
+// issue order, up to the preview's limit. Under RLS: the caller acts on the
+// tenant (auth.WithActingTenant).
+func (q *Queries) ListPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID, maxRows int32) ([]ListPurgeAPITokensRow, error) {
+	rows, err := q.db.Query(ctx, listPurgeAPITokens, tenantID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPurgeAPITokensRow
+	for rows.Next() {
+		var i ListPurgeAPITokensRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPurgeEventSubscriptions = `-- name: ListPurgeEventSubscriptions :many
+SELECT id, sink_kind
+FROM event_subscriptions
+WHERE tenant_id = $1
+ORDER BY created_at, id
+LIMIT $2
+`
+
+type ListPurgeEventSubscriptionsRow struct {
+	ID       pgtype.UUID   `json:"id"`
+	SinkKind EventSinkKind `json:"sink_kind"`
+}
+
+// The tenant's event subscriptions a purge would remove, in creation order,
+// up to the preview's limit.
+func (q *Queries) ListPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, maxRows int32) ([]ListPurgeEventSubscriptionsRow, error) {
+	rows, err := q.db.Query(ctx, listPurgeEventSubscriptions, tenantID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPurgeEventSubscriptionsRow
+	for rows.Next() {
+		var i ListPurgeEventSubscriptionsRow
+		if err := rows.Scan(&i.ID, &i.SinkKind); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTenants = `-- name: ListTenants :many

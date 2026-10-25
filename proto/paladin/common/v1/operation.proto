@@ -32,4 +32,11 @@ message OperationTarget {
   bool permanent = 4;
   // A tag update that replaces each object's tags rather than merging.
   bool replace = 5;
+  // A copy's destination key prefix, as its request named it; empty for a
+  // copy that keeps the source's keys, and for the rest.
+  string destination_key_prefix = 6;
+  // A tag update's tags, as its request named them; empty for the rest. With
+  // the fields above, what a retry of the objects it could not act on asks
+  // for again.
+  map<string, string> tags = 7;
 }

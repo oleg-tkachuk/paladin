@@ -233,18 +233,36 @@ export function OperationPanel({
 async function startRetry(req: RetryRequest): Promise<void> {
   const items = req.names.map((name) => ({ name, collection: req.parent }));
   await Promise.all(
-    selectorBatches(items).map(({ names }) =>
-      req.kind === "delete"
-        ? batchClient.batchDeleteObjects({
+    selectorBatches(items).map(({ names }) => {
+      const selector = { names, filter: "" };
+      switch (req.kind) {
+        case "delete":
+          return batchClient.batchDeleteObjects({
             parent: req.parent,
-            selector: { names, filter: "" },
+            selector,
             permanent: req.permanent,
-          })
-        : batchClient.batchRestoreObjects({
+          });
+        case "restore":
+          return batchClient.batchRestoreObjects({
             parent: req.parent,
-            selector: { names, filter: "" },
-          }),
-    ),
+            selector,
+          });
+        case "copy":
+          return batchClient.batchCopyObjects({
+            sourceParent: req.parent,
+            selector,
+            destinationCollection: req.destination,
+            destinationKeyPrefix: req.keyPrefix,
+          });
+        case "tags":
+          return batchClient.batchUpdateTags({
+            parent: req.parent,
+            selector,
+            tags: req.tags,
+            replace: req.replace,
+          });
+      }
+    }),
   );
 }
 

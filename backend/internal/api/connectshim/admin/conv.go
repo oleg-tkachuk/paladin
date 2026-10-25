@@ -19,6 +19,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/apitokenh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
@@ -425,7 +427,7 @@ func eventSubToProto(s *admindomain.EventSubscription) *pb.EventSubscription {
 		return nil
 	}
 	out := &pb.EventSubscription{
-		Name:            fmt.Sprintf("tenants/%s/eventSubscriptions/%s", s.TenantID, s.SubscriptionID),
+		Name:            subscriptionName(s.TenantID, s.SubscriptionID),
 		TenantId:        s.TenantID.String(),
 		Filter:          s.CELFilter,
 		Disabled:        s.Disabled,
@@ -511,6 +513,12 @@ func bucketNameParts(name string) (backend, bucket string, err error) {
 	return parts[1], parts[3], nil
 }
 
+// subscriptionName is the resource name of tenant's event subscription id,
+// which subscriptionFromName splits.
+func subscriptionName(tenant, id uuid.UUID) string {
+	return fmt.Sprintf("tenants/%s/eventSubscriptions/%s", tenant, id)
+}
+
 // subscriptionFromName splits "tenants/{tenant}/eventSubscriptions/{id}".
 // The tenant segment is returned, not discarded: the handler authorises
 // against it and scopes the connection to it before reading, so a
@@ -541,4 +549,34 @@ func bucketGrantToProto(backendID, bucketName string, g admindomain.BucketGrant)
 		GrantedBy: g.GrantedBy,
 		GrantedAt: timestamppb.New(g.GrantedAt),
 	}
+}
+
+// purgePreviewToProto is p, tenant's purge preview, as the contract answers
+// it: blockers only for a kind the tenant holds any of, in the order they are
+// removed in.
+func purgePreviewToProto(tenant uuid.UUID, p *tenanth.PurgePreview) *pb.PreviewPurgeTenantResponse {
+	out := &pb.PreviewPurgeTenantResponse{
+		ApiTokenCount:          p.APITokenCount,
+		EventSubscriptionCount: p.SubscriptionCount,
+		CapabilityCount:        p.CapabilityCount,
+	}
+	for _, t := range p.APITokens {
+		out.ApiTokens = append(out.ApiTokens, &pb.PurgedResource{Name: apitokenh.TokenName(tenant, t.ID), DisplayName: t.Name})
+	}
+	for _, s := range p.Subscriptions {
+		out.EventSubscriptions = append(out.EventSubscriptions, &pb.PurgedResource{Name: subscriptionName(tenant, s.ID), DisplayName: s.SinkKind})
+	}
+	for _, b := range []struct {
+		kind  pb.PurgeBlockerKind
+		count int64
+	}{
+		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_COLLECTIONS, p.Blockers.Collections},
+		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS, p.Blockers.Buckets},
+		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_USERS, p.Blockers.Users},
+	} {
+		if b.count > 0 {
+			out.Blockers = append(out.Blockers, &pb.PurgeBlocker{Kind: b.kind, Count: b.count})
+		}
+	}
+	return out
 }

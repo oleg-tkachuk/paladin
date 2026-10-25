@@ -19,7 +19,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.admin.v1.types_pb2 import Tenant
 from pyqwest import Client, SyncClient
 
-from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PurgeTenantRequest, PurgeTenantResponse, RenameTenantSlugRequest, ResolveRenamedSlugRequest, ResolveRenamedSlugResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
+from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, RenameTenantSlugRequest, ResolveRenamedSlugRequest, ResolveRenamedSlugResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -107,6 +107,15 @@ class TenantService(Protocol):
         an active tenant (operators have to soft-delete first) so the
         two-step recovery window is preserved by default. Idempotent on
         a missing row.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def preview_purge_tenant(self, request: PreviewPurgeTenantRequest, ctx: RequestContext[PreviewPurgeTenantRequest, PreviewPurgeTenantResponse], /) -> PreviewPurgeTenantResponse:
+        """
+        PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+        remove with the tenant and what would refuse it: for the confirmation
+        an operator reads before a delete nothing undoes. The tenant may be
+        active or trashed; the answer is the same either way.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -266,6 +275,16 @@ class TenantServiceASGIApplication(ConnectASGIApplication[TenantService]):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=svc.purge_tenant,
+                ),
+                "/paladin.admin.v1.TenantService/PreviewPurgeTenant": Endpoint.unary(
+                    method=MethodInfo(
+                        name="PreviewPurgeTenant",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=PreviewPurgeTenantRequest,
+                        output=PreviewPurgeTenantResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.preview_purge_tenant,
                 ),
                 "/paladin.admin.v1.TenantService/RenameTenantSlug": Endpoint.unary(
                     method=MethodInfo(
@@ -589,6 +608,34 @@ class TenantServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def preview_purge_tenant(
+        self,
+        request: PreviewPurgeTenantRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> PreviewPurgeTenantResponse:
+        """
+        PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+        remove with the tenant and what would refuse it: for the confirmation
+        an operator reads before a delete nothing undoes. The tenant may be
+        active or trashed; the answer is the same either way.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="PreviewPurgeTenant",
+                service_name="paladin.admin.v1.TenantService",
+                input=PreviewPurgeTenantRequest,
+                output=PreviewPurgeTenantResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
     async def rename_tenant_slug(
         self,
         request: RenameTenantSlugRequest,
@@ -852,6 +899,15 @@ class TenantServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def preview_purge_tenant(self, request: PreviewPurgeTenantRequest, ctx: RequestContext[PreviewPurgeTenantRequest, PreviewPurgeTenantResponse], /) -> PreviewPurgeTenantResponse:
+        """
+        PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+        remove with the tenant and what would refuse it: for the confirmation
+        an operator reads before a delete nothing undoes. The tenant may be
+        active or trashed; the answer is the same either way.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def rename_tenant_slug(self, request: RenameTenantSlugRequest, ctx: RequestContext[RenameTenantSlugRequest, Tenant], /) -> Tenant:
         """
         RenameTenantSlug rewrites the tenant's `slug` and rewrites every
@@ -1006,6 +1062,16 @@ class TenantServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.IDEMPOTENT,
                     ),
                     function=service.purge_tenant,
+                ),
+                "/paladin.admin.v1.TenantService/PreviewPurgeTenant": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="PreviewPurgeTenant",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=PreviewPurgeTenantRequest,
+                        output=PreviewPurgeTenantResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.preview_purge_tenant,
                 ),
                 "/paladin.admin.v1.TenantService/RenameTenantSlug": EndpointSync.unary(
                     method=MethodInfo(
@@ -1320,6 +1386,33 @@ class TenantServiceClientSync(ConnectClientSync):
             ),
             headers=headers,
             timeout_ms=timeout_ms,
+        )
+    def preview_purge_tenant(
+        self,
+        request: PreviewPurgeTenantRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> PreviewPurgeTenantResponse:
+        """
+        PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+        remove with the tenant and what would refuse it: for the confirmation
+        an operator reads before a delete nothing undoes. The tenant may be
+        active or trashed; the answer is the same either way.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="PreviewPurgeTenant",
+                service_name="paladin.admin.v1.TenantService",
+                input=PreviewPurgeTenantRequest,
+                output=PreviewPurgeTenantResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
         )
     def rename_tenant_slug(
         self,

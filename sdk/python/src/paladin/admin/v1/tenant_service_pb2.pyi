@@ -7,12 +7,24 @@ from paladin.admin.v1 import types_pb2 as _types_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class PurgeBlockerKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    PURGE_BLOCKER_KIND_UNSPECIFIED: _ClassVar[PurgeBlockerKind]
+    PURGE_BLOCKER_KIND_COLLECTIONS: _ClassVar[PurgeBlockerKind]
+    PURGE_BLOCKER_KIND_BUCKETS: _ClassVar[PurgeBlockerKind]
+    PURGE_BLOCKER_KIND_USERS: _ClassVar[PurgeBlockerKind]
+PURGE_BLOCKER_KIND_UNSPECIFIED: PurgeBlockerKind
+PURGE_BLOCKER_KIND_COLLECTIONS: PurgeBlockerKind
+PURGE_BLOCKER_KIND_BUCKETS: PurgeBlockerKind
+PURGE_BLOCKER_KIND_USERS: PurgeBlockerKind
 
 class CreateTenantRequest(_message.Message):
     __slots__ = ("tenant_id", "tenant", "default_bucket")
@@ -99,6 +111,44 @@ class PurgeTenantRequest(_message.Message):
 class PurgeTenantResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class PreviewPurgeTenantRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class PreviewPurgeTenantResponse(_message.Message):
+    __slots__ = ("api_tokens", "api_token_count", "event_subscriptions", "event_subscription_count", "capability_count", "blockers")
+    API_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    API_TOKEN_COUNT_FIELD_NUMBER: _ClassVar[int]
+    EVENT_SUBSCRIPTIONS_FIELD_NUMBER: _ClassVar[int]
+    EVENT_SUBSCRIPTION_COUNT_FIELD_NUMBER: _ClassVar[int]
+    CAPABILITY_COUNT_FIELD_NUMBER: _ClassVar[int]
+    BLOCKERS_FIELD_NUMBER: _ClassVar[int]
+    api_tokens: _containers.RepeatedCompositeFieldContainer[PurgedResource]
+    api_token_count: int
+    event_subscriptions: _containers.RepeatedCompositeFieldContainer[PurgedResource]
+    event_subscription_count: int
+    capability_count: int
+    blockers: _containers.RepeatedCompositeFieldContainer[PurgeBlocker]
+    def __init__(self, api_tokens: _Optional[_Iterable[_Union[PurgedResource, _Mapping]]] = ..., api_token_count: _Optional[int] = ..., event_subscriptions: _Optional[_Iterable[_Union[PurgedResource, _Mapping]]] = ..., event_subscription_count: _Optional[int] = ..., capability_count: _Optional[int] = ..., blockers: _Optional[_Iterable[_Union[PurgeBlocker, _Mapping]]] = ...) -> None: ...
+
+class PurgedResource(_message.Message):
+    __slots__ = ("name", "display_name")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    display_name: str
+    def __init__(self, name: _Optional[str] = ..., display_name: _Optional[str] = ...) -> None: ...
+
+class PurgeBlocker(_message.Message):
+    __slots__ = ("kind", "count")
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    kind: PurgeBlockerKind
+    count: int
+    def __init__(self, kind: _Optional[_Union[PurgeBlockerKind, str]] = ..., count: _Optional[int] = ...) -> None: ...
 
 class RenameTenantSlugRequest(_message.Message):
     __slots__ = ("name", "resource_version", "new_slug")

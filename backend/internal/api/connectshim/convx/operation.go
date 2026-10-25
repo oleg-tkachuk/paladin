@@ -109,10 +109,12 @@ func OperationTarget(opType string, metadata []byte) *commonpb.OperationTarget {
 		return nil
 	}
 	return &commonpb.OperationTarget{
-		Collection:  t.Collection,
-		Destination: t.Destination,
-		ObjectCount: safecast.Int32(t.ObjectCount),
-		Permanent:   t.Permanent,
-		Replace:     t.Replace,
+		Collection:           t.Collection,
+		Destination:          t.Destination,
+		ObjectCount:          safecast.Int32(t.ObjectCount),
+		Permanent:            t.Permanent,
+		Replace:              t.Replace,
+		DestinationKeyPrefix: t.KeyPrefix,
+		Tags:                 t.Tags,
 	}
 }
