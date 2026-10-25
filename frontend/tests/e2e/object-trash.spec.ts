@@ -10,6 +10,8 @@
  * These run against the object trash (per-collection), not the tenant trash
  * covered by trash.spec.ts.
  */
+import { type Page } from "@playwright/test";
+
 import { test, expect, type MakeCollection } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import {
@@ -19,6 +21,17 @@ import {
   softDeleteObject,
 } from "./fixtures/seed";
 import { gotoSettled } from "./fixtures/navigate";
+import { NO_DURATION } from "@/lib/format/duration";
+import { PAGE_TABLE, tableParam } from "@/lib/table/urlState";
+
+/** How long a seeded row, the panel or a confirmed action takes to show. */
+const SETTLE_MS = 10_000;
+/** The URL parameter the trash keeps its open object under. */
+const OPEN_PARAM = tableParam("row", PAGE_TABLE);
+/** The panel's field for how long the object has sat in the trash. */
+const IN_TRASH_FOR = "In trash for";
+/** The word the purge confirmation asks to be typed. */
+const PURGE_WORD = "purge";
 
 /** Tenant + physical bucket + collection — the same scope
  *  object-lifecycle.spec.ts builds, since these tests also move real bytes. */
@@ -33,6 +46,16 @@ async function seedScope(makeCollection: MakeCollection) {
  *  so it is encoded as a single path segment. */
 function trashURL(tenantId: string, collection: string): string {
   return `/tenants/${tenantId}/collections/${encodeURIComponent(collection)}/trash`;
+}
+
+/** The last segment of an object's key: what its row and panel are named. */
+function baseName(key: string): string {
+  return key.split("/").pop() ?? key;
+}
+
+/** `?id=<objectId>` (or `&id=`) in the address bar. */
+function openParamRE(objectId: string): RegExp {
+  return new RegExp(`[?&]${OPEN_PARAM}=${objectId}(&|$)`);
 }
 
 test.describe("Object trash — version + restore", () => {
@@ -134,5 +157,156 @@ test.describe("Object trash — holds its collection", () => {
     await expect(
       page.getByRole("row").filter({ hasText: obj.objectId }),
     ).toBeVisible({ timeout: 10_000 });
+  });
+});
+
+// The trashed object's record opens in the detail panel beside the list, its
+// id in the URL, with Restore and Purge along the bottom. The unit tests
+// render the panel alone; these drive it on the page, against the server.
+test.describe("Object trash — detail panel", () => {
+  /** A soft-deleted object, and the trash page listing it. */
+  async function trashedObject(page: Page, makeCollection: MakeCollection) {
+    await loginAsAdmin(page);
+    const { tenantId, collection } = await seedScope(makeCollection);
+    const obj = await seedObject({ tenantId, collection });
+    await softDeleteObject(obj.name);
+    return { tenantId, collection, obj };
+  }
+
+  /** The panel for one object: a dialog named after its key. */
+  function panelFor(page: Page, obj: { key: string }) {
+    return page.getByRole("dialog", { name: baseName(obj.key) });
+  }
+
+  test("a clicked row opens its panel, with the id in the URL", async ({
+    page,
+    makeCollection,
+  }) => {
+    const { tenantId, collection, obj } = await trashedObject(
+      page,
+      makeCollection,
+    );
+    await gotoSettled(page, trashURL(tenantId, collection));
+
+    const row = page.getByRole("row").filter({ hasText: obj.objectId });
+    await expect(row).toBeVisible({ timeout: SETTLE_MS });
+    await row.getByText(baseName(obj.key), { exact: true }).click();
+
+    const panel = panelFor(page, obj);
+    await expect(panel).toBeVisible({ timeout: SETTLE_MS });
+    await expect(panel).toContainText(obj.objectId);
+    await expect(page).toHaveURL(openParamRE(obj.objectId));
+
+    // How long it has been in the trash is measured from the deletion: a
+    // missing deletion time, or one the page could not measure, reads as the
+    // empty duration. The exact span depends on the clock, so only that it
+    // was measured is asserted.
+    const field = panel.getByText(IN_TRASH_FOR, { exact: true }).locator("..");
+    await expect(field).toBeVisible();
+    await expect(field).not.toContainText(NO_DURATION);
+    await expect(field).toHaveText(new RegExp(`^${IN_TRASH_FOR}.+`));
+  });
+
+  test("a link with the object's id opens its panel on load", async ({
+    page,
+    makeCollection,
+  }) => {
+    const { tenantId, collection, obj } = await trashedObject(
+      page,
+      makeCollection,
+    );
+    await gotoSettled(
+      page,
+      `${trashURL(tenantId, collection)}?${OPEN_PARAM}=${obj.objectId}`,
+    );
+
+    // The workspace canonicalises the tenant segment; the open object has to
+    // survive that, or the link opens a bare list.
+    await expect(page).toHaveURL(openParamRE(obj.objectId));
+    const panel = panelFor(page, obj);
+    await expect(panel).toBeVisible({ timeout: SETTLE_MS });
+    await expect(panel).toContainText(obj.objectId);
+    await expect(panel.getByText(IN_TRASH_FOR, { exact: true })).toBeVisible();
+
+    // And a reload of that address opens it again.
+    await page.reload();
+    await expect(panelFor(page, obj)).toBeVisible({ timeout: SETTLE_MS });
+  });
+
+  test("restore from the panel is confirmed, then empties the trash", async ({
+    page,
+    makeCollection,
+  }) => {
+    const { tenantId, collection, obj } = await trashedObject(
+      page,
+      makeCollection,
+    );
+    await gotoSettled(
+      page,
+      `${trashURL(tenantId, collection)}?${OPEN_PARAM}=${obj.objectId}`,
+    );
+    const panel = panelFor(page, obj);
+    await expect(panel).toBeVisible({ timeout: SETTLE_MS });
+
+    await panel.getByRole("button", { name: /^Restore$/ }).click();
+    const confirm = page.getByRole("alertdialog", {
+      name: "Restore this object?",
+    });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: /^Restore object$/ }).click();
+
+    // The object has left the trash, so its panel closes and the URL lets it go.
+    await expect(panel).toBeHidden({ timeout: SETTLE_MS });
+    await expect(page).not.toHaveURL(openParamRE(obj.objectId));
+    await expect(
+      page.getByRole("row").filter({ hasText: obj.objectId }),
+    ).toBeHidden({ timeout: SETTLE_MS });
+    await expect(page.getByText(/Trash is empty/i)).toBeVisible({
+      timeout: SETTLE_MS,
+    });
+  });
+
+  test("purge from the panel is typed out, then the object is gone", async ({
+    page,
+    makeCollection,
+  }) => {
+    const { tenantId, collection, obj } = await trashedObject(
+      page,
+      makeCollection,
+    );
+    await gotoSettled(
+      page,
+      `${trashURL(tenantId, collection)}?${OPEN_PARAM}=${obj.objectId}`,
+    );
+    const panel = panelFor(page, obj);
+    await expect(panel).toBeVisible({ timeout: SETTLE_MS });
+
+    await panel.getByRole("button", { name: /^Purge$/ }).click();
+    const confirm = page.getByRole("alertdialog", {
+      name: "Permanently purge this object?",
+    });
+    await expect(confirm).toBeVisible();
+    // A purge destroys the bytes, so it waits for the word to be typed.
+    const purge = confirm.getByRole("button", { name: /^Purge permanently$/ });
+    await expect(purge).toBeDisabled();
+    await confirm
+      .getByRole("textbox", { name: `Type ${PURGE_WORD} to confirm` })
+      .fill(PURGE_WORD);
+    await purge.click();
+
+    await expect(panel).toBeHidden({ timeout: SETTLE_MS });
+    await expect(page).not.toHaveURL(openParamRE(obj.objectId));
+    await expect(page.getByText(/Trash is empty/i)).toBeVisible({
+      timeout: SETTLE_MS,
+    });
+
+    // Gone, not merely out of the list: the link to it now finds nothing.
+    await gotoSettled(
+      page,
+      `${trashURL(tenantId, collection)}?${OPEN_PARAM}=${obj.objectId}`,
+    );
+    await expect(
+      page.getByText(/No object with this id is in the trash/),
+    ).toBeVisible({ timeout: SETTLE_MS });
   });
 });
