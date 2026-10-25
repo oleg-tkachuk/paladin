@@ -30,27 +30,6 @@ When work lands that surfaces *new* deferred items, add them here in
 the same commit. Treat this file like a runtime invariant.
 
 ---
-## Release process
-
-### docs/upgrading.md conflicts with every release that names its sections
-
-- **Status:** Deferred.
-- **Reason:** every change a consumer notices adds a `## Unreleased — …`
-  section at the top of `docs/upgrading.md`, and every SDK or product
-  release rewrites the headings it shipped there
-  (`.github/ci/upgrade-sections.ts`, merged as its own pull request). Both
-  edit the same few lines, so an open pull request that carries a section
-  conflicts with each release that lands before it, and stops merging until
-  the conflict is resolved by hand. On 2026-10-25 #757 and #773 each needed
-  it twice.
-- **Definition of Done:** an open pull request with an upgrade note does not
-  conflict with a release naming another section — for example one file per
-  section under `docs/upgrading/`, named by the change and read in order
-  into the guide, with the release renaming a file's heading rather than a
-  line of a shared one — with tests for the release step that names them.
-- **Blockers:** none.
-
----
 ## Audit log
 
 ### An audit entry does not record the resource's state

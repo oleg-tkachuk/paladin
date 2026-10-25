@@ -25,7 +25,7 @@ pre-1.0, so a breaking change is a minor on its stream until it reaches 1.0.
 A breaking change confined to `sdk/go/` breaks the SDK's API, not the
 product's, so it releases the product as a minor too; one that also touches the server is the
 product's major. Documentation does not decide where a commit belongs:
-a breaking SDK commit that also writes its section of upgrading.md is still
+a breaking SDK commit that also writes its upgrade note is still
 the SDK's alone.
 
 ## The product: `vX.Y.Z`
@@ -199,9 +199,9 @@ stream's first tag is cut by hand, at the version it continues from.
 
 A change that alters what existing code does — a signature, a default, an
 error a caller handled — is breaking even when no signature changes: its
-commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section in
-[upgrading.md](upgrading.md) headed `## vX.Y.Z — …` for the release that
-ships it. Pre-1.0 such a release is only a minor, so its notes list these
+commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section —
+a file `docs/upgrading/<slug>.md` headed `## Unreleased — …`, which the
+release names `## vX.Y.Z — …` and writes into [upgrading.md](upgrading.md). Pre-1.0 such a release is only a minor, so its notes list these
 commits first, under *Behaviour changes*, with a link to that section
 ([`.github/ci/sdk-release.ts`](../.github/ci/sdk-release.ts)).
 
