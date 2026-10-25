@@ -23,9 +23,10 @@ import { errorMessage } from "@/hooks/errorContract";
 import { isUuid } from "@/lib/resources/tenant-resolve";
 import { T } from "@/lib/ui/typography";
 import type { AuditLogEntry } from "@/gen/paladin/admin/v1/types_pb";
+import { stateChange } from "@/components/features/audit/stateChanges";
 
 /** The panel's tabs, in order; the first opens by default. */
-export const AUDIT_ENTRY_TABS = ["summary", "request"] as const;
+export const AUDIT_ENTRY_TABS = ["summary", "changes", "request"] as const;
 export type AuditEntryTab = (typeof AUDIT_ENTRY_TABS)[number];
 
 /**
@@ -41,6 +42,13 @@ export function requestText(bytes: Uint8Array | undefined): string | null {
     return raw;
   }
 }
+
+// What the two states are, so a reader knows where they come from.
+const STATE_HINT =
+  "The resource as its own Get read it just before and just after the action, with secrets redacted. The reads are not part of the action, so a change made between them by someone else shows here too.";
+const NO_STATE =
+  "No state recorded for this action: it changes no single resource, or the resource could not be read.";
+const NO_CHANGE = "The action left the resource as it was.";
 
 // What the request is, so a reader does not take it for the resource's state.
 const REQUEST_HINT =
@@ -97,6 +105,11 @@ export function AuditEntryPanel({
           content: body((entry) => <Summary entry={entry} />),
         },
         {
+          value: "changes",
+          label: "Changes",
+          content: body((entry) => <Changes entry={entry} />),
+        },
+        {
           value: "request",
           label: "Request",
           content: body((entry) => <Request entry={entry} />),
@@ -104,6 +117,62 @@ export function AuditEntryPanel({
       ]}
     />
   );
+}
+
+const pretty = (v: unknown) => JSON.stringify(v, null, 2);
+
+function Changes({ entry }: { entry: AuditLogEntry }) {
+  const change = stateChange(entry.stateBeforeJson, entry.stateAfterJson);
+  switch (change.kind) {
+    case "none":
+      return <p className={T.hint}>{NO_STATE}</p>;
+    case "created":
+      return (
+        <RecordFields>
+          <p className={T.hint}>{STATE_HINT}</p>
+          <RecordBlock label="Created">{pretty(change.after)}</RecordBlock>
+        </RecordFields>
+      );
+    case "removed":
+      return (
+        <RecordFields>
+          <p className={T.hint}>{STATE_HINT}</p>
+          <RecordBlock label="Removed">{pretty(change.before)}</RecordBlock>
+        </RecordFields>
+      );
+    case "changed":
+      return (
+        <RecordFields>
+          <p className={T.hint}>{STATE_HINT}</p>
+          {change.fields.length === 0 ? (
+            <p className={T.hint}>{NO_CHANGE}</p>
+          ) : (
+            <table className="w-full table-fixed text-xs">
+              <thead>
+                <tr className="text-left text-muted-foreground">
+                  <th className="w-1/3 pb-1 font-medium">Field</th>
+                  <th className="pb-1 font-medium">Before</th>
+                  <th className="pb-1 font-medium">After</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                {change.fields.map((f) => (
+                  <tr key={f.path} className="align-top">
+                    <td className="break-all py-1 pr-2">{f.path}</td>
+                    <td className="break-all py-1 pr-2 text-destructive">
+                      {f.before ?? "—"}
+                    </td>
+                    <td className="break-all py-1 text-success">
+                      {f.after ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </RecordFields>
+      );
+  }
 }
 
 function Request({ entry }: { entry: AuditLogEntry }) {

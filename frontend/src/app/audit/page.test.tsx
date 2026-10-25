@@ -34,7 +34,7 @@ vi.mock("@/components/features/audit/ActorName", () => ({
   ActorName: ({ subject }: { subject: string }) => subject,
 }));
 vi.mock("@/components/features/audit/AuditEntryPanel", () => ({
-  AUDIT_ENTRY_TABS: ["summary", "request"],
+  AUDIT_ENTRY_TABS: ["summary", "changes", "request"],
   AuditEntryPanel: ({
     entryId,
     tab,

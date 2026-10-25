@@ -60,8 +60,43 @@ describe("AuditEntryPanel", () => {
     expect(await screen.findByText(/"versioning": true/)).toBeInTheDocument();
     expect(screen.getByText(/not the resource's state/)).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Request" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Changes" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Snapshots" })).toBeNull();
+  });
+
+  it("shows the fields the action changed, before and after", async () => {
+    h.get.mockResolvedValue({
+      ...UPDATE,
+      stateBeforeJson: enc({ name: "tenants/t", display_name: "Old" }),
+      stateAfterJson: enc({ name: "tenants/t", display_name: "New" }),
+    });
+    panel("e1", "changes");
+    expect(await screen.findByText("display_name")).toBeInTheDocument();
+    expect(screen.getByText('"Old"')).toBeInTheDocument();
+    expect(screen.getByText('"New"')).toBeInTheDocument();
+    expect(screen.queryByText("name")).toBeNull();
+  });
+
+  it("shows a resource made, and one removed, whole", async () => {
+    h.get.mockResolvedValue({
+      ...UPDATE,
+      stateAfterJson: enc({ slug: "made" }),
+    });
+    const { unmount } = panel("e1", "changes");
+    expect(await screen.findByText("Created")).toBeInTheDocument();
+    expect(screen.getByText(/"slug": "made"/)).toBeInTheDocument();
+    unmount();
+    h.get.mockResolvedValue({
+      ...UPDATE,
+      stateBeforeJson: enc({ slug: "gone" }),
+    });
+    panel("e2", "changes");
+    expect(await screen.findByText("Removed")).toBeInTheDocument();
+  });
+
+  it("says when no state was recorded", async () => {
+    h.get.mockResolvedValue(UPDATE);
+    panel("e1", "changes");
+    expect(await screen.findByText(/no state recorded/i)).toBeInTheDocument();
   });
 
   it("shows a request that is not JSON as it was stored", async () => {
