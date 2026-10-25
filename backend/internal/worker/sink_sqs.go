@@ -22,6 +22,10 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
 
+// errSQSUnacknowledged is a batch entry SendMessageBatch's answer named
+// neither as sent nor as failed: not known to be on the queue, so retried.
+var errSQSUnacknowledged = errors.New("sqs batch: entry not acknowledged")
+
 // sqsSender is the subset of the AWS SQS client the sink uses, narrowed so
 // tests substitute a fake without the SDK or a live queue.
 type sqsSender interface {
@@ -256,6 +260,9 @@ func (d *Dispatcher) deliverSQSBatch(ctx context.Context, cfg sqsSinkConfig, ite
 		for _, e := range chunk {
 			byID[*e.in.Id] = e.rowID
 			in.Entries = append(in.Entries, e.in)
+			// Unsent until the answer says otherwise: an entry it names
+			// neither way was not acknowledged, and is retried.
+			out[e.rowID] = errSQSUnacknowledged
 		}
 		resp, err := client.SendMessageBatch(ctx, in)
 		if err != nil {

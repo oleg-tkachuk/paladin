@@ -93,7 +93,11 @@ func TestSQSSinkBatchDelivery_Wire(t *testing.T) {
 			Evt: Event{Type: "paladin.bucket.updated", TenantID: "tenant-123", ID: id.String()},
 		})
 	}
-	for id, derr := range d.deliverSQSBatch(ctx, cfg, items) {
+	outcome := d.deliverSQSBatch(ctx, cfg, items)
+	if len(outcome) != n {
+		t.Fatalf("outcomes for %d rows, want all %d", len(outcome), n)
+	}
+	for id, derr := range outcome {
 		if derr != nil {
 			t.Fatalf("row %s failed: %v", id, derr)
 		}
