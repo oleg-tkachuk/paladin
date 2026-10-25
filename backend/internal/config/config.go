@@ -22,6 +22,7 @@ import (
 	goyaml "gopkg.in/yaml.v3"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 //go:embed schema.cue
@@ -333,6 +334,7 @@ func (c *Config) Validate() error {
 const (
 	revocationCacheTTLKey       = "revocation_cache_ttl"
 	revocationCacheSyncedTTLKey = "revocation_cache_synced_ttl"
+	chargesOlderThanKey         = "charges_older_than"
 )
 
 // validateCapabilityBounds holds the capability durations to the bounds limes
@@ -356,6 +358,9 @@ func (c *Config) validateCapabilityBounds() error {
 	}
 	if r := c.Worker.Jobs.Capability.ExpiredFor; r != 0 && r < limes.MinPurgeRetention {
 		return fmt.Errorf("worker.jobs.capability: expired_for %s is shorter than %s", r, limes.MinPurgeRetention)
+	}
+	if j := c.Worker.Jobs.Capability; j.PurgeCharges && j.ChargesOlderThan < meter.MinChargeRetention {
+		return fmt.Errorf("worker.jobs.capability: %s %s is shorter than %s", chargesOlderThanKey, j.ChargesOlderThan, meter.MinChargeRetention)
 	}
 	return nil
 }

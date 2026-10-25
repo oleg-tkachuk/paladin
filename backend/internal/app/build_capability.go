@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/otelmetric"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
@@ -29,9 +30,12 @@ type CapabilityBundle struct {
 	// CopyUsage reads the counters of Biscuit copies with limits of their own.
 	CopyUsage meter.CopyUsageReader
 	Usage     meter.UsageStore
-	Issuer    *limes.Issuer
-	Verifier  *limes.Verifier
-	Keys      *jwks.Static
+	// Ledger reads the charges ledger for billing, and removes its old
+	// charges for the capability purger when asked to.
+	Ledger   *pgstore.Ledger
+	Issuer   *limes.Issuer
+	Verifier *limes.Verifier
+	Keys     *jwks.Static
 
 	// Revocations is the verifier's revocation cache, which the watcher
 	// keeps in step; its Stats say whether a revocation reaches this
@@ -241,6 +245,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if !ok {
 		return nil, errors.New("app: the capability usage store reads no Biscuit copy counters")
 	}
+	ledger, err := capabilitypg.NewLedger(deps.Pool)
+	if err != nil {
+		return nil, fmt.Errorf("app: charges ledger: %w", err)
+	}
 
 	return &CapabilityBundle{
 		Store:        store,
@@ -249,6 +257,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		CopyUsage:    copyUsage,
 		Records:      records,
 		Usage:        usage,
+		Ledger:       ledger,
 		Issuer:       issuer,
 		Verifier:     verifier,
 		Keys:         keys,

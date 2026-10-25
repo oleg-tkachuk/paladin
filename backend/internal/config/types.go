@@ -697,9 +697,16 @@ type OperationsWorker struct {
 // and the denylists bounded; the verifier doesn't notice, as long as
 // `expired_for` is at least limes.MinPurgeRetention (Config.Validate holds it
 // there). Disable by setting interval to 0.
+//
+// With purge_charges it also removes the ledger's charges taken more than
+// charges_older_than ago — at least meter.MinChargeRetention, a leap year of
+// billing and the disputes after it (Config.Validate holds it there). Off by
+// default: a removed charge is gone from every billing sum.
 type CapabilityWorker struct {
-	Interval   time.Duration `yaml:"interval" json:"interval"`
-	ExpiredFor time.Duration `yaml:"expired_for" json:"expired_for"`
+	Interval         time.Duration `yaml:"interval" json:"interval"`
+	ExpiredFor       time.Duration `yaml:"expired_for" json:"expired_for"`
+	PurgeCharges     bool          `yaml:"purge_charges" json:"purge_charges"`
+	ChargesOlderThan time.Duration `yaml:"charges_older_than" json:"charges_older_than"`
 }
 
 // DPoPNonce configures DPoP server nonces. Every replica must share Key: a

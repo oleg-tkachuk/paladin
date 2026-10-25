@@ -378,6 +378,10 @@ var unsetKnobAllowlist = map[string]string{
 	"worker.ops.tls.server_name":               "cert SANs cover the Service name",
 	"worker.ops.tls.insecure_skip_verify":      "off is the only safe default",
 
+	// Removing billing history is something an operator turns on: a charge
+	// purged is gone from every sum.
+	"worker.jobs.capability.purge_charges": "off by default: purged charges leave every billing sum",
+
 	// The dispatcher's ops listener is in-cluster and plaintext by design;
 	// the whole tls block is therefore unset rather than half-filled.
 	"dispatcher.ops.tls": "in-cluster plaintext listener; enabling TLS is opt-in",

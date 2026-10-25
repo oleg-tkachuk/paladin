@@ -1,10 +1,15 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // verifierLeewayKey and purgeRetentionKey are the config paths the bound
@@ -88,5 +93,54 @@ func TestValidateRevocationCacheTTLBounds(t *testing.T) {
 			set(&c, limes.MaxRevocationCacheSyncedTTL+time.Nanosecond)
 			mustReject(t, c, key)
 		})
+	}
+}
+
+// Removing the ledger's old charges keeps at least meter.MinChargeRetention
+// of them: a leap year of billing and the disputes after it. Off, any value
+// stands, as nothing reads it.
+func TestValidateChargeRetentionBounds(t *testing.T) {
+	for name, tc := range map[string]struct {
+		purge     bool
+		olderThan time.Duration
+		ok        bool
+	}{
+		"off, any retention":     {false, time.Hour, true},
+		"on, at the minimum":     {true, meter.MinChargeRetention, true},
+		"on, just below minimum": {true, meter.MinChargeRetention - time.Nanosecond, false},
+		"on, unset":              {true, 0, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := minimalValidConfig()
+			c.Worker.Jobs.Capability.PurgeCharges = tc.purge
+			c.Worker.Jobs.Capability.ChargesOlderThan = tc.olderThan
+			if tc.ok {
+				if err := c.Validate(); err != nil {
+					t.Fatalf("refused: %v", err)
+				}
+				return
+			}
+			mustReject(t, c, chargesOlderThanKey)
+		})
+	}
+}
+
+// schema.cue's default for charges_older_than is limes's floor itself: a
+// floor that moves with a limes bump would turn the shipped default into a
+// boot failure the moment purge_charges is set.
+func TestChargeRetentionDefaultIsLimesFloor(t *testing.T) {
+	minPath := filepath.Join(t.TempDir(), "min.yaml")
+	if err := os.WriteFile(minPath, []byte(minimalConfigYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{minPath}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Worker.Jobs.Capability.ChargesOlderThan; got != meter.MinChargeRetention {
+		t.Errorf("charges_older_than defaults to %s, want meter.MinChargeRetention %s", got, meter.MinChargeRetention)
+	}
+	if cfg.Worker.Jobs.Capability.PurgeCharges {
+		t.Error("purge_charges is on by default")
 	}
 }

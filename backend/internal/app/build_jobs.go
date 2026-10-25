@@ -313,13 +313,20 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		if deps.Capability.Replay != nil {
 			replay = deps.Capability.Replay
 		}
+		// Likewise the ledger, only when its old charges are to go.
+		var ledger worker.ChargePurger
+		if cfg.Worker.Jobs.Capability.PurgeCharges {
+			ledger = deps.Capability.Ledger
+		}
 		out = append(out, &worker.CapabilityPurger{
-			Store:      deps.Capability.Store,
-			Usage:      deps.Capability.Usage,
-			Replay:     replay,
-			Interval:   cfg.Worker.Jobs.Capability.Interval,
-			ExpiredFor: cfg.Worker.Jobs.Capability.ExpiredFor,
-			Logger:     l.Named("capability-purger"),
+			Store:            deps.Capability.Store,
+			Usage:            deps.Capability.Usage,
+			Replay:           replay,
+			Interval:         cfg.Worker.Jobs.Capability.Interval,
+			ExpiredFor:       cfg.Worker.Jobs.Capability.ExpiredFor,
+			Ledger:           ledger,
+			ChargesOlderThan: cfg.Worker.Jobs.Capability.ChargesOlderThan,
+			Logger:           l.Named("capability-purger"),
 		})
 	}
 

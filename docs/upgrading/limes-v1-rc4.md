@@ -24,3 +24,8 @@
   naming the old outcomes needs the new ones. A charge in another currency
   is `error` there, and no longer fires the alert. Point your own queries and
   alerts at the new series; `paladin_capability_charge_amount` stays.
+- **The ledger's old charges can be removed**: with
+  `worker.jobs.capability.purge_charges: true` the capability purger removes
+  the charges taken more than `charges_older_than` ago (default and minimum
+  9624h, 401 days), as limes's ledger housekeeping does. Off by default; a
+  removed charge leaves every billing sum.

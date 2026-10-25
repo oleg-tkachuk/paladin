@@ -1,7 +1,8 @@
 // CapabilityPurger drops the capability records — with their revocation
 // entries — that have been expired for at least ExpiredFor (limes
 // Store.Purge), then releases expired holds and drops the usage rows of the
-// capabilities purged. Bounds the records and the denylist over time without
+// capabilities purged, and, when asked, the ledger's charges older than its
+// retention (limes LedgerHousekeeping). Bounds the records and the denylist over time without
 // affecting verifier correctness: the retention is never shorter than
 // limes.MinPurgeRetention, past which no verifier accepts the token.
 //
@@ -30,6 +31,10 @@ type ReplayPurger interface {
 	PurgeExpired(ctx context.Context) (int64, error)
 }
 
+// ChargePurger removes a batch of the ledger's old charges: limes's
+// meter.LedgerHousekeeping, which pgstore's Ledger is.
+type ChargePurger = meter.LedgerHousekeeping
+
 // DefaultCapabilityExpiredFor is how long a capability stays on record past
 // its expiry before the purger drops it, when ExpiredFor is unset. A cost
 // reported later than that is charged to nothing: the meter refuses a
@@ -46,7 +51,12 @@ type CapabilityPurger struct {
 	Replay     ReplayPurger
 	Interval   time.Duration
 	ExpiredFor time.Duration
-	Logger     *zap.Logger
+	// Ledger, when wired, has the charges taken more than ChargesOlderThan
+	// ago removed from the ledger (limes LedgerHousekeeping). Unwired, the
+	// ledger keeps every charge.
+	Ledger           ChargePurger
+	ChargesOlderThan time.Duration
+	Logger           *zap.Logger
 }
 
 // Run blocks until ctx is cancelled or the store returns a fatal error.
@@ -116,6 +126,22 @@ func (p *CapabilityPurger) tick(ctx context.Context) error {
 			}
 			if res.Purged > 0 {
 				p.log().Info("purged capability usage orphans", zap.Int64("capabilities", res.Purged))
+			}
+			if res.Purged < limes.DefaultHousekeepingLimit {
+				break
+			}
+		}
+	}
+	if p.Ledger != nil {
+		for {
+			res, err := p.Ledger.PurgeCharges(ctx, meter.PurgeChargesRequest{OlderThan: p.ChargesOlderThan})
+			if err != nil {
+				p.log().Warn("failed to purge old capability charges", zap.Error(err))
+				tickErr = err
+				break
+			}
+			if res.Purged > 0 {
+				p.log().Info("purged old capability charges", zap.Int64("charges", res.Purged))
 			}
 			if res.Purged < limes.DefaultHousekeepingLimit {
 				break
