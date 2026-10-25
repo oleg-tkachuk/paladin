@@ -92,6 +92,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 
 import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import { CompletionMode } from "@/gen/paladin/common/v1/resource_pb";
 import { PALADIN_ERROR_DOMAIN } from "@/hooks/errorContract";
 import CollectionsPage from "./page";
 
@@ -307,5 +308,60 @@ describe("CollectionsPage delete refused", () => {
     expect(notice.action.label).toBe("Open its trash");
     notice.action.onClick();
     expect(h.push).toHaveBeenCalledWith("/tenants/t-a/collections/c1/trash");
+  });
+});
+
+// Every collection in scope is loaded, so the facets count the whole list,
+// as every fully loaded list's do, and a choice narrows the rows.
+describe("CollectionsPage facets", () => {
+  const PRIMARY = "storageBackends/primary/buckets/docs";
+  const SECONDARY = "storageBackends/secondary/buckets/media";
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/collections");
+    h.collections = [
+      {
+        tenantId: "t-a",
+        collection: "alpha",
+        bucket: PRIMARY,
+        completionMode: CompletionMode.IMPLICIT,
+        resourceVersion: "1",
+      },
+      {
+        tenantId: "t-a",
+        collection: "beta",
+        bucket: SECONDARY,
+        completionMode: CompletionMode.EXPLICIT,
+        resourceVersion: "1",
+      },
+      {
+        tenantId: "t-b",
+        collection: "gamma",
+        bucket: PRIMARY,
+        completionMode: CompletionMode.IMPLICIT,
+        resourceVersion: "1",
+      },
+    ];
+  });
+
+  it("narrows to a bucket, by tenant name and by bucket in words", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<CollectionsPage />);
+    await user.click(screen.getByRole("button", { name: "Filter by bucket" }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", {
+        name: "primary / docs, 2 rows",
+      }),
+    );
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+    expect(screen.getByText("gamma")).toBeInTheDocument();
+    expect(screen.queryByText("beta")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Filter by tenant" }));
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: "Tenant A, 2 rows" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "tenant-b, 1 row" }),
+    ).toBeInTheDocument();
   });
 });

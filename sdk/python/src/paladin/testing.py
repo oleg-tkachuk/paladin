@@ -802,6 +802,52 @@ def _not_before(request: Message) -> datetime | None:
     return request.not_before.ToDatetime(tzinfo=UTC)  # type: ignore[attr-defined,no-any-return]
 
 
+# What the server's issuer refuses a delegation with (limes.ErrDelegationTooWide).
+_DELEGATION_TOO_WIDE = "limes: child wider than parent"
+
+
+def _wider_than(
+    parent: capability_service_pb2.Capability,
+    child: capability_service_pb2.Capability,
+    child_from: datetime,
+) -> str | None:
+    """How ``child``, valid from ``child_from``, is wider than ``parent``, by
+    limes.Narrows' rule — None when it is not: a plane, an earlier start,
+    another tenant, an op, a resource, tainted reads or an idempotency key
+    the parent does not allow. The ceilings the fake counts itself are left
+    to it; the expiry is cut to the parent's before this is asked."""
+    widened = set(child.audience) - set(parent.audience)
+    if widened:
+        return f"audience {sorted(child.audience)} widens parent {sorted(parent.audience)}"
+    parent_from = (
+        parent.not_before if parent.HasField("not_before") else parent.issued_at
+    ).ToDatetime(tzinfo=UTC)
+    if child_from < parent_from:
+        return f"child starts {child_from}, before parent {parent_from}"
+    if child.subject.tenant_id != parent.subject.tenant_id:
+        return "tenant_id mismatch"
+    if parent.confirmation_jkt and not child.confirmation_jkt:
+        return "parent is key-bound, child is not"
+    p, c = parent.caveats, child.caveats
+    for op in c.ops:
+        if op not in p.ops:
+            return f"child op {json.dumps(op)} not in parent ops"
+    if p.resource_prefixes or p.resource_uris:
+        if not c.resource_prefixes and not c.resource_uris:
+            return "parent restricts resources, child unrestricted"
+        for prefix in c.resource_prefixes:
+            if not any(_match_resource(q, prefix) for q in p.resource_prefixes):
+                return f"child prefix {json.dumps(prefix)} not under any parent prefix"
+        for uri in c.resource_uris:
+            if not _allows_resource(p, uri):
+                return f"child URI {json.dumps(uri)} not in parent allowance"
+    if c.allow_tainted_read and not p.allow_tainted_read:
+        return "child grants tainted_read; parent does not"
+    if p.idempotency_key_required and not c.idempotency_key_required:
+        return "child relaxes idempotency_key requirement"
+    return None
+
+
 def _lifetime(now: datetime, nbf: datetime | None, ttl_seconds: int) -> datetime:
     """When a capability issued at ``now`` for ``ttl_seconds`` — the default
     when 0 — expires, as the server reckons it: ttl after it is issued. A
@@ -907,12 +953,18 @@ class _CapabilityService(CapabilityServiceSync):
                     )
             caveats = request.caveats
         expires = _lifetime(now, nbf, request.ttl_seconds)
+        # A child outliving its parent is cut to the parent's end, as limes does.
+        parent_expires = parent.msg.expires_at.ToDatetime(tzinfo=UTC)
+        expires = min(expires, parent_expires)
         c = capability_service_pb2.Capability(
             subject=request.subject if request.HasField("subject") else parent.msg.subject,
             audience=list(request.audience) or list(parent.msg.audience),
             caveats=caveats,
             confirmation_jkt=jkt,
         )
+        wider = _wider_than(parent.msg, c, nbf or now)
+        if wider is not None:
+            raise _with_reason(Code.PERMISSION_DENIED, f"{_DELEGATION_TOO_WIDE}: {wider}")
         return fake._mint_capability(c, now, nbf, expires, status, parent.msg.id)
 
     def revoke(

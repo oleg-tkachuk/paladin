@@ -1,5 +1,5 @@
 {
-  "_comment": "How CapabilityService answers Issue and Delegate where a consumer's tests meet it, which the server and both SDKs' fakes are held to. An issue case asks, for the fake's tenant, with audience [\"data\"], a TTL of 300 s, ops [\"get\", \"list\"] and unlimited ceilings unless it says otherwise: key_bound sets a confirmation_jkt, not_before is \"later\" (a minute on) or \"past_expiry\" (an hour on, past the TTL), no_request_ceiling and no_budget_ceiling leave a ceiling out. A delegate case delegates from a parent with parent_ops, its own caveats narrowed to child_ops when it names them and left out otherwise. want is the code it is refused with, or the biscuit_status it is answered with and whether a Biscuit comes back.",
+  "_comment": "How CapabilityService answers Issue and Delegate where a consumer's tests meet it, which the server and both SDKs' fakes are held to. An issue case asks, for the fake's tenant, with audience [\"data\"], a TTL of 300 s, ops [\"get\", \"list\"] and unlimited ceilings unless it says otherwise: key_bound sets a confirmation_jkt, not_before is \"later\" (a minute on) or \"past_expiry\" (an hour on, past the TTL), no_request_ceiling and no_budget_ceiling leave a ceiling out. A delegate case delegates from a parent with parent_ops (and parent_prefixes, parent_idempotency_key when it names them), its own caveats narrowed to child_ops — with child_prefixes and child_tainted_read — when it names them and left out otherwise, for child_audience when it names one; what a child may not widen is limes.Narrows'. want is the code it is refused with, or the biscuit_status it is answered with and whether a Biscuit comes back.",
   "issue": [
     {"name": "no share", "ops": ["get"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
     {"name": "share", "ops": ["get", "share"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
@@ -25,6 +25,12 @@
     {"name": "an op the parent lacks", "parent_ops": ["get", "share"], "child_ops": ["put"], "want": {"code": "permission_denied"}},
     {"name": "narrowed to a bare op", "parent_ops": ["get", "share"], "child_ops": ["presign"], "want": {"code": "invalid_argument"}},
     {"name": "wider and key-bound, required", "parent_ops": ["get", "share"], "child_ops": ["put"], "key_bound": true, "require_biscuit": true, "want": {"code": "failed_precondition"}},
-    {"name": "a key-bound child, required", "parent_ops": ["get", "share"], "key_bound": true, "require_biscuit": true, "want": {"code": "failed_precondition"}}
+    {"name": "a key-bound child, required", "parent_ops": ["get", "share"], "key_bound": true, "require_biscuit": true, "want": {"code": "failed_precondition"}},
+    {"name": "a resource under the parent's", "parent_ops": ["get", "share"], "parent_prefixes": ["object://t/docs/"], "child_ops": ["get"], "child_prefixes": ["object://t/docs/reports/"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
+    {"name": "a resource outside the parent's", "parent_ops": ["get", "share"], "parent_prefixes": ["object://t/docs/"], "child_ops": ["get"], "child_prefixes": ["object://t/photos/"], "want": {"code": "permission_denied"}},
+    {"name": "no resource under a restricted parent", "parent_ops": ["get", "share"], "parent_prefixes": ["object://t/docs/"], "child_ops": ["get"], "want": {"code": "permission_denied"}},
+    {"name": "a plane the parent lacks", "parent_ops": ["get", "share"], "child_audience": ["data", "admin", "iam"], "want": {"code": "permission_denied"}},
+    {"name": "tainted reads the parent lacks", "parent_ops": ["get", "share"], "child_ops": ["get"], "child_tainted_read": true, "want": {"code": "permission_denied"}},
+    {"name": "an idempotency key the parent requires", "parent_ops": ["get", "share"], "parent_idempotency_key": true, "child_ops": ["get"], "want": {"code": "permission_denied"}}
   ]
 }

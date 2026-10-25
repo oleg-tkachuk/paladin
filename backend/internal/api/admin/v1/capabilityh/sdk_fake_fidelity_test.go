@@ -48,16 +48,22 @@ type issuanceWant struct {
 
 // issuanceCase is one request of the table, Issue's or Delegate's.
 type issuanceCase struct {
-	Name             string       `json:"name"`
-	Ops              *[]string    `json:"ops"`
-	ParentOps        []string     `json:"parent_ops"`
-	ChildOps         *[]string    `json:"child_ops"`
-	KeyBound         bool         `json:"key_bound"`
-	NotBefore        string       `json:"not_before"`
-	RequireBiscuit   bool         `json:"require_biscuit"`
-	NoRequestCeiling bool         `json:"no_request_ceiling"`
-	NoBudgetCeiling  bool         `json:"no_budget_ceiling"`
-	Want             issuanceWant `json:"want"`
+	Name             string    `json:"name"`
+	Ops              *[]string `json:"ops"`
+	ParentOps        []string  `json:"parent_ops"`
+	ChildOps         *[]string `json:"child_ops"`
+	KeyBound         bool      `json:"key_bound"`
+	NotBefore        string    `json:"not_before"`
+	RequireBiscuit   bool      `json:"require_biscuit"`
+	NoRequestCeiling bool      `json:"no_request_ceiling"`
+	NoBudgetCeiling  bool      `json:"no_budget_ceiling"`
+	// What a delegation's parent restricts, and its child asks for.
+	ParentPrefixes       []string     `json:"parent_prefixes"`
+	ParentIdempotencyKey bool         `json:"parent_idempotency_key"`
+	ChildPrefixes        []string     `json:"child_prefixes"`
+	ChildTaintedRead     bool         `json:"child_tainted_read"`
+	ChildAudience        []string     `json:"child_audience"`
+	Want                 issuanceWant `json:"want"`
 }
 
 func readIssuanceTable(t *testing.T) (issue, delegate []issuanceCase) {
@@ -155,7 +161,10 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 	mutate := func(tc issuanceCase, r *adminv1.CapabilityServiceDelegateRequest) {
 		if tc.ChildOps != nil {
 			r.Caveats = openCaveats(opsOf(*tc.ChildOps)...)
+			r.Caveats.ResourcePrefixes = tc.ChildPrefixes
+			r.Caveats.AllowTaintedRead = tc.ChildTaintedRead
 		}
+		r.Audience = tc.ChildAudience
 		if tc.KeyBound {
 			r.ConfirmationJkt = testJKT
 		}
@@ -163,7 +172,12 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			parent := mintParent(t, m, opsOf(tc.ParentOps)...)
+			parent, _ := m.Mint(t, limes.Capability{
+				Audience: paladin.PlaneNames(paladin.PlaneData, paladin.PlaneAdmin),
+				Caveats: limes.Caveats{
+					Ops: opsOf(tc.ParentOps), ResourcePrefixes: tc.ParentPrefixes, IdempotencyKeyRequired: tc.ParentIdempotencyKey,
+				},
+			})
 			serverReq := delegateReq(parent)
 			mutate(tc, serverReq)
 			if got := gotIssuance(h.Delegate(auth.WithCapability(context.Background(), parent), serverReq)); got != tc.Want {
@@ -177,6 +191,8 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 				Audience: paladin.PlaneNames(paladin.PlaneData, paladin.PlaneAdmin),
 				Caveats:  openCaveats(opsOf(tc.ParentOps)...),
 			}
+			issueReq.Caveats.ResourcePrefixes = tc.ParentPrefixes
+			issueReq.Caveats.IdempotencyKeyRequired = tc.ParentIdempotencyKey
 			fakeParent, err := srv.Connect().Admin.Capability.Issue(context.Background(), issueReq)
 			if err != nil {
 				t.Fatal(err)

@@ -60,22 +60,8 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
-### The Python fake delegates wider than the server allows
-
-- **Status:** Deferred.
-- **Reason:** the Go fake (`paladintest`) refuses a delegation as the
-  server's issuer does, through `limes.Narrows`, and cuts a child that would
-  outlive its parent to the parent's end. The Python fake
-  (`paladin.testing`) checks only the ops: it accepts a child with an
-  audience, a resource or a start its parent lacks, and lets it outlive the
-  parent. limes is Go only, so the Python fake needs the rule written out.
-- **Definition of Done:** the Python fake refuses what `limes.Narrows`
-  refuses — audience, window, tenant, key binding, resources, tainted-read,
-  idempotency — and clamps the expiry, with the Go fake's cases in a shared
-  table both fakes run.
-- **Blockers:** none.
-
 ---
+
 ## Deploy cutover: rename to `paladin`
 
 ### The `paladin` name collides — decide qualify-vs-rename before publishing
@@ -836,17 +822,18 @@ order they are being taken up.
 
 - **Status:** Blocked.
 - **Reason:** counted facets reach every list loaded whole that answers a
-  question worth narrowing by (useTableFacets), and the operations page and
-  both audit logs, which the server pages, through counts their listings
-  give with the first page (useServerFacets). What is left is paged on the
-  server too — collections and objects — and no List RPC of theirs counts
-  yet, so a count beside them would describe only the rows read so far; the
-  capabilities page browses by kind and subject through two server-side
-  flags of its own; configuration is a document, not a list of rows.
-- **Definition of Done:** collections and objects filter through facets
-  whose counts their List RPCs give, as ListOperations' and ListAuditLog's
-  facets and facet_counts do; or this entry names each one left and why.
-- **Blockers:** facets and counts on ListCollections and ListObjects.
+  question worth narrowing by (useTableFacets) — both collection lists
+  among them, which read every page — and the operations page and both
+  audit logs, which the server pages, through counts their listings give
+  with the first page (useServerFacets). What is left is a folder's objects,
+  paged on the server, where no List RPC counts yet, so a count beside them
+  would describe only the rows read so far; the capabilities page browses
+  by kind and subject through two server-side flags of its own;
+  configuration is a document, not a list of rows.
+- **Definition of Done:** a folder's objects filter through facets whose
+  counts ListObjects gives, as ListOperations' and ListAuditLog's facets and
+  facet_counts do; or this entry says why not.
+- **Blockers:** facets and counts on ListObjects.
 
 #### Facet choices remembered between visits
 

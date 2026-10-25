@@ -35,6 +35,8 @@ import { useBackends } from "@/hooks/useBackends";
 import { collectionDeleteFailure } from "@/lib/collectionDeleteFailure";
 import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { collectionFacets } from "@/lib/collectionFacets";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -149,9 +151,12 @@ export default function CollectionsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Counted over every collection in scope, which the list loads whole.
+  const facetDefs = useMemo(() => collectionFacets(tenantNames), [tenantNames]);
+  const facets = useTableFacets(collections, facetDefs, PAGE_TABLE);
   const sorted = useMemo(
-    () => sortCollections(collections, sort.column, sort.direction),
-    [collections, sort],
+    () => sortCollections(facets.rows, sort.column, sort.direction),
+    [facets.rows, sort],
   );
 
   const handleDelete = async () => {
@@ -203,6 +208,8 @@ export default function CollectionsPage() {
             onQueryChange={setSearch}
             searchLabel="Search collections"
             placeholder="Search by name or display label…"
+            facets={facets.controls}
+            count={{ shown: sorted.length, total: collections.length }}
             actions={
               <>
                 <Button
@@ -267,7 +274,9 @@ export default function CollectionsPage() {
                 ? {
                     icon: ServerStackIcon,
                     what: "collections",
-                    reason: emptyReason({ filtered: !!search }),
+                    reason: emptyReason({
+                      filtered: !!search || facets.active > 0,
+                    }),
                     purpose:
                       "A collection is a tenant's namespace of objects, stored in one bucket.",
                     action: {

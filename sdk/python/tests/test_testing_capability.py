@@ -22,7 +22,7 @@ from paladin.admin.v1 import types_pb2 as admin_types
 from paladin.caveats import op_refusal
 from paladin.common.v1.pagination_pb2 import SORT_ORDER_ASC, SORT_ORDER_DESC
 from paladin.data.v1 import object_service_pb2, types_pb2
-from paladin.testing import FakePaladin
+from paladin.testing import DEFAULT_CAPABILITY_TTL, FakePaladin
 
 OP_NAMES = Path(__file__).resolve().parents[2] / "testdata" / "capability_op_names.json"
 JKT = "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"
@@ -189,6 +189,17 @@ def test_delegate(strict: FakePaladin) -> None:
         (as_(parent.token), bound, Code.FAILED_PRECONDITION),
     ]:
         assert _code(lambda c=client, r=req: c.delegate(r)) == code, req
+
+
+def test_delegate_cuts_a_child_to_its_parents_end(strict: FakePaladin) -> None:
+    """A child asking to outlive its parent ends when its parent does, as
+    the server's issuer cuts it; the table holds what it refuses."""
+    admin = _admin(strict).admin.capability
+    parent = admin.issue(_issue_request(strict, Op.GET, Op.SHARE))
+    req = _narrow(parent.capability.id, Op.GET)
+    req.ttl_seconds = int((DEFAULT_CAPABILITY_TTL + timedelta(hours=1)).total_seconds())
+    child = strict.connect(capability=parent.token).admin.capability.delegate(req)
+    assert child.capability.expires_at == parent.capability.expires_at
 
 
 def test_revoke_and_get(strict: FakePaladin) -> None:
