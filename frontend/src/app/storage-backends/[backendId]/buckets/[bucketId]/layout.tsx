@@ -4,12 +4,12 @@
 // fetched once for all of them. It used to have a copy under its owner's
 // workspace, which held the settings; that route now redirects here.
 
-import { type Dispatch, type SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notFound, useParams } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
+import { ArrowPathIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 
 import { BucketTabs } from "@/components/layout/BucketTabs";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 
 import { BucketProvider, type BucketOwner } from "./bucket-context";
 import { SharedBucketNotice } from "./SharedBucketNotice";
+import { BucketNoticeDialog } from "./BucketNoticeDialog";
 
 export default function BucketLayout({
   children,
@@ -79,6 +80,7 @@ export default function BucketLayout({
   const ownerName = owner?.displayName || owner?.slug || ownerId;
   // The operator's word on this bucket, from its labels (notice.paladin.io/*).
   const notice = noticeFromLabels(bucket?.labels);
+  const [noticeOpen, setNoticeOpen] = useState(false);
 
   if (notFoundFlag) {
     notFound();
@@ -92,17 +94,29 @@ export default function BucketLayout({
           bucket?.displayName ? bucket.displayName : `Bucket on ${backendId}`
         }
         actions={
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => void refetch()}
-            aria-label="Refresh"
-            disabled={loading}
-          >
-            <ArrowPathIcon
-              className={cn("size-4", loading && "animate-spin")}
-            />
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNoticeOpen(true)}
+              disabled={!bucket || changesBlocked !== null}
+              title={changesBlocked ?? undefined}
+            >
+              <MegaphoneIcon className="size-4" />
+              Edit notice
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void refetch()}
+              aria-label="Refresh"
+              disabled={loading}
+            >
+              <ArrowPathIcon
+                className={cn("size-4", loading && "animate-spin")}
+              />
+            </Button>
+          </>
         }
       />
 
@@ -121,6 +135,15 @@ export default function BucketLayout({
       )}
 
       {notice && <NoticeBanner notice={notice} className="rounded-md" />}
+
+      {bucket && noticeOpen && (
+        <BucketNoticeDialog
+          bucket={bucket}
+          open={noticeOpen}
+          onClose={() => setNoticeOpen(false)}
+          onSaved={(saved) => setBucket(saved)}
+        />
+      )}
 
       <BucketTabs backendId={backendId} bucketId={bucketId} />
 
