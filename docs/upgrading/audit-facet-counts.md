@@ -1,4 +1,4 @@
-## Unreleased — the audit log narrows and counts by plane, outcome and service
+## sdk/go/v0.119.0, sdk/python/v0.120.0 — the audit log narrows and counts by plane, outcome and service
 
 - **`ListAuditLogRequest` gains `facets` and `count_facets`**. `facets`
   (`AuditFacets`) narrows the log to the planes (`actor_audience`), outcomes
