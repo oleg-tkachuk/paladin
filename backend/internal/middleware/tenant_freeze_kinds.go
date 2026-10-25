@@ -117,14 +117,15 @@ var procedureKinds = map[string]Kind{
 	admin.BucketServiceRevokeBucketGrantProcedure: Withdraws,
 	admin.BucketServiceListBucketGrantsProcedure:  Reads,
 
-	admin.CapabilityServiceIssueProcedure:           Changes,
-	admin.CapabilityServiceDelegateProcedure:        Changes,
-	admin.CapabilityServiceRevokeProcedure:          Withdraws,
-	admin.CapabilityServiceRevokeBiscuitProcedure:   Withdraws,
-	admin.CapabilityServiceGetBiscuitUsageProcedure: Reads,
-	admin.CapabilityServiceGetProcedure:             Reads,
-	admin.CapabilityServiceListProcedure:            Reads,
-	admin.CapabilityServiceGetUsageProcedure:        Reads,
+	admin.CapabilityServiceIssueProcedure:               Changes,
+	admin.CapabilityServiceDelegateProcedure:            Changes,
+	admin.CapabilityServiceRevokeProcedure:              Withdraws,
+	admin.CapabilityServiceRevokeBiscuitProcedure:       Withdraws,
+	admin.CapabilityServiceGetBiscuitUsageProcedure:     Reads,
+	admin.CapabilityServiceListOperationGrantsProcedure: Reads,
+	admin.CapabilityServiceGetProcedure:                 Reads,
+	admin.CapabilityServiceListProcedure:                Reads,
+	admin.CapabilityServiceGetUsageProcedure:            Reads,
 
 	admin.CELServiceValidateProcedure: Reads,
 

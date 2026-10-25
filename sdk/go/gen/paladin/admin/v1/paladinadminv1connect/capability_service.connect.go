@@ -43,6 +43,9 @@ const (
 	CapabilityServiceListProcedure = "/paladin.admin.v1.CapabilityService/List"
 	// CapabilityServiceGetUsageProcedure is the procedure name of the CapabilityService's GetUsage RPC.
 	CapabilityServiceGetUsageProcedure = "/paladin.admin.v1.CapabilityService/GetUsage"
+	// CapabilityServiceListOperationGrantsProcedure is the procedure name of the CapabilityService's
+	// ListOperationGrants RPC.
+	CapabilityServiceListOperationGrantsProcedure = "/paladin.admin.v1.CapabilityService/ListOperationGrants"
 )
 
 var (
@@ -108,6 +111,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	capabilityServiceListOperationGrantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("ListOperationGrants"),
+			Procedure:        CapabilityServiceListOperationGrantsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CapabilityServiceClient is a client for the paladin.admin.v1.CapabilityService service.
@@ -157,6 +168,12 @@ type CapabilityServiceClient interface {
 	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
+	// ListOperationGrants returns, for each capability operation, the actions
+	// it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+	// the caveats admit the operation, the built-in policy grants its actions.
+	// An operation that unlocks none needs a tenant policy naming the actions.
+	// The same for every caller; it reads no tenant.
+	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
 // NewCapabilityServiceClient constructs a client for the paladin.admin.v1.CapabilityService
@@ -212,6 +229,12 @@ type CapabilityServiceHandler interface {
 	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
+	// ListOperationGrants returns, for each capability operation, the actions
+	// it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+	// the caveats admit the operation, the built-in policy grants its actions.
+	// An operation that unlocks none needs a tenant policy naming the actions.
+	// The same for every caller; it reads no tenant.
+	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
 // RegisterCapabilityServiceHandler registers svc as the paladin.admin.v1.CapabilityService
@@ -227,6 +250,7 @@ func RegisterCapabilityServiceHandler(server *connect.Server, svc CapabilityServ
 		connect.Method{Spec: capabilityServiceGetSpec(), Handler: adapter.get},
 		connect.Method{Spec: capabilityServiceListSpec(), Handler: adapter.list},
 		connect.Method{Spec: capabilityServiceGetUsageSpec(), Handler: adapter.getUsage},
+		connect.Method{Spec: capabilityServiceListOperationGrantsSpec(), Handler: adapter.listOperationGrants},
 	)
 }
 
@@ -263,6 +287,10 @@ func (UnimplementedCapabilityServiceHandler) List(context.Context, *v1.Capabilit
 
 func (UnimplementedCapabilityServiceHandler) GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetUsage is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.ListOperationGrants is not implemented")
 }
 
 type capabilityServiceClient struct {
@@ -328,6 +356,14 @@ func (c *capabilityServiceClient) List(ctx context.Context, req *v1.CapabilitySe
 func (c *capabilityServiceClient) GetUsage(ctx context.Context, req *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error) {
 	var res v1.CapabilityServiceGetUsageResponse
 	if err := c.client.CallUnary(ctx, capabilityServiceGetUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) ListOperationGrants(ctx context.Context, req *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error) {
+	var res v1.CapabilityServiceListOperationGrantsResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceListOperationGrantsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -425,6 +461,18 @@ func (h capabilityServiceHandler) getUsage(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.GetUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) listOperationGrants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceListOperationGrantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOperationGrants(ctx, &req)
 	if err != nil {
 		return err
 	}

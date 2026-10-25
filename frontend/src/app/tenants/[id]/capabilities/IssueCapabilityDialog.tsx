@@ -44,6 +44,8 @@ import {
   type Capability,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
+import { CapabilityOpGrants } from "@/components/features/capabilities/CapabilityOpGrants";
+
 import { ToggleRow } from "./_form-fields";
 import { missingBiscuitReason } from "./_biscuit";
 import { LimitInput } from "@/components/ui/LimitInput";
@@ -390,6 +392,10 @@ export function IssueCapabilityDialog({
             options={OP_CHOICES}
             selected={issueOps}
             onToggle={(v) => toggleSetEntry(setIssueOps, issueOps, v)}
+          />
+          {/* In the order the toggles show, not the order they were picked. */}
+          <CapabilityOpGrants
+            ops={OP_CHOICES.filter((op) => issueOps.has(op))}
           />
         </fieldset>
         <fieldset className="space-y-1.5">

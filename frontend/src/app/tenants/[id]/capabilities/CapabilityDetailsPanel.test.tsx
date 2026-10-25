@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -7,12 +7,17 @@ import { Code, ConnectError } from "@connectrpc/connect";
 const h = vi.hoisted(() => ({
   get: vi.fn(),
   getUsage: vi.fn(),
+  listOperationGrants: vi.fn(),
   getToken: vi.fn(),
   revoke: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
-  capabilityClient: { get: h.get, getUsage: h.getUsage },
+  capabilityClient: {
+    get: h.get,
+    getUsage: h.getUsage,
+    listOperationGrants: h.listOperationGrants,
+  },
   apiTokenClient: { get: h.getToken },
 }));
 vi.mock("@/lib/utils", async (orig) => ({
@@ -44,11 +49,18 @@ const CAP = {
   },
 } as unknown as Capability;
 
-function open() {
+// The server's table, as ListOperationGrants serves it.
+const GRANTS = [
+  { op: "get", actions: ["GetObject", "PresignGet"] },
+  { op: "manage", actions: [] },
+];
+const UNLOCKS = "What these ops unlock";
+
+function open(cap: Capability = CAP) {
   render(
     <CapabilityDetailsPanel
-      id={CAP.id}
-      cap={CAP}
+      id={cap.id}
+      cap={cap}
       usageEntry="never"
       onClose={vi.fn()}
       onRevoke={h.revoke}
@@ -60,6 +72,56 @@ describe("CapabilityDetailsPanel", () => {
   beforeEach(() => {
     h.get.mockReset();
     h.getUsage.mockReset();
+    h.listOperationGrants.mockReset();
+    h.listOperationGrants.mockResolvedValue({ grants: GRANTS });
+  });
+
+  describe("what its ops unlock", () => {
+    it("lists each op's actions beside the allowed ops", async () => {
+      h.get.mockResolvedValue({ capability: CAP });
+      open();
+      const unlocks = await screen.findByRole("group", { name: UNLOCKS });
+      expect(within(unlocks).getByText("GetObject")).toBeInTheDocument();
+      expect(within(unlocks).getByText("PresignGet")).toBeInTheDocument();
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    // A manage capability fails with "denied by policy" on a tenant with no
+    // policy for it; the panel says why before anyone reads the audit log.
+    it("warns that manage needs a tenant policy", async () => {
+      const cap = {
+        ...CAP,
+        caveats: { ...CAP.caveats, ops: ["get", "manage"] },
+      } as unknown as Capability;
+      h.get.mockResolvedValue({ capability: cap });
+      open(cap);
+      expect(await screen.findByRole("note")).toHaveTextContent(
+        "manage unlocks nothing on its own: without a tenant policy that permits its actions, each call is denied by policy.",
+      );
+    });
+
+    it("says the table is unavailable when the read fails", async () => {
+      h.get.mockResolvedValue({ capability: CAP });
+      h.listOperationGrants.mockRejectedValue(new Error("down"));
+      open();
+      expect(
+        await screen.findByText("What these ops unlock is unavailable."),
+      ).toBeInTheDocument();
+      // The rest of the panel reads on.
+      expect(screen.getByText("Allowed ops")).toBeInTheDocument();
+    });
+
+    it("has no row for a capability with no ops", async () => {
+      const cap = {
+        ...CAP,
+        caveats: { ...CAP.caveats, ops: [] },
+      } as unknown as Capability;
+      h.get.mockResolvedValue({ capability: cap });
+      open(cap);
+      expect(await screen.findByText("Allowed ops")).toBeInTheDocument();
+      expect(screen.queryByText("Unlocks")).not.toBeInTheDocument();
+      expect(h.listOperationGrants).not.toHaveBeenCalled();
+    });
   });
 
   it("reads the record for its issuer and revocation", async () => {
