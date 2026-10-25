@@ -89,6 +89,27 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/go/v0.117.0, sdk/python/v0.118.0 — operation listings narrow and count by state and type
+
+- **`ListOperationsRequest` gains `facets` and `count_facets`** on both the
+  admin and the data plane. `facets` (`OperationFacets`) narrows the listing
+  to the states and types it names; with `count_facets` the first page's
+  answer carries `facet_counts` (`FacetCount`): for facet `state` each
+  `OperationState`'s name, for `type` each type, each facet counted without
+  its own choices. Additive; a caller that sets neither sees no change.
+- The console's operations page filters by state and type with counts in
+  place of its single-choice state filter.
+
+## Unreleased — the data and IAM planes record what an action changed
+
+- **An audit entry of the data or IAM plane carries `state_before_json` and
+  `state_after_json`**, as the admin plane's does: the object, its lock or
+  its tags around an object action, the user or the user's settings around
+  an IAM one, read through their own Get and redacted. A batch records its
+  request alone: its operation records what each object came to.
+- Each audited action that records no state says why in
+  `backend/internal/app/audit_state_test.go`.
+
 ## sdk/go/v0.116.0, sdk/python/v0.117.0 — an audit entry records the resource before and after
 
 - **`AuditLogEntry` carries `state_before_json` and `state_after_json`**:
