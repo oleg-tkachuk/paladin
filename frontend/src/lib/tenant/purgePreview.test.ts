@@ -67,6 +67,30 @@ describe("affectedByPurge", () => {
   });
 });
 
+// The live check read "1 API token: integrations using them stop at once".
+describe("a count of one", () => {
+  it("reads in the singular", () => {
+    const [tokens, rest] = affectedByPurge(
+      create(PreviewPurgeTenantResponseSchema, {
+        apiTokens: [{ name: TOKEN, displayName: "ci" }],
+        apiTokenCount: 1n,
+        capabilityCount: 1n,
+      }),
+    );
+    expect(tokens.heading).toBe(
+      "1 API token: integrations using it stop at once",
+    );
+    expect(rest.items[0]).toBe("1 capability, with its counters and charges");
+    expect(
+      whatBlocksPurge([
+        create(PurgeBlockerSchema, { kind: PurgeBlockerKind.USERS, count: 1n }),
+      ]),
+    ).toBe(
+      "The tenant still owns 1 user. The purge is refused until it is removed: restore the tenant, delete it, and trash it again.",
+    );
+  });
+});
+
 describe("whatBlocksPurge", () => {
   it("is null when nothing refuses the purge", () => {
     expect(whatBlocksPurge([])).toBeNull();
@@ -81,6 +105,6 @@ describe("whatBlocksPurge", () => {
       create(PurgeBlockerSchema, { kind: PurgeBlockerKind.USERS, count: 1n }),
     ]);
     expect(text).toContain("2 collections, 1 user");
-    expect(text).toContain("refused");
+    expect(text).toContain("until they are removed");
   });
 });

@@ -16,8 +16,13 @@ const BLOCKER_NOUNS: Record<PurgeBlockerKind, [one: string, many: string]> = {
   [PurgeBlockerKind.USERS]: ["user", "users"],
 };
 
+/** one for a count of one, many for any other. */
+function oneOrMany<T>(n: bigint, one: T, many: T): T {
+  return n === 1n ? one : many;
+}
+
 function counted(n: bigint, [one, many]: [string, string]): string {
-  return `${formatCount(n)} ${n === 1n ? one : many}`;
+  return `${formatCount(n)} ${oneOrMany(n, one, many)}`;
 }
 
 /** What a purge removes that the preview neither names nor counts. */
@@ -51,7 +56,7 @@ export function affectedByPurge(p: PreviewPurgeTenantResponse): Affected[] {
   const out: Affected[] = [];
   if (p.apiTokenCount > 0n) {
     out.push({
-      heading: `${counted(p.apiTokenCount, ["API token", "API tokens"])}: integrations using them stop at once`,
+      heading: `${counted(p.apiTokenCount, ["API token", "API tokens"])}: integrations using ${oneOrMany(p.apiTokenCount, "it", "them")} stop at once`,
       items: p.apiTokens.map((t) => t.displayName || t.name),
       total: Number(p.apiTokenCount),
     });
@@ -68,7 +73,7 @@ export function affectedByPurge(p: PreviewPurgeTenantResponse): Affected[] {
   const rest =
     p.capabilityCount > 0n
       ? [
-          `${counted(p.capabilityCount, ["capability", "capabilities"])}, with their counters and charges`,
+          `${counted(p.capabilityCount, ["capability", "capabilities"])}, with ${oneOrMany(p.capabilityCount, "its", "their")} counters and charges`,
           ...PURGE_ALSO_REMOVED,
         ]
       : PURGE_ALSO_REMOVED;
@@ -87,5 +92,7 @@ export function whatBlocksPurge(
   const owned = blockers
     .map((b) => counted(b.count, BLOCKER_NOUNS[b.kind]))
     .join(", ");
-  return `The tenant still owns ${owned}. The purge is refused until they are removed: restore the tenant, delete them, and trash it again.`;
+  const total = blockers.reduce((sum, b) => sum + b.count, 0n);
+  const [it, is] = oneOrMany(total, ["it", "it is"], ["them", "they are"]);
+  return `The tenant still owns ${owned}. The purge is refused until ${is} removed: restore the tenant, delete ${it}, and trash it again.`;
 }
