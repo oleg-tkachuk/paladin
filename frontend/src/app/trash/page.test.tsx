@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+
+import {
+  PreviewPurgeTenantResponseSchema,
+  PurgeBlockerKind,
+  type PreviewPurgeTenantResponse,
+} from "@/gen/paladin/admin/v1/tenant_service_pb";
 
 import {
   fireEvent,
@@ -36,6 +43,19 @@ const h = vi.hoisted(() => ({
   purgeTenant: vi.fn(),
   restoreTenant: vi.fn(),
   notify: vi.fn(),
+  // The purge preview the confirmation reads: unread by default, so the
+  // confirmation lists the kinds a purge removes and lets it go ahead.
+  preview: {} as {
+    data?: PreviewPurgeTenantResponse;
+    isPending: boolean;
+    isError: boolean;
+    error?: Error;
+  },
+}));
+
+vi.mock("@/hooks/usePurgePreview", () => ({
+  usePurgePreview: (tenantId?: string) =>
+    tenantId ? h.preview : { isPending: true, isError: false },
 }));
 
 vi.mock("@/hooks/useTenants", () => ({
@@ -61,6 +81,11 @@ describe("TrashPage", () => {
     h.purgeTenant.mockReset();
     h.restoreTenant.mockReset();
     h.notify.mockReset();
+    h.preview = {
+      isPending: false,
+      isError: true,
+      error: new Error("preview unavailable"),
+    };
     h.tenants = [
       trashedTenant("t-new", "smoke-new", "Newer", 2),
       trashedTenant("t-old", "smoke-old", "Older", 40),
@@ -163,6 +188,7 @@ describe("TrashPage", () => {
     });
     expect(cascade).toHaveTextContent("API tokens");
     expect(cascade).toHaveTextContent("Event subscriptions");
+    expect(dialog).toHaveTextContent("could not be read");
     const purge = within(dialog).getByRole("button", {
       name: "Purge permanently",
     });
@@ -174,6 +200,78 @@ describe("TrashPage", () => {
     expect(purge).toBeDisabled();
     await confirmPurge("smoke-old");
     await waitFor(() => expect(h.purgeTenant).toHaveBeenCalledWith("t-old"));
+  });
+
+  // The confirmation names what this tenant holds, not just the kinds.
+  it("names the tenant's tokens and subscriptions from the preview", async () => {
+    h.preview = {
+      isPending: false,
+      isError: false,
+      data: create(PreviewPurgeTenantResponseSchema, {
+        apiTokens: [{ name: "tenants/t-old/apiTokens/1", displayName: "ci" }],
+        apiTokenCount: 3n,
+        eventSubscriptions: [
+          { name: "tenants/t-old/eventSubscriptions/2", displayName: "http" },
+        ],
+        eventSubscriptionCount: 1n,
+        capabilityCount: 4n,
+      }),
+    };
+    h.purgeTenant.mockResolvedValue(undefined);
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const tokens = within(dialog).getByRole("list", {
+      name: "3 API tokens: integrations using them stop at once",
+    });
+    expect(tokens).toHaveTextContent("ci");
+    expect(tokens).toHaveTextContent("and 2 more");
+    expect(
+      within(dialog).getByRole("list", { name: "Also removed" }),
+    ).toHaveTextContent("4 capabilities");
+    expect(within(dialog).queryByText(/could not be read/)).toBeNull();
+    await confirmPurge("smoke-old");
+    await waitFor(() => expect(h.purgeTenant).toHaveBeenCalledWith("t-old"));
+  });
+
+  // A purge the database would refuse is not offered: the dialog says what
+  // to remove first.
+  it("refuses a purge the tenant's rows would block, and says why", async () => {
+    h.preview = {
+      isPending: false,
+      isError: false,
+      data: create(PreviewPurgeTenantResponseSchema, {
+        blockers: [{ kind: PurgeBlockerKind.USERS, count: 2n }],
+      }),
+    };
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("still owns 2 users");
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: /to confirm/ }),
+      { target: { value: "smoke-old" } },
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Purge permanently" }),
+    ).toBeDisabled();
+  });
+
+  it("waits for the preview before offering the purge", async () => {
+    h.preview = { isPending: true, isError: false };
+    render(<TrashPage />);
+    await screen.findByText("Older");
+    fireEvent.click(screen.getByRole("button", { name: "Purge smoke-old" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.change(
+      within(dialog).getByRole("textbox", { name: /to confirm/ }),
+      { target: { value: "smoke-old" } },
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Purge permanently" }),
+    ).toBeDisabled();
   });
 
   // A refused purge is reported under the tenant's own row, not in a toast

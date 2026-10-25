@@ -249,6 +249,20 @@ func (s *TenantServer) PurgeTenant(ctx context.Context, req *pb.PurgeTenantReque
 	return &pb.PurgeTenantResponse{}, nil
 }
 
+// PreviewPurgeTenant — what a purge would remove and what would refuse it,
+// changing nothing.
+func (s *TenantServer) PreviewPurgeTenant(ctx context.Context, req *pb.PreviewPurgeTenantRequest) (*pb.PreviewPurgeTenantResponse, error) {
+	tid, err := s.resolveTenantID(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.H.PreviewPurgeTenant(ctx, tid)
+	if err != nil {
+		return nil, err
+	}
+	return purgePreviewToProto(tid, p), nil
+}
+
 func (s *TenantServer) ListTenants(ctx context.Context, req *pb.ListTenantsRequest) (*pb.ListTenantsResponse, error) {
 	m := req
 	args := tenanth.ListTenantsArgs{

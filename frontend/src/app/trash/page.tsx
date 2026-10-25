@@ -35,22 +35,6 @@ function byDeletedAt(a: Tenant, b: Tenant): number {
 
 const COLUMN_COUNT = 4;
 
-// What a purge deletes along with the tenant row, without asking again: the
-// ON DELETE CASCADE children of `tenants`, and the capabilities pgstore
-// erases in the same transaction (docs/deletion-semantics.md). Kinds rather
-// than rows: the trash does not read each tenant's tokens and subscriptions.
-const PURGE_CASCADE: Affected = {
-  heading: "Removed with it",
-  items: [
-    "API tokens: integrations using them stop at once",
-    "Event subscriptions: deliveries stop, silently",
-    "Capabilities, with their counters and charges",
-    "Quotas, rate limits and slug history",
-    "Operations, object locks and upload sessions",
-  ],
-  mono: false,
-};
-
 // Which trashed tenants show, by where they stand in the retention window.
 type RetentionFilter = "all" | "past" | "within";
 const RETENTION_FILTERS: readonly ToolbarFilterOption<RetentionFilter>[] = [
@@ -94,7 +78,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { usePurgePreview } from "@/hooks/usePurgePreview";
+import {
+  PURGE_CASCADE,
+  whatBlocksPurge,
+  affectedByPurge,
+} from "@/lib/tenant/purgePreview";
 import { SortableHead } from "@/components/ui/SortHeader";
 import {
   TableToolbar,
@@ -140,6 +130,15 @@ export default function TrashPage() {
     kind: "restore" | "purge";
     tenant: Tenant;
   } | null>(null);
+  // What the purge awaiting confirmation would remove and what would refuse
+  // it, read while its confirmation is open. While it loads the confirmation
+  // lists the kinds a purge removes and waits; if it cannot be read, it
+  // lists them and lets the purge go ahead, whose own refusal still lands
+  // under the row.
+  const preview = usePurgePreview(
+    pending?.kind === "purge" ? pending.tenant.tenantId : undefined,
+  );
+  const blockers = preview.data ? whatBlocksPurge(preview.data.blockers) : null;
   // Why the last purge of a tenant was refused, by tenant id.
   const [purgeRefusals, setPurgeRefusals] = useState<Record<string, string>>(
     {},
@@ -476,7 +475,10 @@ export default function TrashPage() {
           loading={busyId !== null}
           type="danger"
           typeToConfirm={pending?.tenant.slug || pending?.tenant.tenantId}
-          affected={PURGE_CASCADE}
+          affected={
+            preview.data ? affectedByPurge(preview.data) : PURGE_CASCADE
+          }
+          confirmDisabled={preview.isPending || blockers !== null}
           title="Purge this tenant?"
           message={
             <p>
@@ -489,9 +491,19 @@ export default function TrashPage() {
           }
           warning={
             <>
-              Physical S3 objects under{" "}
-              <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span> are not
-              removed — clean them up separately if needed.
+              {blockers && <p className="font-medium">{blockers}</p>}
+              {preview.isError && (
+                <p>
+                  What it removes could not be read (
+                  {errorMessage(preview.error)}); the kinds below are what any
+                  purge removes.
+                </p>
+              )}
+              <p>
+                Physical S3 objects under{" "}
+                <span className={T.code}>{"<bucket>/<tenant_id>/…"}</span> are
+                not removed — clean them up separately if needed.
+              </p>
             </>
           }
           confirmText="Purge permanently"

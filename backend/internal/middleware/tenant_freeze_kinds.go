@@ -182,6 +182,7 @@ var procedureKinds = map[string]Kind{
 	admin.TenantServiceSetInheritedPolicyProcedure:         Changes,
 	admin.TenantServiceRestoreTenantProcedure:              Lifecycle,
 	admin.TenantServicePurgeTenantProcedure:                Lifecycle,
+	admin.TenantServicePreviewPurgeTenantProcedure:         Lifecycle,
 	admin.TenantServiceRenameTenantSlugProcedure:           Changes,
 	admin.TenantServiceMigrateTenantStorageLayoutProcedure: Changes,
 	admin.TenantServiceGetTenantStorageMigrationProcedure:  Reads,

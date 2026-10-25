@@ -43,6 +43,9 @@ const (
 	TenantServiceRestoreTenantProcedure = "/paladin.admin.v1.TenantService/RestoreTenant"
 	// TenantServicePurgeTenantProcedure is the procedure name of the TenantService's PurgeTenant RPC.
 	TenantServicePurgeTenantProcedure = "/paladin.admin.v1.TenantService/PurgeTenant"
+	// TenantServicePreviewPurgeTenantProcedure is the procedure name of the TenantService's
+	// PreviewPurgeTenant RPC.
+	TenantServicePreviewPurgeTenantProcedure = "/paladin.admin.v1.TenantService/PreviewPurgeTenant"
 	// TenantServiceRenameTenantSlugProcedure is the procedure name of the TenantService's
 	// RenameTenantSlug RPC.
 	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
@@ -127,6 +130,14 @@ var (
 			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("PurgeTenant"),
 			Procedure:        TenantServicePurgeTenantProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	tenantServicePreviewPurgeTenantSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("PreviewPurgeTenant"),
+			Procedure:        TenantServicePreviewPurgeTenantProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
 	tenantServiceRenameTenantSlugSpec = sync.OnceValue(func() connect.Spec {
@@ -227,6 +238,11 @@ type TenantServiceClient interface {
 	// two-step recovery window is preserved by default. Idempotent on
 	// a missing row.
 	PurgeTenant(context.Context, *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error)
+	// PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+	// remove with the tenant and what would refuse it: for the confirmation
+	// an operator reads before a delete nothing undoes. The tenant may be
+	// active or trashed; the answer is the same either way.
+	PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
 	// inherited_cedar_policy AND in every collection's cedar_policy to
@@ -311,6 +327,11 @@ type TenantServiceHandler interface {
 	// two-step recovery window is preserved by default. Idempotent on
 	// a missing row.
 	PurgeTenant(context.Context, *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error)
+	// PreviewPurgeTenant answers, changing nothing, what PurgeTenant would
+	// remove with the tenant and what would refuse it: for the confirmation
+	// an operator reads before a delete nothing undoes. The tenant may be
+	// active or trashed; the answer is the same either way.
+	PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error)
 	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
 	// `Tenant::"<old_slug>"` reference in the tenant's
 	// inherited_cedar_policy AND in every collection's cedar_policy to
@@ -361,6 +382,7 @@ func RegisterTenantServiceHandler(server *connect.Server, svc TenantServiceHandl
 		connect.Method{Spec: tenantServiceSetInheritedPolicySpec(), Handler: adapter.setInheritedPolicy},
 		connect.Method{Spec: tenantServiceRestoreTenantSpec(), Handler: adapter.restoreTenant},
 		connect.Method{Spec: tenantServicePurgeTenantSpec(), Handler: adapter.purgeTenant},
+		connect.Method{Spec: tenantServicePreviewPurgeTenantSpec(), Handler: adapter.previewPurgeTenant},
 		connect.Method{Spec: tenantServiceRenameTenantSlugSpec(), Handler: adapter.renameTenantSlug},
 		connect.Method{Spec: tenantServiceMigrateTenantStorageLayoutSpec(), Handler: adapter.migrateTenantStorageLayout},
 		connect.Method{Spec: tenantServiceGetTenantStorageMigrationSpec(), Handler: adapter.getTenantStorageMigration},
@@ -404,6 +426,10 @@ func (UnimplementedTenantServiceHandler) RestoreTenant(context.Context, *v1.Rest
 
 func (UnimplementedTenantServiceHandler) PurgeTenant(context.Context, *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.PurgeTenant is not implemented")
+}
+
+func (UnimplementedTenantServiceHandler) PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.PreviewPurgeTenant is not implemented")
 }
 
 func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error) {
@@ -497,6 +523,14 @@ func (c *tenantServiceClient) RestoreTenant(ctx context.Context, req *v1.Restore
 func (c *tenantServiceClient) PurgeTenant(ctx context.Context, req *v1.PurgeTenantRequest) (*v1.PurgeTenantResponse, error) {
 	var res v1.PurgeTenantResponse
 	if err := c.client.CallUnary(ctx, tenantServicePurgeTenantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) PreviewPurgeTenant(ctx context.Context, req *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error) {
+	var res v1.PreviewPurgeTenantResponse
+	if err := c.client.CallUnary(ctx, tenantServicePreviewPurgeTenantSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -650,6 +684,18 @@ func (h tenantServiceHandler) purgeTenant(ctx context.Context, _ connect.Spec, s
 		return err
 	}
 	res, err := h.svc.PurgeTenant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) previewPurgeTenant(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewPurgeTenantRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewPurgeTenant(ctx, &req)
 	if err != nil {
 		return err
 	}

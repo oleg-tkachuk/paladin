@@ -174,6 +174,11 @@ type Repository interface {
 	// the tenant row and everything that cascades from it. A refusal by a
 	// locked object is ErrTenantHoldsLockedObjects.
 	Purge(ctx context.Context, args PurgeTenantArgs) error
+	// PreviewPurge reads, in one snapshot and changing nothing, what Purge
+	// would remove with the tenant — up to names of its API tokens and event
+	// subscriptions by name, every one of them counted, and its capabilities
+	// counted — and what would refuse it.
+	PreviewPurge(ctx context.Context, tenantID uuid.UUID, names int) (PurgePreview, error)
 
 	// StartStorageMigration provisions the tenant's dedicated bucket
 	// (provision_state='pending', owned by the tenant) and inserts the

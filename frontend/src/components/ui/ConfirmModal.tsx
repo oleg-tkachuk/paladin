@@ -70,8 +70,9 @@ interface ConfirmModalProps {
   // selection): pasting an id copied from the row proves nothing, and a
   // selection's count changes as rows are ticked.
   typeToConfirm?: string;
-  // What the action reaches, listed by name; see Affected.
-  affected?: Affected;
+  // What the action reaches, listed by name; see Affected. Several lists
+  // show one under another, in the order given.
+  affected?: Affected | readonly Affected[];
 }
 
 // Colours are theme tokens, like every other dialog's: the fixed dark hex and
@@ -204,7 +205,9 @@ export function ConfirmModal({
             <div>{warning}</div>
           </div>
         )}
-        {affected && <AffectedList {...affected} />}
+        {affectedLists(affected).map((a) => (
+          <AffectedList key={a.heading} {...a} />
+        ))}
         {children}
         {typeToConfirm !== undefined && (
           <div className="space-y-1.5 text-left">
@@ -279,6 +282,14 @@ export function ConfirmModal({
 
 // The names an action reaches, a few at most and then how many more: enough
 // to recognise the selection by, without the dialog outgrowing the screen.
+// affectedLists is affected as a list of lists, empty when there is none.
+function affectedLists(
+  affected: Affected | readonly Affected[] | undefined,
+): readonly Affected[] {
+  if (!affected) return [];
+  return Array.isArray(affected) ? affected : [affected as Affected];
+}
+
 function AffectedList({ heading, items, total, mono = true }: Affected) {
   const headingId = useId();
   const shown = items.slice(0, AFFECTED_SHOWN);

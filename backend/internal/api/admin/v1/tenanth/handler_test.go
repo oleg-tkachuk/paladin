@@ -60,6 +60,7 @@ type fakeRepo struct {
 	updateTxFn       func(context.Context, pgx.Tx, UpdateTenantArgs) (Tenant, error)
 	softDeleteTxFn   func(context.Context, pgx.Tx, uuid.UUID, int64) error
 	purgeFn          func(context.Context, PurgeTenantArgs) error
+	previewPurgeFn   func(context.Context, uuid.UUID, int) (PurgePreview, error)
 	restoreTxFn      func(context.Context, pgx.Tx, uuid.UUID) (Tenant, error)
 	startMigrationFn func(context.Context, StartStorageMigrationArgs) (StorageMigration, error)
 	getMigrationFn   func(context.Context, uuid.UUID) (StorageMigration, error)
@@ -201,6 +202,13 @@ func (f *fakeRepo) Purge(ctx context.Context, args PurgeTenantArgs) error {
 		return f.purgeFn(ctx, args)
 	}
 	return nil
+}
+
+func (f *fakeRepo) PreviewPurge(ctx context.Context, id uuid.UUID, names int) (PurgePreview, error) {
+	if f.previewPurgeFn != nil {
+		return f.previewPurgeFn(ctx, id, names)
+	}
+	return PurgePreview{}, nil
 }
 
 func (f *fakeRepo) RestoreTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Tenant, error) {

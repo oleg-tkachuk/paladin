@@ -6,6 +6,8 @@ import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
 const h = vi.hoisted(() => ({
   batchDelete: vi.fn(),
   batchRestore: vi.fn(),
+  batchCopy: vi.fn(),
+  batchTags: vi.fn(),
   notify: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", async (orig) => ({
@@ -13,6 +15,8 @@ vi.mock("@/lib/connect/client", async (orig) => ({
   batchClient: {
     batchDeleteObjects: h.batchDelete,
     batchRestoreObjects: h.batchRestore,
+    batchCopyObjects: h.batchCopy,
+    batchUpdateTags: h.batchTags,
   },
 }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -134,6 +138,8 @@ describe("RetryFailedButton", () => {
   beforeEach(() => {
     h.batchDelete.mockReset().mockResolvedValue({});
     h.batchRestore.mockReset().mockResolvedValue({});
+    h.batchCopy.mockReset().mockResolvedValue({});
+    h.batchTags.mockReset().mockResolvedValue({});
     h.notify.mockReset();
   });
 
@@ -176,7 +182,40 @@ describe("RetryFailedButton", () => {
     );
   });
 
-  it("offers nothing for a copy, whose request it cannot rebuild", () => {
+  it("copies again to the destination and key prefix the copy named", async () => {
+    const op = partial("BatchCopy");
+    op.target!.destination = "tenants/t-1/collections/archive";
+    op.target!.destinationKeyPrefix = "2026/";
+    render(<RetryFailedButton op={op} />);
+    await userEvent.click(screen.getByRole("button", { name: /Retry failed/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(h.batchCopy).toHaveBeenCalledWith({
+        sourceParent: COLLECTION,
+        selector: { names: [`${COLLECTION}/objects/${FAILED}`], filter: "" },
+        destinationCollection: "tenants/t-1/collections/archive",
+        destinationKeyPrefix: "2026/",
+      }),
+    );
+  });
+
+  it("updates the tags again as the update named them", async () => {
+    const op = partial("BatchUpdateTags");
+    op.target!.tags = { stage: "done" };
+    render(<RetryFailedButton op={op} />);
+    await userEvent.click(screen.getByRole("button", { name: /Retry failed/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(h.batchTags).toHaveBeenCalledWith({
+        parent: COLLECTION,
+        selector: { names: [`${COLLECTION}/objects/${FAILED}`], filter: "" },
+        tags: { stage: "done" },
+        replace: false,
+      }),
+    );
+  });
+
+  it("offers nothing for a copy whose destination it does not know", () => {
     render(<RetryFailedButton op={partial("BatchCopy")} />);
     expect(screen.queryByRole("button", { name: /Retry failed/ })).toBeNull();
   });

@@ -59,11 +59,43 @@ describe("retryRequest", () => {
     expect(retryRequest(batch("BatchDelete", []))).toBeNull();
   });
 
-  // A copy's key prefix and a tag update's tags are not on the operation, so
-  // a retry could not ask for what they asked.
-  it("offers nothing for a copy or a tag update", () => {
-    const failures = [{ object_id: FAILED, reason: "x" }];
-    expect(retryRequest(batch("BatchCopy", failures))).toBeNull();
-    expect(retryRequest(batch("BatchUpdateTags", failures))).toBeNull();
+  it("copies again to the same destination and key prefix", () => {
+    const op = batch("BatchCopy", [{ object_id: FAILED, reason: "x" }]);
+    op.target!.destination = "tenants/t-1/collections/archive";
+    op.target!.destinationKeyPrefix = "2026/";
+    expect(retryRequest(op)).toEqual({
+      kind: "copy",
+      parent: COLLECTION,
+      names: [`${COLLECTION}/objects/${FAILED}`],
+      destination: "tenants/t-1/collections/archive",
+      keyPrefix: "2026/",
+    });
+  });
+
+  it("updates the same tags again, replacing as it did", () => {
+    const op = batch("BatchUpdateTags", [{ object_id: FAILED, reason: "x" }]);
+    op.target!.tags = { stage: "done" };
+    op.target!.replace = true;
+    expect(retryRequest(op)).toEqual({
+      kind: "tags",
+      parent: COLLECTION,
+      names: [`${COLLECTION}/objects/${FAILED}`],
+      tags: { stage: "done" },
+      replace: true,
+    });
+  });
+
+  // A server that does not send the tags would have the retry ask for none,
+  // which with replace clears every tag the objects have.
+  it("offers nothing for a tag update whose tags it does not know", () => {
+    const op = batch("BatchUpdateTags", [{ object_id: FAILED, reason: "x" }]);
+    op.target!.replace = true;
+    expect(retryRequest(op)).toBeNull();
+  });
+
+  it("offers nothing for a copy whose destination it does not know", () => {
+    expect(
+      retryRequest(batch("BatchCopy", [{ object_id: FAILED, reason: "x" }])),
+    ).toBeNull();
   });
 });

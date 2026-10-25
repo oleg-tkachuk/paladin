@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -856,4 +857,69 @@ func (r *TenantRepo) TenantNames(ctx context.Context, ids []uuid.UUID) (map[uuid
 		}
 	}
 	return out, nil
+}
+
+// PreviewPurge reads what Purge would remove with the tenant and what would
+// refuse it, in one repeatable-read snapshot, acting on the tenant so its
+// row-level security shows its rows. The capability count is pgstore's
+// census of the tenant's records, which Purge erases.
+func (r *TenantRepo) PreviewPurge(ctx context.Context, tenantID uuid.UUID, names int) (tenanth.PurgePreview, error) {
+	ctx = auth.WithActingTenant(ctx, tenantID)
+	var out tenanth.PurgePreview
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return out, fmt.Errorf("preview purge: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q, id, limit := r.q.WithTx(tx), pgUUID(tenantID), int32(min(names, math.MaxInt32)) // #nosec G115 -- bounded above
+	tokens, err := q.ListPurgeAPITokens(ctx, id, limit)
+	if err != nil {
+		return out, fmt.Errorf("preview purge: api tokens: %w", err)
+	}
+	for _, t := range tokens {
+		out.APITokens = append(out.APITokens, tenanth.PurgedAPIToken{ID: uuidFrom(t.ID), Name: t.Name})
+	}
+	if out.APITokenCount, err = q.CountPurgeAPITokens(ctx, id); err != nil {
+		return out, fmt.Errorf("preview purge: count api tokens: %w", err)
+	}
+	subs, err := q.ListPurgeEventSubscriptions(ctx, id, limit)
+	if err != nil {
+		return out, fmt.Errorf("preview purge: event subscriptions: %w", err)
+	}
+	for _, s := range subs {
+		out.Subscriptions = append(out.Subscriptions, tenanth.PurgedSubscription{ID: uuidFrom(s.ID), SinkKind: string(s.SinkKind)})
+	}
+	if out.SubscriptionCount, err = q.CountPurgeEventSubscriptions(ctx, id); err != nil {
+		return out, fmt.Errorf("preview purge: count event subscriptions: %w", err)
+	}
+	blockers, err := q.CountPurgeBlockers(ctx, id)
+	if err != nil {
+		return out, fmt.Errorf("preview purge: blockers: %w", err)
+	}
+	out.Blockers = tenanth.PurgeBlockers{Collections: blockers.Collections, Buckets: blockers.Buckets, Users: blockers.Users}
+	if err := tx.Commit(ctx); err != nil {
+		return out, fmt.Errorf("preview purge: commit: %w", err)
+	}
+	if out.CapabilityCount, err = r.capabilityCount(ctx, tenantID); err != nil {
+		return out, fmt.Errorf("preview purge: capabilities: %w", err)
+	}
+	return out, nil
+}
+
+// capabilityCount is how many capability records of tenantID pgstore holds,
+// every disposition counted.
+func (r *TenantRepo) capabilityCount(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	census, err := capabilitypg.NewCensus(r.pool)
+	if err != nil {
+		return 0, err
+	}
+	page, err := census.CountRecords(ctx, limes.CountRecordsRequest{TenantID: tenantID})
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, c := range page.Items {
+		total += c.Total
+	}
+	return total, nil
 }

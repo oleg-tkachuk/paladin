@@ -91,6 +91,12 @@ type Querier interface {
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, liveOnly bool) (int64, error)
 	CountPendingMultipartAborts(ctx context.Context) (int64, error)
+	CountPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// The ON DELETE RESTRICT children of the tenant, which refuse its purge
+	// while any is left (docs/deletion-semantics.md). Trashed collections count:
+	// the foreign key does not tell them apart.
+	CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error)
+	CountPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// Trashed tenants whose trash retention has lapsed as of as_of: the ones the
 	// console marks "Past retention" and an operator should decide on.
 	CountTenantsPastTrashRetention(ctx context.Context, trashRetentionSeconds float64, asOf pgtype.Timestamptz) (int64, error)
@@ -503,6 +509,13 @@ type Querier interface {
 	// rows are picked up before failed-and-waiting-for-retry rows. Caller is
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
+	// The tenant's API tokens a purge would remove, revoked ones included, in
+	// issue order, up to the preview's limit. Under RLS: the caller acts on the
+	// tenant (auth.WithActingTenant).
+	ListPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID, maxRows int32) ([]ListPurgeAPITokensRow, error)
+	// The tenant's event subscriptions a purge would remove, in creation order,
+	// up to the preview's limit.
+	ListPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, maxRows int32) ([]ListPurgeEventSubscriptionsRow, error)
 	// Sessions whose client never Completed/Aborted, past the cooling-off
 	// window. Joins objects + collections to materialise everything
 	// AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so

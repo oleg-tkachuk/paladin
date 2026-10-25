@@ -16,8 +16,9 @@ const (
 )
 
 // Target is what an operation acts on, as its request named it: the part of
-// the worker's arguments a reader of the operation needs, and no more — the
-// object ids and tag values stay with the worker.
+// the worker's arguments a reader of the operation needs to see it and to
+// start it again for the objects it could not act on, and no more — the
+// object ids stay with the worker.
 type Target struct {
 	// Collection and Destination are resource names,
 	// "tenants/{tenant_id}/collections/{name}"; Destination only for a copy.
@@ -26,6 +27,9 @@ type Target struct {
 	ObjectCount int
 	Permanent   bool
 	Replace     bool
+	// KeyPrefix is a copy's destination key prefix; Tags a tag update's tags.
+	KeyPrefix string
+	Tags      map[string]string
 }
 
 // CollectionName is a collection's resource name.
@@ -54,13 +58,14 @@ func DescribeOperation(opType string, metadata []byte) (Target, bool) {
 			Collection:  CollectionName(a.TenantID, a.SrcCollection),
 			Destination: CollectionName(a.TenantID, a.DstCollection),
 			ObjectCount: len(a.ObjectIDs),
+			KeyPrefix:   a.KeyPrefix,
 		}, true
 	case OpBatchUpdateTags:
 		var a BatchUpdateTagsArgs
 		if json.Unmarshal(metadata, &a) != nil {
 			return Target{}, false
 		}
-		return Target{Collection: CollectionName(a.TenantID, a.Collection), ObjectCount: len(a.ObjectIDs), Replace: a.Replace}, true
+		return Target{Collection: CollectionName(a.TenantID, a.Collection), ObjectCount: len(a.ObjectIDs), Replace: a.Replace, Tags: a.Tags}, true
 	case OpBatchRestoreObjects:
 		var a BatchRestoreObjectsArgs
 		if json.Unmarshal(metadata, &a) != nil {

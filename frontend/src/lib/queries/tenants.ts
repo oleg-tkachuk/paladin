@@ -61,3 +61,23 @@ export function tenantsQuery(set: TenantSet = "active") {
     queryFn: ({ signal }) => listTenants(set, signal),
   });
 }
+
+/** The segment the purge previews of tenants sit under, beside the sets. */
+const PURGE_PREVIEW_SEGMENT = "purgePreview";
+
+/**
+ * What a purge of the tenant would remove and what would refuse it, read
+ * each time the confirmation opens: under the tenants' key, so a change to
+ * any tenant drops it, and never served stale.
+ */
+export function purgePreviewQuery(tenantId: string) {
+  return queryOptions({
+    queryKey: [...TENANTS_QUERY_KEY, PURGE_PREVIEW_SEGMENT, tenantId] as const,
+    queryFn: ({ signal }) =>
+      tenantClient.previewPurgeTenant(
+        { name: `tenants/${tenantId}` },
+        { signal },
+      ),
+    staleTime: 0,
+  });
+}

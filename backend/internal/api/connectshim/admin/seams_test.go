@@ -280,6 +280,9 @@ func (failingTenant) MigrateTenantStorageLayout(context.Context, uuid.UUID, stri
 func (failingTenant) PurgeTenant(context.Context, uuid.UUID) error {
 	return errBoom
 }
+func (failingTenant) PreviewPurgeTenant(context.Context, uuid.UUID) (*tenanth.PurgePreview, error) {
+	return nil, errBoom
+}
 func (failingTenant) RenameTenantSlug(context.Context, tenanth.RenameTenantSlugArgs) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
@@ -682,6 +685,10 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"Tenant.PurgeTenant", func() error {
 			_, err := tenantSrv.PurgeTenant(ctx, &pb.PurgeTenantRequest{Name: tenantName})
+			return err
+		}},
+		{"Tenant.PreviewPurgeTenant", func() error {
+			_, err := tenantSrv.PreviewPurgeTenant(ctx, &pb.PreviewPurgeTenantRequest{Name: tenantName})
 			return err
 		}},
 		{"Tenant.RenameTenantSlug", func() error {

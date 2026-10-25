@@ -186,6 +186,12 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	}, nil
 }
 
+// TokenName is the resource name of tenant's API token id, which every
+// addressed RPC on the service takes and parseTokenName decodes.
+func TokenName(tenant, id uuid.UUID) string {
+	return "tenants/" + tenant.String() + "/apiTokens/" + id.String()
+}
+
 // parseTokenName decodes "tenants/{tenant}/apiTokens/{id}".
 //
 // The tenant segment is the point of the whole conversion. api_tokens carries
@@ -395,7 +401,7 @@ func tokenToProto(t api_token.Token) *adminv1.APIToken {
 		// The resource name every addressed RPC on this service now takes.
 		// Returned so a caller never has to assemble it, and never has to
 		// carry a bare id that cannot be scoped.
-		Name:        "tenants/" + t.TenantID.String() + "/apiTokens/" + t.ID.String(),
+		Name:        TokenName(t.TenantID, t.ID),
 		Id:          t.ID.String(),
 		TenantId:    t.TenantID.String(),
 		DisplayName: t.Name,
