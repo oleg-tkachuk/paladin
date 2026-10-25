@@ -338,7 +338,7 @@ type Querier interface {
 	// an older stamp, and the roll's next tick would otherwise zero what this day
 	// had already admitted.
 	IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
-	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, requestJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID, relayedBy *string, userAgent *string) error
+	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, requestJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID, relayedBy *string, userAgent *string, stateBeforeJson []byte, stateAfterJson []byte) error
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
 	InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, checksumPartSizeBytes *int64, contentType *string, metadata []byte, tags []byte) error

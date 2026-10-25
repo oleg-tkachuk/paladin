@@ -21,7 +21,7 @@ vi.mock("../tenant-context", () => ({
 }));
 
 vi.mock("@/components/features/audit/AuditEntryPanel", () => ({
-  AUDIT_ENTRY_TABS: ["summary", "request"],
+  AUDIT_ENTRY_TABS: ["summary", "changes", "request"],
   AuditEntryPanel: ({ entryId }: { entryId: string | null }) =>
     entryId ? <div role="dialog">{entryId}</div> : null,
 }));

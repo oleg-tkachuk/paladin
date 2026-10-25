@@ -190,6 +190,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 
 	// The plane's interceptors; the codec, size limits and compression it
 	// shares with the others are rpcMountOptions.
+	// The readers the audit log takes each change's before and after with,
+	// filled once the servers they read through exist (adminStateServers).
+	stateReaders := middleware.StateReaders{}
 	adminServer := connect.NewServer(
 		// Outermost of all: a panic anywhere below is answered as an
 		// internal error and logged with its stack.
@@ -251,8 +254,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// RPC returns, so a process kill can no longer drop a queued entry
 		// (the compliance trail must survive a crash). Cost is one indexed
 		// append on the response path of each mutating admin RPC.
-		middleware.AuditWithMirror(repos.Audit, auth.AudienceAdmin, false,
-			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror"))),
+		// Each action that changes one resource also records it before and
+		// after, read through stateReaders, which the servers fill below.
+		middleware.AuditWithState(repos.Audit, auth.AudienceAdmin, false,
+			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror")), stateReaders),
 	)
 
 	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")
@@ -270,10 +275,17 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	healthH.Register(mux)
 	adminServices := servicesIn(protoregistry.GlobalFiles, adminPackage)
 	mountGRPCStandards(mux, healthH.GRPCChecker(adminServices...), adminServices)
-	paladinadminv1connect.RegisterBackendServiceHandler(adminServer, admin.NewBackendServer(backendH))
-	paladinadminv1connect.RegisterBucketServiceHandler(adminServer, admin.NewBucketServer(bucketV2H, tenantH))
-	paladinadminv1connect.RegisterTenantServiceHandler(adminServer, admin.NewTenantServer(tenantH, cfg.Admin.Tenants.TrashRetention))
-	paladinadminv1connect.RegisterCollectionServiceHandler(adminServer, admin.NewCollectionServer(collectionH, repos.Tenant, tenantH))
+	state := adminStateServers{
+		backend:    admin.NewBackendServer(backendH),
+		bucket:     admin.NewBucketServer(bucketV2H, tenantH),
+		tenant:     admin.NewTenantServer(tenantH, cfg.Admin.Tenants.TrashRetention),
+		collection: admin.NewCollectionServer(collectionH, repos.Tenant, tenantH),
+		quota:      admin.NewQuotaServer(quotaH),
+	}
+	paladinadminv1connect.RegisterBackendServiceHandler(adminServer, state.backend)
+	paladinadminv1connect.RegisterBucketServiceHandler(adminServer, state.bucket)
+	paladinadminv1connect.RegisterTenantServiceHandler(adminServer, state.tenant)
+	paladinadminv1connect.RegisterCollectionServiceHandler(adminServer, state.collection)
 	paladinadminv1connect.RegisterPolicyServiceHandler(adminServer, admin.NewPolicyServer(policyH))
 	// CELService — stateless validator for CEL filter / match expressions
 	// the admin UI surfaces inline (lifecycle.match, eventsub.filter,
@@ -281,15 +293,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// admin-audience JWT only, no DB, no audit, no Cedar gate.
 	paladinadminv1connect.RegisterCELServiceHandler(adminServer, celh.NewHandler())
 	paladinadminv1connect.RegisterPlatformOperationServiceHandler(adminServer, admin.NewOperationServer(opH))
-	paladinadminv1connect.RegisterQuotaServiceHandler(adminServer, admin.NewQuotaServer(quotaH))
+	paladinadminv1connect.RegisterQuotaServiceHandler(adminServer, state.quota)
 
 	{
 		var usageStore meter.UsageStore
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
 		}
-		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer,
-			admin.NewTenantBudgetServer(usageStore, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
+		state.budget = admin.NewTenantBudgetServer(usageStore, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool))
+		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer, state.budget)
 
 		// BillingService — read-only aggregation over the charges
 		// ledger. Only mounted with a real handler when the capability
@@ -306,7 +318,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
 	}
 	paladinadminv1connect.RegisterAuditLogServiceHandler(adminServer, admin.NewAuditServer(auditH))
-	paladinadminv1connect.RegisterEventSubscriptionServiceHandler(adminServer, admin.NewEventSubscriptionServer(eventSubH, tenantH))
+	state.subscription = admin.NewEventSubscriptionServer(eventSubH, tenantH)
+	paladinadminv1connect.RegisterEventSubscriptionServiceHandler(adminServer, state.subscription)
+	state.fill(stateReaders)
 	// MCPInspectService — read-only operator visibility into the MCP
 	// bridge configuration (profiles, deny-list, tool catalog,
 	// upstreams, transport state). Always mounted; the admin's Cedar

@@ -56,6 +56,15 @@ func marshalAuditPayload(v any) []byte {
 	return b
 }
 
+// marshalState is a resource's state as an entry records it, secrets
+// redacted; nil for none.
+func marshalState(m proto.Message) []byte {
+	if m == nil {
+		return nil
+	}
+	return marshalAuditPayload(m)
+}
+
 // AuditWriter inserts audit log entries. Implementations are typically the
 // Postgres adapter via admindomain.AuditRepository.
 //
@@ -86,11 +95,30 @@ type AuditMirrorEmitter interface {
 // cfg.Dispatcher.AuditMirrorEnabled (default off — even higher
 // cardinality than charge events because every mutation logs).
 func AuditWithMirror(w AuditWriter, audience string, recordReads bool, mirror AuditMirrorEmitter) connect.ServerInterceptor {
+	return AuditWithState(w, audience, recordReads, mirror, nil)
+}
+
+// StateReader reads the resource an audited action changes, as its own Get
+// answers it, from the action's request: before the action, and after it
+// when the action does not answer with the resource itself.
+type StateReader func(ctx context.Context, req proto.Message) (proto.Message, error)
+
+// StateReaders are the readers of the actions that change one resource, by
+// procedure. A procedure held with a nil reader is a create: it has no state
+// before, and its answer is the resource it made.
+type StateReaders map[string]StateReader
+
+// AuditWithState is AuditWithMirror that also records, for an action with a
+// reader, the resource as it was before the action and as the action left
+// it (AuditEntry.StateBefore, StateAfter), secrets redacted. A read that
+// fails leaves its side empty and never fails the action.
+func AuditWithState(w AuditWriter, audience string, recordReads bool, mirror AuditMirrorEmitter, readers StateReaders) connect.ServerInterceptor {
 	return (&auditInterceptor{
 		w:           w,
 		audience:    audience,
 		recordReads: recordReads,
 		mirror:      mirror,
+		readers:     readers,
 	}).interceptor()
 }
 
@@ -99,6 +127,42 @@ type auditInterceptor struct {
 	audience    string
 	recordReads bool
 	mirror      AuditMirrorEmitter
+	readers     StateReaders
+}
+
+// readState is what read answers for req, nil when it answers nothing: a
+// resource that does not exist on that side of the action, or a read that
+// failed, which is logged.
+func readState(ctx context.Context, spec connect.Spec, read StateReader, req proto.Message) proto.Message {
+	m, err := read(ctx, req)
+	switch {
+	case err == nil && m != nil && m.ProtoReflect().IsValid():
+		return m
+	case err == nil, connect.CodeOf(err) == connect.CodeNotFound:
+		return nil
+	}
+	logger.FromContext(ctx).Warn("audit state not read",
+		zap.String("rpc", spec.Procedure), zap.Error(err))
+	return nil
+}
+
+// answered is resp, nil for no answer.
+func answered(resp proto.Message) proto.Message {
+	if resp == nil || !resp.ProtoReflect().IsValid() {
+		return nil
+	}
+	return resp
+}
+
+// stateAfter is the resource as a successful action left it: its answer,
+// when that is the resource, as the same type as before shows; otherwise
+// read again.
+func stateAfter(ctx context.Context, spec connect.Spec, read StateReader, req proto.Message, before, resp proto.Message) proto.Message {
+	if before != nil && resp != nil && resp.ProtoReflect().IsValid() &&
+		proto.MessageName(resp) == proto.MessageName(before) {
+		return resp
+	}
+	return readState(ctx, spec, read, req)
 }
 
 // interceptor records a unary call with its request message, and a stream
@@ -113,9 +177,22 @@ func (a *auditInterceptor) unary(next unary.Func) unary.Func {
 		// the canonical (A-shape) name into. Audit row picks it up
 		// after the handler returns (see preferCanonical).
 		ctx = apiutil.WithResourceSlot(ctx)
+		skip := a.shouldSkip(spec)
+		read, recorded := a.readers[spec.Procedure]
+		var before, after proto.Message
+		if !skip && read != nil {
+			before = readState(ctx, spec, read, req)
+		}
 		resp, err := next(ctx, spec, req)
-		if a.shouldSkip(spec) {
+		if skip {
 			return resp, err
+		}
+		switch {
+		case err != nil || !recorded:
+		case read == nil:
+			after = answered(resp)
+		default:
+			after = stateAfter(ctx, spec, read, req, before, resp)
 		}
 		// Best-effort in the sense that it never blocks or fails the RPC — NOT
 		// in the sense that nobody is told. This is the compliance trail (SOC 2
@@ -128,7 +205,7 @@ func (a *auditInterceptor) unary(next unary.Func) unary.Func {
 		// Error, not Warn. An audit write that fails is a defect with an
 		// external consequence, and the rate of these is something someone
 		// should be paged about.
-		if werr := a.write(ctx, spec, req, err); werr != nil {
+		if werr := a.write(ctx, spec, req, err, before, after); werr != nil {
 			logger.FromContext(ctx).Error("audit entry not written",
 				zap.String("rpc", spec.Procedure), zap.Error(werr))
 		}
@@ -171,17 +248,20 @@ var urlIssuingProcedures = map[string]bool{
 }
 
 func (a *auditInterceptor) shouldSkip(spec connect.Spec) bool {
-	if a.recordReads {
-		return false
-	}
-	if spec.IdempotencyLevel == connect.IdempotencyNoSideEffects {
+	return !a.recordReads && AuditSkips(spec.Procedure, spec.IdempotencyLevel)
+}
+
+// AuditSkips reports whether the log leaves out a call of procedure, whose
+// contract declares level: a read, a session operation, a URL issued.
+func AuditSkips(procedure string, level connect.IdempotencyLevel) bool {
+	if level == connect.IdempotencyNoSideEffects {
 		return true
 	}
-	if urlIssuingProcedures[spec.Procedure] {
+	if urlIssuingProcedures[procedure] {
 		return true
 	}
 	// Procedure shape: "/paladin.admin.v1.BackendService/GetBackend"
-	method := spec.Procedure
+	method := procedure
 	if i := strings.LastIndexByte(method, '/'); i >= 0 {
 		method = method[i+1:]
 	}
@@ -200,7 +280,7 @@ func (a *auditInterceptor) shouldSkip(spec connect.Spec) bool {
 	return false
 }
 
-func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req proto.Message, rpcErr error) error {
+func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req proto.Message, rpcErr error, before, after proto.Message) error {
 	subject, tenantID := principalCoords(ctx)
 	entry := admindomain.AuditEntry{
 		EntryID:       uuid.Must(uuid.NewV7()),
@@ -220,6 +300,8 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 		entry.ErrorMessage = rpcErr.Error()
 	}
 	entry.RequestJSON = marshalAuditPayload(req)
+	entry.StateBefore = marshalState(before)
+	entry.StateAfter = marshalState(after)
 	// The audit row and its mirror event commit atomically: the mirror
 	// enqueues its outbox rows on the insert's own transaction (ADR-0003).
 	// nil mirror ⇒ nil hook ⇒ InsertWithOutbox degrades to a plain Insert.

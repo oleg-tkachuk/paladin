@@ -41,6 +41,8 @@ func auditFixture(tenantID uuid.UUID) admindomain.AuditEntry {
 		SourceIP:      "203.0.113.7",
 		ErrorMessage:  "error-message",
 		RequestJSON:   []byte(`{"name":"tenants/t"}`),
+		StateBefore:   []byte(`{"display_name":"before"}`),
+		StateAfter:    []byte(`{"display_name":"after"}`),
 		CapabilityID:  uuid.Must(uuid.NewV7()),
 		RelayedBy:     "relayed-by",
 		UserAgent:     "paladin-sdk-go/0.97.0 gateway/1.4",
@@ -71,6 +73,9 @@ func assertAuditEntry(t *testing.T, got, want admindomain.AuditEntry, via string
 		if c.got != c.want {
 			t.Errorf("via %s: %s = %v, want %v", via, c.field, c.got, c.want)
 		}
+	}
+	if string(got.StateBefore) != string(want.StateBefore) || string(got.StateAfter) != string(want.StateAfter) {
+		t.Errorf("via %s: state %s → %s, want %s → %s", via, got.StateBefore, got.StateAfter, want.StateBefore, want.StateAfter)
 	}
 	if string(got.RequestJSON) != string(want.RequestJSON) {
 		t.Errorf("via %s: RequestJSON = %s, want %s", via, got.RequestJSON, want.RequestJSON)
@@ -243,6 +248,7 @@ var auditWrittenColumns = []string{
 	"action", "resource_name", "request_id", "source_ip",
 	"request_json", "error_message", "capability_id",
 	"resource_tenant_id", "relayed_by", "user_agent",
+	"state_before_json", "state_after_json",
 }
 
 // A column nothing writes holds its default in every row and reads as data

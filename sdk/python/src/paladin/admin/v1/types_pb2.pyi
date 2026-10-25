@@ -449,7 +449,7 @@ class QuotaUsage(_message.Message):
     def __init__(self, total_bytes: _Optional[int] = ..., object_count: _Optional[int] = ..., bytes_today: _Optional[int] = ..., objects_today: _Optional[int] = ..., last_reset_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class AuditLogEntry(_message.Message):
-    __slots__ = ("entry_id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name", "request_id", "source_ip", "before_json", "after_json", "error_message", "capability_id", "relayed_by", "user_agent", "request_json")
+    __slots__ = ("entry_id", "at", "actor_subject", "actor_tenant_id", "actor_audience", "action", "resource_name", "request_id", "source_ip", "before_json", "after_json", "error_message", "capability_id", "relayed_by", "user_agent", "request_json", "state_before_json", "state_after_json")
     ENTRY_ID_FIELD_NUMBER: _ClassVar[int]
     AT_FIELD_NUMBER: _ClassVar[int]
     ACTOR_SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -466,6 +466,8 @@ class AuditLogEntry(_message.Message):
     RELAYED_BY_FIELD_NUMBER: _ClassVar[int]
     USER_AGENT_FIELD_NUMBER: _ClassVar[int]
     REQUEST_JSON_FIELD_NUMBER: _ClassVar[int]
+    STATE_BEFORE_JSON_FIELD_NUMBER: _ClassVar[int]
+    STATE_AFTER_JSON_FIELD_NUMBER: _ClassVar[int]
     entry_id: str
     at: _timestamp_pb2.Timestamp
     actor_subject: str
@@ -482,7 +484,9 @@ class AuditLogEntry(_message.Message):
     relayed_by: str
     user_agent: str
     request_json: bytes
-    def __init__(self, entry_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., actor_subject: _Optional[str] = ..., actor_tenant_id: _Optional[str] = ..., actor_audience: _Optional[str] = ..., action: _Optional[str] = ..., resource_name: _Optional[str] = ..., request_id: _Optional[str] = ..., source_ip: _Optional[str] = ..., before_json: _Optional[bytes] = ..., after_json: _Optional[bytes] = ..., error_message: _Optional[str] = ..., capability_id: _Optional[str] = ..., relayed_by: _Optional[str] = ..., user_agent: _Optional[str] = ..., request_json: _Optional[bytes] = ...) -> None: ...
+    state_before_json: bytes
+    state_after_json: bytes
+    def __init__(self, entry_id: _Optional[str] = ..., at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., actor_subject: _Optional[str] = ..., actor_tenant_id: _Optional[str] = ..., actor_audience: _Optional[str] = ..., action: _Optional[str] = ..., resource_name: _Optional[str] = ..., request_id: _Optional[str] = ..., source_ip: _Optional[str] = ..., before_json: _Optional[bytes] = ..., after_json: _Optional[bytes] = ..., error_message: _Optional[str] = ..., capability_id: _Optional[str] = ..., relayed_by: _Optional[str] = ..., user_agent: _Optional[str] = ..., request_json: _Optional[bytes] = ..., state_before_json: _Optional[bytes] = ..., state_after_json: _Optional[bytes] = ...) -> None: ...
 
 class EventSubscription(_message.Message):
     __slots__ = ("name", "tenant_id", "filter", "sink", "disabled", "resource_version", "created_at", "updated_at")

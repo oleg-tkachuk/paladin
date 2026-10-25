@@ -484,6 +484,14 @@ message AuditLogEntry {
   // event that drove an ingest. Not the resource's state. Empty when the
   // action recorded none.
   bytes request_json = 16;
+  // state_before_json and state_after_json are the resource the action
+  // changed, as JSON with secret fields redacted, as its own Get read it just
+  // before the action and just after it. The reads are not in the action's
+  // transaction, so a concurrent change can fall between them. Empty when the
+  // action has no reader — a create, a batch — when the resource did not
+  // exist on that side, when the read failed, and on a failed action's after.
+  bytes state_before_json = 17;
+  bytes state_after_json = 18;
 }
 
 // ─── Event subscription ─────────────────────────────────────────────────────

@@ -3,8 +3,9 @@ INSERT INTO audit_log (
     id, at, actor_subject, actor_tenant_id, actor_audience,
     action, resource_name, request_id, source_ip,
     request_json, error_message, capability_id,
-    resource_tenant_id, relayed_by, user_agent
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
+    resource_tenant_id, relayed_by, user_agent,
+    state_before_json, state_after_json
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17);
 
 -- name: GetAuditEntry :one
 SELECT sqlc.embed(audit_log)
