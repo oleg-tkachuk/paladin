@@ -83,6 +83,14 @@ here.
 
 
 
+## Unreleased — an operation names a copy's key prefix and a tag update's tags
+
+- **`OperationTarget` carries `destination_key_prefix` and `tags`**: what
+  a copy and a tag update asked for, beside the collections and `replace`
+  it carried already, so a retry of the objects an operation could not act
+  on asks for the same thing. The console's Retry failed now offers it for
+  both. Nothing else changes.
+
 ## Unreleased — preview what a tenant purge removes
 
 - **`TenantService.PreviewPurgeTenant`** answers, changing nothing, what

@@ -881,19 +881,6 @@ order they are being taken up.
   saved ones too.
 - **Blockers:** the owner's decision.
 
-#### A partly failed copy or tag update cannot be retried from the console
-
-- **Status:** Deferred.
-- **Reason:** the operation panel's Retry failed starts a delete or a restore
-  again for the objects it could not act on, from the operation's target and
-  its response's failures. A copy's destination key prefix and a tag update's
-  tags are on neither, so a retry of those could not ask for what they asked,
-  and the button is not offered for them.
-- **Definition of Done:** `OperationTarget` carries a copy's key prefix and a
-  tag update's tags (or the request it was started from), and Retry failed
-  rebuilds those two as well, with tests on both sides.
-- **Blockers:** none.
-
 #### Topology: a tenant's policies and capabilities as a side branch
 
 - **Status:** Deferred.

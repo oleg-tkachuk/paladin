@@ -231,10 +231,15 @@ func TestOperationTarget(t *testing.T) {
 	if got := OperationTarget("Reindex", []byte(`{}`)); got != nil {
 		t.Errorf("an unknown type has target %v", got)
 	}
-	md := []byte(`{"TenantID":"01a0f4a9-7600-77a9-862e-11ea31d523ca","Collection":"docs","ObjectIDs":["01a14f08-7312-7ae0-95ff-6e9536789c38"],"Replace":true}`)
+	md := []byte(`{"TenantID":"01a0f4a9-7600-77a9-862e-11ea31d523ca","Collection":"docs","ObjectIDs":["01a14f08-7312-7ae0-95ff-6e9536789c38"],"Tags":{"stage":"done"},"Replace":true}`)
 	got := OperationTarget(batchh.OpBatchUpdateTags, md)
 	if got.GetCollection() != "tenants/01a0f4a9-7600-77a9-862e-11ea31d523ca/collections/docs" ||
-		got.GetObjectCount() != 1 || !got.GetReplace() {
+		got.GetObjectCount() != 1 || !got.GetReplace() || got.GetTags()["stage"] != "done" {
 		t.Errorf("target = %v", got)
+	}
+	// What a retry of a copy asks for again.
+	md = []byte(`{"TenantID":"01a0f4a9-7600-77a9-862e-11ea31d523ca","SrcCollection":"docs","DstCollection":"archive","ObjectIDs":[],"KeyPrefix":"2026/"}`)
+	if got := OperationTarget(batchh.OpBatchCopy, md); got.GetDestinationKeyPrefix() != "2026/" {
+		t.Errorf("copy target = %v, want its key prefix", got)
 	}
 }

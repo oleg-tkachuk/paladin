@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_common_v1_operation: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFwYWxhZGluL2NvbW1vbi92MS9vcGVyYXRpb24ucHJvdG8SEXBhbGFkaW4uY29tbW9uLnYxInQKD09wZXJhdGlvblRhcmdldBISCgpjb2xsZWN0aW9uGAEgASgJEhMKC2Rlc3RpbmF0aW9uGAIgASgJEhQKDG9iamVjdF9jb3VudBgDIAEoBRIRCglwZXJtYW5lbnQYBCABKAgSDwoHcmVwbGFjZRgFIAEoCCrFAQoOT3BlcmF0aW9uU3RhdGUSHwobT1BFUkFUSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASGwoXT1BFUkFUSU9OX1NUQVRFX1BFTkRJTkcQARIbChdPUEVSQVRJT05fU1RBVEVfUlVOTklORxACEh0KGU9QRVJBVElPTl9TVEFURV9TVUNDRUVERUQQAxIaChZPUEVSQVRJT05fU1RBVEVfRkFJTEVEEAQSHQoZT1BFUkFUSU9OX1NUQVRFX0NBTkNFTExFRBAFQk5aTGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2NvbW1vbi92MTtwYWxhZGluY29tbW9udjFiBnByb3RvMw",
+    "CiFwYWxhZGluL2NvbW1vbi92MS9vcGVyYXRpb24ucHJvdG8SEXBhbGFkaW4uY29tbW9uLnYxIv0BCg9PcGVyYXRpb25UYXJnZXQSEgoKY29sbGVjdGlvbhgBIAEoCRITCgtkZXN0aW5hdGlvbhgCIAEoCRIUCgxvYmplY3RfY291bnQYAyABKAUSEQoJcGVybWFuZW50GAQgASgIEg8KB3JlcGxhY2UYBSABKAgSHgoWZGVzdGluYXRpb25fa2V5X3ByZWZpeBgGIAEoCRI6CgR0YWdzGAcgAygLMiwucGFsYWRpbi5jb21tb24udjEuT3BlcmF0aW9uVGFyZ2V0LlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASrFAQoOT3BlcmF0aW9uU3RhdGUSHwobT1BFUkFUSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASGwoXT1BFUkFUSU9OX1NUQVRFX1BFTkRJTkcQARIbChdPUEVSQVRJT05fU1RBVEVfUlVOTklORxACEh0KGU9QRVJBVElPTl9TVEFURV9TVUNDRUVERUQQAxIaChZPUEVSQVRJT05fU1RBVEVfRkFJTEVEEAQSHQoZT1BFUkFUSU9OX1NUQVRFX0NBTkNFTExFRBAFQk5aTGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2NvbW1vbi92MTtwYWxhZGluY29tbW9udjFiBnByb3RvMw",
   );
 
 /**
@@ -61,6 +61,23 @@ export type OperationTarget = Message<"paladin.common.v1.OperationTarget"> & {
    * @generated from field: bool replace = 5;
    */
   replace: boolean;
+
+  /**
+   * A copy's destination key prefix, as its request named it; empty for a
+   * copy that keeps the source's keys, and for the rest.
+   *
+   * @generated from field: string destination_key_prefix = 6;
+   */
+  destinationKeyPrefix: string;
+
+  /**
+   * A tag update's tags, as its request named them; empty for the rest. With
+   * the fields above, what a retry of the objects it could not act on asks
+   * for again.
+   *
+   * @generated from field: map<string, string> tags = 7;
+   */
+  tags: { [key: string]: string };
 };
 
 /**
