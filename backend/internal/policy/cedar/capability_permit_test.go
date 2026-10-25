@@ -10,18 +10,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/capop"
 )
 
-// Capability operations as limes spells them on the wire (limes.OpGet …).
-// Spelled out for the reason the credential kinds are: the policy text must
-// match the wire value, not whatever a constant happens to say.
-const (
-	capOpGet    = "get"
-	capOpList   = "list"
-	capOpPut    = "put"
-	capOpDelete = "delete"
-	capOpManage = "manage"
-	// capOpNone is a request whose handler asserted nothing.
-	capOpNone = ""
-)
+// capOpNone is a request whose handler asserted nothing.
+const capOpNone = ""
 
 // authzCapability asks whether a principal of the given kind, whose request
 // stamped op, may perform action on an object. The tenant policy is EMPTY
@@ -59,14 +49,14 @@ func TestCapabilityPermit_GrantsTheActionsOfItsOperation(t *testing.T) {
 		op     string
 		action Action
 	}{
-		{capOpGet, ActionGetObject},
-		{capOpGet, ActionPresignGet},
-		{capOpList, ActionGetObject},
-		{capOpList, ActionPresignGet},
-		{capOpPut, ActionPutObject},
-		{capOpPut, ActionPresignPut},
-		{capOpPut, ActionUpdateObject},
-		{capOpPut, ActionCopyObject},
+		{CapabilityOpGet, ActionGetObject},
+		{CapabilityOpGet, ActionPresignGet},
+		{CapabilityOpList, ActionGetObject},
+		{CapabilityOpList, ActionPresignGet},
+		{CapabilityOpPut, ActionPutObject},
+		{CapabilityOpPut, ActionPresignPut},
+		{CapabilityOpPut, ActionUpdateObject},
+		{CapabilityOpPut, ActionCopyObject},
 	}
 	for _, c := range cases {
 		t.Run(c.op+"/"+c.action.String(), func(t *testing.T) {
@@ -88,14 +78,14 @@ func TestCapabilityPermit_DeniesActionsOutsideItsOperation(t *testing.T) {
 	}{
 		{"nothing asserted, read", capOpNone, ActionGetObject},
 		{"nothing asserted, upload", capOpNone, ActionPresignPut},
-		{"read admitted, upload asked", capOpGet, ActionPresignPut},
-		{"list admitted, write asked", capOpList, ActionPutObject},
-		{"write admitted, read asked", capOpPut, ActionGetObject},
-		{"write admitted, download asked", capOpPut, ActionPresignGet},
-		{"manage admitted, read asked", capOpManage, ActionGetObject},
-		{"manage admitted, taint asked", capOpManage, ActionSetObjectTaint},
-		{"delete admitted, write asked", capOpDelete, ActionPutObject},
-		{"read admitted, lock asked", capOpGet, ActionReadObjectLock},
+		{"read admitted, upload asked", CapabilityOpGet, ActionPresignPut},
+		{"list admitted, write asked", CapabilityOpList, ActionPutObject},
+		{"write admitted, read asked", CapabilityOpPut, ActionGetObject},
+		{"write admitted, download asked", CapabilityOpPut, ActionPresignGet},
+		{"manage admitted, read asked", CapabilityOpManage, ActionGetObject},
+		{"manage admitted, taint asked", CapabilityOpManage, ActionSetObjectTaint},
+		{"delete admitted, write asked", CapabilityOpDelete, ActionPutObject},
+		{"read admitted, lock asked", CapabilityOpGet, ActionReadObjectLock},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -110,13 +100,13 @@ func TestCapabilityPermit_DeniesActionsOutsideItsOperation(t *testing.T) {
 func TestCapabilityPermit_OnlyACapabilityInItsOwnTenant(t *testing.T) {
 	for _, kind := range []string{kindUser, kindAPIKey, kindServiceAccount} {
 		t.Run(kind, func(t *testing.T) {
-			if got := authzCapability(t, kind, capOpGet, ActionGetObject, true, ""); got != DecisionDeny {
+			if got := authzCapability(t, kind, CapabilityOpGet, ActionGetObject, true, ""); got != DecisionDeny {
 				t.Fatalf("%s reading = %v, want Deny — no role, no permit", kind, got)
 			}
 		})
 	}
 	t.Run("another tenant", func(t *testing.T) {
-		if got := authzCapability(t, kindCapability, capOpGet, ActionGetObject, false, ""); got != DecisionDeny {
+		if got := authzCapability(t, kindCapability, CapabilityOpGet, ActionGetObject, false, ""); got != DecisionDeny {
 			t.Fatalf("cross-tenant read = %v, want Deny", got)
 		}
 	})
@@ -128,10 +118,10 @@ func TestCapabilityPermit_TenantPolicyCanForbid(t *testing.T) {
 	const policy = `forbid(principal, action == Action::"PresignPut", resource)
 when { principal has kind && principal.kind == "capability" };`
 
-	if got := authzCapability(t, kindCapability, capOpPut, ActionPresignPut, true, policy); got != DecisionDeny {
+	if got := authzCapability(t, kindCapability, CapabilityOpPut, ActionPresignPut, true, policy); got != DecisionDeny {
 		t.Fatalf("decision = %v, want Deny — a tenant forbid must beat the built-in", got)
 	}
-	if got := authzCapability(t, kindCapability, capOpGet, ActionGetObject, true, policy); got != DecisionAllow {
+	if got := authzCapability(t, kindCapability, CapabilityOpGet, ActionGetObject, true, policy); got != DecisionAllow {
 		t.Fatalf("an unforbidden read = %v, want Allow", got)
 	}
 }

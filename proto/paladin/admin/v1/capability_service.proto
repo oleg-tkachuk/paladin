@@ -91,6 +91,14 @@ service CapabilityService {
   rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListOperationGrants returns, for each capability operation, the actions
+  // it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+  // the caveats admit the operation, the built-in policy grants its actions.
+  // An operation that unlocks none needs a tenant policy naming the actions.
+  // The same for every caller; it reads no tenant.
+  rpc ListOperationGrants(CapabilityServiceListOperationGrantsRequest) returns (CapabilityServiceListOperationGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // PrincipalKind discriminates the principal-shape oneof. Mirrors the
@@ -456,4 +464,21 @@ message CapabilityServiceGetUsageResponse {
   reserved "unit_code", "spent_micros";
   // spent is the accumulated spend, in the capability's currency.
   google.type.Money spent = 7;
+}
+
+message CapabilityServiceListOperationGrantsRequest {}
+
+message CapabilityServiceListOperationGrantsResponse {
+  // One per operation a capability's caveats can name, in the order
+  // get, list, put, delete, manage.
+  repeated CapabilityOperationGrant grants = 1;
+}
+
+// What one capability operation unlocks without a tenant policy.
+message CapabilityOperationGrant {
+  // The operation as caveats.ops names it.
+  string op = 1;
+  // The Cedar actions the operation unlocks in the capability's own tenant.
+  // Empty when every action of the operation needs a tenant policy.
+  repeated string actions = 2;
 }

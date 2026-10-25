@@ -87,6 +87,10 @@ func (disabledCapabilityServiceHandler) GetBiscuitUsage(ctx context.Context, _ *
 	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
+func (disabledCapabilityServiceHandler) ListOperationGrants(ctx context.Context, _ *adminv1.CapabilityServiceListOperationGrantsRequest) (*adminv1.CapabilityServiceListOperationGrantsResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
+}
+
 func (disabledCapabilityServiceHandler) Get(ctx context.Context, _ *adminv1.CapabilityServiceGetRequest) (*adminv1.CapabilityServiceGetResponse, error) {
 	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }

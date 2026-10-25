@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse
+from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -129,6 +129,16 @@ class CapabilityService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
+        """
+        ListOperationGrants returns, for each capability operation, the actions
+        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+        the caveats admit the operation, the built-in policy grants its actions.
+        An operation that unlocks none needs a tenant policy naming the actions.
+        The same for every caller; it reads no tenant.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]):
     def __init__(
@@ -222,6 +232,16 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_usage,
+                ),
+                "/paladin.admin.v1.CapabilityService/ListOperationGrants": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListOperationGrants",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceListOperationGrantsRequest,
+                        output=CapabilityServiceListOperationGrantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_operation_grants,
                 ),
             },
             interceptors=interceptors,
@@ -499,6 +519,35 @@ class CapabilityServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def list_operation_grants(
+        self,
+        request: CapabilityServiceListOperationGrantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceListOperationGrantsResponse:
+        """
+        ListOperationGrants returns, for each capability operation, the actions
+        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+        the caveats admit the operation, the built-in policy grants its actions.
+        An operation that unlocks none needs a tenant policy naming the actions.
+        The same for every caller; it reads no tenant.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListOperationGrants",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceListOperationGrantsRequest,
+                output=CapabilityServiceListOperationGrantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
 class CapabilityServiceSync(Protocol):
     """
     CapabilityService manages capability tokens — short-lived, signed,
@@ -594,6 +643,16 @@ class CapabilityServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
+        """
+        ListOperationGrants returns, for each capability operation, the actions
+        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+        the caveats admit the operation, the built-in policy grants its actions.
+        An operation that unlocks none needs a tenant policy naming the actions.
+        The same for every caller; it reads no tenant.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
     def __init__(
@@ -685,6 +744,16 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_usage,
+                ),
+                "/paladin.admin.v1.CapabilityService/ListOperationGrants": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListOperationGrants",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceListOperationGrantsRequest,
+                        output=CapabilityServiceListOperationGrantsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_operation_grants,
                 ),
             },
             interceptors=interceptors,
@@ -948,6 +1017,34 @@ class CapabilityServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.CapabilityService",
                 input=CapabilityServiceGetUsageRequest,
                 output=CapabilityServiceGetUsageResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def list_operation_grants(
+        self,
+        request: CapabilityServiceListOperationGrantsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceListOperationGrantsResponse:
+        """
+        ListOperationGrants returns, for each capability operation, the actions
+        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
+        the caveats admit the operation, the built-in policy grants its actions.
+        An operation that unlocks none needs a tenant policy naming the actions.
+        The same for every caller; it reads no tenant.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListOperationGrants",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceListOperationGrantsRequest,
+                output=CapabilityServiceListOperationGrantsResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

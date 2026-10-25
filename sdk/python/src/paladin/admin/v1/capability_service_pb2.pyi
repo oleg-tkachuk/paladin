@@ -329,3 +329,21 @@ class CapabilityServiceGetUsageResponse(_message.Message):
     updated_at: _timestamp_pb2.Timestamp
     spent: _money_pb2.Money
     def __init__(self, capability_id: _Optional[str] = ..., request_count: _Optional[int] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
+
+class CapabilityServiceListOperationGrantsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class CapabilityServiceListOperationGrantsResponse(_message.Message):
+    __slots__ = ("grants",)
+    GRANTS_FIELD_NUMBER: _ClassVar[int]
+    grants: _containers.RepeatedCompositeFieldContainer[CapabilityOperationGrant]
+    def __init__(self, grants: _Optional[_Iterable[_Union[CapabilityOperationGrant, _Mapping]]] = ...) -> None: ...
+
+class CapabilityOperationGrant(_message.Message):
+    __slots__ = ("op", "actions")
+    OP_FIELD_NUMBER: _ClassVar[int]
+    ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    op: str
+    actions: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, op: _Optional[str] = ..., actions: _Optional[_Iterable[str]] = ...) -> None: ...

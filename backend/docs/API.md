@@ -126,7 +126,7 @@ Every service and RPC in `proto/`, by plane.
 | `BillingService` | 4 | `GetTenantSummary`, `GetTenantTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |
 | `BucketService` | 14 | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
 | `CELService` | 1 | `Validate` |
-| `CapabilityService` | 8 | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage` |
+| `CapabilityService` | 9 | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage`, `ListOperationGrants` |
 | `CollectionService` | 7 | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | 7 | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` — deliveries are CloudEvents 1.0 envelopes ([event-delivery-dedup.md](../../docs/event-delivery-dedup.md)) |
 | `MCPInspectService` | 3 | `Inspect`, `ListSessions`, `GetBridgeStatus` |
