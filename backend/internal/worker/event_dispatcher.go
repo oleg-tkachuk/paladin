@@ -1045,7 +1045,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		}
 		outcome := r.Dispatcher.deliverSQSBatch(ctx, sqsCfgs[key], items)
 		for _, q := range queued {
-			if derr := outcome[q.row.id]; derr == nil {
+			if derr := batchOutcome(outcome, q.row.id); derr == nil {
 				r.recordDelivered(ctx, tx, q.row.id, 0)
 			} else {
 				r.markDeliveryFailed(ctx, tx, q.sub, q.row.id, q.row.attempts, 0, derr)
@@ -1060,7 +1060,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		}
 		outcome := r.Dispatcher.deliverNATSBatch(ctx, items)
 		for _, q := range queued {
-			if derr := outcome[q.row.id]; derr == nil {
+			if derr := batchOutcome(outcome, q.row.id); derr == nil {
 				r.recordDelivered(ctx, tx, q.row.id, 0)
 			} else {
 				r.markDeliveryFailed(ctx, tx, q.item.Sub, q.row.id, q.row.attempts, 0, derr)
@@ -1075,7 +1075,7 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		}
 		outcome := r.Dispatcher.deliverKafkaBatch(ctx, items)
 		for _, q := range queued {
-			if derr := outcome[q.row.id]; derr == nil {
+			if derr := batchOutcome(outcome, q.row.id); derr == nil {
 				r.recordDelivered(ctx, tx, q.row.id, 0)
 			} else {
 				r.markDeliveryFailed(ctx, tx, q.item.Sub, q.row.id, q.row.attempts, 0, derr)
@@ -1310,4 +1310,19 @@ func (r *OutboxRunner) DeliveryStats(ctx context.Context) (*DeliveryStats, error
 		out.Subscriptions = append(out.Subscriptions, s)
 	}
 	return out, rows.Err()
+}
+
+// errNoBatchOutcome is a row a batch delivery returned no outcome for: not
+// known to be delivered, so failed and retried rather than recorded.
+var errNoBatchOutcome = errors.New("batch delivery: no outcome for the row")
+
+// batchOutcome is what a batch delivery did to row: its error, nil when
+// delivered, and errNoBatchOutcome when the batch said nothing of it — which
+// a plain map lookup would read as delivered, and drop the event.
+func batchOutcome(outcome map[uuid.UUID]error, row uuid.UUID) error {
+	err, ok := outcome[row]
+	if !ok {
+		return errNoBatchOutcome
+	}
+	return err
 }

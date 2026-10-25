@@ -20,7 +20,9 @@ type fakeSQS struct {
 	sent    []*sqs.SendMessageInput
 	batches []*sqs.SendMessageBatchInput
 	failIDs map[string]bool // batch entry Ids to report as Failed
-	err     error
+	// silentIDs are batch entry Ids the answer names neither way.
+	silentIDs map[string]bool
+	err       error
 }
 
 func (f *fakeSQS) SendMessageBatch(_ context.Context, in *sqs.SendMessageBatchInput, _ ...func(*sqs.Options)) (*sqs.SendMessageBatchOutput, error) {
@@ -31,6 +33,9 @@ func (f *fakeSQS) SendMessageBatch(_ context.Context, in *sqs.SendMessageBatchIn
 	out := &sqs.SendMessageBatchOutput{}
 	for _, e := range in.Entries {
 		id := *e.Id
+		if f.silentIDs[id] {
+			continue
+		}
 		if f.failIDs[id] {
 			out.Failed = append(out.Failed, sqstypes.BatchResultErrorEntry{
 				Id: e.Id, Code: aws.String("InternalError"), Message: aws.String("boom"),
@@ -230,6 +235,26 @@ func TestDeliverSQSBatch_PartialFailureMapsToRows(t *testing.T) {
 	}
 }
 
+// An entry the answer names neither as sent nor as failed was not
+// acknowledged: it is the row's failure, retried, not a delivery. The
+// dispatcher reads a row with no outcome as delivered, so before this the
+// event was dropped without a word.
+func TestDeliverSQSBatch_UnacknowledgedEntryFails(t *testing.T) {
+	cfg := sqsSinkConfig{QueueURL: "https://q/1", Region: "eu-1"}
+	items := sqsBatchItems(t, cfg, 3)
+	fake := &fakeSQS{silentIDs: map[string]bool{items[1].RowID.String(): true}}
+	out := sqsTestDispatcher(fake).deliverSQSBatch(context.Background(), cfg, items)
+	if len(out) != len(items) {
+		t.Fatalf("outcomes for %d rows, want every one of %d", len(out), len(items))
+	}
+	if out[items[0].RowID] != nil || out[items[2].RowID] != nil {
+		t.Error("acknowledged entries must map to nil")
+	}
+	if err := out[items[1].RowID]; err == nil || !errors.Is(err, errSQSUnacknowledged) {
+		t.Errorf("unacknowledged entry: %v, want errSQSUnacknowledged", err)
+	}
+}
+
 func TestDeliverSQSBatch_WholeCallFailureFailsChunk(t *testing.T) {
 	cfg := sqsSinkConfig{QueueURL: "https://q/1", Region: "eu-1"}
 	items := sqsBatchItems(t, cfg, 2)
@@ -263,5 +288,22 @@ func TestDeliverSQSBatch_FIFOAttributes(t *testing.T) {
 	}
 	if e.MessageDeduplicationId == nil || *e.MessageDeduplicationId != items[0].RowID.String() {
 		t.Errorf("FIFO dedup id = %v, want the delivery-row id", e.MessageDeduplicationId)
+	}
+}
+
+// A row a batch says nothing of is failed, not delivered: a plain lookup of
+// a missing key reads nil, which is "delivered".
+func TestBatchOutcome(t *testing.T) {
+	sent, failed, silent := uuid.New(), uuid.New(), uuid.New()
+	boom := errors.New("boom")
+	outcome := map[uuid.UUID]error{sent: nil, failed: boom}
+	if err := batchOutcome(outcome, sent); err != nil {
+		t.Errorf("a sent row: %v", err)
+	}
+	if err := batchOutcome(outcome, failed); !errors.Is(err, boom) {
+		t.Errorf("a failed row: %v, want its error", err)
+	}
+	if err := batchOutcome(outcome, silent); !errors.Is(err, errNoBatchOutcome) {
+		t.Errorf("a row with no outcome: %v, want errNoBatchOutcome", err)
 	}
 }
