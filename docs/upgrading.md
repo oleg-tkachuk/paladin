@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — the fakes seal a real Biscuit
+## sdk/go/v0.114.0, sdk/python/v0.115.0 — the fakes seal a real Biscuit
 
 - **`paladin.testing`'s Biscuit is a real one with the `biscuit` extra**,
   as `paladintest`'s is, so `paladin.attenuate` narrows it and a narrowed
