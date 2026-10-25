@@ -69,40 +69,53 @@ func StatusHandler(
 			return
 		}
 
-		out := BridgeStatus{
-			Upstreams: make([]UpstreamStatus, len(targets)),
-			CheckedAt: time.Now().UTC(),
-		}
+		out := BridgeStatus{CheckedAt: time.Now().UTC()}
 		if reg != nil {
 			out.Sessions = len(reg.Snapshot())
 		}
 
-		var wg sync.WaitGroup
-		for i, t := range targets {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-				defer cancel()
-				start := time.Now()
-				err := probe(ctx, t.URL)
-				st := UpstreamStatus{
-					Name:      t.Name,
-					URL:       t.URL,
-					Reachable: err == nil,
-					LatencyMs: time.Since(start).Milliseconds(),
-				}
-				if err != nil {
-					st.Error = err.Error()
-				}
-				out.Upstreams[i] = st
-			}()
-		}
-		wg.Wait()
+		out.Upstreams = ProbeUpstreams(r.Context(), targets, probe)
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(out)
 	})
+}
+
+// upstreamProbeTimeout bounds one plane's probe, so one hanging plane cannot
+// hold the answer about the others.
+const upstreamProbeTimeout = 2 * time.Second
+
+// ProbeUpstreams probes every target at once, each under its own deadline,
+// and reports each in the targets' order: reachable or why not, and how long
+// the probe took either way.
+func ProbeUpstreams(ctx context.Context, targets []UpstreamTarget, probe func(ctx context.Context, url string) error) []UpstreamStatus {
+	if probe == nil {
+		probe = probeHealth
+	}
+	out := make([]UpstreamStatus, len(targets))
+	var wg sync.WaitGroup
+	for i, t := range targets {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(ctx, upstreamProbeTimeout)
+			defer cancel()
+			start := time.Now()
+			err := probe(ctx, t.URL)
+			st := UpstreamStatus{
+				Name:      t.Name,
+				URL:       t.URL,
+				Reachable: err == nil,
+				LatencyMs: time.Since(start).Milliseconds(),
+			}
+			if err != nil {
+				st.Error = err.Error()
+			}
+			out[i] = st
+		}()
+	}
+	wg.Wait()
+	return out
 }
 
 // HealthProbe asks a plane's /livez over the supplied client, which every role
