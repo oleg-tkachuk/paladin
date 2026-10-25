@@ -175,6 +175,44 @@ describe("HealthPage component switch", () => {
     const postgres = await row("postgres");
     expect(postgres).not.toHaveTextContent("db");
     expect(postgres).not.toHaveTextContent("config");
+    expect(screen.getByText("postgres")).not.toHaveAttribute("title");
+  });
+});
+
+// Nearly every component is required, so the exception is marked: one the
+// role keeps serving without. What switches a component is said on hover.
+describe("HealthPage component marks", () => {
+  beforeEach(() => {
+    payload = {
+      roles: [
+        {
+          role: "api",
+          status: "healthy",
+          components: [
+            component("postgres", true),
+            { ...component("api_token", false), control: "config" },
+          ],
+        },
+      ],
+    };
+  });
+
+  it("marks an optional component, not a required one", async () => {
+    render(<HealthPage />);
+    const card = await roleCard("api");
+    expect(card).not.toHaveTextContent("required");
+    const optional = Array.from(card.querySelectorAll("button")).filter((b) =>
+      b.textContent!.includes("optional"),
+    );
+    expect(optional).toHaveLength(1);
+    expect(optional[0]).toHaveTextContent("api_token");
+  });
+
+  it("says what switches a component on hover, with no badge", async () => {
+    render(<HealthPage />);
+    const name = await screen.findByText("api_token");
+    expect(name).toHaveAttribute("title", "Switched by a configuration key");
+    expect(name.closest("button")).not.toHaveTextContent("config");
   });
 });
 

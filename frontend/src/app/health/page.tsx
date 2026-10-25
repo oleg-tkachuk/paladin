@@ -193,22 +193,21 @@ function ComponentRow({ c }: { c: Component }) {
       >
         <div className="flex min-w-0 items-center gap-2">
           <StatusDot tone={m.status} />
-          <span className="truncate font-mono text-sm">{c.name}</span>
-          {c.critical && (
+          <span
+            className="truncate font-mono text-sm"
+            title={control ? control.title : undefined}
+          >
+            {c.name}
+          </span>
+          {/* Nearly every component is required, so the exception is
+              what is marked: one the role keeps serving without. */}
+          {!c.critical && (
             <Badge
               variant="outline"
-              className="shrink-0 px-1.5 py-0 font-normal"
+              title="The role keeps serving while it is down"
+              className="shrink-0 px-1.5 py-0 font-normal text-muted-foreground"
             >
-              required
-            </Badge>
-          )}
-          {control && (
-            <Badge
-              variant="secondary"
-              title={control.title}
-              className="shrink-0 px-1.5 py-0 font-normal"
-            >
-              {control.label}
+              optional
             </Badge>
           )}
         </div>
