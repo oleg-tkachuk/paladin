@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — the Python fake refuses an unknown capability as the server does
+## sdk/go/v0.115.1, sdk/python/v0.116.1 — the Python fake refuses an unknown capability as the server does
 
 - **`paladin.testing` under `strict_auth` refuses a capability it did not
   issue with `PERMISSION_DENIED` and reason `CAPABILITY_INVALID_TOKEN`**, as
