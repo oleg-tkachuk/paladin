@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TrashIcon } from "@heroicons/react/24/outline";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
@@ -11,9 +12,10 @@ import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { CLEAR_FILTERS_LABEL } from "@/components/ui/EmptyState";
 import { ListLoadError } from "@/components/ui/ListLoadError";
+import { DetailPanel } from "@/components/ui/DetailPanel";
 import {
-  RecordDialog,
   RecordField,
+  RecordFields,
   openableRow,
 } from "@/components/ui/RecordDialog";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -36,6 +38,7 @@ import {
   type OAuthGrant,
 } from "@/gen/paladin/iam/v1/user_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { useTableView } from "@/hooks/useTableView";
 import type { TableUrl } from "@/lib/table/urlState";
 import { useTableFacets } from "@/hooks/useTableFacets";
@@ -49,8 +52,8 @@ import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
-// The list of applications keeps its search and sort in the URL under its own names, beside the
-// page's other tables.
+// The list of applications keeps its search, sort and open grant in the URL
+// under its own names, beside the page's other tables.
 const APPS_TABLE: TableUrl = { namespace: "apps" };
 
 /**
@@ -121,7 +124,8 @@ export function ConnectedApplications({
 }) {
   const queryClient = useQueryClient();
   const { showNotification } = useNotification();
-  const [opened, setOpened] = useState<OAuthGrant | null>(null);
+  // The open grant is in the URL, so its address links to it.
+  const detail = useDetailPanel(undefined, APPS_TABLE);
   const [target, setTarget] = useState<OAuthGrant | null>(null);
   const query = useQuery({
     queryKey: oauthGrantsKey(userName),
@@ -140,6 +144,9 @@ export function ConnectedApplications({
     url: APPS_TABLE,
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
+  // Read from every grant, not the rows the facets leave: a link may name an
+  // ended grant the default filter hides.
+  const opened = grants.find((g) => g.id === detail.openId) ?? null;
 
   const revoke = async () => {
     if (!target) return;
@@ -167,10 +174,7 @@ export function ConnectedApplications({
     }
   };
 
-  const startRevoke = (g: OAuthGrant) => {
-    setOpened(null);
-    setTarget(g);
-  };
+  const startRevoke = (g: OAuthGrant) => setTarget(g);
 
   return (
     <>
@@ -263,7 +267,11 @@ export function ConnectedApplications({
                   </TableRow>
                 ) : (
                   view.rows.map((g) => (
-                    <TableRow key={g.id} {...openableRow(() => setOpened(g))}>
+                    <TableRow
+                      key={g.id}
+                      {...openableRow(() => detail.open(g.id))}
+                      {...detail.rowProps(g.id)}
+                    >
                       <TableCell
                         className={cn(T.code, "whitespace-normal break-all")}
                       >
@@ -309,59 +317,14 @@ export function ConnectedApplications({
         </div>
       )}
 
-      <RecordDialog
-        open={opened !== null}
-        onOpenChange={(o) => !o && setOpened(null)}
-        title="Connected application"
-        subtitle={opened?.clientId}
-      >
-        {opened ? (
-          <>
-            <RecordField label="Access">
-              <Badge variant={access(opened).variant}>
-                {access(opened).label}
-              </Badge>
-            </RecordField>
-            <RecordField label="State">
-              <LifecycleBadge state={lifecycle(opened)} />
-            </RecordField>
-            <RecordField label="May">
-              <ul className="space-y-0.5">
-                {opened.scopes.length === 0 ? (
-                  <li>No scope</li>
-                ) : (
-                  opened.scopes.map((s) => (
-                    <li key={s}>{describeOAuthScope(s)}</li>
-                  ))
-                )}
-              </ul>
-            </RecordField>
-            <RecordField label="Plane" mono>
-              {opened.audience}
-            </RecordField>
-            <RecordField label="Granted">
-              <Timestamp ts={opened.grantedAt} />
-            </RecordField>
-            <RecordField label="Last refreshed">
-              <Timestamp ts={opened.refreshedAt} />
-            </RecordField>
-            <RecordField label="Expires">
-              <Timestamp ts={opened.expiresAt} />
-            </RecordField>
-            {isActive(opened) ? (
-              <div className="flex justify-end pt-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => startRevoke(opened)}
-                >
-                  Revoke access
-                </Button>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-      </RecordDialog>
+      <ApplicationPanel
+        id={detail.openId}
+        grant={opened}
+        loading={query.isPending}
+        failed={query.isError}
+        onClose={detail.close}
+        onRevoke={startRevoke}
+      />
 
       <ConfirmModal
         isOpen={target !== null}
@@ -374,5 +337,95 @@ export function ConnectedApplications({
         confirmText="Revoke"
       />
     </>
+  );
+}
+
+/**
+ * One grant, in a panel beside the list, with its revoke along the bottom
+ * while it is live. The list holds every grant the user has, ended ones too,
+ * so a linked one it does not hold has been purged.
+ */
+function ApplicationPanel({
+  id,
+  grant,
+  loading,
+  failed,
+  onClose,
+  onRevoke,
+}: {
+  /** The grant to show; null keeps the panel closed. */
+  id: string | null;
+  grant: OAuthGrant | null;
+  /** The list is still being read, so a missing grant may yet arrive. */
+  loading: boolean;
+  /** The list could not be read, so nothing says whether the grant exists. */
+  failed: boolean;
+  onClose: () => void;
+  /** Asks to revoke the grant shown; the page confirms it. */
+  onRevoke: (grant: OAuthGrant) => void;
+}) {
+  return (
+    <DetailPanel
+      open={!!id}
+      onClose={onClose}
+      rowId={id}
+      title="Connected application"
+      identifier={grant?.clientId}
+      description={grant ? undefined : (id ?? undefined)}
+      footer={
+        grant && isActive(grant) ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onRevoke(grant)}
+          >
+            <TrashIcon className="size-4" />
+            Revoke access
+          </Button>
+        ) : null
+      }
+    >
+      {grant ? (
+        <RecordFields>
+          <RecordField label="Access">
+            <Badge variant={access(grant).variant}>{access(grant).label}</Badge>
+          </RecordField>
+          <RecordField label="State">
+            <LifecycleBadge state={lifecycle(grant)} />
+          </RecordField>
+          <RecordField label="May">
+            <ul className="space-y-0.5">
+              {grant.scopes.length === 0 ? (
+                <li>No scope</li>
+              ) : (
+                grant.scopes.map((s) => (
+                  <li key={s}>{describeOAuthScope(s)}</li>
+                ))
+              )}
+            </ul>
+          </RecordField>
+          <RecordField label="Plane" mono>
+            {grant.audience}
+          </RecordField>
+          <RecordField label="Granted">
+            <Timestamp ts={grant.grantedAt} />
+          </RecordField>
+          <RecordField label="Last refreshed">
+            <Timestamp ts={grant.refreshedAt} />
+          </RecordField>
+          <RecordField label="Expires">
+            <Timestamp ts={grant.expiresAt} />
+          </RecordField>
+        </RecordFields>
+      ) : (
+        <p className={T.hint}>
+          {loading
+            ? "Reading the grant…"
+            : failed
+              ? "The grants could not be read."
+              : "No grant has this id: it has ended and its tokens are purged."}
+        </p>
+      )}
+    </DetailPanel>
   );
 }

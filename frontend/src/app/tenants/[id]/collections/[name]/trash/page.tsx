@@ -53,16 +53,20 @@ import {
 import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { SelectionBar } from "@/components/ui/SelectionBar";
 import { Skeleton } from "@/components/ui/Skeleton";
-import {
-  RecordDialog,
-  RecordField,
-  openableRow,
-} from "@/components/ui/RecordDialog";
+import { openableRow } from "@/components/ui/RecordDialog";
+import { useDetailPanel } from "@/hooks/useDetailPanel";
 
 import { useCollection } from "../collection-context";
 import { useTenantChangesBlocked } from "../../../tenant-context";
 import { formatDateTime } from "@/lib/format/locale";
 import { Bytes } from "@/components/ui/Bytes";
+
+import {
+  DEFAULT_CONTENT_TYPE,
+  TrashedObjectPanel,
+  objectBaseName,
+  useTrashedObject,
+} from "./TrashedObjectPanel";
 
 /** The state a trashed object is in. */
 const TRASHED_STATE = "DELETED";
@@ -111,7 +115,19 @@ export default function CollectionTrashPage() {
   });
   const [useRelativeTime, setUseRelativeTime] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [opened, setOpened] = useState<Object$ | null>(null);
+  // The open object is in the URL, so its address links to it. The row
+  // clicked stays at hand for one the list no longer holds, and a linked one
+  // on a page not loaded yet is read by id.
+  const detail = useDetailPanel();
+  const [clicked, setClicked] = useState<Object$ | null>(null);
+  const listed =
+    objects.find((o) => o.objectId === detail.openId) ??
+    (clicked && clicked.objectId === detail.openId ? clicked : null);
+  const opened = useTrashedObject(
+    collectionResource.name,
+    detail.openId,
+    listed,
+  );
   // The action awaiting the operator's confirmation: restore and purge, of one
   // row or of the selection, are all asked first.
   const [pending, setPending] = useState<{
@@ -143,10 +159,12 @@ export default function CollectionTrashPage() {
     setSelected(next);
   };
 
+  // The panel's object counts too: it may be on a page not loaded.
+  const known = (id: string) =>
+    objects.find((o) => o.objectId === id) ??
+    (opened.object?.objectId === id ? opened.object : undefined);
   const itemsFor = (ids: string[]) =>
-    ids
-      .map((id) => objects.find((o) => o.objectId === id))
-      .filter((o): o is NonNullable<typeof o> => !!o);
+    ids.map(known).filter((o): o is NonNullable<typeof o> => !!o);
 
   const runPending = async () => {
     if (!pending) return;
@@ -160,6 +178,8 @@ export default function CollectionTrashPage() {
       if (single) {
         if (kind === "restore") await restoreObject(items[0]);
         else await purgeObject(items[0]);
+        // The object has left the trash, so its panel has nothing to show.
+        if (ids[0] === detail.openId) detail.close();
       } else {
         const refs = items.map((o) => ({
           name: o.name,
@@ -313,11 +333,15 @@ export default function CollectionTrashPage() {
               </TableRow>
             ) : (
               filtered.map((obj) => {
-                const row = openableRow(() => setOpened(obj));
+                const row = openableRow(() => {
+                  setClicked(obj);
+                  detail.open(obj.objectId);
+                });
                 return (
                   <TableRow
                     key={obj.objectId}
                     {...row}
+                    {...detail.rowProps(obj.objectId)}
                     className={cn(row.className, "group")}
                     data-state={
                       selected.has(obj.objectId) ? "selected" : undefined
@@ -337,7 +361,7 @@ export default function CollectionTrashPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="truncate font-medium">
-                            {obj.key.split("/").pop()}
+                            {objectBaseName(obj.key)}
                           </div>
                           <CopyableId
                             value={obj.objectId}
@@ -354,7 +378,7 @@ export default function CollectionTrashPage() {
                       />
                     </TableCell>
                     <TableCell className="hidden @2xl:table-cell text-xs text-muted-foreground font-mono">
-                      {obj.contentType || "binary/octet-stream"}
+                      {obj.contentType || DEFAULT_CONTENT_TYPE}
                     </TableCell>
                     <TableCell
                       numeric
@@ -486,40 +510,21 @@ export default function CollectionTrashPage() {
         </Button>
       </SelectionBar>
 
-      <RecordDialog
-        open={opened !== null}
-        onOpenChange={(o) => !o && setOpened(null)}
-        title={opened?.key.split("/").pop() || "Object"}
-        subtitle={opened?.objectId}
-      >
-        {opened ? (
-          <>
-            <RecordField label="Key" mono>
-              {opened.key}
-            </RecordField>
-            <RecordField label="Object tag">
-              <ObjectTagBadge
-                objectTag={opened.tags?.object_tag}
-                linked={!!opened.tags?.object_tag}
-              />
-            </RecordField>
-            <RecordField label="Content type" mono>
-              {opened.contentType || "binary/octet-stream"}
-            </RecordField>
-            <RecordField label="Size" mono>
-              <Bytes value={opened.sizeBytes} />
-            </RecordField>
-            <RecordField label="Deleted">
-              {opened.terminatedAt
-                ? formatDateTime(timestampToDate(opened.terminatedAt))
-                : "—"}
-            </RecordField>
-            <RecordField label="Version" mono>
-              {opened.resourceVersion || "—"}
-            </RecordField>
-          </>
-        ) : null}
-      </RecordDialog>
+      <TrashedObjectPanel
+        id={detail.openId}
+        object={opened.object}
+        loading={opened.loading}
+        failed={opened.failed}
+        actionsDisabled={Boolean(changesBlocked) || !!busyId}
+        disabledReason={changesBlocked ?? undefined}
+        onClose={detail.close}
+        onRestore={(o) =>
+          setPending({ kind: "restore", ids: [o.objectId], selection: false })
+        }
+        onPurge={(o) =>
+          setPending({ kind: "purge", ids: [o.objectId], selection: false })
+        }
+      />
 
       <ConfirmModal
         isOpen={pending?.kind === "restore"}

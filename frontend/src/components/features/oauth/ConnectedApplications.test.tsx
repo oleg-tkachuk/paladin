@@ -158,6 +158,38 @@ describe("ConnectedApplications", () => {
     expect(within(dialog).getByText(GRANT.audience)).toBeInTheDocument();
   });
 
+  it("puts the open grant in the address, under the table's namespace", async () => {
+    h.list.mockResolvedValue({ grants: [GRANT] });
+    render(<ConnectedApplications userName={USER} own />);
+    fireEvent.click(await row(GRANT.clientId));
+    await screen.findByRole("dialog", { name: "Connected application" });
+    expect(window.location.search).toBe(`?apps.id=${GRANT.id}`);
+  });
+
+  it("opens the grant a link names on load, an ended one too", async () => {
+    h.list.mockResolvedValue({ grants: [GRANT, REVOKED] });
+    window.history.replaceState(null, "", `/?apps.id=${REVOKED.id}`);
+    render(<ConnectedApplications userName={USER} own />);
+    const panel = await screen.findByRole("dialog", {
+      name: "Connected application",
+    });
+    // The panel opens while the list is read, then shows the grant.
+    await waitFor(() =>
+      expect(panel).toHaveAccessibleDescription(REVOKED.clientId),
+    );
+    // An ended grant has nothing left to revoke.
+    expect(
+      within(panel).queryByRole("button", { name: "Revoke access" }),
+    ).toBeNull();
+  });
+
+  it("says so when the linked grant is no longer on record", async () => {
+    h.list.mockResolvedValue({ grants: [GRANT] });
+    window.history.replaceState(null, "", "/?apps.id=0199-purged");
+    render(<ConnectedApplications userName={USER} own />);
+    expect(await screen.findByText(/No grant has this id/)).toBeInTheDocument();
+  });
+
   it.each([
     [true, /You have not let any application in/],
     [false, /This user has not let any application in/],
