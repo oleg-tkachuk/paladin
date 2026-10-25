@@ -37,6 +37,8 @@ import { useBackends } from "@/hooks/useBackends";
 import { collectionDeleteFailure } from "@/lib/collectionDeleteFailure";
 import { useNotification } from "@/components/ui/Notification";
 import { TableToolbar } from "@/components/ui/TableToolbar";
+import { useTableFacets } from "@/hooks/useTableFacets";
+import { TENANT_COLLECTION_FACETS } from "@/lib/collectionFacets";
 
 import { searchFilter } from "@/lib/cel";
 
@@ -169,9 +171,11 @@ export default function TenantCollectionsPage() {
   // nothing, if a search had just changed the query — and sent an empty one.
   const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
 
+  // Counted over the tenant's every collection, which the list loads whole.
+  const facets = useTableFacets(list, TENANT_COLLECTION_FACETS, PAGE_TABLE);
   const sorted = useMemo(
-    () => sortCollections(list, sort.column, sort.direction),
-    [list, sort],
+    () => sortCollections(facets.rows, sort.column, sort.direction),
+    [facets.rows, sort],
   );
 
   const handleDelete = async () => {
@@ -231,6 +235,8 @@ export default function TenantCollectionsPage() {
             onQueryChange={setSearch}
             searchLabel="Search collections"
             placeholder="Search by name or display label…"
+            facets={facets.controls}
+            count={{ shown: sorted.length, total: list.length }}
             actions={
               <>
                 <Button
@@ -295,7 +301,9 @@ export default function TenantCollectionsPage() {
                 ? {
                     icon: ServerStackIcon,
                     what: "collections",
-                    reason: emptyReason({ filtered: !!search }),
+                    reason: emptyReason({
+                      filtered: !!search || facets.active > 0,
+                    }),
                     purpose:
                       "A collection is a tenant's namespace of objects, stored in one bucket.",
                     action: {
