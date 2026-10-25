@@ -85,8 +85,10 @@ export function SidebarResourceLinks({
   if (!links.shown || entries.length === 0) return null;
   return (
     <div className="mb-7 space-y-0.5" data-testid="resource-links">
-      <div className="flex items-center justify-between pr-1">
-        <div className={groupLabelClass}>Pinned &amp; recent</div>
+      <div className="flex items-center justify-between gap-2 pr-1">
+        <div className={cn(groupLabelClass, "min-w-0 truncate")}>
+          Pinned &amp; recent
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -127,7 +129,7 @@ export function SidebarResourceLinks({
             href={link.href}
             onClick={onNavigate}
             title={`${link.kind} · ${link.href}`}
-            className="group flex h-9 items-center gap-3 rounded-md pl-3 pr-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+            className="group flex h-9 min-w-0 items-center gap-3 rounded-md pl-3 pr-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
           >
             <Icon
               className={cn(
@@ -135,7 +137,8 @@ export function SidebarResourceLinks({
                 group === "pinned" && "text-primary",
               )}
             />
-            <span className="truncate">{link.label}</span>
+            {/* min-w-0: a flex item will not shrink below its text without it. */}
+            <span className="min-w-0 flex-1 truncate">{link.label}</span>
             <span className="ml-auto shrink-0 text-xs opacity-60">
               {link.kind}
             </span>
