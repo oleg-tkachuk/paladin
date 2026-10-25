@@ -836,18 +836,17 @@ order they are being taken up.
 
 - **Status:** Blocked.
 - **Reason:** counted facets reach every list loaded whole that answers a
-  question worth narrowing by (useTableFacets), and the operations page,
-  which the server pages, through counts its listing gives with the first
-  page (useServerFacets). What is left is paged on the server too — audit,
-  collections, objects — and no List RPC of theirs counts yet, so a count
-  beside them would describe only the rows read so far; the capabilities
-  page browses by kind and subject through two server-side flags of its own;
-  configuration is a document, not a list of rows.
-- **Definition of Done:** audit, collections and objects filter through
-  facets whose counts their List RPCs give, as ListOperations' facets and
-  facet_counts do; or this entry names each one left and why.
-- **Blockers:** facets and counts on ListAuditLog, ListCollections and
-  ListObjects.
+  question worth narrowing by (useTableFacets), and the operations page and
+  both audit logs, which the server pages, through counts their listings
+  give with the first page (useServerFacets). What is left is paged on the
+  server too — collections and objects — and no List RPC of theirs counts
+  yet, so a count beside them would describe only the rows read so far; the
+  capabilities page browses by kind and subject through two server-side
+  flags of its own; configuration is a document, not a list of rows.
+- **Definition of Done:** collections and objects filter through facets
+  whose counts their List RPCs give, as ListOperations' and ListAuditLog's
+  facets and facet_counts do; or this entry names each one left and why.
+- **Blockers:** facets and counts on ListCollections and ListObjects.
 
 #### Facet choices remembered between visits
 

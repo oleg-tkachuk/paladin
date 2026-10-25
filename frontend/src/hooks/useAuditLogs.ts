@@ -10,6 +10,9 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 import type { SortState } from "@/hooks/useTableSort";
 import type { AuditOrderField } from "@/lib/auditOrder";
 import { toSortOrder } from "@/lib/table/sortOrder";
+import type { FacetCount } from "@/gen/paladin/common/v1/facet_pb";
+import { auditFacetsRequest } from "@/lib/auditFacets";
+import type { FacetSelection } from "@/lib/table/facets";
 
 // useAuditLogs — wrapper around admin/v1.AuditLogService.ListAuditLog.
 //
@@ -22,12 +25,17 @@ export type { AuditLogEntry };
 
 export interface UseAuditLogsResult {
   entries: AuditLogEntry[];
+  /** With facets, what each counts over the whole listing, from its first page. */
+  facetCounts: readonly FacetCount[];
   loading: boolean;
   error: string | null;
   nextCursor: string;
   refresh: () => Promise<void>;
   loadMore: () => Promise<void>;
 }
+
+/** No counts: a listing that asked for none, or has not answered. */
+const NO_COUNTS: readonly FacetCount[] = [];
 
 /** No sort: the log's own order, newest first. */
 const NO_SORT: SortState<AuditOrderField> = { column: null, direction: null };
@@ -40,17 +48,30 @@ const NO_SORT: SortState<AuditOrderField> = { column: null, direction: null };
  * `sort` is applied by the server, which pages a sorted log; the sort is part
  * of the query key, so a new one starts again from the first page rather than
  * resuming a cursor minted for another order.
+ *
+ * `facets`, when given, narrows the log by the plane, outcome and service
+ * facets' choices on the server, which counts each with the first page.
  */
 export function useAuditLogs(
   pageSize: number = 50,
   filter: string = "",
   tenantId: string = "",
   sort: SortState<AuditOrderField> = NO_SORT,
+  facets?: FacetSelection,
 ): UseAuditLogsResult {
   const orderBy = sort.direction ? (sort.column ?? "") : "";
+  const narrow = facets ? auditFacetsRequest(facets) : undefined;
   const sortOrder = toSortOrder(orderBy ? sort.direction : null);
   const query = useInfiniteQuery({
-    queryKey: ["auditLogs", pageSize, filter, tenantId, orderBy, sortOrder],
+    queryKey: [
+      "auditLogs",
+      pageSize,
+      filter,
+      tenantId,
+      orderBy,
+      sortOrder,
+      narrow,
+    ],
     initialPageParam: "",
     queryFn: async ({ pageParam, signal }) => {
       try {
@@ -64,6 +85,10 @@ export function useAuditLogs(
             tenantId,
             orderBy,
             sortOrder,
+            facets: narrow,
+            // Counted once, with the first page: a later one is the same
+            // listing, and the server answers it without counts.
+            countFacets: narrow !== undefined && pageParam === "",
           },
           { signal },
         );
@@ -88,6 +113,7 @@ export function useAuditLogs(
 
   return {
     entries,
+    facetCounts: query.data?.pages[0]?.facetCounts ?? NO_COUNTS,
     loading: query.isFetching,
     // The old hook surfaced the server's rawMessage string; normalizeError
     // already unwraps a ConnectError to that.

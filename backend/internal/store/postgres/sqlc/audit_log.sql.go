@@ -11,6 +11,174 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAuditByAudience = `-- name: CountAuditByAudience :many
+SELECT actor_audience AS value, count(*)::bigint AS count
+FROM audit_log
+WHERE ($1::text IS NULL OR actor_subject = $1::text)
+  AND ($2::uuid IS NULL OR actor_tenant_id = $2::uuid)
+  AND ($3::uuid IS NULL
+       OR actor_tenant_id = $3::uuid
+       OR resource_tenant_id = $3::uuid)
+  AND ($4::text IS NULL OR action = $4::text)
+  AND ($5::text IS NULL OR action LIKE $5::text)
+  AND ($6::timestamptz IS NULL OR at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR at <= $7::timestamptz)
+  AND ($8::text[] IS NULL OR actor_audience = ANY($8::text[]))
+  AND ($9::boolean IS NULL OR (COALESCE(error_message, '') <> '') = $9::boolean)
+  AND ($10::text[] IS NULL OR audit_service(action) = ANY($10::text[]))
+GROUP BY actor_audience
+`
+
+type CountAuditByAudienceRow struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// How many entries of a listing came in on each plane: list_audit_entry_ids'
+// predicates (100), without its order or cursor, grouped. The caller leaves
+// out the plane facet's own choices, so each count says what choosing that
+// plane gives.
+func (q *Queries) CountAuditByAudience(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string) ([]CountAuditByAudienceRow, error) {
+	rows, err := q.db.Query(ctx, countAuditByAudience,
+		actorSubject,
+		actorTenantID,
+		trailTenantID,
+		actionEq,
+		actionPrefix,
+		atGte,
+		atLte,
+		audiences,
+		isError,
+		services,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAuditByAudienceRow
+	for rows.Next() {
+		var i CountAuditByAudienceRow
+		if err := rows.Scan(&i.Value, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countAuditByOutcome = `-- name: CountAuditByOutcome :many
+SELECT (COALESCE(error_message, '') <> '')::boolean AS is_error, count(*)::bigint AS count
+FROM audit_log
+WHERE ($1::text IS NULL OR actor_subject = $1::text)
+  AND ($2::uuid IS NULL OR actor_tenant_id = $2::uuid)
+  AND ($3::uuid IS NULL
+       OR actor_tenant_id = $3::uuid
+       OR resource_tenant_id = $3::uuid)
+  AND ($4::text IS NULL OR action = $4::text)
+  AND ($5::text IS NULL OR action LIKE $5::text)
+  AND ($6::timestamptz IS NULL OR at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR at <= $7::timestamptz)
+  AND ($8::text[] IS NULL OR actor_audience = ANY($8::text[]))
+  AND ($9::boolean IS NULL OR (COALESCE(error_message, '') <> '') = $9::boolean)
+  AND ($10::text[] IS NULL OR audit_service(action) = ANY($10::text[]))
+GROUP BY 1
+`
+
+type CountAuditByOutcomeRow struct {
+	IsError bool  `json:"is_error"`
+	Count   int64 `json:"count"`
+}
+
+// As CountAuditByAudience, by whether the call failed.
+func (q *Queries) CountAuditByOutcome(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string) ([]CountAuditByOutcomeRow, error) {
+	rows, err := q.db.Query(ctx, countAuditByOutcome,
+		actorSubject,
+		actorTenantID,
+		trailTenantID,
+		actionEq,
+		actionPrefix,
+		atGte,
+		atLte,
+		audiences,
+		isError,
+		services,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAuditByOutcomeRow
+	for rows.Next() {
+		var i CountAuditByOutcomeRow
+		if err := rows.Scan(&i.IsError, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countAuditByService = `-- name: CountAuditByService :many
+SELECT audit_service(action)::text AS value, count(*)::bigint AS count
+FROM audit_log
+WHERE ($1::text IS NULL OR actor_subject = $1::text)
+  AND ($2::uuid IS NULL OR actor_tenant_id = $2::uuid)
+  AND ($3::uuid IS NULL
+       OR actor_tenant_id = $3::uuid
+       OR resource_tenant_id = $3::uuid)
+  AND ($4::text IS NULL OR action = $4::text)
+  AND ($5::text IS NULL OR action LIKE $5::text)
+  AND ($6::timestamptz IS NULL OR at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR at <= $7::timestamptz)
+  AND ($8::text[] IS NULL OR actor_audience = ANY($8::text[]))
+  AND ($9::boolean IS NULL OR (COALESCE(error_message, '') <> '') = $9::boolean)
+  AND ($10::text[] IS NULL OR audit_service(action) = ANY($10::text[]))
+GROUP BY 1
+`
+
+type CountAuditByServiceRow struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+// As CountAuditByAudience, by the service called (audit_service).
+func (q *Queries) CountAuditByService(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string) ([]CountAuditByServiceRow, error) {
+	rows, err := q.db.Query(ctx, countAuditByService,
+		actorSubject,
+		actorTenantID,
+		trailTenantID,
+		actionEq,
+		actionPrefix,
+		atGte,
+		atLte,
+		audiences,
+		isError,
+		services,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAuditByServiceRow
+	for rows.Next() {
+		var i CountAuditByServiceRow
+		if err := rows.Scan(&i.Value, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAuditEntry = `-- name: GetAuditEntry :one
 SELECT audit_log.id, audit_log.at, audit_log.actor_subject, audit_log.actor_tenant_id, audit_log.actor_audience, audit_log.action, audit_log.resource_name, audit_log.request_id, audit_log.source_ip, audit_log.capability_id, audit_log.error_message, audit_log.request_json, audit_log.resource_tenant_id, audit_log.relayed_by, audit_log.user_agent, audit_log.state_before_json, audit_log.state_after_json
 FROM audit_log
@@ -91,11 +259,14 @@ WHERE id = ANY (ARRAY(
             $5::text,
             $6::timestamptz,
             $7::timestamptz,
-            $8::text,
+            $8::text[],
             $9::boolean,
-            $10::text,
-            $11::uuid,
-            $12::integer)))
+            $10::text[],
+            $11::text,
+            $12::boolean,
+            $13::text,
+            $14::uuid,
+            $15::integer)))
 `
 
 type ListAuditEntriesRow struct {
@@ -112,7 +283,7 @@ type ListAuditEntriesRow struct {
 // top-level conjuncts the extractor recognises. The full CEL program ALWAYS
 // still runs in-memory after this fetch, so pushdown only narrows the
 // candidate set; correctness lives in the handler, not in this WHERE clause.
-func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, orderBy string, sortDesc bool, afterValue *string, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
+func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string, orderBy string, sortDesc bool, afterValue *string, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listAuditEntries,
 		actorSubject,
 		actorTenantID,
@@ -121,6 +292,9 @@ func (q *Queries) ListAuditEntries(ctx context.Context, actorSubject *string, ac
 		actionPrefix,
 		atGte,
 		atLte,
+		audiences,
+		isError,
+		services,
 		orderBy,
 		sortDesc,
 		afterValue,

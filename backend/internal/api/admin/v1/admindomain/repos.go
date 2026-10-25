@@ -212,6 +212,41 @@ type AuditRepository interface {
 	InsertWithOutbox(ctx context.Context, e AuditEntry, onInserted func(ctx context.Context, tx pgx.Tx) error) error
 	Get(ctx context.Context, entryID uuid.UUID) (AuditEntry, error)
 	List(ctx context.Context, args ListAuditArgs) ([]AuditEntry, string, error)
+	// CountFacets counts the entries List would list for args, without its
+	// order, cursor or page size, by each facet's answers: each facet
+	// counted without its own choices in args.Facets.
+	CountFacets(ctx context.Context, args ListAuditArgs) ([]AuditFacetCount, error)
+}
+
+// The facets an audit listing narrows and counts by (AuditFacetCount.Facet).
+const (
+	AuditFacetPlane   = "plane"
+	AuditFacetOutcome = "outcome"
+	AuditFacetService = "service"
+)
+
+// AuditOutcome is how a recorded call ended: an AuditFacetOutcome answer.
+type AuditOutcome string
+
+const (
+	AuditOutcomeOK    AuditOutcome = "ok"
+	AuditOutcomeError AuditOutcome = "error"
+)
+
+// AuditFacets narrows an audit listing: an entry passes when its plane
+// (ActorAudience) is one of Planes, its outcome one of Outcomes and its
+// service (the package and service of its action's procedure, or the action
+// itself for one of the server's own) one of Services, each empty for any.
+type AuditFacets struct {
+	Planes   []string
+	Outcomes []AuditOutcome
+	Services []string
+}
+
+// AuditFacetCount is how many entries of a listing give Value for Facet.
+type AuditFacetCount struct {
+	Facet, Value string
+	Count        int64
 }
 
 // The fields ListAuditLog sorts by, as order_by names them: AuditLogEntry's
@@ -298,6 +333,9 @@ type ListAuditArgs struct {
 	ActionPrefix string    // LIKE '<prefix>%'
 	AtGTE        time.Time // at >= AtGTE
 	AtLTE        time.Time // at <= AtLTE
+
+	// Facets narrows the listing apart from the filter.
+	Facets AuditFacets
 }
 
 // ─── Quota repository ───────────────────────────────────────────────────────

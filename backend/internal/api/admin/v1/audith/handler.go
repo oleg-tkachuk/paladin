@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"cel.dev/cel-go/cel"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
@@ -77,37 +79,66 @@ const maxFilteredBatches = 10
 // CEL expression evaluated against AuditLogSchema; rows that fail the
 // predicate are dropped, and further store pages are read to fill the page
 // (up to maxFilteredBatches).
-func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditEntry, string, error) {
+// listScope is args as a listing of the log may read them, with filter's
+// compiled program: a caller other than a platform admin held to its own
+// tenant, the policy asked, and the filter's SQL-expressible conjuncts
+// pushed down — refused when the caller may not list them.
+func (h *Handler) listScope(ctx context.Context, args admindomain.ListAuditArgs, filter string) (admindomain.ListAuditArgs, cel.Program, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
-		return nil, "", err
+		return args, nil, err
 	}
 	if args.Order, err = auditOrder(args.Order); err != nil {
-		return nil, "", err
+		return args, nil, err
 	}
 	// Non-platform admins can see only their own tenant's entries.
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		if args.ActorTenantID != uuid.Nil && args.ActorTenantID != caller {
-			return nil, "", connect.NewError(connect.CodePermissionDenied,
+			return args, nil, connect.NewError(connect.CodePermissionDenied,
 				"cross-tenant audit denied")
 		}
 		if args.TrailTenantID != uuid.Nil && args.TrailTenantID != caller {
-			return nil, "", connect.NewError(connect.CodePermissionDenied,
+			return args, nil, connect.NewError(connect.CodePermissionDenied,
 				"cross-tenant audit denied")
 		}
 		args.ActorTenantID = caller
 	}
 	if err := h.authorize(ctx, cedar.ActionReadAuditLog, args.ActorTenantID); err != nil {
-		return nil, "", err
+		return args, nil, err
 	}
 	prog, err := h.cel.Compile(celpkg.AuditLogSchema, filter)
 	if err != nil {
-		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return args, nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	// Best-effort SQL pushdown of recognized conjuncts. The full CEL
-	// program still runs in-memory below; pushdown only narrows the
-	// candidate set on the way out of Postgres.
+	// program still runs in-memory after the fetch; pushdown only narrows
+	// the candidate set on the way out of Postgres.
 	applyAuditPushdown(&args, filter)
+	return args, prog, nil
+}
+
+// CountAuditFacets counts the entries ListAuditLog would list for args and
+// filter by each facet's answers (AuditFacetPlane, AuditFacetOutcome,
+// AuditFacetService), each facet without its own choices. Counted over what
+// the filter pushes down: the conjuncts it cannot are applied to each page
+// after, so a count can exceed the entries the pages then hold.
+func (h *Handler) CountAuditFacets(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditFacetCount, error) {
+	args, _, err := h.listScope(ctx, args, filter)
+	if err != nil {
+		return nil, err
+	}
+	counts, err := h.repo.CountFacets(ctx, args)
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("count audit facets: %w", err))
+	}
+	return counts, nil
+}
+
+func (h *Handler) ListAuditLog(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditEntry, string, error) {
+	args, prog, err := h.listScope(ctx, args, filter)
+	if err != nil {
+		return nil, "", err
+	}
 	page, next, err := h.listPage(ctx, args)
 	if err != nil {
 		return nil, "", err

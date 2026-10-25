@@ -171,6 +171,9 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 		likePrefixOrNil(args.ActionPrefix),
 		tsOptional(args.AtGTE),
 		tsOptional(args.AtLTE),
+		nilIfNone(args.Facets.Planes),
+		isErrorOf(args.Facets.Outcomes),
+		nilIfNone(args.Facets.Services),
 		order.Field, order.Desc, afterValue, afterID,
 		pageSize,
 	)
@@ -191,6 +194,83 @@ func (r *AuditRepoV2) List(ctx context.Context, args admindomain.ListAuditArgs) 
 		next = admindomain.AuditCursor(order, out[len(out)-1])
 	}
 	return out, next, nil
+}
+
+// CountFacets counts args' entries by plane, outcome and service, each
+// without its own facet's choices.
+func (r *AuditRepoV2) CountFacets(ctx context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditFacetCount, error) {
+	type predicates struct {
+		planes, services []string
+		isError          *bool
+	}
+	of := func(f admindomain.AuditFacets) predicates {
+		return predicates{planes: nilIfNone(f.Planes), services: nilIfNone(f.Services), isError: isErrorOf(f.Outcomes)}
+	}
+	subject, actor, trail := strPtrNonEmpty(args.ActorSubject), pgUUIDOptional(args.ActorTenantID), pgUUIDOptional(args.TrailTenantID)
+	actionEq, actionPrefix := strPtrNonEmpty(args.ActionEq), likePrefixOrNil(args.ActionPrefix)
+	gte, lte := tsOptional(args.AtGTE), tsOptional(args.AtLTE)
+
+	var out []admindomain.AuditFacetCount
+	byPlane := args.Facets
+	byPlane.Planes = nil
+	p := of(byPlane)
+	planes, err := r.q.CountAuditByAudience(ctx, subject, actor, trail, actionEq, actionPrefix, gte, lte, p.planes, p.isError, p.services)
+	if err != nil {
+		return nil, fmt.Errorf("count audit entries by plane: %w", err)
+	}
+	for _, row := range planes {
+		out = append(out, admindomain.AuditFacetCount{Facet: admindomain.AuditFacetPlane, Value: row.Value, Count: row.Count})
+	}
+	byOutcome := args.Facets
+	byOutcome.Outcomes = nil
+	p = of(byOutcome)
+	outcomes, err := r.q.CountAuditByOutcome(ctx, subject, actor, trail, actionEq, actionPrefix, gte, lte, p.planes, p.isError, p.services)
+	if err != nil {
+		return nil, fmt.Errorf("count audit entries by outcome: %w", err)
+	}
+	for _, row := range outcomes {
+		outcome := admindomain.AuditOutcomeOK
+		if row.IsError {
+			outcome = admindomain.AuditOutcomeError
+		}
+		out = append(out, admindomain.AuditFacetCount{Facet: admindomain.AuditFacetOutcome, Value: string(outcome), Count: row.Count})
+	}
+	byService := args.Facets
+	byService.Services = nil
+	p = of(byService)
+	services, err := r.q.CountAuditByService(ctx, subject, actor, trail, actionEq, actionPrefix, gte, lte, p.planes, p.isError, p.services)
+	if err != nil {
+		return nil, fmt.Errorf("count audit entries by service: %w", err)
+	}
+	for _, row := range services {
+		out = append(out, admindomain.AuditFacetCount{Facet: admindomain.AuditFacetService, Value: row.Value, Count: row.Count})
+	}
+	return out, nil
+}
+
+// nilIfNone is values, or nil — no narrowing — when there are none.
+func nilIfNone(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+// isErrorOf is the outcome facet as the query takes it: nil, any outcome,
+// when outcomes names neither or both; otherwise whether the call failed.
+func isErrorOf(outcomes []admindomain.AuditOutcome) *bool {
+	ok, failed := slices.Contains(outcomes, admindomain.AuditOutcomeOK), slices.Contains(outcomes, admindomain.AuditOutcomeError)
+	switch {
+	case len(outcomes) == 0 || ok && failed:
+		return nil
+	case ok:
+		v := false
+		return &v
+	case failed:
+		v := true
+		return &v
+	}
+	return nil
 }
 
 // strPtrNonEmpty returns nil for empty strings so the sqlc OR-NULL

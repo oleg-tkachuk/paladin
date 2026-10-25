@@ -29,6 +29,15 @@ type fakeAuditRepo struct {
 	calls int
 	args  admindomain.ListAuditArgs   // the last List's arguments
 	seen  []admindomain.ListAuditArgs // every List's arguments, in order
+	// counted is the last CountFacets' arguments, and counts its answer.
+	counted  *admindomain.ListAuditArgs
+	counts   []admindomain.AuditFacetCount
+	countErr error
+}
+
+func (f *fakeAuditRepo) CountFacets(_ context.Context, args admindomain.ListAuditArgs) ([]admindomain.AuditFacetCount, error) {
+	f.counted = &args
+	return f.counts, f.countErr
 }
 
 func (f *fakeAuditRepo) Insert(context.Context, admindomain.AuditEntry) error { return nil }

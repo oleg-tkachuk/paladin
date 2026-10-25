@@ -35,6 +35,7 @@ func (s *AuditServer) ListAuditLog(ctx context.Context, req *pb.ListAuditLogRequ
 		PageSize:  m.GetPage().GetPageSize(),
 		PageToken: m.GetPage().GetPageToken(),
 		Order:     auditOrderOf(m.GetOrderBy(), m.GetSortOrder()),
+		Facets:    auditFacetsFromProto(m.GetFacets()),
 	}
 	if id := m.GetTenantId(); id != "" {
 		tenant, err := uuid.Parse(id)
@@ -51,7 +52,49 @@ func (s *AuditServer) ListAuditLog(ctx context.Context, req *pb.ListAuditLogRequ
 	for i := range list {
 		out.Entries = append(out.Entries, auditEntryToProto(&list[i]))
 	}
+	// Counted with the first page only: a later page is the same listing.
+	if m.GetCountFacets() && args.PageToken == "" {
+		counts, err := s.H.CountAuditFacets(ctx, args, m.GetFilter())
+		if err != nil {
+			return nil, err
+		}
+		out.FacetCounts = auditFacetCountsToProto(counts)
+	}
 	return out, nil
+}
+
+// auditOutcomes names each outcome on the wire.
+var auditOutcomes = map[admindomain.AuditOutcome]pb.AuditOutcome{
+	admindomain.AuditOutcomeOK:    pb.AuditOutcome_AUDIT_OUTCOME_OK,
+	admindomain.AuditOutcomeError: pb.AuditOutcome_AUDIT_OUTCOME_ERROR,
+}
+
+// auditFacetsFromProto is f in the domain's terms; an outcome the domain
+// does not know is left out.
+func auditFacetsFromProto(f *pb.AuditFacets) admindomain.AuditFacets {
+	out := admindomain.AuditFacets{Planes: f.GetPlanes(), Services: f.GetServices()}
+	for _, o := range f.GetOutcomes() {
+		for domain, wire := range auditOutcomes {
+			if wire == o {
+				out.Outcomes = append(out.Outcomes, domain)
+			}
+		}
+	}
+	return out
+}
+
+// auditFacetCountsToProto is counts on the wire: an outcome by its
+// AuditOutcome name, as AuditFacets names it.
+func auditFacetCountsToProto(counts []admindomain.AuditFacetCount) []*commonpb.FacetCount {
+	out := make([]*commonpb.FacetCount, 0, len(counts))
+	for _, c := range counts {
+		value := c.Value
+		if c.Facet == admindomain.AuditFacetOutcome {
+			value = auditOutcomes[admindomain.AuditOutcome(c.Value)].String()
+		}
+		out = append(out, &commonpb.FacetCount{Facet: c.Facet, Value: value, Count: c.Count})
+	}
+	return out
 }
 
 func (s *AuditServer) GetAuditLogEntry(ctx context.Context, req *pb.GetAuditLogEntryRequest) (*pb.AuditLogEntry, error) {

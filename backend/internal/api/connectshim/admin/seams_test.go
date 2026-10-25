@@ -50,6 +50,10 @@ func (failingAudit) ListAuditLog(context.Context, admindomain.ListAuditArgs, str
 	return nil, "", errBoom
 }
 
+func (failingAudit) CountAuditFacets(context.Context, admindomain.ListAuditArgs, string) ([]admindomain.AuditFacetCount, error) {
+	return nil, errBoom
+}
+
 type failingBackend struct{}
 
 func (failingBackend) CreateBackend(context.Context, admindomain.StorageBackend) (*admindomain.StorageBackend, error) {

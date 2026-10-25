@@ -14,6 +14,8 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
+import { useServerFacets } from "@/hooks/useTableFacets";
+import { AUDIT_FACETS, auditFacetCounts } from "@/lib/auditFacets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { AUDIT_ORDER_FIELDS, type AuditOrderField } from "@/lib/auditOrder";
 import { TableToolbar } from "@/components/ui/TableToolbar";
@@ -53,8 +55,29 @@ export default function TenantAuditLogPage() {
     tableId: TABLE_ID,
     columns: AUDIT_ORDER_FIELDS,
   });
-  const { entries, loading, error, nextCursor, refresh, loadMore } =
-    useAuditLogs(TENANT_AUDIT_PAGE_SIZE, "", tenant.tenantId, sort);
+  // The facets narrow the trail on the server, which counts them with its
+  // first page.
+  const facets = useServerFacets(AUDIT_FACETS, PAGE_TABLE);
+  const {
+    entries,
+    facetCounts,
+    loading,
+    error,
+    nextCursor,
+    refresh,
+    loadMore,
+  } = useAuditLogs(
+    TENANT_AUDIT_PAGE_SIZE,
+    "",
+    tenant.tenantId,
+    sort,
+    facets.selection,
+  );
+  const { controls: controlsFor } = facets;
+  const facetControls = useMemo(
+    () => controlsFor(auditFacetCounts(facetCounts)),
+    [controlsFor, facetCounts],
+  );
 
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
   // The open entry and its tab are in the URL, as on /audit.
@@ -120,6 +143,7 @@ export default function TenantAuditLogPage() {
               onQueryChange={setSearch}
               searchLabel="Filter the audit log"
               placeholder="Filter by action, actor, resource, client, request id…"
+              facets={facetControls}
             >
               <span className={T.hint}>
                 {entries.length} loaded

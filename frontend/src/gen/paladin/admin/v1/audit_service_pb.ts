@@ -3,11 +3,13 @@
 /* eslint-disable */
 
 import type {
+  GenEnum,
   GenFile,
   GenMessage,
   GenService,
 } from "@bufbuild/protobuf/codegenv2";
 import {
+  enumDesc,
   fileDesc,
   messageDesc,
   serviceDesc,
@@ -17,6 +19,8 @@ import type { OperationSchema } from "./operation_service_pb";
 import { file_paladin_admin_v1_operation_service } from "./operation_service_pb";
 import type { AuditLogEntry, AuditLogEntrySchema } from "./types_pb";
 import { file_paladin_admin_v1_types } from "./types_pb";
+import type { FacetCount } from "../../common/v1/facet_pb";
+import { file_paladin_common_v1_facet } from "../../common/v1/facet_pb";
 import type {
   PageRequest,
   PageResponse,
@@ -31,11 +35,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_audit_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiRwYWxhZGluL2FkbWluL3YxL2F1ZGl0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEitwEKE0xpc3RBdWRpdExvZ1JlcXVlc3QSLAoEcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCRIeCgl0ZW5hbnRfaWQYAyABKAlCC7pICNgBAXIDsAEBEhAKCG9yZGVyX2J5GAQgASgJEjAKCnNvcnRfb3JkZXIYBSABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXIidwoUTGlzdEF1ZGl0TG9nUmVzcG9uc2USMAoHZW50cmllcxgBIAMoCzIfLnBhbGFkaW4uYWRtaW4udjEuQXVkaXRMb2dFbnRyeRItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIjQKF0dldEF1ZGl0TG9nRW50cnlSZXF1ZXN0EhkKCGVudHJ5X2lkGAEgASgJQge6SARyAhABIkUKFUV4cG9ydEF1ZGl0TG9nUmVxdWVzdBIOCgZmaWx0ZXIYASABKAkSHAoLZGVzdGluYXRpb24YAiABKAlCB7pIBHICEAEytwIKD0F1ZGl0TG9nU2VydmljZRJiCgxMaXN0QXVkaXRMb2cSJS5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLkxpc3RBdWRpdExvZ1Jlc3BvbnNlIgOQAgESYwoQR2V0QXVkaXRMb2dFbnRyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0QXVkaXRMb2dFbnRyeVJlcXVlc3QaHy5wYWxhZGluLmFkbWluLnYxLkF1ZGl0TG9nRW50cnkiA5ACARJbCg5FeHBvcnRBdWRpdExvZxInLnBhbGFkaW4uYWRtaW4udjEuRXhwb3J0QXVkaXRMb2dSZXF1ZXN0GhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24iA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    "CiRwYWxhZGluL2FkbWluL3YxL2F1ZGl0X3NlcnZpY2UucHJvdG8SEHBhbGFkaW4uYWRtaW4udjEi/AEKE0xpc3RBdWRpdExvZ1JlcXVlc3QSLAoEcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCRIeCgl0ZW5hbnRfaWQYAyABKAlCC7pICNgBAXIDsAEBEhAKCG9yZGVyX2J5GAQgASgJEjAKCnNvcnRfb3JkZXIYBSABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISLQoGZmFjZXRzGAYgASgLMh0ucGFsYWRpbi5hZG1pbi52MS5BdWRpdEZhY2V0cxIUCgxjb3VudF9mYWNldHMYByABKAgiYQoLQXVkaXRGYWNldHMSDgoGcGxhbmVzGAEgAygJEjAKCG91dGNvbWVzGAIgAygOMh4ucGFsYWRpbi5hZG1pbi52MS5BdWRpdE91dGNvbWUSEAoIc2VydmljZXMYAyADKAkirAEKFExpc3RBdWRpdExvZ1Jlc3BvbnNlEjAKB2VudHJpZXMYASADKAsyHy5wYWxhZGluLmFkbWluLnYxLkF1ZGl0TG9nRW50cnkSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZRIzCgxmYWNldF9jb3VudHMYAyADKAsyHS5wYWxhZGluLmNvbW1vbi52MS5GYWNldENvdW50IjQKF0dldEF1ZGl0TG9nRW50cnlSZXF1ZXN0EhkKCGVudHJ5X2lkGAEgASgJQge6SARyAhABIkUKFUV4cG9ydEF1ZGl0TG9nUmVxdWVzdBIOCgZmaWx0ZXIYASABKAkSHAoLZGVzdGluYXRpb24YAiABKAlCB7pIBHICEAEqXAoMQXVkaXRPdXRjb21lEh0KGUFVRElUX09VVENPTUVfVU5TUEVDSUZJRUQQABIUChBBVURJVF9PVVRDT01FX09LEAESFwoTQVVESVRfT1VUQ09NRV9FUlJPUhACMrcCCg9BdWRpdExvZ1NlcnZpY2USYgoMTGlzdEF1ZGl0TG9nEiUucGFsYWRpbi5hZG1pbi52MS5MaXN0QXVkaXRMb2dSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5MaXN0QXVkaXRMb2dSZXNwb25zZSIDkAIBEmMKEEdldEF1ZGl0TG9nRW50cnkSKS5wYWxhZGluLmFkbWluLnYxLkdldEF1ZGl0TG9nRW50cnlSZXF1ZXN0Gh8ucGFsYWRpbi5hZG1pbi52MS5BdWRpdExvZ0VudHJ5IgOQAgESWwoORXhwb3J0QXVkaXRMb2cSJy5wYWxhZGluLmFkbWluLnYxLkV4cG9ydEF1ZGl0TG9nUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_paladin_admin_v1_operation_service,
       file_paladin_admin_v1_types,
+      file_paladin_common_v1_facet,
       file_paladin_common_v1_pagination,
     ],
   );
@@ -87,6 +92,24 @@ export type ListAuditLogRequest =
      * @generated from field: paladin.common.v1.SortOrder sort_order = 5;
      */
     sortOrder: SortOrder;
+
+    /**
+     * facets narrows the log by plane, outcome and service, apart from filter,
+     * so the listing can count each facet without its own choices
+     * (facet_counts).
+     *
+     * @generated from field: paladin.admin.v1.AuditFacets facets = 6;
+     */
+    facets?: AuditFacets | undefined;
+
+    /**
+     * count_facets asks for facet_counts with the first page. Counted in the
+     * query over what filter pushes down; the conjuncts it cannot push down run
+     * over each page after, so a count can exceed what the pages then hold.
+     *
+     * @generated from field: bool count_facets = 7;
+     */
+    countFacets: boolean;
   };
 
 /**
@@ -96,6 +119,42 @@ export type ListAuditLogRequest =
 export const ListAuditLogRequestSchema: GenMessage<ListAuditLogRequest> =
   /*@__PURE__*/
   messageDesc(file_paladin_admin_v1_audit_service, 0);
+
+/**
+ * AuditFacets narrows an audit listing, each facet one the listing can
+ * count (FacetCount, facets "plane", "outcome" and "service"): an entry
+ * passes when its actor_audience is one of planes, its outcome one of
+ * outcomes and its service one of services, each left empty for any. An
+ * entry's service is the service its action's procedure names
+ * ("paladin.admin.v1.BucketService"), or the action itself for one of the
+ * server's own ("iam.bootstrap_admin").
+ *
+ * @generated from message paladin.admin.v1.AuditFacets
+ */
+export type AuditFacets = Message<"paladin.admin.v1.AuditFacets"> & {
+  /**
+   * @generated from field: repeated string planes = 1;
+   */
+  planes: string[];
+
+  /**
+   * @generated from field: repeated paladin.admin.v1.AuditOutcome outcomes = 2;
+   */
+  outcomes: AuditOutcome[];
+
+  /**
+   * @generated from field: repeated string services = 3;
+   */
+  services: string[];
+};
+
+/**
+ * Describes the message paladin.admin.v1.AuditFacets.
+ * Use `create(AuditFacetsSchema)` to create a new message.
+ */
+export const AuditFacetsSchema: GenMessage<AuditFacets> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_audit_service, 1);
 
 /**
  * @generated from message paladin.admin.v1.ListAuditLogResponse
@@ -111,6 +170,15 @@ export type ListAuditLogResponse =
      * @generated from field: paladin.common.v1.PageResponse page = 2;
      */
     page?: PageResponse | undefined;
+
+    /**
+     * facet_counts, when count_facets asked for them on the first page: for
+     * facet "plane" each actor_audience, for "outcome" each AuditOutcome's
+     * name, for "service" each service, with how many entries give it.
+     *
+     * @generated from field: repeated paladin.common.v1.FacetCount facet_counts = 3;
+     */
+    facetCounts: FacetCount[];
   };
 
 /**
@@ -119,7 +187,7 @@ export type ListAuditLogResponse =
  */
 export const ListAuditLogResponseSchema: GenMessage<ListAuditLogResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_audit_service, 1);
+  messageDesc(file_paladin_admin_v1_audit_service, 2);
 
 /**
  * @generated from message paladin.admin.v1.GetAuditLogEntryRequest
@@ -138,7 +206,7 @@ export type GetAuditLogEntryRequest =
  */
 export const GetAuditLogEntryRequestSchema: GenMessage<GetAuditLogEntryRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_audit_service, 2);
+  messageDesc(file_paladin_admin_v1_audit_service, 3);
 
 /**
  * @generated from message paladin.admin.v1.ExportAuditLogRequest
@@ -165,7 +233,40 @@ export type ExportAuditLogRequest =
  */
 export const ExportAuditLogRequestSchema: GenMessage<ExportAuditLogRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_audit_service, 3);
+  messageDesc(file_paladin_admin_v1_audit_service, 4);
+
+/**
+ * AuditOutcome is how a recorded call ended.
+ *
+ * @generated from enum paladin.admin.v1.AuditOutcome
+ */
+export enum AuditOutcome {
+  /**
+   * @generated from enum value: AUDIT_OUTCOME_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * OK: the call succeeded; the entry carries no error_message.
+   *
+   * @generated from enum value: AUDIT_OUTCOME_OK = 1;
+   */
+  OK = 1,
+
+  /**
+   * ERROR: the call was refused or failed; error_message says why.
+   *
+   * @generated from enum value: AUDIT_OUTCOME_ERROR = 2;
+   */
+  ERROR = 2,
+}
+
+/**
+ * Describes the enum paladin.admin.v1.AuditOutcome.
+ */
+export const AuditOutcomeSchema: GenEnum<AuditOutcome> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_admin_v1_audit_service, 0);
 
 /**
  * AuditLogService is read-only access to the immutable audit log. Writes
