@@ -11,10 +11,14 @@
 import { type APIRequestContext } from "@playwright/test";
 
 import { test, expect } from "./fixtures/resources";
+import { loginAsAdmin } from "./fixtures/auth";
+import { gotoSettled } from "./fixtures/navigate";
 import { createHash } from "node:crypto";
 import { createClient } from "@connectrpc/connect";
 
 import { AuditLogService } from "@/gen/paladin/admin/v1/audit_service_pb";
+import { NO_DURATION } from "@/lib/format/duration";
+import { tableParam } from "@/lib/table/urlState";
 
 import {
   AUDIENCE_ADMIN,
@@ -63,6 +67,14 @@ const UNIQUE_SUFFIX = 8;
 const AUDIT_PAGE_SIZE = 50;
 // The tag the set_object_tags test writes, unique to the run.
 const TAG_KEY = "e2e-mcp";
+// The console page listing live sessions, and the namespace its sessions table
+// keeps its view under (SESSIONS_TABLE in MCPSessions.tsx).
+const MCP_PAGE = "/mcp";
+const SESSIONS_PARAM = tableParam("row", { namespace: "sessions" });
+// The session panel's field for how long the session has been open.
+const CONNECTED_FOR = "Connected for";
+// How long the session list, which polls, takes to show a new session.
+const SESSION_LISTED_MS = 15_000;
 
 interface RPCResponse {
   result?: {
@@ -93,6 +105,11 @@ class MCPSession {
   private id = 0;
   private sessionID = "";
   private protocol = OFFERED_PROTOCOL;
+
+  /** The id the server minted on initialize; empty before it. */
+  get session(): string {
+    return this.sessionID;
+  }
 
   constructor(
     private readonly request: APIRequestContext,
@@ -288,5 +305,47 @@ test.describe("MCP token exchange", () => {
     const tags = (JSON.parse(after.text) as { tags?: Record<string, string> })
       .tags;
     expect(tags?.[TAG_KEY]).toBe(marker);
+  });
+
+  // The console lists the session the agent just opened, and its record opens
+  // in the detail panel, linked from the URL, naming the agent by the token's
+  // subject.
+  test("the console opens a live session's record", async ({
+    page,
+    request,
+  }) => {
+    const tok = await grant(request, [SCOPE_READ], MCP_RESOURCE);
+    const session = new MCPSession(request, tok.access_token);
+    await session.initialize();
+    expect(session.session, "initialize minted a session id").toBeTruthy();
+    // The MCP server labels a session with the verified token's subject.
+    const agent = String(claims(tok.access_token).sub ?? "");
+    expect(agent, "the token names a subject").toBeTruthy();
+
+    await loginAsAdmin(page);
+    await gotoSettled(page, MCP_PAGE);
+
+    // The row shows a prefix of the id and carries the whole one as its title.
+    const cell = page.getByTitle(session.session, { exact: true });
+    await expect(cell).toBeVisible({ timeout: SESSION_LISTED_MS });
+    await cell.click();
+
+    const panel = page.getByRole("dialog", { name: "Session" });
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(session.session);
+    await expect(page).toHaveURL(
+      new RegExp(
+        `[?&]${SESSIONS_PARAM.replace(".", "\\.")}=${session.session}(&|$)`,
+      ),
+    );
+
+    const agentField = panel.getByText("Agent", { exact: true }).locator("..");
+    await expect(agentField).toContainText(agent);
+    const connected = panel
+      .getByText(CONNECTED_FOR, { exact: true })
+      .locator("..");
+    await expect(connected).toBeVisible();
+    await expect(connected).not.toContainText(NO_DURATION);
+    await expect(connected).toHaveText(new RegExp(`^${CONNECTED_FOR}.+`));
   });
 });
