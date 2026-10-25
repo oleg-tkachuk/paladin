@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/capop"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 )
 
@@ -518,7 +519,7 @@ func (e *Engine) IsAuthorized(ctx context.Context, p *Principal, action Action, 
 		Principal: userUID(p),
 		Action:    actionUID(action.String()),
 		Resource:  e.resourceUID(r, authSlug),
-		Context:   buildContext(rc),
+		Context:   buildContext(rc, capop.Admitted(ctx)),
 	}
 
 	decision, diag := cedar.Authorize(set, entities, req)
@@ -873,6 +874,56 @@ when {
   (principal.kind == "api_key" ||
    principal.kind == "service_account" ||
    principal.kind == "capability") &&
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
+// Built-in: a capability does what its caveats allowed, in its own tenant
+// (ADR-0038). A capability carries no role by design (ADR-0010), so without
+// this a tenant with no stored policy denied every read and upload a
+// capability was issued for, and the refusal said only "denied by policy".
+//
+// context.capability_op is the operation auth.AssertCapabilityOp checked
+// against the caveats in this request — its prefix, resource URIs, request
+// and budget ceilings, taint — before the handler asked Cedar; it is "" for
+// any request that presented no capability or whose handler asserted nothing.
+// Each permit binds an operation to the data-plane actions that operation
+// names, so a "get" admitted on one object cannot authorize a PresignPut.
+// "delete" needs no line here: the machine delete permit above grants it.
+// "manage" gets none on purpose — taint, Object Lock and operation
+// cancellation stay with a tenant policy that names them.
+//
+// A tenant that wants capabilities held to its own rules can still "forbid";
+// first-forbid wins.
+permit (
+  principal,
+  action in [Action::"GetObject", Action::"PresignGet"],
+  resource
+)
+when {
+  principal has kind &&
+  principal.kind == "capability" &&
+  (context.capability_op == "get" || context.capability_op == "list") &&
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
+permit (
+  principal,
+  action in [
+    Action::"PutObject",
+    Action::"PresignPut",
+    Action::"UpdateObject",
+    Action::"CopyObject"
+  ],
+  resource
+)
+when {
+  principal has kind &&
+  principal.kind == "capability" &&
+  context.capability_op == "put" &&
   principal has tenant_id &&
   resource has tenant_id &&
   principal.tenant_id == resource.tenant_id
@@ -1527,7 +1578,10 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	return m
 }
 
-func buildContext(rc RequestContext) cedartypes.Record {
+// capabilityOp is the operation the request's capability caveats admitted
+// (capop), "" without one — read from the request, never from the caller's
+// RequestContext, so a handler cannot claim an operation nobody checked.
+func buildContext(rc RequestContext, capabilityOp string) cedartypes.Record {
 	now := rc.Now
 	if now.IsZero() {
 		now = time.Now()
@@ -1543,6 +1597,7 @@ func buildContext(rc RequestContext) cedartypes.Record {
 		"ip":              cedartypes.String(rc.IP),
 		"oauth_client_id": cedartypes.String(rc.OAuthClientID),
 		"oauth_scopes":    cedartypes.NewSet(scopes...),
+		"capability_op":   cedartypes.String(capabilityOp),
 	})
 }
 

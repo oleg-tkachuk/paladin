@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
+	"github.com/oleg-tkachuk/paladin/backend/internal/capop"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
@@ -499,46 +500,24 @@ func extractCapabilityToken(xlegate, authz string) (string, limes.AuthScheme) {
 // subsystem is wired so handlers don't need a global reference.
 type chargeKey struct{}
 
-// lastOpKey carries a per-request *string that AssertCapabilityOp
-// writes the most-recently-asserted capability op into, so a later
-// ChargeRequest / ChargeCapability call in the same handler can
-// stamp it onto the charges-ledger row without the caller threading
-// the op as an extra arg.
-//
-// Using a pointer-to-string holder rather than a context.WithValue
-// rebind keeps existing handler code shape: handlers call
-// AssertCapabilityOp(ctx, op, uri) without re-binding ctx (return
-// signature stays `error`, not `(context.Context, error)`). The
-// interceptor allocates one holder per request and pins it in ctx
-// before the handler runs; AssertCapabilityOp mutates the target.
-type lastOpKey struct{}
-
-// withLastOpHolder allocates a fresh holder and stamps it. Called
-// once per request from the interceptor, before the handler runs.
-// Handler-side: AssertCapabilityOp writes via stampLastOp,
-// ChargeCapability reads via readLastOp.
+// withLastOpHolder installs the per-request holders a handler's charge
+// reads: the last charge id, and the op AssertCapabilityOp admitted
+// (capop, which the policy engine also reads as context.capability_op).
+// Called once per request from the interceptor, before the handler runs.
 func withLastOpHolder(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, lastChargeKey{}, new(uuid.UUID))
-	return context.WithValue(ctx, lastOpKey{}, new(string))
+	return capop.WithHolder(ctx)
 }
 
-// stampLastOp writes the supplied op into the per-request holder.
-// No-op when no holder is installed (unit-test contexts that bypass
-// the interceptor; the read side falls back to "").
+// stampLastOp records op as the one the caveats admitted for this request.
 func stampLastOp(ctx context.Context, op limes.Op) {
-	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok {
-		*holder = string(op)
-	}
+	capop.Stamp(ctx, string(op))
 }
 
-// readLastOp returns the most-recently-asserted op for this request,
-// or "" if AssertCapabilityOp hasn't been called yet (or the holder
-// isn't installed).
+// readLastOp returns the most-recently-asserted op for this request, or ""
+// if AssertCapabilityOp hasn't been called yet (or no holder is installed).
 func readLastOp(ctx context.Context) limes.Op {
-	if holder, ok := ctx.Value(lastOpKey{}).(*string); ok && holder != nil {
-		return limes.Op(*holder)
-	}
-	return ""
+	return limes.Op(capop.Admitted(ctx))
 }
 
 // chargeAmountKey carries the per-request default charge amount
