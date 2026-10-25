@@ -24,6 +24,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// AuditOutcome is how a recorded call ended.
+type AuditOutcome int32
+
+const (
+	AuditOutcome_AUDIT_OUTCOME_UNSPECIFIED AuditOutcome = 0
+	// OK: the call succeeded; the entry carries no error_message.
+	AuditOutcome_AUDIT_OUTCOME_OK AuditOutcome = 1
+	// ERROR: the call was refused or failed; error_message says why.
+	AuditOutcome_AUDIT_OUTCOME_ERROR AuditOutcome = 2
+)
+
+// Enum value maps for AuditOutcome.
+var (
+	AuditOutcome_name = map[int32]string{
+		0: "AUDIT_OUTCOME_UNSPECIFIED",
+		1: "AUDIT_OUTCOME_OK",
+		2: "AUDIT_OUTCOME_ERROR",
+	}
+	AuditOutcome_value = map[string]int32{
+		"AUDIT_OUTCOME_UNSPECIFIED": 0,
+		"AUDIT_OUTCOME_OK":          1,
+		"AUDIT_OUTCOME_ERROR":       2,
+	}
+)
+
+func (x AuditOutcome) Enum() *AuditOutcome {
+	p := new(AuditOutcome)
+	*p = x
+	return p
+}
+
+func (x AuditOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuditOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_paladin_admin_v1_audit_service_proto_enumTypes[0].Descriptor()
+}
+
+func (AuditOutcome) Type() protoreflect.EnumType {
+	return &file_paladin_admin_v1_audit_service_proto_enumTypes[0]
+}
+
+func (x AuditOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuditOutcome.Descriptor instead.
+func (AuditOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{0}
+}
+
 type ListAuditLogRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Page  *v1.PageRequest        `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
@@ -44,7 +96,15 @@ type ListAuditLogRequest struct {
 	OrderBy string `protobuf:"bytes,4,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
 	// sort_order is the direction of a named order_by; unspecified is
 	// ascending. With no order_by, only ascending turns newest-first around.
-	SortOrder     v1.SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	SortOrder v1.SortOrder `protobuf:"varint,5,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	// facets narrows the log by plane, outcome and service, apart from filter,
+	// so the listing can count each facet without its own choices
+	// (facet_counts).
+	Facets *AuditFacets `protobuf:"bytes,6,opt,name=facets,proto3" json:"facets,omitempty"`
+	// count_facets asks for facet_counts with the first page. Counted in the
+	// query over what filter pushes down; the conjuncts it cannot push down run
+	// over each page after, so a count can exceed what the pages then hold.
+	CountFacets   bool `protobuf:"varint,7,opt,name=count_facets,json=countFacets,proto3" json:"count_facets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,17 +174,102 @@ func (x *ListAuditLogRequest) GetSortOrder() v1.SortOrder {
 	return v1.SortOrder(0)
 }
 
-type ListAuditLogResponse struct {
+func (x *ListAuditLogRequest) GetFacets() *AuditFacets {
+	if x != nil {
+		return x.Facets
+	}
+	return nil
+}
+
+func (x *ListAuditLogRequest) GetCountFacets() bool {
+	if x != nil {
+		return x.CountFacets
+	}
+	return false
+}
+
+// AuditFacets narrows an audit listing, each facet one the listing can
+// count (FacetCount, facets "plane", "outcome" and "service"): an entry
+// passes when its actor_audience is one of planes, its outcome one of
+// outcomes and its service one of services, each left empty for any. An
+// entry's service is the service its action's procedure names
+// ("paladin.admin.v1.BucketService"), or the action itself for one of the
+// server's own ("iam.bootstrap_admin").
+type AuditFacets struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entries       []*AuditLogEntry       `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	Page          *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	Planes        []string               `protobuf:"bytes,1,rep,name=planes,proto3" json:"planes,omitempty"`
+	Outcomes      []AuditOutcome         `protobuf:"varint,2,rep,packed,name=outcomes,proto3,enum=paladin.admin.v1.AuditOutcome" json:"outcomes,omitempty"`
+	Services      []string               `protobuf:"bytes,3,rep,name=services,proto3" json:"services,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuditFacets) Reset() {
+	*x = AuditFacets{}
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuditFacets) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuditFacets) ProtoMessage() {}
+
+func (x *AuditFacets) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuditFacets.ProtoReflect.Descriptor instead.
+func (*AuditFacets) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AuditFacets) GetPlanes() []string {
+	if x != nil {
+		return x.Planes
+	}
+	return nil
+}
+
+func (x *AuditFacets) GetOutcomes() []AuditOutcome {
+	if x != nil {
+		return x.Outcomes
+	}
+	return nil
+}
+
+func (x *AuditFacets) GetServices() []string {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+type ListAuditLogResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Entries []*AuditLogEntry       `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	Page    *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	// facet_counts, when count_facets asked for them on the first page: for
+	// facet "plane" each actor_audience, for "outcome" each AuditOutcome's
+	// name, for "service" each service, with how many entries give it.
+	FacetCounts   []*v1.FacetCount `protobuf:"bytes,3,rep,name=facet_counts,json=facetCounts,proto3" json:"facet_counts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListAuditLogResponse) Reset() {
 	*x = ListAuditLogResponse{}
-	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[1]
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -136,7 +281,7 @@ func (x *ListAuditLogResponse) String() string {
 func (*ListAuditLogResponse) ProtoMessage() {}
 
 func (x *ListAuditLogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[1]
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -149,7 +294,7 @@ func (x *ListAuditLogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditLogResponse.ProtoReflect.Descriptor instead.
 func (*ListAuditLogResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{1}
+	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListAuditLogResponse) GetEntries() []*AuditLogEntry {
@@ -166,6 +311,13 @@ func (x *ListAuditLogResponse) GetPage() *v1.PageResponse {
 	return nil
 }
 
+func (x *ListAuditLogResponse) GetFacetCounts() []*v1.FacetCount {
+	if x != nil {
+		return x.FacetCounts
+	}
+	return nil
+}
+
 type GetAuditLogEntryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EntryId       string                 `protobuf:"bytes,1,opt,name=entry_id,json=entryId,proto3" json:"entry_id,omitempty"`
@@ -175,7 +327,7 @@ type GetAuditLogEntryRequest struct {
 
 func (x *GetAuditLogEntryRequest) Reset() {
 	*x = GetAuditLogEntryRequest{}
-	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[2]
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -187,7 +339,7 @@ func (x *GetAuditLogEntryRequest) String() string {
 func (*GetAuditLogEntryRequest) ProtoMessage() {}
 
 func (x *GetAuditLogEntryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[2]
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -200,7 +352,7 @@ func (x *GetAuditLogEntryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAuditLogEntryRequest.ProtoReflect.Descriptor instead.
 func (*GetAuditLogEntryRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{2}
+	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetAuditLogEntryRequest) GetEntryId() string {
@@ -222,7 +374,7 @@ type ExportAuditLogRequest struct {
 
 func (x *ExportAuditLogRequest) Reset() {
 	*x = ExportAuditLogRequest{}
-	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[3]
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +386,7 @@ func (x *ExportAuditLogRequest) String() string {
 func (*ExportAuditLogRequest) ProtoMessage() {}
 
 func (x *ExportAuditLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[3]
+	mi := &file_paladin_admin_v1_audit_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,7 +399,7 @@ func (x *ExportAuditLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportAuditLogRequest.ProtoReflect.Descriptor instead.
 func (*ExportAuditLogRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{3}
+	return file_paladin_admin_v1_audit_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ExportAuditLogRequest) GetFilter() string {
@@ -268,22 +420,33 @@ var File_paladin_admin_v1_audit_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_audit_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xe3\x01\n" +
+	"$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\x1dpaladin/common/v1/facet.proto\x1a\"paladin/common/v1/pagination.proto\"\xbd\x02\n" +
 	"\x13ListAuditLogRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12(\n" +
 	"\ttenant_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\x12\x19\n" +
 	"\border_by\x18\x04 \x01(\tR\aorderBy\x12;\n" +
 	"\n" +
-	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"\x86\x01\n" +
+	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x125\n" +
+	"\x06facets\x18\x06 \x01(\v2\x1d.paladin.admin.v1.AuditFacetsR\x06facets\x12!\n" +
+	"\fcount_facets\x18\a \x01(\bR\vcountFacets\"}\n" +
+	"\vAuditFacets\x12\x16\n" +
+	"\x06planes\x18\x01 \x03(\tR\x06planes\x12:\n" +
+	"\boutcomes\x18\x02 \x03(\x0e2\x1e.paladin.admin.v1.AuditOutcomeR\boutcomes\x12\x1a\n" +
+	"\bservices\x18\x03 \x03(\tR\bservices\"\xc8\x01\n" +
 	"\x14ListAuditLogResponse\x129\n" +
 	"\aentries\x18\x01 \x03(\v2\x1f.paladin.admin.v1.AuditLogEntryR\aentries\x123\n" +
-	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"=\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\x12@\n" +
+	"\ffacet_counts\x18\x03 \x03(\v2\x1d.paladin.common.v1.FacetCountR\vfacetCounts\"=\n" +
 	"\x17GetAuditLogEntryRequest\x12\"\n" +
 	"\bentry_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aentryId\"Z\n" +
 	"\x15ExportAuditLogRequest\x12\x16\n" +
 	"\x06filter\x18\x01 \x01(\tR\x06filter\x12)\n" +
-	"\vdestination\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdestination2\xb7\x02\n" +
+	"\vdestination\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vdestination*\\\n" +
+	"\fAuditOutcome\x12\x1d\n" +
+	"\x19AUDIT_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10AUDIT_OUTCOME_OK\x10\x01\x12\x17\n" +
+	"\x13AUDIT_OUTCOME_ERROR\x10\x022\xb7\x02\n" +
 	"\x0fAuditLogService\x12b\n" +
 	"\fListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12c\n" +
 	"\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n" +
@@ -301,34 +464,41 @@ func file_paladin_admin_v1_audit_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_audit_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_audit_service_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_paladin_admin_v1_audit_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_paladin_admin_v1_audit_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_paladin_admin_v1_audit_service_proto_goTypes = []any{
-	(*ListAuditLogRequest)(nil),     // 0: paladin.admin.v1.ListAuditLogRequest
-	(*ListAuditLogResponse)(nil),    // 1: paladin.admin.v1.ListAuditLogResponse
-	(*GetAuditLogEntryRequest)(nil), // 2: paladin.admin.v1.GetAuditLogEntryRequest
-	(*ExportAuditLogRequest)(nil),   // 3: paladin.admin.v1.ExportAuditLogRequest
-	(*v1.PageRequest)(nil),          // 4: paladin.common.v1.PageRequest
-	(v1.SortOrder)(0),               // 5: paladin.common.v1.SortOrder
-	(*AuditLogEntry)(nil),           // 6: paladin.admin.v1.AuditLogEntry
-	(*v1.PageResponse)(nil),         // 7: paladin.common.v1.PageResponse
-	(*Operation)(nil),               // 8: paladin.admin.v1.Operation
+	(AuditOutcome)(0),               // 0: paladin.admin.v1.AuditOutcome
+	(*ListAuditLogRequest)(nil),     // 1: paladin.admin.v1.ListAuditLogRequest
+	(*AuditFacets)(nil),             // 2: paladin.admin.v1.AuditFacets
+	(*ListAuditLogResponse)(nil),    // 3: paladin.admin.v1.ListAuditLogResponse
+	(*GetAuditLogEntryRequest)(nil), // 4: paladin.admin.v1.GetAuditLogEntryRequest
+	(*ExportAuditLogRequest)(nil),   // 5: paladin.admin.v1.ExportAuditLogRequest
+	(*v1.PageRequest)(nil),          // 6: paladin.common.v1.PageRequest
+	(v1.SortOrder)(0),               // 7: paladin.common.v1.SortOrder
+	(*AuditLogEntry)(nil),           // 8: paladin.admin.v1.AuditLogEntry
+	(*v1.PageResponse)(nil),         // 9: paladin.common.v1.PageResponse
+	(*v1.FacetCount)(nil),           // 10: paladin.common.v1.FacetCount
+	(*Operation)(nil),               // 11: paladin.admin.v1.Operation
 }
 var file_paladin_admin_v1_audit_service_proto_depIdxs = []int32{
-	4, // 0: paladin.admin.v1.ListAuditLogRequest.page:type_name -> paladin.common.v1.PageRequest
-	5, // 1: paladin.admin.v1.ListAuditLogRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	6, // 2: paladin.admin.v1.ListAuditLogResponse.entries:type_name -> paladin.admin.v1.AuditLogEntry
-	7, // 3: paladin.admin.v1.ListAuditLogResponse.page:type_name -> paladin.common.v1.PageResponse
-	0, // 4: paladin.admin.v1.AuditLogService.ListAuditLog:input_type -> paladin.admin.v1.ListAuditLogRequest
-	2, // 5: paladin.admin.v1.AuditLogService.GetAuditLogEntry:input_type -> paladin.admin.v1.GetAuditLogEntryRequest
-	3, // 6: paladin.admin.v1.AuditLogService.ExportAuditLog:input_type -> paladin.admin.v1.ExportAuditLogRequest
-	1, // 7: paladin.admin.v1.AuditLogService.ListAuditLog:output_type -> paladin.admin.v1.ListAuditLogResponse
-	6, // 8: paladin.admin.v1.AuditLogService.GetAuditLogEntry:output_type -> paladin.admin.v1.AuditLogEntry
-	8, // 9: paladin.admin.v1.AuditLogService.ExportAuditLog:output_type -> paladin.admin.v1.Operation
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6,  // 0: paladin.admin.v1.ListAuditLogRequest.page:type_name -> paladin.common.v1.PageRequest
+	7,  // 1: paladin.admin.v1.ListAuditLogRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	2,  // 2: paladin.admin.v1.ListAuditLogRequest.facets:type_name -> paladin.admin.v1.AuditFacets
+	0,  // 3: paladin.admin.v1.AuditFacets.outcomes:type_name -> paladin.admin.v1.AuditOutcome
+	8,  // 4: paladin.admin.v1.ListAuditLogResponse.entries:type_name -> paladin.admin.v1.AuditLogEntry
+	9,  // 5: paladin.admin.v1.ListAuditLogResponse.page:type_name -> paladin.common.v1.PageResponse
+	10, // 6: paladin.admin.v1.ListAuditLogResponse.facet_counts:type_name -> paladin.common.v1.FacetCount
+	1,  // 7: paladin.admin.v1.AuditLogService.ListAuditLog:input_type -> paladin.admin.v1.ListAuditLogRequest
+	4,  // 8: paladin.admin.v1.AuditLogService.GetAuditLogEntry:input_type -> paladin.admin.v1.GetAuditLogEntryRequest
+	5,  // 9: paladin.admin.v1.AuditLogService.ExportAuditLog:input_type -> paladin.admin.v1.ExportAuditLogRequest
+	3,  // 10: paladin.admin.v1.AuditLogService.ListAuditLog:output_type -> paladin.admin.v1.ListAuditLogResponse
+	8,  // 11: paladin.admin.v1.AuditLogService.GetAuditLogEntry:output_type -> paladin.admin.v1.AuditLogEntry
+	11, // 12: paladin.admin.v1.AuditLogService.ExportAuditLog:output_type -> paladin.admin.v1.Operation
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_audit_service_proto_init() }
@@ -343,13 +513,14 @@ func file_paladin_admin_v1_audit_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_audit_service_proto_rawDesc), len(file_paladin_admin_v1_audit_service_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   4,
+			NumEnums:      1,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_paladin_admin_v1_audit_service_proto_goTypes,
 		DependencyIndexes: file_paladin_admin_v1_audit_service_proto_depIdxs,
+		EnumInfos:         file_paladin_admin_v1_audit_service_proto_enumTypes,
 		MessageInfos:      file_paladin_admin_v1_audit_service_proto_msgTypes,
 	}.Build()
 	File_paladin_admin_v1_audit_service_proto = out.File

@@ -75,6 +75,15 @@ type Querier interface {
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
 	CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// How many entries of a listing came in on each plane: list_audit_entry_ids'
+	// predicates (100), without its order or cursor, grouped. The caller leaves
+	// out the plane facet's own choices, so each count says what choosing that
+	// plane gives.
+	CountAuditByAudience(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string) ([]CountAuditByAudienceRow, error)
+	// As CountAuditByAudience, by whether the call failed.
+	CountAuditByOutcome(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string) ([]CountAuditByOutcomeRow, error)
+	// As CountAuditByAudience, by the service called (audit_service).
+	CountAuditByService(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string) ([]CountAuditByServiceRow, error)
 	//
 	// Every relation that holds a bucket under ON DELETE RESTRICT, counted in one
 	// round trip. The list is not a guess: it is the RESTRICT set as the schema
@@ -380,7 +389,7 @@ type Querier interface {
 	// top-level conjuncts the extractor recognises. The full CEL program ALWAYS
 	// still runs in-memory after this fetch, so pushdown only narrows the
 	// candidate set; correctness lives in the handler, not in this WHERE clause.
-	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, orderBy string, sortDesc bool, afterValue *string, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error)
+	ListAuditEntries(ctx context.Context, actorSubject *string, actorTenantID pgtype.UUID, trailTenantID pgtype.UUID, actionEq *string, actionPrefix *string, atGte pgtype.Timestamptz, atLte pgtype.Timestamptz, audiences []string, isError *bool, services []string, orderBy string, sortDesc bool, afterValue *string, afterID pgtype.UUID, pageSize int32) ([]ListAuditEntriesRow, error)
 	// A bucket's grants, oldest first.
 	ListBucketGrants(ctx context.Context, backendName string, bucketName string) ([]ListBucketGrantsRow, error)
 	ListBuckets(ctx context.Context, backendID *string, afterName *string, afterBackendID *string, pageSize int32) ([]ListBucketsRow, error)

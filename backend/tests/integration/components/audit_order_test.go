@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,9 +124,10 @@ func TestListAuditEntryIDs_RefusesAnUnknownOrder(t *testing.T) {
 	ctx := context.Background()
 	admin := startPostgres(t)
 	// Every predicate unset; only the order is under test.
-	_, err := admin.Exec(ctx, `SELECT list_audit_entry_ids($1, $2, $3, $4, $5, $6, $7, $8, false, $9, $10, 10)`,
-		nil, nil, nil, nil, nil, nil, nil, "at; DROP TABLE audit_log", nil, nil)
-	if err == nil {
-		t.Fatal("an unknown order listed entries")
+	_, err := admin.Exec(ctx, `SELECT list_audit_entry_ids($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, $12, $13, 10)`,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, "at; DROP TABLE audit_log", nil, nil)
+	// The refusal is the function's own, not a call it could not resolve.
+	if err == nil || !strings.Contains(err.Error(), "unknown order") {
+		t.Fatalf("an unknown order: err = %v, want the function's refusal", err)
 	}
 }

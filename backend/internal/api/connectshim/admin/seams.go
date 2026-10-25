@@ -27,6 +27,7 @@ type auditHandler interface {
 	ExportAuditLog(ctx context.Context, filter, destination string) (*audith.ExportAuditLogResult, error)
 	GetAuditLogEntry(ctx context.Context, id uuid.UUID) (*admindomain.AuditEntry, error)
 	ListAuditLog(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditEntry, string, error)
+	CountAuditFacets(ctx context.Context, args admindomain.ListAuditArgs, filter string) ([]admindomain.AuditFacetCount, error)
 }
 
 var _ auditHandler = (*audith.Handler)(nil)

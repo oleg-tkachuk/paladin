@@ -326,7 +326,57 @@ func TestDomainConvertersTolerateNil(t *testing.T) {
 // something checks what came out — inverting either parse check survived.
 type recordingAudit struct {
 	failingAudit
-	args admindomain.ListAuditArgs
+	args    admindomain.ListAuditArgs
+	counted *admindomain.ListAuditArgs
+}
+
+func (r *recordingAudit) CountAuditFacets(_ context.Context, args admindomain.ListAuditArgs, _ string) ([]admindomain.AuditFacetCount, error) {
+	r.counted = &args
+	return []admindomain.AuditFacetCount{
+		{Facet: admindomain.AuditFacetOutcome, Value: string(admindomain.AuditOutcomeError), Count: 2},
+		{Facet: admindomain.AuditFacetPlane, Value: auditPlaneAdmin, Count: 3},
+	}, nil
+}
+
+// auditPlaneAdmin is an actor_audience the audit facet tests narrow by.
+const auditPlaneAdmin = "paladin-admin"
+
+// The facets narrow the listing as the domain names them, and are counted
+// only when asked and only with the first page; an outcome is counted under
+// its AuditOutcome name.
+func TestListAuditLog_FacetCounts(t *testing.T) {
+	facets := &pb.AuditFacets{
+		Planes:   []string{auditPlaneAdmin},
+		Outcomes: []pb.AuditOutcome{pb.AuditOutcome_AUDIT_OUTCOME_ERROR, pb.AuditOutcome_AUDIT_OUTCOME_UNSPECIFIED},
+	}
+	for _, tc := range []struct {
+		name    string
+		count   bool
+		token   string
+		counted bool
+	}{
+		{"asked, first page", true, "", true},
+		{"asked, a later page", true, "tok", false},
+		{"not asked", false, "", false},
+	} {
+		h := &recordingAudit{}
+		out, err := (&AuditServer{H: h}).ListAuditLog(context.Background(), &pb.ListAuditLogRequest{
+			Facets: facets, CountFacets: tc.count, Page: &commonv1.PageRequest{PageToken: tc.token},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := h.args.Facets
+		if len(f.Planes) != 1 || len(f.Outcomes) != 1 || f.Outcomes[0] != admindomain.AuditOutcomeError {
+			t.Errorf("%s: listed with %+v; want the plane and the one known outcome", tc.name, f)
+		}
+		if (h.counted != nil) != tc.counted || (len(out.GetFacetCounts()) != 0) != tc.counted {
+			t.Errorf("%s: counted %t with %d counts, want %t", tc.name, h.counted != nil, len(out.GetFacetCounts()), tc.counted)
+		}
+		if tc.counted && out.GetFacetCounts()[0].GetValue() != pb.AuditOutcome_AUDIT_OUTCOME_ERROR.String() {
+			t.Errorf("%s: outcome counted as %q", tc.name, out.GetFacetCounts()[0].GetValue())
+		}
+	}
 }
 
 func (r *recordingAudit) ListAuditLog(_ context.Context, args admindomain.ListAuditArgs, _ string) ([]admindomain.AuditEntry, string, error) {

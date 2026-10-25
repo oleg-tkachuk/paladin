@@ -7,6 +7,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1
 import "buf/validate/validate.proto";
 import "paladin/admin/v1/operation_service.proto";
 import "paladin/admin/v1/types.proto";
+import "paladin/common/v1/facet.proto";
 import "paladin/common/v1/pagination.proto";
 
 // AuditLogService is read-only access to the immutable audit log. Writes
@@ -54,11 +55,45 @@ message ListAuditLogRequest {
   // sort_order is the direction of a named order_by; unspecified is
   // ascending. With no order_by, only ascending turns newest-first around.
   paladin.common.v1.SortOrder sort_order = 5;
+  // facets narrows the log by plane, outcome and service, apart from filter,
+  // so the listing can count each facet without its own choices
+  // (facet_counts).
+  AuditFacets facets = 6;
+  // count_facets asks for facet_counts with the first page. Counted in the
+  // query over what filter pushes down; the conjuncts it cannot push down run
+  // over each page after, so a count can exceed what the pages then hold.
+  bool count_facets = 7;
+}
+
+// AuditOutcome is how a recorded call ended.
+enum AuditOutcome {
+  AUDIT_OUTCOME_UNSPECIFIED = 0;
+  // OK: the call succeeded; the entry carries no error_message.
+  AUDIT_OUTCOME_OK = 1;
+  // ERROR: the call was refused or failed; error_message says why.
+  AUDIT_OUTCOME_ERROR = 2;
+}
+
+// AuditFacets narrows an audit listing, each facet one the listing can
+// count (FacetCount, facets "plane", "outcome" and "service"): an entry
+// passes when its actor_audience is one of planes, its outcome one of
+// outcomes and its service one of services, each left empty for any. An
+// entry's service is the service its action's procedure names
+// ("paladin.admin.v1.BucketService"), or the action itself for one of the
+// server's own ("iam.bootstrap_admin").
+message AuditFacets {
+  repeated string planes = 1;
+  repeated AuditOutcome outcomes = 2;
+  repeated string services = 3;
 }
 
 message ListAuditLogResponse {
   repeated AuditLogEntry entries = 1;
   paladin.common.v1.PageResponse page = 2;
+  // facet_counts, when count_facets asked for them on the first page: for
+  // facet "plane" each actor_audience, for "outcome" each AuditOutcome's
+  // name, for "service" each service, with how many entries give it.
+  repeated paladin.common.v1.FacetCount facet_counts = 3;
 }
 
 message GetAuditLogEntryRequest {

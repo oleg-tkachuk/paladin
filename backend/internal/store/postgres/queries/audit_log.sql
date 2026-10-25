@@ -52,8 +52,68 @@ WHERE id = ANY (ARRAY(
             sqlc.narg('action_prefix')::text,
             sqlc.narg('at_gte')::timestamptz,
             sqlc.narg('at_lte')::timestamptz,
+            sqlc.narg('audiences')::text[],
+            sqlc.narg('is_error')::boolean,
+            sqlc.narg('services')::text[],
             sqlc.arg('order_by')::text,
             sqlc.arg('sort_desc')::boolean,
             sqlc.narg('after_value')::text,
             sqlc.narg('after_id')::uuid,
             sqlc.arg('page_size')::integer)));
+
+-- name: CountAuditByAudience :many
+-- How many entries of a listing came in on each plane: list_audit_entry_ids'
+-- predicates (100), without its order or cursor, grouped. The caller leaves
+-- out the plane facet's own choices, so each count says what choosing that
+-- plane gives.
+SELECT actor_audience AS value, count(*)::bigint AS count
+FROM audit_log
+WHERE (sqlc.narg('actor_subject')::text IS NULL OR actor_subject = sqlc.narg('actor_subject')::text)
+  AND (sqlc.narg('actor_tenant_id')::uuid IS NULL OR actor_tenant_id = sqlc.narg('actor_tenant_id')::uuid)
+  AND (sqlc.narg('trail_tenant_id')::uuid IS NULL
+       OR actor_tenant_id = sqlc.narg('trail_tenant_id')::uuid
+       OR resource_tenant_id = sqlc.narg('trail_tenant_id')::uuid)
+  AND (sqlc.narg('action_eq')::text IS NULL OR action = sqlc.narg('action_eq')::text)
+  AND (sqlc.narg('action_prefix')::text IS NULL OR action LIKE sqlc.narg('action_prefix')::text)
+  AND (sqlc.narg('at_gte')::timestamptz IS NULL OR at >= sqlc.narg('at_gte')::timestamptz)
+  AND (sqlc.narg('at_lte')::timestamptz IS NULL OR at <= sqlc.narg('at_lte')::timestamptz)
+  AND (sqlc.narg('audiences')::text[] IS NULL OR actor_audience = ANY(sqlc.narg('audiences')::text[]))
+  AND (sqlc.narg('is_error')::boolean IS NULL OR (COALESCE(error_message, '') <> '') = sqlc.narg('is_error')::boolean)
+  AND (sqlc.narg('services')::text[] IS NULL OR audit_service(action) = ANY(sqlc.narg('services')::text[]))
+GROUP BY actor_audience;
+
+-- name: CountAuditByOutcome :many
+-- As CountAuditByAudience, by whether the call failed.
+SELECT (COALESCE(error_message, '') <> '')::boolean AS is_error, count(*)::bigint AS count
+FROM audit_log
+WHERE (sqlc.narg('actor_subject')::text IS NULL OR actor_subject = sqlc.narg('actor_subject')::text)
+  AND (sqlc.narg('actor_tenant_id')::uuid IS NULL OR actor_tenant_id = sqlc.narg('actor_tenant_id')::uuid)
+  AND (sqlc.narg('trail_tenant_id')::uuid IS NULL
+       OR actor_tenant_id = sqlc.narg('trail_tenant_id')::uuid
+       OR resource_tenant_id = sqlc.narg('trail_tenant_id')::uuid)
+  AND (sqlc.narg('action_eq')::text IS NULL OR action = sqlc.narg('action_eq')::text)
+  AND (sqlc.narg('action_prefix')::text IS NULL OR action LIKE sqlc.narg('action_prefix')::text)
+  AND (sqlc.narg('at_gte')::timestamptz IS NULL OR at >= sqlc.narg('at_gte')::timestamptz)
+  AND (sqlc.narg('at_lte')::timestamptz IS NULL OR at <= sqlc.narg('at_lte')::timestamptz)
+  AND (sqlc.narg('audiences')::text[] IS NULL OR actor_audience = ANY(sqlc.narg('audiences')::text[]))
+  AND (sqlc.narg('is_error')::boolean IS NULL OR (COALESCE(error_message, '') <> '') = sqlc.narg('is_error')::boolean)
+  AND (sqlc.narg('services')::text[] IS NULL OR audit_service(action) = ANY(sqlc.narg('services')::text[]))
+GROUP BY 1;
+
+-- name: CountAuditByService :many
+-- As CountAuditByAudience, by the service called (audit_service).
+SELECT audit_service(action)::text AS value, count(*)::bigint AS count
+FROM audit_log
+WHERE (sqlc.narg('actor_subject')::text IS NULL OR actor_subject = sqlc.narg('actor_subject')::text)
+  AND (sqlc.narg('actor_tenant_id')::uuid IS NULL OR actor_tenant_id = sqlc.narg('actor_tenant_id')::uuid)
+  AND (sqlc.narg('trail_tenant_id')::uuid IS NULL
+       OR actor_tenant_id = sqlc.narg('trail_tenant_id')::uuid
+       OR resource_tenant_id = sqlc.narg('trail_tenant_id')::uuid)
+  AND (sqlc.narg('action_eq')::text IS NULL OR action = sqlc.narg('action_eq')::text)
+  AND (sqlc.narg('action_prefix')::text IS NULL OR action LIKE sqlc.narg('action_prefix')::text)
+  AND (sqlc.narg('at_gte')::timestamptz IS NULL OR at >= sqlc.narg('at_gte')::timestamptz)
+  AND (sqlc.narg('at_lte')::timestamptz IS NULL OR at <= sqlc.narg('at_lte')::timestamptz)
+  AND (sqlc.narg('audiences')::text[] IS NULL OR actor_audience = ANY(sqlc.narg('audiences')::text[]))
+  AND (sqlc.narg('is_error')::boolean IS NULL OR (COALESCE(error_message, '') <> '') = sqlc.narg('is_error')::boolean)
+  AND (sqlc.narg('services')::text[] IS NULL OR audit_service(action) = ANY(sqlc.narg('services')::text[]))
+GROUP BY 1;

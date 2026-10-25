@@ -25,10 +25,11 @@ _sym_db = _symbol_database.Default()
 from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
 from paladin.admin.v1 import operation_service_pb2 as paladin_dot_admin_dot_v1_dot_operation__service__pb2
 from paladin.admin.v1 import types_pb2 as paladin_dot_admin_dot_v1_dot_types__pb2
+from paladin.common.v1 import facet_pb2 as paladin_dot_common_dot_v1_dot_facet__pb2
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\"paladin/common/v1/pagination.proto\"\xb7\x01\n\x13ListAuditLogRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x1e\n\ttenant_id\x18\x03 \x01(\tB\x0b\xbaH\x08r\x03\xb0\x01\x01\xd8\x01\x01\x12\x10\n\x08order_by\x18\x04 \x01(\t\x12\x30\n\nsort_order\x18\x05 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\"w\n\x14ListAuditLogResponse\x12\x30\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x1f.paladin.admin.v1.AuditLogEntry\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"4\n\x17GetAuditLogEntryRequest\x12\x19\n\x08\x65ntry_id\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"E\n\x15\x45xportAuditLogRequest\x12\x0e\n\x06\x66ilter\x18\x01 \x01(\t\x12\x1c\n\x0b\x64\x65stination\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x32\xb7\x02\n\x0f\x41uditLogService\x12\x62\n\x0cListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12\x63\n\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n\x0e\x45xportAuditLog\x12\'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$paladin/admin/v1/audit_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a(paladin/admin/v1/operation_service.proto\x1a\x1cpaladin/admin/v1/types.proto\x1a\x1dpaladin/common/v1/facet.proto\x1a\"paladin/common/v1/pagination.proto\"\xfc\x01\n\x13ListAuditLogRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x1e\n\ttenant_id\x18\x03 \x01(\tB\x0b\xbaH\x08r\x03\xb0\x01\x01\xd8\x01\x01\x12\x10\n\x08order_by\x18\x04 \x01(\t\x12\x30\n\nsort_order\x18\x05 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\x12-\n\x06\x66\x61\x63\x65ts\x18\x06 \x01(\x0b\x32\x1d.paladin.admin.v1.AuditFacets\x12\x14\n\x0c\x63ount_facets\x18\x07 \x01(\x08\"a\n\x0b\x41uditFacets\x12\x0e\n\x06planes\x18\x01 \x03(\t\x12\x30\n\x08outcomes\x18\x02 \x03(\x0e\x32\x1e.paladin.admin.v1.AuditOutcome\x12\x10\n\x08services\x18\x03 \x03(\t\"\xac\x01\n\x14ListAuditLogResponse\x12\x30\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x1f.paladin.admin.v1.AuditLogEntry\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\x12\x33\n\x0c\x66\x61\x63\x65t_counts\x18\x03 \x03(\x0b\x32\x1d.paladin.common.v1.FacetCount\"4\n\x17GetAuditLogEntryRequest\x12\x19\n\x08\x65ntry_id\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"E\n\x15\x45xportAuditLogRequest\x12\x0e\n\x06\x66ilter\x18\x01 \x01(\t\x12\x1c\n\x0b\x64\x65stination\x18\x02 \x01(\tB\x07\xbaH\x04r\x02\x10\x01*\\\n\x0c\x41uditOutcome\x12\x1d\n\x19\x41UDIT_OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n\x10\x41UDIT_OUTCOME_OK\x10\x01\x12\x17\n\x13\x41UDIT_OUTCOME_ERROR\x10\x02\x32\xb7\x02\n\x0f\x41uditLogService\x12\x62\n\x0cListAuditLog\x12%.paladin.admin.v1.ListAuditLogRequest\x1a&.paladin.admin.v1.ListAuditLogResponse\"\x03\x90\x02\x01\x12\x63\n\x10GetAuditLogEntry\x12).paladin.admin.v1.GetAuditLogEntryRequest\x1a\x1f.paladin.admin.v1.AuditLogEntry\"\x03\x90\x02\x01\x12[\n\x0e\x45xportAuditLog\x12\'.paladin.admin.v1.ExportAuditLogRequest\x1a\x1b.paladin.admin.v1.Operation\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -48,14 +49,18 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_AUDITLOGSERVICE'].methods_by_name['GetAuditLogEntry']._serialized_options = b'\220\002\001'
   _globals['_AUDITLOGSERVICE'].methods_by_name['ExportAuditLog']._loaded_options = None
   _globals['_AUDITLOGSERVICE'].methods_by_name['ExportAuditLog']._serialized_options = b'\220\002\001'
-  _globals['_LISTAUDITLOGREQUEST']._serialized_start=196
-  _globals['_LISTAUDITLOGREQUEST']._serialized_end=379
-  _globals['_LISTAUDITLOGRESPONSE']._serialized_start=381
-  _globals['_LISTAUDITLOGRESPONSE']._serialized_end=500
-  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_start=502
-  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_end=554
-  _globals['_EXPORTAUDITLOGREQUEST']._serialized_start=556
-  _globals['_EXPORTAUDITLOGREQUEST']._serialized_end=625
-  _globals['_AUDITLOGSERVICE']._serialized_start=628
-  _globals['_AUDITLOGSERVICE']._serialized_end=939
+  _globals['_AUDITOUTCOME']._serialized_start=880
+  _globals['_AUDITOUTCOME']._serialized_end=972
+  _globals['_LISTAUDITLOGREQUEST']._serialized_start=227
+  _globals['_LISTAUDITLOGREQUEST']._serialized_end=479
+  _globals['_AUDITFACETS']._serialized_start=481
+  _globals['_AUDITFACETS']._serialized_end=578
+  _globals['_LISTAUDITLOGRESPONSE']._serialized_start=581
+  _globals['_LISTAUDITLOGRESPONSE']._serialized_end=753
+  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_start=755
+  _globals['_GETAUDITLOGENTRYREQUEST']._serialized_end=807
+  _globals['_EXPORTAUDITLOGREQUEST']._serialized_start=809
+  _globals['_EXPORTAUDITLOGREQUEST']._serialized_end=878
+  _globals['_AUDITLOGSERVICE']._serialized_start=975
+  _globals['_AUDITLOGSERVICE']._serialized_end=1286
 # @@protoc_insertion_point(module_scope)
