@@ -70,3 +70,23 @@ func TestValidatePurgeRetentionBounds(t *testing.T) {
 		})
 	}
 }
+
+// Both revocation cache TTLs are held to limes.MaxRevocationCacheSyncedTTL:
+// limes caches for the longer of the two and refuses a cache past it, so
+// Validate stops the boot first and names the key.
+func TestValidateRevocationCacheTTLBounds(t *testing.T) {
+	for key, set := range map[string]func(*Config, time.Duration){
+		revocationCacheTTLKey:       func(c *Config, d time.Duration) { c.Capability.RevocationCacheTTL = d },
+		revocationCacheSyncedTTLKey: func(c *Config, d time.Duration) { c.Capability.RevocationCacheSyncedTTL = d },
+	} {
+		t.Run(key, func(t *testing.T) {
+			c := minimalValidConfig()
+			set(&c, limes.MaxRevocationCacheSyncedTTL)
+			if err := c.Validate(); err != nil {
+				t.Fatalf("%s at the ceiling refused: %v", key, err)
+			}
+			set(&c, limes.MaxRevocationCacheSyncedTTL+time.Nanosecond)
+			mustReject(t, c, key)
+		})
+	}
+}

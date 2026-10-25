@@ -73,7 +73,7 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	if _, err := usage.Reserve(acting, meter.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	if err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {
+	if _, err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {
 		t.Fatalf("revoke copy: %v", err)
 	}
 	if _, err := records.Revoke(acting, limes.RevokeRequest{CapabilityID: c.ID}); err != nil {

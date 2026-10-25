@@ -6,10 +6,40 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useNotification } from "@/components/ui/Notification";
+import {
+  useNotification,
+  type Notification,
+} from "@/components/ui/Notification";
+import type { CapabilityServiceRevokeBiscuitResponse } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { formatTimestamp } from "@/lib/format/timestamp";
 import { capabilityClient } from "@/lib/connect/client";
 import { errorMessage } from "@/hooks/errorContract";
 import { isJWT } from "./_biscuit";
+
+/**
+ * What a copy's revoke did, as the notification says it. A revoke is
+ * idempotent: a second one keeps the first entry, and says so rather than
+ * claim it revoked anything.
+ */
+export function noticeOfBiscuitRevoke(
+  res: Pick<
+    CapabilityServiceRevokeBiscuitResponse,
+    "capabilityId" | "alreadyRevoked" | "revocation"
+  >,
+): Omit<Notification, "id"> {
+  if (res.alreadyRevoked) {
+    return {
+      type: "info",
+      title: "Already revoked",
+      message: `This copy of capability ${res.capabilityId} was revoked on ${formatTimestamp(res.revocation?.revokedAt)}; that revocation stands.`,
+    };
+  }
+  return {
+    type: "success",
+    title: "Copy revoked",
+    message: `A copy of capability ${res.capabilityId}`,
+  };
+}
 
 /**
  * Revokes one copy of a capability's Biscuit. Copies are narrowed offline by
@@ -45,11 +75,7 @@ export function RevokeBiscuitCopyDialog({
         token: trimmed,
         reason: reason.trim(),
       });
-      showNotification({
-        type: "success",
-        title: "Copy revoked",
-        message: `A copy of capability ${res.capabilityId}`,
-      });
+      showNotification(noticeOfBiscuitRevoke(res));
       handleClose();
     } catch (err) {
       const msg = errorMessage(err, "Revoke failed");

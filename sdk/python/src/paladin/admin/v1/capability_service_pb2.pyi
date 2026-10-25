@@ -205,10 +205,14 @@ class CapabilityServiceRevokeBiscuitRequest(_message.Message):
     def __init__(self, token: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceRevokeBiscuitResponse(_message.Message):
-    __slots__ = ("capability_id",)
+    __slots__ = ("capability_id", "already_revoked", "revocation")
     CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    ALREADY_REVOKED_FIELD_NUMBER: _ClassVar[int]
+    REVOCATION_FIELD_NUMBER: _ClassVar[int]
     capability_id: str
-    def __init__(self, capability_id: _Optional[str] = ...) -> None: ...
+    already_revoked: bool
+    revocation: CapabilityRevocation
+    def __init__(self, capability_id: _Optional[str] = ..., already_revoked: _Optional[bool] = ..., revocation: _Optional[_Union[CapabilityRevocation, _Mapping]] = ...) -> None: ...
 
 class CapabilityServiceGetBiscuitUsageRequest(_message.Message):
     __slots__ = ("token",)

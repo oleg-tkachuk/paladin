@@ -134,11 +134,15 @@ func TestBiscuitCopyRevokedBeforeTheTenantIsKnown(t *testing.T) {
 	revoked := f.copyOf(t, revokedToken)
 	fromIt := f.copyOf(t, attenuate(t, revokedToken, limes.OpGet))
 	sibling := f.copyOf(t, attenuate(t, sealed, limes.OpList))
-	for range 2 { // idempotent
-		if err := f.store.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
+	for i := range 2 { // idempotent: the second keeps the first entry, and says so
+		res, err := f.store.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{
 			Copy: revoked, Note: "leak", Actor: "user:ops",
-		}); err != nil {
+		})
+		if err != nil {
 			t.Fatalf("revoke copy: %v", err)
+		}
+		if res.AlreadyRevoked != (i > 0) || res.Revocation.Note != "leak" {
+			t.Errorf("revoke %d: %+v", i, res)
 		}
 	}
 
@@ -183,7 +187,7 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 
 	scoped := newCapStore(t, rlsPool(t, ctx, admin))
 	ctxA := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantA})
-	err := scoped.RevokeBiscuit(ctxA, limes.RevokeBiscuitRequest{Copy: hostile, Note: "hostile", Actor: "user:attacker"})
+	_, err := scoped.RevokeBiscuit(ctxA, limes.RevokeBiscuitRequest{Copy: hostile, Note: "hostile", Actor: "user:attacker"})
 	if !errors.Is(err, limes.ErrNotFound) {
 		t.Errorf("err = %v, want ErrNotFound", err)
 	}
@@ -199,7 +203,7 @@ func TestBiscuitCopyRevokeIsTenantScoped(t *testing.T) {
 
 	// The owning tenant can.
 	ctxB := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenantB})
-	if err := scoped.RevokeBiscuit(ctxB, limes.RevokeBiscuitRequest{Copy: hostile}); err != nil {
+	if _, err := scoped.RevokeBiscuit(ctxB, limes.RevokeBiscuitRequest{Copy: hostile}); err != nil {
 		t.Errorf("owning tenant: %v", err)
 	}
 }
@@ -235,7 +239,7 @@ func TestBiscuitCopyRevocationNotifies(t *testing.T) {
 		t.Fatalf("before revoke: revoked=%v err=%v", r, err)
 	}
 
-	if err := f.store.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{Copy: copied, Note: "test", Actor: "user:ops"}); err != nil {
+	if _, err := f.store.RevokeBiscuit(ctx, limes.RevokeBiscuitRequest{Copy: copied, Note: "test", Actor: "user:ops"}); err != nil {
 		t.Fatalf("revoke copy: %v", err)
 	}
 

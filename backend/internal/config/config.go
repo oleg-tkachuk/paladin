@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/bytesize"
 
@@ -328,14 +329,30 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// The capability keys validateCapabilityBounds names in its refusals.
+const (
+	revocationCacheTTLKey       = "revocation_cache_ttl"
+	revocationCacheSyncedTTLKey = "revocation_cache_synced_ttl"
+)
+
 // validateCapabilityBounds holds the capability durations to the bounds limes
 // refuses outside of, so a misconfigured value stops the boot rather than
 // every verifier construction or every purge tick: a verifier leeway past
 // limes.MaxLeeway, and a purge retention shorter than limes.MinPurgeRetention,
-// which would drop a revocation while a verifier still honours its token.
+// which would drop a revocation while a verifier still honours its token, and
+// a revocation cache TTL past limes.MaxRevocationCacheSyncedTTL.
 func (c *Config) validateCapabilityBounds() error {
 	if l := c.Capability.VerifierLeeway; l < 0 || l > limes.MaxLeeway {
 		return fmt.Errorf("capability: verifier_leeway %s is outside 0..%s", l, limes.MaxLeeway)
+	}
+	// limes caches for the longer of the two, and refuses past its ceiling.
+	for key, ttl := range map[string]time.Duration{
+		revocationCacheTTLKey:       c.Capability.RevocationCacheTTL,
+		revocationCacheSyncedTTLKey: c.Capability.RevocationCacheSyncedTTL,
+	} {
+		if ttl > limes.MaxRevocationCacheSyncedTTL {
+			return fmt.Errorf("capability: %s %s is longer than %s", key, ttl, limes.MaxRevocationCacheSyncedTTL)
+		}
 	}
 	if r := c.Worker.Jobs.Capability.ExpiredFor; r != 0 && r < limes.MinPurgeRetention {
 		return fmt.Errorf("worker.jobs.capability: expired_for %s is shorter than %s", r, limes.MinPurgeRetention)

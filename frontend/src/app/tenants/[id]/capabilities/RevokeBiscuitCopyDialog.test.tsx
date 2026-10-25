@@ -12,7 +12,10 @@ vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
 }));
 
-import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
+import {
+  RevokeBiscuitCopyDialog,
+  noticeOfBiscuitRevoke,
+} from "./RevokeBiscuitCopyDialog";
 
 const BISCUIT = "En0KEwoEMTIzNBgDIgkKBwgKEgMYgAgSJAgAEiB";
 const JWT = "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ4In0.c2ln";
@@ -69,6 +72,20 @@ describe("RevokeBiscuitCopyDialog", () => {
         message: expect.stringContaining("cap-1"),
       }),
     );
+  });
+
+  it("says a copy already revoked keeps its first revocation", () => {
+    const notice = noticeOfBiscuitRevoke({
+      capabilityId: "cap-1",
+      alreadyRevoked: true,
+      revocation: undefined,
+    });
+    expect(notice).toMatchObject({ type: "info", title: "Already revoked" });
+    expect(notice.message).toContain("cap-1");
+    expect(notice.message).toContain("that revocation stands");
+    expect(
+      noticeOfBiscuitRevoke({ capabilityId: "cap-1", alreadyRevoked: false }),
+    ).toMatchObject({ type: "success", title: "Copy revoked" });
   });
 
   it("reports a refusal from the server", async () => {
