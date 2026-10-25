@@ -83,7 +83,7 @@ here.
 
 
 
-## Unreleased — an operation names a copy's key prefix and a tag update's tags
+## sdk/go/v0.115.0, sdk/python/v0.116.0 — an operation names a copy's key prefix and a tag update's tags
 
 - **`OperationTarget` carries `destination_key_prefix` and `tags`**: what
   a copy and a tag update asked for, beside the collections and `replace`
@@ -91,7 +91,7 @@ here.
   on asks for the same thing. The console's Retry failed now offers it for
   both. Nothing else changes.
 
-## Unreleased — preview what a tenant purge removes
+## sdk/go/v0.115.0, sdk/python/v0.116.0 — preview what a tenant purge removes
 
 - **`TenantService.PreviewPurgeTenant`** answers, changing nothing, what
   `PurgeTenant` would remove with a tenant — its API tokens and event
