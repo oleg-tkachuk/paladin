@@ -42,6 +42,9 @@ type RequestContext = {
   ip: String,
   oauth_client_id: String,
   oauth_scopes: Set<String>,
+  // The operation the request's capability caveats admitted (get, list,
+  // put, delete, manage); "" for a request without a capability.
+  capability_op: String,
 };
 
 // ─── Entities ───────────────────────────────────────────────────────────────

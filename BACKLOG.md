@@ -64,47 +64,18 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Deploy cutover: rename to `paladin`
 
-### The `paladin` name collides — decide qualify-vs-rename before publishing
+### The `paladin` name has not been checked against trademark registers
 
-- **Status:** Open, not blocking. Registries checked 2026-08-21. Owner
-  decision 2026-09-30: nobody else uses Paladin yet, so if the name turns out
-  to be taken the service is renamed then; the repository goes public without
-  waiting on it.
-- **What the check found:**
-  - **PyPI `paladin` is taken by NVIDIA** — `nv-paladin/paladin`, "The
-    Foundation for All Paladin Libraries", Apache-2.0, 242 stars, version
-    26.6.1 released 2026-06. This is the significant one: an active project
-    from a large vendor, in adjacent infrastructure-software territory,
-    holding the bare name on a major registry and a GitHub org (`nv-paladin`).
-    We publish nothing to PyPI, so there is no packaging conflict today —
-    but "Paladin" as a *project name* in infrastructure software is no longer
-    unclaimed, and search results will not separate us.
-  - **npm `paladin` is taken but abandoned** — v0.0.3, "a simple api
-    framework", created 2014, last touched 2022, no repository, no licence,
-    maintainer `mcfog`. Not a live conflict; also not available.
-  - **The `@paladin` npm scope is free** (404), which is the obvious escape
-    hatch if we ever publish JS.
-  - **At least three unrelated 2026 packages use the name**:
-    `@momidala/paladin` (v3.0.0, TypeScript MCP server), `paladin-mcp`,
-    `paladin-verify`. The word is in active, uncoordinated use.
-  - **pkg.go.dev has nothing** for `github.com/oleg-tkachuk/paladin` — the
-    module is not resolvable while the repository is private, so the Go
-    namespace is uncontested by default rather than by right.
-- **Not checked:** trademark registers. The USPTO search API needs a key,
-  and this is a legal question rather than a lookup — it wants a person, not
-  a script. It is also the only one of these that applies whether or not we
-  publish, because a public repository is use.
-- **Definition of Done:** get the trademark question answered by someone
-  qualified, then pick one and write it down here:
-  1. **Keep `paladin` bare.** Lowest effort, permanent ambiguity with NVIDIA
-     in every search.
-  2. **Qualify it** — `paladin-cp`, `paladinctl`, or scope the JS side to
-     `@paladin/*`. Cheap now, expensive after the repository is linked
-     publicly.
-  3. **Rename.** Only worth it if the trademark answer forces it.
-  The cost of deciding late is in other people's bookmarks, not in this tree.
-- **Blockers:** none. A rename is cheapest before anything is published
-  under the name — the SDK distributions above all.
+- **Status:** Open, not blocking.
+- **Reason:** [ADR-0039](docs/adr/0039-the-name-is-qualified-where-it-is-published.md)
+  keeps the name and qualifies every published artifact, which settles the
+  registries but not trademark use. The USPTO search API needs a key, and
+  the question wants a person qualified to answer it, not a lookup. It
+  applies whether or not anything is published: a public repository is use.
+- **Definition of Done:** someone qualified has answered whether "Paladin"
+  for this software infringes a registered mark, and the answer is recorded
+  in ADR-0039 — with a rename planned if it does.
+- **Blockers:** none.
 
 ---
 

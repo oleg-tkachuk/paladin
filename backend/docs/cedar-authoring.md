@@ -47,6 +47,11 @@ Four layers are concatenated, in this order, and compiled together:
      its tenant's users;
    - a machine principal (`kind` is `api_key`, `service_account` or
      `capability`) may delete and restore objects in its own tenant;
+   - a capability may, in its own tenant, read and download objects
+     (`GetObject`, `PresignGet`) when its caveats admitted `get` or `list`
+     for the request, and upload and change them (`PutObject`, `PresignPut`,
+     `UpdateObject`, `CopyObject`) when they admitted `put`
+     ([ADR-0038](../../docs/adr/0038-a-capability-does-what-its-caveats-allow.md));
    - `platform.tenant-provisioner` may create tenants and their storage,
      bind collections to buckets and publish them (`ConfigurePublicRead`);
    - `platform.capability-issuer` may issue, revoke and read capabilities
@@ -204,6 +209,7 @@ whether the bucket was resolved.
 | `ip` | String | every request with a resolvable client address; see `trusted_proxies` in [configuration](../../docs/configuration.md#client-address-behind-proxies) |
 | `oauth_client_id` | String | `AuthorizeOAuth` |
 | `oauth_scopes` | Set&lt;String&gt; | `AuthorizeOAuth` |
+| `capability_op` | String | a request presenting a capability: the operation its caveats admitted (`get`, `list`, `put`, `delete`, `manage`) |
 
 Keys that do not apply are zero-valued, never absent.
 

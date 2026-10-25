@@ -135,7 +135,7 @@ func TestEngineRequestsConformToTheSchema(t *testing.T) {
 	v := validate.New(s)
 	e := &Engine{}
 	fx := fixtures()
-	ctx := buildContext(RequestContext{Now: time.Now()})
+	ctx := buildContext(RequestContext{Now: time.Now()}, "")
 	for uid, a := range s.Actions {
 		if a.AppliesTo == nil {
 			t.Errorf("%s applies to nothing", uid)
