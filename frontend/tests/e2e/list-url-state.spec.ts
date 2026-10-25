@@ -1,6 +1,6 @@
 /**
  * A list keeps its view in the address bar: the search, the sort and the
- * toolbar's choice. A reload or a link opens the list as it was left.
+ * toolbar's facet choices. A reload or a link opens the list as it was left.
  *
  * The unit tests drive the hooks against jsdom's location. This drives the
  * real router, which answers a replace in a transition of its own: a search
@@ -40,13 +40,14 @@ test("a list opens with the search a link names and keeps what is typed", async 
   await expect(page).toHaveURL(/[?&]sort=user&dir=asc/);
 });
 
-test("a list opens on the choice a link names", async ({ page }) => {
+test("a list opens on the facet choice a link names", async ({ page }) => {
   await loginAsAdmin(page);
-  await gotoSettled(page, "/operations?filter=failed");
-  await expect(page.getByRole("button", { name: "Failed" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await page.getByRole("button", { name: "All" }).click();
-  await expect(page).not.toHaveURL(/filter=/);
+  await gotoSettled(page, "/operations?state=FAILED");
+  const state = page.getByRole("button", {
+    name: "Filter by state, 1 chosen",
+  });
+  await expect(state).toBeVisible();
+  await state.click();
+  await page.getByRole("menuitemcheckbox", { name: /^Failed, / }).click();
+  await expect(page).not.toHaveURL(/[?&]state=/);
 });
