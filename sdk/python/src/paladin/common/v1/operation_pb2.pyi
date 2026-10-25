@@ -2,8 +2,8 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from collections.abc import Mapping as _Mapping
-from typing import ClassVar as _ClassVar, Optional as _Optional
+from collections.abc import Iterable as _Iterable, Mapping as _Mapping
+from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -46,3 +46,11 @@ class OperationTarget(_message.Message):
     destination_key_prefix: str
     tags: _containers.ScalarMap[str, str]
     def __init__(self, collection: _Optional[str] = ..., destination: _Optional[str] = ..., object_count: _Optional[int] = ..., permanent: _Optional[bool] = ..., replace: _Optional[bool] = ..., destination_key_prefix: _Optional[str] = ..., tags: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class OperationFacets(_message.Message):
+    __slots__ = ("states", "types")
+    STATES_FIELD_NUMBER: _ClassVar[int]
+    TYPES_FIELD_NUMBER: _ClassVar[int]
+    states: _containers.RepeatedScalarFieldContainer[OperationState]
+    types: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, states: _Optional[_Iterable[_Union[OperationState, str]]] = ..., types: _Optional[_Iterable[str]] = ...) -> None: ...

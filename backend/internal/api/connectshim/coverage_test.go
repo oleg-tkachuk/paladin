@@ -39,6 +39,9 @@ var gateMarkers = []string{
 	// bucketh's grant RPCs: the bucket-admin roles, then the stored owner's
 	// Cedar decision (bucketh/grants.go).
 	"h.grantable",
+	// operationh's listing and its facet counts: the tenant and initiator
+	// checks, then the Cedar decision (operationh/handler.go).
+	"h.listScope",
 }
 
 // preAuthnAllowlist — handler methods that intentionally run before any

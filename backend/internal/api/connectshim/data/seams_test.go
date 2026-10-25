@@ -97,6 +97,9 @@ func (failingOperations) DismissOperations(context.Context, []uuid.UUID) (int64,
 func (failingOperations) ListOperations(context.Context, operationh.ListInput) ([]operationh.Operation, string, error) {
 	return nil, "", errBoom
 }
+func (failingOperations) CountOperationFacets(context.Context, operationh.ListInput) ([]operationh.FacetCount, error) {
+	return nil, errBoom
+}
 func (failingOperations) CancelOperation(context.Context, uuid.UUID) error { return errBoom }
 
 type failingBootstrap struct{}

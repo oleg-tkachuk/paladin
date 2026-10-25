@@ -34,6 +34,11 @@ export interface Facet<R> {
    */
   options?: readonly FacetOption[];
   /**
+   * Names an answer the facet has no fixed vocabulary for; the answer
+   * itself when absent.
+   */
+  optionLabel?: (value: string) => string;
+  /**
    * What the list shows before anyone chooses — the tokens still in use, not
    * the revoked — so a fresh visit is not a wall of dead rows.
    */
@@ -113,17 +118,57 @@ export function countOptions<R>(
       counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
+  return countedOptions(facet, counts, selected);
+}
+
+/**
+ * Each answer the menu offers, with its count from `counts` — answers a
+ * server counted over a list it pages, or the rows counted above. An answer
+ * without a count is offered at nought; a chosen one is always offered, so
+ * it can be unchosen.
+ */
+export function countedOptions<R>(
+  facet: Facet<R>,
+  counts: ReadonlyMap<string, number>,
+  selected: readonly string[],
+): CountedOption[] {
+  const label = facet.optionLabel ?? ((value: string) => value);
   const offered: FacetOption[] = facet.options
     ? [...facet.options]
     : [...counts.keys()]
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-        .map((value) => ({ value, label: value }));
+        .map((value) => ({ value, label: label(value) }));
   for (const value of selected) {
     if (!offered.some((o) => o.value === value)) {
-      offered.push({ value, label: value });
+      offered.push({ value, label: label(value) });
     }
   }
   return offered.map((o) => ({ ...o, count: counts.get(o.value) ?? 0 }));
+}
+
+/** One count a server gave: how many rows give `value` for `facet`. */
+export interface ServerFacetCount {
+  facet: string;
+  value: string;
+  count: bigint | number;
+}
+
+/** A server's counts by facet id, then by answer. */
+export type FacetCounts = ReadonlyMap<string, ReadonlyMap<string, number>>;
+
+/** counts grouped by facet, each answer's value read through `value`. */
+export function groupFacetCounts(
+  counts: readonly ServerFacetCount[],
+  value: (c: ServerFacetCount) => string = (c) => c.value,
+): FacetCounts {
+  const out = new Map<string, Map<string, number>>();
+  for (const c of counts) {
+    const byValue = out.get(c.facet) ?? new Map<string, number>();
+    const v = value(c);
+    byValue.set(v, (byValue.get(v) ?? 0) + Number(c.count));
+    out.set(c.facet, byValue);
+  }
+  return out;
 }
 
 /** The URL parameter a facet's choices are kept under. */

@@ -56,6 +56,7 @@ type presignHandler interface {
 type operationHandler interface {
 	GetOperation(ctx context.Context, opID uuid.UUID) (*operationh.Operation, error)
 	ListOperations(ctx context.Context, in operationh.ListInput) ([]operationh.Operation, string, error)
+	CountOperationFacets(ctx context.Context, in operationh.ListInput) ([]operationh.FacetCount, error)
 	DismissOperations(ctx context.Context, ids []uuid.UUID) (int64, error)
 	CancelOperation(ctx context.Context, opID uuid.UUID) error
 }

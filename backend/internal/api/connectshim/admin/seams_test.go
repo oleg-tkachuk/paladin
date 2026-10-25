@@ -206,6 +206,10 @@ func (failingOperation) ListOperations(context.Context, operationh.ListInput) ([
 	return nil, "", errBoom
 }
 
+func (failingOperation) CountOperationFacets(context.Context, operationh.ListInput) ([]operationh.FacetCount, error) {
+	return nil, errBoom
+}
+
 type failingPolicy struct{}
 
 func (failingPolicy) GetEffectivePolicy(context.Context, string, uuid.UUID) (*policyh.EffectivePolicyOutput, error) {

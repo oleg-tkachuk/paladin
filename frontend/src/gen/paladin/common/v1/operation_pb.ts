@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_common_v1_operation: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFwYWxhZGluL2NvbW1vbi92MS9vcGVyYXRpb24ucHJvdG8SEXBhbGFkaW4uY29tbW9uLnYxIv0BCg9PcGVyYXRpb25UYXJnZXQSEgoKY29sbGVjdGlvbhgBIAEoCRITCgtkZXN0aW5hdGlvbhgCIAEoCRIUCgxvYmplY3RfY291bnQYAyABKAUSEQoJcGVybWFuZW50GAQgASgIEg8KB3JlcGxhY2UYBSABKAgSHgoWZGVzdGluYXRpb25fa2V5X3ByZWZpeBgGIAEoCRI6CgR0YWdzGAcgAygLMiwucGFsYWRpbi5jb21tb24udjEuT3BlcmF0aW9uVGFyZ2V0LlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASrFAQoOT3BlcmF0aW9uU3RhdGUSHwobT1BFUkFUSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASGwoXT1BFUkFUSU9OX1NUQVRFX1BFTkRJTkcQARIbChdPUEVSQVRJT05fU1RBVEVfUlVOTklORxACEh0KGU9QRVJBVElPTl9TVEFURV9TVUNDRUVERUQQAxIaChZPUEVSQVRJT05fU1RBVEVfRkFJTEVEEAQSHQoZT1BFUkFUSU9OX1NUQVRFX0NBTkNFTExFRBAFQk5aTGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2NvbW1vbi92MTtwYWxhZGluY29tbW9udjFiBnByb3RvMw",
+    "CiFwYWxhZGluL2NvbW1vbi92MS9vcGVyYXRpb24ucHJvdG8SEXBhbGFkaW4uY29tbW9uLnYxIv0BCg9PcGVyYXRpb25UYXJnZXQSEgoKY29sbGVjdGlvbhgBIAEoCRITCgtkZXN0aW5hdGlvbhgCIAEoCRIUCgxvYmplY3RfY291bnQYAyABKAUSEQoJcGVybWFuZW50GAQgASgIEg8KB3JlcGxhY2UYBSABKAgSHgoWZGVzdGluYXRpb25fa2V5X3ByZWZpeBgGIAEoCRI6CgR0YWdzGAcgAygLMiwucGFsYWRpbi5jb21tb24udjEuT3BlcmF0aW9uVGFyZ2V0LlRhZ3NFbnRyeRorCglUYWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJTCg9PcGVyYXRpb25GYWNldHMSMQoGc3RhdGVzGAEgAygOMiEucGFsYWRpbi5jb21tb24udjEuT3BlcmF0aW9uU3RhdGUSDQoFdHlwZXMYAiADKAkqxQEKDk9wZXJhdGlvblN0YXRlEh8KG09QRVJBVElPTl9TVEFURV9VTlNQRUNJRklFRBAAEhsKF09QRVJBVElPTl9TVEFURV9QRU5ESU5HEAESGwoXT1BFUkFUSU9OX1NUQVRFX1JVTk5JTkcQAhIdChlPUEVSQVRJT05fU1RBVEVfU1VDQ0VFREVEEAMSGgoWT1BFUkFUSU9OX1NUQVRFX0ZBSUxFRBAEEh0KGU9QRVJBVElPTl9TVEFURV9DQU5DRUxMRUQQBUJOWkxnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9jb21tb24vdjE7cGFsYWRpbmNvbW1vbnYxYgZwcm90bzM",
   );
 
 /**
@@ -87,6 +87,34 @@ export type OperationTarget = Message<"paladin.common.v1.OperationTarget"> & {
 export const OperationTargetSchema: GenMessage<OperationTarget> =
   /*@__PURE__*/
   messageDesc(file_paladin_common_v1_operation, 0);
+
+/**
+ * OperationFacets narrows an operation listing by state and by type, each a
+ * facet the listing can count (FacetCount, facets "state" and "type"): an
+ * operation passes when its state is one of states and its type one of
+ * types, either left empty for any.
+ *
+ * @generated from message paladin.common.v1.OperationFacets
+ */
+export type OperationFacets = Message<"paladin.common.v1.OperationFacets"> & {
+  /**
+   * @generated from field: repeated paladin.common.v1.OperationState states = 1;
+   */
+  states: OperationState[];
+
+  /**
+   * @generated from field: repeated string types = 2;
+   */
+  types: string[];
+};
+
+/**
+ * Describes the message paladin.common.v1.OperationFacets.
+ * Use `create(OperationFacetsSchema)` to create a new message.
+ */
+export const OperationFacetsSchema: GenMessage<OperationFacets> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_common_v1_operation, 1);
 
 /**
  * OperationState is where a long-running operation stands. done says only

@@ -13,6 +13,10 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { FacetCount } from "../../common/v1/facet_pb";
+import { file_paladin_common_v1_facet } from "../../common/v1/facet_pb";
+import type { OperationFacets } from "../../common/v1/operation_pb";
+import { file_paladin_common_v1_operation } from "../../common/v1/operation_pb";
 import type {
   PageRequest,
   PageResponse,
@@ -29,9 +33,11 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_data_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CidwYWxhZGluL2RhdGEvdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD3BhbGFkaW4uZGF0YS52MSIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEisAEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISDAoEbWluZRgEIAEoCBIZChFpbmNsdWRlX2Rpc21pc3NlZBgFIAEoCCJ3ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi4KCm9wZXJhdGlvbnMYASADKAsyGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uEi0KBHBhZ2UYAiABKAsyHy5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVzcG9uc2UiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIjoKGERpc21pc3NPcGVyYXRpb25zUmVxdWVzdBIeCgVuYW1lcxgBIAMoCUIPukgMkgEJEOgHIgRyAhABIjQKGURpc21pc3NPcGVyYXRpb25zUmVzcG9uc2USFwoPZGlzbWlzc2VkX2NvdW50GAEgASgFMp8DChBPcGVyYXRpb25TZXJ2aWNlElUKDEdldE9wZXJhdGlvbhIkLnBhbGFkaW4uZGF0YS52MS5HZXRPcGVyYXRpb25SZXF1ZXN0GhoucGFsYWRpbi5kYXRhLnYxLk9wZXJhdGlvbiIDkAIBEmYKDkxpc3RPcGVyYXRpb25zEiYucGFsYWRpbi5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBonLnBhbGFkaW4uZGF0YS52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlIgOQAgESWwoPQ2FuY2VsT3BlcmF0aW9uEicucGFsYWRpbi5kYXRhLnYxLkNhbmNlbE9wZXJhdGlvblJlcXVlc3QaGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uIgOQAgISbwoRRGlzbWlzc09wZXJhdGlvbnMSKS5wYWxhZGluLmRhdGEudjEuRGlzbWlzc09wZXJhdGlvbnNSZXF1ZXN0GioucGFsYWRpbi5kYXRhLnYxLkRpc21pc3NPcGVyYXRpb25zUmVzcG9uc2UiA5ACAkJKWkhnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9kYXRhL3YxO3BhbGFkaW5kYXRhdjFiBnByb3RvMw",
+    "CidwYWxhZGluL2RhdGEvdjEvb3BlcmF0aW9uX3NlcnZpY2UucHJvdG8SD3BhbGFkaW4uZGF0YS52MSIsChNHZXRPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEi+gEKFUxpc3RPcGVyYXRpb25zUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEjAKCnNvcnRfb3JkZXIYAyABKA4yHC5wYWxhZGluLmNvbW1vbi52MS5Tb3J0T3JkZXISDAoEbWluZRgEIAEoCBIZChFpbmNsdWRlX2Rpc21pc3NlZBgFIAEoCBIyCgZmYWNldHMYBiABKAsyIi5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25GYWNldHMSFAoMY291bnRfZmFjZXRzGAcgASgIIqwBChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi4KCm9wZXJhdGlvbnMYASADKAsyGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uEi0KBHBhZ2UYAiABKAsyHy5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVzcG9uc2USMwoMZmFjZXRfY291bnRzGAMgAygLMh0ucGFsYWRpbi5jb21tb24udjEuRmFjZXRDb3VudCIvChZDYW5jZWxPcGVyYXRpb25SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiOgoYRGlzbWlzc09wZXJhdGlvbnNSZXF1ZXN0Eh4KBW5hbWVzGAEgAygJQg+6SAySAQkQ6AciBHICEAEiNAoZRGlzbWlzc09wZXJhdGlvbnNSZXNwb25zZRIXCg9kaXNtaXNzZWRfY291bnQYASABKAUynwMKEE9wZXJhdGlvblNlcnZpY2USVQoMR2V0T3BlcmF0aW9uEiQucGFsYWRpbi5kYXRhLnYxLkdldE9wZXJhdGlvblJlcXVlc3QaGi5wYWxhZGluLmRhdGEudjEuT3BlcmF0aW9uIgOQAgESZgoOTGlzdE9wZXJhdGlvbnMSJi5wYWxhZGluLmRhdGEudjEuTGlzdE9wZXJhdGlvbnNSZXF1ZXN0GicucGFsYWRpbi5kYXRhLnYxLkxpc3RPcGVyYXRpb25zUmVzcG9uc2UiA5ACARJbCg9DYW5jZWxPcGVyYXRpb24SJy5wYWxhZGluLmRhdGEudjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBoaLnBhbGFkaW4uZGF0YS52MS5PcGVyYXRpb24iA5ACAhJvChFEaXNtaXNzT3BlcmF0aW9ucxIpLnBhbGFkaW4uZGF0YS52MS5EaXNtaXNzT3BlcmF0aW9uc1JlcXVlc3QaKi5wYWxhZGluLmRhdGEudjEuRGlzbWlzc09wZXJhdGlvbnNSZXNwb25zZSIDkAICQkpaSGdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2RhdGEvdjE7cGFsYWRpbmRhdGF2MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
+      file_paladin_common_v1_facet,
+      file_paladin_common_v1_operation,
       file_paladin_common_v1_pagination,
       file_paladin_data_v1_batch_service,
     ],
@@ -102,6 +108,23 @@ export type ListOperationsRequest =
      * @generated from field: bool include_dismissed = 5;
      */
     includeDismissed: boolean;
+
+    /**
+     * facets narrows the listing by state and type, apart from filter, so the
+     * listing can count each facet without its own choices (facet_counts).
+     *
+     * @generated from field: paladin.common.v1.OperationFacets facets = 6;
+     */
+    facets?: OperationFacets | undefined;
+
+    /**
+     * count_facets asks for facet_counts with the first page. Counted in the
+     * query over what filter pushes down; the conjuncts it cannot push down run
+     * over each page after, so a count can exceed what the pages then hold.
+     *
+     * @generated from field: bool count_facets = 7;
+     */
+    countFacets: boolean;
   };
 
 /**
@@ -126,6 +149,15 @@ export type ListOperationsResponse =
      * @generated from field: paladin.common.v1.PageResponse page = 2;
      */
     page?: PageResponse | undefined;
+
+    /**
+     * facet_counts, when count_facets asked for them on the first page: for
+     * facet "state" each OperationState's name, for "type" each type, with how
+     * many operations of the listing give it.
+     *
+     * @generated from field: repeated paladin.common.v1.FacetCount facet_counts = 3;
+     */
+    facetCounts: FacetCount[];
   };
 
 /**

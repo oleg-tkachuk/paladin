@@ -40,3 +40,12 @@ message OperationTarget {
   // for again.
   map<string, string> tags = 7;
 }
+
+// OperationFacets narrows an operation listing by state and by type, each a
+// facet the listing can count (FacetCount, facets "state" and "type"): an
+// operation passes when its state is one of states and its type one of
+// types, either left empty for any.
+message OperationFacets {
+  repeated OperationState states = 1;
+  repeated string types = 2;
+}

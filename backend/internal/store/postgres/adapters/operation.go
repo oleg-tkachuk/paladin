@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
@@ -190,38 +191,89 @@ func (r *OperationRepo) Dismiss(ctx context.Context, tenantID uuid.UUID, initiat
 	return n, nil
 }
 
+// operationPredicates are ListOperations' predicates as the queries take
+// them: the filter's pushdown hints, narrowed by the facets.
+type operationPredicates struct {
+	typeIn, errorCodeIn, stateIn []string
+	typeLike, errorMessageNeq    *string
+	done, hasFailures            *bool
+	createdGTE, createdLTE       pgtype.Timestamptz
+}
+
+// predicatesOf is args' predicates. Pushdown: see admin_bucket.go. The
+// filter's `state` is compared as text in the query, so a literal the enum
+// does not hold matches nothing rather than failing the cast.
+func predicatesOf(args operationh.ListArgs) operationPredicates {
+	pd := hints(cel.OperationSchema, args.Filter)
+	var p operationPredicates
+	p.typeIn, p.typeLike = pd.StringHint("type")
+	p.errorCodeIn, _ = pd.StringHint("error_code")
+	p.stateIn, _ = pd.StringHint("state")
+	p.done = pd.BoolHint("done")
+	p.hasFailures = pd.BoolHint("has_failures")
+	// `error_message != ""` is how a caller asks for "operations that failed"
+	// — the dashboard's failed-ops widget does exactly that. Without the hint
+	// the predicate only narrowed the page it was handed, so a page of five
+	// recent operations that happened to contain no failure rendered as "no
+	// failures" while failures sat one page back.
+	p.errorMessageNeq = pd.NeqHint("error_message")
+	p.createdGTE, p.createdLTE = createdBounds(pd)
+	if args.State != nil {
+		p.stateIn = within(p.stateIn, stateNames([]operationh.State{*args.State}))
+	}
+	p.stateIn = within(p.stateIn, stateNames(args.Facets.States))
+	p.typeIn = within(p.typeIn, args.Facets.Types)
+	return p
+}
+
+// stateNames is states as the query compares them, nil for none.
+func stateNames(states []operationh.State) []string {
+	if len(states) == 0 {
+		return nil
+	}
+	out := make([]string, len(states))
+	for i, st := range states {
+		out[i] = string(st)
+	}
+	return out
+}
+
+// within is the values both a and b allow, nil meaning any: b when a allows
+// any, a when b does, otherwise their intersection — empty, not nil, when
+// they share none, which matches nothing.
+func within(a, b []string) []string {
+	switch {
+	case a == nil:
+		return b
+	case b == nil:
+		return a
+	}
+	out := []string{}
+	for _, v := range a {
+		if slices.Contains(b, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]operationh.Operation, string, error) {
-	tenantID, state, afterID, filter, newestFirst, initiator := args.TenantID, args.State, args.AfterID, args.Filter, args.NewestFirst, args.Initiator
+	tenantID, state, afterID, newestFirst, initiator := args.TenantID, args.State, args.AfterID, args.NewestFirst, args.Initiator
 	pageSize := pageSizeOrDefault(args.PageSize)
 	var ns *sqlc.OperationState
 	if state != nil {
 		v := sqlc.OperationState(string(*state))
 		ns = &v
 	}
-	// Pushdown: see admin_bucket.go. The filter's `state` is compared as text
-	// in the query, so a literal the enum does not hold matches nothing rather
-	// than failing the cast; the typed state argument above is validated.
-	pd := hints(cel.OperationSchema, filter)
-	typeIn, typeLike := pd.StringHint("type")
-	errorCodeIn, _ := pd.StringHint("error_code")
-	stateIn, _ := pd.StringHint("state")
-	done := pd.BoolHint("done")
-	hasFailures := pd.BoolHint("has_failures")
-	// `error_message != ""` is how a caller asks for "operations that failed"
-	// — the dashboard's failed-ops widget does exactly that. Without the hint
-	// the predicate only narrowed the page it was handed, so a page of five
-	// recent operations that happened to contain no failure rendered as "no
-	// failures" while failures sat one page back.
-	errorMessageNeq := pd.NeqHint("error_message")
-	createdGTE, createdLTE := createdBounds(pd)
+	p := predicatesOf(args)
 
 	// Two queries rather than one with a flipped comparison: the cursor test
 	// has to move with the sort, and sqlc parameterises neither.
 	out := make([]operationh.Operation, 0, pageSize)
 	if newestFirst {
 		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
-			typeIn, typeLike, errorCodeIn, stateIn, done, hasFailures, errorMessageNeq,
-			createdGTE, createdLTE, pageSize)
+			p.typeIn, p.typeLike, p.errorCodeIn, p.stateIn, p.done, p.hasFailures, p.errorMessageNeq,
+			p.createdGTE, p.createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
 		}
@@ -230,8 +282,8 @@ func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]o
 		}
 	} else {
 		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
-			typeIn, typeLike, errorCodeIn, stateIn, done, hasFailures, errorMessageNeq,
-			createdGTE, createdLTE, pageSize)
+			p.typeIn, p.typeLike, p.errorCodeIn, p.stateIn, p.done, p.hasFailures, p.errorMessageNeq,
+			p.createdGTE, p.createdLTE, pageSize)
 		if err != nil {
 			return nil, "", fmt.Errorf("list operations: %w", err)
 		}
@@ -244,6 +296,35 @@ func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]o
 		next = out[len(out)-1].OperationID.String()
 	}
 	return out, next, nil
+}
+
+// CountFacets counts args' operations by state, without the state facet's
+// own choices, and by type, without the type facet's.
+func (r *OperationRepo) CountFacets(ctx context.Context, args operationh.ListArgs) ([]operationh.FacetCount, error) {
+	byState := args
+	byState.Facets.States = nil
+	s := predicatesOf(byState)
+	stateRows, err := r.q.CountOperationsByState(ctx, pgUUID(args.TenantID), strPtrNonEmpty(args.Initiator), args.HideDismissed,
+		s.typeIn, s.typeLike, s.errorCodeIn, s.stateIn, s.done, s.hasFailures, s.errorMessageNeq, s.createdGTE, s.createdLTE)
+	if err != nil {
+		return nil, fmt.Errorf("count operations by state: %w", err)
+	}
+	byType := args
+	byType.Facets.Types = nil
+	t := predicatesOf(byType)
+	typeRows, err := r.q.CountOperationsByType(ctx, pgUUID(args.TenantID), strPtrNonEmpty(args.Initiator), args.HideDismissed,
+		t.typeIn, t.typeLike, t.errorCodeIn, t.stateIn, t.done, t.hasFailures, t.errorMessageNeq, t.createdGTE, t.createdLTE)
+	if err != nil {
+		return nil, fmt.Errorf("count operations by type: %w", err)
+	}
+	out := make([]operationh.FacetCount, 0, len(stateRows)+len(typeRows))
+	for _, row := range stateRows {
+		out = append(out, operationh.FacetCount{Facet: operationh.FacetState, Value: row.Value, Count: row.Count})
+	}
+	for _, row := range typeRows {
+		out = append(out, operationh.FacetCount{Facet: operationh.FacetType, Value: row.Value, Count: row.Count})
+	}
+	return out, nil
 }
 
 // PurgeTerminalBefore deletes operations in a terminal state whose `done_at`

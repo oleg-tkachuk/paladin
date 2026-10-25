@@ -41,20 +41,30 @@ func (s *OperationServer) GetOperation(ctx context.Context, req *pb.GetOperation
 
 func (s *OperationServer) ListOperations(ctx context.Context, req *pb.ListOperationsRequest) (*pb.ListOperationsResponse, error) {
 	m := req
-	list, next, err := s.H.ListOperations(ctx, operationh.ListInput{
+	in := operationh.ListInput{
 		PageSize:         m.GetPage().GetPageSize(),
 		PageToken:        m.GetPage().GetPageToken(),
 		Filter:           m.GetFilter(),
 		NewestFirst:      m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC,
 		Mine:             m.GetMine(),
 		IncludeDismissed: m.GetIncludeDismissed(),
-	})
+		Facets:           convx.OperationFacetsFromProto(m.GetFacets()),
+	}
+	list, next, err := s.H.ListOperations(ctx, in)
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.ListOperationsResponse{Page: convx.PageResponseProto(next)}
 	for i := range list {
 		out.Operations = append(out.Operations, dataOperationToProto(&list[i]))
+	}
+	// Counted with the first page only: a later page is the same listing.
+	if m.GetCountFacets() && in.PageToken == "" {
+		counts, err := s.H.CountOperationFacets(ctx, in)
+		if err != nil {
+			return nil, err
+		}
+		out.FacetCounts = convx.FacetCountsToProto(counts)
 	}
 	return out, nil
 }

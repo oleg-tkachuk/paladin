@@ -143,6 +143,7 @@ var assertingHelpers = []handlerMethod{
 	{pkg: "objecth", typ: "LockHandler", method: "resolve"},
 	{pkg: "batchh", typ: "Handler", method: "assertOnObjects"},
 	{pkg: "batchh", typ: "Handler", method: "assertCopy"},
+	{pkg: "operationh", typ: "Handler", method: "listScope"},
 }
 
 // exemptRPC lists data-plane RPCs that legitimately do not assert, keyed by

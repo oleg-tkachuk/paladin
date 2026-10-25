@@ -23,11 +23,13 @@ _sym_db = _symbol_database.Default()
 
 
 from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
+from paladin.common.v1 import facet_pb2 as paladin_dot_common_dot_v1_dot_facet__pb2
+from paladin.common.v1 import operation_pb2 as paladin_dot_common_dot_v1_dot_operation__pb2
 from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 from paladin.data.v1 import batch_service_pb2 as paladin_dot_data_dot_v1_dot_batch__service__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\",\n\x13GetOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\xb0\x01\n\x15ListOperationsRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x30\n\nsort_order\x18\x03 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\x12\x0c\n\x04mine\x18\x04 \x01(\x08\x12\x19\n\x11include_dismissed\x18\x05 \x01(\x08\"w\n\x16ListOperationsResponse\x12.\n\noperations\x18\x01 \x03(\x0b\x32\x1a.paladin.data.v1.Operation\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"/\n\x16\x43\x61ncelOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\":\n\x18\x44ismissOperationsRequest\x12\x1e\n\x05names\x18\x01 \x03(\tB\x0f\xbaH\x0c\x92\x01\t\x10\xe8\x07\"\x04r\x02\x10\x01\"4\n\x19\x44ismissOperationsResponse\x12\x17\n\x0f\x64ismissed_count\x18\x01 \x01(\x05\x32\x9f\x03\n\x10OperationService\x12U\n\x0cGetOperation\x12$.paladin.data.v1.GetOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12\x66\n\x0eListOperations\x12&.paladin.data.v1.ListOperationsRequest\x1a\'.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n\x0f\x43\x61ncelOperation\x12\'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02\x12o\n\x11\x44ismissOperations\x12).paladin.data.v1.DismissOperationsRequest\x1a*.paladin.data.v1.DismissOperationsResponse\"\x03\x90\x02\x02\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\'paladin/data/v1/operation_service.proto\x12\x0fpaladin.data.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1dpaladin/common/v1/facet.proto\x1a!paladin/common/v1/operation.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/data/v1/batch_service.proto\",\n\x13GetOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"\xfa\x01\n\x15ListOperationsRequest\x12,\n\x04page\x18\x01 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\x12\x0e\n\x06\x66ilter\x18\x02 \x01(\t\x12\x30\n\nsort_order\x18\x03 \x01(\x0e\x32\x1c.paladin.common.v1.SortOrder\x12\x0c\n\x04mine\x18\x04 \x01(\x08\x12\x19\n\x11include_dismissed\x18\x05 \x01(\x08\x12\x32\n\x06\x66\x61\x63\x65ts\x18\x06 \x01(\x0b\x32\".paladin.common.v1.OperationFacets\x12\x14\n\x0c\x63ount_facets\x18\x07 \x01(\x08\"\xac\x01\n\x16ListOperationsResponse\x12.\n\noperations\x18\x01 \x03(\x0b\x32\x1a.paladin.data.v1.Operation\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\x12\x33\n\x0c\x66\x61\x63\x65t_counts\x18\x03 \x03(\x0b\x32\x1d.paladin.common.v1.FacetCount\"/\n\x16\x43\x61ncelOperationRequest\x12\x15\n\x04name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\":\n\x18\x44ismissOperationsRequest\x12\x1e\n\x05names\x18\x01 \x03(\tB\x0f\xbaH\x0c\x92\x01\t\x10\xe8\x07\"\x04r\x02\x10\x01\"4\n\x19\x44ismissOperationsResponse\x12\x17\n\x0f\x64ismissed_count\x18\x01 \x01(\x05\x32\x9f\x03\n\x10OperationService\x12U\n\x0cGetOperation\x12$.paladin.data.v1.GetOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x01\x12\x66\n\x0eListOperations\x12&.paladin.data.v1.ListOperationsRequest\x1a\'.paladin.data.v1.ListOperationsResponse\"\x03\x90\x02\x01\x12[\n\x0f\x43\x61ncelOperation\x12\'.paladin.data.v1.CancelOperationRequest\x1a\x1a.paladin.data.v1.Operation\"\x03\x90\x02\x02\x12o\n\x11\x44ismissOperations\x12).paladin.data.v1.DismissOperationsRequest\x1a*.paladin.data.v1.DismissOperationsResponse\"\x03\x90\x02\x02\x42JZHgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1;paladindatav1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -49,18 +51,18 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_OPERATIONSERVICE'].methods_by_name['CancelOperation']._serialized_options = b'\220\002\002'
   _globals['_OPERATIONSERVICE'].methods_by_name['DismissOperations']._loaded_options = None
   _globals['_OPERATIONSERVICE'].methods_by_name['DismissOperations']._serialized_options = b'\220\002\002'
-  _globals['_GETOPERATIONREQUEST']._serialized_start=162
-  _globals['_GETOPERATIONREQUEST']._serialized_end=206
-  _globals['_LISTOPERATIONSREQUEST']._serialized_start=209
-  _globals['_LISTOPERATIONSREQUEST']._serialized_end=385
-  _globals['_LISTOPERATIONSRESPONSE']._serialized_start=387
-  _globals['_LISTOPERATIONSRESPONSE']._serialized_end=506
-  _globals['_CANCELOPERATIONREQUEST']._serialized_start=508
-  _globals['_CANCELOPERATIONREQUEST']._serialized_end=555
-  _globals['_DISMISSOPERATIONSREQUEST']._serialized_start=557
-  _globals['_DISMISSOPERATIONSREQUEST']._serialized_end=615
-  _globals['_DISMISSOPERATIONSRESPONSE']._serialized_start=617
-  _globals['_DISMISSOPERATIONSRESPONSE']._serialized_end=669
-  _globals['_OPERATIONSERVICE']._serialized_start=672
-  _globals['_OPERATIONSERVICE']._serialized_end=1087
+  _globals['_GETOPERATIONREQUEST']._serialized_start=228
+  _globals['_GETOPERATIONREQUEST']._serialized_end=272
+  _globals['_LISTOPERATIONSREQUEST']._serialized_start=275
+  _globals['_LISTOPERATIONSREQUEST']._serialized_end=525
+  _globals['_LISTOPERATIONSRESPONSE']._serialized_start=528
+  _globals['_LISTOPERATIONSRESPONSE']._serialized_end=700
+  _globals['_CANCELOPERATIONREQUEST']._serialized_start=702
+  _globals['_CANCELOPERATIONREQUEST']._serialized_end=749
+  _globals['_DISMISSOPERATIONSREQUEST']._serialized_start=751
+  _globals['_DISMISSOPERATIONSREQUEST']._serialized_end=809
+  _globals['_DISMISSOPERATIONSRESPONSE']._serialized_start=811
+  _globals['_DISMISSOPERATIONSRESPONSE']._serialized_end=863
+  _globals['_OPERATIONSERVICE']._serialized_start=866
+  _globals['_OPERATIONSERVICE']._serialized_end=1281
 # @@protoc_insertion_point(module_scope)

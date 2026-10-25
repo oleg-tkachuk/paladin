@@ -65,6 +65,10 @@ func (r *recordingRepo) List(context.Context, operationh.ListArgs) ([]operationh
 	return nil, "", nil
 }
 
+func (r *recordingRepo) CountFacets(context.Context, operationh.ListArgs) ([]operationh.FacetCount, error) {
+	return nil, nil
+}
+
 func (r *recordingRepo) terminal() []operationh.State {
 	r.mu.Lock()
 	defer r.mu.Unlock()

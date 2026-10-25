@@ -223,3 +223,49 @@ SELECT EXISTS (
     SELECT 1 FROM operations
     WHERE id = $1 AND state IN ('PENDING', 'RUNNING')
 );
+
+-- name: CountOperationsByState :many
+-- How many operations of a listing are in each state: ListOperations' own
+-- predicates, without its cursor, grouped. The caller leaves out the state
+-- facet's own choices, so each count says what choosing that state gives.
+SELECT state::text AS value, count(*)::bigint AS count
+FROM operations
+WHERE tenant_id = $1
+  AND (sqlc.narg('initiator_subject')::text IS NULL OR initiator_subject = sqlc.narg('initiator_subject')::text)
+  AND (NOT sqlc.arg('hide_dismissed')::boolean OR dismissed_at IS NULL)
+  AND (sqlc.narg('type_in')::text[] IS NULL OR type = ANY(sqlc.narg('type_in')::text[]))
+  AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
+  AND (sqlc.narg('error_code_in')::text[] IS NULL OR error_code = ANY(sqlc.narg('error_code_in')::text[]))
+  AND (sqlc.narg('state_in')::text[] IS NULL OR state::text = ANY(sqlc.narg('state_in')::text[]))
+  AND (sqlc.narg('done')::bool IS NULL OR (done_at IS NOT NULL) = sqlc.narg('done')::bool)
+  AND (sqlc.narg('has_failures')::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = sqlc.narg('has_failures')::bool)
+  AND (sqlc.narg('error_message_neq')::text IS NULL
+       OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR created_at <= sqlc.narg('created_at_lte')::timestamptz)
+GROUP BY state;
+
+-- name: CountOperationsByType :many
+-- As CountOperationsByState, by type.
+SELECT type AS value, count(*)::bigint AS count
+FROM operations
+WHERE tenant_id = $1
+  AND (sqlc.narg('initiator_subject')::text IS NULL OR initiator_subject = sqlc.narg('initiator_subject')::text)
+  AND (NOT sqlc.arg('hide_dismissed')::boolean OR dismissed_at IS NULL)
+  AND (sqlc.narg('type_in')::text[] IS NULL OR type = ANY(sqlc.narg('type_in')::text[]))
+  AND (sqlc.narg('type_like')::text IS NULL OR type LIKE sqlc.narg('type_like')::text)
+  AND (sqlc.narg('error_code_in')::text[] IS NULL OR error_code = ANY(sqlc.narg('error_code_in')::text[]))
+  AND (sqlc.narg('state_in')::text[] IS NULL OR state::text = ANY(sqlc.narg('state_in')::text[]))
+  AND (sqlc.narg('done')::bool IS NULL OR (done_at IS NOT NULL) = sqlc.narg('done')::bool)
+  AND (sqlc.narg('has_failures')::bool IS NULL
+       OR (state = 'FAILED' OR failed_count > 0) = sqlc.narg('has_failures')::bool)
+  AND (sqlc.narg('error_message_neq')::text IS NULL
+       OR coalesce(error_message, '') <> sqlc.narg('error_message_neq')::text)
+  AND (sqlc.narg('created_at_gte')::timestamptz IS NULL
+       OR created_at >= sqlc.narg('created_at_gte')::timestamptz)
+  AND (sqlc.narg('created_at_lte')::timestamptz IS NULL
+       OR created_at <= sqlc.narg('created_at_lte')::timestamptz)
+GROUP BY type;

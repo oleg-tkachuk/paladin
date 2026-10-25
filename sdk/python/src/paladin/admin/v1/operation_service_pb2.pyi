@@ -4,6 +4,7 @@ from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import any_pb2 as _any_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.rpc import status_pb2 as _status_pb2
+from paladin.common.v1 import facet_pb2 as _facet_pb2
 from paladin.common.v1 import operation_pb2 as _operation_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
@@ -58,28 +59,34 @@ class GetOperationRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ListOperationsRequest(_message.Message):
-    __slots__ = ("page", "filter", "sort_order", "mine", "include_dismissed", "tenant_id")
+    __slots__ = ("page", "filter", "sort_order", "mine", "include_dismissed", "tenant_id", "facets", "count_facets")
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
     MINE_FIELD_NUMBER: _ClassVar[int]
     INCLUDE_DISMISSED_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    FACETS_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FACETS_FIELD_NUMBER: _ClassVar[int]
     page: _pagination_pb2.PageRequest
     filter: str
     sort_order: _pagination_pb2.SortOrder
     mine: bool
     include_dismissed: bool
     tenant_id: str
-    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ..., include_dismissed: _Optional[bool] = ..., tenant_id: _Optional[str] = ...) -> None: ...
+    facets: _operation_pb2.OperationFacets
+    count_facets: bool
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., mine: _Optional[bool] = ..., include_dismissed: _Optional[bool] = ..., tenant_id: _Optional[str] = ..., facets: _Optional[_Union[_operation_pb2.OperationFacets, _Mapping]] = ..., count_facets: _Optional[bool] = ...) -> None: ...
 
 class ListOperationsResponse(_message.Message):
-    __slots__ = ("operations", "page")
+    __slots__ = ("operations", "page", "facet_counts")
     OPERATIONS_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
+    FACET_COUNTS_FIELD_NUMBER: _ClassVar[int]
     operations: _containers.RepeatedCompositeFieldContainer[Operation]
     page: _pagination_pb2.PageResponse
-    def __init__(self, operations: _Optional[_Iterable[_Union[Operation, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ...) -> None: ...
+    facet_counts: _containers.RepeatedCompositeFieldContainer[_facet_pb2.FacetCount]
+    def __init__(self, operations: _Optional[_Iterable[_Union[Operation, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., facet_counts: _Optional[_Iterable[_Union[_facet_pb2.FacetCount, _Mapping]]] = ...) -> None: ...
 
 class CancelOperationRequest(_message.Message):
     __slots__ = ("name",)

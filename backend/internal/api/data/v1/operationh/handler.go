@@ -85,6 +85,10 @@ type Repository interface {
 	// is the 50 oldest, which is how a three-day-old failure came to be the
 	// console's idea of what is running.
 	List(ctx context.Context, args ListArgs) ([]Operation, string, error)
+	// CountFacets counts the operations List would list for args, without
+	// its cursor or its page size, by each facet's values: each facet
+	// counted without its own choices in args.Facets.
+	CountFacets(ctx context.Context, args ListArgs) ([]FacetCount, error)
 	// Dismiss clears the finished operations of initiator in tenantID from
 	// their own list — those of ids, or every one with ids empty — and
 	// reports how many it cleared.
@@ -195,34 +199,62 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	return nil
 }
 
+// listScope is what a listing of in may read: the tenant, and the initiator
+// when it lists only the caller's own — refused when the caller may not
+// list them.
+func (h *Handler) listScope(ctx context.Context, in ListInput) (uuid.UUID, string, error) {
+	tenantID, err := auth.TenantFromContext(ctx)
+	if err != nil {
+		return uuid.Nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+	}
+	if in.TenantID != uuid.Nil && in.TenantID != tenantID {
+		if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
+			return uuid.Nil, "", connect.NewError(connect.CodePermissionDenied, msgCrossTenant)
+		}
+		tenantID = in.TenantID
+	}
+	var initiator string
+	if in.Mine {
+		if initiator, err = callerSubject(ctx); err != nil {
+			return uuid.Nil, "", err
+		}
+	}
+	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
+		return uuid.Nil, "", err
+	}
+	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
+		return uuid.Nil, "", err
+	}
+	return tenantID, initiator, nil
+}
+
+// CountOperationFacets counts the operations ListOperations would list for
+// in by each facet's values (FacetState, FacetType), each facet without its
+// own choices. Counted over what the filter pushes down: the conjuncts it
+// cannot are applied to each page after, so a count can exceed the rows the
+// pages then hold.
+func (h *Handler) CountOperationFacets(ctx context.Context, in ListInput) ([]FacetCount, error) {
+	tenantID, initiator, err := h.listScope(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return h.repo.CountFacets(ctx, ListArgs{
+		TenantID: tenantID, State: in.State, Filter: in.Filter, Facets: in.Facets,
+		Initiator: initiator, HideDismissed: in.Mine && !in.IncludeDismissed,
+	})
+}
+
 // ListOperations returns one page of the caller tenant's operations, or with
 // mine only those the caller started. filter is an optional CEL expression
 // over OperationSchema, applied after the fetch; the repo cursor is returned
 // unchanged so paging survives a page whose rows all fail the predicate.
 func (h *Handler) ListOperations(ctx context.Context, in ListInput) ([]Operation, string, error) {
-	state, pageSize, pageToken, filter, newestFirst, mine := in.State, in.PageSize, in.PageToken, in.Filter, in.NewestFirst, in.Mine
-	tenantID, err := auth.TenantFromContext(ctx)
+	state, pageSize, pageToken, filter, newestFirst := in.State, in.PageSize, in.PageToken, in.Filter, in.NewestFirst
+	tenantID, initiator, err := h.listScope(ctx, in)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	if in.TenantID != uuid.Nil && in.TenantID != tenantID {
-		if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
-			return nil, "", connect.NewError(connect.CodePermissionDenied, msgCrossTenant)
-		}
-		tenantID = in.TenantID
-	}
-	var initiator string
-	if mine {
-		if initiator, err = callerSubject(ctx); err != nil {
-			return nil, "", err
-		}
-	}
-	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
 		return nil, "", err
 	}
-	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
-		return nil, "", err
-	}
+	mine := in.Mine
 	var afterID uuid.UUID
 	if pageToken != "" {
 		id, err := uuid.Parse(pageToken)
@@ -233,7 +265,7 @@ func (h *Handler) ListOperations(ctx context.Context, in ListInput) ([]Operation
 	}
 	page, next, err := h.repo.List(ctx, ListArgs{
 		TenantID: tenantID, State: state, AfterID: afterID, PageSize: pageSize,
-		Filter: filter, NewestFirst: newestFirst,
+		Filter: filter, NewestFirst: newestFirst, Facets: in.Facets,
 		Initiator: initiator, HideDismissed: mine && !in.IncludeDismissed,
 	})
 	if err != nil {
@@ -311,6 +343,27 @@ type ListArgs struct {
 	// HideDismissed then leaves out those it cleared from its own list.
 	Initiator     string
 	HideDismissed bool
+	// Facets narrows the listing apart from Filter.
+	Facets Facets
+}
+
+// The facets an operation listing narrows and counts by (FacetCount.Facet).
+const (
+	FacetState = "state"
+	FacetType  = "type"
+)
+
+// Facets narrows an operation listing: an operation passes when its state is
+// one of States and its type one of Types, either empty for any.
+type Facets struct {
+	States []State
+	Types  []string
+}
+
+// FacetCount is how many operations of a listing give Value for Facet.
+type FacetCount struct {
+	Facet, Value string
+	Count        int64
 }
 
 // ListInput is a ListOperations request.
@@ -327,6 +380,8 @@ type ListInput struct {
 	// TenantID lists another tenant's operations, which only a platform
 	// admin may; uuid.Nil is the caller's own tenant.
 	TenantID uuid.UUID
+	// Facets narrows the listing apart from Filter.
+	Facets Facets
 }
 
 // msgCrossTenant is the refusal of a caller who names another tenant's

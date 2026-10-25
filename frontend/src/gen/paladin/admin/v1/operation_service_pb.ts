@@ -20,7 +20,10 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import type { Status } from "../../../google/rpc/status_pb";
 import { file_google_rpc_status } from "../../../google/rpc/status_pb";
+import type { FacetCount } from "../../common/v1/facet_pb";
+import { file_paladin_common_v1_facet } from "../../common/v1/facet_pb";
 import type {
+  OperationFacets,
   OperationState,
   OperationTarget,
 } from "../../common/v1/operation_pb";
@@ -40,12 +43,13 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_operation_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIpYFCglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDEjUKDGRpc21pc3NlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI0CgtleHBpcmVfdGltZRgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIZCgxmYWlsZWRfY291bnQYECABKANCA+BBA0IICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABItABChVMaXN0T3BlcmF0aW9uc1JlcXVlc3QSLAoEcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCRIwCgpzb3J0X29yZGVyGAMgASgOMhwucGFsYWRpbi5jb21tb24udjEuU29ydE9yZGVyEgwKBG1pbmUYBCABKAgSGQoRaW5jbHVkZV9kaXNtaXNzZWQYBSABKAgSHgoJdGVuYW50X2lkGAYgASgJQgu6SAjYAQFyA7ABASJ4ChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi8KCm9wZXJhdGlvbnMYASADKAsyGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbhItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlIi8KFkNhbmNlbE9wZXJhdGlvblJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASI6ChhEaXNtaXNzT3BlcmF0aW9uc1JlcXVlc3QSHgoFbmFtZXMYASADKAlCD7pIDJIBCRDoByIEcgIQASI0ChlEaXNtaXNzT3BlcmF0aW9uc1Jlc3BvbnNlEhcKD2Rpc21pc3NlZF9jb3VudBgBIAEoBTKvAwoYUGxhdGZvcm1PcGVyYXRpb25TZXJ2aWNlElcKDEdldE9wZXJhdGlvbhIlLnBhbGFkaW4uYWRtaW4udjEuR2V0T3BlcmF0aW9uUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgESaAoOTGlzdE9wZXJhdGlvbnMSJy5wYWxhZGluLmFkbWluLnYxLkxpc3RPcGVyYXRpb25zUmVxdWVzdBooLnBhbGFkaW4uYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXNwb25zZSIDkAIBEl0KD0NhbmNlbE9wZXJhdGlvbhIoLnBhbGFkaW4uYWRtaW4udjEuQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBobLnBhbGFkaW4uYWRtaW4udjEuT3BlcmF0aW9uIgOQAgIScQoRRGlzbWlzc09wZXJhdGlvbnMSKi5wYWxhZGluLmFkbWluLnYxLkRpc21pc3NPcGVyYXRpb25zUmVxdWVzdBorLnBhbGFkaW4uYWRtaW4udjEuRGlzbWlzc09wZXJhdGlvbnNSZXNwb25zZSIDkAICQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CihwYWxhZGluL2FkbWluL3YxL29wZXJhdGlvbl9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIpYFCglPcGVyYXRpb24SEQoEbmFtZRgBIAEoCUID4EEIEhEKBHR5cGUYAiABKAlCA+BBAxImCghtZXRhZGF0YRgDIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnkSEQoEZG9uZRgEIAEoCEID4EEDEiMKBWVycm9yGAUgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXNIABIoCghyZXNwb25zZRgGIAEoCzIULmdvb2dsZS5wcm90b2J1Zi5BbnlIABIeChFpbml0aWF0b3Jfc3ViamVjdBgHIAEoCUID4EEDEhsKE2luaXRpYXRvcl90ZW5hbnRfaWQYCCABKAkSMwoKY3JlYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjAKB2RvbmVfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSNQoFc3RhdGUYDCABKA4yIS5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25TdGF0ZUID4EEDEjcKBnRhcmdldBgNIAEoCzIiLnBhbGFkaW4uY29tbW9uLnYxLk9wZXJhdGlvblRhcmdldEID4EEDEjUKDGRpc21pc3NlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxI0CgtleHBpcmVfdGltZRgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIZCgxmYWlsZWRfY291bnQYECABKANCA+BBA0IICgZyZXN1bHQiLAoTR2V0T3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIpoCChVMaXN0T3BlcmF0aW9uc1JlcXVlc3QSLAoEcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgCIAEoCRIwCgpzb3J0X29yZGVyGAMgASgOMhwucGFsYWRpbi5jb21tb24udjEuU29ydE9yZGVyEgwKBG1pbmUYBCABKAgSGQoRaW5jbHVkZV9kaXNtaXNzZWQYBSABKAgSHgoJdGVuYW50X2lkGAYgASgJQgu6SAjYAQFyA7ABARIyCgZmYWNldHMYByABKAsyIi5wYWxhZGluLmNvbW1vbi52MS5PcGVyYXRpb25GYWNldHMSFAoMY291bnRfZmFjZXRzGAggASgIIq0BChZMaXN0T3BlcmF0aW9uc1Jlc3BvbnNlEi8KCm9wZXJhdGlvbnMYASADKAsyGy5wYWxhZGluLmFkbWluLnYxLk9wZXJhdGlvbhItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlEjMKDGZhY2V0X2NvdW50cxgDIAMoCzIdLnBhbGFkaW4uY29tbW9uLnYxLkZhY2V0Q291bnQiLwoWQ2FuY2VsT3BlcmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIjoKGERpc21pc3NPcGVyYXRpb25zUmVxdWVzdBIeCgVuYW1lcxgBIAMoCUIPukgMkgEJEOgHIgRyAhABIjQKGURpc21pc3NPcGVyYXRpb25zUmVzcG9uc2USFwoPZGlzbWlzc2VkX2NvdW50GAEgASgFMq8DChhQbGF0Zm9ybU9wZXJhdGlvblNlcnZpY2USVwoMR2V0T3BlcmF0aW9uEiUucGFsYWRpbi5hZG1pbi52MS5HZXRPcGVyYXRpb25SZXF1ZXN0GhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24iA5ACARJoCg5MaXN0T3BlcmF0aW9ucxInLnBhbGFkaW4uYWRtaW4udjEuTGlzdE9wZXJhdGlvbnNSZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5MaXN0T3BlcmF0aW9uc1Jlc3BvbnNlIgOQAgESXQoPQ2FuY2VsT3BlcmF0aW9uEigucGFsYWRpbi5hZG1pbi52MS5DYW5jZWxPcGVyYXRpb25SZXF1ZXN0GhsucGFsYWRpbi5hZG1pbi52MS5PcGVyYXRpb24iA5ACAhJxChFEaXNtaXNzT3BlcmF0aW9ucxIqLnBhbGFkaW4uYWRtaW4udjEuRGlzbWlzc09wZXJhdGlvbnNSZXF1ZXN0GisucGFsYWRpbi5hZG1pbi52MS5EaXNtaXNzT3BlcmF0aW9uc1Jlc3BvbnNlIgOQAgJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_any,
       file_google_protobuf_timestamp,
       file_google_rpc_status,
+      file_paladin_common_v1_facet,
       file_paladin_common_v1_operation,
       file_paladin_common_v1_pagination,
       file_google_api_field_behavior,
@@ -257,6 +261,23 @@ export type ListOperationsRequest =
      * @generated from field: string tenant_id = 6;
      */
     tenantId: string;
+
+    /**
+     * facets narrows the listing by state and type, apart from filter, so the
+     * listing can count each facet without its own choices (facet_counts).
+     *
+     * @generated from field: paladin.common.v1.OperationFacets facets = 7;
+     */
+    facets?: OperationFacets | undefined;
+
+    /**
+     * count_facets asks for facet_counts with the first page. Counted in the
+     * query over what filter pushes down; the conjuncts it cannot push down run
+     * over each page after, so a count can exceed what the pages then hold.
+     *
+     * @generated from field: bool count_facets = 8;
+     */
+    countFacets: boolean;
   };
 
 /**
@@ -281,6 +302,15 @@ export type ListOperationsResponse =
      * @generated from field: paladin.common.v1.PageResponse page = 2;
      */
     page?: PageResponse | undefined;
+
+    /**
+     * facet_counts, when count_facets asked for them on the first page: for
+     * facet "state" each OperationState's name, for "type" each type, with how
+     * many operations of the listing give it.
+     *
+     * @generated from field: repeated paladin.common.v1.FacetCount facet_counts = 3;
+     */
+    facetCounts: FacetCount[];
   };
 
 /**

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeFacets,
+  countedOptions,
   countOptions,
   facetUpdates,
   filterByFacets,
+  groupFacetCounts,
   initialSelection,
   parseFacets,
   type Facet,
@@ -149,5 +151,41 @@ describe("the URL form", () => {
       state: ["on", "off"],
       tag: ["eu", "prod"],
     });
+  });
+});
+
+describe("counts a server gave", () => {
+  const counts = groupFacetCounts([
+    { facet: "state", value: "on", count: 4n },
+    { facet: "tag", value: "eu", count: 2n },
+    { facet: "tag", value: "prod", count: 1 },
+  ]);
+
+  it("offers a fixed vocabulary in its order, an uncounted answer at nought", () => {
+    expect(countedOptions(STATE, counts.get("state") ?? new Map(), [])).toEqual(
+      [
+        { value: "on", label: "On", count: 4 },
+        { value: "off", label: "Off", count: 0 },
+      ],
+    );
+  });
+
+  it("offers the answers counted, named by the facet, and a chosen one at nought", () => {
+    const named = { ...TAG, optionLabel: (v: string) => v.toUpperCase() };
+    expect(
+      countedOptions(named, counts.get("tag") ?? new Map(), ["us"]),
+    ).toEqual([
+      { value: "eu", label: "EU", count: 2 },
+      { value: "prod", label: "PROD", count: 1 },
+      { value: "us", label: "US", count: 0 },
+    ]);
+  });
+
+  it("reads each answer through the value given", () => {
+    const renamed = groupFacetCounts(
+      [{ facet: "state", value: "STATE_ON", count: 3n }],
+      (c) => c.value.replace("STATE_", "").toLowerCase(),
+    );
+    expect(renamed.get("state")?.get("on")).toBe(3);
   });
 });
