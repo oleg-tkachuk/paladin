@@ -1,4 +1,4 @@
-## Unreleased — the configuration's defaults beside the running one
+## sdk/go/v0.120.0, sdk/python/v0.121.0 — the configuration's defaults beside the running one
 
 - **`GetConfigResponse` gains `defaults_yaml`**: the configuration a
   deployment runs on where it sets nothing, in the running one's shape and

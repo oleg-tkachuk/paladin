@@ -89,6 +89,15 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/go/v0.120.0, sdk/python/v0.121.0 — the configuration's defaults beside the running one
+
+- **`GetConfigResponse` gains `defaults_yaml`**: the configuration a
+  deployment runs on where it sets nothing, in the running one's shape and
+  redaction. Additive.
+- The console's `/config` Compare opens on the defaults, so an operator sees
+  every setting the deployment changed; a pasted `config.yaml` is one click
+  away.
+
 ## v40.1.0, sdk/go/v0.119.0, sdk/python/v0.120.0 — the audit log narrows and counts by plane, outcome and service
 
 - **`ListAuditLogRequest` gains `facets` and `count_facets`**. `facets`
