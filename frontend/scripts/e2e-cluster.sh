@@ -129,9 +129,11 @@ export PALADIN_E2E_ADMIN_PASSWORD="$password"
 # backend too and wait for it (tests/e2e/fixtures/seed.ts deleteBuckets).
 export PALADIN_E2E_STACK_RUNS_WORKER=1
 
-# Playwright's own worker count unless WORKERS says otherwise. The suite once
-# ran on one worker here because every test signs in and the cluster's login
-# limiter stalled parallel runs; the local cluster lifts that limit now.
+# Playwright's own worker count unless WORKERS says otherwise. Every test signs
+# in, and a cluster on the built-in login limits (auth.login_rate_limit_per_*,
+# 10 a minute per subject) refuses the suite after its first few minutes of
+# logins, whatever the worker count: raise both limits on the cluster before a
+# full run.
 workers=()
 [[ -n "${WORKERS:-}" ]] && workers=(--workers="$WORKERS")
 
