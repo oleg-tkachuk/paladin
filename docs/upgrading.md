@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.118.0, sdk/python/v0.119.0 — limes v1.0.0-rc.4
+## v40.0.0, sdk/go/v0.118.0, sdk/python/v0.119.0 — limes v1.0.0-rc.4
 
 - **`CapabilityServiceRevokeBiscuitResponse` gains `already_revoked` and
   `revocation`**, as the capability's own revoke answers: a second revoke of
