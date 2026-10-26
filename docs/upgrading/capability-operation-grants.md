@@ -1,4 +1,4 @@
-## Unreleased — the API says what each capability operation unlocks
+## sdk/go/v0.121.0, sdk/python/v0.122.0 — the API says what each capability operation unlocks
 
 - **`CapabilityService.ListOperationGrants`** returns, for each operation a
   capability's caveats can name (`get`, `list`, `put`, `delete`, `manage`),
