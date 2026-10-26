@@ -36,6 +36,14 @@ class BiscuitStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     BISCUIT_STATUS_NOT_SHAREABLE: _ClassVar[BiscuitStatus]
     BISCUIT_STATUS_KEY_BOUND: _ClassVar[BiscuitStatus]
     BISCUIT_STATUS_NOT_YET_VALID: _ClassVar[BiscuitStatus]
+
+class CapabilityGrantBasis(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    CAPABILITY_GRANT_BASIS_UNSPECIFIED: _ClassVar[CapabilityGrantBasis]
+    CAPABILITY_GRANT_BASIS_BUILTIN: _ClassVar[CapabilityGrantBasis]
+    CAPABILITY_GRANT_BASIS_TENANT_POLICY: _ClassVar[CapabilityGrantBasis]
+    CAPABILITY_GRANT_BASIS_PAIRED: _ClassVar[CapabilityGrantBasis]
+    CAPABILITY_GRANT_BASIS_CAVEATS_ONLY: _ClassVar[CapabilityGrantBasis]
 PRINCIPAL_KIND_UNSPECIFIED: PrincipalKind
 PRINCIPAL_KIND_USER: PrincipalKind
 PRINCIPAL_KIND_AGENT: PrincipalKind
@@ -49,6 +57,11 @@ BISCUIT_STATUS_ISSUED: BiscuitStatus
 BISCUIT_STATUS_NOT_SHAREABLE: BiscuitStatus
 BISCUIT_STATUS_KEY_BOUND: BiscuitStatus
 BISCUIT_STATUS_NOT_YET_VALID: BiscuitStatus
+CAPABILITY_GRANT_BASIS_UNSPECIFIED: CapabilityGrantBasis
+CAPABILITY_GRANT_BASIS_BUILTIN: CapabilityGrantBasis
+CAPABILITY_GRANT_BASIS_TENANT_POLICY: CapabilityGrantBasis
+CAPABILITY_GRANT_BASIS_PAIRED: CapabilityGrantBasis
+CAPABILITY_GRANT_BASIS_CAVEATS_ONLY: CapabilityGrantBasis
 
 class CapabilityPrincipal(_message.Message):
     __slots__ = ("kind", "tenant_id", "subject", "agent_type", "agent_version", "run_id", "parent_run_id", "model", "mcp_client")
@@ -341,9 +354,15 @@ class CapabilityServiceListOperationGrantsResponse(_message.Message):
     def __init__(self, grants: _Optional[_Iterable[_Union[CapabilityOperationGrant, _Mapping]]] = ...) -> None: ...
 
 class CapabilityOperationGrant(_message.Message):
-    __slots__ = ("op", "actions")
+    __slots__ = ("op", "actions", "basis", "paired_ops", "procedures")
     OP_FIELD_NUMBER: _ClassVar[int]
     ACTIONS_FIELD_NUMBER: _ClassVar[int]
+    BASIS_FIELD_NUMBER: _ClassVar[int]
+    PAIRED_OPS_FIELD_NUMBER: _ClassVar[int]
+    PROCEDURES_FIELD_NUMBER: _ClassVar[int]
     op: str
     actions: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, op: _Optional[str] = ..., actions: _Optional[_Iterable[str]] = ...) -> None: ...
+    basis: CapabilityGrantBasis
+    paired_ops: _containers.RepeatedScalarFieldContainer[str]
+    procedures: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, op: _Optional[str] = ..., actions: _Optional[_Iterable[str]] = ..., basis: _Optional[_Union[CapabilityGrantBasis, str]] = ..., paired_ops: _Optional[_Iterable[str]] = ..., procedures: _Optional[_Iterable[str]] = ...) -> None: ...

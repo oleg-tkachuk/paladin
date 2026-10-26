@@ -57,6 +57,7 @@ func TestCapabilityPermit_GrantsTheActionsOfItsOperation(t *testing.T) {
 		{CapabilityOpPut, ActionPresignPut},
 		{CapabilityOpPut, ActionUpdateObject},
 		{CapabilityOpPut, ActionCopyObject},
+		{CapabilityOpTag, ActionUpdateObject},
 	}
 	for _, c := range cases {
 		t.Run(c.op+"/"+c.action.String(), func(t *testing.T) {
@@ -86,6 +87,9 @@ func TestCapabilityPermit_DeniesActionsOutsideItsOperation(t *testing.T) {
 		{"manage admitted, taint asked", CapabilityOpManage, ActionSetObjectTaint},
 		{"delete admitted, write asked", CapabilityOpDelete, ActionPutObject},
 		{"read admitted, lock asked", CapabilityOpGet, ActionReadObjectLock},
+		{"tag admitted, write asked", CapabilityOpTag, ActionPutObject},
+		{"presign alone, download asked", CapabilityOpPresign, ActionPresignGet},
+		{"share admitted, read asked", CapabilityOpShare, ActionGetObject},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

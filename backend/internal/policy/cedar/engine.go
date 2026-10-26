@@ -890,9 +890,14 @@ when {
 // any request that presented no capability or whose handler asserted nothing.
 // Each permit binds an operation to the data-plane actions that operation
 // names, so a "get" admitted on one object cannot authorize a PresignPut.
-// "delete" needs no line here: the machine delete permit above grants it.
-// "manage" gets none on purpose — taint, Object Lock and operation
-// cancellation stay with a tenant policy that names them.
+// "object:tag" is the batch tag change's: BatchUpdateTags asserts it on every
+// object and then asks for UpdateObject. "delete" needs no line here: the
+// machine delete permit above grants it. "object:presign" is only asserted
+// beside "get" or "put", and the request authorizes under the one asserted
+// last. "share" opens Delegate, which asks no policy. "manage" gets none on
+// purpose — taint, Object Lock and operation cancellation stay with a tenant
+// policy that names them. CapabilityOperationGrants is this, as the API serves
+// it.
 //
 // A tenant that wants capabilities held to its own rules can still "forbid";
 // first-forbid wins.
@@ -905,6 +910,20 @@ when {
   principal has kind &&
   principal.kind == "capability" &&
   (context.capability_op == "get" || context.capability_op == "list") &&
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
+permit (
+  principal,
+  action == Action::"UpdateObject",
+  resource
+)
+when {
+  principal has kind &&
+  principal.kind == "capability" &&
+  context.capability_op == "object:tag" &&
   principal has tenant_id &&
   resource has tenant_id &&
   principal.tenant_id == resource.tenant_id

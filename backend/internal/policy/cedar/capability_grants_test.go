@@ -2,24 +2,38 @@ package cedar
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// The operation names are the wire values limes checks caveats against; a
+// The operation names are the wire values caveats are checked against: a
 // policy comparing context.capability_op to anything else matches nothing.
-func TestCapabilityOps_AreLimesOps(t *testing.T) {
-	for got, want := range map[string]limes.Op{
-		CapabilityOpGet:    limes.OpGet,
-		CapabilityOpList:   limes.OpList,
-		CapabilityOpPut:    limes.OpPut,
-		CapabilityOpDelete: limes.OpDelete,
-		CapabilityOpManage: limes.OpManage,
+func TestCapabilityOps_AreTheWireOps(t *testing.T) {
+	for got, want := range map[string]string{
+		CapabilityOpGet:     string(limes.OpGet),
+		CapabilityOpList:    string(limes.OpList),
+		CapabilityOpPut:     string(limes.OpPut),
+		CapabilityOpDelete:  string(limes.OpDelete),
+		CapabilityOpShare:   string(limes.OpShare),
+		CapabilityOpManage:  string(limes.OpManage),
+		CapabilityOpPresign: string(paladin.OpObjectPresign),
+		CapabilityOpTag:     string(paladin.OpObjectTag),
 	} {
-		if got != string(want) {
-			t.Errorf("%q != limes %q", got, want)
+		if got != want {
+			t.Errorf("%q != wire %q", got, want)
 		}
+	}
+}
+
+// The RPC the table says share opens is the one the SDK calls.
+func TestCapabilityOperationGrants_NameTheDelegateProcedure(t *testing.T) {
+	want := strings.ReplaceAll(strings.TrimPrefix(paladinadminv1connect.CapabilityServiceDelegateProcedure, "/"), "/", ".")
+	if procedureDelegate != want {
+		t.Fatalf("procedureDelegate = %q, want %q", procedureDelegate, want)
 	}
 }
 
@@ -46,14 +60,42 @@ func TestCapabilityOperationGrants_MatchTheBuiltin(t *testing.T) {
 	}
 }
 
-// One row per operation limes knows, so the console never meets an operation
-// the table is silent about.
+// Each row carries what its basis says and nothing else, so the console can
+// read the basis without second-guessing the lists.
+func TestCapabilityOperationGrants_RowsMatchTheirBasis(t *testing.T) {
+	ops := map[string]bool{}
+	for _, row := range CapabilityOperationGrants {
+		ops[row.Op] = true
+	}
+	for _, row := range CapabilityOperationGrants {
+		if got, want := len(row.Actions) > 0, row.Basis == GrantBuiltin; got != want {
+			t.Errorf("%s: has actions = %v, basis %d", row.Op, got, row.Basis)
+		}
+		if got, want := len(row.PairedOps) > 0, row.Basis == GrantPaired; got != want {
+			t.Errorf("%s: has paired ops = %v, basis %d", row.Op, got, row.Basis)
+		}
+		if got, want := len(row.Procedures) > 0, row.Basis == GrantCaveatsOnly; got != want {
+			t.Errorf("%s: has procedures = %v, basis %d", row.Op, got, row.Basis)
+		}
+		for _, p := range row.PairedOps {
+			if !ops[p] {
+				t.Errorf("%s pairs with %q, which has no row", row.Op, p)
+			}
+		}
+	}
+}
+
+// One row per operation a caveat can name, so the console never meets an
+// operation the table is silent about.
 func TestCapabilityOperationGrants_CoverEveryOperation(t *testing.T) {
 	var ops []string
 	for _, row := range CapabilityOperationGrants {
 		ops = append(ops, row.Op)
 	}
-	want := []string{CapabilityOpGet, CapabilityOpList, CapabilityOpPut, CapabilityOpDelete, CapabilityOpManage}
+	want := []string{
+		CapabilityOpGet, CapabilityOpPut, CapabilityOpList, CapabilityOpDelete,
+		CapabilityOpShare, CapabilityOpManage, CapabilityOpPresign, CapabilityOpTag,
+	}
 	if !slices.Equal(ops, want) {
 		t.Fatalf("operations = %v, want %v", ops, want)
 	}
