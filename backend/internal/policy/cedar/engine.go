@@ -622,10 +622,13 @@ type PerObjectEvaluator interface {
 // (reads only tenant_id/collection, or no resource attributes at all), in which
 // case the single up-front collection-scoped check already covers the whole page.
 //
-// Conservative by design: it does not scope the analysis by action, so a policy
-// that reads a per-object attribute for ANY action turns on per-row evaluation
-// for listing. That only ever costs extra Cedar calls — never a wrong decision,
-// since an action-mismatched policy simply doesn't match the per-row request.
+// Only a policy whose action scope can take one of listingPerRowActions counts:
+// the per-row pass asks for those and nothing else, and a policy scoped to other actions
+// (the default policy's upload blocklist reads resource.key under PutObject and
+// PresignPut) matches none of those requests. The schema declares no action
+// groups, so a scope naming actions takes exactly them. Before this, that one
+// upload rule put nearly every tenant's listing on per-row evaluation and
+// withheld its facet counts.
 func (e *Engine) NeedsPerObjectEval(ctx context.Context, tenantID uuid.UUID, collection string) (bool, error) {
 	cp, err := e.loadCompiled(ctx, tenantID, collection)
 	if err != nil {
@@ -672,15 +675,65 @@ func policyReadsPerObjectResourceAttr(set *cedar.PolicySet) bool {
 		if err != nil {
 			return true // conservative: don't skip a policy we can't inspect
 		}
-		var tree any
+		var tree map[string]any
 		if err := json.Unmarshal(js, &tree); err != nil {
 			return true
 		}
-		if walkReadsPerObjectResourceAttr(tree) {
+		if mayApplyToAnyAction(tree, listingPerRowActions) && walkReadsPerObjectResourceAttr(tree) {
 			return true
 		}
 	}
 	return false
+}
+
+// Cedar JSON's action-scope operators.
+const (
+	scopeOpAll = "All"
+	scopeOpEq  = "=="
+	scopeOpIn  = "in"
+)
+
+// listingPerRowActions are the actions a listing decides object by object:
+// whether the caller may see each row, and whether it may see where the row
+// is stored.
+var listingPerRowActions = []Action{ActionGetObject, ActionReadObjectPlacement}
+
+// mayApplyToAnyAction reports whether a policy, in its Cedar JSON form, can
+// match a request for one of actions. A scope it does not recognise counts as
+// yes: skipping a policy that might apply is the one mistake this must not make.
+func mayApplyToAnyAction(policy map[string]any, actions []Action) bool {
+	scope, ok := policy["action"].(map[string]any)
+	if !ok {
+		return true
+	}
+	switch scope["op"] {
+	case scopeOpAll:
+		return true
+	case scopeOpEq, scopeOpIn:
+		var named []any
+		if e, ok := scope["entity"]; ok {
+			named = append(named, e)
+		}
+		if es, ok := scope["entities"].([]any); ok {
+			named = append(named, es...)
+		}
+		if len(named) == 0 {
+			return true
+		}
+		for _, e := range named {
+			m, ok := e.(map[string]any)
+			if !ok {
+				return true
+			}
+			for _, a := range actions {
+				if m["id"] == a.String() {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // walkReadsPerObjectResourceAttr recursively scans a decoded Cedar JSON
