@@ -8,7 +8,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { useServerFacets, useTableFacets } from "./useTableFacets";
-import { groupFacetCounts, type Facet } from "@/lib/table/facets";
+import {
+  FACET_COUNTING,
+  groupFacetCounts,
+  type Facet,
+} from "@/lib/table/facets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 
 interface Row {
@@ -101,5 +105,21 @@ describe("useServerFacets", () => {
     act(() => result.current.clear());
     expect(result.current.active).toBe(0);
     expect(window.location.search).toBe("?state=any");
+  });
+
+  it("says how the counts read, exact unless told otherwise", () => {
+    const { result } = renderHook(() => useServerFacets(FACETS));
+    expect(result.current.controls(counts)[0].counting).toBe(
+      FACET_COUNTING.exact,
+    );
+    expect(
+      result.current.controls(counts, FACET_COUNTING.lowerBound)[0].counting,
+    ).toBe(FACET_COUNTING.lowerBound);
+  });
+
+  it("sets one facet's choices outright", () => {
+    const { result } = renderHook(() => useServerFacets(FACETS));
+    act(() => result.current.choose("state", ["off"]));
+    expect(result.current.selection).toEqual({ state: ["off"] });
   });
 });

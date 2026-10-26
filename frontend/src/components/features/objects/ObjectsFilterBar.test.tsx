@@ -2,22 +2,37 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import type { FacetControl } from "@/hooks/useTableFacets";
+import { OBJECT_FACETS } from "@/lib/objectFacets";
+import { FACET_COUNTING } from "@/lib/table/facets";
+
 import { ObjectsFilterBar, type FilterState } from "./ObjectsFilterBar";
 
 const VIEW = { name: "Pending only", filters: { status: "pending" } };
+
+// The page's two facets, uncounted, each with its own setter to assert on.
+function facetControls(): FacetControl[] {
+  return OBJECT_FACETS.map((f) => ({
+    id: f.id,
+    label: f.label,
+    options: (f.options ?? []).map((o) => ({ ...o, count: 0 })),
+    selected: [],
+    onChange: vi.fn(),
+    counting: FACET_COUNTING.withheld,
+  }));
+}
 
 function bar(filter: Partial<FilterState> = {}) {
   const props = {
     filter: {
       search: "",
-      status: undefined,
       tag: undefined,
-      type: undefined,
       meta: undefined,
       recursive: false,
       ...filter,
     },
     onFilterChange: vi.fn(),
+    facets: facetControls(),
     tagOptions: [],
     visibleColumns: new Set<string>(),
     onToggleColumn: vi.fn(),
@@ -55,14 +70,28 @@ describe("ObjectsFilterBar saved views", () => {
 });
 
 describe("ObjectsFilterBar content type and metadata", () => {
-  it("offers the content-type categories and clears with All Types", async () => {
+  it("offers every content category as a facet, Other among them", async () => {
     const props = bar();
-    const select = screen.getByRole("combobox", {
-      name: "Filter by content type",
-    });
-    await userEvent.click(select);
-    await userEvent.click(screen.getByRole("option", { name: "Images" }));
-    expect(props.onFilterChange).toHaveBeenLastCalledWith({ type: "image" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by content type" }),
+    );
+    const options = screen
+      .getAllByRole("menuitemcheckbox")
+      .map((o) => o.getAttribute("aria-label"));
+    expect(options).toEqual([
+      "Images",
+      "Video",
+      "Audio",
+      "Text",
+      "PDF",
+      "JSON",
+      "Other",
+    ]);
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: "Images" }),
+    );
+    expect(props.facets[1]!.onChange).toHaveBeenLastCalledWith(["image"]);
+    expect(props.onFilterChange).not.toHaveBeenCalled();
   });
 
   it("applies a metadata facet on Enter, not per keystroke", async () => {
@@ -106,15 +135,12 @@ describe("ObjectsFilterBar status", () => {
   it("offers the states an object can be in, and no Failed", async () => {
     bar();
     await userEvent.click(
-      screen.getByRole("combobox", { name: "Filter by status" }),
+      screen.getByRole("button", { name: "Filter by status" }),
     );
-    const options = screen.getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual([
-      "All Statuses",
-      "Pending",
-      "Available",
-      "Deleted",
-    ]);
+    const options = screen
+      .getAllByRole("menuitemcheckbox")
+      .map((o) => o.getAttribute("aria-label"));
+    expect(options).toEqual(["Pending", "Available", "Deleted"]);
   });
 });
 

@@ -275,6 +275,7 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *pb.ListObjectsReque
 		SortDesc:   m.GetSortOrder() == commonpb.SortOrder_SORT_ORDER_DESC,
 		Prefix:     m.GetPrefix(),
 		Delimiter:  m.GetDelimiter(),
+		Facets:     objectFacetsFromProto(m.GetFacets()),
 	}
 	objs, next, err := s.H.ListObjects(ctx, in)
 	if err != nil {
@@ -286,6 +287,17 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *pb.ListObjectsReque
 		out.CommonPrefixes, out.CommonPrefixesTruncated, err = s.H.ListCommonPrefixes(ctx, in)
 		if err != nil {
 			return nil, err
+		}
+		if m.GetCountFacets() {
+			counts, err := s.H.CountObjectFacets(ctx, in)
+			if err != nil {
+				return nil, err
+			}
+			// nil: the collection's policies decide object by object.
+			if counts != nil {
+				out.FacetCounts = objectFacetCountsToProto(counts)
+				out.FacetCountsExact = counts.Exact
+			}
 		}
 	}
 	for i := range objs {

@@ -4,6 +4,7 @@ from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import field_mask_pb2 as _field_mask_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from paladin.common.v1 import facet_pb2 as _facet_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from paladin.common.v1 import resource_pb2 as _resource_pb2
 from paladin.data.v1 import types_pb2 as _types_pb2
@@ -22,9 +23,28 @@ class PresignTransport(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PRESIGN_TRANSPORT_UNSPECIFIED: _ClassVar[PresignTransport]
     PRESIGN_TRANSPORT_PUT: _ClassVar[PresignTransport]
     PRESIGN_TRANSPORT_POST: _ClassVar[PresignTransport]
+
+class ObjectContentCategory(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    OBJECT_CONTENT_CATEGORY_UNSPECIFIED: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_IMAGE: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_VIDEO: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_AUDIO: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_TEXT: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_PDF: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_JSON: _ClassVar[ObjectContentCategory]
+    OBJECT_CONTENT_CATEGORY_OTHER: _ClassVar[ObjectContentCategory]
 PRESIGN_TRANSPORT_UNSPECIFIED: PresignTransport
 PRESIGN_TRANSPORT_PUT: PresignTransport
 PRESIGN_TRANSPORT_POST: PresignTransport
+OBJECT_CONTENT_CATEGORY_UNSPECIFIED: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_IMAGE: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_VIDEO: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_AUDIO: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_TEXT: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_PDF: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_JSON: ObjectContentCategory
+OBJECT_CONTENT_CATEGORY_OTHER: ObjectContentCategory
 
 class ObjectVersion(_message.Message):
     __slots__ = ("name", "version_id", "object_id", "is_delete_marker", "storage_path", "size_bytes", "etag", "checksum", "content_type", "metadata", "tags", "lock", "created_at", "is_current")
@@ -329,7 +349,7 @@ class TagsOverride(_message.Message):
     def __init__(self, tags: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class ListObjectsRequest(_message.Message):
-    __slots__ = ("parent", "page", "filter", "order_by", "sort_order", "prefix", "delimiter")
+    __slots__ = ("parent", "page", "filter", "order_by", "sort_order", "prefix", "delimiter", "facets", "count_facets")
     PARENT_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
     FILTER_FIELD_NUMBER: _ClassVar[int]
@@ -337,6 +357,8 @@ class ListObjectsRequest(_message.Message):
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
     PREFIX_FIELD_NUMBER: _ClassVar[int]
     DELIMITER_FIELD_NUMBER: _ClassVar[int]
+    FACETS_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FACETS_FIELD_NUMBER: _ClassVar[int]
     parent: str
     page: _pagination_pb2.PageRequest
     filter: str
@@ -344,19 +366,33 @@ class ListObjectsRequest(_message.Message):
     sort_order: _pagination_pb2.SortOrder
     prefix: str
     delimiter: str
-    def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., order_by: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., prefix: _Optional[str] = ..., delimiter: _Optional[str] = ...) -> None: ...
+    facets: ObjectFacets
+    count_facets: bool
+    def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., order_by: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., prefix: _Optional[str] = ..., delimiter: _Optional[str] = ..., facets: _Optional[_Union[ObjectFacets, _Mapping]] = ..., count_facets: _Optional[bool] = ...) -> None: ...
 
 class ListObjectsResponse(_message.Message):
-    __slots__ = ("objects", "page", "common_prefixes", "common_prefixes_truncated")
+    __slots__ = ("objects", "page", "common_prefixes", "common_prefixes_truncated", "facet_counts", "facet_counts_exact")
     OBJECTS_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
     COMMON_PREFIXES_FIELD_NUMBER: _ClassVar[int]
     COMMON_PREFIXES_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    FACET_COUNTS_FIELD_NUMBER: _ClassVar[int]
+    FACET_COUNTS_EXACT_FIELD_NUMBER: _ClassVar[int]
     objects: _containers.RepeatedCompositeFieldContainer[_types_pb2.Object]
     page: _pagination_pb2.PageResponse
     common_prefixes: _containers.RepeatedScalarFieldContainer[str]
     common_prefixes_truncated: bool
-    def __init__(self, objects: _Optional[_Iterable[_Union[_types_pb2.Object, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., common_prefixes: _Optional[_Iterable[str]] = ..., common_prefixes_truncated: _Optional[bool] = ...) -> None: ...
+    facet_counts: _containers.RepeatedCompositeFieldContainer[_facet_pb2.FacetCount]
+    facet_counts_exact: bool
+    def __init__(self, objects: _Optional[_Iterable[_Union[_types_pb2.Object, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., common_prefixes: _Optional[_Iterable[str]] = ..., common_prefixes_truncated: _Optional[bool] = ..., facet_counts: _Optional[_Iterable[_Union[_facet_pb2.FacetCount, _Mapping]]] = ..., facet_counts_exact: _Optional[bool] = ...) -> None: ...
+
+class ObjectFacets(_message.Message):
+    __slots__ = ("states", "content_categories")
+    STATES_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
+    states: _containers.RepeatedScalarFieldContainer[_types_pb2.ObjectState]
+    content_categories: _containers.RepeatedScalarFieldContainer[ObjectContentCategory]
+    def __init__(self, states: _Optional[_Iterable[_Union[_types_pb2.ObjectState, str]]] = ..., content_categories: _Optional[_Iterable[_Union[ObjectContentCategory, str]]] = ...) -> None: ...
 
 class CountObjectsRequest(_message.Message):
     __slots__ = ("parent", "filter")

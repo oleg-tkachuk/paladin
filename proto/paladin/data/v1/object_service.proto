@@ -8,6 +8,7 @@ import "buf/validate/validate.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "paladin/common/v1/facet.proto";
 import "paladin/common/v1/pagination.proto";
 import "paladin/common/v1/resource.proto";
 import "paladin/data/v1/types.proto";
@@ -399,6 +400,14 @@ message ListObjectsRequest {
   // folded into prefix + segment + delimiter. Empty lists every key under the
   // prefix. One character, usually "/".
   string delimiter = 7 [(buf.validate.field).string.max_len = 1];
+
+  // facets narrows the listing by state and content category, as conjuncts
+  // of filter, so the listing can count each facet without its own choices
+  // (facet_counts). Each repeated field is a disjunction; empty narrows
+  // nothing.
+  ObjectFacets facets = 8;
+  // count_facets asks for facet_counts with the first page.
+  bool count_facets = 9;
 }
 
 message ListObjectsResponse {
@@ -411,6 +420,42 @@ message ListObjectsResponse {
   repeated string common_prefixes = 3;
   // More folders exist than common_prefixes holds.
   bool common_prefixes_truncated = 4;
+  // facet_counts, when count_facets asked for them on the first page: for
+  // facet "state" each ObjectState's name, for "content_category" each
+  // ObjectContentCategory's name, with how many objects of the listing give
+  // it — the filter, the prefix and the folder level applied, and every facet
+  // but the one counted. Absent when the collection's policies decide object
+  // by object: a count would include objects the listing does not return.
+  repeated paladin.common.v1.FacetCount facet_counts = 5;
+  // facet_counts_exact is false when the count stopped at its scan cap: the
+  // counts are then a lower bound.
+  bool facet_counts_exact = 6;
+}
+
+// ObjectFacets narrows an object listing by the facets it counts.
+message ObjectFacets {
+  repeated ObjectState states = 1 [(buf.validate.field).repeated.items.enum = {defined_only: true, not_in: [0]}];
+  repeated ObjectContentCategory content_categories = 2 [(buf.validate.field).repeated.items.enum = {defined_only: true, not_in: [0]}];
+}
+
+// ObjectContentCategory groups content types the way the console filters
+// them. The server owns the mapping, since it counts by it.
+enum ObjectContentCategory {
+  OBJECT_CONTENT_CATEGORY_UNSPECIFIED = 0;
+  // image/*
+  OBJECT_CONTENT_CATEGORY_IMAGE = 1;
+  // video/*
+  OBJECT_CONTENT_CATEGORY_VIDEO = 2;
+  // audio/*
+  OBJECT_CONTENT_CATEGORY_AUDIO = 3;
+  // text/*
+  OBJECT_CONTENT_CATEGORY_TEXT = 4;
+  // application/pdf
+  OBJECT_CONTENT_CATEGORY_PDF = 5;
+  // application/json
+  OBJECT_CONTENT_CATEGORY_JSON = 6;
+  // Any content type the others do not name.
+  OBJECT_CONTENT_CATEGORY_OTHER = 7;
 }
 
 message CountObjectsRequest {

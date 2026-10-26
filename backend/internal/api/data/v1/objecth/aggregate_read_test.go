@@ -236,3 +236,7 @@ func TestLookupObjectUnknownKeyIsNotFound(t *testing.T) {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}
 }
+
+func (*aggregateRepo) TallyObjects(context.Context, TallyObjectsArgs) (ObjectTally, error) {
+	return ObjectTally{}, nil
+}

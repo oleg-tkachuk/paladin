@@ -83,6 +83,10 @@ func TestListObjectsRefusesWhatItDoesNotApply(t *testing.T) {
 		"filter":     {Parent: parent, Filter: `key = "a"`},
 		"order_by":   {Parent: parent, OrderBy: "key"},
 		"sort_order": {Parent: parent, SortOrder: commonv1.SortOrder_SORT_ORDER_DESC},
+		"facets": {Parent: parent, Facets: &datav1.ObjectFacets{
+			States: []datav1.ObjectState{datav1.ObjectState_OBJECT_STATE_AVAILABLE},
+		}},
+		"count_facets": {Parent: parent, CountFacets: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := p.Data.Object.ListObjects(context.Background(), req)

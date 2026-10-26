@@ -43,6 +43,14 @@ import { BulkEditModal } from "@/components/features/objects/BulkEditModal";
 import { Badge } from "@/components/ui/badge";
 
 import { useCollection } from "../collection-context";
+import {
+  OBJECT_FACET_STATUS,
+  OBJECT_FACET_TYPE,
+  objectFacetCounts,
+  viewFacetSelection,
+} from "@/lib/objectFacets";
+import { activeFacets, serverCounting } from "@/lib/table/facets";
+
 import { SavedViewSchema, type SavedView } from "./_view";
 import { useObjectListState } from "./useObjectListState";
 import { CopyMoveDialog } from "./CopyMoveDialog";
@@ -96,10 +104,11 @@ function CollectionObjectsContent() {
   // dedicated hook. Selection and tag-option accumulation stay here because
   // they depend on the loaded objects, which the hook never sees.
   const {
-    status,
-    setStatus,
+    facetSelection,
+    facets,
+    facetControls: controlsFor,
+    setFacetSelection,
     tagFilter,
-    typeFilter,
     metaFilter,
     search,
     setSearch,
@@ -108,9 +117,7 @@ function CollectionObjectsContent() {
     sort,
     filter,
     handleSort,
-    handleStatusChange,
     handleTagChange,
-    handleTypeChange,
     handleMetaChange,
     handleSearchChange,
     handleRecursiveChange,
@@ -151,6 +158,8 @@ function CollectionObjectsContent() {
     objects,
     folders,
     foldersTruncated,
+    facetCounts,
+    facetCountsExact,
     loading,
     error,
     refresh,
@@ -167,12 +176,27 @@ function CollectionObjectsContent() {
   } = useObjects({
     collection,
     filter,
+    // Status and content type narrow on the server, which counts them with
+    // the first page.
+    facets,
+    countFacets: true,
     orderBy: sort.column || undefined,
     sortDirection: sort.direction,
     prefix,
     delimiter,
     refetchIntervalMs: live ? OBJECTS_LIVE_POLL_MS : undefined,
   });
+
+  // Counted over the whole listing; lower bounds past the server's scan cap,
+  // and none where the collection's policies decide object by object.
+  const facetControls = useMemo(
+    () =>
+      controlsFor(
+        objectFacetCounts(facetCounts),
+        serverCounting(facetCounts, facetCountsExact),
+      ),
+    [controlsFor, facetCounts, facetCountsExact],
+  );
 
   // Authoritative tag-facet options from the server (whole-Collection scope via
   // ListDistinctTags). Empty while loading or on error — the client-side
@@ -621,9 +645,9 @@ function CollectionObjectsContent() {
       name: newViewName,
       filters: {
         search,
-        status,
+        status: [...(facetSelection[OBJECT_FACET_STATUS] ?? [])],
         tag: tagFilter,
-        type: typeFilter,
+        type: [...(facetSelection[OBJECT_FACET_TYPE] ?? [])],
         meta: metaFilter,
         recursive,
       },
@@ -639,10 +663,9 @@ function CollectionObjectsContent() {
   // applying "Images" after a tag filter shows images, not tagged images.
   const applyView = (view: SavedView) => {
     setSearch(view.filters.search || "");
-    setStatus(view.filters.status);
+    setFacetSelection(viewFacetSelection(view.filters));
     setRecursive(view.filters.recursive ?? false);
     handleTagChange(view.filters.tag);
-    handleTypeChange(view.filters.type);
     handleMetaChange(view.filters.meta);
   };
 
@@ -778,17 +801,14 @@ function CollectionObjectsContent() {
           <ObjectsFilterBar
             filter={{
               search,
-              status,
               tag: tagFilter,
-              type: typeFilter,
               meta: metaFilter,
               recursive,
             }}
+            facets={facetControls}
             onFilterChange={(patch) => {
               if ("search" in patch) handleSearchChange(patch.search!);
-              if ("status" in patch) handleStatusChange(patch.status);
               if ("tag" in patch) handleTagChange(patch.tag);
-              if ("type" in patch) handleTypeChange(patch.type);
               if ("meta" in patch) handleMetaChange(patch.meta);
               if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
             }}
@@ -838,7 +858,9 @@ function CollectionObjectsContent() {
             editingLabelsId={editingLabelsId}
             editLabelsValue={editLabelsValue}
             search={search}
-            status={status}
+            narrowed={
+              activeFacets(facetSelection) > 0 || !!tagFilter || !!metaFilter
+            }
             rowProps={{
               onToggleSelect: toggleSelect,
               onInspect: setSelectedInspectorKey,

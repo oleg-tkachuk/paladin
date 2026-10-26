@@ -153,6 +153,35 @@ export interface ServerFacetCount {
   count: bigint | number;
 }
 
+/**
+ * How a facet's counts read. A server may cap the scan behind them, which
+ * makes each a lower bound, or withhold them, which is not the same as every
+ * answer counting nought: the choices still narrow the list.
+ */
+export const FACET_COUNTING = {
+  /** Each count is how many rows give the answer. */
+  exact: "exact",
+  /** Each count is at least how many rows give the answer. */
+  lowerBound: "lowerBound",
+  /** No count is known; the answers are offered without one. */
+  withheld: "withheld",
+} as const;
+
+export type FacetCounting =
+  (typeof FACET_COUNTING)[keyof typeof FACET_COUNTING];
+
+/**
+ * How a server's answer counts its facets: withheld when it gave no counts,
+ * a lower bound when it says its scan stopped short, else exact.
+ */
+export function serverCounting(
+  counts: readonly ServerFacetCount[],
+  exact: boolean,
+): FacetCounting {
+  if (counts.length === 0) return FACET_COUNTING.withheld;
+  return exact ? FACET_COUNTING.exact : FACET_COUNTING.lowerBound;
+}
+
 /** A server's counts by facet id, then by answer. */
 export type FacetCounts = ReadonlyMap<string, ReadonlyMap<string, number>>;
 

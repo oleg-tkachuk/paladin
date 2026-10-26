@@ -6,31 +6,11 @@
 // function per clause), and they are joined with `&&` only: a conjunction of
 // pushable clauses is one indexed query, which is what keeps a selective
 // filter from scanning the collection page by page.
+//
+// The object page's state and content-type choices are not here: they go to
+// the server as ListObjectsRequest.facets (objectFacets.ts), which owns the
+// content-type categories and counts by them.
 import { celString } from "@/lib/cel";
-
-/**
- * Content-type categories offered in the filter bar. The URL carries the
- * `value`; anything else in the URL is ignored rather than spliced into the
- * expression, so a link cannot make the console send a filter it would not.
- */
-export const CONTENT_TYPE_OPTIONS = [
-  { value: "image", label: "Images", prefix: "image/" },
-  { value: "video", label: "Video", prefix: "video/" },
-  { value: "audio", label: "Audio", prefix: "audio/" },
-  { value: "text", label: "Text", prefix: "text/" },
-  { value: "pdf", label: "PDF", exact: "application/pdf" },
-  { value: "json", label: "JSON", exact: "application/json" },
-] as const;
-
-export function contentTypeClause(
-  value: string | undefined,
-): string | undefined {
-  const opt = CONTENT_TYPE_OPTIONS.find((o) => o.value === value);
-  if (!opt) return undefined;
-  return "exact" in opt
-    ? `content_type == ${celString(opt.exact)}`
-    : `content_type.startsWith(${celString(opt.prefix)})`;
-}
 
 /**
  * Split a "key=value" facet on its FIRST "=" — values may contain "=".
@@ -47,14 +27,13 @@ export function parseKeyValue(
 }
 
 export interface ObjectFilterInput {
+  /** One state, as the trash lists its deleted objects by. */
   status?: string;
   /** Search text; only applied from three characters, as the server's
    *  trigram index needs. */
   search?: string;
   /** Tag facet, "key=value". */
   tag?: string;
-  /** A CONTENT_TYPE_OPTIONS value. */
-  type?: string;
   /** Metadata facet, "key=value". */
   meta?: string;
 }
@@ -67,8 +46,6 @@ export function buildObjectFilter(f: ObjectFilterInput): string {
     parts.push(`key.contains(${celString(f.search)})`);
   const tag = parseKeyValue(f.tag);
   if (tag) parts.push(`tags[${celString(tag.key)}] == ${celString(tag.value)}`);
-  const type = contentTypeClause(f.type);
-  if (type) parts.push(type);
   const meta = parseKeyValue(f.meta);
   if (meta)
     parts.push(`metadata[${celString(meta.key)}] == ${celString(meta.value)}`);

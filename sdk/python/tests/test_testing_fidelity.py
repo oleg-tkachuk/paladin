@@ -20,7 +20,7 @@ from paladin import (
     unpack_detail,
 )
 from paladin.common.v1 import error_reason_pb2, pagination_pb2
-from paladin.data.v1 import object_service_pb2
+from paladin.data.v1 import object_service_pb2, types_pb2
 from paladin.testing import PART_SIZE, TESTING_EXTRA_HINT, FakePaladin, StorageOp
 
 CONTENT_TYPE = "application/octet-stream"
@@ -83,6 +83,11 @@ def test_the_fake_validates_every_request(fake: FakePaladin, case: str) -> None:
         ("filter", {"filter": 'key = "a"'}),
         ("order_by", {"order_by": "key"}),
         ("sort_order", {"sort_order": pagination_pb2.SORT_ORDER_DESC}),
+        (
+            "facets",
+            {"facets": object_service_pb2.ObjectFacets(states=[types_pb2.OBJECT_STATE_AVAILABLE])},
+        ),
+        ("count_facets", {"count_facets": True}),
     ],
 )
 def test_list_objects_refuses_what_it_does_not_apply(

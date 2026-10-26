@@ -3,7 +3,8 @@
 // One facet of a list, as a toolbar button after Argo CD's filter sidebar:
 // its name and how many answers are chosen on the button, and in its menu
 // every answer with a checkbox, its status dot where it has one, and how many
-// loaded rows give it. Choosing keeps the menu open, so several answers are
+// rows give it — "10k+" where the count is a lower bound, nothing where none
+// is known. Choosing keeps the menu open, so several answers are
 // chosen in one visit. Controlled: useTableFacets owns the choices.
 import { ChevronDownIcon, FunnelIcon } from "@heroicons/react/24/outline";
 
@@ -21,16 +22,30 @@ import {
 import { StatusDot } from "@/components/ui/StatusIcon";
 import type { FacetControl } from "@/hooks/useTableFacets";
 import { formatCount } from "@/lib/format/locale";
+import { FACET_COUNTING, type FacetCounting } from "@/lib/table/facets";
 import { cn } from "@/lib/utils";
 
 /** What the menu says when the loaded rows give no answer to offer. */
 const NOTHING_TO_CHOOSE = "Nothing to filter by";
+
+/** Follows a count that is a lower bound: "10k+". */
+const AT_LEAST_MARK = "+";
+
+/** How an answer reads aloud: "Disabled, 3 rows", or its label alone. */
+function optionName(label: string, count: number, counting: FacetCounting) {
+  if (counting === FACET_COUNTING.withheld) return label;
+  const rows = `${formatCount(count)} ${count === 1 ? "row" : "rows"}`;
+  return counting === FACET_COUNTING.lowerBound
+    ? `${label}, at least ${rows}`
+    : `${label}, ${rows}`;
+}
 
 export function FacetFilter({
   label,
   options,
   selected,
   onChange,
+  counting = FACET_COUNTING.exact,
 }: Omit<FacetControl, "id">) {
   const active = selected.length > 0;
   const toggle = (value: string, on: boolean) =>
@@ -66,7 +81,7 @@ export function FacetFilter({
             <DropdownMenuCheckboxItem
               key={o.value}
               // Read as "Disabled, 3 rows", not the run-together "Disabled3".
-              aria-label={`${o.label}, ${formatCount(o.count)} ${o.count === 1 ? "row" : "rows"}`}
+              aria-label={optionName(o.label, o.count, counting)}
               checked={selected.includes(o.value)}
               onCheckedChange={(on) => toggle(o.value, on === true)}
               // Kept open, so a second answer is one more click.
@@ -74,13 +89,19 @@ export function FacetFilter({
             >
               {o.tone ? <StatusDot tone={o.tone} /> : null}
               <span className="min-w-0 flex-1 truncate">{o.label}</span>
-              <Count
-                value={o.count}
-                className={cn(
-                  "text-xs text-muted-foreground",
-                  o.count === 0 && "opacity-60",
-                )}
-              />
+              {counting === FACET_COUNTING.withheld ? null : (
+                <span
+                  className={cn(
+                    "text-xs tabular-nums text-muted-foreground",
+                    o.count === 0 && "opacity-60",
+                  )}
+                >
+                  <Count value={o.count} />
+                  {counting === FACET_COUNTING.lowerBound
+                    ? AT_LEAST_MARK
+                    : null}
+                </span>
+              )}
             </DropdownMenuCheckboxItem>
           ))
         )}

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildObjectFilter,
-  contentTypeClause,
-  parseKeyValue,
-} from "./objectFilter";
+import { buildObjectFilter, parseKeyValue } from "./objectFilter";
 
 describe("buildObjectFilter", () => {
   it("is empty with nothing set", () => {
@@ -17,27 +13,17 @@ describe("buildObjectFilter", () => {
         status: "AVAILABLE",
         search: "report",
         tag: "env=prod",
-        type: "image",
         meta: "owner=ops",
       }),
     ).toBe(
       'state == "AVAILABLE" && key.contains("report") && tags["env"] == "prod"' +
-        ' && content_type.startsWith("image/") && metadata["owner"] == "ops"',
+        ' && metadata["owner"] == "ops"',
     );
   });
 
   it("applies search from three characters", () => {
     expect(buildObjectFilter({ search: "ab" })).toBe("");
     expect(buildObjectFilter({ search: "abc" })).toBe('key.contains("abc")');
-  });
-
-  it("uses equality for exact content types", () => {
-    expect(contentTypeClause("pdf")).toBe('content_type == "application/pdf"');
-  });
-
-  it("ignores a content type it does not offer instead of splicing it in", () => {
-    expect(contentTypeClause('image" || true || "')).toBeUndefined();
-    expect(buildObjectFilter({ type: "x) || true" })).toBe("");
   });
 
   it("escapes both halves of the metadata facet", () => {
