@@ -1,6 +1,11 @@
 package cedar
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/oleg-tkachuk/paladin/backend/policies"
+)
 
 // TestPolicyReadsPerObjectResourceAttr locks down the compile-time analyzer that
 // decides whether ListObjects must Cedar-check every returned object (a policy
@@ -66,9 +71,39 @@ func TestPolicyReadsPerObjectResourceAttr(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "per-object attr for an unrelated action still triggers (conservative)",
+			name: "per-object attr for an action a listing never asks does not trigger",
 			text: `forbid (principal, action == Action::"DeleteObject", resource)
 			       when { resource.tags.contains("locked") };`,
+			want: false,
+		},
+		{
+			name: "the default policy's upload blocklist does not trigger",
+			text: `permit (principal, action in [Action::"PutObject", Action::"PresignPut"], resource)
+			       when { !(resource has key) || !(resource.key like "*.exe") };`,
+			want: false,
+		},
+		{
+			name: "a scope naming GetObject among others triggers",
+			text: `forbid (principal, action in [Action::"PutObject", Action::"GetObject"], resource)
+			       when { resource.tags.contains("locked") };`,
+			want: true,
+		},
+		{
+			name: "a scope equal to GetObject triggers",
+			text: `forbid (principal, action == Action::"GetObject", resource)
+			       when { resource.state == "PENDING" };`,
+			want: true,
+		},
+		{
+			name: "a placement rule on the object triggers: the listing decides placement per row",
+			text: `permit (principal, action == Action::"ReadObjectPlacement", resource)
+			       when { resource has key && resource.key like "public/*" };`,
+			want: true,
+		},
+		{
+			name: "in a single action triggers when it is GetObject",
+			text: `forbid (principal, action in Action::"GetObject", resource)
+			       when { resource.size_bytes > 10 };`,
 			want: true,
 		},
 	}
@@ -83,5 +118,29 @@ func TestPolicyReadsPerObjectResourceAttr(t *testing.T) {
 				t.Fatalf("policyReadsPerObjectResourceAttr = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The analysis reads an action scope as exactly the actions it names, which is
+// sound only while the schema declares no action groups: a group would let
+// `action in Action::"Reads"` take GetObject without naming it.
+func TestSchemaDeclaresNoActionGroups(t *testing.T) {
+	s := loadSchema(t)
+	for uid, a := range s.Actions {
+		if a.Entity.Parents.Len() > 0 {
+			t.Errorf("%s is a member of %v: mayApplyToAction must learn the groups", uid, a.Entity.Parents)
+		}
+	}
+}
+
+// The policy every tenant gets at creation keeps a listing on the single
+// collection-scoped check: its one per-object read is the upload blocklist.
+func TestDefaultTenantPolicy_ListsWithoutPerRowEval(t *testing.T) {
+	set, err := compile(strings.ReplaceAll(policies.DefaultTenantPolicy, policies.TenantPlaceholder, "acme"))
+	if err != nil {
+		t.Fatalf("compile default policy: %v", err)
+	}
+	if policyReadsPerObjectResourceAttr(set) {
+		t.Fatal("the default policy puts every listing on per-row evaluation")
 	}
 }
