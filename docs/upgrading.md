@@ -89,13 +89,16 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.121.0, sdk/python/v0.122.0 — the API says what each capability operation unlocks
+## sdk/go/v0.122.0, sdk/python/v0.123.0 — the API says what each capability operation unlocks
 
-- **`CapabilityService.ListOperationGrants`** returns, for each operation a
-  capability's caveats can name (`get`, `list`, `put`, `delete`, `manage`),
-  the Cedar actions it unlocks in the capability's own tenant with no tenant
-  policy. An operation with none (`manage`) needs a tenant policy naming its
-  actions. Gated on `ReadCapability`. Additive.
+- **`CapabilityService.ListOperationGrants`** returns a row for each
+  operation a capability's caveats can name, with its `basis`
+  (`CapabilityGrantBasis`): `BUILTIN` with the Cedar `actions` the built-in
+  policy grants in the capability's own tenant; `TENANT_POLICY` for `manage`,
+  which needs a tenant policy; `PAIRED` for `object:presign`, asserted beside
+  the `paired_ops` that grant the action; `CAVEATS_ONLY` for `share`, whose
+  `procedures` (`Delegate`) ask no policy. Gated on `ReadCapability`.
+  Additive.
 - The console shows it when a capability is issued and on its record.
 
 ## Unreleased — a capability does what its caveats allow without a tenant policy
@@ -103,7 +106,7 @@ here.
 - **A capability is now permitted, in its own tenant, the data-plane actions
   of the operation its caveats admitted** (ADR-0038): `get`/`list` →
   `GetObject`, `PresignGet`; `put` → `PutObject`, `PresignPut`,
-  `UpdateObject`, `CopyObject`. Before, a tenant with no stored policy
+  `UpdateObject`, `CopyObject`; `object:tag` → `UpdateObject`. Before, a tenant with no stored policy
   refused these with "denied by policy". A tenant that relied on that
   default to keep issued capabilities inert must add a `forbid`, for example
   `forbid (principal, action, resource) when { principal has kind && principal.kind == "capability" };`.
