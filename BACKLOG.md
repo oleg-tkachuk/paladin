@@ -763,8 +763,9 @@ order they are being taken up.
 - **Status:** Blocked.
 - **Reason:** the dashboard lists the user's operations, the tenants near
   their budget (TenantBudgetService.Summarize), how many quotas sit at or
-  near their caps and a first-run checklist, but not how any of them got
-  there: nothing serves a usage or spend series across tenants.
+  near their caps and a first-run checklist, and the tenants list tells each
+  tenant's limit state from the same reads, but neither shows how a tenant
+  got there: nothing serves a usage or spend series across tenants.
 - **Definition of Done:** a sparkline beside each tenant near its budget or
   quota, from a cross-tenant series the API serves, not assembled in the
   browser tenant by tenant.
@@ -858,17 +859,3 @@ order they are being taken up.
   who wrote each and when, and the policy editor diffs any two of them in
   `DiffView`.
 - **Blockers:** the backend keeping a policy's history.
-
-#### The tenants list cannot tell a tenant near its limits
-
-- **Status:** Blocked.
-- **Reason:** the tenants list's status bar, tiles and summary tell a tenant
-  in the trash (Frozen) and one whose notice is a warning or critical from an
-  active one, but not one near its quota or budget: ListTenants carries no
-  usage, and reading each tenant's quotas from the browser is one call per
-  row.
-- **Definition of Done:** "Near quota" and "Over budget" states in
-  `tenantStatus` (app/tenants/tenantView.ts), counted in the status bar and
-  shown on the tiles, from usage the list read serves.
-- **Blockers:** the cross-tenant read in "Dashboard: a trend for the tenants
-  nearest their limits".

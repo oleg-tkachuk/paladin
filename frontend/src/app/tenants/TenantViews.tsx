@@ -23,6 +23,7 @@ import { formatCount } from "@/lib/format/locale";
 import { parseBucketName, tenantHref } from "@/lib/navigation/hrefs";
 import { noticeFromLabels } from "@/lib/notice";
 import { isDedicatedLayout } from "@/lib/storageLayout";
+import { tenantLimitState, type TenantLimitSignals } from "@/lib/tenant/limits";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
@@ -36,26 +37,43 @@ const QUICK_LINKS = [
   { tab: "policies", label: "Policies" },
 ] as const;
 
+/** Each tenant's limit signals by id; a tenant absent from it shows none. */
+type Limits = ReadonlyMap<string, TenantLimitSignals>;
+
 /** The grid tiles and summary cards are laid out in. */
 const GRID = "grid gap-4 sm:grid-cols-2 xl:grid-cols-3";
 
-export function TenantTiles({ tenants }: { tenants: readonly Tenant[] }) {
+export function TenantTiles({
+  tenants,
+  limits,
+}: {
+  tenants: readonly Tenant[];
+  limits: Limits;
+}) {
   return (
     <ul className={GRID} aria-label="Tenants">
       {tenants.map((t) => (
         <li key={t.tenantId}>
-          <TenantTile tenant={t} />
+          <TenantTile tenant={t} limits={limits.get(t.tenantId)} />
         </li>
       ))}
     </ul>
   );
 }
 
-function TenantTile({ tenant: t }: { tenant: Tenant }) {
+function TenantTile({
+  tenant: t,
+  limits,
+}: {
+  tenant: Tenant;
+  limits: TenantLimitSignals | undefined;
+}) {
   // Slug-first, as the table links; the id stands in for a legacy row.
   const handle = t.slug || t.tenantId;
   const href = tenantHref(handle);
-  const status = tenantStatus(t);
+  const status = tenantStatus(t, limits);
+  // A notice that leads at the same tone does not hide the limit state.
+  const limit = tenantLimitState(limits);
   const notice = noticeFromLabels(t.labels);
   const bucket = parseBucketName(t.defaultBucket);
   return (
@@ -74,7 +92,12 @@ function TenantTile({ tenant: t }: { tenant: Tenant }) {
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className={cn(T.codeSmall, "truncate")}>{handle}</span>
-          <StatusLabel tone={status.tone}>{status.label}</StatusLabel>
+          <span className="flex flex-wrap items-center gap-2">
+            <StatusLabel tone={status.tone}>{status.label}</StatusLabel>
+            {limit && limit.label !== status.label && (
+              <StatusLabel tone={limit.tone}>{limit.label}</StatusLabel>
+            )}
+          </span>
         </div>
         <dl className="grid grid-cols-3 gap-2 text-sm">
           <div>
@@ -108,9 +131,17 @@ function TenantTile({ tenant: t }: { tenant: Tenant }) {
   );
 }
 
-export function TenantSummary({ tenants }: { tenants: readonly Tenant[] }) {
+export function TenantSummary({
+  tenants,
+  limits,
+}: {
+  tenants: readonly Tenant[];
+  limits: Limits;
+}) {
   const { layout, backend, labels } = tenantBreakdowns(tenants);
-  const states = stateEntries(tallyStatus(tenants, tenantStatus));
+  const states = stateEntries(
+    tallyStatus(tenants, (t) => tenantStatus(t, limits.get(t.tenantId))),
+  );
   return (
     <div className={GRID}>
       <Breakdown title="State" icon={ShieldCheckIcon} entries={states} />
