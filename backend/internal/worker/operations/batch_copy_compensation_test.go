@@ -197,3 +197,7 @@ func TestExecuteRefusesWithoutPendingTTL(t *testing.T) {
 func (*copyFakeStorage) PublicURL(context.Context, string, string, string, uuid.UUID, string, string) (string, error) {
 	return "", nil
 }
+
+func (*copyFakeRepo) TallyObjects(context.Context, objecth.TallyObjectsArgs) (objecth.ObjectTally, error) {
+	return objecth.ObjectTally{}, nil
+}

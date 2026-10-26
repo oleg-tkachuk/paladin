@@ -804,7 +804,8 @@ order they are being taken up.
 - **Definition of Done:** a folder's objects filter through facets whose
   counts ListObjects gives, as ListOperations' and ListAuditLog's facets and
   facet_counts do; or this entry says why not.
-- **Blockers:** facets and counts on ListObjects.
+- **Blockers:** the console reading them: ListObjects takes facets (state,
+  content category) and counts them with the first page.
 
 #### Facet choices remembered between visits
 

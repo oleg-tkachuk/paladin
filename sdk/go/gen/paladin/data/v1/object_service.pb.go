@@ -83,6 +83,79 @@ func (PresignTransport) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{0}
 }
 
+// ObjectContentCategory groups content types the way the console filters
+// them. The server owns the mapping, since it counts by it.
+type ObjectContentCategory int32
+
+const (
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_UNSPECIFIED ObjectContentCategory = 0
+	// image/*
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_IMAGE ObjectContentCategory = 1
+	// video/*
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_VIDEO ObjectContentCategory = 2
+	// audio/*
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_AUDIO ObjectContentCategory = 3
+	// text/*
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_TEXT ObjectContentCategory = 4
+	// application/pdf
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_PDF ObjectContentCategory = 5
+	// application/json
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_JSON ObjectContentCategory = 6
+	// Any content type the others do not name.
+	ObjectContentCategory_OBJECT_CONTENT_CATEGORY_OTHER ObjectContentCategory = 7
+)
+
+// Enum value maps for ObjectContentCategory.
+var (
+	ObjectContentCategory_name = map[int32]string{
+		0: "OBJECT_CONTENT_CATEGORY_UNSPECIFIED",
+		1: "OBJECT_CONTENT_CATEGORY_IMAGE",
+		2: "OBJECT_CONTENT_CATEGORY_VIDEO",
+		3: "OBJECT_CONTENT_CATEGORY_AUDIO",
+		4: "OBJECT_CONTENT_CATEGORY_TEXT",
+		5: "OBJECT_CONTENT_CATEGORY_PDF",
+		6: "OBJECT_CONTENT_CATEGORY_JSON",
+		7: "OBJECT_CONTENT_CATEGORY_OTHER",
+	}
+	ObjectContentCategory_value = map[string]int32{
+		"OBJECT_CONTENT_CATEGORY_UNSPECIFIED": 0,
+		"OBJECT_CONTENT_CATEGORY_IMAGE":       1,
+		"OBJECT_CONTENT_CATEGORY_VIDEO":       2,
+		"OBJECT_CONTENT_CATEGORY_AUDIO":       3,
+		"OBJECT_CONTENT_CATEGORY_TEXT":        4,
+		"OBJECT_CONTENT_CATEGORY_PDF":         5,
+		"OBJECT_CONTENT_CATEGORY_JSON":        6,
+		"OBJECT_CONTENT_CATEGORY_OTHER":       7,
+	}
+)
+
+func (x ObjectContentCategory) Enum() *ObjectContentCategory {
+	p := new(ObjectContentCategory)
+	*p = x
+	return p
+}
+
+func (x ObjectContentCategory) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ObjectContentCategory) Descriptor() protoreflect.EnumDescriptor {
+	return file_paladin_data_v1_object_service_proto_enumTypes[1].Descriptor()
+}
+
+func (ObjectContentCategory) Type() protoreflect.EnumType {
+	return &file_paladin_data_v1_object_service_proto_enumTypes[1]
+}
+
+func (x ObjectContentCategory) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ObjectContentCategory.Descriptor instead.
+func (ObjectContentCategory) EnumDescriptor() ([]byte, []int) {
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{1}
+}
+
 // ─── Versioning ─────────────────────────────────────────────────────────────
 type ObjectVersion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1617,7 +1690,14 @@ type ListObjectsRequest struct {
 	// holds no delimiter past the prefix, and in common_prefixes the rest
 	// folded into prefix + segment + delimiter. Empty lists every key under the
 	// prefix. One character, usually "/".
-	Delimiter     string `protobuf:"bytes,7,opt,name=delimiter,proto3" json:"delimiter,omitempty"`
+	Delimiter string `protobuf:"bytes,7,opt,name=delimiter,proto3" json:"delimiter,omitempty"`
+	// facets narrows the listing by state and content category, as conjuncts
+	// of filter, so the listing can count each facet without its own choices
+	// (facet_counts). Each repeated field is a disjunction; empty narrows
+	// nothing.
+	Facets *ObjectFacets `protobuf:"bytes,8,opt,name=facets,proto3" json:"facets,omitempty"`
+	// count_facets asks for facet_counts with the first page.
+	CountFacets   bool `protobuf:"varint,9,opt,name=count_facets,json=countFacets,proto3" json:"count_facets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1701,6 +1781,20 @@ func (x *ListObjectsRequest) GetDelimiter() string {
 	return ""
 }
 
+func (x *ListObjectsRequest) GetFacets() *ObjectFacets {
+	if x != nil {
+		return x.Facets
+	}
+	return nil
+}
+
+func (x *ListObjectsRequest) GetCountFacets() bool {
+	if x != nil {
+		return x.CountFacets
+	}
+	return false
+}
+
 type ListObjectsResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Objects []*Object              `protobuf:"bytes,1,rep,name=objects,proto3" json:"objects,omitempty"`
@@ -1712,8 +1806,18 @@ type ListObjectsResponse struct {
 	CommonPrefixes []string `protobuf:"bytes,3,rep,name=common_prefixes,json=commonPrefixes,proto3" json:"common_prefixes,omitempty"`
 	// More folders exist than common_prefixes holds.
 	CommonPrefixesTruncated bool `protobuf:"varint,4,opt,name=common_prefixes_truncated,json=commonPrefixesTruncated,proto3" json:"common_prefixes_truncated,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// facet_counts, when count_facets asked for them on the first page: for
+	// facet "state" each ObjectState's name, for "content_category" each
+	// ObjectContentCategory's name, with how many objects of the listing give
+	// it — the filter, the prefix and the folder level applied, and every facet
+	// but the one counted. Absent when the collection's policies decide object
+	// by object: a count would include objects the listing does not return.
+	FacetCounts []*v1.FacetCount `protobuf:"bytes,5,rep,name=facet_counts,json=facetCounts,proto3" json:"facet_counts,omitempty"`
+	// facet_counts_exact is false when the count stopped at its scan cap: the
+	// counts are then a lower bound.
+	FacetCountsExact bool `protobuf:"varint,6,opt,name=facet_counts_exact,json=facetCountsExact,proto3" json:"facet_counts_exact,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ListObjectsResponse) Reset() {
@@ -1774,6 +1878,73 @@ func (x *ListObjectsResponse) GetCommonPrefixesTruncated() bool {
 	return false
 }
 
+func (x *ListObjectsResponse) GetFacetCounts() []*v1.FacetCount {
+	if x != nil {
+		return x.FacetCounts
+	}
+	return nil
+}
+
+func (x *ListObjectsResponse) GetFacetCountsExact() bool {
+	if x != nil {
+		return x.FacetCountsExact
+	}
+	return false
+}
+
+// ObjectFacets narrows an object listing by the facets it counts.
+type ObjectFacets struct {
+	state             protoimpl.MessageState  `protogen:"open.v1"`
+	States            []ObjectState           `protobuf:"varint,1,rep,packed,name=states,proto3,enum=paladin.data.v1.ObjectState" json:"states,omitempty"`
+	ContentCategories []ObjectContentCategory `protobuf:"varint,2,rep,packed,name=content_categories,json=contentCategories,proto3,enum=paladin.data.v1.ObjectContentCategory" json:"content_categories,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ObjectFacets) Reset() {
+	*x = ObjectFacets{}
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectFacets) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectFacets) ProtoMessage() {}
+
+func (x *ObjectFacets) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectFacets.ProtoReflect.Descriptor instead.
+func (*ObjectFacets) Descriptor() ([]byte, []int) {
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ObjectFacets) GetStates() []ObjectState {
+	if x != nil {
+		return x.States
+	}
+	return nil
+}
+
+func (x *ObjectFacets) GetContentCategories() []ObjectContentCategory {
+	if x != nil {
+		return x.ContentCategories
+	}
+	return nil
+}
+
 type CountObjectsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
@@ -1784,7 +1955,7 @@ type CountObjectsRequest struct {
 
 func (x *CountObjectsRequest) Reset() {
 	*x = CountObjectsRequest{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1796,7 +1967,7 @@ func (x *CountObjectsRequest) String() string {
 func (*CountObjectsRequest) ProtoMessage() {}
 
 func (x *CountObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[25]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1809,7 +1980,7 @@ func (x *CountObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountObjectsRequest.ProtoReflect.Descriptor instead.
 func (*CountObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{25}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CountObjectsRequest) GetParent() string {
@@ -1836,7 +2007,7 @@ type CountObjectsResponse struct {
 
 func (x *CountObjectsResponse) Reset() {
 	*x = CountObjectsResponse{}
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[26]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1848,7 +2019,7 @@ func (x *CountObjectsResponse) String() string {
 func (*CountObjectsResponse) ProtoMessage() {}
 
 func (x *CountObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_data_v1_object_service_proto_msgTypes[26]
+	mi := &file_paladin_data_v1_object_service_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1861,7 +2032,7 @@ func (x *CountObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountObjectsResponse.ProtoReflect.Descriptor instead.
 func (*CountObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{26}
+	return file_paladin_data_v1_object_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CountObjectsResponse) GetApproximateCount() int64 {
@@ -1882,7 +2053,7 @@ var File_paladin_data_v1_object_service_proto protoreflect.FileDescriptor
 
 const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/data/v1/object_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\x1a paladin/common/v1/resource.proto\x1a\x1bpaladin/data/v1/types.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd7\x05\n" +
+	"$paladin/data/v1/object_service.proto\x12\x0fpaladin.data.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpaladin/common/v1/facet.proto\x1a\"paladin/common/v1/pagination.proto\x1a paladin/common/v1/resource.proto\x1a\x1bpaladin/data/v1/types.proto\x1a\x1fgoogle/api/field_behavior.proto\"\xd7\x05\n" +
 	"\rObjectVersion\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2020,7 +2191,7 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2'.paladin.data.v1.TagsOverride.TagsEntryR\x04tags\x1a7\n" +
 	"\tTagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa2\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xfc\x02\n" +
 	"\x12ListObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x122\n" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\x12\x16\n" +
@@ -2029,12 +2200,19 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\n" +
 	"sort_order\x18\x05 \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12 \n" +
 	"\x06prefix\x18\x06 \x01(\tB\b\xbaH\x05r\x03(\x80\bR\x06prefix\x12%\n" +
-	"\tdelimiter\x18\a \x01(\tB\a\xbaH\x04r\x02\x18\x01R\tdelimiter\"\xe2\x01\n" +
+	"\tdelimiter\x18\a \x01(\tB\a\xbaH\x04r\x02\x18\x01R\tdelimiter\x125\n" +
+	"\x06facets\x18\b \x01(\v2\x1d.paladin.data.v1.ObjectFacetsR\x06facets\x12!\n" +
+	"\fcount_facets\x18\t \x01(\bR\vcountFacets\"\xd2\x02\n" +
 	"\x13ListObjectsResponse\x121\n" +
 	"\aobjects\x18\x01 \x03(\v2\x17.paladin.data.v1.ObjectR\aobjects\x123\n" +
 	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\x12'\n" +
 	"\x0fcommon_prefixes\x18\x03 \x03(\tR\x0ecommonPrefixes\x12:\n" +
-	"\x19common_prefixes_truncated\x18\x04 \x01(\bR\x17commonPrefixesTruncated\"N\n" +
+	"\x19common_prefixes_truncated\x18\x04 \x01(\bR\x17commonPrefixesTruncated\x12@\n" +
+	"\ffacet_counts\x18\x05 \x03(\v2\x1d.paladin.common.v1.FacetCountR\vfacetCounts\x12,\n" +
+	"\x12facet_counts_exact\x18\x06 \x01(\bR\x10facetCountsExact\"\xbd\x01\n" +
+	"\fObjectFacets\x12E\n" +
+	"\x06states\x18\x01 \x03(\x0e2\x1c.paladin.data.v1.ObjectStateB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12f\n" +
+	"\x12content_categories\x18\x02 \x03(\x0e2&.paladin.data.v1.ObjectContentCategoryB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\x11contentCategories\"N\n" +
 	"\x13CountObjectsRequest\x12\x1f\n" +
 	"\x06parent\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06parent\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\"Y\n" +
@@ -2044,7 +2222,16 @@ const file_paladin_data_v1_object_service_proto_rawDesc = "" +
 	"\x10PresignTransport\x12!\n" +
 	"\x1dPRESIGN_TRANSPORT_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PRESIGN_TRANSPORT_PUT\x10\x01\x12\x1a\n" +
-	"\x16PRESIGN_TRANSPORT_POST\x10\x022\xa0\r\n" +
+	"\x16PRESIGN_TRANSPORT_POST\x10\x02*\xb1\x02\n" +
+	"\x15ObjectContentCategory\x12'\n" +
+	"#OBJECT_CONTENT_CATEGORY_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dOBJECT_CONTENT_CATEGORY_IMAGE\x10\x01\x12!\n" +
+	"\x1dOBJECT_CONTENT_CATEGORY_VIDEO\x10\x02\x12!\n" +
+	"\x1dOBJECT_CONTENT_CATEGORY_AUDIO\x10\x03\x12 \n" +
+	"\x1cOBJECT_CONTENT_CATEGORY_TEXT\x10\x04\x12\x1f\n" +
+	"\x1bOBJECT_CONTENT_CATEGORY_PDF\x10\x05\x12 \n" +
+	"\x1cOBJECT_CONTENT_CATEGORY_JSON\x10\x06\x12!\n" +
+	"\x1dOBJECT_CONTENT_CATEGORY_OTHER\x10\a2\xa0\r\n" +
 	"\rObjectService\x12[\n" +
 	"\fUploadObject\x12$.paladin.data.v1.UploadObjectRequest\x1a%.paladin.data.v1.UploadObjectResponse\x12a\n" +
 	"\x0eDownloadObject\x12&.paladin.data.v1.DownloadObjectRequest\x1a'.paladin.data.v1.DownloadObjectResponse\x12L\n" +
@@ -2078,133 +2265,141 @@ func file_paladin_data_v1_object_service_proto_rawDescGZIP() []byte {
 	return file_paladin_data_v1_object_service_proto_rawDescData
 }
 
-var file_paladin_data_v1_object_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_data_v1_object_service_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_paladin_data_v1_object_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_paladin_data_v1_object_service_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_paladin_data_v1_object_service_proto_goTypes = []any{
 	(PresignTransport)(0),               // 0: paladin.data.v1.PresignTransport
-	(*ObjectVersion)(nil),               // 1: paladin.data.v1.ObjectVersion
-	(*ListObjectVersionsRequest)(nil),   // 2: paladin.data.v1.ListObjectVersionsRequest
-	(*ListObjectVersionsResponse)(nil),  // 3: paladin.data.v1.ListObjectVersionsResponse
-	(*GetObjectVersionRequest)(nil),     // 4: paladin.data.v1.GetObjectVersionRequest
-	(*RestoreObjectVersionRequest)(nil), // 5: paladin.data.v1.RestoreObjectVersionRequest
-	(*UploadObjectRequest)(nil),         // 6: paladin.data.v1.UploadObjectRequest
-	(*UploadObjectResponse)(nil),        // 7: paladin.data.v1.UploadObjectResponse
-	(*DownloadObjectRequest)(nil),       // 8: paladin.data.v1.DownloadObjectRequest
-	(*DownloadObjectResponse)(nil),      // 9: paladin.data.v1.DownloadObjectResponse
-	(*GetObjectRequest)(nil),            // 10: paladin.data.v1.GetObjectRequest
-	(*LookupObjectRequest)(nil),         // 11: paladin.data.v1.LookupObjectRequest
-	(*UpdateObjectRequest)(nil),         // 12: paladin.data.v1.UpdateObjectRequest
-	(*CompleteObjectRequest)(nil),       // 13: paladin.data.v1.CompleteObjectRequest
-	(*DeleteObjectRequest)(nil),         // 14: paladin.data.v1.DeleteObjectRequest
-	(*DeleteObjectResponse)(nil),        // 15: paladin.data.v1.DeleteObjectResponse
-	(*SetObjectRetentionRequest)(nil),   // 16: paladin.data.v1.SetObjectRetentionRequest
-	(*SetObjectLegalHoldRequest)(nil),   // 17: paladin.data.v1.SetObjectLegalHoldRequest
-	(*SetObjectTaintRequest)(nil),       // 18: paladin.data.v1.SetObjectTaintRequest
-	(*GetObjectLockRequest)(nil),        // 19: paladin.data.v1.GetObjectLockRequest
-	(*RestoreObjectRequest)(nil),        // 20: paladin.data.v1.RestoreObjectRequest
-	(*CopyObjectRequest)(nil),           // 21: paladin.data.v1.CopyObjectRequest
-	(*MetadataOverride)(nil),            // 22: paladin.data.v1.MetadataOverride
-	(*TagsOverride)(nil),                // 23: paladin.data.v1.TagsOverride
-	(*ListObjectsRequest)(nil),          // 24: paladin.data.v1.ListObjectsRequest
-	(*ListObjectsResponse)(nil),         // 25: paladin.data.v1.ListObjectsResponse
-	(*CountObjectsRequest)(nil),         // 26: paladin.data.v1.CountObjectsRequest
-	(*CountObjectsResponse)(nil),        // 27: paladin.data.v1.CountObjectsResponse
-	nil,                                 // 28: paladin.data.v1.ObjectVersion.MetadataEntry
-	nil,                                 // 29: paladin.data.v1.ObjectVersion.TagsEntry
-	nil,                                 // 30: paladin.data.v1.UploadObjectRequest.MetadataEntry
-	nil,                                 // 31: paladin.data.v1.UploadObjectRequest.TagsEntry
-	nil,                                 // 32: paladin.data.v1.UpdateObjectRequest.MetadataEntry
-	nil,                                 // 33: paladin.data.v1.UpdateObjectRequest.TagsEntry
-	nil,                                 // 34: paladin.data.v1.MetadataOverride.MetadataEntry
-	nil,                                 // 35: paladin.data.v1.TagsOverride.TagsEntry
-	(*ChecksumDigest)(nil),              // 36: paladin.data.v1.ChecksumDigest
-	(*ObjectLockState)(nil),             // 37: paladin.data.v1.ObjectLockState
-	(*timestamppb.Timestamp)(nil),       // 38: google.protobuf.Timestamp
-	(*v1.PageRequest)(nil),              // 39: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),             // 40: paladin.common.v1.PageResponse
-	(v1.ChecksumAlgorithm)(0),           // 41: paladin.common.v1.ChecksumAlgorithm
-	(*Object)(nil),                      // 42: paladin.data.v1.Object
-	(*v1.PresignedUrl)(nil),             // 43: paladin.common.v1.PresignedUrl
-	(v1.CompletionMode)(0),              // 44: paladin.common.v1.CompletionMode
-	(*durationpb.Duration)(nil),         // 45: google.protobuf.Duration
-	(*fieldmaskpb.FieldMask)(nil),       // 46: google.protobuf.FieldMask
-	(TaintSignal)(0),                    // 47: paladin.data.v1.TaintSignal
-	(v1.SortOrder)(0),                   // 48: paladin.common.v1.SortOrder
+	(ObjectContentCategory)(0),          // 1: paladin.data.v1.ObjectContentCategory
+	(*ObjectVersion)(nil),               // 2: paladin.data.v1.ObjectVersion
+	(*ListObjectVersionsRequest)(nil),   // 3: paladin.data.v1.ListObjectVersionsRequest
+	(*ListObjectVersionsResponse)(nil),  // 4: paladin.data.v1.ListObjectVersionsResponse
+	(*GetObjectVersionRequest)(nil),     // 5: paladin.data.v1.GetObjectVersionRequest
+	(*RestoreObjectVersionRequest)(nil), // 6: paladin.data.v1.RestoreObjectVersionRequest
+	(*UploadObjectRequest)(nil),         // 7: paladin.data.v1.UploadObjectRequest
+	(*UploadObjectResponse)(nil),        // 8: paladin.data.v1.UploadObjectResponse
+	(*DownloadObjectRequest)(nil),       // 9: paladin.data.v1.DownloadObjectRequest
+	(*DownloadObjectResponse)(nil),      // 10: paladin.data.v1.DownloadObjectResponse
+	(*GetObjectRequest)(nil),            // 11: paladin.data.v1.GetObjectRequest
+	(*LookupObjectRequest)(nil),         // 12: paladin.data.v1.LookupObjectRequest
+	(*UpdateObjectRequest)(nil),         // 13: paladin.data.v1.UpdateObjectRequest
+	(*CompleteObjectRequest)(nil),       // 14: paladin.data.v1.CompleteObjectRequest
+	(*DeleteObjectRequest)(nil),         // 15: paladin.data.v1.DeleteObjectRequest
+	(*DeleteObjectResponse)(nil),        // 16: paladin.data.v1.DeleteObjectResponse
+	(*SetObjectRetentionRequest)(nil),   // 17: paladin.data.v1.SetObjectRetentionRequest
+	(*SetObjectLegalHoldRequest)(nil),   // 18: paladin.data.v1.SetObjectLegalHoldRequest
+	(*SetObjectTaintRequest)(nil),       // 19: paladin.data.v1.SetObjectTaintRequest
+	(*GetObjectLockRequest)(nil),        // 20: paladin.data.v1.GetObjectLockRequest
+	(*RestoreObjectRequest)(nil),        // 21: paladin.data.v1.RestoreObjectRequest
+	(*CopyObjectRequest)(nil),           // 22: paladin.data.v1.CopyObjectRequest
+	(*MetadataOverride)(nil),            // 23: paladin.data.v1.MetadataOverride
+	(*TagsOverride)(nil),                // 24: paladin.data.v1.TagsOverride
+	(*ListObjectsRequest)(nil),          // 25: paladin.data.v1.ListObjectsRequest
+	(*ListObjectsResponse)(nil),         // 26: paladin.data.v1.ListObjectsResponse
+	(*ObjectFacets)(nil),                // 27: paladin.data.v1.ObjectFacets
+	(*CountObjectsRequest)(nil),         // 28: paladin.data.v1.CountObjectsRequest
+	(*CountObjectsResponse)(nil),        // 29: paladin.data.v1.CountObjectsResponse
+	nil,                                 // 30: paladin.data.v1.ObjectVersion.MetadataEntry
+	nil,                                 // 31: paladin.data.v1.ObjectVersion.TagsEntry
+	nil,                                 // 32: paladin.data.v1.UploadObjectRequest.MetadataEntry
+	nil,                                 // 33: paladin.data.v1.UploadObjectRequest.TagsEntry
+	nil,                                 // 34: paladin.data.v1.UpdateObjectRequest.MetadataEntry
+	nil,                                 // 35: paladin.data.v1.UpdateObjectRequest.TagsEntry
+	nil,                                 // 36: paladin.data.v1.MetadataOverride.MetadataEntry
+	nil,                                 // 37: paladin.data.v1.TagsOverride.TagsEntry
+	(*ChecksumDigest)(nil),              // 38: paladin.data.v1.ChecksumDigest
+	(*ObjectLockState)(nil),             // 39: paladin.data.v1.ObjectLockState
+	(*timestamppb.Timestamp)(nil),       // 40: google.protobuf.Timestamp
+	(*v1.PageRequest)(nil),              // 41: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),             // 42: paladin.common.v1.PageResponse
+	(v1.ChecksumAlgorithm)(0),           // 43: paladin.common.v1.ChecksumAlgorithm
+	(*Object)(nil),                      // 44: paladin.data.v1.Object
+	(*v1.PresignedUrl)(nil),             // 45: paladin.common.v1.PresignedUrl
+	(v1.CompletionMode)(0),              // 46: paladin.common.v1.CompletionMode
+	(*durationpb.Duration)(nil),         // 47: google.protobuf.Duration
+	(*fieldmaskpb.FieldMask)(nil),       // 48: google.protobuf.FieldMask
+	(TaintSignal)(0),                    // 49: paladin.data.v1.TaintSignal
+	(v1.SortOrder)(0),                   // 50: paladin.common.v1.SortOrder
+	(*v1.FacetCount)(nil),               // 51: paladin.common.v1.FacetCount
+	(ObjectState)(0),                    // 52: paladin.data.v1.ObjectState
 }
 var file_paladin_data_v1_object_service_proto_depIdxs = []int32{
-	36, // 0: paladin.data.v1.ObjectVersion.checksum:type_name -> paladin.data.v1.ChecksumDigest
-	28, // 1: paladin.data.v1.ObjectVersion.metadata:type_name -> paladin.data.v1.ObjectVersion.MetadataEntry
-	29, // 2: paladin.data.v1.ObjectVersion.tags:type_name -> paladin.data.v1.ObjectVersion.TagsEntry
-	37, // 3: paladin.data.v1.ObjectVersion.lock:type_name -> paladin.data.v1.ObjectLockState
-	38, // 4: paladin.data.v1.ObjectVersion.created_at:type_name -> google.protobuf.Timestamp
-	39, // 5: paladin.data.v1.ListObjectVersionsRequest.page:type_name -> paladin.common.v1.PageRequest
-	1,  // 6: paladin.data.v1.ListObjectVersionsResponse.versions:type_name -> paladin.data.v1.ObjectVersion
-	40, // 7: paladin.data.v1.ListObjectVersionsResponse.page:type_name -> paladin.common.v1.PageResponse
-	41, // 8: paladin.data.v1.UploadObjectRequest.checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
-	30, // 9: paladin.data.v1.UploadObjectRequest.metadata:type_name -> paladin.data.v1.UploadObjectRequest.MetadataEntry
-	31, // 10: paladin.data.v1.UploadObjectRequest.tags:type_name -> paladin.data.v1.UploadObjectRequest.TagsEntry
+	38, // 0: paladin.data.v1.ObjectVersion.checksum:type_name -> paladin.data.v1.ChecksumDigest
+	30, // 1: paladin.data.v1.ObjectVersion.metadata:type_name -> paladin.data.v1.ObjectVersion.MetadataEntry
+	31, // 2: paladin.data.v1.ObjectVersion.tags:type_name -> paladin.data.v1.ObjectVersion.TagsEntry
+	39, // 3: paladin.data.v1.ObjectVersion.lock:type_name -> paladin.data.v1.ObjectLockState
+	40, // 4: paladin.data.v1.ObjectVersion.created_at:type_name -> google.protobuf.Timestamp
+	41, // 5: paladin.data.v1.ListObjectVersionsRequest.page:type_name -> paladin.common.v1.PageRequest
+	2,  // 6: paladin.data.v1.ListObjectVersionsResponse.versions:type_name -> paladin.data.v1.ObjectVersion
+	42, // 7: paladin.data.v1.ListObjectVersionsResponse.page:type_name -> paladin.common.v1.PageResponse
+	43, // 8: paladin.data.v1.UploadObjectRequest.checksum_algorithm:type_name -> paladin.common.v1.ChecksumAlgorithm
+	32, // 9: paladin.data.v1.UploadObjectRequest.metadata:type_name -> paladin.data.v1.UploadObjectRequest.MetadataEntry
+	33, // 10: paladin.data.v1.UploadObjectRequest.tags:type_name -> paladin.data.v1.UploadObjectRequest.TagsEntry
 	0,  // 11: paladin.data.v1.UploadObjectRequest.transport:type_name -> paladin.data.v1.PresignTransport
-	42, // 12: paladin.data.v1.UploadObjectResponse.object:type_name -> paladin.data.v1.Object
-	43, // 13: paladin.data.v1.UploadObjectResponse.upload_url:type_name -> paladin.common.v1.PresignedUrl
-	44, // 14: paladin.data.v1.UploadObjectResponse.completion_mode:type_name -> paladin.common.v1.CompletionMode
-	45, // 15: paladin.data.v1.DownloadObjectRequest.ttl:type_name -> google.protobuf.Duration
-	42, // 16: paladin.data.v1.DownloadObjectResponse.object:type_name -> paladin.data.v1.Object
-	43, // 17: paladin.data.v1.DownloadObjectResponse.download_url:type_name -> paladin.common.v1.PresignedUrl
-	46, // 18: paladin.data.v1.UpdateObjectRequest.update_mask:type_name -> google.protobuf.FieldMask
-	32, // 19: paladin.data.v1.UpdateObjectRequest.metadata:type_name -> paladin.data.v1.UpdateObjectRequest.MetadataEntry
-	33, // 20: paladin.data.v1.UpdateObjectRequest.tags:type_name -> paladin.data.v1.UpdateObjectRequest.TagsEntry
-	42, // 21: paladin.data.v1.DeleteObjectResponse.object:type_name -> paladin.data.v1.Object
-	38, // 22: paladin.data.v1.SetObjectRetentionRequest.retain_until:type_name -> google.protobuf.Timestamp
-	47, // 23: paladin.data.v1.SetObjectTaintRequest.signals:type_name -> paladin.data.v1.TaintSignal
-	22, // 24: paladin.data.v1.CopyObjectRequest.metadata_override:type_name -> paladin.data.v1.MetadataOverride
-	23, // 25: paladin.data.v1.CopyObjectRequest.tags_override:type_name -> paladin.data.v1.TagsOverride
-	34, // 26: paladin.data.v1.MetadataOverride.metadata:type_name -> paladin.data.v1.MetadataOverride.MetadataEntry
-	35, // 27: paladin.data.v1.TagsOverride.tags:type_name -> paladin.data.v1.TagsOverride.TagsEntry
-	39, // 28: paladin.data.v1.ListObjectsRequest.page:type_name -> paladin.common.v1.PageRequest
-	48, // 29: paladin.data.v1.ListObjectsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
-	42, // 30: paladin.data.v1.ListObjectsResponse.objects:type_name -> paladin.data.v1.Object
-	40, // 31: paladin.data.v1.ListObjectsResponse.page:type_name -> paladin.common.v1.PageResponse
-	6,  // 32: paladin.data.v1.ObjectService.UploadObject:input_type -> paladin.data.v1.UploadObjectRequest
-	8,  // 33: paladin.data.v1.ObjectService.DownloadObject:input_type -> paladin.data.v1.DownloadObjectRequest
-	10, // 34: paladin.data.v1.ObjectService.GetObject:input_type -> paladin.data.v1.GetObjectRequest
-	11, // 35: paladin.data.v1.ObjectService.LookupObject:input_type -> paladin.data.v1.LookupObjectRequest
-	12, // 36: paladin.data.v1.ObjectService.UpdateObject:input_type -> paladin.data.v1.UpdateObjectRequest
-	13, // 37: paladin.data.v1.ObjectService.CompleteObject:input_type -> paladin.data.v1.CompleteObjectRequest
-	14, // 38: paladin.data.v1.ObjectService.DeleteObject:input_type -> paladin.data.v1.DeleteObjectRequest
-	20, // 39: paladin.data.v1.ObjectService.RestoreObject:input_type -> paladin.data.v1.RestoreObjectRequest
-	21, // 40: paladin.data.v1.ObjectService.CopyObject:input_type -> paladin.data.v1.CopyObjectRequest
-	24, // 41: paladin.data.v1.ObjectService.ListObjects:input_type -> paladin.data.v1.ListObjectsRequest
-	26, // 42: paladin.data.v1.ObjectService.CountObjects:input_type -> paladin.data.v1.CountObjectsRequest
-	2,  // 43: paladin.data.v1.ObjectService.ListObjectVersions:input_type -> paladin.data.v1.ListObjectVersionsRequest
-	4,  // 44: paladin.data.v1.ObjectService.GetObjectVersion:input_type -> paladin.data.v1.GetObjectVersionRequest
-	5,  // 45: paladin.data.v1.ObjectService.RestoreObjectVersion:input_type -> paladin.data.v1.RestoreObjectVersionRequest
-	16, // 46: paladin.data.v1.ObjectService.SetObjectRetention:input_type -> paladin.data.v1.SetObjectRetentionRequest
-	17, // 47: paladin.data.v1.ObjectService.SetObjectLegalHold:input_type -> paladin.data.v1.SetObjectLegalHoldRequest
-	19, // 48: paladin.data.v1.ObjectService.GetObjectLock:input_type -> paladin.data.v1.GetObjectLockRequest
-	18, // 49: paladin.data.v1.ObjectService.SetObjectTaint:input_type -> paladin.data.v1.SetObjectTaintRequest
-	7,  // 50: paladin.data.v1.ObjectService.UploadObject:output_type -> paladin.data.v1.UploadObjectResponse
-	9,  // 51: paladin.data.v1.ObjectService.DownloadObject:output_type -> paladin.data.v1.DownloadObjectResponse
-	42, // 52: paladin.data.v1.ObjectService.GetObject:output_type -> paladin.data.v1.Object
-	42, // 53: paladin.data.v1.ObjectService.LookupObject:output_type -> paladin.data.v1.Object
-	42, // 54: paladin.data.v1.ObjectService.UpdateObject:output_type -> paladin.data.v1.Object
-	42, // 55: paladin.data.v1.ObjectService.CompleteObject:output_type -> paladin.data.v1.Object
-	15, // 56: paladin.data.v1.ObjectService.DeleteObject:output_type -> paladin.data.v1.DeleteObjectResponse
-	42, // 57: paladin.data.v1.ObjectService.RestoreObject:output_type -> paladin.data.v1.Object
-	42, // 58: paladin.data.v1.ObjectService.CopyObject:output_type -> paladin.data.v1.Object
-	25, // 59: paladin.data.v1.ObjectService.ListObjects:output_type -> paladin.data.v1.ListObjectsResponse
-	27, // 60: paladin.data.v1.ObjectService.CountObjects:output_type -> paladin.data.v1.CountObjectsResponse
-	3,  // 61: paladin.data.v1.ObjectService.ListObjectVersions:output_type -> paladin.data.v1.ListObjectVersionsResponse
-	1,  // 62: paladin.data.v1.ObjectService.GetObjectVersion:output_type -> paladin.data.v1.ObjectVersion
-	42, // 63: paladin.data.v1.ObjectService.RestoreObjectVersion:output_type -> paladin.data.v1.Object
-	37, // 64: paladin.data.v1.ObjectService.SetObjectRetention:output_type -> paladin.data.v1.ObjectLockState
-	37, // 65: paladin.data.v1.ObjectService.SetObjectLegalHold:output_type -> paladin.data.v1.ObjectLockState
-	37, // 66: paladin.data.v1.ObjectService.GetObjectLock:output_type -> paladin.data.v1.ObjectLockState
-	42, // 67: paladin.data.v1.ObjectService.SetObjectTaint:output_type -> paladin.data.v1.Object
-	50, // [50:68] is the sub-list for method output_type
-	32, // [32:50] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	44, // 12: paladin.data.v1.UploadObjectResponse.object:type_name -> paladin.data.v1.Object
+	45, // 13: paladin.data.v1.UploadObjectResponse.upload_url:type_name -> paladin.common.v1.PresignedUrl
+	46, // 14: paladin.data.v1.UploadObjectResponse.completion_mode:type_name -> paladin.common.v1.CompletionMode
+	47, // 15: paladin.data.v1.DownloadObjectRequest.ttl:type_name -> google.protobuf.Duration
+	44, // 16: paladin.data.v1.DownloadObjectResponse.object:type_name -> paladin.data.v1.Object
+	45, // 17: paladin.data.v1.DownloadObjectResponse.download_url:type_name -> paladin.common.v1.PresignedUrl
+	48, // 18: paladin.data.v1.UpdateObjectRequest.update_mask:type_name -> google.protobuf.FieldMask
+	34, // 19: paladin.data.v1.UpdateObjectRequest.metadata:type_name -> paladin.data.v1.UpdateObjectRequest.MetadataEntry
+	35, // 20: paladin.data.v1.UpdateObjectRequest.tags:type_name -> paladin.data.v1.UpdateObjectRequest.TagsEntry
+	44, // 21: paladin.data.v1.DeleteObjectResponse.object:type_name -> paladin.data.v1.Object
+	40, // 22: paladin.data.v1.SetObjectRetentionRequest.retain_until:type_name -> google.protobuf.Timestamp
+	49, // 23: paladin.data.v1.SetObjectTaintRequest.signals:type_name -> paladin.data.v1.TaintSignal
+	23, // 24: paladin.data.v1.CopyObjectRequest.metadata_override:type_name -> paladin.data.v1.MetadataOverride
+	24, // 25: paladin.data.v1.CopyObjectRequest.tags_override:type_name -> paladin.data.v1.TagsOverride
+	36, // 26: paladin.data.v1.MetadataOverride.metadata:type_name -> paladin.data.v1.MetadataOverride.MetadataEntry
+	37, // 27: paladin.data.v1.TagsOverride.tags:type_name -> paladin.data.v1.TagsOverride.TagsEntry
+	41, // 28: paladin.data.v1.ListObjectsRequest.page:type_name -> paladin.common.v1.PageRequest
+	50, // 29: paladin.data.v1.ListObjectsRequest.sort_order:type_name -> paladin.common.v1.SortOrder
+	27, // 30: paladin.data.v1.ListObjectsRequest.facets:type_name -> paladin.data.v1.ObjectFacets
+	44, // 31: paladin.data.v1.ListObjectsResponse.objects:type_name -> paladin.data.v1.Object
+	42, // 32: paladin.data.v1.ListObjectsResponse.page:type_name -> paladin.common.v1.PageResponse
+	51, // 33: paladin.data.v1.ListObjectsResponse.facet_counts:type_name -> paladin.common.v1.FacetCount
+	52, // 34: paladin.data.v1.ObjectFacets.states:type_name -> paladin.data.v1.ObjectState
+	1,  // 35: paladin.data.v1.ObjectFacets.content_categories:type_name -> paladin.data.v1.ObjectContentCategory
+	7,  // 36: paladin.data.v1.ObjectService.UploadObject:input_type -> paladin.data.v1.UploadObjectRequest
+	9,  // 37: paladin.data.v1.ObjectService.DownloadObject:input_type -> paladin.data.v1.DownloadObjectRequest
+	11, // 38: paladin.data.v1.ObjectService.GetObject:input_type -> paladin.data.v1.GetObjectRequest
+	12, // 39: paladin.data.v1.ObjectService.LookupObject:input_type -> paladin.data.v1.LookupObjectRequest
+	13, // 40: paladin.data.v1.ObjectService.UpdateObject:input_type -> paladin.data.v1.UpdateObjectRequest
+	14, // 41: paladin.data.v1.ObjectService.CompleteObject:input_type -> paladin.data.v1.CompleteObjectRequest
+	15, // 42: paladin.data.v1.ObjectService.DeleteObject:input_type -> paladin.data.v1.DeleteObjectRequest
+	21, // 43: paladin.data.v1.ObjectService.RestoreObject:input_type -> paladin.data.v1.RestoreObjectRequest
+	22, // 44: paladin.data.v1.ObjectService.CopyObject:input_type -> paladin.data.v1.CopyObjectRequest
+	25, // 45: paladin.data.v1.ObjectService.ListObjects:input_type -> paladin.data.v1.ListObjectsRequest
+	28, // 46: paladin.data.v1.ObjectService.CountObjects:input_type -> paladin.data.v1.CountObjectsRequest
+	3,  // 47: paladin.data.v1.ObjectService.ListObjectVersions:input_type -> paladin.data.v1.ListObjectVersionsRequest
+	5,  // 48: paladin.data.v1.ObjectService.GetObjectVersion:input_type -> paladin.data.v1.GetObjectVersionRequest
+	6,  // 49: paladin.data.v1.ObjectService.RestoreObjectVersion:input_type -> paladin.data.v1.RestoreObjectVersionRequest
+	17, // 50: paladin.data.v1.ObjectService.SetObjectRetention:input_type -> paladin.data.v1.SetObjectRetentionRequest
+	18, // 51: paladin.data.v1.ObjectService.SetObjectLegalHold:input_type -> paladin.data.v1.SetObjectLegalHoldRequest
+	20, // 52: paladin.data.v1.ObjectService.GetObjectLock:input_type -> paladin.data.v1.GetObjectLockRequest
+	19, // 53: paladin.data.v1.ObjectService.SetObjectTaint:input_type -> paladin.data.v1.SetObjectTaintRequest
+	8,  // 54: paladin.data.v1.ObjectService.UploadObject:output_type -> paladin.data.v1.UploadObjectResponse
+	10, // 55: paladin.data.v1.ObjectService.DownloadObject:output_type -> paladin.data.v1.DownloadObjectResponse
+	44, // 56: paladin.data.v1.ObjectService.GetObject:output_type -> paladin.data.v1.Object
+	44, // 57: paladin.data.v1.ObjectService.LookupObject:output_type -> paladin.data.v1.Object
+	44, // 58: paladin.data.v1.ObjectService.UpdateObject:output_type -> paladin.data.v1.Object
+	44, // 59: paladin.data.v1.ObjectService.CompleteObject:output_type -> paladin.data.v1.Object
+	16, // 60: paladin.data.v1.ObjectService.DeleteObject:output_type -> paladin.data.v1.DeleteObjectResponse
+	44, // 61: paladin.data.v1.ObjectService.RestoreObject:output_type -> paladin.data.v1.Object
+	44, // 62: paladin.data.v1.ObjectService.CopyObject:output_type -> paladin.data.v1.Object
+	26, // 63: paladin.data.v1.ObjectService.ListObjects:output_type -> paladin.data.v1.ListObjectsResponse
+	29, // 64: paladin.data.v1.ObjectService.CountObjects:output_type -> paladin.data.v1.CountObjectsResponse
+	4,  // 65: paladin.data.v1.ObjectService.ListObjectVersions:output_type -> paladin.data.v1.ListObjectVersionsResponse
+	2,  // 66: paladin.data.v1.ObjectService.GetObjectVersion:output_type -> paladin.data.v1.ObjectVersion
+	44, // 67: paladin.data.v1.ObjectService.RestoreObjectVersion:output_type -> paladin.data.v1.Object
+	39, // 68: paladin.data.v1.ObjectService.SetObjectRetention:output_type -> paladin.data.v1.ObjectLockState
+	39, // 69: paladin.data.v1.ObjectService.SetObjectLegalHold:output_type -> paladin.data.v1.ObjectLockState
+	39, // 70: paladin.data.v1.ObjectService.GetObjectLock:output_type -> paladin.data.v1.ObjectLockState
+	44, // 71: paladin.data.v1.ObjectService.SetObjectTaint:output_type -> paladin.data.v1.Object
+	54, // [54:72] is the sub-list for method output_type
+	36, // [36:54] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_paladin_data_v1_object_service_proto_init() }
@@ -2219,8 +2414,8 @@ func file_paladin_data_v1_object_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_data_v1_object_service_proto_rawDesc), len(file_paladin_data_v1_object_service_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   35,
+			NumEnums:      2,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

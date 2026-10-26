@@ -55,3 +55,7 @@ func TestListObjectsAnswersTheFolders(t *testing.T) {
 		t.Errorf("second page: folders %v, asked %d times, err %v", out.GetCommonPrefixes(), h.prefixCalls, err)
 	}
 }
+
+func (f *folderHandler) CountObjectFacets(context.Context, objecth.ListObjectsInput) (*objecth.ObjectFacetCounts, error) {
+	return nil, nil
+}

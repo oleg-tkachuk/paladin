@@ -2280,6 +2280,10 @@ def _unhonoured_list_field(request: object_service_pb2.ListObjectsRequest) -> st
         return "order_by"
     if request.sort_order != pagination_pb2.SORT_ORDER_UNSPECIFIED:
         return "sort_order"
+    if request.facets.states or request.facets.content_categories:
+        return "facets"
+    if request.count_facets:
+        return "count_facets"
     return ""
 
 

@@ -391,3 +391,11 @@ func (c *countingHandler) CopyObject(context.Context, objecth.CopyObjectInput) (
 	c.n++
 	return &objecth.Object{}, nil
 }
+
+func (c *countingHandler) CountObjectFacets(context.Context, objecth.ListObjectsInput) (*objecth.ObjectFacetCounts, error) {
+	return nil, nil
+}
+
+func (f failingHandler) CountObjectFacets(context.Context, objecth.ListObjectsInput) (*objecth.ObjectFacetCounts, error) {
+	return nil, nil
+}

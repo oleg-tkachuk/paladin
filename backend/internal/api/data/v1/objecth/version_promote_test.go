@@ -266,3 +266,7 @@ func TestUnsetDeleteMarkerCurrentNoOpWhenVersioningOff(t *testing.T) {
 }
 
 func timePtr(t time.Time) *time.Time { return &t }
+
+func (*fakeObjectRepo) TallyObjects(context.Context, TallyObjectsArgs) (ObjectTally, error) {
+	return ObjectTally{}, nil
+}

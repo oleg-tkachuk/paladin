@@ -95,3 +95,7 @@ func TestObjectRequestsMapOntoTheHandler(t *testing.T) {
 		}
 	})
 }
+
+func (r *recordingHandler) CountObjectFacets(context.Context, objecth.ListObjectsInput) (*objecth.ObjectFacetCounts, error) {
+	return nil, nil
+}

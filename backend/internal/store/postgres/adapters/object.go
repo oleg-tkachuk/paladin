@@ -369,6 +369,46 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 	}
 }
 
+// TallyObjects counts the listing's objects by state and content type: the
+// candidates ListObjects would fetch, at the same prefix and folder level,
+// each kept only if the compiled filter accepts it. It scans at most
+// countScanCap rows, as CountObjects does, and says when it stopped there.
+func (r *ObjectRepo) TallyObjects(ctx context.Context, args objecth.TallyObjectsArgs) (objecth.ObjectTally, error) {
+	tally := objecth.ObjectTally{Counts: map[objecth.ObjectTallyKey]int64{}}
+	branches := withLevel(narrowToPrefix(objectBranchHints(args.Filter), args.Prefix), args.Prefix, args.Delimiter)
+	liveOnly := liveObjectsOnly(args.Filter) && !args.IncludeDeleted
+	order := keyset.Order{Field: objectOrderByID}
+	var (
+		scanned int64
+		after   *keyset.Cursor
+	)
+	for {
+		rows, next, more, err := r.candidates(ctx, args.TenantID, args.Collection, branches, liveOnly, order, after, tallyPageSize)
+		if err != nil {
+			return objecth.ObjectTally{}, fmt.Errorf("tally objects: %w", err)
+		}
+		for _, row := range rows {
+			o := objectFromSQLC(row.Object, row.CollectionName)
+			scanned++
+			if atLevel(o.Key, args.Prefix, args.Delimiter) &&
+				(args.CompiledCEL == nil || rowMatches(args.CompiledCEL, o)) {
+				tally.Counts[objecth.ObjectTallyKey{State: o.State, ContentType: o.ContentType}]++
+			}
+			if scanned >= countScanCap {
+				return tally, nil
+			}
+		}
+		if !more {
+			tally.Exact = true
+			return tally, nil
+		}
+		after = &next
+	}
+}
+
+// tallyPageSize is how many candidates TallyObjects fetches per query.
+const tallyPageSize int32 = 500
+
 // objectStateField is the ObjectSchema field holding an object's state.
 const objectStateField = "state"
 

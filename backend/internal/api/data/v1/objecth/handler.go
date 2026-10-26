@@ -312,6 +312,9 @@ type Repository interface {
 	// most MaxCommonPrefixes, and whether more exist.
 	ListCommonPrefixes(ctx context.Context, args ListPrefixesArgs) ([]string, bool, error)
 	CountObjects(ctx context.Context, args CountObjectsArgs) (count int64, exact bool, err error)
+	// TallyObjects counts a listing's objects by state and content type
+	// together, scanning at most countScanCap rows; Exact is false past it.
+	TallyObjects(ctx context.Context, args TallyObjectsArgs) (ObjectTally, error)
 	// ListDistinctTags returns the distinct tag key→values across the
 	// Collection's live (non-DELETED) objects, each value list sorted. Backs
 	// the tag-facet filter dropdown.
@@ -1059,6 +1062,8 @@ type ListObjectsInput struct {
 	Prefix string
 	// Delimiter lists one level under Prefix; empty lists every level.
 	Delimiter string
+	// Facets narrow the listing as further conjuncts of Filter.
+	Facets ObjectFacets
 }
 
 // maxDelimiterRunes is how long a folder delimiter may be: one character,
@@ -1077,6 +1082,7 @@ func checkDelimiter(d string) error {
 // MaxCommonPrefixes, and whether more exist. The same gates as ListObjects
 // hold it, and the filter must compile, though only its state narrows them.
 func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) ([]string, bool, error) {
+	in.Filter = withFacets(in.Filter, in.Facets)
 	if in.Delimiter == "" {
 		return nil, false, nil
 	}
@@ -1119,6 +1125,7 @@ func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (
 // skipped — listing is permitted for any authenticated tenant member to keep
 // pagination cheap (same contract as ListCollections).
 func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
+	in.Filter = withFacets(in.Filter, in.Facets)
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
