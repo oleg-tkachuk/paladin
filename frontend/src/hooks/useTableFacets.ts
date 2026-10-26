@@ -8,12 +8,14 @@ import {
   chosen,
   countedOptions,
   countOptions,
+  FACET_COUNTING,
   facetUpdates,
   filterByFacets,
   initialSelection,
   parseFacets,
   type CountedOption,
   type Facet,
+  type FacetCounting,
   type FacetCounts,
   type FacetSelection,
 } from "@/lib/table/facets";
@@ -37,6 +39,8 @@ export interface FacetControl {
   options: readonly CountedOption[];
   selected: readonly string[];
   onChange: (values: readonly string[]) => void;
+  /** How the options' counts read; exact when absent. */
+  counting?: FacetCounting;
 }
 
 /**
@@ -73,6 +77,7 @@ function controlsOf<R>(
   selection: FacetSelection,
   choose: (id: string, values: readonly string[]) => void,
   options: (f: Facet<R>, selected: readonly string[]) => CountedOption[],
+  counting: FacetCounting = FACET_COUNTING.exact,
 ): FacetControl[] {
   return facets.map((f) => {
     const selected = chosen(selection, f.id);
@@ -82,6 +87,7 @@ function controlsOf<R>(
       options: options(f, selected),
       selected,
       onChange: (values) => choose(f.id, values),
+      counting,
     };
   });
 }
@@ -123,8 +129,10 @@ export function useTableFacets<R>(
  * the server to narrow by, and the toolbar's controls for the counts its
  * answer then gives — each answer counted by the server over the whole
  * listing. The choices come before the answer, so the controls are a
- * function of its counts. The rows are the server's to narrow; none are
- * filtered here.
+ * function of its counts, and of how they read: a server that capped its
+ * scan gives lower bounds, one that withheld them gives none. The rows are
+ * the server's to narrow; none are filtered here. `choose` sets one facet's
+ * choices outright, as a saved view does.
  */
 export function useServerFacets<R>(
   facets: readonly Facet<R>[],
@@ -132,13 +140,24 @@ export function useServerFacets<R>(
 ) {
   const { selection, choose, clear } = useFacetSelection(facets, url);
   const controls = useCallback(
-    (counts: FacetCounts) =>
-      controlsOf(facets, selection, choose, (f, selected) =>
-        countedOptions(f, counts.get(f.id) ?? NO_COUNTS, selected),
+    (counts: FacetCounts, counting: FacetCounting = FACET_COUNTING.exact) =>
+      controlsOf(
+        facets,
+        selection,
+        choose,
+        (f, selected) =>
+          countedOptions(f, counts.get(f.id) ?? NO_COUNTS, selected),
+        counting,
       ),
     [facets, selection, choose],
   );
-  return { selection, controls, active: activeFacets(selection), clear };
+  return {
+    selection,
+    controls,
+    choose,
+    active: activeFacets(selection),
+    clear,
+  };
 }
 
 const NO_COUNTS: ReadonlyMap<string, number> = new Map();

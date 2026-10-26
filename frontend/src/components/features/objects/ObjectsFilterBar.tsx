@@ -16,15 +16,16 @@ import { useState } from "react";
 import { Select } from "@/components/ui/Select";
 import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 import { Dropdown } from "@/components/ui/Dropdown";
-import { CONTENT_TYPE_OPTIONS } from "@/lib/objectFilter";
+import { FacetFilter } from "@/components/ui/FacetFilter";
+import type { FacetControl } from "@/hooks/useTableFacets";
 
 interface SavedView {
   name: string;
   filters: {
     search?: string;
-    status?: string;
+    status?: string | string[];
     tag?: string;
-    type?: string;
+    type?: string | string[];
     meta?: string;
     recursive?: boolean;
   };
@@ -32,14 +33,12 @@ interface SavedView {
 
 /**
  * The object-list filter values, collapsed into one object. `tag` and `meta`
- * are "key=value" facets and `type` a content-type category; each is
- * undefined when unfiltered, as is `status`.
+ * are "key=value" filters, each undefined when unfiltered. The status and
+ * content type are facets the server counts, and come as `facets`.
  */
 export interface FilterState {
   search: string;
-  status: string | undefined;
   tag: string | undefined;
-  type: string | undefined;
   meta: string | undefined;
   recursive: boolean;
 }
@@ -49,6 +48,8 @@ interface ObjectsFilterBarProps {
   filter: FilterState;
   /** Apply a single-field patch — the bar always changes one field at a time. */
   onFilterChange: (patch: Partial<FilterState>) => void;
+  /** The status and content-type facets, counted by the server. */
+  facets: readonly FacetControl[];
   /** Distinct "key=value" pairs seen across loaded objects. */
   tagOptions: string[];
   visibleColumns: Set<string>;
@@ -61,16 +62,10 @@ interface ObjectsFilterBarProps {
   onRefresh: () => void;
 }
 
-const STATUS_OPTIONS = [
-  { value: "all", label: "All Statuses" },
-  { value: "PENDING", label: "Pending" },
-  { value: "AVAILABLE", label: "Available" },
-  { value: "DELETED", label: "Deleted" },
-];
-
 export function ObjectsFilterBar({
   filter,
   onFilterChange,
+  facets,
   tagOptions,
   visibleColumns,
   onToggleColumn,
@@ -83,16 +78,12 @@ export function ObjectsFilterBar({
 }: ObjectsFilterBarProps) {
   // Re-derive the per-field values + setters from the bundled filter so the
   // markup below stays unchanged. Each setter emits a single-field patch.
-  const { search, status, tag, type, meta, recursive } = filter;
+  const { search, tag, meta, recursive } = filter;
   const onSearchChange = (value: string) => onFilterChange({ search: value });
-  const onStatusChange = (value: string | undefined) =>
-    onFilterChange({ status: value });
   const onTagChange = (value: string | undefined) =>
     onFilterChange({ tag: value });
   const onRecursiveChange = (value: boolean) =>
     onFilterChange({ recursive: value });
-  const onTypeChange = (value: string | undefined) =>
-    onFilterChange({ type: value });
   return (
     <div className="flex flex-col gap-3 bg-card/30 border border-border rounded-2xl p-4">
       {/* The refresh sits with the search, on the line every width keeps:
@@ -140,12 +131,9 @@ export function ObjectsFilterBar({
           </label>
         </div>
 
-        <Select
-          aria-label="Filter by status"
-          options={STATUS_OPTIONS}
-          value={status || "all"}
-          onChange={(val) => onStatusChange(val === "all" ? undefined : val)}
-        />
+        {facets.map(({ id, ...facet }) => (
+          <FacetFilter key={id} {...facet} />
+        ))}
 
         {tagOptions.length > 0 && (
           <Select
@@ -161,19 +149,6 @@ export function ObjectsFilterBar({
             onChange={(val) => onTagChange(val === "all" ? undefined : val)}
           />
         )}
-
-        <Select
-          aria-label="Filter by content type"
-          options={[
-            { value: "all", label: "All Types" },
-            ...CONTENT_TYPE_OPTIONS.map((o) => ({
-              value: o.value,
-              label: o.label,
-            })),
-          ]}
-          value={type || "all"}
-          onChange={(val) => onTypeChange(val === "all" ? undefined : val)}
-        />
 
         <MetadataFilterInput
           value={meta}

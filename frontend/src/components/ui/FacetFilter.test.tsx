@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { render, screen } from "@/test/utils";
 
+import { FACET_COUNTING } from "@/lib/table/facets";
 import { StatusTone } from "@/lib/ui/status";
 
 import { FacetFilter } from "./FacetFilter";
@@ -92,5 +93,42 @@ describe("FacetFilter", () => {
     );
     await open("Filter by label");
     expect(screen.getByText("Nothing to filter by")).toBeInTheDocument();
+  });
+
+  // A server that stopped counting at its scan cap gives lower bounds.
+  it("marks every count a lower bound when the server's count stopped short", async () => {
+    render(
+      <FacetFilter
+        label="State"
+        options={[{ value: "on", label: "Enabled", count: 10_000 }]}
+        selected={[]}
+        onChange={() => {}}
+        counting={FACET_COUNTING.lowerBound}
+      />,
+    );
+    await open("Filter by state");
+    const on = screen.getByRole("menuitemcheckbox", {
+      name: "Enabled, at least 10,000 rows",
+    });
+    expect(on).toHaveTextContent(/^Enabled10k\+$/);
+  });
+
+  // Withheld is not nought: no count shows, and the answer is still chosen.
+  it("offers the answers without a count when the server gave none", async () => {
+    const onChange = vi.fn();
+    render(
+      <FacetFilter
+        label="State"
+        options={OPTIONS}
+        selected={[]}
+        onChange={onChange}
+        counting={FACET_COUNTING.withheld}
+      />,
+    );
+    await open("Filter by state");
+    const on = screen.getByRole("menuitemcheckbox", { name: "Enabled" });
+    expect(on).toHaveTextContent(/^Enabled$/);
+    await userEvent.click(on);
+    expect(onChange).toHaveBeenLastCalledWith(["on"]);
   });
 });

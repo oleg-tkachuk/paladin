@@ -89,7 +89,7 @@ export function ObjectsTable({
   editingLabelsId,
   editLabelsValue,
   search,
-  status,
+  narrowed,
   rowProps,
   folders,
 }: {
@@ -112,7 +112,8 @@ export function ObjectsTable({
   editingLabelsId: string | null;
   editLabelsValue: string;
   search: string;
-  status: string | undefined;
+  /** A facet or filter narrows the listing, so an empty one is filtered. */
+  narrowed: boolean;
   rowProps: ObjectRowCallbacks;
   folders?: FolderRows;
 }) {
@@ -260,7 +261,7 @@ export function ObjectsTable({
                   <EmptyState
                     icon={DocumentIcon}
                     what="objects"
-                    reason={emptyReason({ filtered: !!(search || status) })}
+                    reason={emptyReason({ filtered: !!search || narrowed })}
                     purpose="Drop files on the list, or use Upload, to add the first."
                   />
                 )}

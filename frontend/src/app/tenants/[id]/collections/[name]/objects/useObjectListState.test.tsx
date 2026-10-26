@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
-// status, tag and search are read out of the QUERY STRING, so they are text a
-// link can carry into a CEL expression the server compiles. This file exists
-// because two of the three were interpolated with an escape that handled the
-// quote and not the backslash, and the third — `state == '${status}'` — was
-// interpolated with no escaping at all.
+// tag, metadata and search are read out of the QUERY STRING, so they are text
+// a link can carry into a CEL expression the server compiles. This file exists
+// because two of them were interpolated with an escape that handled the quote
+// and not the backslash, and the status — `state == '${status}'` — was
+// interpolated with no escaping at all. The status and the content type now
+// go to the server as facets from a fixed vocabulary, never into the filter.
 //
 // Named .test.tsx, not .test.ts: vitest.config splits the two projects by
 // extension — .ts runs in node, .tsx in jsdom — and renderHook needs a DOM.
@@ -20,6 +21,9 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/tenants/t-1/collections/ok-1/objects",
 }));
 
+import { ObjectContentCategory } from "@/gen/paladin/data/v1/object_service_pb";
+import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
+
 import { useObjectListState } from "./useObjectListState";
 
 /** Opens the page at this query string, as a link would. */
@@ -33,6 +37,11 @@ function filterFor(query: string): string {
   return renderHook(() => useObjectListState()).result.current.filter;
 }
 
+function facetsFor(query: string) {
+  openAt(query);
+  return renderHook(() => useObjectListState()).result.current.facets;
+}
+
 // One literal is two quote characters. Anything else means the value closed
 // its own string and the rest of it is being read as expression syntax.
 function unescapedQuotes(expr: string): number {
@@ -41,42 +50,69 @@ function unescapedQuotes(expr: string): number {
 
 describe("useObjectListState filter escaping", () => {
   it("builds the ordinary filters as literals", () => {
-    expect(filterFor("status=active")).toBe('state == "active"');
     expect(filterFor("tag=env%3Dprod")).toContain('tags["env"] == "prod"');
-  });
-
-  it("does not let a crafted status write its own conjunct", () => {
-    const filter = filterFor("status=" + encodeURIComponent('x" || true || "'));
-    // The whole hostile value stays INSIDE one literal. Asserting
-    // `not.toContain("|| true ||")` would be wrong and did fail here: those
-    // characters legitimately appear, as data, between escaped quotes. What
-    // distinguishes data from syntax is the quote count and the exact shape.
-    expect(unescapedQuotes(filter)).toBe(2);
-    expect(filter).toBe('state == "x\\" || true || \\""');
-  });
-
-  it("survives a trailing backslash, which used to escape the closing quote", () => {
-    const filter = filterFor("status=" + encodeURIComponent("c:\\"));
-    expect(unescapedQuotes(filter)).toBe(2);
-    expect(filter).toBe('state == "c:\\\\"');
   });
 
   it("escapes both halves of a tag facet, not just the key", () => {
     const filter = filterFor("tag=" + encodeURIComponent('k"=v" || true || "'));
+    // The whole hostile value stays INSIDE the literals. Asserting
+    // `not.toContain("|| true ||")` would be wrong: those characters
+    // legitimately appear, as data, between escaped quotes. What
+    // distinguishes data from syntax is the quote count and the exact shape.
     expect(unescapedQuotes(filter)).toBe(4); // two literals, key and value
     expect(filter).toBe('tags["k\\""] == "v\\" || true || \\""');
   });
 
-  it("reads content type and metadata from the URL, escaped or ignored", () => {
-    expect(filterFor("type=image")).toBe('content_type.startsWith("image/")');
-    expect(filterFor("type=" + encodeURIComponent('image" || true || "'))).toBe(
-      "",
-    );
+  it("reads metadata from the URL, escaped", () => {
     const filter = filterFor(
       "meta=" + encodeURIComponent('k"=v" || true || "'),
     );
     expect(unescapedQuotes(filter)).toBe(4);
     expect(filter).toBe('metadata["k\\""] == "v\\" || true || \\""');
+  });
+});
+
+describe("useObjectListState facets from the URL", () => {
+  it("sends the status and content type as facets, not in the filter", () => {
+    expect(facetsFor("status=AVAILABLE,DELETED&type=pdf")).toEqual({
+      states: [ObjectState.AVAILABLE, ObjectState.DELETED],
+      contentCategories: [ObjectContentCategory.PDF],
+    });
+    expect(filterFor("status=AVAILABLE&type=pdf")).toBe("");
+  });
+
+  it.each([
+    "status=active",
+    "status=" + encodeURIComponent('x" || true || "'),
+    "status=" + encodeURIComponent("c:\\"),
+    "type=" + encodeURIComponent('image" || true || "'),
+  ])("sends nothing for %s, which no facet offers", (query) => {
+    expect(facetsFor(query)).toEqual({ states: [], contentCategories: [] });
+    expect(filterFor(query)).toBe("");
+  });
+
+  it("replaces every facet's choices, as a saved view does", () => {
+    openAt("status=PENDING");
+    const { result } = renderHook(() => useObjectListState());
+    act(() =>
+      result.current.setFacetSelection({
+        status: [],
+        type: ["image", "other"],
+      }),
+    );
+    expect(result.current.facets).toEqual({
+      states: [],
+      contentCategories: [
+        ObjectContentCategory.IMAGE,
+        ObjectContentCategory.OTHER,
+      ],
+    });
+    expect(new URLSearchParams(window.location.search).get("type")).toBe(
+      "image,other",
+    );
+    expect(new URLSearchParams(window.location.search).has("status")).toBe(
+      false,
+    );
   });
 });
 

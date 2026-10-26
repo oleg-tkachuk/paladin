@@ -92,7 +92,7 @@ describe("ObjectsTable", () => {
             editingLabelsId={null}
             editLabelsValue=""
             search=""
-            status={undefined}
+            narrowed={false}
             rowProps={rowProps}
           />
         </TooltipProvider>

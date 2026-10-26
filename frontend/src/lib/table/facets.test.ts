@@ -4,11 +4,13 @@ import {
   activeFacets,
   countedOptions,
   countOptions,
+  FACET_COUNTING,
   facetUpdates,
   filterByFacets,
   groupFacetCounts,
   initialSelection,
   parseFacets,
+  serverCounting,
   type Facet,
 } from "./facets";
 import { PAGE_TABLE, type TableUrl } from "./urlState";
@@ -187,5 +189,18 @@ describe("counts a server gave", () => {
       (c) => c.value.replace("STATE_", "").toLowerCase(),
     );
     expect(renamed.get("state")?.get("on")).toBe(3);
+  });
+});
+
+describe("serverCounting", () => {
+  const some = [{ facet: "state", value: "on", count: 1 }];
+  it.each([
+    ["counts given, exact", some, true, FACET_COUNTING.exact],
+    ["counts given, the scan capped", some, false, FACET_COUNTING.lowerBound],
+    // None given is not every answer at nought: the server withheld them.
+    ["no counts, exact", [], true, FACET_COUNTING.withheld],
+    ["no counts, inexact", [], false, FACET_COUNTING.withheld],
+  ])("reads %s", (_, counts, exact, want) => {
+    expect(serverCounting(counts, exact)).toBe(want);
   });
 });

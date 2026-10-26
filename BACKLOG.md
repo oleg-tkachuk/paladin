@@ -789,23 +789,16 @@ order they are being taken up.
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
 
-#### Facets and pages for the remaining lists
+#### Tag facet counts on the object listing
 
-- **Status:** Blocked.
-- **Reason:** counted facets reach every list loaded whole that answers a
-  question worth narrowing by (useTableFacets) — both collection lists
-  among them, which read every page — and the operations page and both
-  audit logs, which the server pages, through counts their listings give
-  with the first page (useServerFacets). What is left is a folder's objects,
-  paged on the server, where no List RPC counts yet, so a count beside them
-  would describe only the rows read so far; the capabilities page browses
-  by kind and subject through two server-side flags of its own;
-  configuration is a document, not a list of rows.
-- **Definition of Done:** a folder's objects filter through facets whose
-  counts ListObjects gives, as ListOperations' and ListAuditLog's facets and
-  facet_counts do; or this entry says why not.
-- **Blockers:** the console reading them: ListObjects takes facets (state,
-  content category) and counts them with the first page.
+- **Status:** Deferred.
+- **Reason:** a folder's objects count by state and content category beside
+  their choices, but not by tag: tag values are unbounded per key,
+  ListDistinctTags already serves the values (capped at 100 per key) for the
+  tag filter, and a count per key=value would need its own cap and paging.
+- **Definition of Done:** the object listing's tag filter shows a count
+  beside each tag value; or this entry says why not.
+- **Blockers:** none.
 
 #### Facet choices remembered between visits
 

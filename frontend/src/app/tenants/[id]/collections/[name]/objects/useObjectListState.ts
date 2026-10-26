@@ -1,50 +1,69 @@
 // URL-synced filter, folder and sort state for the Collection objects page,
 // on the same contract as every other list (useUrlState, TABLE_PARAMS): the
-// search, the sort, the status / tag / type / metadata facets, the folder and
-// whether to list everything under it. Derives the CEL `filter` the data hook
-// consumes. Selection, tag-option accumulation, and the data fetch itself stay
+// search, the sort, the tag / metadata filters, the folder and whether to list
+// everything under it, and the status and content-type facets the server
+// narrows and counts by (useServerFacets). Derives the CEL `filter` and the
+// `facets` the data hook sends. Selection, tag-option accumulation, and the data fetch itself stay
 // in the page — they depend on the loaded objects, which this hook never sees.
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
+import { type FacetControl, useServerFacets } from "@/hooks/useTableFacets";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTableQuery } from "@/hooks/useTableUrl";
 import { flagParam, textParam, useUrlState } from "@/hooks/useUrlState";
 import { buildObjectFilter } from "@/lib/objectFilter";
+import {
+  OBJECT_FACETS,
+  OBJECT_FACET_STATUS,
+  OBJECT_FACET_TYPE,
+  objectFacetsRequest,
+} from "@/lib/objectFacets";
 import { folderPrefix } from "@/lib/objectFolders";
 import {
   OBJECT_ORDER_FIELDS,
   isObjectOrderField,
   type ObjectOrderField,
 } from "@/lib/objectOrder";
+import type {
+  FacetCounting,
+  FacetCounts,
+  FacetSelection,
+} from "@/lib/table/facets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 
 import type { SortState } from "./_view";
 
-/** The page's own query-string parameters, beside TABLE_PARAMS. */
+/**
+ * The page's own query-string parameters, beside TABLE_PARAMS. The status and
+ * content-type facets keep theirs under their facet ids (OBJECT_FACETS).
+ */
 export const OBJECT_LIST_PARAMS = {
-  status: "status",
   tag: "tag",
-  type: "type",
   meta: "meta",
   recursive: "recursive",
   folder: "prefix",
 } as const;
 
-const STATUS = textParam(OBJECT_LIST_PARAMS.status);
 const TAG = textParam(OBJECT_LIST_PARAMS.tag);
-const TYPE = textParam(OBJECT_LIST_PARAMS.type);
 const META = textParam(OBJECT_LIST_PARAMS.meta);
 const RECURSIVE = flagParam(OBJECT_LIST_PARAMS.recursive);
 const FOLDER = textParam(OBJECT_LIST_PARAMS.folder);
 const SORT_IN_URL = { url: PAGE_TABLE, columns: OBJECT_ORDER_FIELDS };
 
 export interface ObjectListState {
-  status: string | undefined;
-  setStatus: (value: string | undefined) => void;
+  /** The status and content-type choices, by facet id. */
+  facetSelection: FacetSelection;
+  /** The choices as ListObjectsRequest.facets names them. */
+  facets: ReturnType<typeof objectFacetsRequest>;
+  /** The facets' toolbar controls, for the counts the listing gave. */
+  facetControls: (
+    counts: FacetCounts,
+    counting: FacetCounting,
+  ) => FacetControl[];
+  /** Replaces every facet's choices, as a saved view does. */
+  setFacetSelection: (selection: FacetSelection) => void;
   tagFilter: string | undefined;
-  /** Content-type category (CONTENT_TYPE_OPTIONS value), URL param `type`. */
-  typeFilter: string | undefined;
   /** Metadata facet "key=value", URL param `meta`. */
   metaFilter: string | undefined;
   search: string;
@@ -55,13 +74,10 @@ export interface ObjectListState {
   /** The folder listed: empty for the root, else ending in the delimiter. */
   prefix: string;
   sort: SortState;
-  /** Derived CEL predicate over the object list (status, search, tag, type,
-   *  metadata). */
+  /** Derived CEL predicate over the object list (search, tag, metadata). */
   filter: string;
   handleSort: (column: string) => void;
-  handleStatusChange: (value: string | undefined) => void;
   handleTagChange: (value: string | undefined) => void;
-  handleTypeChange: (value: string | undefined) => void;
   handleMetaChange: (value: string | undefined) => void;
   handleSearchChange: (value: string) => void;
   handleRecursiveChange: (value: boolean) => void;
@@ -71,9 +87,12 @@ export interface ObjectListState {
 const unset = (v: string) => v || undefined;
 
 export function useObjectListState(): ObjectListState {
-  const [status, setStatusText] = useUrlState(STATUS, "");
+  const {
+    selection: facetSelection,
+    controls: facetControls,
+    choose,
+  } = useServerFacets(OBJECT_FACETS, PAGE_TABLE);
   const [tag, setTag] = useUrlState(TAG, "");
-  const [type, setType] = useUrlState(TYPE, "");
   const [meta, setMeta] = useUrlState(META, "");
   const [recursive, setRecursive] = useUrlState(RECURSIVE, false);
   const [folder, setFolder] = useUrlState(FOLDER, "");
@@ -89,9 +108,18 @@ export function useObjectListState(): ObjectListState {
   // rather than once per keystroke.
   const debouncedSearch = useDebouncedValue(search);
 
-  const setStatus = useCallback(
-    (value: string | undefined) => setStatusText(value ?? ""),
-    [setStatusText],
+  const setFacetSelection = useCallback(
+    (selection: FacetSelection) => {
+      choose(OBJECT_FACET_STATUS, selection[OBJECT_FACET_STATUS] ?? []);
+      choose(OBJECT_FACET_TYPE, selection[OBJECT_FACET_TYPE] ?? []);
+    },
+    [choose],
+  );
+  // The facets' choices come from a fixed vocabulary, which the URL reading
+  // already holds them to: a value it does not offer never reaches the server.
+  const facets = useMemo(
+    () => objectFacetsRequest(facetSelection),
+    [facetSelection],
   );
   const handleSort = (column: string) => {
     if (isObjectOrderField(column)) toggleSort(column);
@@ -99,8 +127,8 @@ export function useObjectListState(): ObjectListState {
 
   // Every value here comes out of the QUERY STRING, so it is attacker-supplied
   // text headed for an expression the server compiles. buildObjectFilter
-  // passes every literal through celString and maps the content type through
-  // a fixed list; its tests, and this hook's, hold the escaping.
+  // passes every literal through celString; its tests, and this hook's, hold
+  // the escaping.
   //
   // What was here once: `state == '${status}'` with no escaping at all, and a
   // `replace(/'/g, …)` that handled the quote and not the backslash. A URL
@@ -109,18 +137,17 @@ export function useObjectListState(): ObjectListState {
   // filter runs inside the caller's own tenant and collection — but a filter
   // nobody can predict is not a filter.
   const filter = buildObjectFilter({
-    status: unset(status),
     search: debouncedSearch,
     tag: unset(tag),
-    type: unset(type),
     meta: unset(meta),
   });
 
   return {
-    status: unset(status),
-    setStatus,
+    facetSelection,
+    facets,
+    facetControls,
+    setFacetSelection,
     tagFilter: unset(tag),
-    typeFilter: unset(type),
     metaFilter: unset(meta),
     search,
     setSearch,
@@ -130,9 +157,7 @@ export function useObjectListState(): ObjectListState {
     sort: { column: sort.column ?? "", direction: sort.direction },
     filter,
     handleSort,
-    handleStatusChange: setStatus,
     handleTagChange: (v) => setTag(v ?? ""),
-    handleTypeChange: (v) => setType(v ?? ""),
     handleMetaChange: (v) => setMeta(v ?? ""),
     handleSearchChange: setSearch,
     handleRecursiveChange: setRecursive,

@@ -5,7 +5,9 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 
 import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
 import { selectorBatches, type BatchItem } from "@/lib/batchSelector";
-import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
+import type { Object$, ObjectState } from "@/gen/paladin/data/v1/types_pb";
+import type { ObjectContentCategory } from "@/gen/paladin/data/v1/object_service_pb";
+import type { FacetCount } from "@/gen/paladin/common/v1/facet_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { toSortOrder } from "@/lib/table/sortOrder";
 import { useActingTenantId } from "@/hooks/useActingTenant";
@@ -53,7 +55,16 @@ export interface UseObjectsOptions {
   prefix?: string;
   /** Set, one level under `prefix`, with the folders below it. */
   delimiter?: string;
+  /** The states and content categories the server narrows by, beside `filter`. */
+  facets?: {
+    states: readonly ObjectState[];
+    contentCategories: readonly ObjectContentCategory[];
+  };
+  /** Ask the server to count the facets with the first page. */
+  countFacets?: boolean;
 }
+
+const NO_FACET_COUNTS: readonly FacetCount[] = [];
 
 const DEFAULT_OBJECT_KEY = "default";
 
@@ -85,6 +96,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
       options.sortDirection ?? null,
       options.prefix ?? "",
       options.delimiter ?? "",
+      options.facets ?? null,
+      options.countFacets ?? false,
       pageSize,
       refreshSignal,
     ],
@@ -101,6 +114,13 @@ export function useObjects(options: UseObjectsOptions = {}) {
           sortOrder: toSortOrder(options.sortDirection),
           prefix: options.prefix ?? "",
           delimiter: options.delimiter ?? "",
+          facets: options.facets && {
+            states: [...options.facets.states],
+            contentCategories: [...options.facets.contentCategories],
+          },
+          // Counted once, with the first page: a later one is the same
+          // listing, and the server answers it without counts.
+          countFacets: !!options.countFacets && pageParam === "",
         });
       } catch (err) {
         throw normalizeError(err);
@@ -117,6 +137,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
   const firstPage = query.data?.pages[0];
   const folders = useMemo(() => firstPage?.commonPrefixes ?? [], [firstPage]);
   const foldersTruncated = firstPage?.commonPrefixesTruncated ?? false;
+  const facetCounts = firstPage?.facetCounts ?? NO_FACET_COUNTS;
+  const facetCountsExact = firstPage?.facetCountsExact ?? false;
   const nextCursor = query.hasNextPage
     ? (query.data?.pages.at(-1)?.page?.nextPageToken ?? undefined)
     : undefined;
@@ -296,6 +318,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
     objects,
     folders,
     foldersTruncated,
+    facetCounts,
+    facetCountsExact,
     loading: query.isFetching,
     error: (query.error as Error | null) ?? null,
     nextCursor,

@@ -28,6 +28,8 @@ vi.mock("@/context/RefreshContext", () => ({
 }));
 
 import { useObjects } from "./useObjects";
+import { ObjectContentCategory } from "@/gen/paladin/data/v1/object_service_pb";
+import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 import { SELECTOR_MAX_NAMES } from "@/lib/batchSelector";
 import { TenantProvider } from "@/app/tenants/[id]/tenant-context";
 import type { ResolvedTenant } from "@/lib/resources/tenant-resolve";
@@ -146,6 +148,61 @@ describe("useObjects folders", () => {
     expect(result.current.foldersTruncated).toBe(true);
     expect(h.listObjects).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: "a/", delimiter: "/" }),
+    );
+  });
+});
+
+// The facets narrow the listing on the server, which counts them once, with
+// the first page; a later page is the same listing and asks for none.
+describe("useObjects facets", () => {
+  const FACETS = {
+    states: [ObjectState.AVAILABLE],
+    contentCategories: [ObjectContentCategory.PDF],
+  };
+  const COUNTS = [
+    { facet: "state", value: "OBJECT_STATE_AVAILABLE", count: 4n },
+  ];
+
+  it("sends the facets, counts them with the first page only, and keeps the counts", async () => {
+    h.listObjects.mockClear();
+    h.listObjects
+      .mockResolvedValueOnce({
+        objects: [],
+        page: { nextPageToken: "p2" },
+        facetCounts: COUNTS,
+        facetCountsExact: false,
+      } as never)
+      .mockResolvedValueOnce({
+        objects: [],
+        page: { nextPageToken: "" },
+        facetCounts: [],
+        facetCountsExact: false,
+      } as never);
+    const { result } = renderHook(
+      () =>
+        useObjects({ collection: "docs", facets: FACETS, countFacets: true }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.facetCounts).toEqual(COUNTS));
+    expect(result.current.facetCountsExact).toBe(false);
+    expect(h.listObjects).toHaveBeenLastCalledWith(
+      expect.objectContaining({ facets: FACETS, countFacets: true }),
+    );
+    result.current.loadMore?.();
+    await waitFor(() => expect(h.listObjects).toHaveBeenCalledTimes(2));
+    expect(h.listObjects).toHaveBeenLastCalledWith(
+      expect.objectContaining({ facets: FACETS, countFacets: false }),
+    );
+    // The first page's counts stand for the listing.
+    expect(result.current.facetCounts).toEqual(COUNTS);
+  });
+
+  it("asks for no counts unless told to", async () => {
+    h.listObjects.mockClear();
+    renderHook(() => useObjects({ collection: "docs" }), { wrapper });
+    await waitFor(() => expect(h.listObjects).toHaveBeenCalled());
+    expect(h.listObjects).toHaveBeenCalledWith(
+      expect.objectContaining({ countFacets: false, facets: undefined }),
     );
   });
 });

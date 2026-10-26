@@ -42,11 +42,16 @@ const h = vi.hoisted(() => ({
   access: 0,
   objects: [] as Array<Record<string, unknown>>,
   folders: [] as string[],
+  // The facet counts the listing's first page gives, and whether exact.
+  facetCounts: [] as Array<{ facet: string; value: string; count: bigint }>,
+  facetCountsExact: true,
   // Last options useObjects was called with — lets the filter-wiring tests
   // assert the CEL filter + sort the page derives and feeds the data hook.
   lastOpts: undefined as
     | {
         filter: string;
+        facets?: { states: number[]; contentCategories: number[] };
+        countFacets?: boolean;
         orderBy?: string;
         sortDirection: unknown;
         prefix?: string;
@@ -72,6 +77,8 @@ vi.mock("@/hooks/useObjects", () => ({
       objects: h.objects,
       folders: h.folders,
       foldersTruncated: false,
+      facetCounts: h.facetCounts,
+      facetCountsExact: h.facetCountsExact,
       loading: false,
       error: null,
       refresh: h.refresh,
@@ -138,27 +145,59 @@ vi.mock("../collection-context", () => ({
 vi.mock("@/components/features/ObjectInspector", () => ({
   ObjectInspector: () => null,
 }));
-vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
-  ObjectsFilterBar: ({
-    onFilterChange,
-  }: {
-    onFilterChange: (patch: {
-      search?: string;
-      status?: string | undefined;
-      tag?: string | undefined;
-      type?: string | undefined;
-      meta?: string | undefined;
-      recursive?: boolean;
-    }) => void;
-  }) => (
+// The facets are rendered by the real FacetFilter, so the counts the page
+// hands them are read as the menu shows them.
+vi.mock("@/components/features/objects/ObjectsFilterBar", async () => {
+  const { FacetFilter } = await vi.importActual<
+    typeof import("@/components/ui/FacetFilter")
+  >("@/components/ui/FacetFilter");
+  return {
+    ObjectsFilterBar: ({
+      onFilterChange,
+      facets,
+      savedViews,
+      onApplyView,
+    }: {
+      onFilterChange: (patch: {
+        search?: string;
+        tag?: string | undefined;
+        meta?: string | undefined;
+        recursive?: boolean;
+      }) => void;
+      facets: readonly import("@/hooks/useTableFacets").FacetControl[];
+      savedViews: { name: string }[];
+      onApplyView: (view: { name: string }) => void;
+    }) => (
+      <div>
+        {facets.map(({ id, ...facet }) => (
+          <FacetFilter key={id} {...facet} />
+        ))}
+        {savedViews.map((v) => (
+          <button key={v.name} onClick={() => onApplyView(v)}>
+            apply {v.name}
+          </button>
+        ))}
+        <FilterButtons onFilterChange={onFilterChange} />
+      </div>
+    ),
+  };
+});
+
+function FilterButtons({
+  onFilterChange,
+}: {
+  onFilterChange: (patch: {
+    search?: string;
+    tag?: string | undefined;
+    meta?: string | undefined;
+    recursive?: boolean;
+  }) => void;
+}) {
+  return (
     <div>
-      <button onClick={() => onFilterChange({ status: "active" })}>
-        set status
-      </button>
       <button onClick={() => onFilterChange({ tag: "env=prod" })}>
         set tag
       </button>
-      <button onClick={() => onFilterChange({ type: "pdf" })}>set type</button>
       <button onClick={() => onFilterChange({ meta: "owner=ops" })}>
         set meta
       </button>
@@ -169,8 +208,8 @@ vi.mock("@/components/features/objects/ObjectsFilterBar", () => ({
         set recursive
       </button>
     </div>
-  ),
-}));
+  );
+}
 vi.mock("@/components/features/objects/BulkActionsToolbar", () => ({
   BulkActionsToolbar: ({
     selectedCount,
@@ -266,6 +305,10 @@ vi.mock("@/components/features/objects/ObjectTableRow", () => ({
 }));
 
 import CollectionObjectsPage from "./page";
+import { STORAGE_KEYS } from "@/constants";
+import { ObjectContentCategory } from "@/gen/paladin/data/v1/object_service_pb";
+
+const PAGE_PATH = "/tenants/t-1/collections/ok-1/objects";
 import { CollectionAccess } from "@/gen/paladin/admin/v1/types_pb";
 
 const makeObj = (key: string) => ({
@@ -296,7 +339,10 @@ beforeEach(() => {
   h.objects = [makeObj("path/to/file.txt")];
   h.access = 0;
   h.lastOpts = undefined;
+  h.facetCounts = [];
+  h.facetCountsExact = true;
   localStorage.clear();
+  window.history.replaceState(null, "", PAGE_PATH);
 });
 
 describe("CollectionObjectsPage", () => {
@@ -371,11 +417,111 @@ describe("CollectionObjectsPage", () => {
     expect(window.location.search).toContain("sort=key&dir=asc");
   });
 
-  it("applies a status filter to the CEL filter", async () => {
+  it("sends the chosen states as facets, not in the CEL filter, and asks for counts", async () => {
     render(<CollectionObjectsPage />);
-    await userEvent.click(screen.getByText("set status"));
-    await waitFor(() => expect(h.lastOpts?.filter).toBe('state == "active"'));
-    expect(window.location.search).toContain("status=active");
+    expect(h.lastOpts?.countFacets).toBe(true);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by status" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /^Available/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /^Deleted/ }),
+    );
+    await waitFor(() =>
+      expect(h.lastOpts?.facets).toEqual({
+        states: [ObjectState.AVAILABLE, ObjectState.DELETED],
+        contentCategories: [],
+      }),
+    );
+    expect(h.lastOpts?.filter).toBe("");
+    expect(new URLSearchParams(window.location.search).get("status")).toBe(
+      "AVAILABLE,DELETED",
+    );
+  });
+
+  it("shows the counts the listing gave beside each choice", async () => {
+    h.facetCounts = [
+      { facet: "state", value: "OBJECT_STATE_AVAILABLE", count: 12n },
+      {
+        facet: "content_category",
+        value: "OBJECT_CONTENT_CATEGORY_PDF",
+        count: 3n,
+      },
+    ];
+    render(<CollectionObjectsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by content type" }),
+    );
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "PDF, 3 rows" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Other, 0 rows" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a capped count as a lower bound", async () => {
+    h.facetCounts = [
+      { facet: "state", value: "OBJECT_STATE_AVAILABLE", count: 10_000n },
+    ];
+    h.facetCountsExact = false;
+    render(<CollectionObjectsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by status" }),
+    );
+    expect(
+      screen.getByRole("menuitemcheckbox", {
+        name: "Available, at least 10,000 rows",
+      }),
+    ).toHaveTextContent(/10k\+$/);
+  });
+
+  it("offers the choices without counts when the listing gave none", async () => {
+    render(<CollectionObjectsPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter by content type" }),
+    );
+    const pdf = screen.getByRole("menuitemcheckbox", { name: "PDF" });
+    expect(pdf).toHaveTextContent(/^PDF$/);
+    await userEvent.click(pdf);
+    await waitFor(() =>
+      expect(h.lastOpts?.facets?.contentCategories).toEqual([
+        ObjectContentCategory.PDF,
+      ]),
+    );
+  });
+
+  it("opens a link the single-choice filters wrote on the same choice", () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${PAGE_PATH}?status=DELETED&type=pdf`,
+    );
+    render(<CollectionObjectsPage />);
+    expect(h.lastOpts?.facets).toEqual({
+      states: [ObjectState.DELETED],
+      contentCategories: [ObjectContentCategory.PDF],
+    });
+    expect(h.lastOpts?.filter).toBe("");
+  });
+
+  it("applies a view saved with one status and type as that choice", async () => {
+    localStorage.setItem(
+      STORAGE_KEYS.savedViews,
+      JSON.stringify([
+        { name: "pdfs", filters: { status: "AVAILABLE", type: "pdf" } },
+      ]),
+    );
+    render(<CollectionObjectsPage />);
+    await userEvent.click(await screen.findByText("apply pdfs"));
+    await waitFor(() =>
+      expect(h.lastOpts?.facets).toEqual({
+        states: [ObjectState.AVAILABLE],
+        contentCategories: [ObjectContentCategory.PDF],
+      }),
+    );
   });
 
   it("applies a tag facet to the CEL filter", async () => {
@@ -386,14 +532,11 @@ describe("CollectionObjectsPage", () => {
     );
   });
 
-  it("applies content type and metadata to the CEL filter, URL-synced", async () => {
+  it("applies metadata to the CEL filter, URL-synced", async () => {
     render(<CollectionObjectsPage />);
-    await userEvent.click(screen.getByText("set type"));
     await userEvent.click(screen.getByText("set meta"));
     await waitFor(() =>
-      expect(h.lastOpts?.filter).toBe(
-        'content_type == "application/pdf" && metadata["owner"] == "ops"',
-      ),
+      expect(h.lastOpts?.filter).toBe('metadata["owner"] == "ops"'),
     );
     expect(window.location.search).toContain("meta=owner%3Dops");
   });
