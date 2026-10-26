@@ -140,7 +140,8 @@ describe("ObjectsFilterBar status", () => {
     const options = screen
       .getAllByRole("menuitemcheckbox")
       .map((o) => o.getAttribute("aria-label"));
-    expect(options).toEqual(["Pending", "Available", "Deleted"]);
+    // Deleted objects are the trash's, which lists them on a page of its own.
+    expect(options).toEqual(["Pending", "Available"]);
   });
 });
 

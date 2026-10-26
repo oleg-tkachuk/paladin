@@ -427,17 +427,17 @@ describe("CollectionObjectsPage", () => {
       screen.getByRole("menuitemcheckbox", { name: /^Available/ }),
     );
     await userEvent.click(
-      screen.getByRole("menuitemcheckbox", { name: /^Deleted/ }),
+      screen.getByRole("menuitemcheckbox", { name: /^Pending/ }),
     );
     await waitFor(() =>
       expect(h.lastOpts?.facets).toEqual({
-        states: [ObjectState.AVAILABLE, ObjectState.DELETED],
+        states: [ObjectState.AVAILABLE, ObjectState.PENDING],
         contentCategories: [],
       }),
     );
     expect(h.lastOpts?.filter).toBe("");
     expect(new URLSearchParams(window.location.search).get("status")).toBe(
-      "AVAILABLE,DELETED",
+      "AVAILABLE,PENDING",
     );
   });
 
@@ -493,15 +493,21 @@ describe("CollectionObjectsPage", () => {
     );
   });
 
+  it("ignores a link's DELETED status: the trash lists deleted objects", () => {
+    window.history.replaceState(null, "", `${PAGE_PATH}?status=DELETED`);
+    render(<CollectionObjectsPage />);
+    expect(h.lastOpts?.facets).toEqual({ states: [], contentCategories: [] });
+  });
+
   it("opens a link the single-choice filters wrote on the same choice", () => {
     window.history.replaceState(
       null,
       "",
-      `${PAGE_PATH}?status=DELETED&type=pdf`,
+      `${PAGE_PATH}?status=PENDING&type=pdf`,
     );
     render(<CollectionObjectsPage />);
     expect(h.lastOpts?.facets).toEqual({
-      states: [ObjectState.DELETED],
+      states: [ObjectState.PENDING],
       contentCategories: [ObjectContentCategory.PDF],
     });
     expect(h.lastOpts?.filter).toBe("");

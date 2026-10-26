@@ -25,11 +25,8 @@ const options = (id: string) =>
 
 describe("OBJECT_FACETS", () => {
   it("offers the states and categories the enums name, in their order", () => {
-    expect(options(OBJECT_FACET_STATUS)).toEqual([
-      "PENDING",
-      "AVAILABLE",
-      "DELETED",
-    ]);
+    // DELETED is the trash's: it lists deleted objects on a page of its own.
+    expect(options(OBJECT_FACET_STATUS)).toEqual(["PENDING", "AVAILABLE"]);
     expect(options(OBJECT_FACET_TYPE)).toEqual([
       "image",
       "video",
@@ -47,7 +44,8 @@ describe("the URL the page wrote before the facets", () => {
   it.each([
     ["status=AVAILABLE", { status: ["AVAILABLE"], type: [] }],
     ["type=pdf", { status: [], type: ["pdf"] }],
-    ["status=DELETED&type=image", { status: ["DELETED"], type: ["image"] }],
+    // The listing no longer offers DELETED: the trash lists those objects.
+    ["status=DELETED&type=image", { status: [], type: ["image"] }],
     [
       "status=AVAILABLE,PENDING",
       { status: ["PENDING", "AVAILABLE"], type: [] },
@@ -75,8 +73,8 @@ describe("viewFacetSelection", () => {
     ],
     [
       "several choices",
-      { status: ["DELETED", "PENDING"], type: ["other", "image"] },
-      { status: ["PENDING", "DELETED"], type: ["image", "other"] },
+      { status: ["AVAILABLE", "PENDING"], type: ["other", "image"] },
+      { status: ["PENDING", "AVAILABLE"], type: ["image", "other"] },
     ],
     [
       "values the facets do not offer",
@@ -93,9 +91,9 @@ describe("objectFacetsRequest", () => {
     ["no choice", {}, { states: [], contentCategories: [] }],
     [
       "several of each",
-      { status: ["AVAILABLE", "DELETED"], type: ["pdf", "other"] },
+      { status: ["AVAILABLE", "PENDING"], type: ["pdf", "other"] },
       {
-        states: [ObjectState.AVAILABLE, ObjectState.DELETED],
+        states: [ObjectState.AVAILABLE, ObjectState.PENDING],
         contentCategories: [
           ObjectContentCategory.PDF,
           ObjectContentCategory.OTHER,

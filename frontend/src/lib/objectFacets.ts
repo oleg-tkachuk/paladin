@@ -67,9 +67,17 @@ function categoryValue(category: ObjectContentCategory): string {
   );
 }
 
-/** Each state the enum names, in its order. */
+/** States the object listing does not offer: a deleted object is the trash's,
+ *  which lists it on a page of its own. */
+const STATES_LISTED_ELSEWHERE: readonly ObjectState[] = [ObjectState.DELETED];
+
+/** Each state the enum names that the listing offers, in the enum's order. */
 const STATE_OPTIONS: readonly FacetOption[] = ObjectStateSchema.values
-  .filter((v) => v.number !== ObjectState.UNSPECIFIED)
+  .filter(
+    (v) =>
+      v.number !== ObjectState.UNSPECIFIED &&
+      !STATES_LISTED_ELSEWHERE.includes(v.number as ObjectState),
+  )
   .map((v) => ({
     value: v.localName,
     label: STATE_LABEL[v.number as NamedState],
