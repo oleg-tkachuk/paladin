@@ -1,49 +1,145 @@
 import { describe, expect, it } from "vitest";
 
+import { CapabilityGrantBasis } from "@/gen/paladin/admin/v1/capability_service_pb";
+
 import {
   capabilityOpGrants,
-  needsTenantPolicy,
+  procedureLabel,
   type CapabilityOpGrants,
   type OperationGrant,
 } from "./capabilityOpGrants";
 
-// The table as the server serves it today (backend capability_grants.go).
 const READ_ACTIONS = ["GetObject", "PresignGet"];
 const PUT_ACTIONS = ["PutObject", "PresignPut", "UpdateObject", "CopyObject"];
+const PRESIGN_PAIRED = ["get", "put"];
+const DELEGATE = "paladin.admin.v1.CapabilityService.Delegate";
+
+function row(op: string, fields: Partial<OperationGrant>): OperationGrant {
+  return {
+    op,
+    basis: CapabilityGrantBasis.BUILTIN,
+    actions: [],
+    pairedOps: [],
+    procedures: [],
+    ...fields,
+  };
+}
+
+// The table as the server serves it (backend capability_grants.go), one row
+// per basis.
 const GRANTS: OperationGrant[] = [
-  { op: "get", actions: READ_ACTIONS },
-  { op: "list", actions: READ_ACTIONS },
-  { op: "put", actions: PUT_ACTIONS },
-  { op: "delete", actions: ["DeleteObject"] },
-  { op: "manage", actions: [] },
+  row("get", { actions: READ_ACTIONS }),
+  row("list", { actions: READ_ACTIONS }),
+  row("put", { actions: PUT_ACTIONS }),
+  row("delete", { actions: ["DeleteObject"] }),
+  row("manage", { basis: CapabilityGrantBasis.TENANT_POLICY }),
+  row("object:presign", {
+    basis: CapabilityGrantBasis.PAIRED,
+    pairedOps: PRESIGN_PAIRED,
+  }),
+  row("share", {
+    basis: CapabilityGrantBasis.CAVEATS_ONLY,
+    procedures: [DELEGATE],
+  }),
 ];
 
-const NONE: CapabilityOpGrants = { granted: [], needsPolicy: [], unknown: [] };
+/** A basis number no generated enum value holds: a newer server's. */
+const FUTURE_BASIS = 99 as CapabilityGrantBasis;
+
+const NONE: CapabilityOpGrants = {
+  granted: [],
+  needsPolicy: [],
+  paired: [],
+  caveatsOnly: [],
+  unknown: [],
+};
 
 describe("capabilityOpGrants", () => {
   it.each<[string, string[], readonly OperationGrant[], CapabilityOpGrants]>([
     ["no ops", [], GRANTS, NONE],
     [
-      "an op that unlocks actions",
+      "BUILTIN: the actions it grants",
       ["get"],
       GRANTS,
       { ...NONE, granted: [{ op: "get", actions: READ_ACTIONS }] },
     ],
     [
-      "an op the table names with no actions",
+      "TENANT_POLICY: needs a tenant policy",
       ["manage"],
       GRANTS,
       { ...NONE, needsPolicy: ["manage"] },
     ],
     [
-      "an op the table does not name",
+      "PAIRED: the ops it is asserted beside",
+      ["object:presign"],
+      GRANTS,
+      {
+        ...NONE,
+        paired: [{ op: "object:presign", pairedOps: PRESIGN_PAIRED }],
+      },
+    ],
+    [
+      "CAVEATS_ONLY: the procedures it opens",
       ["share"],
       GRANTS,
+      { ...NONE, caveatsOnly: [{ op: "share", procedures: [DELEGATE] }] },
+    ],
+    [
+      "an op the table does not name",
+      ["object:tag"],
+      GRANTS,
+      { ...NONE, unknown: ["object:tag"] },
+    ],
+    [
+      "UNSPECIFIED: unknown, even with actions",
+      ["get"],
+      [
+        row("get", {
+          basis: CapabilityGrantBasis.UNSPECIFIED,
+          actions: READ_ACTIONS,
+        }),
+      ],
+      { ...NONE, unknown: ["get"] },
+    ],
+    [
+      "a basis this console does not know: unknown",
+      ["get"],
+      [row("get", { basis: FUTURE_BASIS, actions: READ_ACTIONS })],
+      { ...NONE, unknown: ["get"] },
+    ],
+    [
+      "BUILTIN with no actions: unknown, not granted",
+      ["get"],
+      [row("get", {})],
+      { ...NONE, unknown: ["get"] },
+    ],
+    [
+      "PAIRED with no ops: unknown",
+      ["object:presign"],
+      [row("object:presign", { basis: CapabilityGrantBasis.PAIRED })],
+      { ...NONE, unknown: ["object:presign"] },
+    ],
+    [
+      "CAVEATS_ONLY with no procedures: unknown",
+      ["share"],
+      [row("share", { basis: CapabilityGrantBasis.CAVEATS_ONLY })],
       { ...NONE, unknown: ["share"] },
     ],
     [
-      "every outcome, in the order given",
-      ["share", "put", "manage", "get", "object:tag"],
+      // A TENANT_POLICY row grants nothing whatever it carries.
+      "TENANT_POLICY with actions: still needs a policy",
+      ["manage"],
+      [
+        row("manage", {
+          basis: CapabilityGrantBasis.TENANT_POLICY,
+          actions: ["DeleteObject"],
+        }),
+      ],
+      { ...NONE, needsPolicy: ["manage"] },
+    ],
+    [
+      "every basis, in the order given",
+      ["share", "put", "object:tag", "manage", "object:presign", "get"],
       GRANTS,
       {
         granted: [
@@ -51,7 +147,9 @@ describe("capabilityOpGrants", () => {
           { op: "get", actions: READ_ACTIONS },
         ],
         needsPolicy: ["manage"],
-        unknown: ["share", "object:tag"],
+        paired: [{ op: "object:presign", pairedOps: PRESIGN_PAIRED }],
+        caveatsOnly: [{ op: "share", procedures: [DELEGATE] }],
+        unknown: ["object:tag"],
       },
     ],
     [
@@ -82,11 +180,17 @@ describe("capabilityOpGrants", () => {
   });
 });
 
-describe("needsTenantPolicy", () => {
-  it.each<[string, OperationGrant, boolean]>([
-    ["no actions", { op: "manage", actions: [] }, true],
-    ["one action", { op: "delete", actions: ["DeleteObject"] }, false],
-  ])("%s", (_name, grant, want) => {
-    expect(needsTenantPolicy(grant)).toBe(want);
+describe("procedureLabel", () => {
+  it.each<[string, string, string]>([
+    ["drops the package", DELEGATE, "CapabilityService.Delegate"],
+    [
+      "keeps Service.Method",
+      "CapabilityService.Delegate",
+      "CapabilityService.Delegate",
+    ],
+    ["keeps a bare name", "Delegate", "Delegate"],
+    ["keeps an empty name", "", ""],
+  ])("%s", (_name, procedure, want) => {
+    expect(procedureLabel(procedure)).toBe(want);
   });
 });

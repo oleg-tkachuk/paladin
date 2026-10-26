@@ -29,7 +29,10 @@ vi.mock("@/components/ui/Notification", () => ({
 }));
 
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
-import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
+import {
+  CapabilityGrantBasis,
+  PrincipalKind,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
 import { CapabilityDetailsPanel } from "./CapabilityDetailsPanel";
 
 const CAP = {
@@ -49,10 +52,28 @@ const CAP = {
   },
 } as unknown as Capability;
 
-// The server's table, as ListOperationGrants serves it.
+const NO_FIELDS = { actions: [], pairedOps: [], procedures: [] };
+// The server's table, as ListOperationGrants serves it, one row per basis.
 const GRANTS = [
-  { op: "get", actions: ["GetObject", "PresignGet"] },
-  { op: "manage", actions: [] },
+  {
+    ...NO_FIELDS,
+    op: "get",
+    basis: CapabilityGrantBasis.BUILTIN,
+    actions: ["GetObject", "PresignGet"],
+  },
+  { ...NO_FIELDS, op: "manage", basis: CapabilityGrantBasis.TENANT_POLICY },
+  {
+    ...NO_FIELDS,
+    op: "object:presign",
+    basis: CapabilityGrantBasis.PAIRED,
+    pairedOps: ["get", "put"],
+  },
+  {
+    ...NO_FIELDS,
+    op: "share",
+    basis: CapabilityGrantBasis.CAVEATS_ONLY,
+    procedures: ["paladin.admin.v1.CapabilityService.Delegate"],
+  },
 ];
 const UNLOCKS = "What these ops unlock";
 
@@ -97,6 +118,59 @@ describe("CapabilityDetailsPanel", () => {
       open(cap);
       expect(await screen.findByRole("note")).toHaveTextContent(
         "manage unlocks nothing on its own: without a tenant policy that permits its actions, each call is denied by policy.",
+      );
+    });
+
+    it("says object:presign adds a check beside get or put", async () => {
+      const cap = {
+        ...CAP,
+        caveats: { ...CAP.caveats, ops: ["get", "object:presign"] },
+      } as unknown as Capability;
+      h.get.mockResolvedValue({ capability: cap });
+      open(cap);
+      const unlocks = await screen.findByRole("group", { name: UNLOCKS });
+      expect(
+        within(unlocks).getByText(/adds a check beside/),
+      ).toHaveTextContent(
+        "object:presign adds a check beside get or put; it unlocks nothing on its own.",
+      );
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("says share is decided by the caveats alone", async () => {
+      const cap = {
+        ...CAP,
+        caveats: { ...CAP.caveats, ops: ["share"] },
+      } as unknown as Capability;
+      h.get.mockResolvedValue({ capability: cap });
+      open(cap);
+      const unlocks = await screen.findByRole("group", { name: UNLOCKS });
+      expect(
+        within(unlocks).getByText(/is decided by the caveats alone/),
+      ).toHaveTextContent(
+        "share is decided by the caveats alone: it opens CapabilityService.Delegate.",
+      );
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    // A row with no basis the console knows is not a grant: no badges.
+    it("counts an op with an unspecified basis as not granted", async () => {
+      h.listOperationGrants.mockResolvedValue({
+        grants: [
+          {
+            ...NO_FIELDS,
+            op: "get",
+            basis: CapabilityGrantBasis.UNSPECIFIED,
+            actions: ["GetObject"],
+          },
+        ],
+      });
+      h.get.mockResolvedValue({ capability: CAP });
+      open();
+      const unlocks = await screen.findByRole("group", { name: UNLOCKS });
+      expect(within(unlocks).queryByText("GetObject")).not.toBeInTheDocument();
+      expect(unlocks).toHaveTextContent(
+        "The server's table does not say what get unlocks; it is not counted as granted.",
       );
     });
 

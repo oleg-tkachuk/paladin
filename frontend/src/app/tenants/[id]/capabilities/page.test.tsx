@@ -54,6 +54,7 @@ import { LINKED_ROW_ATTR } from "@/components/ui/table";
 import {
   BiscuitStatus,
   CapabilityDisposition,
+  CapabilityGrantBasis,
   PrincipalKind,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
@@ -96,7 +97,15 @@ beforeEach(() => {
   h.tenantId = "t-1";
   h.list.mockResolvedValue({ capabilities: [] });
   h.listOperationGrants.mockResolvedValue({
-    grants: [{ op: "get", actions: ["GetObject", "PresignGet"] }],
+    grants: [
+      {
+        op: "get",
+        basis: CapabilityGrantBasis.BUILTIN,
+        actions: ["GetObject", "PresignGet"],
+        pairedOps: [],
+        procedures: [],
+      },
+    ],
   });
   h.getUsage.mockResolvedValue({
     requestCount: 0n,
