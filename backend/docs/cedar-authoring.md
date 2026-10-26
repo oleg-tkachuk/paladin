@@ -50,7 +50,8 @@ Four layers are concatenated, in this order, and compiled together:
    - a capability may, in its own tenant, read and download objects
      (`GetObject`, `PresignGet`) when its caveats admitted `get` or `list`
      for the request, and upload and change them (`PutObject`, `PresignPut`,
-     `UpdateObject`, `CopyObject`) when they admitted `put`
+     `UpdateObject`, `CopyObject`) when they admitted `put`, and change
+     tags in bulk (`UpdateObject`) when they admitted `object:tag`
      ([ADR-0038](../../docs/adr/0038-a-capability-does-what-its-caveats-allow.md));
    - `platform.tenant-provisioner` may create tenants and their storage,
      bind collections to buckets and publish them (`ConfigurePublicRead`);

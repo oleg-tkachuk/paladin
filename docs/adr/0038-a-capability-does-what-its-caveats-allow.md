@@ -31,13 +31,20 @@
      - `get` or `list` admitted → `GetObject`, `PresignGet`;
      - `put` admitted → `PutObject`, `PresignPut`, `UpdateObject`,
        `CopyObject`;
+     - `object:tag` admitted → `UpdateObject` (the batch tag change);
      - `delete` → the machine delete permit already covers
        `DeleteObject` and `RestoreObject`.
+     `object:presign` is asserted only beside `get` or `put`, which grant
+     the action; `share` opens `Delegate`, which asks no policy.
      A read admitted on one object cannot authorize an upload, and a
      request whose handler asserted nothing authorizes nothing.
   3. **`manage` gets no default.** Taint, Object Lock and operation
      cancellation stay with a tenant policy that names them.
-  4. **A tenant can still say no.** These are permits; a tenant `forbid`
+  4. **The API serves the table.** `CapabilityService.ListOperationGrants`
+     returns it with each operation's basis, from
+     `cedar.CapabilityOperationGrants`; a test holds the table to the policy
+     text, so the console never describes a grant the engine does not make.
+  5. **A tenant can still say no.** These are permits; a tenant `forbid`
      wins, as with every built-in.
 
 - **Consequences.**

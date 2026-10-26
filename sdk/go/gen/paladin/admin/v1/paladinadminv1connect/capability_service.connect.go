@@ -168,11 +168,11 @@ type CapabilityServiceClient interface {
 	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
-	// ListOperationGrants returns, for each capability operation, the actions
-	// it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-	// the caveats admit the operation, the built-in policy grants its actions.
-	// An operation that unlocks none needs a tenant policy naming the actions.
-	// The same for every caller; it reads no tenant.
+	// ListOperationGrants returns, for each capability operation, what it
+	// unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+	// and on what basis: the built-in policy's actions, a tenant policy, the
+	// operation it is asserted beside, or the caveats alone. The same for every
+	// caller; it reads no tenant.
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
@@ -229,11 +229,11 @@ type CapabilityServiceHandler interface {
 	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
-	// ListOperationGrants returns, for each capability operation, the actions
-	// it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-	// the caveats admit the operation, the built-in policy grants its actions.
-	// An operation that unlocks none needs a tenant policy naming the actions.
-	// The same for every caller; it reads no tenant.
+	// ListOperationGrants returns, for each capability operation, what it
+	// unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+	// and on what basis: the built-in policy's actions, a tenant policy, the
+	// operation it is asserted beside, or the caveats alone. The same for every
+	// caller; it reads no tenant.
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 

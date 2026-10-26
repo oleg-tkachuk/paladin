@@ -1,6 +1,7 @@
 package capabilityh
 
 import (
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -24,6 +25,12 @@ func TestListOperationGrants_ServesTheEngineTable(t *testing.T) {
 	for i, want := range cedar.CapabilityOperationGrants {
 		if got[i].GetOp() != want.Op {
 			t.Errorf("grant %d op = %q, want %q", i, got[i].GetOp(), want.Op)
+		}
+		if got[i].GetBasis() != grantBasisToProto[want.Basis] || got[i].GetBasis() == adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_UNSPECIFIED {
+			t.Errorf("%s basis = %v, want %v", want.Op, got[i].GetBasis(), grantBasisToProto[want.Basis])
+		}
+		if !slices.Equal(got[i].GetPairedOps(), want.PairedOps) || !slices.Equal(got[i].GetProcedures(), want.Procedures) {
+			t.Errorf("%s paired %v procedures %v, want %v %v", want.Op, got[i].GetPairedOps(), got[i].GetProcedures(), want.PairedOps, want.Procedures)
 		}
 		if len(got[i].GetActions()) != len(want.Actions) {
 			t.Errorf("%s: %d actions, want %d", want.Op, len(got[i].GetActions()), len(want.Actions))

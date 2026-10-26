@@ -91,11 +91,11 @@ service CapabilityService {
   rpc GetUsage(CapabilityServiceGetUsageRequest) returns (CapabilityServiceGetUsageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // ListOperationGrants returns, for each capability operation, the actions
-  // it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-  // the caveats admit the operation, the built-in policy grants its actions.
-  // An operation that unlocks none needs a tenant policy naming the actions.
-  // The same for every caller; it reads no tenant.
+  // ListOperationGrants returns, for each capability operation, what it
+  // unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+  // and on what basis: the built-in policy's actions, a tenant policy, the
+  // operation it is asserted beside, or the caveats alone. The same for every
+  // caller; it reads no tenant.
   rpc ListOperationGrants(CapabilityServiceListOperationGrantsRequest) returns (CapabilityServiceListOperationGrantsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -469,16 +469,37 @@ message CapabilityServiceGetUsageResponse {
 message CapabilityServiceListOperationGrantsRequest {}
 
 message CapabilityServiceListOperationGrantsResponse {
-  // One per operation a capability's caveats can name, in the order
-  // get, list, put, delete, manage.
+  // One per operation a capability's caveats can name, in the order the
+  // console lists them.
   repeated CapabilityOperationGrant grants = 1;
+}
+
+// Where what an operation unlocks comes from.
+enum CapabilityGrantBasis {
+  CAPABILITY_GRANT_BASIS_UNSPECIFIED = 0;
+  // The built-in policy grants the actions, in the capability's own tenant.
+  CAPABILITY_GRANT_BASIS_BUILTIN = 1;
+  // Nothing without a tenant policy that names the operation's actions.
+  CAPABILITY_GRANT_BASIS_TENANT_POLICY = 2;
+  // Asserted only beside another operation, in paired_ops, whose own row
+  // grants the action: it adds a requirement, never an action.
+  CAPABILITY_GRANT_BASIS_PAIRED = 3;
+  // The caveats alone decide; no policy is asked (share: Delegate).
+  CAPABILITY_GRANT_BASIS_CAVEATS_ONLY = 4;
 }
 
 // What one capability operation unlocks without a tenant policy.
 message CapabilityOperationGrant {
   // The operation as caveats.ops names it.
   string op = 1;
-  // The Cedar actions the operation unlocks in the capability's own tenant.
-  // Empty when every action of the operation needs a tenant policy.
+  // The Cedar actions the built-in policy grants under the operation, in the
+  // capability's own tenant. Set only for CAPABILITY_GRANT_BASIS_BUILTIN.
   repeated string actions = 2;
+  CapabilityGrantBasis basis = 3;
+  // The operations this one is asserted beside, for
+  // CAPABILITY_GRANT_BASIS_PAIRED.
+  repeated string paired_ops = 4;
+  // The RPCs the caveats alone open, for CAPABILITY_GRANT_BASIS_CAVEATS_ONLY,
+  // as service.Method.
+  repeated string procedures = 5;
 }

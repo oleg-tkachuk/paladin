@@ -25,7 +25,22 @@ func operationGrantsToProto(rows []cedar.CapabilityOperationGrant) []*adminv1.Ca
 		for _, a := range row.Actions {
 			actions = append(actions, a.String())
 		}
-		out = append(out, &adminv1.CapabilityOperationGrant{Op: row.Op, Actions: actions})
+		out = append(out, &adminv1.CapabilityOperationGrant{
+			Op:         row.Op,
+			Actions:    actions,
+			Basis:      grantBasisToProto[row.Basis],
+			PairedOps:  row.PairedOps,
+			Procedures: row.Procedures,
+		})
 	}
 	return out
+}
+
+// grantBasisToProto maps the engine's basis onto the wire enum; a basis
+// missing here reaches the wire as UNSPECIFIED, which a test refuses.
+var grantBasisToProto = map[cedar.GrantBasis]adminv1.CapabilityGrantBasis{
+	cedar.GrantBuiltin:      adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_BUILTIN,
+	cedar.GrantTenantPolicy: adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_TENANT_POLICY,
+	cedar.GrantPaired:       adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_PAIRED,
+	cedar.GrantCaveatsOnly:  adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_CAVEATS_ONLY,
 }

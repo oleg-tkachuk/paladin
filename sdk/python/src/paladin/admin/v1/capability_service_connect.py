@@ -131,11 +131,11 @@ class CapabilityService(Protocol):
 
     async def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
         """
-        ListOperationGrants returns, for each capability operation, the actions
-        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-        the caveats admit the operation, the built-in policy grants its actions.
-        An operation that unlocks none needs a tenant policy naming the actions.
-        The same for every caller; it reads no tenant.
+        ListOperationGrants returns, for each capability operation, what it
+        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+        and on what basis: the built-in policy's actions, a tenant policy, the
+        operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -528,11 +528,11 @@ class CapabilityServiceClient(ConnectClient):
         use_get: bool = False,
     ) -> CapabilityServiceListOperationGrantsResponse:
         """
-        ListOperationGrants returns, for each capability operation, the actions
-        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-        the caveats admit the operation, the built-in policy grants its actions.
-        An operation that unlocks none needs a tenant policy naming the actions.
-        The same for every caller; it reads no tenant.
+        ListOperationGrants returns, for each capability operation, what it
+        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+        and on what basis: the built-in policy's actions, a tenant policy, the
+        operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
         """
         return await self.execute_unary(
             request=request,
@@ -645,11 +645,11 @@ class CapabilityServiceSync(Protocol):
 
     def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
         """
-        ListOperationGrants returns, for each capability operation, the actions
-        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-        the caveats admit the operation, the built-in policy grants its actions.
-        An operation that unlocks none needs a tenant policy naming the actions.
-        The same for every caller; it reads no tenant.
+        ListOperationGrants returns, for each capability operation, what it
+        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+        and on what basis: the built-in policy's actions, a tenant policy, the
+        operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -1032,11 +1032,11 @@ class CapabilityServiceClientSync(ConnectClientSync):
         use_get: bool = False,
     ) -> CapabilityServiceListOperationGrantsResponse:
         """
-        ListOperationGrants returns, for each capability operation, the actions
-        it unlocks in the capability's own tenant with no tenant policy (ADR-0038):
-        the caveats admit the operation, the built-in policy grants its actions.
-        An operation that unlocks none needs a tenant policy naming the actions.
-        The same for every caller; it reads no tenant.
+        ListOperationGrants returns, for each capability operation, what it
+        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+        and on what basis: the built-in policy's actions, a tenant policy, the
+        operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
         """
         return self.execute_unary(
             request=request,
