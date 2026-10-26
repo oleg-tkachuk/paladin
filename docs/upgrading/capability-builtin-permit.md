@@ -1,4 +1,4 @@
-## Unreleased — a capability does what its caveats allow without a tenant policy
+## v40.2.0 — a capability does what its caveats allow without a tenant policy
 
 - **A capability is now permitted, in its own tenant, the data-plane actions
   of the operation its caveats admitted** (ADR-0038): `get`/`list` →

@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.123.0, sdk/python/v0.124.0 — the object listing narrows and counts by state and content category
+## v40.2.0, sdk/go/v0.123.0, sdk/python/v0.124.0 — the object listing narrows and counts by state and content category
 
 - **`ListObjectsRequest` gains `facets` and `count_facets`.** `facets`
   (`ObjectFacets`) narrows the listing to the states and the content
@@ -103,7 +103,7 @@ here.
 - The SDK fakes refuse `facets` and `count_facets` with `UNIMPLEMENTED`, as
   they do `filter`.
 
-## sdk/go/v0.122.0, sdk/python/v0.123.0 — the API says what each capability operation unlocks
+## v40.2.0, sdk/go/v0.122.0, sdk/python/v0.123.0 — the API says what each capability operation unlocks
 
 - **`CapabilityService.ListOperationGrants`** returns a row for each
   operation a capability's caveats can name, with its `basis`
@@ -115,7 +115,7 @@ here.
   Additive.
 - The console shows it when a capability is issued and on its record.
 
-## Unreleased — a capability does what its caveats allow without a tenant policy
+## v40.2.0 — a capability does what its caveats allow without a tenant policy
 
 - **A capability is now permitted, in its own tenant, the data-plane actions
   of the operation its caveats admitted** (ADR-0038): `get`/`list` →
@@ -128,7 +128,7 @@ here.
   capability's caveats admitted for the request, `""` without one. Tenant
   policies may read it. Additive.
 
-## sdk/go/v0.120.0, sdk/python/v0.121.0 — the configuration's defaults beside the running one
+## v40.2.0, sdk/go/v0.120.0, sdk/python/v0.121.0 — the configuration's defaults beside the running one
 
 - **`GetConfigResponse` gains `defaults_yaml`**: the configuration a
   deployment runs on where it sets nothing, in the running one's shape and

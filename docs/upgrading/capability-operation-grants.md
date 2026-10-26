@@ -1,4 +1,4 @@
-## sdk/go/v0.122.0, sdk/python/v0.123.0 — the API says what each capability operation unlocks
+## v40.2.0, sdk/go/v0.122.0, sdk/python/v0.123.0 — the API says what each capability operation unlocks
 
 - **`CapabilityService.ListOperationGrants`** returns a row for each
   operation a capability's caveats can name, with its `basis`
