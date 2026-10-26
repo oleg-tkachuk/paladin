@@ -1,4 +1,4 @@
-## Unreleased — the object listing narrows and counts by state and content category
+## sdk/go/v0.123.0, sdk/python/v0.124.0 — the object listing narrows and counts by state and content category
 
 - **`ListObjectsRequest` gains `facets` and `count_facets`.** `facets`
   (`ObjectFacets`) narrows the listing to the states and the content
