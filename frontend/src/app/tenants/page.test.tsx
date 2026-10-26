@@ -18,6 +18,12 @@ const h = vi.hoisted(() => ({
     tenants: [] as Array<Record<string, unknown>>,
     loading: false,
     error: null as string | null,
+    // What useTenantLimitSignals answers: the page reads only `signals`.
+    limits: {
+      signals: new Map() as ReadonlyMap<string, TenantLimitSignals>,
+      loading: false,
+      error: null as string | null,
+    },
   },
 }));
 
@@ -36,6 +42,9 @@ vi.mock("@/hooks/useTenants", () => ({
     updateTenantMetadata: h.updateTenant,
     deleteTenant: h.deleteTenant,
   }),
+}));
+vi.mock("@/hooks/useTenantLimitSignals", () => ({
+  useTenantLimitSignals: () => h.state.limits,
 }));
 vi.mock("@/hooks/useBackends", () => ({
   useBackends: () => ({ backends: [] }),
@@ -61,6 +70,10 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 
+import { create } from "@bufbuild/protobuf";
+import { MoneySchema } from "@/gen/google/type/money_pb";
+import { TenantBudgetSchema } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
+import type { TenantLimitSignals } from "@/lib/tenant/limits";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { renderWithActions } from "@/test/withActions";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -72,6 +85,7 @@ beforeEach(() => {
   h.showNotification.mockReset();
   h.state.tenants = [];
   h.state.loading = false;
+  h.state.limits = { signals: new Map(), loading: false, error: null };
 });
 
 describe("TenantsPage", () => {
@@ -366,6 +380,128 @@ describe("TenantsPage views", () => {
     expect(
       screen.getByRole("heading", { name: "Default backend" }),
     ).toBeInTheDocument();
+  });
+});
+
+// The limit states come from the platform reads (useTenantLimitSignals),
+// joined to the tenants by id; a read still loading or refused leaves the
+// tenants as the list reads them.
+describe("TenantsPage limit states", () => {
+  const usd = (units: bigint) =>
+    create(MoneySchema, { currencyCode: "USD", units });
+  const budget = (spent: bigint) =>
+    create(TenantBudgetSchema, {
+      tenantId: "t",
+      spent: usd(spent),
+      budgetCeiling: { case: "maxBudget", value: usd(100n) },
+    });
+  const tenants = () =>
+    ["acme", "globex", "initech", "umbrella"].map((slug, i) => ({
+      tenantId: `t-${i + 1}`,
+      slug,
+      displayName: `${slug} Inc`,
+      labels: {},
+      resourceVersion: "1",
+    }));
+  const limits = (): Map<string, TenantLimitSignals> =>
+    new Map<string, TenantLimitSignals>([
+      ["t-1", { budget: budget(120n) }],
+      ["t-2", { quota: "near-limit" }],
+      ["t-3", { quota: "near-limit", budget: budget(85n) }],
+      // A tenant the list does not hold is not counted.
+      ["t-9", { quota: "at-limit" }],
+    ]);
+  const renderPage = () =>
+    render(
+      <TooltipProvider>
+        <TenantsPage />
+      </TooltipProvider>,
+    );
+  beforeEach(() => window.history.replaceState(null, "", "/tenants"));
+  afterEach(() => window.history.replaceState(null, "", "/tenants"));
+
+  it("counts the tenants over budget and near quota in the status bar", () => {
+    h.state.tenants = tenants();
+    h.state.limits.signals = limits();
+    renderPage();
+    expect(
+      screen.getByRole("img", {
+        name: "1 Over budget · 2 Near quota · 1 Active",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows each tenant's limit state on its row", () => {
+    h.state.tenants = tenants();
+    h.state.limits.signals = limits();
+    renderPage();
+    const row = (slug: string) =>
+      screen.getByText(slug).closest("tr") as HTMLElement;
+    expect(within(row("acme")).getByText("Over budget")).toBeInTheDocument();
+    expect(within(row("globex")).getByText("Near quota")).toBeInTheDocument();
+    expect(within(row("initech")).getByText("Near quota")).toBeInTheDocument();
+    expect(
+      within(row("umbrella")).queryByText(/budget|quota/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the limit state on a tile, beside a notice that leads", async () => {
+    h.state.tenants = [
+      ...tenants().slice(0, 1),
+      {
+        ...tenants()[1],
+        labels: {
+          "notice.paladin.io/content": "Read-only until Friday",
+          "notice.paladin.io/severity": "critical",
+        },
+      },
+    ];
+    h.state.limits.signals = limits();
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: "Tiles" }));
+    const tiles = within(screen.getByRole("list", { name: "Tenants" }));
+    const [acme, globex] = tiles.getAllByRole("listitem");
+    expect(within(acme).getByText("Over budget")).toBeInTheDocument();
+    expect(within(globex).getByText("Critical notice")).toBeInTheDocument();
+    expect(within(globex).getByText("Near quota")).toBeInTheDocument();
+  });
+
+  it("counts the limit states in the summary", () => {
+    window.history.replaceState(null, "", "/tenants?view=summary");
+    h.state.tenants = tenants();
+    h.state.limits.signals = limits();
+    renderPage();
+    const state = screen
+      .getByRole("heading", { name: "State" })
+      .closest("[data-slot=card]") as HTMLElement;
+    expect(
+      within(state)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Over budget (1)", "Near quota (2)", "Active (1)"]);
+  });
+
+  it("lists the tenants without limit states while the reads load", () => {
+    h.state.tenants = tenants();
+    h.state.limits = { signals: new Map(), loading: true, error: null };
+    renderPage();
+    expect(screen.getByText("acme")).toBeInTheDocument();
+    expect(screen.queryByText("Over budget")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "4 Active" })).toBeInTheDocument();
+  });
+
+  it("lists the tenants without limit states when a read is refused", () => {
+    h.state.tenants = tenants();
+    h.state.limits = {
+      signals: new Map(),
+      loading: false,
+      error: "permission denied",
+    };
+    renderPage();
+    expect(screen.getByText("umbrella")).toBeInTheDocument();
+    expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("permission denied")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "4 Active" })).toBeInTheDocument();
   });
 });
 

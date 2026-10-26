@@ -49,6 +49,7 @@ import {
 import type { TenantBudgetSummary } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
 import { formatMoney, unitOf } from "@/lib/format/money";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
+import { BUDGET_ALERT_THRESHOLD } from "@/lib/tenant/limits";
 
 // Operation.result is a oneof — case "error" carries google.rpc.Status.
 function opError(o: Operation): string {
@@ -302,10 +303,6 @@ function FailedOpsWidget() {
   );
 }
 
-// Threshold for the "approaching cap" surface. 80 % is the
-// platform-wide default — operators escalate to a deeper view
-// (/billing or the tenant's Budget tab) for fine-grained action.
-const BUDGET_ALERT_THRESHOLD = 80;
 const BUDGET_ALERT_LIMIT = 5;
 
 const BUDGET_ALERTS_CARD: QuietCard = {

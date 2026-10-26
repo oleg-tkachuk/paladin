@@ -28,6 +28,9 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { bucketHref, parseBucketName } from "@/lib/navigation/hrefs";
 import { useTenants } from "@/hooks/useTenants";
+import { useTenantLimitSignals } from "@/hooks/useTenantLimitSignals";
+import { tenantLimitState } from "@/lib/tenant/limits";
+import { StatusLabel } from "@/components/ui/StatusIcon";
 import { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { TenantCreateDialog } from "./TenantCreateDialog";
 import { TenantEditDialog } from "./TenantEditDialog";
@@ -106,6 +109,9 @@ export default function TenantsPage() {
     updateTenantMetadata,
     deleteTenant,
   } = useTenants();
+  // Which tenants are near or at their limits. A read that fails or has not
+  // landed adds nothing: the tenants show, without the states it would tell.
+  const { signals: limits } = useTenantLimitSignals();
 
   // ─── search + sort ────────────────────────────────────────────────────────
   const [search, setSearch] = useTableQuery(PAGE_TABLE);
@@ -174,9 +180,9 @@ export default function TenantsPage() {
   const showRows = filtered.length > 0 && !listError;
   const otherView =
     showRows && view === "tiles" ? (
-      <TenantTiles tenants={paged.rows} />
+      <TenantTiles tenants={paged.rows} limits={limits} />
     ) : showRows && view === "summary" ? (
-      <TenantSummary tenants={filtered} />
+      <TenantSummary tenants={filtered} limits={limits} />
     ) : undefined;
 
   return (
@@ -204,7 +210,11 @@ export default function TenantsPage() {
                 </>
               }
             />
-            <StatusBar segments={tallyStatus(filtered, tenantStatus)} />
+            <StatusBar
+              segments={tallyStatus(filtered, (t) =>
+                tenantStatus(t, limits.get(t.tenantId)),
+              )}
+            />
           </>
         }
         view={otherView}
@@ -306,6 +316,7 @@ export default function TenantsPage() {
               const labelEntries = plainLabels(tenant.labels);
               const notice = noticeFromLabels(tenant.labels);
               const db = parseBucketName(tenant.defaultBucket);
+              const limit = tenantLimitState(limits.get(tenant.tenantId));
               // Slug is the canonical handle in URLs; UUID is the
               // safety net when slug is empty (legacy rows). Phase 0
               // makes slug NOT NULL UNIQUE, so the fallback only
@@ -340,6 +351,14 @@ export default function TenantsPage() {
                       </Link>
                       {/* Beside the link, not in it: the glyph takes focus. */}
                       {notice && <NoticeIcon notice={notice} />}
+                      {limit && (
+                        <StatusLabel
+                          tone={limit.tone}
+                          className="whitespace-nowrap text-xs"
+                        >
+                          {limit.label}
+                        </StatusLabel>
+                      )}
                     </div>
                   </TableCell>
                   {/* Free text, and the one column that gives: it takes what
