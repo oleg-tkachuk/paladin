@@ -74,8 +74,8 @@ describe("useObjectListState filter escaping", () => {
 
 describe("useObjectListState facets from the URL", () => {
   it("sends the status and content type as facets, not in the filter", () => {
-    expect(facetsFor("status=AVAILABLE,DELETED&type=pdf")).toEqual({
-      states: [ObjectState.AVAILABLE, ObjectState.DELETED],
+    expect(facetsFor("status=AVAILABLE,PENDING&type=pdf")).toEqual({
+      states: [ObjectState.PENDING, ObjectState.AVAILABLE],
       contentCategories: [ObjectContentCategory.PDF],
     });
     expect(filterFor("status=AVAILABLE&type=pdf")).toBe("");
