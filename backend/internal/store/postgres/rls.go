@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -95,7 +96,7 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 		// The actor goes with it, or the next request's policy writes would
 		// be recorded under the last one's name.
 		if _, err := conn.Exec(context.Background(),
-			`SELECT set_config('paladin.actor', '', false)`); err != nil {
+			`SELECT set_config('paladin.actor', '', false), set_config('paladin.actor_tenant', '', false)`); err != nil {
 			return false
 		}
 		// Wipe the GUC on release so a connection returning to the
@@ -122,15 +123,24 @@ func setCrossTenant(ctx context.Context, conn *pgx.Conn, on bool) error {
 	return err
 }
 
-// setActor writes `paladin.actor`, the subject of the request's principal,
-// which the policy-version triggers (migration 101) record as who wrote a
-// policy. Always written, ” without a principal, for setCrossTenant's
-// reason: a reused connection must not keep the previous request's name.
+// setActor writes `paladin.actor` and `paladin.actor_tenant`, the subject of
+// the request's principal and its own tenant (not the one it acts on), which
+// the policy-version triggers (migrations 101, 102) record as who wrote a
+// policy: a subject names a user only within its tenant. Always written, as
+// the empty string without a principal, for setCrossTenant's reason: a
+// reused connection must not keep the previous request's name.
 func setActor(ctx context.Context, conn *pgx.Conn) error {
-	subject := ""
+	subject, tenant := "", ""
 	if p, err := auth.PrincipalFromContext(ctx); err == nil && p != nil {
 		subject = p.Subject
+		// The tenant only qualifies a subject; without one there is no
+		// writer to name.
+		if subject != "" && p.TenantID != uuid.Nil {
+			tenant = p.TenantID.String()
+		}
 	}
-	_, err := conn.Exec(ctx, `SELECT set_config('paladin.actor', $1, false)`, subject)
+	_, err := conn.Exec(ctx,
+		`SELECT set_config('paladin.actor', $1, false), set_config('paladin.actor_tenant', $2, false)`,
+		subject, tenant)
 	return err
 }

@@ -37,7 +37,7 @@ func (q *Queries) CollectionIDForPolicy(ctx context.Context, tenantID pgtype.UUI
 
 const listPolicyVersions = `-- name: ListPolicyVersions :many
 
-SELECT version, cedar_policy, written_by, written_at
+SELECT version, cedar_policy, written_by, written_by_tenant_id, written_at
   FROM policy_versions
  WHERE layer = $1::policy_layer
    AND owner_id = $2
@@ -47,10 +47,11 @@ SELECT version, cedar_policy, written_by, written_at
 `
 
 type ListPolicyVersionsRow struct {
-	Version     int32              `json:"version"`
-	CedarPolicy string             `json:"cedar_policy"`
-	WrittenBy   *string            `json:"written_by"`
-	WrittenAt   pgtype.Timestamptz `json:"written_at"`
+	Version           int32              `json:"version"`
+	CedarPolicy       string             `json:"cedar_policy"`
+	WrittenBy         *string            `json:"written_by"`
+	WrittenByTenantID pgtype.UUID        `json:"written_by_tenant_id"`
+	WrittenAt         pgtype.Timestamptz `json:"written_at"`
 }
 
 // Policy history (migration 101). Rows are written by triggers only; the
@@ -75,6 +76,7 @@ func (q *Queries) ListPolicyVersions(ctx context.Context, layer PolicyLayer, own
 			&i.Version,
 			&i.CedarPolicy,
 			&i.WrittenBy,
+			&i.WrittenByTenantID,
 			&i.WrittenAt,
 		); err != nil {
 			return nil, err

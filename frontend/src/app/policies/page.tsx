@@ -221,7 +221,17 @@ export default function PoliciesPage() {
   // it: without this, a failed read followed by Save would replace the
   // target's real policy with the previous target's text, or with nothing.
   const policyFailed = policyQuery.isError && !policyQuery.data;
-  const loadPolicyForTarget = () => policyQuery.refetch();
+  // Reload puts what is saved back in the editor, even when the saved
+  // version has not moved: the snapshot below is applied only when its
+  // version changes, so a bare refetch kept the draft and Reload looked broken.
+  const loadPolicyForTarget = async () => {
+    const { data } = await policyQuery.refetch();
+    if (!data) return;
+    setPolicyText(data.policy);
+    setServerSnapshot(data.policy);
+    setResourceVersion(data.resourceVersion);
+    setDiagnostics(null);
+  };
 
   // Apply a freshly-loaded snapshot to the editor, or clear when no target is
   // selected — render-phase adjust-on-change (not set-state-in-effect). Keyed
@@ -301,6 +311,15 @@ export default function PoliciesPage() {
   const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(
     null,
   );
+  // Reload discards a draft that differs from what is saved, so it asks first.
+  const [confirmReload, setConfirmReload] = useState(false);
+  const handleReload = () => {
+    if (policyText !== serverSnapshot) {
+      setConfirmReload(true);
+      return;
+    }
+    void loadPolicyForTarget();
+  };
 
   const applyTemplate = useCallback((id: string) => {
     const tpl = POLICY_TEMPLATES.find((t) => t.id === id);
@@ -475,7 +494,7 @@ export default function PoliciesPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => void loadPolicyForTarget()}
+              onClick={handleReload}
               disabled={!target || loadingPolicy}
               aria-label="Reload policy"
             >
@@ -678,6 +697,19 @@ export default function PoliciesPage() {
         }
         type="warning"
         confirmText="Load template"
+        cancelText="Keep editing"
+      />
+      <ConfirmModal
+        isOpen={confirmReload}
+        onClose={() => setConfirmReload(false)}
+        onConfirm={() => {
+          setConfirmReload(false);
+          void loadPolicyForTarget();
+        }}
+        title="Discard unsaved changes?"
+        message="Reloading replaces the editor's text with the saved policy. Your unsaved Cedar edits are lost."
+        type="warning"
+        confirmText="Reload saved policy"
         cancelText="Keep editing"
       />
     </div>

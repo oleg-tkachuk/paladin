@@ -61,6 +61,22 @@ describe("PolicyHistory", () => {
     expect(diff).toHaveTextContent("permit-two");
   });
 
+  it("looks a writer up in the tenant the server recorded for it", async () => {
+    const PLATFORM = "22222222-2222-4222-8222-222222222222";
+    h.listPolicyVersions.mockResolvedValue(
+      answer([
+        { ...version(2, "two", "admin-id"), writtenByTenantId: PLATFORM },
+      ]),
+    );
+    render(<PolicyHistory resourceName={LAYER} />);
+    const table = await screen.findByRole("table", { name: "Policy versions" });
+    // A platform admin edited acme's policy: its user record is the platform's.
+    expect(within(table).getByText("admin-id")).toHaveAttribute(
+      "data-tenant",
+      PLATFORM,
+    );
+  });
+
   it("diffs the two versions the user picks", async () => {
     h.listPolicyVersions.mockResolvedValue(
       answer([version(3, "three"), version(2, "two"), version(1, "one")]),

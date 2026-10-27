@@ -631,10 +631,14 @@ type PolicyVersion struct {
 	CedarPolicy string `protobuf:"bytes,2,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
 	// The subject of the principal whose request wrote it — a user's id, an
 	// agent's agent:… — and absent when no request did (a migration, psql).
-	WrittenBy     *string                `protobuf:"bytes,3,opt,name=written_by,json=writtenBy,proto3,oneof" json:"written_by,omitempty"`
-	WrittenAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=written_at,json=writtenAt,proto3" json:"written_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	WrittenBy *string                `protobuf:"bytes,3,opt,name=written_by,json=writtenBy,proto3,oneof" json:"written_by,omitempty"`
+	WrittenAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=written_at,json=writtenAt,proto3" json:"written_at,omitempty"`
+	// The writer's own tenant, in which written_by names a user — not the
+	// tenant whose policy it wrote. Absent with written_by, and for a version
+	// written before the server recorded it.
+	WrittenByTenantId *string `protobuf:"bytes,5,opt,name=written_by_tenant_id,json=writtenByTenantId,proto3,oneof" json:"written_by_tenant_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PolicyVersion) Reset() {
@@ -695,6 +699,13 @@ func (x *PolicyVersion) GetWrittenAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *PolicyVersion) GetWrittenByTenantId() string {
+	if x != nil && x.WrittenByTenantId != nil {
+		return *x.WrittenByTenantId
+	}
+	return ""
+}
+
 var File_paladin_admin_v1_policy_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
@@ -736,15 +747,17 @@ const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x8e\x01\n" +
 	"\x1aListPolicyVersionsResponse\x12;\n" +
 	"\bversions\x18\x01 \x03(\v2\x1f.paladin.admin.v1.PolicyVersionR\bversions\x123\n" +
-	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\xba\x01\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\x89\x02\n" +
 	"\rPolicyVersion\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12!\n" +
 	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy\x12\"\n" +
 	"\n" +
 	"written_by\x18\x03 \x01(\tH\x00R\twrittenBy\x88\x01\x01\x129\n" +
 	"\n" +
-	"written_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\twrittenAtB\r\n" +
-	"\v_written_by2\xba\x03\n" +
+	"written_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\twrittenAt\x124\n" +
+	"\x14written_by_tenant_id\x18\x05 \x01(\tH\x01R\x11writtenByTenantId\x88\x01\x01B\r\n" +
+	"\v_written_byB\x17\n" +
+	"\x15_written_by_tenant_id2\xba\x03\n" +
 	"\rPolicyService\x12V\n" +
 	"\bValidate\x12!.paladin.admin.v1.ValidateRequest\x1a\".paladin.admin.v1.ValidateResponse\"\x03\x90\x02\x01\x12e\n" +
 	"\rSimulateAuthz\x12&.paladin.admin.v1.SimulateAuthzRequest\x1a'.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12t\n" +

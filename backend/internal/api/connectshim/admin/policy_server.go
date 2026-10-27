@@ -96,12 +96,17 @@ func (s *PolicyServer) ListPolicyVersions(ctx context.Context, req *pb.ListPolic
 	}
 	resp := &pb.ListPolicyVersionsResponse{Page: convx.PageResponseProto(page.NextPageToken)}
 	for _, v := range page.Versions {
-		resp.Versions = append(resp.Versions, &pb.PolicyVersion{
+		pv := &pb.PolicyVersion{
 			Version:     v.Version,
 			CedarPolicy: v.CedarPolicy,
 			WrittenBy:   v.WrittenBy,
 			WrittenAt:   timestamppb.New(v.WrittenAt),
-		})
+		}
+		if v.WrittenByTenant != nil {
+			id := v.WrittenByTenant.String()
+			pv.WrittenByTenantId = &id
+		}
+		resp.Versions = append(resp.Versions, pv)
 	}
 	return resp, nil
 }

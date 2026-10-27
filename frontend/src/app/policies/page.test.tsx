@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@/test/utils";
+import { render, screen, waitFor, within } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the policies page. It orchestrates four admin
@@ -177,6 +177,58 @@ describe("PoliciesPage unsaved changes", () => {
     });
     expect(diff).toHaveTextContent("forbid");
     expect(diff.querySelector('[data-diff="add"]')).not.toBeNull();
+    h.tenants = [];
+  });
+});
+
+// Reload puts the saved policy back in the editor, even when the saved
+// version has not moved; a draft that differs is discarded only once the user
+// confirms.
+describe("PoliciesPage reload", () => {
+  const SAVED = "permit (principal, action, resource);\n";
+  const cedarEditor = () =>
+    screen.getByRole("textbox", { name: /Cedar policy/ });
+  async function openAcme() {
+    h.tenants = [{ tenantId: "acme", displayName: "Acme" }];
+    h.getTenant.mockResolvedValue({
+      inheritedCedarPolicy: SAVED,
+      resourceVersion: "7",
+    });
+    const user = userEvent.setup();
+    render(<PoliciesPage />);
+    await user.click(screen.getByLabelText("Target"));
+    await user.click(screen.getByRole("option", { name: /Acme/ }));
+    const editor = await screen.findByDisplayValue(/permit \(principal/);
+    await user.type(editor, "forbid");
+    return { user };
+  }
+
+  it("discards the draft once the user confirms", async () => {
+    const { user } = await openAcme();
+    await user.click(screen.getByRole("button", { name: "Reload policy" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Discard unsaved changes?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Reload saved policy" }),
+    );
+    await waitFor(() => expect(cedarEditor()).toHaveValue(SAVED));
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    h.tenants = [];
+  });
+
+  it("keeps the draft when the user keeps editing", async () => {
+    const { user } = await openAcme();
+    const reads = h.getTenant.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Reload policy" }));
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Discard unsaved changes?",
+    });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Keep editing" }),
+    );
+    expect(cedarEditor()).toHaveValue(SAVED + "forbid");
+    expect(h.getTenant.mock.calls.length).toBe(reads);
     h.tenants = [];
   });
 });
