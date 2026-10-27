@@ -36,6 +36,8 @@ type Querier interface {
 	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, expectedVersion int64) (int64, error)
 	// Whether the tenant holds a grant on the bucket and has a collection in it.
 	BucketGrantInUse(ctx context.Context, backendName string, bucketName string, tenantID pgtype.UUID) (bool, error)
+	// The bucket whose policy layer storageBackends/{backend}/buckets/{name} addresses.
+	BucketIDForPolicy(ctx context.Context, backendID pgtype.UUID, name string) (pgtype.UUID, error)
 	// Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
 	//
 	// Shared across replicas: an in-memory bucket gave each pod its own ceiling,
@@ -71,6 +73,8 @@ type Querier interface {
 	// first sighting (claimed = true → process) or a duplicate (false → skip).
 	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
 	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// The collection whose policy layer the name tenants/{tenant}/collections/{name} addresses.
+	CollectionIDForPolicy(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
 	// Rebind verified: serve from the dedicated bucket. The old copies are kept
 	// until cleanup_after (now + the row's retention) so a bad migration is still
 	// rollback-able within the window.
@@ -524,6 +528,11 @@ type Querier interface {
 	// rows are picked up before failed-and-waiting-for-retry rows. Caller is
 	// expected to apply its own backoff before recalling on failed rows.
 	ListPendingBucketProvisions(ctx context.Context, maxAttempts int32, limitCount int32) ([]ListPendingBucketProvisionsRow, error)
+	// Policy history (migration 101). Rows are written by triggers only; the
+	// application reads them.
+	// A layer's versions, newest first. before_version 0 starts at the newest;
+	// otherwise the page holds the versions below it.
+	ListPolicyVersions(ctx context.Context, layer PolicyLayer, ownerID pgtype.UUID, beforeVersion int32, pageSize int32) ([]ListPolicyVersionsRow, error)
 	// The tenant's API tokens a purge would remove, revoked ones included, in
 	// issue order, up to the preview's limit. Under RLS: the caller acts on the
 	// tenant (auth.WithActingTenant).

@@ -167,16 +167,17 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		BucketGrants: adapters.NewBucketGrantRepoV2(db.Queries),
 		// pool wired so the audit interceptor's InsertWithOutbox can open a
 		// tx that commits the audit row + its mirror event atomically.
-		Audit:         adapters.NewAuditRepoV2(db.Queries, pool),
-		Quota:         adapters.NewQuotaRepoV2(db.Queries, pool),
-		EventSub:      adapters.NewEventSubscriptionRepoV2(db.Queries),
-		IAMUser:       adapters.NewUserRepo(db.Queries),
-		IAMRefresh:    refreshRepo,
-		IAMOAuthGrant: refreshRepo,
-		ObjectVersion: adapters.NewObjectVersionRepo(db.Queries),
-		ObjectLock:    adapters.NewObjectLockRepo(db.Queries),
-		ObjectTaint:   adapters.NewObjectTaintRepo(db.Queries),
-		Idempotency:   adapters.NewIdempotencyRepo(db.Queries),
+		Audit:          adapters.NewAuditRepoV2(db.Queries, pool),
+		PolicyVersions: adapters.NewPolicyVersionRepo(db.Queries),
+		Quota:          adapters.NewQuotaRepoV2(db.Queries, pool),
+		EventSub:       adapters.NewEventSubscriptionRepoV2(db.Queries),
+		IAMUser:        adapters.NewUserRepo(db.Queries),
+		IAMRefresh:     refreshRepo,
+		IAMOAuthGrant:  refreshRepo,
+		ObjectVersion:  adapters.NewObjectVersionRepo(db.Queries),
+		ObjectLock:     adapters.NewObjectLockRepo(db.Queries),
+		ObjectTaint:    adapters.NewObjectTaintRepo(db.Queries),
+		Idempotency:    adapters.NewIdempotencyRepo(db.Queries),
 	}
 	storage := wire.Storage{
 		Object:      s3adapter.NewObjectRouter(registry),
