@@ -23,9 +23,11 @@ _sym_db = _symbol_database.Default()
 
 
 from buf.validate import validate_pb2 as buf_dot_validate_dot_validate__pb2
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from paladin.common.v1 import pagination_pb2 as paladin_dot_common_dot_v1_dot_pagination__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/admin/v1/policy_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\"0\n\x0fValidateRequest\x12\x1d\n\x0c\x63\x65\x64\x61r_policy\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"W\n\x10ValidateResponse\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x37\n\x0b\x64iagnostics\x18\x02 \x03(\x0b\x32\".paladin.admin.v1.PolicyDiagnostic\"S\n\x10PolicyDiagnostic\x12\x10\n\x08severity\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x0c\n\x04line\x18\x03 \x01(\x05\x12\x0e\n\x06\x63olumn\x18\x04 \x01(\x05\"\xc1\x01\n\x14SimulateAuthzRequest\x12\"\n\x11principal_subject\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1b\n\x13principal_tenant_id\x18\x02 \x01(\t\x12\x17\n\x0fprincipal_roles\x18\x03 \x03(\t\x12\x17\n\x06\x61\x63tion\x18\x04 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1e\n\rresource_name\x18\x05 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x16\n\x0eprincipal_kind\x18\x06 \x01(\t\"W\n\x15SimulateAuthzResponse\x12\x0f\n\x07\x61llowed\x18\x01 \x01(\x08\x12\x18\n\x10matched_policies\x18\x02 \x03(\t\x12\x13\n\x0b\x65xplanation\x18\x03 \x01(\t\";\n\x19GetEffectivePolicyRequest\x12\x1e\n\rresource_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"h\n\x1aGetEffectivePolicyResponse\x12\x1b\n\x13merged_cedar_policy\x18\x01 \x01(\t\x12-\n\x06layers\x18\x02 \x03(\x0b\x32\x1d.paladin.admin.v1.PolicyLayer\"c\n\x0bPolicyLayer\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x14\n\x0c\x63\x65\x64\x61r_policy\x18\x02 \x01(\t\x12\x0e\n\x06\x66rozen\x18\x03 \x01(\x08\x12\x1e\n\x16\x65valuated_cedar_policy\x18\x04 \x01(\t2\xc4\x02\n\rPolicyService\x12V\n\x08Validate\x12!.paladin.admin.v1.ValidateRequest\x1a\".paladin.admin.v1.ValidateResponse\"\x03\x90\x02\x01\x12\x65\n\rSimulateAuthz\x12&.paladin.admin.v1.SimulateAuthzRequest\x1a\'.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12t\n\x12GetEffectivePolicy\x12+.paladin.admin.v1.GetEffectivePolicyRequest\x1a,.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%paladin/admin/v1/policy_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\"0\n\x0fValidateRequest\x12\x1d\n\x0c\x63\x65\x64\x61r_policy\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"W\n\x10ValidateResponse\x12\n\n\x02ok\x18\x01 \x01(\x08\x12\x37\n\x0b\x64iagnostics\x18\x02 \x03(\x0b\x32\".paladin.admin.v1.PolicyDiagnostic\"S\n\x10PolicyDiagnostic\x12\x10\n\x08severity\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x0c\n\x04line\x18\x03 \x01(\x05\x12\x0e\n\x06\x63olumn\x18\x04 \x01(\x05\"\xc1\x01\n\x14SimulateAuthzRequest\x12\"\n\x11principal_subject\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1b\n\x13principal_tenant_id\x18\x02 \x01(\t\x12\x17\n\x0fprincipal_roles\x18\x03 \x03(\t\x12\x17\n\x06\x61\x63tion\x18\x04 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x1e\n\rresource_name\x18\x05 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12\x16\n\x0eprincipal_kind\x18\x06 \x01(\t\"W\n\x15SimulateAuthzResponse\x12\x0f\n\x07\x61llowed\x18\x01 \x01(\x08\x12\x18\n\x10matched_policies\x18\x02 \x03(\t\x12\x13\n\x0b\x65xplanation\x18\x03 \x01(\t\";\n\x19GetEffectivePolicyRequest\x12\x1e\n\rresource_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\"h\n\x1aGetEffectivePolicyResponse\x12\x1b\n\x13merged_cedar_policy\x18\x01 \x01(\t\x12-\n\x06layers\x18\x02 \x03(\x0b\x32\x1d.paladin.admin.v1.PolicyLayer\"c\n\x0bPolicyLayer\x12\x0e\n\x06source\x18\x01 \x01(\t\x12\x14\n\x0c\x63\x65\x64\x61r_policy\x18\x02 \x01(\t\x12\x0e\n\x06\x66rozen\x18\x03 \x01(\x08\x12\x1e\n\x16\x65valuated_cedar_policy\x18\x04 \x01(\t\"i\n\x19ListPolicyVersionsRequest\x12\x1e\n\rresource_name\x18\x01 \x01(\tB\x07\xbaH\x04r\x02\x10\x01\x12,\n\x04page\x18\x02 \x01(\x0b\x32\x1e.paladin.common.v1.PageRequest\"~\n\x1aListPolicyVersionsResponse\x12\x31\n\x08versions\x18\x01 \x03(\x0b\x32\x1f.paladin.admin.v1.PolicyVersion\x12-\n\x04page\x18\x02 \x01(\x0b\x32\x1f.paladin.common.v1.PageResponse\"\x8e\x01\n\rPolicyVersion\x12\x0f\n\x07version\x18\x01 \x01(\x05\x12\x14\n\x0c\x63\x65\x64\x61r_policy\x18\x02 \x01(\t\x12\x17\n\nwritten_by\x18\x03 \x01(\tH\x00\x88\x01\x01\x12.\n\nwritten_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\r\n\x0b_written_by2\xba\x03\n\rPolicyService\x12V\n\x08Validate\x12!.paladin.admin.v1.ValidateRequest\x1a\".paladin.admin.v1.ValidateResponse\"\x03\x90\x02\x01\x12\x65\n\rSimulateAuthz\x12&.paladin.admin.v1.SimulateAuthzRequest\x1a\'.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12t\n\x12GetEffectivePolicy\x12+.paladin.admin.v1.GetEffectivePolicyRequest\x1a,.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01\x12t\n\x12ListPolicyVersions\x12+.paladin.admin.v1.ListPolicyVersionsRequest\x1a,.paladin.admin.v1.ListPolicyVersionsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,28 +45,38 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SIMULATEAUTHZREQUEST'].fields_by_name['resource_name']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_GETEFFECTIVEPOLICYREQUEST'].fields_by_name['resource_name']._loaded_options = None
   _globals['_GETEFFECTIVEPOLICYREQUEST'].fields_by_name['resource_name']._serialized_options = b'\272H\004r\002\020\001'
+  _globals['_LISTPOLICYVERSIONSREQUEST'].fields_by_name['resource_name']._loaded_options = None
+  _globals['_LISTPOLICYVERSIONSREQUEST'].fields_by_name['resource_name']._serialized_options = b'\272H\004r\002\020\001'
   _globals['_POLICYSERVICE'].methods_by_name['Validate']._loaded_options = None
   _globals['_POLICYSERVICE'].methods_by_name['Validate']._serialized_options = b'\220\002\001'
   _globals['_POLICYSERVICE'].methods_by_name['SimulateAuthz']._loaded_options = None
   _globals['_POLICYSERVICE'].methods_by_name['SimulateAuthz']._serialized_options = b'\220\002\001'
   _globals['_POLICYSERVICE'].methods_by_name['GetEffectivePolicy']._loaded_options = None
   _globals['_POLICYSERVICE'].methods_by_name['GetEffectivePolicy']._serialized_options = b'\220\002\001'
-  _globals['_VALIDATEREQUEST']._serialized_start=88
-  _globals['_VALIDATEREQUEST']._serialized_end=136
-  _globals['_VALIDATERESPONSE']._serialized_start=138
-  _globals['_VALIDATERESPONSE']._serialized_end=225
-  _globals['_POLICYDIAGNOSTIC']._serialized_start=227
-  _globals['_POLICYDIAGNOSTIC']._serialized_end=310
-  _globals['_SIMULATEAUTHZREQUEST']._serialized_start=313
-  _globals['_SIMULATEAUTHZREQUEST']._serialized_end=506
-  _globals['_SIMULATEAUTHZRESPONSE']._serialized_start=508
-  _globals['_SIMULATEAUTHZRESPONSE']._serialized_end=595
-  _globals['_GETEFFECTIVEPOLICYREQUEST']._serialized_start=597
-  _globals['_GETEFFECTIVEPOLICYREQUEST']._serialized_end=656
-  _globals['_GETEFFECTIVEPOLICYRESPONSE']._serialized_start=658
-  _globals['_GETEFFECTIVEPOLICYRESPONSE']._serialized_end=762
-  _globals['_POLICYLAYER']._serialized_start=764
-  _globals['_POLICYLAYER']._serialized_end=863
-  _globals['_POLICYSERVICE']._serialized_start=866
-  _globals['_POLICYSERVICE']._serialized_end=1190
+  _globals['_POLICYSERVICE'].methods_by_name['ListPolicyVersions']._loaded_options = None
+  _globals['_POLICYSERVICE'].methods_by_name['ListPolicyVersions']._serialized_options = b'\220\002\001'
+  _globals['_VALIDATEREQUEST']._serialized_start=157
+  _globals['_VALIDATEREQUEST']._serialized_end=205
+  _globals['_VALIDATERESPONSE']._serialized_start=207
+  _globals['_VALIDATERESPONSE']._serialized_end=294
+  _globals['_POLICYDIAGNOSTIC']._serialized_start=296
+  _globals['_POLICYDIAGNOSTIC']._serialized_end=379
+  _globals['_SIMULATEAUTHZREQUEST']._serialized_start=382
+  _globals['_SIMULATEAUTHZREQUEST']._serialized_end=575
+  _globals['_SIMULATEAUTHZRESPONSE']._serialized_start=577
+  _globals['_SIMULATEAUTHZRESPONSE']._serialized_end=664
+  _globals['_GETEFFECTIVEPOLICYREQUEST']._serialized_start=666
+  _globals['_GETEFFECTIVEPOLICYREQUEST']._serialized_end=725
+  _globals['_GETEFFECTIVEPOLICYRESPONSE']._serialized_start=727
+  _globals['_GETEFFECTIVEPOLICYRESPONSE']._serialized_end=831
+  _globals['_POLICYLAYER']._serialized_start=833
+  _globals['_POLICYLAYER']._serialized_end=932
+  _globals['_LISTPOLICYVERSIONSREQUEST']._serialized_start=934
+  _globals['_LISTPOLICYVERSIONSREQUEST']._serialized_end=1039
+  _globals['_LISTPOLICYVERSIONSRESPONSE']._serialized_start=1041
+  _globals['_LISTPOLICYVERSIONSRESPONSE']._serialized_end=1167
+  _globals['_POLICYVERSION']._serialized_start=1170
+  _globals['_POLICYVERSION']._serialized_end=1312
+  _globals['_POLICYSERVICE']._serialized_start=1315
+  _globals['_POLICYSERVICE']._serialized_end=1757
 # @@protoc_insertion_point(module_scope)

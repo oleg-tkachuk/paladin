@@ -226,6 +226,10 @@ func (failingPolicy) ValidatePolicy(context.Context, string) (*policyh.ValidateO
 	return nil, errBoom
 }
 
+func (failingPolicy) ListPolicyVersions(context.Context, string, int32, string) (policyh.VersionsPage, error) {
+	return policyh.VersionsPage{}, errBoom
+}
+
 type failingQuota struct{}
 
 func (failingQuota) GetBucketQuota(context.Context, string, string) (*admindomain.Quota, error) {
@@ -612,6 +616,10 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 
 		{"Policy.Validate", func() error {
 			_, err := policySrv.Validate(ctx, &pb.ValidateRequest{CedarPolicy: okPolicy})
+			return err
+		}},
+		{"Policy.ListPolicyVersions", func() error {
+			_, err := policySrv.ListPolicyVersions(ctx, &pb.ListPolicyVersionsRequest{ResourceName: collName})
 			return err
 		}},
 		{"Policy.GetEffectivePolicy", func() error {

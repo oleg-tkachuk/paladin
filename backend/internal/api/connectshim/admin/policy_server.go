@@ -5,8 +5,10 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -86,3 +88,20 @@ func (s *PolicyServer) GetEffectivePolicy(ctx context.Context, req *pb.GetEffect
 }
 
 var _ paladinadminv1connect.PolicyServiceHandler = (*PolicyServer)(nil)
+
+func (s *PolicyServer) ListPolicyVersions(ctx context.Context, req *pb.ListPolicyVersionsRequest) (*pb.ListPolicyVersionsResponse, error) {
+	page, err := s.H.ListPolicyVersions(ctx, req.GetResourceName(), req.GetPage().GetPageSize(), req.GetPage().GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	resp := &pb.ListPolicyVersionsResponse{Page: convx.PageResponseProto(page.NextPageToken)}
+	for _, v := range page.Versions {
+		resp.Versions = append(resp.Versions, &pb.PolicyVersion{
+			Version:     v.Version,
+			CedarPolicy: v.CedarPolicy,
+			WrittenBy:   v.WrittenBy,
+			WrittenAt:   timestamppb.New(v.WrittenAt),
+		})
+	}
+	return resp, nil
+}

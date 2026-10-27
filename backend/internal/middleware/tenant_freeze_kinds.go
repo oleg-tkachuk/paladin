@@ -161,6 +161,7 @@ var procedureKinds = map[string]Kind{
 	admin.PolicyServiceValidateProcedure:           Reads,
 	admin.PolicyServiceSimulateAuthzProcedure:      Reads,
 	admin.PolicyServiceGetEffectivePolicyProcedure: Reads,
+	admin.PolicyServiceListPolicyVersionsProcedure: Reads,
 
 	admin.QuotaServiceGetQuotaProcedure:   Reads,
 	admin.QuotaServiceSetQuotaProcedure:   Changes,

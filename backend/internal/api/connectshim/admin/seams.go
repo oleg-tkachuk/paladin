@@ -120,6 +120,7 @@ type policyHandler interface {
 	GetEffectivePolicy(ctx context.Context, resourceName string, fallbackTenant uuid.UUID) (*policyh.EffectivePolicyOutput, error)
 	SimulateAuthz(ctx context.Context, in policyh.SimulateAuthzInput) (*policyh.SimulateAuthzOutput, error)
 	ValidatePolicy(ctx context.Context, text string) (*policyh.ValidateOutput, error)
+	ListPolicyVersions(ctx context.Context, resourceName string, pageSize int32, pageToken string) (policyh.VersionsPage, error)
 }
 
 var _ policyHandler = (*policyh.Handler)(nil)

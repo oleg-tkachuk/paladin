@@ -33,6 +33,9 @@ const (
 	// PolicyServiceGetEffectivePolicyProcedure is the procedure name of the PolicyService's
 	// GetEffectivePolicy RPC.
 	PolicyServiceGetEffectivePolicyProcedure = "/paladin.admin.v1.PolicyService/GetEffectivePolicy"
+	// PolicyServiceListPolicyVersionsProcedure is the procedure name of the PolicyService's
+	// ListPolicyVersions RPC.
+	PolicyServiceListPolicyVersionsProcedure = "/paladin.admin.v1.PolicyService/ListPolicyVersions"
 )
 
 var (
@@ -60,6 +63,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	policyServiceListPolicyVersionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_policy_service_proto.Services().ByName("PolicyService").Methods().ByName("ListPolicyVersions"),
+			Procedure:        PolicyServiceListPolicyVersionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // PolicyServiceClient is a client for the paladin.admin.v1.PolicyService service.
@@ -73,6 +84,13 @@ type PolicyServiceClient interface {
 	// GetEffectivePolicy returns the merged policy stack for a target
 	// (tenant + bucket + collection inheritance), useful for debugging.
 	GetEffectivePolicy(context.Context, *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error)
+	// ListPolicyVersions pages through the texts one policy layer has held,
+	// newest first, with who wrote each and when (ADR-0040). resource_name
+	// names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+	// tenants/{id} or tenants/{id}/collections/{name}. Gated as
+	// GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+	// not exist, or one the caller's tenant cannot see.
+	ListPolicyVersions(context.Context, *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error)
 }
 
 // NewPolicyServiceClient constructs a client for the paladin.admin.v1.PolicyService service.
@@ -92,6 +110,13 @@ type PolicyServiceHandler interface {
 	// GetEffectivePolicy returns the merged policy stack for a target
 	// (tenant + bucket + collection inheritance), useful for debugging.
 	GetEffectivePolicy(context.Context, *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error)
+	// ListPolicyVersions pages through the texts one policy layer has held,
+	// newest first, with who wrote each and when (ADR-0040). resource_name
+	// names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+	// tenants/{id} or tenants/{id}/collections/{name}. Gated as
+	// GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+	// not exist, or one the caller's tenant cannot see.
+	ListPolicyVersions(context.Context, *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error)
 }
 
 // RegisterPolicyServiceHandler registers svc as the paladin.admin.v1.PolicyService implementation
@@ -102,6 +127,7 @@ func RegisterPolicyServiceHandler(server *connect.Server, svc PolicyServiceHandl
 		connect.Method{Spec: policyServiceValidateSpec(), Handler: adapter.validate},
 		connect.Method{Spec: policyServiceSimulateAuthzSpec(), Handler: adapter.simulateAuthz},
 		connect.Method{Spec: policyServiceGetEffectivePolicySpec(), Handler: adapter.getEffectivePolicy},
+		connect.Method{Spec: policyServiceListPolicyVersionsSpec(), Handler: adapter.listPolicyVersions},
 	)
 }
 
@@ -118,6 +144,10 @@ func (UnimplementedPolicyServiceHandler) SimulateAuthz(context.Context, *v1.Simu
 
 func (UnimplementedPolicyServiceHandler) GetEffectivePolicy(context.Context, *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PolicyService.GetEffectivePolicy is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) ListPolicyVersions(context.Context, *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.PolicyService.ListPolicyVersions is not implemented")
 }
 
 type policyServiceClient struct {
@@ -143,6 +173,14 @@ func (c *policyServiceClient) SimulateAuthz(ctx context.Context, req *v1.Simulat
 func (c *policyServiceClient) GetEffectivePolicy(ctx context.Context, req *v1.GetEffectivePolicyRequest) (*v1.GetEffectivePolicyResponse, error) {
 	var res v1.GetEffectivePolicyResponse
 	if err := c.client.CallUnary(ctx, policyServiceGetEffectivePolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) ListPolicyVersions(ctx context.Context, req *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error) {
+	var res v1.ListPolicyVersionsResponse
+	if err := c.client.CallUnary(ctx, policyServiceListPolicyVersionsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -180,6 +218,18 @@ func (h policyServiceHandler) getEffectivePolicy(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.GetEffectivePolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) listPolicyVersions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPolicyVersionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPolicyVersions(ctx, &req)
 	if err != nil {
 		return err
 	}

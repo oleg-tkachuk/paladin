@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .policy_service_pb2 import GetEffectivePolicyRequest, GetEffectivePolicyResponse, SimulateAuthzRequest, SimulateAuthzResponse, ValidateRequest, ValidateResponse
+from .policy_service_pb2 import GetEffectivePolicyRequest, GetEffectivePolicyResponse, ListPolicyVersionsRequest, ListPolicyVersionsResponse, SimulateAuthzRequest, SimulateAuthzResponse, ValidateRequest, ValidateResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -58,6 +58,17 @@ class PolicyService(Protocol):
         """
         GetEffectivePolicy returns the merged policy stack for a target
         (tenant + bucket + collection inheritance), useful for debugging.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_policy_versions(self, request: ListPolicyVersionsRequest, ctx: RequestContext[ListPolicyVersionsRequest, ListPolicyVersionsResponse], /) -> ListPolicyVersionsResponse:
+        """
+        ListPolicyVersions pages through the texts one policy layer has held,
+        newest first, with who wrote each and when (ADR-0040). resource_name
+        names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+        tenants/{id} or tenants/{id}/collections/{name}. Gated as
+        GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+        not exist, or one the caller's tenant cannot see.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -104,6 +115,16 @@ class PolicyServiceASGIApplication(ConnectASGIApplication[PolicyService]):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.get_effective_policy,
+                ),
+                "/paladin.admin.v1.PolicyService/ListPolicyVersions": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListPolicyVersions",
+                        service_name="paladin.admin.v1.PolicyService",
+                        input=ListPolicyVersionsRequest,
+                        output=ListPolicyVersionsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_policy_versions,
                 ),
             },
             interceptors=interceptors,
@@ -226,6 +247,36 @@ class PolicyServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def list_policy_versions(
+        self,
+        request: ListPolicyVersionsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListPolicyVersionsResponse:
+        """
+        ListPolicyVersions pages through the texts one policy layer has held,
+        newest first, with who wrote each and when (ADR-0040). resource_name
+        names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+        tenants/{id} or tenants/{id}/collections/{name}. Gated as
+        GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+        not exist, or one the caller's tenant cannot see.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListPolicyVersions",
+                service_name="paladin.admin.v1.PolicyService",
+                input=ListPolicyVersionsRequest,
+                output=ListPolicyVersionsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
 class PolicyServiceSync(Protocol):
     """
     PolicyService offers Cedar policy authoring helpers — validation,
@@ -250,6 +301,17 @@ class PolicyServiceSync(Protocol):
         """
         GetEffectivePolicy returns the merged policy stack for a target
         (tenant + bucket + collection inheritance), useful for debugging.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_policy_versions(self, request: ListPolicyVersionsRequest, ctx: RequestContext[ListPolicyVersionsRequest, ListPolicyVersionsResponse], /) -> ListPolicyVersionsResponse:
+        """
+        ListPolicyVersions pages through the texts one policy layer has held,
+        newest first, with who wrote each and when (ADR-0040). resource_name
+        names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+        tenants/{id} or tenants/{id}/collections/{name}. Gated as
+        GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+        not exist, or one the caller's tenant cannot see.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -294,6 +356,16 @@ class PolicyServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.get_effective_policy,
+                ),
+                "/paladin.admin.v1.PolicyService/ListPolicyVersions": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListPolicyVersions",
+                        service_name="paladin.admin.v1.PolicyService",
+                        input=ListPolicyVersionsRequest,
+                        output=ListPolicyVersionsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_policy_versions,
                 ),
             },
             interceptors=interceptors,
@@ -407,6 +479,35 @@ class PolicyServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.PolicyService",
                 input=GetEffectivePolicyRequest,
                 output=GetEffectivePolicyResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def list_policy_versions(
+        self,
+        request: ListPolicyVersionsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListPolicyVersionsResponse:
+        """
+        ListPolicyVersions pages through the texts one policy layer has held,
+        newest first, with who wrote each and when (ADR-0040). resource_name
+        names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+        tenants/{id} or tenants/{id}/collections/{name}. Gated as
+        GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+        not exist, or one the caller's tenant cannot see.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListPolicyVersions",
+                service_name="paladin.admin.v1.PolicyService",
+                input=ListPolicyVersionsRequest,
+                output=ListPolicyVersionsResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,
