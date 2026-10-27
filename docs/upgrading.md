@@ -89,6 +89,15 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/go/v0.125.0, sdk/python/v0.126.0 — a policy version names its writer's tenant
+
+- **`PolicyVersion.written_by_tenant_id`**: the writer's own tenant, in which
+  `written_by` names a user — a platform admin editing another tenant's
+  policy is recorded under the platform tenant. Absent with `written_by`, and
+  for versions written before it was recorded. Additive.
+- **Migration `102`** adds the column and records it; the pool sets
+  `paladin.actor_tenant` beside `paladin.actor`.
+
 ## sdk/go/v0.124.0, sdk/python/v0.125.0 — a policy layer keeps every text it has held
 
 - **`PolicyService.ListPolicyVersions`** pages through one layer's texts,
