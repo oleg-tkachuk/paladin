@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // aliceLogin is the login name of the user whose settings are asked about. It
@@ -77,7 +76,7 @@ func TestBuiltin_OwnUserSettingsDoesNotCoverTheTenant(t *testing.T) {
 	tenant := uuid.New()
 	e := NewEngine(fakeStore{}, time.Minute)
 	dec, err := e.IsAuthorized(context.Background(),
-		&Principal{Subject: uuid.NewString(), TenantID: tenant, Kind: "user", Roles: []string{"tenant.user"}},
+		&Principal{Subject: uuid.New().String(), TenantID: tenant, Kind: "user", Roles: []string{"tenant.user"}},
 		ActionReadUserSettings,
 		&Resource{TenantID: tenant},
 		RequestContext{},

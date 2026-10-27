@@ -2,9 +2,9 @@ package admin
 
 import (
 	"context"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	policyh "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/policyh"

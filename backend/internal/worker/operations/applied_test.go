@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
@@ -482,7 +482,7 @@ func TestBatchCopyAdoptsAPendingDestinationFromADeadRun(t *testing.T) {
 	}{
 		{name: "dead creator", dst: pending(func(*objecth.Object) {}), adoption: fakeAdoption{adopt: true},
 			wantAdopted: true, wantAsked: true},
-		{name: "an upload, not a copy", dst: pending(func(d *objecth.Object) { d.CreatedByOperation = uuid.Nil }),
+		{name: "an upload, not a copy", dst: pending(func(d *objecth.Object) { d.CreatedByOperation = uuid.Nil() }),
 			wantReason: "write in progress"},
 		{name: "this operation's own row", dst: pending(func(d *objecth.Object) { d.CreatedByOperation = opID }),
 			wantReason: "write in progress"},

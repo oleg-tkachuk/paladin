@@ -3,9 +3,9 @@ package admin
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -91,7 +91,7 @@ func TestCollectionParentWithoutLookup(t *testing.T) {
 	for parent, want := range map[string]uuid.UUID{
 		"tenants/" + id.String():               id,
 		"tenants/" + id.String() + "/anything": id,
-		"":                                     uuid.Nil,
+		"":                                     uuid.Nil(),
 	} {
 		h := &recordingCollections{}
 		srv := &CollectionServer{H: h, bindings: okBindings{}}

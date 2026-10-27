@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
@@ -34,8 +33,8 @@ func TestCreateCollectionTwiceIsAlreadyExists(t *testing.T) {
 	repo := adapters.NewCollectionRepo(q, pool)
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
-	backendID := "be-" + uuid.NewString()[:8]
-	bucketName := "bk-" + uuid.NewString()[:8]
+	backendID := "be-" + uuid.New().String()[:8]
+	bucketName := "bk-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,
@@ -71,7 +70,7 @@ func TestCreateCollectionOnUnknownBucketIsNotFound(t *testing.T) {
 	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
-	backendID := "be-" + uuid.NewString()[:8]
+	backendID := "be-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,
@@ -99,7 +98,7 @@ func TestCreateBucketTwiceIsAlreadyExists(t *testing.T) {
 	repo := adapters.NewBucketRepoV2(q, pool)
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
-	backendID := "be-" + uuid.NewString()[:8]
+	backendID := "be-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,
@@ -107,7 +106,7 @@ func TestCreateBucketTwiceIsAlreadyExists(t *testing.T) {
 
 	b := admindomain.Bucket{
 		BackendID:     backendID,
-		BucketName:    "bk-" + uuid.NewString()[:8],
+		BucketName:    "bk-" + uuid.New().String()[:8],
 		OwnerTenantID: tenant,
 		Region:        "us-east-1",
 	}
@@ -130,8 +129,8 @@ func TestCreateBucketOnUnknownBackendStaysAConflict(t *testing.T) {
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
 	err := repo.Create(ctx, admindomain.Bucket{
-		BackendID:     "no-such-backend-" + uuid.NewString()[:8],
-		BucketName:    "bk-" + uuid.NewString()[:8],
+		BackendID:     "no-such-backend-" + uuid.New().String()[:8],
+		BucketName:    "bk-" + uuid.New().String()[:8],
 		OwnerTenantID: tenant,
 		Region:        "us-east-1",
 	})

@@ -3,8 +3,7 @@ package resolve
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )

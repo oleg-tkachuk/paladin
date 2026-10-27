@@ -2,8 +2,7 @@ package apiutil
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -41,7 +40,7 @@ func TestCedarPrincipal(t *testing.T) {
 		if cp == nil {
 			t.Fatal("want non-nil cedar principal")
 		}
-		if cp.Subject != "" || cp.TenantID != uuid.Nil || len(cp.Roles) != 0 ||
+		if cp.Subject != "" || cp.TenantID != uuid.Nil() || len(cp.Roles) != 0 ||
 			len(cp.Scopes) != 0 || cp.TenantSlug != "" {
 			t.Errorf("want zero-value cedar principal, got %+v", cp)
 		}

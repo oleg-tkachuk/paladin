@@ -6,8 +6,8 @@ import (
 	"maps"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -21,7 +21,7 @@ import (
 func TestPgUUIDAndBack(t *testing.T) {
 	id := uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
-	if got := pgUUID(uuid.Nil); got.Valid {
+	if got := pgUUID(uuid.Nil()); got.Valid {
 		t.Errorf("pgUUID(Nil): Valid = true, want false — nil must reach SQL as NULL")
 	}
 	got := pgUUID(id)
@@ -32,7 +32,7 @@ func TestPgUUIDAndBack(t *testing.T) {
 		t.Errorf("pgUUID(%v): Bytes = %v", id, uuid.UUID(got.Bytes))
 	}
 
-	if got := uuidFrom(pgtype.UUID{}); got != uuid.Nil {
+	if got := uuidFrom(pgtype.UUID{}); got != uuid.Nil() {
 		t.Errorf("uuidFrom(NULL) = %v, want Nil", got)
 	}
 	if got := uuidFrom(pgUUID(id)); got != id {
@@ -41,7 +41,7 @@ func TestPgUUIDAndBack(t *testing.T) {
 	// A UUID carried in an invalid pgtype value is still NULL: the bytes are
 	// there but the column is not set, and reading them back would resurrect
 	// an id the writer deliberately left absent.
-	if got := uuidFrom(pgtype.UUID{Bytes: id, Valid: false}); got != uuid.Nil {
+	if got := uuidFrom(pgtype.UUID{Bytes: id, Valid: false}); got != uuid.Nil() {
 		t.Errorf("uuidFrom(invalid-with-bytes) = %v, want Nil", got)
 	}
 }

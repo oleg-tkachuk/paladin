@@ -3,9 +3,9 @@ package userh
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -62,7 +62,7 @@ func TestListUsersLetsPlatformAdminListEveryTenant(t *testing.T) {
 		t.Fatalf("ListUsers: %v", err)
 	}
 	// Nil is the cross-tenant scan, and only this role reaches it.
-	if repo.sawArgs.TenantID != uuid.Nil {
+	if repo.sawArgs.TenantID != uuid.Nil() {
 		t.Errorf("repo was scoped to %v, want the cross-tenant Nil", repo.sawArgs.TenantID)
 	}
 }

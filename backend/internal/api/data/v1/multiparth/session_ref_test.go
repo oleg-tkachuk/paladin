@@ -3,9 +3,9 @@ package multiparth
 import (
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 )
 
 // Every per-session multipart RPC carries an object_name AND an upload_id, and
@@ -16,8 +16,8 @@ import (
 func TestAssertSessionMatches(t *testing.T) {
 	t.Parallel()
 
-	objID := uuid.Must(uuid.NewV7())
-	other := uuid.Must(uuid.NewV7())
+	objID := uuid.NewV7()
+	other := uuid.NewV7()
 	sess := Session{UploadID: "up-1", ObjectID: objID, Collection: "docs", Key: "a.pdf"}
 
 	tests := []struct {

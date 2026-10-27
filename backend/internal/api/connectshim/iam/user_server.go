@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -51,15 +51,15 @@ var errForeignTenantSlug = errors.New("tenant is not the caller's")
 // the resolved tenant.
 func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID, error) {
 	if parent == "" {
-		return uuid.Nil, nil
+		return uuid.Nil(), nil
 	}
 	if !strings.HasPrefix(parent, apiutil.TenantNamePrefix) {
-		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.Errorf(connect.CodeInvalidArgument,
 			"invalid parent %q (want %s{tenant_id_or_slug})", parent, apiutil.TenantNamePrefix)
 	}
 	ref, err := apiutil.ParseTenantNameRef(parent)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return uuid.Nil(), connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if ref.HasID() {
 		return ref.ID, nil
@@ -69,14 +69,14 @@ func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID
 		return p.TenantID, nil
 	}
 	if p == nil || !p.HasRole(apiutil.RolePlatformAdmin) {
-		return uuid.Nil, connect.NewError(connect.CodePermissionDenied, errForeignTenantSlug.Error()).WithCause(errForeignTenantSlug)
+		return uuid.Nil(), connect.NewError(connect.CodePermissionDenied, errForeignTenantSlug.Error()).WithCause(errForeignTenantSlug)
 	}
 	t, err := s.tenants.GetBySlug(ctx, ref.Slug)
 	if errors.Is(err, tenanth.ErrNotFound) {
-		return uuid.Nil, connect.Errorf(connect.CodeNotFound, "tenant %q not found", ref.Slug)
+		return uuid.Nil(), connect.Errorf(connect.CodeNotFound, "tenant %q not found", ref.Slug)
 	}
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	return t.TenantID, nil
 }
@@ -289,11 +289,11 @@ var _ = authstore.User{}
 func userNameParts(name string) (parent string, id uuid.UUID, err error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 4 || parts[0] != "tenants" || parts[2] != "users" {
-		return "", uuid.Nil, fmt.Errorf("invalid user name %q", name)
+		return "", uuid.Nil(), fmt.Errorf("invalid user name %q", name)
 	}
 	id, err = uuid.Parse(parts[3])
 	if err != nil {
-		return "", uuid.Nil, fmt.Errorf("invalid user name %q: %w", name, err)
+		return "", uuid.Nil(), fmt.Errorf("invalid user name %q: %w", name, err)
 	}
 	return apiutil.TenantNamePrefix + parts[1], id, nil
 }

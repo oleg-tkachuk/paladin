@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -158,11 +158,7 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		zap.String("key", r.Path),
 	)
 
-	purgeID, err := uuid.NewV7()
-	if err != nil {
-		logger.Warn("purge id", zap.Error(err))
-		return err
-	}
+	purgeID := uuid.NewV7()
 	deleted, err := w.deleteRowRecordingDebt(ctx, r, tenantID, purgeID)
 	if err != nil {
 		logger.Warn("db hard-delete failed", zap.Error(err))

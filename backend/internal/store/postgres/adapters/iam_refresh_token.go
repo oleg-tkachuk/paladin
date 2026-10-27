@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"

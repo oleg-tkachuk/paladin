@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -105,8 +105,8 @@ func TestDeleteBucketHeldByANonCollectionIsAConflict(t *testing.T) {
 	repo := adapters.NewBucketRepoV2(q, pool)
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
-	backendID := "be-" + uuid.NewString()[:8]
-	bucketName := "bk-" + uuid.NewString()[:8]
+	backendID := "be-" + uuid.New().String()[:8]
+	bucketName := "bk-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,

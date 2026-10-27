@@ -2,8 +2,7 @@ package cedar
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // TestTagValueAuthorization proves the Object entity exposes tag VALUES (not just

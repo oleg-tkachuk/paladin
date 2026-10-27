@@ -4,8 +4,8 @@ import (
 	"maps"
 	"slices"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/limes"
 )
 

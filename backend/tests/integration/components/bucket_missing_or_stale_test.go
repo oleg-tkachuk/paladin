@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -29,8 +28,8 @@ func TestGuardedBucketWritesTellMissingFromStale(t *testing.T) {
 	pool := startPostgres(t)
 	repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
 
-	backendID := "be-" + uuid.NewString()[:8]
-	bucketName := "bk-" + uuid.NewString()[:8]
+	backendID := "be-" + uuid.New().String()[:8]
+	bucketName := "bk-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,

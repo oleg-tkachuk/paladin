@@ -5,11 +5,11 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -173,7 +173,7 @@ func TestCreateCollection_KeepsAnExplicitBucket(t *testing.T) {
 	srv := &CollectionServer{H: h, bindings: okBindings{}}
 
 	_, err := srv.CreateCollection(context.Background(), &pb.CreateCollectionRequest{
-		Parent: "tenants/" + uuid.NewString(), Collection: "c1",
+		Parent: "tenants/" + uuid.New().String(), Collection: "c1",
 		CollectionResource: &pb.Collection{Bucket: "storageBackends/other/buckets/b2"},
 	})
 	if err != nil {
@@ -285,7 +285,7 @@ func TestGetQuota_RoutesByScope(t *testing.T) {
 		if h.bucketScope != [2]string{"primary", "b1"} {
 			t.Errorf("bucket quota routed to %v", h.bucketScope)
 		}
-		if h.tenantScope != uuid.Nil {
+		if h.tenantScope != uuid.Nil() {
 			t.Error("a bucket-scoped name reached the tenant-quota call")
 		}
 	})
@@ -490,7 +490,7 @@ func TestCreateTenant_LeavesAbsentLabelsUnset(t *testing.T) {
 		h := &recordingTenant{}
 		srv := &TenantServer{H: h}
 		_, err := srv.CreateTenant(context.Background(), &pb.CreateTenantRequest{
-			TenantId: uuid.NewString(), Tenant: &pb.Tenant{DisplayName: "Acme"},
+			TenantId: uuid.New().String(), Tenant: &pb.Tenant{DisplayName: "Acme"},
 		})
 		if err != nil {
 			t.Fatalf("create: %v", err)
@@ -504,7 +504,7 @@ func TestCreateTenant_LeavesAbsentLabelsUnset(t *testing.T) {
 		h := &recordingTenant{}
 		srv := &TenantServer{H: h}
 		_, err := srv.CreateTenant(context.Background(), &pb.CreateTenantRequest{
-			TenantId: uuid.NewString(),
+			TenantId: uuid.New().String(),
 			Tenant:   &pb.Tenant{DisplayName: "Acme", Labels: map[string]string{"tier": "gold"}},
 		})
 		if err != nil {
@@ -604,7 +604,7 @@ func (deniedPolicy) GetEffectivePolicy(context.Context, string, uuid.UUID) (*pol
 func TestGetEffectivePolicy_KeepsTheHandlersCode(t *testing.T) {
 	srv := &PolicyServer{H: deniedPolicy{}}
 	_, err := srv.GetEffectivePolicy(context.Background(), &pb.GetEffectivePolicyRequest{
-		ResourceName: "tenants/" + uuid.NewString(),
+		ResourceName: "tenants/" + uuid.New().String(),
 	})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("code = %v (%v), want PermissionDenied", connect.CodeOf(err), err)
@@ -654,7 +654,7 @@ func TestBucketOwnerTenant_EmptyIsShared(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if create.in.Bucket.OwnerTenantID != uuid.Nil {
+	if create.in.Bucket.OwnerTenantID != uuid.Nil() {
 		t.Errorf("create without an owner: owner = %v, want none", create.in.Bucket.OwnerTenantID)
 	}
 
@@ -666,7 +666,7 @@ func TestBucketOwnerTenant_EmptyIsShared(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	if update.updateArgs.Bucket.OwnerTenantID != uuid.Nil {
+	if update.updateArgs.Bucket.OwnerTenantID != uuid.Nil() {
 		t.Errorf("update clearing the owner: owner = %v, want none", update.updateArgs.Bucket.OwnerTenantID)
 	}
 }

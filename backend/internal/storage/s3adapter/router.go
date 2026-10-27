@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"io"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"

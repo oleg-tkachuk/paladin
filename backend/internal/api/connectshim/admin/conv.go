@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 
@@ -14,7 +15,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -202,7 +202,7 @@ func bucketToProto(b *admindomain.Bucket) *pb.Bucket {
 }
 
 func uuidStrEmpty(s string) string {
-	if s == uuid.Nil.String() {
+	if s == uuid.Nil().String() {
 		return ""
 	}
 	return s
@@ -401,7 +401,7 @@ func quotaToProto(q *admindomain.Quota) *pb.Quota {
 	}
 	var name string
 	switch {
-	case q.TenantID != uuid.Nil:
+	case q.TenantID != uuid.Nil():
 		name = fmt.Sprintf("tenants/%s/quota", q.TenantID)
 	case q.BackendID != "" && q.BucketName != "":
 		name = fmt.Sprintf("storageBackends/%s/buckets/%s/quota", q.BackendID, q.BucketName)

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
@@ -99,7 +99,7 @@ func TestListTenantSpendSumsEveryTenantOnce(t *testing.T) {
 		t.Fatalf("%d ledger requests, want one", len(ledger.requests))
 	}
 	req := ledger.requests[0]
-	if !req.AllTenants || req.TenantID != uuid.Nil || !slices.Equal(req.GroupBy, []meter.ChargeDimension{meter.ChargeDimensionTenant}) {
+	if !req.AllTenants || req.TenantID != uuid.Nil() || !slices.Equal(req.GroupBy, []meter.ChargeDimension{meter.ChargeDimensionTenant}) {
 		t.Errorf("request = %+v, want every tenant grouped by tenant", req)
 	}
 	if !auth.CrossTenantRead(ledger.ctx) {

@@ -5,9 +5,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 

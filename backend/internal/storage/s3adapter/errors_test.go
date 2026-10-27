@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/google/uuid"
 )
 
 // The asymmetry these tests defend: a false negative costs a retry, a false

@@ -19,13 +19,13 @@ import (
 	"strconv"
 	"time"
 	"unicode/utf8"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -775,7 +775,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	//    the resource a Collection entity → "does not have the attribute key"
 	//    eval error → fail-closed deny. A client-omitted key authorizes the
 	//    generated object id, which CreateObject persists below (same value).
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	key := in.Key
 	if key == "" {
 		key = objectID.String()

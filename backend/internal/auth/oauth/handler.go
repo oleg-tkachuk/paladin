@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -470,7 +470,7 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.issueTokens(r.Context(), w, u, authstore.OAuthGrant{
 		ClientID: ac.ClientID, Audience: ac.Audience, Scopes: ac.Scopes,
-	}, uuid.Nil) {
+	}, uuid.Nil()) {
 		h.record(r.Context(), admindomain.AuditEntry{
 			ActorSubject:  u.UserID.String(),
 			ActorTenantID: u.TenantID,
@@ -581,8 +581,8 @@ type tokenResponse struct {
 // refresh token that records the grant, stores the refresh row, and writes
 // the §5.1 JSON. false is a failure it has already answered.
 func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u authstore.User, grant authstore.OAuthGrant, familyID uuid.UUID) bool {
-	if familyID == uuid.Nil {
-		familyID = uuid.Must(uuid.NewV7())
+	if familyID == uuid.Nil() {
+		familyID = uuid.NewV7()
 	}
 	access, accessExp, err := h.iss.MintAccess(issuer.AccessClaims{
 		Subject:  u.UserID.String(),
@@ -600,7 +600,7 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		h.serverError(ctx, w, "mint access failed", err, zap.String("client_id", grant.ClientID))
 		return false
 	}
-	tokenID := uuid.Must(uuid.NewV7())
+	tokenID := uuid.NewV7()
 	refresh, refreshExp, err := h.iss.MintRefresh(issuer.RefreshClaims{
 		Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: tokenID,
 	})
@@ -753,7 +753,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := Client{
-		ClientID:         "paladin-" + uuid.Must(uuid.NewV7()).String(),
+		ClientID:         "paladin-" + uuid.NewV7().String(),
 		ClientName:       req.ClientName,
 		RedirectURIs:     req.RedirectURIs,
 		AllowedScopes:    registeredScopes(req),

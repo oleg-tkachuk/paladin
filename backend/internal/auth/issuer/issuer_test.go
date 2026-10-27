@@ -5,8 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -28,8 +27,8 @@ func newTestIssuer(t *testing.T) *Issuer {
 
 func TestMintAndVerifyAccess(t *testing.T) {
 	iss := newTestIssuer(t)
-	tenantID := uuid.Must(uuid.NewV7())
-	subject := uuid.Must(uuid.NewV7()).String()
+	tenantID := uuid.NewV7()
+	subject := uuid.NewV7().String()
 
 	tok, exp, err := iss.MintAccess(AccessClaims{
 		Subject:  subject,
@@ -98,9 +97,9 @@ func TestMintAccessWrongAudience(t *testing.T) {
 
 func TestMintRefreshDecode(t *testing.T) {
 	iss := newTestIssuer(t)
-	userID := uuid.Must(uuid.NewV7())
-	tokenID := uuid.Must(uuid.NewV7())
-	tenantID := uuid.Must(uuid.NewV7())
+	userID := uuid.NewV7()
+	tokenID := uuid.NewV7()
+	tenantID := uuid.NewV7()
 
 	tok, _, err := iss.MintRefresh(RefreshClaims{
 		Subject:  userID.String(),
@@ -159,12 +158,12 @@ func TestRefreshDecoderRejectsAccessToken(t *testing.T) {
 // stands for.
 func TestMintRefreshSignsAGivenExpiry(t *testing.T) {
 	iss := newTestIssuer(t)
-	userID := uuid.Must(uuid.NewV7())
+	userID := uuid.NewV7()
 	want := time.Now().Add(37 * time.Minute).Truncate(time.Second)
 
 	_, exp, err := iss.MintRefresh(RefreshClaims{
 		Subject: userID.String(), UserID: userID,
-		TokenID: uuid.Must(uuid.NewV7()), ExpiresAt: want,
+		TokenID: uuid.NewV7(), ExpiresAt: want,
 	})
 	if err != nil {
 		t.Fatal(err)

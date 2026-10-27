@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -196,7 +196,7 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 		return nil, err
 	}
 
-	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil, uuid.Nil)
+	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil(), uuid.Nil())
 	if err != nil {
 		metrics.RecordLoginAttempt(ctx, "error")
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -516,7 +516,7 @@ func (h *Handler) WhoAmI(ctx context.Context, routePageToken string) (*WhoAmIOut
 	// Route table is best-effort: WhoAmI's primary job is identity, so a
 	// route-source failure (incl. a Cedar denial for a caller who can't list
 	// Collections) degrades to an empty table rather than failing the call.
-	if h.routes != nil && u.TenantID != uuid.Nil {
+	if h.routes != nil && u.TenantID != uuid.Nil() {
 		routes, nextToken, rErr := h.routes.ListCollectionRoutes(ctx, u.TenantID, routePageToken)
 		if rErr != nil {
 			logger.FromContext(ctx).Warn("whoami: object-key route lookup failed; returning identity without routes",
@@ -579,7 +579,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 	out := make([]Membership, 0, len(matches))
 	for _, m := range matches {
 		var slug string
-		if h.tenantSlug != nil && m.TenantID != uuid.Nil {
+		if h.tenantSlug != nil && m.TenantID != uuid.Nil() {
 			slug, _ = h.tenantSlug(ctx, m.TenantID)
 		}
 		out = append(out, Membership{
@@ -610,7 +610,7 @@ type SwitchTenantOutput struct {
 // refresh family is started (this is a distinct session), so revoking the old
 // tenant's session does not touch the new one.
 func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, requestedAudience string) (*SwitchTenantOutput, error) {
-	if targetTenantID == uuid.Nil {
+	if targetTenantID == uuid.Nil() {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "target tenant required")
 	}
 	cur, err := h.callerUser(ctx)
@@ -662,7 +662,7 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 		return nil, err
 	}
 
-	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil, uuid.Nil)
+	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil(), uuid.Nil())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -720,7 +720,7 @@ func (h *Handler) auditTenantSwitch(ctx context.Context, from, to authstore.User
 		return
 	}
 	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            h.now().UTC(),
 		ActorSubject:  to.UserID.String(),
 		ActorTenantID: to.TenantID,
@@ -817,7 +817,7 @@ func loginOutcome(err error) string {
 }
 
 func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstore.User, error) {
-	if in.TenantHint != uuid.Nil {
+	if in.TenantHint != uuid.Nil() {
 		u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)
 		if err != nil {
 			if errors.Is(err, authstore.ErrNotFound) {
@@ -885,7 +885,7 @@ func checkLoginRow(u authstore.User, password string) (authstore.User, error) {
 // policies fall back to UUID-keyed Tenant UIDs.
 func (h *Handler) mintAccess(ctx context.Context, u authstore.User, audience string) (string, time.Time, error) {
 	var slug string
-	if h.tenantSlug != nil && u.TenantID != uuid.Nil {
+	if h.tenantSlug != nil && u.TenantID != uuid.Nil() {
 		slug, _ = h.tenantSlug(ctx, u.TenantID)
 	}
 	access, exp, err := h.issuer.MintAccess(issuer.AccessClaims{
@@ -1016,8 +1016,8 @@ func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.Refr
 func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience string, familyID, parentID uuid.UUID) (
 	access string, refresh string, accessExp, refreshExp time.Time, err error,
 ) {
-	if familyID == uuid.Nil {
-		familyID = uuid.Must(uuid.NewV7())
+	if familyID == uuid.Nil() {
+		familyID = uuid.NewV7()
 	}
 	// Resolve tenant slug if a lookup is configured. Failure is non-fatal
 	// — the access token can still be minted with UUID-only tenant binding,
@@ -1029,7 +1029,7 @@ func (h *Handler) mintPair(ctx context.Context, u authstore.User, audience strin
 		return "", "", time.Time{}, time.Time{}, err
 	}
 
-	tokenID := uuid.Must(uuid.NewV7())
+	tokenID := uuid.NewV7()
 	refresh, refreshExp, err = h.issuer.MintRefresh(issuer.RefreshClaims{
 		Subject:  u.UserID.String(),
 		TenantID: u.TenantID,
@@ -1079,7 +1079,7 @@ func (h *Handler) onRefreshReplayed(ctx context.Context, jti, userID, tenantID u
 		return
 	}
 	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            h.now().UTC(),
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
@@ -1187,7 +1187,7 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 		return
 	}
 	if err := h.audit.Insert(ctx, admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            h.now().UTC(),
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
@@ -1203,7 +1203,7 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 
 func (h *Handler) parseRefresh(token string) (uuid.UUID, uuid.UUID, uuid.UUID, error) {
 	if h.refreshDecoder == nil {
-		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("refresh decoder not configured")
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), errors.New("refresh decoder not configured")
 	}
 	return h.refreshDecoder.DecodeRefresh(token)
 }
@@ -1233,19 +1233,19 @@ func encodeMembershipCursor(created time.Time, id uuid.UUID) string {
 func decodeMembershipCursor(tok string) (time.Time, uuid.UUID, error) {
 	if tok == "" {
 		// Zero time sorts before every row; uuid.Nil is the lowest uuid.
-		return time.Time{}, uuid.Nil, nil
+		return time.Time{}, uuid.Nil(), nil
 	}
 	nanos, idStr, ok := strings.Cut(tok, ":")
 	if !ok {
-		return time.Time{}, uuid.Nil, fmt.Errorf("malformed page_token %q", tok)
+		return time.Time{}, uuid.Nil(), fmt.Errorf("malformed page_token %q", tok)
 	}
 	n, err := strconv.ParseInt(nanos, 10, 64)
 	if err != nil {
-		return time.Time{}, uuid.Nil, fmt.Errorf("malformed page_token %q: %w", tok, err)
+		return time.Time{}, uuid.Nil(), fmt.Errorf("malformed page_token %q: %w", tok, err)
 	}
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		return time.Time{}, uuid.Nil, fmt.Errorf("malformed page_token %q: %w", tok, err)
+		return time.Time{}, uuid.Nil(), fmt.Errorf("malformed page_token %q: %w", tok, err)
 	}
 	return time.Unix(0, n).UTC(), id, nil
 }

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -26,8 +26,8 @@ func NewObjectVersionRepo(q *sqlc.Queries) *ObjectVersionRepo {
 var _ objecth.VersionRepository = (*ObjectVersionRepo)(nil)
 
 func (r *ObjectVersionRepo) Insert(ctx context.Context, v objecth.ObjectVersion) error {
-	if v.VersionID == uuid.Nil {
-		v.VersionID = uuid.Must(uuid.NewV7())
+	if v.VersionID == uuid.Nil() {
+		v.VersionID = uuid.NewV7()
 	}
 	var sizeBytes *int64
 	if v.SizeBytes > 0 {
@@ -102,9 +102,9 @@ func (r *ObjectVersionRepo) CurrentVersionID(ctx context.Context, objectID uuid.
 	id, err := r.q.GetCurrentVersionID(ctx, pgUUID(objectID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, nil
+			return uuid.Nil(), nil
 		}
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	return uuidFrom(id), nil
 }
@@ -148,15 +148,15 @@ func encodeVersionCursor(at time.Time, id uuid.UUID) string {
 func decodeVersionCursor(tok string) (time.Time, uuid.UUID, error) {
 	idx := strings.LastIndex(tok, "/")
 	if idx <= 0 {
-		return time.Time{}, uuid.Nil, errors.New("malformed cursor")
+		return time.Time{}, uuid.Nil(), errors.New("malformed cursor")
 	}
 	at, err := time.Parse(time.RFC3339Nano, tok[:idx])
 	if err != nil {
-		return time.Time{}, uuid.Nil, err
+		return time.Time{}, uuid.Nil(), err
 	}
 	id, err := uuid.Parse(tok[idx+1:])
 	if err != nil {
-		return time.Time{}, uuid.Nil, err
+		return time.Time{}, uuid.Nil(), err
 	}
 	return at, id, nil
 }

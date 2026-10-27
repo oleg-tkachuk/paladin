@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -272,7 +272,7 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 		"an earlier attempt": stale,
 		"verifying":          {TenantID: tenant, State: worker.MigStateVerifying, Attempts: 2},
 	} {
-		err := repo.RebindBack(ctx, at, reboundAt, uuid.Nil, backend, "rb-shared")
+		err := repo.RebindBack(ctx, at, reboundAt, uuid.Nil(), backend, "rb-shared")
 		if !errors.Is(err, worker.ErrMigrationMoved) {
 			t.Errorf("RebindBack read as %s = %v, want ErrMigrationMoved", what, err)
 		}
@@ -282,14 +282,14 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 	}
 
 	// The current attempt, with 'post' not yet copied back.
-	if err := repo.RebindBack(ctx, current, reboundAt, uuid.Nil, backend, "rb-shared"); !errors.Is(err, worker.ErrRollbackBehind) {
+	if err := repo.RebindBack(ctx, current, reboundAt, uuid.Nil(), backend, "rb-shared"); !errors.Is(err, worker.ErrRollbackBehind) {
 		t.Fatalf("RebindBack with an object past the cursor = %v, want ErrRollbackBehind", err)
 	}
 	if got := read(); got != untouched {
 		t.Errorf("a refused RebindBack changed things: %+v", got)
 	}
 
-	written, err := repo.ListWrittenSince(ctx, tenant, reboundAt, uuid.Nil, 10)
+	written, err := repo.ListWrittenSince(ctx, tenant, reboundAt, uuid.Nil(), 10)
 	if err != nil || len(written) != 1 || written[0].Key != "post" || written[0].SizeBytes != 3 {
 		t.Fatalf("ListWrittenSince = %+v, %v; want just docs/post", written, err)
 	}
@@ -300,7 +300,7 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 	if err := repo.AdvanceRollback(ctx, current, cur.UpdatedAt, cur.ID); err != nil {
 		t.Fatalf("AdvanceRollback: %v", err)
 	}
-	if err := repo.AdvanceRollback(ctx, current, reboundAt, uuid.Nil); !errors.Is(err, worker.ErrMigrationMoved) {
+	if err := repo.AdvanceRollback(ctx, current, reboundAt, uuid.Nil()); !errors.Is(err, worker.ErrMigrationMoved) {
 		t.Errorf("AdvanceRollback backwards = %v, want ErrMigrationMoved", err)
 	}
 	if more, err := repo.ListWrittenSince(ctx, tenant, cur.UpdatedAt, cur.ID, 10); err != nil || len(more) != 0 {

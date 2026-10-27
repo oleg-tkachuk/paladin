@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -36,7 +35,7 @@ func (cancelFailsGetSucceeds) GetOperation(context.Context, uuid.UUID) (*operati
 func TestCancelOperation_ReportsTheCancelNotTheReread(t *testing.T) {
 	srv := &OperationServer{H: cancelFailsGetSucceeds{}}
 	_, err := srv.CancelOperation(context.Background(), &pb.CancelOperationRequest{
-		Name: "operations/" + uuid.NewString(),
+		Name: "operations/" + uuid.New().String(),
 	})
 	if err == nil {
 		t.Fatal("the cancel failed and the shim reported success because the " +
@@ -89,7 +88,7 @@ func (okCollection) CreateCollection(context.Context, objectkey.CreateCollection
 func TestCreateCollection_RoutesThroughTheDefaultBinding(t *testing.T) {
 	srv := &CollectionServer{H: okCollection{}, bindings: okBindings{}}
 	resp, err := srv.CreateCollection(context.Background(), &pb.CreateCollectionRequest{
-		Parent: "tenants/" + uuid.NewString(), Collection: "c1",
+		Parent: "tenants/" + uuid.New().String(), Collection: "c1",
 		CollectionResource: &pb.Collection{}, // no bucket: the binding supplies it
 	})
 	if err != nil {
@@ -112,7 +111,7 @@ func (cancelSucceedsGetFails) CancelOperation(context.Context, uuid.UUID) error 
 func TestCancelOperation_ReportsAFailedReread(t *testing.T) {
 	srv := &OperationServer{H: cancelSucceedsGetFails{}}
 	_, err := srv.CancelOperation(context.Background(), &pb.CancelOperationRequest{
-		Name: "operations/" + uuid.NewString(),
+		Name: "operations/" + uuid.New().String(),
 	})
 	if err == nil {
 		t.Fatal("the re-read failed and the shim answered with an empty operation")

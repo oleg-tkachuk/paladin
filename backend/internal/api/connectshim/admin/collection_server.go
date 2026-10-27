@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -55,19 +55,19 @@ func NewCollectionServer(h *objectkey.Handler, bindings defaultBindingSource, te
 // "this tenant has no collections".
 func (s *CollectionServer) tenantParent(ctx context.Context, parent string) (uuid.UUID, error) {
 	if parent == "" {
-		return uuid.Nil, nil
+		return uuid.Nil(), nil
 	}
 	tenant, _, _ := strings.Cut(strings.TrimPrefix(parent, apiutil.TenantNamePrefix), "/")
 	ref, err := apiutil.ParseTenantNameRef(tenant)
 	if err != nil {
-		return uuid.Nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid tenant parent %q: %w", parent, err))
+		return uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid tenant parent %q: %w", parent, err))
 	}
 	if ref.HasID() {
 		return ref.ID, nil
 	}
 	t, err := s.tenants.GetTenantBySlug(ctx, ref.Slug)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	return t.TenantID, nil
 }

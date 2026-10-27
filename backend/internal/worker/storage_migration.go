@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -518,7 +518,7 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 // tenant keeps serving from the target meanwhile, never from a half-rebound
 // mix.
 func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageMigration) error {
-	afterAt, afterID := m.ReboundAt, uuid.Nil
+	afterAt, afterID := m.ReboundAt, uuid.Nil()
 	if !m.RollbackCursorAt.IsZero() {
 		afterAt, afterID = m.RollbackCursorAt, m.RollbackCursorID
 	}

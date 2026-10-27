@@ -14,8 +14,7 @@ import (
 	"math/big"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // JWTVerifier is a minimal JWT verifier that supports ES256/RS256/HS256 and

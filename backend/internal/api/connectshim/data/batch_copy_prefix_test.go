@@ -3,8 +3,7 @@ package data
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"

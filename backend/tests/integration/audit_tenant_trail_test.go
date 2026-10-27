@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -21,7 +20,7 @@ import (
 // principal when actor is that tenant.
 func trailEntry(actor uuid.UUID, resource string, at time.Time) admindomain.AuditEntry {
 	return admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            at,
 		ActorSubject:  "trail@test",
 		ActorTenantID: actor,
@@ -117,8 +116,8 @@ func TestAuditResourceTenantBackfill(t *testing.T) {
 
 	tenant := mustCreateTenant(t, h.PoolMigrate, "backfill-tenant")
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	nested := trailEntry(uuid.Nil, "storageBackends/primary/buckets/b/tenants/"+tenant.String()+"/collections/c", at)
-	slug := trailEntry(uuid.Nil, "tenants/platform", at)
+	nested := trailEntry(uuid.Nil(), "storageBackends/primary/buckets/b/tenants/"+tenant.String()+"/collections/c", at)
+	slug := trailEntry(uuid.Nil(), "tenants/platform", at)
 	for _, e := range []admindomain.AuditEntry{nested, slug} {
 		if err := repo.Insert(ctx, e); err != nil {
 			t.Fatalf("insert: %v", err)
@@ -144,7 +143,7 @@ func TestAuditResourceTenantBackfill(t *testing.T) {
 	for _, c := range []struct {
 		entry admindomain.AuditEntry
 		want  uuid.UUID
-	}{{nested, tenant}, {slug, uuid.Nil}} {
+	}{{nested, tenant}, {slug, uuid.Nil()}} {
 		got, err := repo.Get(ctx, c.entry.EntryID)
 		if err != nil {
 			t.Fatalf("get: %v", err)

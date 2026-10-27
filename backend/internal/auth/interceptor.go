@@ -3,9 +3,9 @@ package auth
 import (
 	"context"
 	"strings"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -85,7 +85,7 @@ func (a *authInterceptor) intercept(next connect.ServerFunc) connect.ServerFunc 
 }
 
 func annotateSpan(ctx context.Context, p *Principal) {
-	if p == nil || p.TenantID == uuid.Nil {
+	if p == nil || p.TenantID == uuid.Nil() {
 		return
 	}
 	span := trace.SpanFromContext(ctx)

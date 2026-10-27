@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/oleg-tkachuk/limes"
@@ -320,7 +320,7 @@ func wantCode(t *testing.T, err error, want connect.Code) {
 func sessionForTenant(tid uuid.UUID) Session {
 	return Session{
 		UploadID:        "up-1",
-		ObjectID:        uuid.Must(uuid.NewV7()),
+		ObjectID:        uuid.NewV7(),
 		TenantID:        tid,
 		BackendID:       "backend-sess",
 		Bucket:          "bucket-sess",

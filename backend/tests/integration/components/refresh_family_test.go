@@ -7,8 +7,7 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -31,7 +30,7 @@ func TestRefreshTokenFamilyRevoke(t *testing.T) {
 
 	famA, famB := uuid.New(), uuid.New()
 	mk := func(family uuid.UUID) uuid.UUID {
-		jti := uuid.Must(uuid.NewV7())
+		jti := uuid.NewV7()
 		if err := repo.Insert(ctx, authstore.RefreshToken{
 			JTI: jti, FamilyID: family, UserID: userID, TenantID: tenantID,
 			IssuedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour),
@@ -77,7 +76,7 @@ func TestRefreshTokenUnusedSuccessor(t *testing.T) {
 
 	family := uuid.New()
 	mk := func(parent uuid.UUID) uuid.UUID {
-		jti := uuid.Must(uuid.NewV7())
+		jti := uuid.NewV7()
 		if err := repo.Insert(ctx, authstore.RefreshToken{
 			JTI: jti, FamilyID: family, UserID: userID, TenantID: tenantID,
 			IssuedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour), ParentID: parent,
@@ -86,7 +85,7 @@ func TestRefreshTokenUnusedSuccessor(t *testing.T) {
 		}
 		return jti
 	}
-	login := mk(uuid.Nil)
+	login := mk(uuid.Nil())
 	succ := mk(login)
 
 	if got, err := repo.GetAny(ctx, succ); err != nil || got.ParentID != login {
@@ -145,7 +144,7 @@ func TestRefreshTokenOAuthGrant(t *testing.T) {
 
 	insert := func(grant *authstore.OAuthGrant) uuid.UUID {
 		t.Helper()
-		jti := uuid.Must(uuid.NewV7())
+		jti := uuid.NewV7()
 		if err := repo.Insert(ctx, authstore.RefreshToken{
 			JTI: jti, FamilyID: uuid.New(), UserID: userID, TenantID: tenantID,
 			IssuedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour), OAuth: grant,
@@ -206,7 +205,7 @@ func TestOAuthGrantsListAndRevoke(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	insert := func(user, family uuid.UUID, g *authstore.OAuthGrant, issued time.Time, ttl time.Duration) uuid.UUID {
 		t.Helper()
-		jti := uuid.Must(uuid.NewV7())
+		jti := uuid.NewV7()
 		if err := repo.Insert(ctx, authstore.RefreshToken{
 			JTI: jti, FamilyID: family, UserID: user, TenantID: tenantID,
 			IssuedAt: issued, ExpiresAt: issued.Add(ttl), OAuth: g,

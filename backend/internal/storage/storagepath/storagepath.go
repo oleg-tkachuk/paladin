@@ -6,8 +6,7 @@ package storagepath
 
 import (
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Compose builds the full bucket key from tenant_id + collection + storage key.

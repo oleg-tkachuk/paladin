@@ -6,8 +6,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -28,7 +28,7 @@ const platformSlug = "platform"
 // could hold, and returns its id.
 func ownerlessBucket(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name string) uuid.UUID {
 	t.Helper()
-	backend := "be-" + uuid.NewString()[:8]
+	backend := "be-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
 	var id uuid.UUID
 	if err := pool.QueryRow(ctx, `
@@ -42,7 +42,7 @@ func ownerlessBucket(t *testing.T, ctx context.Context, pool *pgxpool.Pool, name
 func bindCollection(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant, bucket uuid.UUID) {
 	t.Helper()
 	mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, bucket_id) VALUES ($1, $2, $3)`,
-		tenant, "c-"+uuid.NewString()[:8], bucket)
+		tenant, "c-"+uuid.New().String()[:8], bucket)
 }
 
 func bucketOwner(t *testing.T, ctx context.Context, pool *pgxpool.Pool, bucket uuid.UUID) uuid.UUID {

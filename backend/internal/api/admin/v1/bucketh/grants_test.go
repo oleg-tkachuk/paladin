@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -86,7 +86,7 @@ func TestCreateBucketRequiresAnOwner(t *testing.T) {
 	repo := &fakeRepo{backendEnabled: true}
 	h := grantsHandler(repo, &fakeGrants{}, allowAuthorizer{})
 	b := validBucket()
-	b.OwnerTenantID = uuid.Nil
+	b.OwnerTenantID = uuid.Nil()
 	_, err := h.CreateBucket(ctxAs(apiutil.RoleBucketAdmin), CreateBucketInput{Bucket: b, ProvisionOnBackend: true})
 	wantReason(t, err, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_BUCKET_OWNER_REQUIRED)
 	if repo.createTxBucket.BucketName != "" {
@@ -196,7 +196,7 @@ func TestUpdateBucketMovesTheOwner(t *testing.T) {
 	}
 
 	ownerless := stored
-	ownerless.OwnerTenantID = uuid.Nil
+	ownerless.OwnerTenantID = uuid.Nil()
 	_, err := h.UpdateBucket(ctxAs(apiutil.RoleBucketAdmin), UpdateBucketInput{
 		Bucket: ownerless, ExpectedVersion: 1, UpdateMask: []string{MaskOwnerTenantID},
 	})

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -49,7 +49,7 @@ func TestListPlatformOperationsFacetCounts(t *testing.T) {
 		counted bool
 	}{
 		{"asked, first page", true, "", true},
-		{"asked, a later page", true, uuid.NewString(), false},
+		{"asked, a later page", true, uuid.New().String(), false},
 		{"not asked", false, "", false},
 	} {
 		h := &recordingOperation{}
@@ -80,7 +80,7 @@ func (r *recordingOperation) ListOperations(_ context.Context, in operationh.Lis
 // caller's own; one that is no id is refused before it.
 func TestListPlatformOperationsOfANamedTenant(t *testing.T) {
 	named := uuid.New()
-	for id, want := range map[string]uuid.UUID{named.String(): named, "": uuid.Nil} {
+	for id, want := range map[string]uuid.UUID{named.String(): named, "": uuid.Nil()} {
 		h := &recordingOperation{}
 		if _, err := (&OperationServer{H: h}).ListOperations(context.Background(), &pb.ListOperationsRequest{TenantId: id}); err != nil {
 			t.Fatal(err)

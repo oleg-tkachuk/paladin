@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -164,7 +164,7 @@ func TestCopyObjectEnforcesDestinationLimits(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := &completeRepo{obj: availableSource(), constraints: tc.constraints, createErr: errors.New("must not be reached")}
 			h, _, ctx, _ := completeHandler(repo, headStorage{})
-			_, err := h.CopyObject(ctx, CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst"})
+			_, err := h.CopyObject(ctx, CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst"})
 			if connect.CodeOf(err) != connect.CodeInvalidArgument {
 				t.Fatalf("code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
 			}

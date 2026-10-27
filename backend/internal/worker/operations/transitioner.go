@@ -2,8 +2,7 @@ package operations
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )

@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/limes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -389,7 +389,7 @@ func notBefore(t *timestamppb.Timestamp) time.Time {
 // answers it with its token and, when status is ISSUED, its Biscuit.
 func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status adminv1.BiscuitStatus, parent string) (*adminv1.CapabilityServiceIssueResponse, error) {
 	// A UUIDv7, as the server's: List pages in id order, which is issue order.
-	c.Id = uuid.Must(uuid.NewV7()).String()
+	c.Id = uuid.NewV7().String()
 	c.Issuer = capabilityIssuer
 	c.ParentId = parent
 	c.IssuedAt = timestamppb.New(now)

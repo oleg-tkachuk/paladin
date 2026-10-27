@@ -18,12 +18,12 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -206,20 +206,20 @@ func parseTokenName(name string) (tenantID, tokenID uuid.UUID, err error) {
 		tokenSep     = "/apiTokens/"
 	)
 	if !strings.HasPrefix(name, tenantPrefix) {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("name %q must start with %q", name, tenantPrefix)
+		return uuid.Nil(), uuid.Nil(), fmt.Errorf("name %q must start with %q", name, tenantPrefix)
 	}
 	rest := strings.TrimPrefix(name, tenantPrefix)
 	tenantPart, idPart, ok := strings.Cut(rest, tokenSep)
 	if !ok || tenantPart == "" || idPart == "" {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("name %q must be tenants/{tenant}/apiTokens/{id}", name)
+		return uuid.Nil(), uuid.Nil(), fmt.Errorf("name %q must be tenants/{tenant}/apiTokens/{id}", name)
 	}
 	tenantID, err = uuid.Parse(tenantPart)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("tenant in %q: %w", name, err)
+		return uuid.Nil(), uuid.Nil(), fmt.Errorf("tenant in %q: %w", name, err)
 	}
 	tokenID, err = uuid.Parse(idPart)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("token id in %q: %w", name, err)
+		return uuid.Nil(), uuid.Nil(), fmt.Errorf("token id in %q: %w", name, err)
 	}
 	return tenantID, tokenID, nil
 }
@@ -228,11 +228,11 @@ func parseTokenName(name string) (tenantID, tokenID uuid.UUID, err error) {
 func parseTenantParent(parent string) (uuid.UUID, error) {
 	const prefix = "tenants/"
 	if !strings.HasPrefix(parent, prefix) {
-		return uuid.Nil, fmt.Errorf("parent %q must be tenants/{tenant}", parent)
+		return uuid.Nil(), fmt.Errorf("parent %q must be tenants/{tenant}", parent)
 	}
 	id, err := uuid.Parse(strings.TrimPrefix(parent, prefix))
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("tenant in %q: %w", parent, err)
+		return uuid.Nil(), fmt.Errorf("tenant in %q: %w", parent, err)
 	}
 	return id, nil
 }

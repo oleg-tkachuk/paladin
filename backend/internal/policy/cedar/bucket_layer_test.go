@@ -5,8 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // A bucket's policy is stored by SetBucketPolicy and, until it became a layer,
@@ -100,7 +99,7 @@ func TestAllScopesEventFlushesEveryTenant(t *testing.T) {
 }
 
 func TestNotifyPayloadForAllScopes(t *testing.T) {
-	if ev := parseNotifyPayload(NotifyAllScopes); !ev.AllScopes || ev.TenantID != uuid.Nil {
+	if ev := parseNotifyPayload(NotifyAllScopes); !ev.AllScopes || ev.TenantID != uuid.Nil() {
 		t.Errorf("parse(%q) = %+v, want AllScopes", NotifyAllScopes, ev)
 	}
 	tid := uuid.New()

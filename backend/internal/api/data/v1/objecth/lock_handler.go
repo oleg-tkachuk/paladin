@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -253,7 +253,7 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 	if err != nil {
 		return out, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	if versionID == uuid.Nil {
+	if versionID == uuid.Nil() {
 		// Every promoted object gets a version row, so this is either an
 		// object still PENDING or one written before versioning existed.
 		// Either way there is nothing to attach retention to, and silently

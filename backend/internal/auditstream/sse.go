@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -46,7 +46,7 @@ func (h *Hub) SSEHandler(verifier auth.TokenVerifier) http.Handler {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
-		if p.TenantID == uuid.Nil {
+		if p.TenantID == uuid.Nil() {
 			// Tenant-less super-admin principals have no single tenant to
 			// scope the stream to; the console they use is tenant-scoped too.
 			http.Error(w, "token carries no tenant", http.StatusForbidden)

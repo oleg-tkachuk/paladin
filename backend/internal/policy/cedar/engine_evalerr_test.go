@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // TestIsAuthorized_EvalErrorFailsClosed: a forbid that references a missing

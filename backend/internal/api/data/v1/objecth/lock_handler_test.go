@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -121,7 +121,7 @@ func newLockHandler(t *testing.T, locks *lockRepoStub, policy cedar.Authorizer, 
 		obj:  Object{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "a.pdf"},
 		meta: BucketMeta{BackendID: "be", BucketName: "bk", ObjectLockEnabled: lockEnabled},
 	}
-	versions := &lockVersionStub{current: uuid.Must(uuid.NewV7())}
+	versions := &lockVersionStub{current: uuid.NewV7()}
 	return NewLockHandler(objects, versions, locks, policy), tenantID
 }
 
@@ -302,7 +302,7 @@ func TestLockNeedsACurrentVersion(t *testing.T) {
 		obj:  Object{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "a.pdf"},
 		meta: BucketMeta{ObjectLockEnabled: true},
 	}
-	h := NewLockHandler(objects, &lockVersionStub{current: uuid.Nil}, &lockRepoStub{}, &actionRecorder{})
+	h := NewLockHandler(objects, &lockVersionStub{current: uuid.Nil()}, &lockRepoStub{}, &actionRecorder{})
 
 	_, err := h.SetRetention(lockCtx(tenantID), SetRetentionInput{
 		Collection: "docs", ObjectID: "o", Mode: "GOVERNANCE", RetainUntil: time.Now().Add(time.Hour),

@@ -3,12 +3,12 @@ package admin
 import (
 	"context"
 	"fmt"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
@@ -138,11 +138,11 @@ func (s *BucketServer) ListAccessibleBuckets(ctx context.Context, req *pb.ListAc
 // the caller believed it owned.
 func ownerTenantID(s string) (uuid.UUID, error) {
 	if s == "" {
-		return uuid.Nil, nil
+		return uuid.Nil(), nil
 	}
 	id, err := uuid.Parse(s)
 	if err != nil {
-		return uuid.Nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("owner_tenant_id must be a tenant UUID: %w", err))
+		return uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("owner_tenant_id must be a tenant UUID: %w", err))
 	}
 	return id, nil
 }

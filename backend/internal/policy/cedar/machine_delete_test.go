@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Wire names for the credential kinds, mirroring auth.PrincipalKind.String().

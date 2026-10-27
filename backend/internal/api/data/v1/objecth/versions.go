@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // ObjectVersion is one immutable history row for a versioned object.

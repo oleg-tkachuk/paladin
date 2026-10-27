@@ -11,8 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -122,8 +122,8 @@ func TestDeliverHTTP_SigningSecretRefResolved(t *testing.T) {
 
 	cfg, _ := json.Marshal(map[string]any{"url": srv.URL, "signing_secret_ref": "k8s:hmac/secret"})
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
-		TenantID:       uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
+		TenantID:       uuid.NewV7(),
 		SinkKind:       "http",
 		SinkConfig:     cfg,
 	}

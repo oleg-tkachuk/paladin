@@ -4,9 +4,9 @@ import (
 	"context"
 	"regexp"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -159,7 +159,7 @@ func TestCopyIntoAPublicCollection(t *testing.T) {
 	repo.obj = src
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "photos",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "photos",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestCopyIntoAPublicCollectionRefusesAClientKey(t *testing.T) {
 	src.ContentType = "image/jpeg"
 	repo.obj = src
 	_, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "photos", DestKey: "mine.jpg",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "photos", DestKey: "mine.jpg",
 	})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || repo.created != nil {
 		t.Errorf("err = %v, created %+v; want FailedPrecondition before any row", err, repo.created)

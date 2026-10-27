@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"

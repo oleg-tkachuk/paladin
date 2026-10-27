@@ -6,8 +6,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -120,7 +120,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 	})
 
 	t.Run("foreign-tenant GUC sees zero rows", func(t *testing.T) {
-		asApp(t, uuid.NewString(), func(tx pgx.Tx) {
+		asApp(t, uuid.New().String(), func(tx pgx.Tx) {
 			if n := totalObjects(t, tx); n != 0 {
 				t.Errorf("foreign GUC saw %d rows, want 0", n)
 			}
@@ -135,8 +135,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 			// this — proving the policy, not a constraint, is the gate.
 			_, err := tx.Exec(ctx,
 				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
-				 VALUES ($1, $2, $3, 'rls-probe', 'PENDING', 'application/octet-stream', 0)`,
-				uuid.Must(uuid.NewV7()), fB.tenantID, fB.collectionID)
+				 VALUES ($1, $2, $3, 'rls-probe', 'PENDING', 'application/octet-stream', 0)`, uuid.NewV7(), fB.tenantID, fB.collectionID)
 			if err == nil {
 				t.Fatal("cross-tenant INSERT succeeded — WITH CHECK not enforced")
 			}
@@ -151,8 +150,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
 				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
-				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0)`,
-				uuid.Must(uuid.NewV7()), fA.tenantID, fA.collectionID)
+				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0)`, uuid.NewV7(), fA.tenantID, fA.collectionID)
 			if err != nil {
 				t.Fatalf("own-tenant INSERT rejected: %v", err)
 			}
@@ -165,8 +163,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 		t.Helper()
 		mustExec(t, ctx, pool,
 			`INSERT INTO audit_log (id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
-			 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`,
-			uuid.Must(uuid.NewV7()), actorTenant)
+			 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`, uuid.NewV7(), actorTenant)
 	}
 	seedAudit(t, fA.tenantID)
 	seedAudit(t, fB.tenantID)
@@ -187,8 +184,7 @@ func TestRLSTenantIsolation(t *testing.T) {
 		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
 				`INSERT INTO audit_log (id, actor_subject, actor_tenant_id, actor_audience, action, resource_name)
-				 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`,
-				uuid.Must(uuid.NewV7()), fB.tenantID)
+				 VALUES ($1, 'svc', $2, 'admin', 'Test', 'r')`, uuid.NewV7(), fB.tenantID)
 			var pgErr *pgconn.PgError
 			if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
 				t.Fatalf("want RLS violation (42501) on wrong actor_tenant_id, got %v", err)

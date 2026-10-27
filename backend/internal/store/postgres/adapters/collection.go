@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -12,7 +13,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -289,7 +289,7 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		 LIMIT $5
 	`
 	var tenantFilter any
-	if args.TenantID != uuid.Nil {
+	if args.TenantID != uuid.Nil() {
 		tenantFilter = pgUUID(args.TenantID)
 	}
 	var afterTok, afterTenantTok any

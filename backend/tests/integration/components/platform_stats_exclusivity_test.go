@@ -6,8 +6,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
@@ -44,7 +43,7 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 		t.Fatalf("baseline census: %v", err)
 	}
 
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	tenantID := uuid.New()
 	mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 		tenantID, "t-"+hex, "tn-"+hex)
@@ -59,12 +58,12 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 	month, hour := now.Add(30*24*time.Hour), now.Add(time.Hour)
 	lapsed := now.Add(-time.Hour)
 
-	live := issue(limes.PrincipalTypeAgent, month, uuid.Nil)  // active, not expiring soon
-	issue(limes.PrincipalTypeAgent, hour, uuid.Nil)           // active AND expiring within 24h
-	issue(limes.PrincipalTypeAgent, lapsed, uuid.Nil)         // expired, never revoked
-	revoke(issue(limes.PrincipalTypeAgent, month, uuid.Nil))  // revoked while still valid
-	revoke(issue(limes.PrincipalTypeAgent, lapsed, uuid.Nil)) // revoked AND expired — revocation wins
-	issue(limes.PrincipalTypeService, month, live)            // active, delegated from `live`
+	live := issue(limes.PrincipalTypeAgent, month, uuid.Nil())  // active, not expiring soon
+	issue(limes.PrincipalTypeAgent, hour, uuid.Nil())           // active AND expiring within 24h
+	issue(limes.PrincipalTypeAgent, lapsed, uuid.Nil())         // expired, never revoked
+	revoke(issue(limes.PrincipalTypeAgent, month, uuid.Nil()))  // revoked while still valid
+	revoke(issue(limes.PrincipalTypeAgent, lapsed, uuid.Nil())) // revoked AND expired — revocation wins
+	issue(limes.PrincipalTypeService, month, live)              // active, delegated from `live`
 
 	// ─── api tokens ─────────────────────────────────────────────────────
 	tok := func(expires string, lastUsed, revoked bool) {
@@ -76,8 +75,7 @@ func TestCredentialCensuses_ClassifyEachRowExactlyOnce(t *testing.T) {
 			VALUES ($1, $2, $3, ARRAY['paladin-data'], 'test', now() + $4::interval,
 			        CASE WHEN $5::bool THEN now() END,
 			        CASE WHEN $6::bool THEN now() END)`,
-			tenantID, "tok-"+uuid.NewString()[:8], uuid.NewString()[:8],
-			expires, lastUsed, revoked)
+			tenantID, "tok-"+uuid.New().String()[:8], uuid.New().String()[:8], expires, lastUsed, revoked)
 	}
 
 	tok("30 days", true, false)  // active, used, not expiring soon

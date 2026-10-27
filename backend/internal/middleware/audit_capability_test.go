@@ -3,8 +3,7 @@ package middleware
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -17,7 +16,7 @@ import (
 func TestCapabilityID_Absent(t *testing.T) {
 	t.Parallel()
 	got := capabilityID(context.Background())
-	if got != uuid.Nil {
+	if got != uuid.Nil() {
 		t.Errorf("expected uuid.Nil, got %s", got)
 	}
 }

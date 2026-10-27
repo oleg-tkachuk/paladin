@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -38,11 +37,11 @@ func TestMultipartSessionAnchorsBackend(t *testing.T) {
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, anchorBackend)
 	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
 		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, anchorBackend, anchorBucket, f.tenantID)
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	sess, err := repo.InitiateSession(ctx, multiparth.InitiateArgs{
 		TenantID:      f.tenantID,
 		Collection:    f.collection,
-		Key:           "mpu-" + uuid.NewString()[:8],
+		Key:           "mpu-" + uuid.New().String()[:8],
 		ContentType:   "application/octet-stream",
 		TotalParts:    2,
 		PartSizeBytes: 5 << 20,

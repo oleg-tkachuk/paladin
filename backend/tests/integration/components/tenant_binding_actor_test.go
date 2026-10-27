@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -60,7 +59,7 @@ func TestTenantCreate_RecordsBindingActor(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			tid := uuid.New()
-			slug := "actor-" + uuid.NewString()[:8]
+			slug := "actor-" + uuid.New().String()[:8]
 			if _, err := repo.Create(tc.ctx, tenanth.CreateTenantArgs{
 				TenantID:          tid,
 				Slug:              slug,

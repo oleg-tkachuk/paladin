@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -91,7 +91,7 @@ func TestRestoreVersionComparesAgainstParent(t *testing.T) {
 	t.Parallel()
 
 	tenantID := uuid.New()
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	h := &VersionHandler{
 		policy: allowAll{},
 		objects: &restoreParentStub{
@@ -101,7 +101,7 @@ func TestRestoreVersionComparesAgainstParent(t *testing.T) {
 	ctx := auth.WithPrincipal(context.Background(),
 		&auth.Principal{Subject: "u1", TenantID: tenantID})
 	name := "tenants/" + tenantID.String() + "/collections/docs/objects/" +
-		objectID.String() + "/versions/" + uuid.Must(uuid.NewV7()).String()
+		objectID.String() + "/versions/" + uuid.NewV7().String()
 
 	t.Run("stale guard is aborted", func(t *testing.T) {
 		_, err := h.RestoreVersion(ctx, name, "6")

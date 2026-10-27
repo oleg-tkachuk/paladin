@@ -3,8 +3,7 @@ package apiutil
 import (
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // ParseCollectionName parses "collections/{collection}".
@@ -29,7 +28,7 @@ type TenantRef struct {
 }
 
 // HasID reports whether the ref carries a UUID directly (no slug lookup needed).
-func (r TenantRef) HasID() bool { return r.ID != uuid.Nil }
+func (r TenantRef) HasID() bool { return r.ID != uuid.Nil() }
 
 // TenantNamePrefix starts every tenant resource name: "tenants/{tenant_id_or_slug}".
 const TenantNamePrefix = "tenants/"
@@ -65,7 +64,7 @@ func TenantInResourceName(name string) (uuid.UUID, bool) {
 		id, err := uuid.Parse(parts[i+1])
 		return id, err == nil
 	}
-	return uuid.Nil, false
+	return uuid.Nil(), false
 }
 
 // ParseTenantNameRef parses "tenants/{tenant_id_or_slug}" and returns a

@@ -3,11 +3,10 @@ package data
 import (
 	"context"
 	"fmt"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
-
-	"github.com/google/uuid"
 
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/durationpb"

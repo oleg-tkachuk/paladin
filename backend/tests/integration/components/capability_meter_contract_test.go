@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
@@ -72,10 +72,10 @@ func TestMeterContract(t *testing.T) {
 			Ledger:        newLedger(t, pool, capstore.WithClock(clock.Now)),
 			NewCapability: func(spec metertest.CapabilitySpec) (uuid.UUID, error) {
 				owner := tenant
-				if spec.Tenant != uuid.Nil {
+				if spec.Tenant != uuid.Nil() {
 					owner = spec.Tenant
 				}
-				c := mkCap(owner, "agent:"+uuid.NewString()[:8], expires)
+				c := mkCap(owner, "agent:"+uuid.New().String()[:8], expires)
 				c.ParentID = spec.Parent
 				c.Caveats.Requests = spec.Requests
 				c.Caveats.Budget = spec.Budget

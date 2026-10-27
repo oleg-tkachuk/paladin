@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
-	"github.com/google/uuid"
 
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 

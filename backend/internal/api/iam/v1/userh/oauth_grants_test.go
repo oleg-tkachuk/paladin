@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"

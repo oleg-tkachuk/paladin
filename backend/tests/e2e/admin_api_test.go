@@ -40,10 +40,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -235,7 +235,7 @@ func (t *authedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// instead of being rejected — the suite would pass by not testing
 	// what it says it tests.
 	if requiresIdempotencyKey(req.URL.Path) {
-		req.Header.Set("Idempotency-Key", uuid.NewString())
+		req.Header.Set("Idempotency-Key", uuid.New().String())
 	}
 	return t.base.RoundTrip(req)
 }

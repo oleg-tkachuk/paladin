@@ -2,8 +2,7 @@ package apiutil
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func TestValidateTenantSlug(t *testing.T) {
@@ -56,11 +55,11 @@ func TestParseTenantNameRef(t *testing.T) {
 	}{
 		{"tenants/" + id.String(), id, "", false},
 		{id.String(), id, "", false},
-		{"tenants/acme", uuid.Nil, "acme", false},
-		{"acme", uuid.Nil, "acme", false},
-		{"tenants/", uuid.Nil, "", true},
-		{"tenants/Bad_Slug", uuid.Nil, "", true},
-		{"", uuid.Nil, "", true},
+		{"tenants/acme", uuid.Nil(), "acme", false},
+		{"acme", uuid.Nil(), "acme", false},
+		{"tenants/", uuid.Nil(), "", true},
+		{"tenants/Bad_Slug", uuid.Nil(), "", true},
+		{"", uuid.Nil(), "", true},
 	}
 	for _, tc := range cases {
 		ref, err := ParseTenantNameRef(tc.in)

@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -32,7 +32,7 @@ func TestHardDeleteHonoursALockOnAnOlderVersion(t *testing.T) {
 			// The fixture's version becomes the older one, locked; a newer,
 			// unlocked version becomes current.
 			lock.apply(t, ctx, f, f.versionID)
-			newer := uuid.Must(uuid.NewV7())
+			newer := uuid.NewV7()
 			mustExec(t, ctx, f.pool,
 				`INSERT INTO object_versions (id, tenant_id, object_id, storage_path)
 				 VALUES ($1, $2, $3, 'tenant/docs/report.pdf')`, newer, f.tenant, f.objectID)
@@ -119,7 +119,7 @@ func TestHardDeleterTakesTheObjectOnceAnOlderHoldIsReleased(t *testing.T) {
 	if _, err := f.locks.SetLegalHold(ctx, f.tenant, f.versionID, true); err != nil {
 		t.Fatalf("place hold: %v", err)
 	}
-	newer := uuid.Must(uuid.NewV7())
+	newer := uuid.NewV7()
 	mustExec(t, ctx, f.pool,
 		`INSERT INTO object_versions (id, tenant_id, object_id, storage_path)
 		 VALUES ($1, $2, $3, 'tenant/docs/report.pdf')`, newer, f.tenant, f.objectID)

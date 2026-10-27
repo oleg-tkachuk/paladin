@@ -25,8 +25,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -118,12 +117,12 @@ func (i *Issuer) MintAccess(c AccessClaims) (string, time.Time, error) {
 		"iat":    now.Unix(),
 		"nbf":    now.Unix(),
 		"exp":    exp.Unix(),
-		"jti":    uuid.Must(uuid.NewV7()).String(),
+		"jti":    uuid.NewV7().String(),
 		"roles":  c.Roles,
 		"scopes": scopes,
 		"kind":   kindString(c.Kind),
 	}
-	if c.TenantID != uuid.Nil {
+	if c.TenantID != uuid.Nil() {
 		claims["tenant"] = c.TenantID.String()
 	}
 	if c.TenantSlug != "" {
@@ -162,7 +161,7 @@ type RefreshClaims struct {
 
 // MintRefresh returns a signed refresh token bound to paladin-iam audience.
 func (i *Issuer) MintRefresh(c RefreshClaims) (string, time.Time, error) {
-	if c.TokenID == uuid.Nil {
+	if c.TokenID == uuid.Nil() {
 		return "", time.Time{}, errors.New("issuer: RefreshClaims.TokenID is required")
 	}
 	now := i.cfg.Now()
@@ -181,7 +180,7 @@ func (i *Issuer) MintRefresh(c RefreshClaims) (string, time.Time, error) {
 		"user_id": c.UserID.String(),
 		"refresh": true,
 	}
-	if c.TenantID != uuid.Nil {
+	if c.TenantID != uuid.Nil() {
 		claims["tenant"] = c.TenantID.String()
 	}
 	tok, err := signHS256(i.cfg.SigningKey, claims)

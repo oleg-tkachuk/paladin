@@ -8,8 +8,7 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Principal is the authenticated caller.
@@ -159,10 +158,10 @@ func PrincipalFromContext(ctx context.Context) (*Principal, error) {
 func TenantFromContext(ctx context.Context) (uuid.UUID, error) {
 	p, err := PrincipalFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
-	if p.TenantID == uuid.Nil {
-		return uuid.Nil, ErrNoTenant
+	if p.TenantID == uuid.Nil() {
+		return uuid.Nil(), ErrNoTenant
 	}
 	return p.TenantID, nil
 }
@@ -197,7 +196,7 @@ type actingTenantKey struct{}
 // the mechanism that RLS otherwise denies, so the gate in front of it is the
 // whole protection.
 func WithActingTenant(ctx context.Context, tenantID uuid.UUID) context.Context {
-	if tenantID == uuid.Nil {
+	if tenantID == uuid.Nil() {
 		return ctx
 	}
 	return context.WithValue(ctx, actingTenantKey{}, tenantID)
@@ -207,7 +206,7 @@ func WithActingTenant(ctx context.Context, tenantID uuid.UUID) context.Context {
 // whether one was set.
 func ActingTenant(ctx context.Context) (uuid.UUID, bool) {
 	tid, ok := ctx.Value(actingTenantKey{}).(uuid.UUID)
-	return tid, ok && tid != uuid.Nil
+	return tid, ok && tid != uuid.Nil()
 }
 
 // EffectiveTenant is the tenant whose rows this request may touch: the one it

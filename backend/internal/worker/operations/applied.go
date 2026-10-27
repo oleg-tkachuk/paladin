@@ -1,7 +1,8 @@
 package operations
 
 import (
-	"github.com/google/uuid"
+	"uuid"
+
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"

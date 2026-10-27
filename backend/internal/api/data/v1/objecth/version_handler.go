@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -107,19 +107,19 @@ const capabilityObjectURIPrefix = paladin.ObjectResourceScheme
 func parseCapabilityObjectURI(uri string) (tenantID uuid.UUID, collection, key string, ok bool) {
 	rest, found := strings.CutPrefix(uri, capabilityObjectURIPrefix)
 	if !found {
-		return uuid.Nil, "", "", false
+		return uuid.Nil(), "", "", false
 	}
 	tenant, rest, found := strings.Cut(rest, "/")
 	if !found {
-		return uuid.Nil, "", "", false
+		return uuid.Nil(), "", "", false
 	}
 	collection, key, found = strings.Cut(rest, "/")
 	if !found || collection == "" || key == "" {
-		return uuid.Nil, "", "", false
+		return uuid.Nil(), "", "", false
 	}
 	tenantID, err := uuid.Parse(tenant)
 	if err != nil {
-		return uuid.Nil, "", "", false
+		return uuid.Nil(), "", "", false
 	}
 	return tenantID, collection, key, true
 }
@@ -271,7 +271,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 // happens at the caller layer (only call when the parent bucket has
 // versioning_enabled).
 func (h *VersionHandler) RecordPromotion(ctx context.Context, v ObjectVersion) error {
-	if v.ObjectID == uuid.Nil {
+	if v.ObjectID == uuid.Nil() {
 		return errors.New("RecordPromotion: ObjectID required")
 	}
 	if v.CreatedAt.IsZero() {
@@ -301,7 +301,7 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	if !meta.VersioningEnabled {
 		return nil
 	}
-	versionID := uuid.Must(uuid.NewV7())
+	versionID := uuid.NewV7()
 	if err := h.RecordPromotion(ctx, ObjectVersion{
 		VersionID:             versionID,
 		ObjectID:              obj.ObjectID,
@@ -355,7 +355,7 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 		return nil
 	}
 	curID, err := h.versions.CurrentVersionID(ctx, obj.ObjectID)
-	if err != nil || curID == uuid.Nil {
+	if err != nil || curID == uuid.Nil() {
 		return nil
 	}
 	cur, err := h.versions.Get(ctx, curID)
@@ -383,7 +383,7 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 	}
 	// No non-marker history found in the first page — clear pointer. The
 	// object becomes AVAILABLE but with no current version (legacy shape).
-	return h.versions.SetCurrentVersionID(ctx, obj.ObjectID, uuid.Nil)
+	return h.versions.SetCurrentVersionID(ctx, obj.ObjectID, uuid.Nil())
 }
 
 // OnSoftDelete records a delete-marker version when the parent bucket has
@@ -401,7 +401,7 @@ func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
 		return nil
 	}
 	return h.RecordPromotion(ctx, ObjectVersion{
-		VersionID:      uuid.Must(uuid.NewV7()),
+		VersionID:      uuid.NewV7(),
 		ObjectID:       obj.ObjectID,
 		IsDeleteMarker: true,
 		StoragePath:    obj.Key,

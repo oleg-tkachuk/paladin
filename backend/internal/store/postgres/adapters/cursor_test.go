@@ -3,8 +3,7 @@ package adapters
 import (
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // The version cursor is the whole of keyset paging: the next page is the rows
@@ -61,7 +60,7 @@ func TestDecodeVersionCursorRejects(t *testing.T) {
 			if !gotAt.IsZero() {
 				t.Errorf("decode(%q) returned time %v alongside the error, want zero", tok, gotAt)
 			}
-			if gotID != uuid.Nil {
+			if gotID != uuid.Nil() {
 				t.Errorf("decode(%q) returned id %v alongside the error, want Nil", tok, gotID)
 			}
 		})

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -157,7 +157,7 @@ func TestExpirerMatchWithoutEvaluatorSkipped(t *testing.T) {
 }
 
 func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	bucket := admindomain.Bucket{
 		BackendID:  "primary",
 		BucketName: "paladin-archive",
@@ -174,9 +174,9 @@ func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
 		},
 	}
 
-	idOld := uuid.Must(uuid.NewV7())
-	idYoung := uuid.Must(uuid.NewV7())
-	idDeleted := uuid.Must(uuid.NewV7())
+	idOld := uuid.NewV7()
+	idYoung := uuid.NewV7()
+	idDeleted := uuid.NewV7()
 	objs := &fakeObjIter{rows: []LifecycleObjectRow{
 		{ObjectID: idOld, State: string(statemachine.StateAvailable), CreatedAt: time.Now().Add(-48 * time.Hour)},
 		{ObjectID: idYoung, State: string(statemachine.StateAvailable), CreatedAt: time.Now().Add(-1 * time.Hour)},
@@ -233,7 +233,7 @@ const (
 // expiringFixture is one bucket with one binding holding two objects past
 // the rule's window, so a tick tries to expire both.
 func expiringFixture() (*fakeBucketSource, *fakeObjIter, CollectionBinding, admindomain.Bucket) {
-	bind := CollectionBinding{TenantID: uuid.Must(uuid.NewV7()), Collection: "logs"}
+	bind := CollectionBinding{TenantID: uuid.NewV7(), Collection: "logs"}
 	bucket := admindomain.Bucket{
 		BackendID:  "primary",
 		BucketName: "paladin-archive",
@@ -249,8 +249,8 @@ func expiringFixture() (*fakeBucketSource, *fakeObjIter, CollectionBinding, admi
 	}
 	old := time.Now().Add(-lifecycleTestAge)
 	objs := &fakeObjIter{rows: []LifecycleObjectRow{
-		{ObjectID: uuid.Must(uuid.NewV7()), Key: "logs/a", State: string(statemachine.StateAvailable), CreatedAt: old},
-		{ObjectID: uuid.Must(uuid.NewV7()), Key: "logs/b", State: string(statemachine.StateAvailable), CreatedAt: old},
+		{ObjectID: uuid.NewV7(), Key: "logs/a", State: string(statemachine.StateAvailable), CreatedAt: old},
+		{ObjectID: uuid.NewV7(), Key: "logs/b", State: string(statemachine.StateAvailable), CreatedAt: old},
 	}}
 	return src, objs, bind, bucket
 }

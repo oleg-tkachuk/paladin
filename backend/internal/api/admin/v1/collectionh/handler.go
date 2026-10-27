@@ -12,13 +12,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -208,7 +208,7 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	// `parent: "tenants/{id}"` in the request). Without the
 	// platform.admin gate the override is silently ignored so a
 	// non-admin can't write into someone else's namespace.
-	if args.TenantID == uuid.Nil {
+	if args.TenantID == uuid.Nil() {
 		args.TenantID = callerTenantID
 	} else if args.TenantID != callerTenantID {
 		// platform.tenant-provisioner too: creating another tenant's object
@@ -363,7 +363,7 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 	if err != nil {
 		return nil, err
 	}
-	if tenantID == uuid.Nil {
+	if tenantID == uuid.Nil() {
 		tenantID = callerTenantID
 	}
 	// A provisioner reads before it creates — the ensure step is what makes
@@ -423,11 +423,11 @@ func (h *Handler) withUsage(ctx context.Context, page []Collection) error {
 func targetTenant(
 	target, caller uuid.UUID, principal *auth.Principal, op string,
 ) (uuid.UUID, error) {
-	if target == uuid.Nil || target == caller {
+	if target == uuid.Nil() || target == caller {
 		return caller, nil
 	}
 	if !principal.HasRole(apiutil.RolePlatformAdmin) {
-		return uuid.Nil, connect.Errorf(connect.CodePermissionDenied,
+		return uuid.Nil(), connect.Errorf(connect.CodePermissionDenied,
 			"cross-tenant %s requires platform.admin", op)
 	}
 	return target, nil
@@ -529,7 +529,7 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	// collection, or with a (backend, bucket) filter every one bound to that
 	// bucket. Anyone else asking without a tenant gets their own tenant's:
 	// without that pin any tenant could enumerate sibling tenants' collections.
-	if args.TenantID == uuid.Nil {
+	if args.TenantID == uuid.Nil() {
 		byBucket := args.BackendID != "" && args.BucketName != ""
 		switch {
 		case principal.HasRole(apiutil.RolePlatformAdmin):
@@ -550,9 +550,9 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	// dominate pagination cost so we don't repeat it for every collection.
 	// For cross-tenant listing we authorize against the caller's tenant
 	// (the principal-tenant invariant the Cedar engine encodes).
-	crossTenant := args.TenantID == uuid.Nil
+	crossTenant := args.TenantID == uuid.Nil()
 	authzTenant := args.TenantID
-	if authzTenant == uuid.Nil {
+	if authzTenant == uuid.Nil() {
 		authzTenant = callerTenantID
 	}
 	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageCollection); err != nil {

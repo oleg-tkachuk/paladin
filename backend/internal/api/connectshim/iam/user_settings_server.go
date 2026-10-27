@@ -10,9 +10,9 @@ import (
 	"context"
 	"errors"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -208,7 +208,7 @@ func paths(m *fieldmaskpb.FieldMask) []string {
 func parseUserResourceName(name string) (uuid.UUID, error) {
 	const prefix = "users/"
 	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
-		return uuid.Nil, errors.New("name must start with users/")
+		return uuid.Nil(), errors.New("name must start with users/")
 	}
 	body := name[len(prefix):]
 	if i := indexOf(body, "/settings"); i >= 0 {
@@ -222,11 +222,11 @@ func parseUserResourceName(name string) (uuid.UUID, error) {
 func parseTenantParent(parent string) (uuid.UUID, error) {
 	const prefix = "tenants/"
 	if len(parent) <= len(prefix) || parent[:len(prefix)] != prefix {
-		return uuid.Nil, errors.New("parent must be tenants/{tenant_id}")
+		return uuid.Nil(), errors.New("parent must be tenants/{tenant_id}")
 	}
 	id, err := uuid.Parse(parent[len(prefix):])
 	if err != nil {
-		return uuid.Nil, errors.New("parent: tenant slug not yet supported on this RPC; use UUID")
+		return uuid.Nil(), errors.New("parent: tenant slug not yet supported on this RPC; use UUID")
 	}
 	return id, nil
 }

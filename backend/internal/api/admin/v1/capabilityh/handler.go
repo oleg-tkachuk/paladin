@@ -20,11 +20,11 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
@@ -702,10 +702,10 @@ func principalToProto(p limes.Principal) *adminv1.CapabilityPrincipal {
 		out.AgentVersion = p.Agent.AgentVersion
 		out.Model = p.Agent.Model
 		out.McpClient = p.Agent.MCPClient
-		if p.Agent.RunID != uuid.Nil {
+		if p.Agent.RunID != uuid.Nil() {
 			out.RunId = p.Agent.RunID.String()
 		}
-		if p.Agent.ParentRunID != uuid.Nil {
+		if p.Agent.ParentRunID != uuid.Nil() {
 			out.ParentRunId = p.Agent.ParentRunID.String()
 		}
 	}
@@ -756,7 +756,7 @@ func capabilityToProto(c *limes.Capability) *adminv1.Capability {
 	if !c.NotBefore.IsZero() {
 		out.NotBefore = timestamppb.New(c.NotBefore)
 	}
-	if c.ParentID != uuid.Nil {
+	if c.ParentID != uuid.Nil() {
 		out.ParentId = c.ParentID.String()
 	}
 	return out

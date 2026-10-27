@@ -3,9 +3,9 @@ package iam
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -55,7 +55,7 @@ func TestListUsersScopesToTheParent(t *testing.T) {
 	id := uuid.New()
 	for parent, want := range map[string]uuid.UUID{
 		"tenants/" + id.String(): id,
-		"":                       uuid.Nil, // cross-tenant; the handler checks the role
+		"":                       uuid.Nil(), // cross-tenant; the handler checks the role
 	} {
 		h := &listingUser{}
 		if _, err := (&UserServer{H: h}).ListUsers(context.Background(), &pb.ListUsersRequest{

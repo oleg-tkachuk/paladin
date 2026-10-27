@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -490,7 +490,7 @@ func TestCreateTenant(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastCreateTx.TenantID == uuid.Nil {
+		if fr.lastCreateTx.TenantID == uuid.Nil() {
 			t.Fatal("expected server-generated tenant_id, got nil UUID")
 		}
 		if fr.lastCreateTx.DisplayName != "acme" {
@@ -724,7 +724,7 @@ func TestDeleteTenant(t *testing.T) {
 		if err := NewHandler(fr, allow()).DeleteTenant(adminCtx(tid), tid, 3); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastPurge.TenantID != uuid.Nil {
+		if fr.lastPurge.TenantID != uuid.Nil() {
 			t.Fatalf("purge was called: %+v", fr.lastPurge)
 		}
 		if fr.lastSoftDelete.version != 3 {

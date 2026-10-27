@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -125,7 +125,7 @@ func (s *Server) IssueCapability(tenant string) string {
 }
 
 func (s *Server) issue(kind credentialKind, prefix, tenant string) string {
-	token := prefix + strings.ReplaceAll(uuid.NewString(), "-", "")
+	token := prefix + strings.ReplaceAll(uuid.New().String(), "-", "")
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.credentials[token] = &credential{kind: kind, tenant: tenant}

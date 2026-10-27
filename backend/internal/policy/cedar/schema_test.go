@@ -4,11 +4,11 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	cedartypes "github.com/cedar-policy/cedar-go/types"
 	"github.com/cedar-policy/cedar-go/x/exp/schema/resolved"
 	"github.com/cedar-policy/cedar-go/x/exp/schema/validate"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/policies"
 )

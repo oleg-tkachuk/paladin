@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -27,7 +26,7 @@ func TestCreateDedicatedTenantProvisionsBucket(t *testing.T) {
 
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	tn, err := repo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID:         tid,
 		Slug:             "ded-" + hex,

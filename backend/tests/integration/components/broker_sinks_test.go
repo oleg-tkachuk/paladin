@@ -33,12 +33,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/scram"
@@ -59,8 +59,8 @@ func brokerTestSub(t *testing.T, sinkKind string, cfg map[string]any) admindomai
 		t.Fatalf("marshal sink config: %v", err)
 	}
 	return admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
-		TenantID:       uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
+		TenantID:       uuid.NewV7(),
 		SinkKind:       sinkKind,
 		SinkConfig:     raw,
 	}

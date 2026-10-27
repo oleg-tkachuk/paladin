@@ -6,8 +6,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -59,7 +58,7 @@ func BenchmarkAuditInsertDurable(b *testing.B) {
 		b.ReportAllocs()
 		for n := 0; n < b.N; n++ {
 			e := base
-			e.EntryID = uuid.Must(uuid.NewV7()) // unique PK per iteration
+			e.EntryID = uuid.NewV7() // unique PK per iteration
 			e.RequestJSON = after
 			if err := repo.Insert(ctx, e); err != nil {
 				b.Fatalf("audit insert: %v", err)

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -24,7 +24,7 @@ import (
 func mkTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, layout string) (uuid.UUID, string) {
 	t.Helper()
 	id := uuid.New()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	slug := "t-" + hex
 	mustExec(t, ctx, pool,
 		`INSERT INTO tenants (id, slug, display_name, storage_layout) VALUES ($1, $2, $3, $4)`,
@@ -48,7 +48,7 @@ func TestAdversarial_CrossTenantDedicatedBucketBindRejected(t *testing.T) {
 	// Tenant A owns a dedicated bucket.
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	victimA := uuid.New()
-	hexA := uuid.NewString()[:8]
+	hexA := uuid.New().String()[:8]
 	if _, err := tenantRepo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID: victimA, Slug: "victim-" + hexA, DisplayName: "victim-" + hexA,
 		StorageLayout: "dedicated", DedicatedBackend: backendID,
@@ -105,7 +105,7 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 	grantBucket(t, ctx, pool, tenantB, backendID, bucket)
 
 	seedObj := func(tid uuid.UUID) {
-		ok := "ok-" + uuid.NewString()[:8]
+		ok := "ok-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool, `INSERT INTO collections (tenant_id, name, bucket_id)
 		 SELECT $1, $2, (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
 			  WHERE sb.name = $3 AND b.name = $4)`,
@@ -113,8 +113,7 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
 			 SELECT $1, $2, c.id, $4, 'AVAILABLE','text/plain',0
-			   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-			uuid.Must(uuid.NewV7()), tid, ok, "k-"+uuid.NewString()[:8])
+			   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), tid, ok, "k-"+uuid.New().String()[:8])
 	}
 	seedObj(tenantA)
 	seedObj(tenantB)
@@ -175,7 +174,7 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	if _, err := tenantRepo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID: tid, Slug: "gate2-" + hex, DisplayName: "gate2-" + hex,
 		StorageLayout: "dedicated", DedicatedBackend: backendID,

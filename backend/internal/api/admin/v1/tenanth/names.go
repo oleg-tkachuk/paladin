@@ -2,8 +2,7 @@ package tenanth
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Name is a tenant as a listing of other rows names it: a budget summary

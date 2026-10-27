@@ -5,8 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // TestNoopLimiter_AllowsAll confirms the zero-cost variant lets every

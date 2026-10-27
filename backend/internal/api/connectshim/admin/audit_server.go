@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -12,7 +13,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -120,7 +120,7 @@ func (s *AuditServer) ExportAuditLog(ctx context.Context, req *pb.ExportAuditLog
 	}
 	now := timestamppb.New(res.GeneratedAt)
 	op := &pb.Operation{
-		Name: "operations/audit-export-" + uuid.NewString(),
+		Name: "operations/audit-export-" + uuid.New().String(),
 		Type: "paladin.admin.v1.AuditLogService/ExportAuditLog",
 		Done: true,
 		Result: &pb.Operation_Response{

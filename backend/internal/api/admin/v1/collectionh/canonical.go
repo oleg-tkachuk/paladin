@@ -11,8 +11,7 @@ package collectionh
 import (
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Canonical resource-name shape A:
@@ -34,7 +33,7 @@ const (
 // panics on misuse rather than emitting a malformed name (it's caller-
 // authored at handler level — every site has the components in scope).
 func CanonicalName(backendID, bucketName string, tenantID uuid.UUID, collection string) string {
-	if backendID == "" || bucketName == "" || tenantID == uuid.Nil || collection == "" {
+	if backendID == "" || bucketName == "" || tenantID == uuid.Nil() || collection == "" {
 		panic(fmt.Sprintf(
 			"canonical collection: empty component (backend=%q bucket=%q tenant=%s collection=%q)",
 			backendID, bucketName, tenantID, collection))

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -25,8 +25,8 @@ func NewEventSubscriptionRepoV2(q *sqlc.Queries) *EventSubscriptionRepoV2 {
 var _ admindomain.EventSubscriptionRepository = (*EventSubscriptionRepoV2)(nil)
 
 func (r *EventSubscriptionRepoV2) Create(ctx context.Context, s *admindomain.EventSubscription) error {
-	if s.SubscriptionID == uuid.Nil {
-		s.SubscriptionID = uuid.Must(uuid.NewV7())
+	if s.SubscriptionID == uuid.Nil() {
+		s.SubscriptionID = uuid.NewV7()
 	}
 	return r.q.CreateEventSubscription(ctx,
 		pgUUID(s.SubscriptionID),
@@ -52,7 +52,7 @@ func (r *EventSubscriptionRepoV2) Get(ctx context.Context, id uuid.UUID) (admind
 func (r *EventSubscriptionRepoV2) List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 	var tenant pgtype.UUID
-	if args.TenantID != uuid.Nil {
+	if args.TenantID != uuid.Nil() {
 		tenant = pgUUIDOptional(args.TenantID)
 	}
 	// AfterID maps to a nullable pgtype.UUID: uuid.Nil → NULL → SQL

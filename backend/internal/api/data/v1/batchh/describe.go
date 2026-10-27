@@ -3,8 +3,7 @@ package batchh
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // The operation types the batch RPCs submit, and the worker runs by name.

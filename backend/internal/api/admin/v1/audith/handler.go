@@ -11,13 +11,13 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"cel.dev/cel-go/cel"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -93,11 +93,11 @@ func (h *Handler) listScope(ctx context.Context, args admindomain.ListAuditArgs,
 	}
 	// Non-platform admins can see only their own tenant's entries.
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
-		if args.ActorTenantID != uuid.Nil && args.ActorTenantID != caller {
+		if args.ActorTenantID != uuid.Nil() && args.ActorTenantID != caller {
 			return args, nil, connect.NewError(connect.CodePermissionDenied,
 				"cross-tenant audit denied")
 		}
-		if args.TrailTenantID != uuid.Nil && args.TrailTenantID != caller {
+		if args.TrailTenantID != uuid.Nil() && args.TrailTenantID != caller {
 			return args, nil, connect.NewError(connect.CodePermissionDenied,
 				"cross-tenant audit denied")
 		}

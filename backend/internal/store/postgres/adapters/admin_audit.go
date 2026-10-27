@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -50,7 +50,7 @@ func (r *AuditRepoV2) Insert(ctx context.Context, e admindomain.AuditEntry) erro
 // and a platform admin acting inside another tenant runs under that
 // tenant's scope; under either, the insert was refused.
 func asActor(ctx context.Context, actorTenant uuid.UUID) context.Context {
-	if actorTenant == uuid.Nil {
+	if actorTenant == uuid.Nil() {
 		return ctx
 	}
 	return auth.WithActingTenant(ctx, actorTenant)
@@ -60,8 +60,8 @@ func asActor(ctx context.Context, actorTenant uuid.UUID) context.Context {
 // pool-backed r.q for autocommit (Insert) or a tx-bound q.WithTx(tx) for
 // InsertWithOutbox. Fills the EntryID / At defaults in one place.
 func (r *AuditRepoV2) insertWith(ctx context.Context, q *sqlc.Queries, e admindomain.AuditEntry) error {
-	if e.EntryID == uuid.Nil {
-		e.EntryID = uuid.Must(uuid.NewV7())
+	if e.EntryID == uuid.Nil() {
+		e.EntryID = uuid.NewV7()
 	}
 	if e.At.IsZero() {
 		e.At = time.Now().UTC()
@@ -111,8 +111,8 @@ func (r *AuditRepoV2) InsertWithOutbox(
 	if r.pool == nil {
 		return errors.New("adapters: AuditRepoV2.InsertWithOutbox requires a pool")
 	}
-	if e.EntryID == uuid.Nil {
-		e.EntryID = uuid.Must(uuid.NewV7())
+	if e.EntryID == uuid.Nil() {
+		e.EntryID = uuid.NewV7()
 	}
 	if e.At.IsZero() {
 		e.At = time.Now().UTC()

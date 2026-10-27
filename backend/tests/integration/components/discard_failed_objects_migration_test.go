@@ -6,8 +6,8 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
@@ -28,7 +28,7 @@ func TestFailedObjectsAreDiscardedByTheMigration(t *testing.T) {
 
 	insert := func(path, state string) uuid.UUID {
 		t.Helper()
-		id := uuid.Must(uuid.NewV7())
+		id := uuid.NewV7()
 		mustExec(t, ctx, pool, `
 			INSERT INTO objects (id, tenant_id, collection_id, path, state,
 			                     content_type, checksum_algorithm)

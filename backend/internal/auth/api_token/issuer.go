@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Issuer mints API tokens. Persist-then-disclose ordering: insert the
@@ -72,7 +71,7 @@ type IssueRequest struct {
 // (with Plaintext populated). Plaintext is shown ONCE — caller stashes
 // it and ships it to the consuming service; the database never sees it.
 func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
-	if req.TenantID == uuid.Nil {
+	if req.TenantID == uuid.Nil() {
 		return nil, errors.New("api_token: TenantID required")
 	}
 	if req.Name == "" {

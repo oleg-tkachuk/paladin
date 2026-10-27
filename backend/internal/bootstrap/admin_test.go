@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -73,7 +73,7 @@ func (f *fakeUsers) Create(_ context.Context, u authstore.User) (authstore.User,
 	if f.byKey == nil {
 		f.byKey = map[string]*authstore.User{}
 	}
-	if u.UserID == uuid.Nil {
+	if u.UserID == uuid.Nil() {
 		u.UserID = uuid.New()
 	}
 	u.CreatedAt = time.Now()

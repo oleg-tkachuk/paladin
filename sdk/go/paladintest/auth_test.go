@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -66,10 +66,10 @@ func TestDefaultModeServesEveryCall(t *testing.T) {
 	for name, p := range map[string]*paladin.Paladin{
 		"no credential":        srv.Connect(),
 		"an unknown token":     srv.Connect(paladin.WithBearerToken("not-issued")),
-		"another tenant's":     srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(uuid.NewString()))),
+		"another tenant's":     srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(uuid.New().String()))),
 		"a revoked token":      srv.Connect(paladin.WithBearerToken(revoked(srv, srv.IssueBearerToken(srv.Tenant())))),
 		"a basic credential":   srv.Connect(paladin.WithHeader(paladin.HeaderAuthorization, "Basic dXNlcjpwYXNz")),
-		"a foreign capability": srv.Connect(paladin.WithCapability(srv.IssueCapability(uuid.NewString()))),
+		"a foreign capability": srv.Connect(paladin.WithCapability(srv.IssueCapability(uuid.New().String()))),
 	} {
 		if err := getObject(p, obj); err != nil {
 			t.Errorf("%s: %v, want the object", name, err)
@@ -129,7 +129,7 @@ func TestStrictAuthServesTheWorkflows(t *testing.T) {
 func TestStrictAuthRefusesWhatTheServerRefuses(t *testing.T) {
 	srv := paladintest.New(t, paladintest.WithStrictAuth())
 	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
-	other := uuid.NewString()
+	other := uuid.New().String()
 	cases := []struct {
 		name string
 		opt  paladin.Option
@@ -227,7 +227,7 @@ func TestStrictAuthRefusesAnotherTenantsUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	theirs := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(uuid.NewString())))
+	theirs := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(uuid.New().String())))
 	_, err = theirs.Data.MultipartUpload.PresignPart(ctx, &datav1.PresignPartRequest{
 		UploadId: up.GetUploadId(), PartNumber: 1, ChecksumValue: emptySHA256,
 	})

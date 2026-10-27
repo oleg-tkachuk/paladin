@@ -3,9 +3,9 @@ package apitokenh
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
@@ -116,7 +116,7 @@ func TestRevokeRefusesAForeignTenant(t *testing.T) {
 
 	_, err := h.Revoke(ctxAs("tenant.admin"),
 		&adminv1.APITokenServiceRevokeRequest{
-			Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
+			Name: "tenants/" + uuid.New().String() + "/apiTokens/" + uuid.New().String(),
 		})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
@@ -132,7 +132,7 @@ func TestRevokeRejectsABareId(t *testing.T) {
 	// The old shape. It is refused rather than guessed at: an id without its
 	// parent has no scope, and inferring one is what this change removes.
 	_, err := h.Revoke(ctxAs("platform.admin"),
-		&adminv1.APITokenServiceRevokeRequest{Name: uuid.NewString()})
+		&adminv1.APITokenServiceRevokeRequest{Name: uuid.New().String()})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
 	}

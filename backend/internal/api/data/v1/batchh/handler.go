@@ -10,9 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -102,19 +102,19 @@ func NewHandler(submitter Submitter, policy cedar.Authorizer, buckets BucketReso
 func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.UUID, error) {
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.NewError(connect.CodeInvalidArgument,
 			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpDelete); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	// Collection-level authorization, and the ONLY authorization this batch
 	// gets. The comment here used to promise a per-object Cedar check inside
@@ -124,11 +124,11 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	// to 10k objects. Saying it happens when it does not is worse than either
 	// choice, because a reader counts on a second line of defence.
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
 	if err != nil {
-		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchDelete args: %w", err))
+		return uuid.Nil(), rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchDelete args: %w", err))
 	}
 	return h.chargeAndSubmit(ctx, OpBatchDelete, md)
 }
@@ -136,30 +136,30 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID, error) {
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.NewError(connect.CodeInvalidArgument,
 			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	if err := h.assertCopy(ctx, tenantID, args); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	// Require copy on source and put on destination — collection-level check.
 	if err := h.authorize(ctx, p, tenantID, args.SrcCollection, cedar.ActionCopyObject); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.DstCollection, cedar.ActionPutObject); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
 	if err != nil {
-		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchCopy args: %w", err))
+		return uuid.Nil(), rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchCopy args: %w", err))
 	}
 	return h.chargeAndSubmit(ctx, OpBatchCopy, md)
 }
@@ -167,26 +167,26 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs) (uuid.UUID, error) {
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.NewError(connect.CodeInvalidArgument,
 			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, auth.OpTag); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
 	if err != nil {
-		return uuid.Nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchUpdateTags args: %w", err))
+		return uuid.Nil(), rpcerr.New(connect.CodeInternal, fmt.Errorf("marshal BatchUpdateTags args: %w", err))
 	}
 	return h.chargeAndSubmit(ctx, OpBatchUpdateTags, md)
 }
@@ -194,24 +194,24 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObjectsArgs) (uuid.UUID, error) {
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	args.TenantID = tenantID
 	if len(args.ObjectIDs) == 0 {
-		return uuid.Nil, connect.NewError(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.NewError(connect.CodeInvalidArgument,
 			"object_ids must be non-empty")
 	}
 	if len(args.ObjectIDs) > maxBatchSize {
-		return uuid.Nil, connect.Errorf(connect.CodeInvalidArgument,
+		return uuid.Nil(), connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
 	// Restoring a soft-deleted object is a write to the lifecycle —
 	// the operator authority required mirrors the put path.
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpPut); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	md, _ := json.Marshal(args)
 	return h.chargeAndSubmit(ctx, OpBatchRestoreObjects, md)
@@ -348,7 +348,7 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 // is 0 (default), so the JWT/unmetered call shape is unchanged.
 func (h *Handler) chargeAndSubmit(ctx context.Context, opType string, md []byte) (uuid.UUID, error) {
 	if err := auth.ChargeRequest(ctx); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil(), err
 	}
 	return h.submitter.Submit(ctx, opType, md)
 }

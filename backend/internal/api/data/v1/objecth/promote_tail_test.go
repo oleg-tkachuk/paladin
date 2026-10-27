@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/limes"
@@ -117,7 +117,7 @@ func tailHandler(t *testing.T, repo *completeRepo, st Storage, sm *fakeStateMach
 
 func pendingObject(tenantID uuid.UUID) Object {
 	return Object{
-		ObjectID: uuid.Must(uuid.NewV7()), TenantID: tenantID,
+		ObjectID: uuid.NewV7(), TenantID: tenantID,
 		Collection: "docs", Key: "a.txt", State: statemachine.StatePending,
 		ContentType: "text/plain",
 	}
@@ -236,7 +236,7 @@ func TestCopyObjectTailEmitsAnUploadedEventMarkedAsACopy(t *testing.T) {
 	repo := &completeRepo{}
 	h, quota, versions, events, ctx, tenantID := tailHandler(t, repo, noopStorage{}, sm)
 	repo.obj = copySource(tenantID)
-	srcID := uuid.NewString()
+	srcID := uuid.New().String()
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
 		SourceCollection: "src", SourceObjectID: srcID,
@@ -274,7 +274,7 @@ func TestCopyObjectTailSkipsAccountingWhenNothingChanged(t *testing.T) {
 	repo.obj = copySource(tenantID)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestCopyObjectCompensatesWhenTheStorageCopyFails(t *testing.T) {
 	repo.obj = copySource(tenantID)
 
 	_, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	})
 	if connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", connect.CodeOf(err))
@@ -321,7 +321,7 @@ func TestCopyObjectReportsBothFailuresWhenCompensationAlsoFails(t *testing.T) {
 	repo.obj = copySource(tenantID)
 
 	_, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	})
 	if connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", connect.CodeOf(err))
@@ -375,7 +375,7 @@ func TestCopyObjectChargesTheCapabilityBudget(t *testing.T) {
 	ctx, capID, usage := budgetedCtx(t, tenantID, roomyBudget)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestCopyObjectRefusesWhenTheBudgetIsSpent(t *testing.T) {
 	repo.obj = copySource(tenantID)
 	ctx, _, _ := budgetedCtx(t, tenantID, chargePerRequest)
 
-	in := CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst"}
+	in := CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst"}
 	if _, err := h.CopyObject(ctx, in); err != nil {
 		t.Fatalf("the first copy is within budget: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestCopyObjectDoesNotChargeARetryThatChangedNothing(t *testing.T) {
 	ctx, capID, usage := budgetedCtx(t, tenantID, roomyBudget)
 
 	if _, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	}); err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}

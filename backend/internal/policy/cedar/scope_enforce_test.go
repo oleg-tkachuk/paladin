@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // blanketPermit permits every principal on every action/resource. With it as the

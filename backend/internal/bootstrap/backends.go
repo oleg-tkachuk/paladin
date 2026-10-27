@@ -25,8 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	v1admindomain "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -228,7 +228,7 @@ func writeBackendAudit(ctx context.Context, deps BackendDeps, action, backendID 
 		return
 	}
 	entry := v1admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		ActorSubject:  auditActorSubject,
 		ActorAudience: auditAudience,
 		Action:        action,

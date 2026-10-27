@@ -17,8 +17,7 @@ package admin
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )

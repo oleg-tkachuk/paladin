@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -47,7 +47,7 @@ func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collect
 		return Object{}, r.findErr
 	}
 	return Object{
-		ObjectID:    uuid.Must(uuid.NewV7()),
+		ObjectID:    uuid.NewV7(),
 		TenantID:    tenantID,
 		Collection:  collection,
 		Key:         "report.pdf",

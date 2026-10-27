@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // watchStore is a Store whose Watch hands back a caller-controlled channel.

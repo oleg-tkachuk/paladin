@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -103,13 +103,13 @@ func (h *Handler) ListPolicyVersions(ctx context.Context, resourceName string, p
 	// A platform layer is checked against the caller's own tenant, as
 	// GetEffectivePolicy checks a backend or bucket name.
 	scope := ref.TenantID
-	if scope == uuid.Nil {
+	if scope == uuid.Nil() {
 		scope = p.TenantID
 	}
 	if err := h.authorizeInspect(ctx, scope, ref.Collection); err != nil {
 		return VersionsPage{}, err
 	}
-	if ref.TenantID != uuid.Nil {
+	if ref.TenantID != uuid.Nil() {
 		// Read as the tenant asked about: its history is under its isolation.
 		ctx = auth.WithActingTenant(ctx, ref.TenantID)
 	}

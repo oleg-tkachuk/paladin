@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 	"google.golang.org/protobuf/proto"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -83,7 +83,7 @@ func VerifiedCapabilityFromContext(ctx context.Context) (limes.VerifiedCapabilit
 // limes.Verifier makes a VerifiedCapability, so a test verifies a token too.
 func WithCapability(ctx context.Context, v limes.VerifiedCapability) context.Context {
 	c := v.Capability()
-	if c.ID == uuid.Nil {
+	if c.ID == uuid.Nil() {
 		return ctx // the zero VerifiedCapability names no capability
 	}
 	return context.WithValue(ctx, capabilityKey{}, verifiedEntry{verified: v, cap: &c})
@@ -385,7 +385,7 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 		// additive so a caller who presents both is unaffected.
 		return ctx, nil
 	}
-	if cap.Subject.TenantID == uuid.Nil {
+	if cap.Subject.TenantID == uuid.Nil() {
 		// The verifier rejects a tenant-less capability, so this is a
 		// belt-and-braces refusal rather than an expected path: establishing a
 		// principal with no tenant would produce a caller the tenant gate
@@ -442,7 +442,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 	// the whole subtree, and the store reads it from the ancestor's record.
 	// A Biscuit copy with limits of its own is counted the same way.
 	subject := verified.MeterSubject()
-	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil || len(subject.Copies()) > 0) {
+	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil() || len(subject.Copies()) > 0) {
 		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), meter.BumpRequest{Subject: subject}); err != nil {
 			// A store failure fails closed, as Unavailable: a capability
 			// with a request ceiling that can't be incremented atomically
@@ -723,7 +723,7 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 		return nil
 	}
 	chargeID := readLastCharge(ctx)
-	if chargeID == uuid.Nil {
+	if chargeID == uuid.Nil() {
 		return nil
 	}
 	req := meter.RefundRequest{ChargeID: chargeID, Amount: amount}
@@ -750,12 +750,12 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duration) (uuid.UUID, error) {
 	verified, ok := VerifiedCapabilityFromContext(ctx)
 	if !ok {
-		return uuid.Nil, nil
+		return uuid.Nil(), nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
 	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
 	if !ok || store == nil {
-		return uuid.Nil, nil
+		return uuid.Nil(), nil
 	}
 	r, err := store.Reserve(ledgerContext(ctx, cap), meter.ReserveRequest{
 		Subject: verified.MeterSubject(),
@@ -765,7 +765,7 @@ func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duratio
 		Actor:   cap.Subject.Subject,
 	})
 	if err != nil {
-		return uuid.Nil, meterError(err)
+		return uuid.Nil(), meterError(err)
 	}
 	return r.ID, nil
 }
@@ -775,7 +775,7 @@ func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duratio
 // does not, the hold stays and the call returns ResourceExhausted.
 func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount limes.Nanos) error {
 	verified, ok := VerifiedCapabilityFromContext(ctx)
-	if !ok || reservationID == uuid.Nil {
+	if !ok || reservationID == uuid.Nil() {
 		return nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
@@ -803,7 +803,7 @@ func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount lime
 // store releases a hold only for the subject that made it.
 func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 	verified, ok := VerifiedCapabilityFromContext(ctx)
-	if !ok || reservationID == uuid.Nil {
+	if !ok || reservationID == uuid.Nil() {
 		return nil
 	}
 	cap, _ := CapabilityFromContext(ctx)
@@ -1005,7 +1005,7 @@ func readLastCharge(ctx context.Context) uuid.UUID {
 	if holder, ok := ctx.Value(lastChargeKey{}).(*uuid.UUID); ok && holder != nil {
 		return *holder
 	}
-	return uuid.Nil
+	return uuid.Nil()
 }
 
 // passthrough is the no-op interceptor returned when a subsystem is off.

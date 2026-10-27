@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -185,7 +185,7 @@ when { principal.tenant_id == resource.tenant_id };`)
 		if fe.calls[0].action != cedar.ActionInspectPolicy {
 			t.Fatalf("gate action: got %q want %q", fe.calls[0].action, cedar.ActionInspectPolicy)
 		}
-		if fe.calls[0].resource.TenantID != uuid.Nil || fe.calls[0].resource.Collection != "" {
+		if fe.calls[0].resource.TenantID != uuid.Nil() || fe.calls[0].resource.Collection != "" {
 			t.Fatalf("ValidatePolicy must pass an empty resource, got %+v", fe.calls[0].resource)
 		}
 	})
@@ -524,7 +524,7 @@ func TestParseSimulateResource(t *testing.T) {
 	})
 
 	t.Run("an object in such a collection", func(t *testing.T) {
-		name := "tenants/" + tenant.String() + "/collections/e2e/logs/objects/" + uuid.NewString()
+		name := "tenants/" + tenant.String() + "/collections/e2e/logs/objects/" + uuid.New().String()
 		gotT, gotK, err := parseSimulateResource(name, fallback)
 		if err != nil || gotT != tenant || gotK != "e2e/logs" {
 			t.Fatalf("got (%v,%q,%v), want %v/e2e/logs", gotT, gotK, err, tenant)

@@ -2,8 +2,7 @@ package auth
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // TenantState is whether a principal's tenant may use its credentials.

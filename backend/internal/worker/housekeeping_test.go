@@ -5,8 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )

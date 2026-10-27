@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -112,7 +112,7 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	// tenant, the bootstrap admin included. Passing the zero uuid through
 	// reached the database and failed there with a constraint violation,
 	// which told the operator nothing about what they had left out.
-	if in.TenantID == uuid.Nil {
+	if in.TenantID == uuid.Nil() {
 		in.TenantID = caller
 	}
 	// Tenant admins limited to their own tenant — code-level guard.
@@ -294,7 +294,7 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	}
 	p, _ := auth.PrincipalFromContext(ctx)
 	scope := in.TenantID
-	if scope == uuid.Nil {
+	if scope == uuid.Nil() {
 		// Cross-tenant listing is platform-admin only.
 		if !hasPlatformAdmin(p) {
 			scope = caller
@@ -311,7 +311,7 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	// a Resource{TenantID: Nil} that no policy literal matches,
 	// resulting in a silent deny even for legitimate admins.
 	authzScope := scope
-	if authzScope == uuid.Nil {
+	if authzScope == uuid.Nil() {
 		authzScope = caller
 	}
 	if err := h.authorize(ctx, cedar.ActionReadUser, authstore.User{TenantID: authzScope}); err != nil {
@@ -340,7 +340,7 @@ func (h *Handler) ListUsers(ctx context.Context, in ListUsersInput) ([]authstore
 	// tenant, so pin to it rather than widening to all of them.
 	listCtx := ctx
 	switch {
-	case scope == uuid.Nil:
+	case scope == uuid.Nil():
 		listCtx = auth.WithCrossTenantRead(ctx)
 	case scope != caller:
 		listCtx = auth.WithActingTenant(ctx, scope)

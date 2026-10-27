@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // ADR-0014 Phase 1: object-level event resource_name goes canonical (A). The

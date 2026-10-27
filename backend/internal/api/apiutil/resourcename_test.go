@@ -2,8 +2,7 @@ package apiutil
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 var rnTID = uuid.MustParse("0a8c0000-0000-7000-8000-000000000f12")
@@ -50,9 +49,9 @@ func TestParseTenantName(t *testing.T) {
 	}{
 		{"prefixed-uuid", "tenants/" + rnTID.String(), rnTID, false},
 		{"bare-uuid", rnTID.String(), rnTID, false},
-		{"prefixed-non-uuid", "tenants/acme-corp", uuid.Nil, true},
-		{"garbage", "not-a-uuid", uuid.Nil, true},
-		{"empty", "", uuid.Nil, true},
+		{"prefixed-non-uuid", "tenants/acme-corp", uuid.Nil(), true},
+		{"garbage", "not-a-uuid", uuid.Nil(), true},
+		{"empty", "", uuid.Nil(), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -85,7 +84,7 @@ func TestParseOperationName(t *testing.T) {
 	}{
 		{"prefixed", "operations/" + rnTID.String(), rnTID, false},
 		{"bare", rnTID.String(), rnTID, false},
-		{"invalid", "operations/nope", uuid.Nil, true},
+		{"invalid", "operations/nope", uuid.Nil(), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -126,7 +125,7 @@ func TestTenantInResourceName(t *testing.T) {
 	}{
 		{"tenant", "tenants/" + id, true},
 		{"child", "tenants/" + id + "/quota", true},
-		{"grandchild", "tenants/" + id + "/users/" + uuid.NewString(), true},
+		{"grandchild", "tenants/" + id + "/users/" + uuid.New().String(), true},
 		{"under a bucket", "storageBackends/primary/buckets/b/tenants/" + id + "/collections/e2e/k", true},
 		{"empty", "", false},
 		{"no tenant", "storageBackends/primary/buckets/b", false},
@@ -143,7 +142,7 @@ func TestTenantInResourceName(t *testing.T) {
 			if ok && got != rnTID {
 				t.Errorf("TenantInResourceName(%q) = %s, want %s", tc.in, got, rnTID)
 			}
-			if !ok && got != uuid.Nil {
+			if !ok && got != uuid.Nil() {
 				t.Errorf("TenantInResourceName(%q) = %s on a miss, want uuid.Nil", tc.in, got)
 			}
 		})

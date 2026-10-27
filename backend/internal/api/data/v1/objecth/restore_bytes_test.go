@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -88,7 +88,7 @@ func (*trashedObjectStub) LiveCollision(context.Context, uuid.UUID, string, stri
 func TestRestoreObjectRefusesAnObjectWithoutBytes(t *testing.T) {
 	t.Parallel()
 	tenantID := uuid.New()
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	h := &Handler{
 		policy: allowAll{},
 		repo: &trashedObjectStub{restoreParentStub{obj: Object{

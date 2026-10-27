@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -52,9 +52,9 @@ func (r *Reader) TenantIDBySlug(ctx context.Context, slug string) (uuid.UUID, bo
 		LIMIT 1`, slug).Scan(&id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return uuid.Nil, false, nil
+		return uuid.Nil(), false, nil
 	case err != nil:
-		return uuid.Nil, false, fmt.Errorf("tenantstate: slug %q: %w", slug, err)
+		return uuid.Nil(), false, fmt.Errorf("tenantstate: slug %q: %w", slug, err)
 	}
 	return id, true, nil
 }

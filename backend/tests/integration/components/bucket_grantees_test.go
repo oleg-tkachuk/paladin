@@ -6,8 +6,7 @@ import (
 	"context"
 	"slices"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -30,7 +29,7 @@ func TestBucketReadsCarryTheirGrantees(t *testing.T) {
 	owner, _ := mkTenant(t, ctx, pool, "shared")
 	first, _ := mkTenant(t, ctx, pool, "shared")
 	second, _ := mkTenant(t, ctx, pool, "shared")
-	backend := "be-" + uuid.NewString()[:8]
+	backend := "be-" + uuid.New().String()[:8]
 	const shared, private = "shared-bucket", "private-bucket"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
 	for _, name := range []string{shared, private} {

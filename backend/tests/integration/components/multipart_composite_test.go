@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -28,13 +27,13 @@ func TestMultipartCompositeChecksumRoundTrip(t *testing.T) {
 		composite = "D3qZqhMCO0j+h+RS7RQR8UFdX4mTed1iexltHESNUwA=-2"
 		later     = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=-2"
 	)
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.InitiateSession(ctx, multiparth.InitiateArgs{
-		TenantID: f.tenantID, Collection: f.collection, Key: "mpu-" + uuid.NewString()[:8],
+		TenantID: f.tenantID, Collection: f.collection, Key: "mpu-" + uuid.New().String()[:8],
 		ContentType: "application/octet-stream", TotalParts: 2, PartSizeBytes: partSize, SizeHint: partSize + 1,
 		ChecksumAlgo: "SHA256",
 	}, objectID, "storage-upload-composite", backendID, bucket); err != nil {

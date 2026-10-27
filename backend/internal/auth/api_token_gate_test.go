@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
@@ -80,7 +80,7 @@ func (f *tokenFixture) issue(t *testing.T, req api_token.IssueRequest) *api_toke
 	if len(req.Audience) == 0 {
 		req.Audience = []string{planeData}
 	}
-	if req.TenantID == uuid.Nil {
+	if req.TenantID == uuid.Nil() {
 		req.TenantID = uuid.New()
 	}
 	if req.TTL == 0 {

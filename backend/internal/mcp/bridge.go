@@ -395,6 +395,11 @@ type getVersionArgs struct {
 type getEffectivePolicyArgs struct {
 	ResourceName string `json:"resource_name" jsonschema:"Any resource name; tenants/{tenant_id_or_slug}/collections/{ok} works for namespace-level"`
 }
+type listPolicyVersionsArgs struct {
+	ResourceName string `json:"resource_name" jsonschema:"the policy layer: storageBackends/{b}, storageBackends/{b}/buckets/{n}, tenants/{t} or tenants/{t}/collections/{c}"`
+	PageSize     int32  `json:"page_size,omitempty" jsonschema:"page size; default 50, max 200"`
+	PageToken    string `json:"page_token,omitempty" jsonschema:"cursor from a previous response's page.next_page_token"`
+}
 type simulateAuthzArgs struct {
 	PrincipalSubject  string   `json:"principal_subject" jsonschema:"subject (user_id or service-account ref)"`
 	PrincipalTenantID string   `json:"principal_tenant_id,omitempty" jsonschema:"optional tenant UUID or slug for the simulated principal"`
@@ -575,6 +580,16 @@ func registerReadTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in getEffectivePolicyArgs) (*mcpsdk.CallToolResult, any, error) {
 		return jsonResult(c.Policy.GetEffectivePolicy(ctx, &adminv1.GetEffectivePolicyRequest{
 			ResourceName: in.ResourceName,
+		}))
+	})
+
+	addTool(s, filter, &mcpsdk.Tool{
+		Name:        "paladin_list_policy_versions",
+		Description: "List the texts one policy layer has held, newest first, with who wrote each and when: what changed before access began to be refused.",
+	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in listPolicyVersionsArgs) (*mcpsdk.CallToolResult, any, error) {
+		return jsonResult(c.Policy.ListPolicyVersions(ctx, &adminv1.ListPolicyVersionsRequest{
+			ResourceName: in.ResourceName,
+			Page:         &commonv1.PageRequest{PageSize: in.PageSize, PageToken: in.PageToken},
 		}))
 	})
 

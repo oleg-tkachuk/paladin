@@ -3,12 +3,12 @@ package admin
 import (
 	"context"
 	"fmt"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/eventsubh"
@@ -35,15 +35,15 @@ func NewEventSubscriptionServer(h *eventsubh.Handler, tenants TenantResolver) *E
 func (s *EventSubscriptionServer) resolveSubscriptionName(ctx context.Context, name string) (uuid.UUID, uuid.UUID, error) {
 	ref, subID, err := subscriptionFromName(name)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return uuid.Nil(), uuid.Nil(), connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	id, err := uuid.Parse(subID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return uuid.Nil(), uuid.Nil(), connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	tenantID, err := resolveTenantRef(ctx, s.Tenants, ref)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, err
+		return uuid.Nil(), uuid.Nil(), err
 	}
 	return tenantID, id, nil
 }

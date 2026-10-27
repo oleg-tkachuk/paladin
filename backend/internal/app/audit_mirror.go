@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -58,7 +58,7 @@ func optionalAuditMirror(enabled bool, d *worker.Dispatcher, l *zap.Logger) midd
 // `paladin.audit.create_tenant`). Subscribers route on this; handlers
 // that share an Action prefix become a subject family.
 func (m *auditMirror) EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admindomain.AuditEntry) error {
-	if entry.ActorTenantID == uuid.Nil {
+	if entry.ActorTenantID == uuid.Nil() {
 		// No tenant on the entry → no fan-out target. Most often a
 		// pre-auth or platform-level call (Login, refresh, federated
 		// IdP callback). Subscribers haven't asked for these in v1.

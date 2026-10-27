@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -130,7 +130,7 @@ func TestIdempotencyLeavesTheRequest(t *testing.T) {
 	client := paladiniamv1connect.NewUserSettingsServiceClient(unarytest.Client(func(s *connect.Server) {
 		paladiniamv1connect.RegisterUserSettingsServiceHandler(s, svc)
 	}, unarytest.LeavesRequest(t), NewIdempotencyInterceptor(store, IdempotencyConfig{TTL: time.Minute})))
-	ctx := withIdempotencyKey(principalCtx(uuid.New()), uuid.NewString())
+	ctx := withIdempotencyKey(principalCtx(uuid.New()), uuid.New().String())
 	if _, err := client.UpdateMine(ctx, &iamv1.UpdateMineRequest{Timezone: leavesTimezone}); err != nil {
 		t.Fatalf("call: %v", err)
 	}

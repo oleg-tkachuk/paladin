@@ -5,8 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Every declared action resolves back to itself by name, and no two share a

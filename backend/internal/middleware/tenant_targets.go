@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"

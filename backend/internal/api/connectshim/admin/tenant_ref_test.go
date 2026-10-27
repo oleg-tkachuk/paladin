@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -46,9 +46,9 @@ func TestSubscriptionParentAcceptsIDOrSlug(t *testing.T) {
 	}{
 		{"uuid", "tenants/" + tenantID.String(), tenantID, 0},
 		{"slug", "tenants/" + refSlug, tenantID, 0},
-		{"unknown slug", "tenants/" + refUnknownSlug, uuid.Nil, connect.CodeNotFound},
-		{"malformed", refMalformed, uuid.Nil, connect.CodeInvalidArgument},
-		{"not a tenant", "orgs/" + refSlug, uuid.Nil, connect.CodeInvalidArgument},
+		{"unknown slug", "tenants/" + refUnknownSlug, uuid.Nil(), connect.CodeNotFound},
+		{"malformed", refMalformed, uuid.Nil(), connect.CodeInvalidArgument},
+		{"not a tenant", "orgs/" + refSlug, uuid.Nil(), connect.CodeInvalidArgument},
 	}
 	for _, tc := range cases {
 		t.Run("Create/"+tc.label, func(t *testing.T) {
@@ -111,8 +111,8 @@ func TestListAccessibleBucketsAcceptsIDOrSlug(t *testing.T) {
 	}{
 		{"uuid", "tenants/" + tenantID.String(), tenantID, 0},
 		{"slug", "tenants/" + refSlug, tenantID, 0},
-		{"unknown slug", "tenants/" + refUnknownSlug, uuid.Nil, connect.CodeNotFound},
-		{"malformed", refMalformed, uuid.Nil, connect.CodeInvalidArgument},
+		{"unknown slug", "tenants/" + refUnknownSlug, uuid.Nil(), connect.CodeNotFound},
+		{"malformed", refMalformed, uuid.Nil(), connect.CodeInvalidArgument},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
@@ -144,7 +144,7 @@ func assertTenantResolution(t *testing.T, err error, wantCode connect.Code, got,
 		if code := connect.CodeOf(err); code != wantCode {
 			t.Fatalf("code = %v, want %v (err %v)", code, wantCode, err)
 		}
-		if got != uuid.Nil {
+		if got != uuid.Nil() {
 			t.Errorf("the handler was reached with tenant %v after a failed resolution", got)
 		}
 		return

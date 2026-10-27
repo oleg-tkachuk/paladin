@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
-
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -105,7 +104,7 @@ var _ paladindatav1connect.OperationServiceHandler = (*OperationServer)(nil)
 func dataOperationID(name string) (uuid.UUID, error) {
 	const prefix = "operations/"
 	if !strings.HasPrefix(name, prefix) || len(name) <= len(prefix) {
-		return uuid.Nil, fmt.Errorf("invalid operation name %q", name)
+		return uuid.Nil(), fmt.Errorf("invalid operation name %q", name)
 	}
 	return uuid.Parse(name[len(prefix):])
 }

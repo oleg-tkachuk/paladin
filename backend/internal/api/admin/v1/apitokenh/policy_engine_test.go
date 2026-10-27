@@ -2,9 +2,9 @@ package apitokenh
 
 import (
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -39,7 +39,7 @@ func TestTokenActions_CapabilityIssuerIsRefused(t *testing.T) {
 	iss := &stubIssuer{}
 	store := &fakeStore{}
 	h := newHandler(iss, store, cedartest.Engine(""))
-	tokenName := "tenants/" + own.String() + "/apiTokens/" + uuid.NewString()
+	tokenName := "tenants/" + own.String() + "/apiTokens/" + uuid.New().String()
 
 	_, createErr := h.Create(ctx, &adminv1.APITokenServiceCreateRequest{RateLimit: unlimitedRate(),
 		Parent: "tenants/" + own.String(), DisplayName: "escalation",

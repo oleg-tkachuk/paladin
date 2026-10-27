@@ -3,8 +3,8 @@ package auth
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
@@ -54,7 +54,7 @@ func TestAnnotateSpan_NoTenantIsNoop(t *testing.T) {
 	ctx, ended := recordingTracerCtx(t)
 	// nil principal and zero-tenant principal must both be safe no-ops.
 	annotateSpan(ctx, nil)
-	annotateSpan(ctx, &Principal{TenantID: uuid.Nil, Subject: "super-admin"})
+	annotateSpan(ctx, &Principal{TenantID: uuid.Nil(), Subject: "super-admin"})
 
 	spans := ended()
 	if _, ok := attrValue(spans[0], "paladin.tenant_id"); ok {

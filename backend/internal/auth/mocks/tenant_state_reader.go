@@ -6,8 +6,8 @@ package auth
 
 import (
 	"context"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	mock "github.com/stretchr/testify/mock"
 )

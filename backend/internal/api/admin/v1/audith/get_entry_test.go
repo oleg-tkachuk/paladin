@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -56,7 +56,7 @@ func ctxAsTenantAdmin(tenantID uuid.UUID) context.Context {
 
 func entryFor(tenantID uuid.UUID) admindomain.AuditEntry {
 	return admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            time.Unix(1700, 0).UTC(),
 		ActorSubject:  "alice",
 		ActorTenantID: tenantID,

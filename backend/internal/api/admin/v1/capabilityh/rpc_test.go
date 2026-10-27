@@ -9,10 +9,10 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -197,7 +197,7 @@ func TestIssueKeyBoundGetsNoBiscuit(t *testing.T) {
 
 	resp, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
-			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.NewString(), Subject: "alice",
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "alice",
 		},
 		Audience:        []string{"paladin-data"},
 		TtlSeconds:      300,
@@ -225,7 +225,7 @@ func TestIssueNotYetValidGetsNoBiscuit(t *testing.T) {
 
 	resp, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject: &adminv1.CapabilityPrincipal{
-			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.NewString(), Subject: "alice",
+			Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER, TenantId: uuid.New().String(), Subject: "alice",
 		},
 		Audience:   []string{"paladin-data"},
 		TtlSeconds: int64((2 * notBeforeLead).Seconds()),
@@ -344,7 +344,7 @@ func TestRevokeSaysWhatItDid(t *testing.T) {
 			PriorDisposition: before,
 		}}
 		h := mkHandler(t, store, nil, &allowAuthorizer{})
-		resp, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString(), Reason: "second"})
+		resp, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{Id: uuid.New().String(), Reason: "second"})
 		if err != nil {
 			t.Fatalf("Revoke: %v", err)
 		}
@@ -418,7 +418,7 @@ func TestListATenantAlone(t *testing.T) {
 	store := &recordingStore{}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
-	if _, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()}); err != nil {
+	if _, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.New().String()}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
 	a := store.listArgs
@@ -474,7 +474,7 @@ func TestListGivesEachCapabilityItsDisposition(t *testing.T) {
 	}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
-	resp, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
+	resp, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.New().String()})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -505,7 +505,7 @@ func TestListUnwiredIsUnavailable(t *testing.T) {
 	m := newMinter(t, &fakeStore{})
 	h := NewHandler(m.Issuer, m.Verifier, &fakeStore{}, nil, &allowAuthorizer{})
 
-	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
+	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.New().String()})
 	if codeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v, want Unavailable", codeOf(err))
 	}

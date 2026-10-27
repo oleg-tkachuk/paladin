@@ -3,8 +3,7 @@ package adapters
 import (
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"

@@ -12,8 +12,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -39,7 +39,7 @@ type fixture struct {
 
 func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture {
 	t.Helper()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	f := fixture{tenantID: uuid.New(), collection: "ok-" + hex}
 	backendID := "be-" + hex
 	bucketName := "bkt-" + hex // satisfies buckets.bucket_name_format
@@ -70,12 +70,12 @@ func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture 
 // collection and returns its id.
 func seedPendingObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture) uuid.UUID {
 	t.Helper()
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool,
 		`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
 		 SELECT $1, $2, c.id, $4, 'PENDING', 'application/octet-stream', 0
 		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-		id, f.tenantID, f.collection, "key-"+uuid.NewString()[:8])
+		id, f.tenantID, f.collection, "key-"+uuid.New().String()[:8])
 	return id
 }
 
@@ -256,8 +256,8 @@ func TestOutboxCrashWindow(t *testing.T) {
 	bucketRepo := adapters.NewBucketRepoV2(q, pool)
 	seedOwnedBucket := func(t *testing.T) (string, string) {
 		t.Helper()
-		be := "be2-" + uuid.NewString()[:8]
-		bn := "bkt2-" + uuid.NewString()[:8]
+		be := "be2-" + uuid.New().String()[:8]
+		bn := "bkt2-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, be)
 		mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
 		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, be, bn, f.tenantID)

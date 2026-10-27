@@ -15,8 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
@@ -253,13 +253,10 @@ func ensureTenant(
 		// Continue to create below.
 
 	default:
-		return uuid.Nil, false, fmt.Errorf("get tenant by slug: %w", err)
+		return uuid.Nil(), false, fmt.Errorf("get tenant by slug: %w", err)
 	}
 
-	tenantID, err := uuid.NewV7()
-	if err != nil {
-		return uuid.Nil, false, fmt.Errorf("generate tenant_id: %w", err)
-	}
+	tenantID := uuid.NewV7()
 	display := cfg.TenantDisplayName
 	if display == "" {
 		display = cfg.TenantSlug
@@ -276,7 +273,7 @@ func ensureTenant(
 		"",       // inherited_cedar_policy — empty default
 		"shared", // storage_layout — the platform tenant is shared
 	); err != nil {
-		return uuid.Nil, false, fmt.Errorf("create tenant: %w", err)
+		return uuid.Nil(), false, fmt.Errorf("create tenant: %w", err)
 	}
 	return tenantID, true, nil
 }
@@ -293,7 +290,7 @@ func writeAudit(
 		return
 	}
 	entry := v1admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		ActorSubject:  auditActorSubject,
 		ActorTenantID: tenantID,
 		ActorAudience: auditAudience,
@@ -310,7 +307,7 @@ func writeAudit(
 
 func uuidFromPg(u pgtype.UUID) uuid.UUID {
 	if !u.Valid {
-		return uuid.Nil
+		return uuid.Nil()
 	}
 	return u.Bytes
 }

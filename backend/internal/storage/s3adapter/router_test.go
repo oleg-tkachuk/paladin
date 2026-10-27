@@ -4,8 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )

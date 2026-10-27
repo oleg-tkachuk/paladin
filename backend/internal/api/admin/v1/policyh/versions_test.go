@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -132,7 +132,7 @@ func TestListPolicyVersions(t *testing.T) {
 		engine := allowEngine()
 		h := NewHandler(engine, &fakeStore{})
 		h.SetVersionStore(&fakeVersions{})
-		if _, err := h.ListPolicyVersions(authedCtx(caller), "storageBackends/"+uuid.NewString(), 0, ""); err != nil {
+		if _, err := h.ListPolicyVersions(authedCtx(caller), "storageBackends/"+uuid.New().String(), 0, ""); err != nil {
 			t.Fatalf("ListPolicyVersions: %v", err)
 		}
 		if got := engine.calls[0].resource.TenantID; got != caller {

@@ -3,11 +3,10 @@ package admin
 import (
 	"errors"
 	"testing"
+	"uuid"
 
 	"context"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/audith"
@@ -345,8 +344,8 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 	tenantName := "tenants/" + tenantID.String()
 	bucketName := "storageBackends/primary/buckets/b1"
 	collName := tenantName + "/collections/c1"
-	subName := tenantName + "/eventSubscriptions/" + uuid.NewString()
-	opName := "operations/" + uuid.NewString()
+	subName := tenantName + "/eventSubscriptions/" + uuid.New().String()
+	opName := "operations/" + uuid.New().String()
 	okPolicy := "permit(principal, action, resource);"
 
 	auditSrv := &AuditServer{H: failingAudit{}}
@@ -371,7 +370,7 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"Audit.GetAuditLogEntry", func() error {
 			_, err := auditSrv.GetAuditLogEntry(ctx, &pb.GetAuditLogEntryRequest{
-				EntryId: uuid.NewString(),
+				EntryId: uuid.New().String(),
 			})
 			return err
 		}},

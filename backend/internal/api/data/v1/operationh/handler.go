@@ -11,9 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -205,25 +205,25 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 func (h *Handler) listScope(ctx context.Context, in ListInput) (uuid.UUID, string, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return uuid.Nil(), "", connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if in.TenantID != uuid.Nil && in.TenantID != tenantID {
+	if in.TenantID != uuid.Nil() && in.TenantID != tenantID {
 		if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
-			return uuid.Nil, "", connect.NewError(connect.CodePermissionDenied, msgCrossTenant)
+			return uuid.Nil(), "", connect.NewError(connect.CodePermissionDenied, msgCrossTenant)
 		}
 		tenantID = in.TenantID
 	}
 	var initiator string
 	if in.Mine {
 		if initiator, err = callerSubject(ctx); err != nil {
-			return uuid.Nil, "", err
+			return uuid.Nil(), "", err
 		}
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpList, ""); err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil(), "", err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadOperation, tenantID); err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil(), "", err
 	}
 	return tenantID, initiator, nil
 }
@@ -312,10 +312,10 @@ func operationRow(o Operation) map[string]any {
 func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (uuid.UUID, error) {
 	tenantID, err := auth.TenantFromContext(ctx)
 	if err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return uuid.Nil(), connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	op := Operation{
-		OperationID: uuid.Must(uuid.NewV7()),
+		OperationID: uuid.NewV7(),
 		TenantID:    tenantID,
 		Type:        opType,
 		State:       StatePending,
@@ -325,7 +325,7 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 		op.InitiatorSubject = p.Subject
 	}
 	if err := h.repo.Create(ctx, op); err != nil {
-		return uuid.Nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return uuid.Nil(), connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return op.OperationID, nil
 }

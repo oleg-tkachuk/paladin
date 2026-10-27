@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -40,7 +40,7 @@ func TestQuotaSoftCheckPassThroughOnNonUploadProc(t *testing.T) {
 }
 
 func TestQuotaSoftCheckRejectsOverCap(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
@@ -61,7 +61,7 @@ func TestQuotaSoftCheckRejectsOverCap(t *testing.T) {
 }
 
 func TestQuotaSoftCheckAdmitsWithinHeadroom(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
@@ -78,7 +78,7 @@ func TestQuotaSoftCheckAdmitsWithinHeadroom(t *testing.T) {
 }
 
 func TestQuotaSoftCheckObjectCountCap(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader: &fakeQuotaReader{q: admindomain.Quota{
@@ -97,7 +97,7 @@ func TestQuotaSoftCheckObjectCountCap(t *testing.T) {
 }
 
 func TestQuotaSoftCheckMissingQuotaIsUnlimited(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: tenantID})
 	q := &QuotaSoftCheck{
 		Reader:           &fakeQuotaReader{err: errors.New("not found")},
@@ -120,7 +120,7 @@ const uploadProc = "/paladin.data.v1.ObjectService/UploadObject"
 func tenantCtx(t *testing.T) context.Context {
 	t.Helper()
 	return auth.WithPrincipal(context.Background(),
-		&auth.Principal{TenantID: uuid.Must(uuid.NewV7())})
+		&auth.Principal{TenantID: uuid.NewV7()})
 }
 
 // gated builds an interceptor whose only gated procedure is UploadObject,
@@ -251,7 +251,7 @@ func TestQuotaSoftCheck_RegenerateDoesNotConsumeObjectSlots(t *testing.T) {
 	}
 
 	err := q.CheckUpload(ctx, regenerateUploadURLProc,
-		&fakeRegenerateRequest{name: "tenants/" + uuid.NewString() + "/collections/ok/objects/abc"})
+		&fakeRegenerateRequest{name: "tenants/" + uuid.New().String() + "/collections/ok/objects/abc"})
 	if err != nil {
 		t.Errorf("regenerate must not consume an object slot, got %v", err)
 	}
@@ -334,7 +334,7 @@ func TestQuotaSoftCheck_BucketCapRejects(t *testing.T) {
 	q.WithBucketScope(bindings)
 
 	err := q.CheckUpload(ctx, uploadProc,
-		&fakeUploadWithParent{parent: "tenants/" + uuid.NewString() + "/collections/ok-1", sizeHint: 200})
+		&fakeUploadWithParent{parent: "tenants/" + uuid.New().String() + "/collections/ok-1", sizeHint: 200})
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Fatalf("code = %v, want ResourceExhausted", connect.CodeOf(err))
 	}
@@ -380,7 +380,7 @@ func TestQuotaSoftCheck_CanonicalNameSkipsBindingLookup(t *testing.T) {
 	q := gated(reader)
 	q.WithBucketScope(bindings)
 
-	name := "storageBackends/be-2/buckets/bkt-2/tenants/" + uuid.NewString() + "/collections/ok-9"
+	name := "storageBackends/be-2/buckets/bkt-2/tenants/" + uuid.New().String() + "/collections/ok-9"
 	if err := q.CheckUpload(ctx, uploadProc, &fakeUploadWithParent{parent: name, sizeHint: 1}); err == nil {
 		t.Fatal("want reject from the bucket object-count cap")
 	}
@@ -521,7 +521,7 @@ func TestQuotaSoftCheck_CountsAnAdminUploadAgainstTheNamedTenant(t *testing.T) {
 // stops all writes impossible to set.
 func TestQuotaSoftCheckZeroCapRefusesAndNilAdmits(t *testing.T) {
 	const headroom = 0.5
-	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: uuid.Must(uuid.NewV7())})
+	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{TenantID: uuid.NewV7()})
 	for name, tc := range map[string]struct {
 		quota  admindomain.Quota
 		refuse bool

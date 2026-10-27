@@ -2,8 +2,7 @@ package storagepath
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func TestSanitizeSegment(t *testing.T) {

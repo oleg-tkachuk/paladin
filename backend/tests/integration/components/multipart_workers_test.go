@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -66,11 +66,11 @@ func seedMultipart(t *testing.T, ctx context.Context, pool *pgxpool.Pool, age ti
 	s := multipartSeed{
 		upload:    uuid.New(),
 		object:    uuid.New(),
-		storageID: "s3-upload-" + uuid.NewString()[:8],
-		backend:   "be-" + uuid.NewString()[:8],
-		bucket:    "bk-" + uuid.NewString()[:8],
-		collect:   "col-" + uuid.NewString()[:8],
-		path:      "k-" + uuid.NewString()[:8],
+		storageID: "s3-upload-" + uuid.New().String()[:8],
+		backend:   "be-" + uuid.New().String()[:8],
+		bucket:    "bk-" + uuid.New().String()[:8],
+		collect:   "col-" + uuid.New().String()[:8],
+		path:      "k-" + uuid.New().String()[:8],
 	}
 	s.tenant, _ = mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,

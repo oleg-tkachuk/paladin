@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -81,12 +81,12 @@ func TestSQSSinkBatchDelivery_Wire(t *testing.T) {
 	const n = 12
 	items := make([]sqsBatchItem, 0, n)
 	for i := 0; i < n; i++ {
-		id := uuid.Must(uuid.NewV7())
+		id := uuid.NewV7()
 		items = append(items, sqsBatchItem{
 			RowID: id,
 			Sub: admindomain.EventSubscription{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
-				TenantID:       uuid.Must(uuid.NewV7()),
+				SubscriptionID: uuid.NewV7(),
+				TenantID:       uuid.NewV7(),
 				SinkKind:       "sqs",
 				SinkConfig:     raw,
 			},

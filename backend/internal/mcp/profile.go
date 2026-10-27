@@ -72,6 +72,7 @@ var DefaultCatalog = []ToolMeta{
 	{Name: "paladin_set_quota", Audience: "admin", Description: "Upsert tenant or bucket quota.", Mutates: true, Destructive: true},
 	{Name: "paladin_validate_policy", Audience: "admin", Description: "Compile + validate a Cedar policy without applying."},
 	{Name: "paladin_get_effective_policy", Audience: "admin", Description: "Read the merged tenant + collection policy text."},
+	{Name: "paladin_list_policy_versions", Audience: "admin", Description: "Read the texts one policy layer has held, with their writers."},
 	{Name: "paladin_simulate_authz", Audience: "admin", Description: "Run a Cedar authz check without performing the call."},
 	{Name: "paladin_audit_recent", Audience: "admin", Description: "Tail the audit log; supports CEL filter."},
 	{Name: "paladin_audit_export", Audience: "admin", Description: "Materialise an audit-log dump for compliance."},

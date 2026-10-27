@@ -25,8 +25,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -62,7 +62,7 @@ func seedRecentAudit(t *testing.T, ctx context.Context, pool interface {
 			action = idxTestExactAction
 		}
 		at := monthStart.Add(time.Duration(i%spanHours) * time.Hour)
-		row := []any{uuid.Must(uuid.NewV7()), at, "svc", nil, "admin", action, "r"}
+		row := []any{uuid.NewV7(), at, "svc", nil, "admin", action, "r"}
 		i++
 		return row, nil
 	})

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -18,7 +18,7 @@ import (
 // ─── uuid ↔ pgtype.UUID ─────────────────────────────────────────────────────
 
 func pgUUID(u uuid.UUID) pgtype.UUID {
-	if u == uuid.Nil {
+	if u == uuid.Nil() {
 		return pgtype.UUID{}
 	}
 	return pgtype.UUID{Bytes: u, Valid: true}
@@ -26,7 +26,7 @@ func pgUUID(u uuid.UUID) pgtype.UUID {
 
 func uuidFrom(p pgtype.UUID) uuid.UUID {
 	if !p.Valid {
-		return uuid.Nil
+		return uuid.Nil()
 	}
 	return uuid.UUID(p.Bytes)
 }

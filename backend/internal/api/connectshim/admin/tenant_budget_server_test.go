@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
@@ -560,7 +560,7 @@ func TestTenantBudgetServer_Set_RefusesAnUnsetCeiling(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
-	if store.lastSet.TenantID != uuid.Nil {
+	if store.lastSet.TenantID != uuid.Nil() {
 		t.Errorf("the store was written: %+v", store.lastSet)
 	}
 }

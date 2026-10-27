@@ -10,8 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -201,7 +201,7 @@ func (s *Store) TouchLastUsed(ctx context.Context, id, tenantID uuid.UUID, at ti
 // ListByTenant implements api_token.Store with cursor-based pagination
 // (cursor = last seen id). Limit defaults to 50, capped at 500.
 func (s *Store) ListByTenant(ctx context.Context, args api_token.ListByTenantArgs) ([]api_token.Token, string, error) {
-	if args.TenantID == uuid.Nil {
+	if args.TenantID == uuid.Nil() {
 		return nil, "", errors.New("api_token/postgres: tenant_id required")
 	}
 	limit := args.Limit

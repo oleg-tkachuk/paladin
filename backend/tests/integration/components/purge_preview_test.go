@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -43,7 +42,7 @@ func TestThePurgePreviewReadsTheTenantsRowsUnderRLS(t *testing.T) {
 			mustExec(t, ctx, admin, `INSERT INTO api_tokens
 				(id, tenant_id, name, prefix, token_hmac, scopes, audience, expires_at, created_by)
 				VALUES ($1, $2, $3, 'AAAAAAAA', $4, '{}'::text[], '{data}'::text[], now() + interval '1 year', 'test')`,
-				uuid.New(), owner, fmt.Sprintf("token-%d", i), []byte(uuid.NewString()))
+				uuid.New(), owner, fmt.Sprintf("token-%d", i), []byte(uuid.New().String()))
 		}
 		mustExec(t, ctx, admin, `INSERT INTO event_subscriptions (id, tenant_id, sink_kind, sink_config)
 			VALUES ($1, $2, 'http', '{}'::jsonb)`, uuid.New(), owner)

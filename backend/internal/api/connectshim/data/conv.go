@@ -16,13 +16,13 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -171,7 +171,7 @@ func assertJWTTenant(ctx context.Context, urlTenantID string) error {
 	if p.HasRole("platform.admin") {
 		return nil
 	}
-	if p.TenantID == uuid.Nil {
+	if p.TenantID == uuid.Nil() {
 		return connect.NewError(connect.CodePermissionDenied, "token has no tenant")
 	}
 	if p.TenantID.String() != urlTenantID {

@@ -2,8 +2,7 @@ package data
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 )
@@ -16,7 +15,7 @@ import (
 func TestNameParsersNameTheFirstResourceForAudit(t *testing.T) {
 	tenant := uuid.New()
 	collection := "tenants/" + tenant.String() + "/collections/docs"
-	object := collection + "/objects/" + uuid.NewString()
+	object := collection + "/objects/" + uuid.New().String()
 
 	ctx := apiutil.WithResourceSlot(ctxTenant(tenant))
 	if _, _, err := collectionNameParts(ctx, collection); err != nil {
@@ -40,7 +39,7 @@ func TestNameParsersNameTheFirstResourceForAudit(t *testing.T) {
 	}
 
 	ctx = apiutil.WithResourceSlot(ctxTenant(tenant))
-	if _, _, err := versionParent(ctx, object+"/versions/"+uuid.NewString()); err != nil {
+	if _, _, err := versionParent(ctx, object+"/versions/"+uuid.New().String()); err != nil {
 		t.Fatalf("version: %v", err)
 	}
 	if got, ok := apiutil.TenantInResourceName(apiutil.ResourceFromContext(ctx)); !ok || got != tenant {

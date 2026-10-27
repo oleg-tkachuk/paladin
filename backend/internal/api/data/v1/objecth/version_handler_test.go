@@ -2,14 +2,13 @@ package objecth
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func TestParseVersionName(t *testing.T) {
-	objectID := uuid.Must(uuid.NewV7())
-	tenantID := uuid.Must(uuid.NewV7())
-	versionID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
+	tenantID := uuid.NewV7()
+	versionID := uuid.NewV7()
 
 	cases := []struct {
 		name        string

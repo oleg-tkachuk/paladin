@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 
@@ -66,7 +66,7 @@ func newSettingsServer(t *testing.T, store IdempotencyStore) (paladiniamv1connec
 func TestDeclaredReadIsNeverMemoized(t *testing.T) {
 	client, svc, ctx := newSettingsServer(t, newMemStore())
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	for i := 0; i < 2; i++ {
 		req := &iamv1.GetMineRequest{}
 		if _, err := client.GetMine(withIdempotencyKey(ctx, key), req); err != nil {
@@ -90,7 +90,7 @@ func TestDeclaredReadIsNeverMemoized(t *testing.T) {
 func TestIdempotentSiblingStillMemoizes(t *testing.T) {
 	client, svc, ctx := newSettingsServer(t, newMemStore())
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	for i := 0; i < 2; i++ {
 		req := &iamv1.UpdateMineRequest{}
 		if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), req); err != nil {
@@ -140,7 +140,7 @@ func TestCredentialMinterIsSkippedWithoutBeingConfigured(t *testing.T) {
 	))
 	ctx := principalCtx(uuid.New())
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	for i := 0; i < 2; i++ {
 		req := &iamv1.RefreshTokenRequest{RefreshToken: "r"}
 		if _, err := client.RefreshToken(withIdempotencyKey(ctx, key), req); err != nil {

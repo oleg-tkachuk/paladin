@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -52,7 +52,7 @@ func (h *PromoteHandler) record(ctx context.Context, logger *zap.Logger, ev Clou
 		detail = nil
 	}
 	if err := h.Audit.Insert(ctx, admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            time.Now().UTC(),
 		ActorSubject:  ingestActor,
 		ActorTenantID: tenantID,

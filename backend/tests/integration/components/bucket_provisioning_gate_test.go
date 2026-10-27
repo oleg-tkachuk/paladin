@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -29,7 +28,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 
 	tenantRepo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 	tid := uuid.New()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	if _, err := tenantRepo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID:         tid,
 		Slug:             "gate-" + hex,

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 )
 
 // AuthService.Revoke was at 0%, and it is the endpoint a user reaches for when

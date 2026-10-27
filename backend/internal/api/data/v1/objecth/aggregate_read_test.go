@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
@@ -189,7 +189,7 @@ func TestListDistinctTagsMapsRepoFailureToInternal(t *testing.T) {
 
 func TestLookupObjectFindsByKey(t *testing.T) {
 	repo := &aggregateRepo{found: Object{
-		ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", Key: "a/b/c.txt",
+		ObjectID: uuid.NewV7(), Collection: "docs", Key: "a/b/c.txt",
 		State: statemachine.StateAvailable, SizeBytes: 11, ContentType: "text/plain",
 	}}
 	h, authz, ctx, _ := aggregateHandler(repo)

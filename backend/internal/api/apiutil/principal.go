@@ -1,7 +1,7 @@
 package apiutil
 
 import (
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -31,7 +31,7 @@ func ScopeStrings(scopes []auth.Scope) []string {
 // The returned value is the principal-as-actor; the resource side is built
 // separately via cedar.Resource.
 func CedarPrincipal(p *auth.Principal) *cedar.Principal {
-	return CedarPrincipalFor(p, uuid.Nil)
+	return CedarPrincipalFor(p, uuid.Nil())
 }
 
 // CedarPrincipalFor is CedarPrincipal with the tenant pinned.
@@ -46,7 +46,7 @@ func CedarPrincipalFor(p *auth.Principal, tenantOverride uuid.UUID) *cedar.Princ
 		return &cedar.Principal{}
 	}
 	tenantID := p.TenantID
-	if tenantOverride != uuid.Nil {
+	if tenantOverride != uuid.Nil() {
 		tenantID = tenantOverride
 	}
 

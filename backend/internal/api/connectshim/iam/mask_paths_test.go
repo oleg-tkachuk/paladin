@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
@@ -27,7 +27,7 @@ func TestUpdateMaskPathsAreProtoFields(t *testing.T) {
 func TestUpdateUserRefusesAnUnknownMaskPath(t *testing.T) {
 	s := &UserServer{}
 	_, err := s.UpdateUser(context.Background(), &pb.UpdateUserRequest{
-		Name:            "tenants/" + uuid.NewString() + "/users/" + uuid.NewString(),
+		Name:            "tenants/" + uuid.New().String() + "/users/" + uuid.New().String(),
 		ResourceVersion: "1",
 		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"display_nam"}},
 	})

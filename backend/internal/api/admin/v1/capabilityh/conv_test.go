@@ -3,9 +3,9 @@ package capabilityh
 import (
 	"math"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
@@ -128,7 +128,7 @@ func TestProtoToPrincipalAgentWithoutLineage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("protoToPrincipal: %v", err)
 	}
-	if got.Agent.RunID != uuid.Nil || got.Agent.ParentRunID != uuid.Nil {
+	if got.Agent.RunID != uuid.Nil() || got.Agent.ParentRunID != uuid.Nil() {
 		t.Errorf("unset lineage must stay zero, got %+v", got.Agent)
 	}
 }

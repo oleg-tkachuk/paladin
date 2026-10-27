@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 )
 
 // A permanent delete removes every version of the object, so a lock on any
