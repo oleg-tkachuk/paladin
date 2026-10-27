@@ -19,8 +19,7 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Decision is the typed result of Allow.

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -28,7 +28,7 @@ func TestIdempotentResponseNotKeptIsLogged(t *testing.T) {
 	core, logs := observer.New(zap.WarnLevel)
 	ctx = logger.WithContext(ctx, zap.New(core))
 
-	if _, err := client.UpdateMine(withIdempotencyKey(ctx, uuid.NewString()), &iamv1.UpdateMineRequest{}); err != nil {
+	if _, err := client.UpdateMine(withIdempotencyKey(ctx, uuid.New().String()), &iamv1.UpdateMineRequest{}); err != nil {
 		t.Fatalf("the call must not fail on the store: %v", err)
 	}
 	if logs.FilterMessage(idempotencyNotKeptMessage).Len() != 1 {

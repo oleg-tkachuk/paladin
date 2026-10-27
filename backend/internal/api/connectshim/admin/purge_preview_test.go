@@ -2,8 +2,8 @@ package admin
 
 import (
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"

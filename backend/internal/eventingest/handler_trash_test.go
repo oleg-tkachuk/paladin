@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -24,7 +24,7 @@ func (f fixedTenantState) TenantState(context.Context, uuid.UUID) (auth.TenantSt
 // object: the tenant is frozen, and the reconciler promotes its pending upload
 // on restore. A state that cannot be read is retried, not dropped.
 func TestHandle_TrashedTenant(t *testing.T) {
-	sf := SubjectFields{TenantID: uuid.NewString(), Collection: "docs", Key: "a.txt"}
+	sf := SubjectFields{TenantID: uuid.New().String(), Collection: "docs", Key: "a.txt"}
 	for name, tc := range map[string]struct {
 		tenants    fixedTenantState
 		wantErr    bool

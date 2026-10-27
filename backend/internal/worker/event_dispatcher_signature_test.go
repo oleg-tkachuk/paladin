@@ -11,8 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -68,8 +67,8 @@ func signedSub(t *testing.T, url string) admindomain.EventSubscription {
 		t.Fatal(err)
 	}
 	return admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
-		TenantID:       uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
+		TenantID:       uuid.NewV7(),
 		SinkKind:       "http",
 		SinkConfig:     cfg,
 	}
@@ -131,7 +130,7 @@ func TestDeliverHTTPUnsignedWithoutASecret(t *testing.T) {
 	srv, deliveries := signingSink(t)
 	cfg, _ := json.Marshal(map[string]any{"url": srv.URL})
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()), TenantID: uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(), TenantID: uuid.NewV7(),
 		SinkKind: "http", SinkConfig: cfg,
 	}
 	d := &Dispatcher{HTTPClient: srv.Client(), MaxAttempts: 1}

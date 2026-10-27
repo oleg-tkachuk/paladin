@@ -25,8 +25,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -72,7 +72,7 @@ func newLockFixture(t *testing.T) (context.Context, lockFixture) {
 		 VALUES ($1, $2, $3, 'report.pdf', 'AVAILABLE', 'application/pdf')`,
 		objectID, tenant, collectionID)
 
-	versionID := uuid.Must(uuid.NewV7())
+	versionID := uuid.NewV7()
 	mustExec(t, ctx, pool,
 		`INSERT INTO object_versions (id, tenant_id, object_id, storage_path)
 		 VALUES ($1, $2, $3, 'tenant/docs/report.pdf')`, versionID, tenant, objectID)

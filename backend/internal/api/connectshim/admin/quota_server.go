@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
@@ -30,7 +30,7 @@ func (s *QuotaServer) GetQuota(ctx context.Context, req *pb.GetQuotaRequest) (*p
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	var q *admindomain.Quota
-	if scope.tenantID != uuid.Nil {
+	if scope.tenantID != uuid.Nil() {
 		q, err = s.H.GetTenantQuota(ctx, scope.tenantID)
 	} else {
 		q, err = s.H.GetBucketQuota(ctx, scope.backendID, scope.bucketName)
@@ -78,7 +78,7 @@ func (s *QuotaServer) ResetUsage(ctx context.Context, req *pb.ResetUsageRequest)
 	// Need quota_id to reset; load first, then read again so the response
 	// carries the cleared counters rather than the ones just reset.
 	load := func() (*admindomain.Quota, error) {
-		if scope.tenantID != uuid.Nil {
+		if scope.tenantID != uuid.Nil() {
 			return s.H.GetTenantQuota(ctx, scope.tenantID)
 		}
 		return s.H.GetBucketQuota(ctx, scope.backendID, scope.bucketName)

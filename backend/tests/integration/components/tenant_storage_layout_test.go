@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -31,7 +30,7 @@ func TestTenantStorageLayout(t *testing.T) {
 	const backendID = "be-layout"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	ded, err := repo.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID:         uuid.New(),
 		Slug:             "ded-" + hex,

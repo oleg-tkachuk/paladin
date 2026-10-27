@@ -6,8 +6,7 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
@@ -34,7 +33,7 @@ func TestOperationFailedCountBackfill(t *testing.T) {
 	}
 	ids := map[string]uuid.UUID{}
 	for name, r := range rows {
-		id := uuid.Must(uuid.NewV7())
+		id := uuid.NewV7()
 		ids[name] = id
 		if _, err := h.PoolMigrate.Exec(ctx,
 			`INSERT INTO operations (id, tenant_id, type, state, response, done_at) VALUES ($1, $2, 'BatchDelete', $3, $4, now())`,

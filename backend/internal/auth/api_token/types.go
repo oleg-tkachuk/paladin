@@ -44,10 +44,9 @@ package api_token
 import (
 	"errors"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
-
-	"github.com/google/uuid"
 )
 
 // Token format. The literal `paladin_pat_` prefix MUST stay stable — secret

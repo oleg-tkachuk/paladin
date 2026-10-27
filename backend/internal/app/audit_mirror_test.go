@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -111,7 +111,7 @@ func TestAuditMirror_DropsTenantless(t *testing.T) {
 	m := &auditMirror{dispatcher: fake, log: zap.NewNop()}
 	if err := m.EmitAuditedTx(context.Background(), nil, admindomain.AuditEntry{
 		EntryID:       uuid.New(),
-		ActorTenantID: uuid.Nil,
+		ActorTenantID: uuid.Nil(),
 		Action:        "/paladin.iam.v1.AuthService/Login",
 	}); err != nil {
 		t.Fatalf("EmitAuditedTx: %v", err)

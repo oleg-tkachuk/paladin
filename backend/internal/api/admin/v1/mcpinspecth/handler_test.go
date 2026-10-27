@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"

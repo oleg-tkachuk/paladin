@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -46,7 +46,7 @@ func seedAuditRows(tb testing.TB, ctx context.Context, pool interface {
 			action = benchAuditMatchPrefix + "Service.CreateBucket"
 		}
 		at := benchAnchor.Add(-time.Duration(i%benchAuditSpanHours) * time.Hour)
-		row := []any{uuid.Must(uuid.NewV7()), at, "svc", nil, "admin", action, "r"}
+		row := []any{uuid.NewV7(), at, "svc", nil, "admin", action, "r"}
 		i++
 		return row, nil
 	})

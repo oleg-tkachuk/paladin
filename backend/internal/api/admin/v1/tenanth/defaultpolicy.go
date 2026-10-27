@@ -2,8 +2,7 @@ package tenanth
 
 import (
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/policies"
 )

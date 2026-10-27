@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -39,7 +39,7 @@ func (r *MultipartRepo) Object(ctx context.Context, tenantID, objectID uuid.UUID
 const multipartSessionTTL = 24 * time.Hour
 
 func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (multiparth.Session, error) {
-	uploadID := uuid.Must(uuid.NewV7()).String()
+	uploadID := uuid.NewV7().String()
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

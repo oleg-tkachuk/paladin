@@ -18,10 +18,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -166,7 +166,7 @@ func leaseWithTiming(t *testing.T, pool *pgxpool.Pool, name string, holder uuid.
 
 func TestRun_OnlyOneHolderRunsTheWork(t *testing.T) {
 	pool := startPostgres(t)
-	name := "run-exclusion-" + uuid.NewString()[:8]
+	name := "run-exclusion-" + uuid.New().String()[:8]
 
 	var mu sync.Mutex
 	inside, maxInside := 0, 0
@@ -232,7 +232,7 @@ func TestRun_ReturnsARealErrorAndSwallowsCancellation(t *testing.T) {
 	pool := startPostgres(t)
 	boom := errors.New("the work itself failed")
 
-	l := leaseWithTiming(t, pool, "run-err-"+uuid.NewString()[:8], uuid.New(),
+	l := leaseWithTiming(t, pool, "run-err-"+uuid.New().String()[:8], uuid.New(),
 		time.Minute, 20*time.Millisecond)
 	err := l.Run(context.Background(), func(context.Context, int64) error { return boom })
 	if !errors.Is(err, boom) {
@@ -241,7 +241,7 @@ func TestRun_ReturnsARealErrorAndSwallowsCancellation(t *testing.T) {
 
 	// Cancellation instead: Run must loop rather than return, so the only way
 	// out is the parent context.
-	l2 := leaseWithTiming(t, pool, "run-cancel-"+uuid.NewString()[:8], uuid.New(),
+	l2 := leaseWithTiming(t, pool, "run-cancel-"+uuid.New().String()[:8], uuid.New(),
 		time.Minute, 20*time.Millisecond)
 	ctx, cancel := context.WithCancel(context.Background())
 	runs := 0
@@ -274,7 +274,7 @@ func TestRun_ReleasesSoTheNextHolderDoesNotWaitOutTheTTL(t *testing.T) {
 	// the next one wait that long. Run releases on the way out, which is what
 	// turns a rolling restart into a handover instead of a stall.
 	pool := startPostgres(t)
-	name := "run-release-" + uuid.NewString()[:8]
+	name := "run-release-" + uuid.New().String()[:8]
 
 	first := leaseWithTiming(t, pool, name, uuid.New(), time.Minute, 20*time.Millisecond)
 	if err := first.Run(context.Background(), func(context.Context, int64) error {

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -81,7 +81,7 @@ func TestReconcilerDiscardsWhenBytesAreAbsent(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
@@ -109,8 +109,7 @@ func TestReconcilerDiscardsWhenBytesAreAbsent(t *testing.T) {
 		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm)
 		SELECT $1, $2, c.id, 'k-gone', 'PENDING', 'application/octet-stream', 0
-		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-		uuid.Must(uuid.NewV7()), f.tenantID, f.collection)
+		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection)
 }
 
 // TestReconcilerLeavesPendingWhenBackendIsUnreachable is the safety half, and
@@ -123,7 +122,7 @@ func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
@@ -156,7 +155,7 @@ func TestReconcilerPromotesWhenBytesArePresent(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
@@ -193,8 +192,7 @@ func TestPendingOverdueCountsWhatTheReconcilerCannotSettle(t *testing.T) {
 			                     content_type, checksum_algorithm, presign_expires_at)
 			SELECT $1, $2, c.id, $4, $5::object_state, 'application/octet-stream', 0,
 			       now() + $6::interval
-			  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-			uuid.Must(uuid.NewV7()), f.tenantID, f.collection, path, state, expires)
+			  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection, path, state, expires)
 	}
 	seed("k-overdue", "PENDING", "-48 hours")
 	seed("k-not-due", "PENDING", "1 hour")

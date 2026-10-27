@@ -3,9 +3,9 @@ package collectionh
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 

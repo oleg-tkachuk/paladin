@@ -3,8 +3,7 @@ package keyset
 import (
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func TestRoundTrip(t *testing.T) {
@@ -33,7 +32,7 @@ func TestDecode_RefusesMalformed(t *testing.T) {
 	cases := map[string]string{
 		"not base64":  "%%%",
 		"not json":    "bm90LWpzb24",
-		"a bare uuid": uuid.NewString(),
+		"a bare uuid": uuid.New().String(),
 		"no row id":   Encode(Cursor{Order: Order{Field: "key"}, Value: "x"}),
 	}
 	for name, tok := range cases {

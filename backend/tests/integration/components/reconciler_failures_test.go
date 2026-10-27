@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -54,8 +54,7 @@ func seedOverdue(t *testing.T, ctx context.Context, pool *pgxpool.Pool, size int
 		                     size_bytes, checksum_algorithm, presign_expires_at)
 		SELECT $1, $2, c.id, 'k-overdue', 'PENDING', 'application/octet-stream', $4, 0,
 		       now() - interval '48 hours'
-		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-		uuid.Must(uuid.NewV7()), f.tenantID, f.collection, size)
+		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection, size)
 }
 
 // reconcileLogged runs the reconciler for a few ticks and returns its log.

@@ -7,8 +7,7 @@ package cedartest
 import (
 	"context"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )

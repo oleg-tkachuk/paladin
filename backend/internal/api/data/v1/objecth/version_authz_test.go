@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -37,9 +37,9 @@ type versionFixture struct {
 func newVersionFixture(t *testing.T, pe cedar.Authorizer) versionFixture {
 	t.Helper()
 	f := versionFixture{
-		objectID:   uuid.Must(uuid.NewV7()),
-		currentID:  uuid.Must(uuid.NewV7()),
-		restoredID: uuid.Must(uuid.NewV7()),
+		objectID:   uuid.NewV7(),
+		currentID:  uuid.NewV7(),
+		restoredID: uuid.NewV7(),
 	}
 	f.versions = newFakeVersionRepo()
 	f.versions.fixedGet = map[uuid.UUID]ObjectVersion{

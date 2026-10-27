@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -205,7 +205,7 @@ func (r *BucketReconciler) reconcileOne(ctx context.Context, row admindomain.Buc
 		// tenant_id so cloud cost reports group bucket→tenant. Best-effort —
 		// a backend that doesn't support PutBucketTagging must not block
 		// provisioning; the bucket is already usable.
-		if row.OwnerTenantID != uuid.Nil {
+		if row.OwnerTenantID != uuid.Nil() {
 			if tErr := r.prov.TagBucketOwner(ctx, row.BackendID, row.BucketName, row.OwnerTenantID); tErr != nil {
 				log.Warn("bucket cost-attribution tagging failed (non-fatal)", zap.Error(tErr))
 			}

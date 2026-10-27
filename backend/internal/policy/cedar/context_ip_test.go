@@ -4,8 +4,7 @@ import (
 	"context"
 	"net/netip"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 )

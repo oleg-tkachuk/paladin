@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // roleTenantProvisioner mirrors apiutil.RoleTenantProvisioner. Spelled out

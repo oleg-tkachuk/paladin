@@ -9,8 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )

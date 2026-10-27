@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -81,7 +81,7 @@ func ctxWithPlatformAdmin(t *testing.T) context.Context {
 
 func mkEntry(at time.Time) admindomain.AuditEntry {
 	return admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            at,
 		ActorSubject:  "alice",
 		ActorAudience: "paladin-admin",
@@ -331,7 +331,7 @@ func TestListAuditLogTrailTenant(t *testing.T) {
 		wantDenied bool
 		wantActor  uuid.UUID
 	}{
-		{name: "platform admin, another tenant", ctx: ctxWithPlatformAdmin(t), trail: other, wantActor: uuid.Nil},
+		{name: "platform admin, another tenant", ctx: ctxWithPlatformAdmin(t), trail: other, wantActor: uuid.Nil()},
 		{name: "member, own tenant", ctx: member, trail: own, wantActor: own},
 		{name: "member, another tenant", ctx: member, trail: other, wantDenied: true},
 	}

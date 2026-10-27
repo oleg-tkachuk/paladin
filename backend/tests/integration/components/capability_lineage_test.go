@@ -11,8 +11,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
@@ -57,7 +57,7 @@ func newLineageFixture(t *testing.T) (context.Context, lineageFixture) {
 		tenant:  tenant,
 		expires: time.Now().Add(time.Hour),
 	}
-	f.root = f.insert(t, ctx, uuid.Nil, lineageRootBudget, lineageRequests)
+	f.root = f.insert(t, ctx, uuid.Nil(), lineageRootBudget, lineageRequests)
 	f.child = f.insert(t, ctx, f.root, lineageChildBudget, lineageRequests)
 	f.sibling = f.insert(t, ctx, f.root, lineageChildBudget, lineageRequests)
 	return ctx, f
@@ -67,7 +67,7 @@ func newLineageFixture(t *testing.T) (context.Context, lineageFixture) {
 // (none when uuid.Nil) with the given ceilings, and returns its id.
 func (f lineageFixture) insert(t *testing.T, ctx context.Context, parent uuid.UUID, budget limes.BudgetCeiling, requests limes.RequestCeiling) uuid.UUID {
 	t.Helper()
-	c := mkCap(f.tenant, "agent:"+uuid.NewString()[:8], f.expires)
+	c := mkCap(f.tenant, "agent:"+uuid.New().String()[:8], f.expires)
 	c.ParentID = parent
 	c.Caveats.Budget = budget
 	c.Caveats.Requests = requests

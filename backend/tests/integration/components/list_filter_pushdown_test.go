@@ -6,10 +6,9 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
-
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
@@ -35,7 +34,7 @@ func TestPushdown_Backends(t *testing.T) {
 	pool := startPostgres(t)
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
-	prefix := "pd-" + uuid.NewString()[:8]
+	prefix := "pd-" + uuid.New().String()[:8]
 	for i := range 5 {
 		mustExec(t, ctx, pool,
 			`INSERT INTO storage_backends (name, kind, provider, region, display_name, enabled)
@@ -107,7 +106,7 @@ func TestPushdown_Tenants(t *testing.T) {
 	pool := startPostgres(t)
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 
-	prefix := "pd" + uuid.NewString()[:8]
+	prefix := "pd" + uuid.New().String()[:8]
 	for i := range 5 {
 		mustExec(t, ctx, pool,
 			`INSERT INTO tenants (id, slug, display_name, storage_layout)
@@ -194,14 +193,12 @@ func TestPushdown_OperationsStateAndDone(t *testing.T) {
 	const running = 4
 	finished := func() {
 		mustExec(t, ctx, pool,
-			`INSERT INTO operations (id, tenant_id, type, state, done_at) VALUES ($1, $2, 'BatchCopy', 'FAILED', now())`,
-			uuid.Must(uuid.NewV7()), tenantID)
+			`INSERT INTO operations (id, tenant_id, type, state, done_at) VALUES ($1, $2, 'BatchCopy', 'FAILED', now())`, uuid.NewV7(), tenantID)
 	}
 	finished()
 	for range running {
 		mustExec(t, ctx, pool,
-			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchCopy', 'RUNNING')`,
-			uuid.Must(uuid.NewV7()), tenantID)
+			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, 'BatchCopy', 'RUNNING')`, uuid.NewV7(), tenantID)
 	}
 	finished()
 
@@ -255,7 +252,7 @@ func TestPushdown_OperationsWithFailures(t *testing.T) {
 	const pageSize = 2
 	const clean = 4
 	insert := func(state string, failed int64) uuid.UUID {
-		id := uuid.Must(uuid.NewV7())
+		id := uuid.NewV7()
 		mustExec(t, ctx, pool,
 			`INSERT INTO operations (id, tenant_id, type, state, done_at, failed_count) VALUES ($1, $2, 'BatchDelete', $3, now(), $4)`,
 			id, tenantID, state, failed)
@@ -315,7 +312,7 @@ func TestPushdown_Collections(t *testing.T) {
 		 SELECT $1, sb.id, 'pd-coll-bucket', 'pd', $3 FROM storage_backends sb WHERE sb.name = $2`,
 		bucketID, backendID, tenantID)
 
-	prefix := "pd" + uuid.NewString()[:8]
+	prefix := "pd" + uuid.New().String()[:8]
 	for i := range 5 {
 		mustExec(t, ctx, pool,
 			`INSERT INTO collections (id, tenant_id, name, display_name, bucket_id)
@@ -346,7 +343,7 @@ func TestPushdown_Users(t *testing.T) {
 	tenantID, _ := mkTenant(t, ctx, pool, "shared")
 	repo := adapters.NewUserRepo(sqlc.New(pool))
 
-	prefix := "pd" + uuid.NewString()[:8]
+	prefix := "pd" + uuid.New().String()[:8]
 	for i := range 5 {
 		mustExec(t, ctx, pool,
 			`INSERT INTO users (id, tenant_id, subject, display_name, password_hash, disabled)

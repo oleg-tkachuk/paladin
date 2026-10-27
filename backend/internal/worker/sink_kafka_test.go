@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -96,7 +96,7 @@ func TestRevokeRefusedNamesNothing(t *testing.T) {
 	store := &recordingStore{revokeErr: limes.ErrNotFound}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 	ctx := withSlot(callerCtx(uuid.New()))
-	_, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.NewString()})
+	_, err := h.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: uuid.New().String()})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("err = %v, want NotFound", err)
 	}

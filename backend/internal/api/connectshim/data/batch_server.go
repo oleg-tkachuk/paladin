@@ -3,10 +3,9 @@ package data
 import (
 	"context"
 	"fmt"
+	"uuid"
 
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
-
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"

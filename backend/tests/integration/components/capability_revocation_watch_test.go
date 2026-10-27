@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/pgstore"
@@ -87,7 +87,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 func TestRevocationNotificationClearsOnlyWhatItOutdates(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
-	unrelated := f.insert(t, ctx, uuid.Nil, lineageRootBudget, lineageRequests)
+	unrelated := f.insert(t, ctx, uuid.Nil(), lineageRootBudget, lineageRequests)
 
 	replica := newCapStore(t, rlsPool(t, ctx, f.pool))
 	cache, err := limes.NewRevocationCache(limes.RevocationCacheConfig{Capabilities: replica, TTL: time.Hour})

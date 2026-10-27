@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/type/money"
@@ -77,7 +77,7 @@ func (e *chargeEmitter) EmitChargedTx(
 	amount limes.Nanos,
 	unitCode string,
 ) error {
-	if tenantID == "" || tenantID == uuid.Nil.String() {
+	if tenantID == "" || tenantID == uuid.Nil().String() {
 		return nil
 	}
 	queued, err := e.dispatcher.DispatchTx(ctx, tx, tenantID, worker.Event{

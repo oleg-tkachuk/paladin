@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -153,7 +153,7 @@ func TestTenantFreeze(t *testing.T) {
 		"a user created in a trashed tenant": {iam.UserServiceCreateUserProcedure,
 			&iamv1.CreateUserRequest{Parent: "tenants/" + trashed.String()}, true},
 		"a user of a trashed tenant updated": {iam.UserServiceUpdateUserProcedure,
-			&iamv1.UpdateUserRequest{Name: "tenants/" + trashed.String() + "/users/" + uuid.NewString()}, true},
+			&iamv1.UpdateUserRequest{Name: "tenants/" + trashed.String() + "/users/" + uuid.New().String()}, true},
 		"switching into a trashed tenant": {iam.AuthServiceSwitchTenantProcedure,
 			&iamv1.SwitchTenantRequest{TargetTenantId: trashed.String()}, true},
 		"revoking a user's scopes": {iam.UserServiceRevokeScopesProcedure,
@@ -189,7 +189,7 @@ func TestTenantFreeze(t *testing.T) {
 func TestTenantFreezeReadsNothingForARead(t *testing.T) {
 	states := &fakeStates{err: errors.New("down")}
 	err := checkFrozen(platformCtx(), states, fakeSlugs{err: errors.New("down")},
-		data.ObjectServiceGetObjectProcedure, &datav1.GetObjectRequest{Name: "tenants/" + uuid.NewString() + "/collections/c/objects/o"})
+		data.ObjectServiceGetObjectProcedure, &datav1.GetObjectRequest{Name: "tenants/" + uuid.New().String() + "/collections/c/objects/o"})
 	if err != nil || states.reads != 0 {
 		t.Errorf("err = %v after %d reads, want a read let through unread", err, states.reads)
 	}
@@ -204,7 +204,7 @@ func TestTenantFreezeFailsClosed(t *testing.T) {
 		slugs  TenantSlugs
 		parent string
 	}{
-		"state unreadable": {&fakeStates{err: down}, fakeSlugs{}, "tenants/" + uuid.NewString()},
+		"state unreadable": {&fakeStates{err: down}, fakeSlugs{}, "tenants/" + uuid.New().String()},
 		"slug unreadable":  {&fakeStates{}, fakeSlugs{err: down}, "tenants/acme"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -292,5 +292,5 @@ type countingSlugs struct{ calls int }
 
 func (c *countingSlugs) TenantIDBySlug(context.Context, string) (uuid.UUID, bool, error) {
 	c.calls++
-	return uuid.Nil, false, nil
+	return uuid.Nil(), false, nil
 }

@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -515,7 +515,7 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
-	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.Must(uuid.NewV7())})
+	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.NewV7()})
 	if err != nil {
 		t.Fatalf("mint refresh: %v", err)
 	}
@@ -556,7 +556,7 @@ func TestToken_RefreshRefusedWhenTheTokenEndsMidRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
-	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.Must(uuid.NewV7())})
+	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.NewV7()})
 	if err != nil {
 		t.Fatalf("mint refresh: %v", err)
 	}

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -73,7 +73,7 @@ func (r *ObjectRepo) read(ctx context.Context, fn func(q sqlc.Querier, db sqlc.D
 var _ objecth.Repository = (*ObjectRepo)(nil)
 
 func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObjectArgs) (objecth.Object, error) {
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	// Under the path lock, so a purge of bytes a deleted object left at this
 	// path cannot delete this one's (package objectpath).
 	tx, err := r.pool.Begin(ctx)

@@ -46,12 +46,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

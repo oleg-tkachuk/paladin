@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -287,7 +287,7 @@ func AuditSkips(procedure string, level connect.IdempotencyLevel) bool {
 func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req proto.Message, rpcErr error, before, after proto.Message) error {
 	subject, tenantID := principalCoords(ctx)
 	entry := admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            time.Now().UTC(),
 		ActorSubject:  subject,
 		ActorTenantID: tenantID,
@@ -328,7 +328,7 @@ func (a *auditInterceptor) mirrorHook(entry admindomain.AuditEntry) func(context
 func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID string, rpcErr error) error {
 	subject, tenantID := principalCoords(ctx)
 	entry := admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            time.Now().UTC(),
 		ActorSubject:  subject,
 		ActorTenantID: tenantID,
@@ -348,7 +348,7 @@ func (a *auditInterceptor) writeStream(ctx context.Context, procedure, requestID
 func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil || p == nil {
-		return "", uuid.Nil
+		return "", uuid.Nil()
 	}
 	return p.Subject, p.TenantID
 }
@@ -371,7 +371,7 @@ func relayedBy(ctx context.Context) string {
 func capabilityID(ctx context.Context) uuid.UUID {
 	c, ok := auth.CapabilityFromContext(ctx)
 	if !ok || c == nil {
-		return uuid.Nil
+		return uuid.Nil()
 	}
 	return c.ID
 }

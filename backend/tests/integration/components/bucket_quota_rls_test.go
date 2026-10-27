@@ -6,9 +6,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/quotah"
@@ -63,7 +63,7 @@ func TestBucketQuota_SetReadChargeEnforceResetUnderRLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetQuota (bucket): %v", err)
 	}
-	if set.BackendID != backendID || set.BucketName != bucketName || set.TenantID != uuid.Nil {
+	if set.BackendID != backendID || set.BucketName != bucketName || set.TenantID != uuid.Nil() {
 		t.Errorf("SetQuota returned %+v, want the bucket scope", set)
 	}
 
@@ -88,12 +88,12 @@ func TestBucketQuota_SetReadChargeEnforceResetUnderRLS(t *testing.T) {
 	}
 
 	// The promote path charges the bucket through the uploader's own session.
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	mustExec(t, ctx, admin,
 		`INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                      content_type, checksum_algorithm, size_bytes)
 		 VALUES ($1, $2, $3, $4, 'AVAILABLE', 'application/octet-stream', 0, 10)`,
-		objectID, f.tenantID, f.collectionID, "k-"+uuid.NewString()[:8])
+		objectID, f.tenantID, f.collectionID, "k-"+uuid.New().String()[:8])
 	if err := quotas.OnObjectPromoted(uploader, f.tenantID, objectID, 10); err != nil {
 		t.Fatalf("OnObjectPromoted: %v", err)
 	}

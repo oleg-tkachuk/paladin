@@ -3,9 +3,9 @@ package objecth
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
@@ -67,7 +67,7 @@ func TestListCommonPrefixes(t *testing.T) {
 			t.Fatalf("got %v %v %v", got, truncated, err)
 		}
 		want := ListPrefixesArgs{TenantID: repo.prefixArgs.TenantID, Collection: "docs", Prefix: "a/", Delimiter: "/", Filter: `state == "DELETED"`}
-		if repo.prefixArgs != want || repo.prefixArgs.TenantID == uuid.Nil {
+		if repo.prefixArgs != want || repo.prefixArgs.TenantID == uuid.Nil() {
 			t.Errorf("store asked %+v", repo.prefixArgs)
 		}
 	})

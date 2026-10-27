@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
@@ -35,16 +35,16 @@ var errBoom = errors.New("backend unavailable")
 type failingBatch struct{}
 
 func (failingBatch) BatchDelete(context.Context, batchh.BatchDeleteArgs) (uuid.UUID, error) {
-	return uuid.Nil, errBoom
+	return uuid.Nil(), errBoom
 }
 func (failingBatch) BatchCopy(context.Context, batchh.BatchCopyArgs) (uuid.UUID, error) {
-	return uuid.Nil, errBoom
+	return uuid.Nil(), errBoom
 }
 func (failingBatch) BatchRestoreObjects(context.Context, batchh.BatchRestoreObjectsArgs) (uuid.UUID, error) {
-	return uuid.Nil, errBoom
+	return uuid.Nil(), errBoom
 }
 func (failingBatch) BatchUpdateTags(context.Context, batchh.BatchUpdateTagsArgs) (uuid.UUID, error) {
-	return uuid.Nil, errBoom
+	return uuid.Nil(), errBoom
 }
 
 type failingMultipart struct{}

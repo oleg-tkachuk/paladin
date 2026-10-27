@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -28,7 +27,7 @@ func TestDeleteBackendWithBucketsIsAConflict(t *testing.T) {
 	repo := adapters.NewBackendRepoV2(q, pool)
 
 	tenant, _ := mkTenant(t, ctx, pool, "shared")
-	backendID := "be-" + uuid.NewString()[:8]
+	backendID := "be-" + uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 		 VALUES ($1, 's3-compatible', 'garage', 'http://x.invalid:3900', 'us-east-1')`,
@@ -36,7 +35,7 @@ func TestDeleteBackendWithBucketsIsAConflict(t *testing.T) {
 	mustExec(t, ctx, pool,
 		`INSERT INTO buckets (backend_id, name, owner_tenant_id)
 		 SELECT id, $2, $3 FROM storage_backends WHERE name = $1`,
-		backendID, "bk-"+uuid.NewString()[:8], tenant)
+		backendID, "bk-"+uuid.New().String()[:8], tenant)
 
 	if err := repo.Delete(ctx, backendID, 0); !errors.Is(err, admindomain.ErrConflict) {
 		t.Errorf("Delete = %v, want ErrConflict", err)

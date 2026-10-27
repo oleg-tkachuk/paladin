@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -115,7 +115,7 @@ func TestTheSDKFakeIssuesAsTheServerDoes(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			req := &adminv1.CapabilityServiceIssueRequest{
 				Subject: &adminv1.CapabilityPrincipal{
-					Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: uuid.NewString(), Subject: "agent:worker",
+					Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: uuid.New().String(), Subject: "agent:worker",
 				},
 				Audience:       paladin.PlaneNames(paladin.PlaneData),
 				TtlSeconds:     issuanceTTLSeconds,

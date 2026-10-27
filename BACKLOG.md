@@ -139,6 +139,19 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
+### Token exchange and introspection limes now ships
+
+- **Status:** Deferred.
+- **Reason:** limes v1.0.0-rc.6 to rc.9 added an `exchange` module (OAuth
+  access tokens for capabilities, RFC 8693, with OAuth metadata) and RFC
+  7662 introspection, while Paladin keeps its own exchange in
+  `backend/internal/auth/oauth/exchange.go` and `backend/internal/mcp/exchange.go`;
+  the bump to rc.9 took only the type changes.
+- **Definition of Done:** Paladin's exchange and token introspection run on
+  limes' and the code that duplicates it is gone, or a note here says why
+  limes' cannot serve Paladin's case.
+- **Blockers:** none; the size of the redesign.
+
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

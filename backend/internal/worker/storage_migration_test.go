@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // fakeMigRepo is an in-memory MigrationRepo for one tenant's migration.
@@ -115,7 +114,7 @@ func (f *fakeMigRepo) StartRollback(_ context.Context, at MigrationRead, reason 
 	}
 	f.mig.Attempts++
 	f.reason = reason
-	f.mig.RollbackCursorAt, f.mig.RollbackCursorID = time.Time{}, uuid.Nil
+	f.mig.RollbackCursorAt, f.mig.RollbackCursorID = time.Time{}, uuid.Nil()
 	return nil
 }
 

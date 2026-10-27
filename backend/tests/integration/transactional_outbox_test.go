@@ -16,8 +16,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -255,7 +255,7 @@ func TestAudit_InsertWithOutbox_AtomicCommit(t *testing.T) {
 	repo := adapters.NewAuditRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-audit-ok")
-	entryID := uuid.Must(uuid.NewV7())
+	entryID := uuid.NewV7()
 	entry := admindomain.AuditEntry{
 		EntryID:       entryID,
 		ActorSubject:  "admin@local",
@@ -287,7 +287,7 @@ func TestAudit_InsertWithOutbox_HookErrorRollsBackAudit(t *testing.T) {
 	repo := adapters.NewAuditRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "ten-audit-fail")
-	entryID := uuid.Must(uuid.NewV7())
+	entryID := uuid.NewV7()
 	entry := admindomain.AuditEntry{
 		EntryID:       entryID,
 		ActorSubject:  "admin@local",

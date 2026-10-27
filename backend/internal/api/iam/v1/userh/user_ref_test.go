@@ -2,9 +2,9 @@ package userh
 
 import (
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -39,7 +39,7 @@ func TestAUserNamedUnderAnotherTenantIsNotFound(t *testing.T) {
 			if err := op(NewHandler(repo, allowAuthorizer{})); code(err) != connect.CodeNotFound {
 				t.Fatalf("code = %v, want NotFound", code(err))
 			}
-			if repo.updated.UserID != uuid.Nil || repo.deletes != 0 || repo.pwdHashSets != 0 {
+			if repo.updated.UserID != uuid.Nil() || repo.deletes != 0 || repo.pwdHashSets != 0 {
 				t.Error("the user was changed")
 			}
 		})

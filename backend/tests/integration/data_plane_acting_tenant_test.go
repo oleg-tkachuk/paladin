@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -182,7 +182,7 @@ func TestDataPlaneTenantBoundaries(t *testing.T) {
 	_, cases["a member listing another tenant"] = f.objects.ListObjects(authed(ctx, member),
 		&pbdata.ListObjectsRequest{Parent: collectionOf(f.target)})
 	_, cases["a member reading another tenant's version"] = f.objects.GetObjectVersion(authed(ctx, member),
-		&pbdata.GetObjectVersionRequest{Name: objectOf(f.target, f.inTarget) + "/versions/" + uuid.NewString()})
+		&pbdata.GetObjectVersionRequest{Name: objectOf(f.target, f.inTarget) + "/versions/" + uuid.New().String()})
 	_, cases["an admin copying across tenants"] = f.objects.CopyObject(authed(ctx, admin),
 		&pbdata.CopyObjectRequest{
 			SourceName: objectOf(f.target, f.inTarget), DestinationCollection: collectionOf(f.platform), DestinationKey: "stolen.txt",

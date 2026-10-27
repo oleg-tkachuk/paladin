@@ -3,8 +3,7 @@ package operationh
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // An operation has failures when it failed, or when it is a batch that ran to

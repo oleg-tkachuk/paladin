@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
@@ -102,7 +102,7 @@ func TestCreate_CedarDenied(t *testing.T) {
 	h := newHandler(&stubIssuer{}, &fakeStore{}, denyAuthorizer{})
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		RateLimit: unlimitedRate(),
-		Parent:    "tenants/" + uuid.NewString(), DisplayName: "ci",
+		Parent:    "tenants/" + uuid.New().String(), DisplayName: "ci",
 	})
 	if code(err) != connect.CodePermissionDenied {
 		t.Fatalf("code = %v, want PermissionDenied", code(err))
@@ -169,7 +169,7 @@ func TestCreate_RejectsMalformedScope(t *testing.T) {
 	h := newHandler(iss, &fakeStore{}, allowAuthorizer{})
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		RateLimit: unlimitedRate(),
-		Parent:    "tenants/" + uuid.NewString(), DisplayName: "bad", Scopes: []string{"api:read"}, // legacy vocab — no longer valid
+		Parent:    "tenants/" + uuid.New().String(), DisplayName: "bad", Scopes: []string{"api:read"}, // legacy vocab — no longer valid
 	})
 	if code(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, want InvalidArgument", code(err))
@@ -218,7 +218,7 @@ func TestRevoke_Success(t *testing.T) {
 	store := &fakeStore{}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
 	_, err := h.Revoke(ctxAs("platform.admin"), &adminv1.APITokenServiceRevokeRequest{
-		Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
+		Name: "tenants/" + uuid.New().String() + "/apiTokens/" + uuid.New().String(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -244,7 +244,7 @@ func TestList_MapsRows(t *testing.T) {
 	}}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
 	resp, err := h.List(ctxAs("platform.admin"), &adminv1.APITokenServiceListRequest{
-		Parent: "tenants/" + uuid.NewString(),
+		Parent: "tenants/" + uuid.New().String(),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -295,14 +295,14 @@ func TestGet_Success(t *testing.T) {
 }
 
 func TestGet_Refusals(t *testing.T) {
-	foreign := "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString()
+	foreign := "tenants/" + uuid.New().String() + "/apiTokens/" + uuid.New().String()
 	for name, tc := range map[string]struct {
 		role, tokenName string
 		store           *fakeStore
 		want            connect.Code
 	}{
 		"not found":      {"platform.admin", foreign, &fakeStore{getErr: api_token.ErrTokenNotFound}, connect.CodeNotFound},
-		"a bare id":      {"platform.admin", uuid.NewString(), &fakeStore{}, connect.CodeInvalidArgument},
+		"a bare id":      {"platform.admin", uuid.New().String(), &fakeStore{}, connect.CodeInvalidArgument},
 		"another tenant": {"tenant.admin", foreign, &fakeStore{}, connect.CodePermissionDenied},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -321,7 +321,7 @@ func TestGetUsage_NotFound(t *testing.T) {
 	store := &fakeStore{getErr: api_token.ErrTokenNotFound}
 	h := newHandler(&stubIssuer{}, store, allowAuthorizer{})
 	_, err := h.GetUsage(ctxAs("platform.admin"), &adminv1.APITokenServiceGetUsageRequest{
-		Name: "tenants/" + uuid.NewString() + "/apiTokens/" + uuid.NewString(),
+		Name: "tenants/" + uuid.New().String() + "/apiTokens/" + uuid.New().String(),
 	})
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
@@ -450,7 +450,7 @@ func TestCreate_PlatformAdminMayGrantTheNarrowRole(t *testing.T) {
 
 	_, err := h.Create(ctxAs("platform.admin"), &adminv1.APITokenServiceCreateRequest{
 		RateLimit: unlimitedRate(),
-		Parent:    "tenants/" + uuid.NewString(), DisplayName: "acme-issuer", Audience: []string{"admin"},
+		Parent:    "tenants/" + uuid.New().String(), DisplayName: "acme-issuer", Audience: []string{"admin"},
 		Roles: []string{"platform.capability-issuer"},
 	})
 	if err != nil {

@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 
-	"github.com/google/uuid"
 	kafka "github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"

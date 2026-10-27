@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -27,7 +26,7 @@ func revokeFixture(t *testing.T, refresh *memRefresh) (*Handler, *memAudit, stri
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
-	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.Must(uuid.NewV7())})
+	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{Subject: u.UserID.String(), TenantID: u.TenantID, UserID: u.UserID, TokenID: uuid.NewV7()})
 	if err != nil {
 		t.Fatalf("mint refresh: %v", err)
 	}

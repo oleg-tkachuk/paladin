@@ -3,8 +3,7 @@ package collectionh
 import (
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Sample UUID — pinned literal so a round-trip test can string-compare.
@@ -53,7 +52,7 @@ func TestCanonicalName_PanicsOnEmpty(t *testing.T) {
 	}{
 		{"empty-backend", "", "b", tid, "ok"},
 		{"empty-bucket", "be", "", tid, "ok"},
-		{"nil-tenant", "be", "b", uuid.Nil, "ok"},
+		{"nil-tenant", "be", "b", uuid.Nil(), "ok"},
 		{"empty-objectkey", "be", "b", tid, ""},
 	}
 	for _, tc := range cases {

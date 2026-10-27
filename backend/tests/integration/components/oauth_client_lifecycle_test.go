@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -67,7 +67,7 @@ func (f clientFixture) code(t *testing.T, ctx context.Context, clientID string, 
 		SELECT $1, c.id, $2, $3, 'https://agent.invalid/cb', 'challenge', 'S256', '{paladin.read}',
 		       'paladin-mcp', now() + $4::interval, CASE WHEN $5 THEN now() END
 		FROM oauth_clients c WHERE c.client_id = $6`,
-		[]byte(uuid.NewString()), f.userID, f.tenantID, expiresIn.String(), consumed, clientID)
+		[]byte(uuid.New().String()), f.userID, f.tenantID, expiresIn.String(), consumed, clientID)
 }
 
 // storeClient stores a client created age ago.
@@ -243,7 +243,7 @@ func TestOAuthClientMarkRoundTrips(t *testing.T) {
 	pool := startPostgres(t)
 	store := oauth.NewPgxStore(pool)
 	for _, want := range []bool{true, false} {
-		id := "client-" + uuid.NewString()
+		id := "client-" + uuid.New().String()
 		if err := store.UpsertClient(ctx, oauth.Client{ClientID: id, SelfRegistered: want}); err != nil {
 			t.Fatal(err)
 		}
@@ -266,10 +266,10 @@ func TestSelfRegisteredMarkIsBackfilled(t *testing.T) {
 	db := stdlib.OpenDBFromPool(pool)
 	t.Cleanup(func() { _ = db.Close() })
 
-	registered := "paladin-" + uuid.Must(uuid.NewV7()).String()
+	registered := "paladin-" + uuid.NewV7().String()
 	seeded := []string{"paladin-e2e-agent", "paladin-mcp-server",
 		// A UUID that is not version 7 is not one registration made.
-		"paladin-" + uuid.NewString()}
+		"paladin-" + uuid.New().String()}
 	for _, id := range append([]string{registered}, seeded...) {
 		mustExec(t, ctx, pool, `INSERT INTO oauth_clients (client_id) VALUES ($1)`, id)
 	}

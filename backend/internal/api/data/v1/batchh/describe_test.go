@@ -4,8 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func TestDescribeOperation(t *testing.T) {

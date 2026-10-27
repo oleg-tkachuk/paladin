@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -137,7 +137,7 @@ func TestOnPromoteSkipsWhenVersioningOff(t *testing.T) {
 	vrepo := newFakeVersionRepo()
 	h := NewVersionHandler(repo, vrepo)
 
-	obj := Object{ObjectID: uuid.Must(uuid.NewV7())}
+	obj := Object{ObjectID: uuid.NewV7()}
 	if err := h.OnPromote(context.Background(), obj); err != nil {
 		t.Fatalf("OnPromote: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestOnPromoteRecordsWhenVersioningOn(t *testing.T) {
 	vrepo := newFakeVersionRepo()
 	h := NewVersionHandler(repo, vrepo)
 
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	obj := Object{
 		ObjectID:    objectID,
 		Collection:  "photos",
@@ -187,7 +187,7 @@ func TestOnSoftDeleteRecordsDeleteMarker(t *testing.T) {
 	vrepo := newFakeVersionRepo()
 	h := NewVersionHandler(repo, vrepo)
 
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	if err := h.OnSoftDelete(context.Background(), Object{ObjectID: objectID, Collection: "k", Key: "x"}); err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestOnPromoteMetaErrPropagates(t *testing.T) {
 	vrepo := newFakeVersionRepo()
 	h := NewVersionHandler(repo, vrepo)
 
-	err := h.OnPromote(context.Background(), Object{ObjectID: uuid.Must(uuid.NewV7())})
+	err := h.OnPromote(context.Background(), Object{ObjectID: uuid.NewV7()})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -217,17 +217,17 @@ func TestOnPromoteNilHandlerSafe(t *testing.T) {
 func TestUnsetDeleteMarkerCurrentFlipsToPrev(t *testing.T) {
 	repo := &fakeObjectRepo{meta: BucketMeta{VersioningEnabled: true}}
 	vrepo := newFakeVersionRepo()
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 
 	// History (newest first): delete-marker (current), regular v1.
 	regular := ObjectVersion{
-		VersionID: uuid.Must(uuid.NewV7()),
+		VersionID: uuid.NewV7(),
 		ObjectID:  objectID,
 		ETag:      "regular",
 		CreatedAt: time.Now().Add(-2 * time.Second),
 	}
 	marker := ObjectVersion{
-		VersionID:      uuid.Must(uuid.NewV7()),
+		VersionID:      uuid.NewV7(),
 		ObjectID:       objectID,
 		IsDeleteMarker: true,
 		CreatedAt:      time.Now(),
@@ -241,7 +241,7 @@ func TestUnsetDeleteMarkerCurrentFlipsToPrev(t *testing.T) {
 	vrepo.current[objectID] = marker.VersionID
 
 	h := NewVersionHandler(repo, vrepo)
-	if err := h.UnsetDeleteMarkerCurrent(context.Background(), Object{ObjectID: objectID, Collection: "k", TenantID: uuid.Must(uuid.NewV7())}); err != nil {
+	if err := h.UnsetDeleteMarkerCurrent(context.Background(), Object{ObjectID: objectID, Collection: "k", TenantID: uuid.NewV7()}); err != nil {
 		t.Fatal(err)
 	}
 	if vrepo.current[objectID] != regular.VersionID {
@@ -252,8 +252,8 @@ func TestUnsetDeleteMarkerCurrentFlipsToPrev(t *testing.T) {
 func TestUnsetDeleteMarkerCurrentNoOpWhenVersioningOff(t *testing.T) {
 	repo := &fakeObjectRepo{meta: BucketMeta{VersioningEnabled: false}}
 	vrepo := newFakeVersionRepo()
-	objectID := uuid.Must(uuid.NewV7())
-	vrepo.current[objectID] = uuid.Must(uuid.NewV7()) // wouldn't matter
+	objectID := uuid.NewV7()
+	vrepo.current[objectID] = uuid.NewV7() // wouldn't matter
 
 	h := NewVersionHandler(repo, vrepo)
 	prior := vrepo.current[objectID]

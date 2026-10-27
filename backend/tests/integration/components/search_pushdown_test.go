@@ -14,12 +14,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
@@ -67,7 +66,7 @@ func subtestBackendSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing
 	return func(t *testing.T) {
 		repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
-		prefix := "srch-" + uuid.NewString()[:8]
+		prefix := "srch-" + uuid.New().String()[:8]
 		for _, f := range searchFixtures {
 			mustExec(t, ctx, pool,
 				`INSERT INTO storage_backends (name, kind, display_name, region, endpoint)
@@ -192,7 +191,7 @@ func celCollections(t *testing.T, filter string, in []objectkey.Collection) []ob
 // search, which is the shape the console actually sends.
 func subtestBackendPastThePage(ctx context.Context, pool *pgxpool.Pool) func(*testing.T) {
 	return func(t *testing.T) {
-		prefix := "page-" + uuid.NewString()[:8]
+		prefix := "page-" + uuid.New().String()[:8]
 		for i := range 40 {
 			mustExec(t, ctx, pool,
 				`INSERT INTO storage_backends (name, kind, display_name)
@@ -254,7 +253,7 @@ func subtestTenantSearch(ctx context.Context, pool *pgxpool.Pool) func(*testing.
 	return func(t *testing.T) {
 		repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
 
-		prefix := "srch" + uuid.NewString()[:8]
+		prefix := "srch" + uuid.New().String()[:8]
 		for _, f := range searchFixtures {
 			// Tenant slugs are constrained; the fixture names are slug-safe apart
 			// from the separator probe pair, which is what it is for.

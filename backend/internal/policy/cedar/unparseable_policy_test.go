@@ -3,8 +3,7 @@ package cedar
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // A tenant-authored policy layer that will not parse must freeze the scope it

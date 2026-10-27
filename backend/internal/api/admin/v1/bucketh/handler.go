@@ -9,9 +9,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -215,7 +215,7 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 	}
 	// Every bucket has an owner (ADR-0032); a pool for many tenants is the
 	// platform tenant's, and they reach it through grants.
-	if in.Bucket.OwnerTenantID == uuid.Nil {
+	if in.Bucket.OwnerTenantID == uuid.Nil() {
 		return nil, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
 	}
 	// The data plane enforces these on every upload; constraints no upload
@@ -326,7 +326,7 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 		return nil, false, connect.NewError(connect.CodeInvalidArgument,
 			"backend_id and bucket_name required")
 	}
-	if in.Bucket.OwnerTenantID == uuid.Nil {
+	if in.Bucket.OwnerTenantID == uuid.Nil() {
 		return nil, false, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
 	}
 	if err := in.Bucket.Constraints.Validate(); err != nil {
@@ -472,7 +472,7 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin); err != nil {
 		return nil, "", err
 	}
-	if err := h.authorize(ctx, cedar.ActionReadBucket, args.BackendID, "", uuid.Nil); err != nil {
+	if err := h.authorize(ctx, cedar.ActionReadBucket, args.BackendID, "", uuid.Nil()); err != nil {
 		return nil, "", err
 	}
 	if args.UsedByTenantID != nil {
@@ -504,7 +504,7 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 // bucketRow projects a Bucket onto the variables PhysicalBucketSchema declares.
 func bucketRow(b admindomain.Bucket) map[string]any {
 	owner := ""
-	if b.OwnerTenantID != uuid.Nil {
+	if b.OwnerTenantID != uuid.Nil() {
 		owner = b.OwnerTenantID.String()
 	}
 	return map[string]any{
@@ -564,7 +564,7 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	}
 	ownerMoves := slices.Contains(in.UpdateMask, MaskOwnerTenantID)
 	if ownerMoves {
-		if in.Bucket.OwnerTenantID == uuid.Nil {
+		if in.Bucket.OwnerTenantID == uuid.Nil() {
 			return nil, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
 		}
 		if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {

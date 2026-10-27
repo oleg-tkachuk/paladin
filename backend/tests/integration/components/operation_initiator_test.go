@@ -6,8 +6,7 @@ import (
 	"context"
 	"slices"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -28,7 +27,7 @@ func TestListOperations_ByInitiator(t *testing.T) {
 	var mine []uuid.UUID
 	for i, who := range []string{alice, bob, alice, "", alice} {
 		op := operationh.Operation{
-			OperationID: uuid.Must(uuid.NewV7()), TenantID: tenantID,
+			OperationID: uuid.NewV7(), TenantID: tenantID,
 			Type: "BatchDelete", State: operationh.StatePending,
 			Metadata: []byte(`{}`), InitiatorSubject: who,
 		}
@@ -85,7 +84,7 @@ func TestDismissOperations_OwnAndFinishedOnly(t *testing.T) {
 	alice, bob := "0199a1b2-alice", "0199a1b2-bob"
 	mk := func(who string, state operationh.State) uuid.UUID {
 		t.Helper()
-		id := uuid.Must(uuid.NewV7())
+		id := uuid.NewV7()
 		mustExec(t, ctx, pool,
 			`INSERT INTO operations (id, tenant_id, type, state, initiator_subject) VALUES ($1, $2, 'BatchDelete', $3, $4)`,
 			id, tenantID, string(state), who)

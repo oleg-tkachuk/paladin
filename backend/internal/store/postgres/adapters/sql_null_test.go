@@ -3,8 +3,7 @@ package adapters
 import (
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -111,7 +110,7 @@ func TestLockModeSQLRoundTrip(t *testing.T) {
 }
 
 func TestPgUUIDOptional(t *testing.T) {
-	if got := pgUUIDOptional(uuid.Nil); got.Valid {
+	if got := pgUUIDOptional(uuid.Nil()); got.Valid {
 		t.Error("pgUUIDOptional(Nil): Valid = true, want false")
 	}
 	id := uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")

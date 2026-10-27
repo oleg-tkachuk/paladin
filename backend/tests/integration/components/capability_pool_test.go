@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
@@ -61,7 +61,7 @@ func TestRefusedChargesDoNotDrainThePool(t *testing.T) {
 	for range refusedBurst {
 		wg.Go(func() {
 			_, err := usage.Charge(burstCtx, meter.ChargeRequest{
-				Subject: subject, Amount: limes.NanosPerUnit, ExternalRef: uuid.NewString(),
+				Subject: subject, Amount: limes.NanosPerUnit, ExternalRef: uuid.New().String(),
 			}, nil)
 			errs <- err
 		})

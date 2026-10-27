@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -75,8 +75,8 @@ func TestDispatcher_JetStreamSink_PublishesAndDedups(t *testing.T) {
 		"jetstream": true,
 	})
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
-		TenantID:       uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
+		TenantID:       uuid.NewV7(),
 		SinkKind:       "nats",
 		SinkConfig:     sinkCfg,
 	}

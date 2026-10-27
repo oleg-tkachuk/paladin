@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 )
 
@@ -57,7 +57,7 @@ func ScrubInternal() connect.ServerInterceptor {
 // ensureRequestID is the request's id, minted and set when it carries none.
 func ensureRequestID(id string, set func(key, value string)) string {
 	if id == "" {
-		id = uuid.NewString()
+		id = uuid.New().String()
 		set(HeaderRequestID, id)
 	}
 	return id

@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	tenantapi "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"

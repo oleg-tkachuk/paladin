@@ -4,9 +4,9 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
@@ -28,11 +28,11 @@ import (
 func TestGetUser_RejectsMalformedNames(t *testing.T) {
 	for _, name := range []string{
 		"",
-		"tenants/" + uuid.NewString(), // too short — indexing parts[2] would panic
-		"bogus/" + uuid.NewString() + "/users/" + uuid.NewString(), // wrong collection prefix
-		"tenants/" + uuid.NewString() + "/groups/" + uuid.NewString(),
-		"tenants/" + uuid.NewString() + "/users/" + uuid.NewString() + "/extra",
-		"tenants/" + uuid.NewString() + "/users/not-a-uuid",
+		"tenants/" + uuid.New().String(), // too short — indexing parts[2] would panic
+		"bogus/" + uuid.New().String() + "/users/" + uuid.New().String(), // wrong collection prefix
+		"tenants/" + uuid.New().String() + "/groups/" + uuid.New().String(),
+		"tenants/" + uuid.New().String() + "/users/" + uuid.New().String() + "/extra",
+		"tenants/" + uuid.New().String() + "/users/not-a-uuid",
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv := &UserServer{H: failingUser{}}
@@ -98,7 +98,7 @@ func TestLogin_ForwardsTheTenantHintHeader(t *testing.T) {
 		if _, err := client.Login(ctx, &pb.LoginRequest{Subject: "tester", Password: "pw"}); err != nil {
 			t.Fatalf("login: %v", err)
 		}
-		if h.login.TenantHint != uuid.Nil {
+		if h.login.TenantHint != uuid.Nil() {
 			t.Errorf("an unparseable hint became %v", h.login.TenantHint)
 		}
 	})
@@ -126,7 +126,7 @@ func TestListMyMemberships_SurfacesTheNextPageToken(t *testing.T) {
 // none. Inverting that both withholds a password nobody else will ever learn
 // and echoes one the caller already knows.
 func TestResetPassword_ReturnsTheGeneratedSecretOnlyWhenItGeneratedOne(t *testing.T) {
-	name := "tenants/" + uuid.NewString() + "/users/" + uuid.NewString()
+	name := "tenants/" + uuid.New().String() + "/users/" + uuid.New().String()
 
 	t.Run("no password supplied — the generated one comes back", func(t *testing.T) {
 		srv := &UserServer{H: resettingUser{generated: "s3cret"}}
@@ -202,7 +202,7 @@ func TestListByTenant_ForwardsThePageSize(t *testing.T) {
 	srv := &UserSettingsServer{H: h}
 
 	_, err := srv.ListByTenant(context.Background(), &pb.ListByTenantRequest{
-		Parent: "tenants/" + uuid.NewString(),
+		Parent: "tenants/" + uuid.New().String(),
 		Page:   &commonpb.PageRequest{PageSize: 25},
 	})
 	if err != nil {
@@ -272,13 +272,13 @@ func TestUserSettings_GetForUserAndListSucceed(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := srv.GetForUser(ctx, &pb.GetForUserRequest{
-		Name: "users/" + uuid.NewString(),
+		Name: "users/" + uuid.New().String(),
 	}); err != nil {
 		t.Errorf("GetForUser on well-formed settings: %v", err)
 	}
 
 	resp, err := srv.ListByTenant(ctx, &pb.ListByTenantRequest{
-		Parent: "tenants/" + uuid.NewString(),
+		Parent: "tenants/" + uuid.New().String(),
 	})
 	if err != nil {
 		t.Fatalf("ListByTenant on well-formed settings: %v", err)

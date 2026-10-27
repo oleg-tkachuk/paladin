@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -73,7 +73,7 @@ func TestEventSubscriptionRepoV2_Create_StampsGeneratedID(t *testing.T) {
 	if err := repo.Create(ctx, &sub); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if sub.SubscriptionID == uuid.Nil {
+	if sub.SubscriptionID == uuid.Nil() {
 		t.Fatal("subscription id was not stamped on the input — " +
 			"the pointer-receiver contract on Create was broken; " +
 			"see commit 19d2296 for the regression history")

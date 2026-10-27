@@ -57,8 +57,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -217,7 +217,7 @@ func wantsIdempotencyKey(procedure string) bool {
 func (t idempotencyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if wantsIdempotencyKey(req.URL.Path) && req.Header.Get("Idempotency-Key") == "" {
 		req = req.Clone(req.Context())
-		req.Header.Set("Idempotency-Key", uuid.NewString())
+		req.Header.Set("Idempotency-Key", uuid.New().String())
 	}
 	return t.base.RoundTrip(req)
 }

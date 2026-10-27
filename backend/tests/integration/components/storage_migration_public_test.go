@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -91,7 +91,7 @@ type publicMigrationFixture struct {
 
 func seedPublicMigrationFixture(t *testing.T, ctx context.Context) publicMigrationFixture {
 	t.Helper()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	f := publicMigrationFixture{
 		pool:      startPostgres(t),
 		store:     &fakeObjectStore{objects: map[string]int64{}},

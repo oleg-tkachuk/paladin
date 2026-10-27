@@ -3,10 +3,9 @@ package admindomain
 import (
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
-
-	"github.com/google/uuid"
 )
 
 // The tenant an entry is filed under besides its actor's: read from the
@@ -16,8 +15,8 @@ func TestAuditEntryResourceTenant(t *testing.T) {
 	cases := map[string]uuid.UUID{
 		"tenants/" + tenant.String() + "/quota":                                           tenant,
 		"storageBackends/primary/buckets/b/tenants/" + tenant.String() + "/collections/c": tenant,
-		"storageBackends/primary/buckets/b":                                               uuid.Nil,
-		"":                                                                                uuid.Nil,
+		"storageBackends/primary/buckets/b":                                               uuid.Nil(),
+		"":                                                                                uuid.Nil(),
 	}
 	for name, want := range cases {
 		if got := (AuditEntry{ResourceName: name}).ResourceTenant(); got != want {

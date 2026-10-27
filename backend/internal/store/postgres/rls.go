@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -135,7 +135,7 @@ func setActor(ctx context.Context, conn *pgx.Conn) error {
 		subject = p.Subject
 		// The tenant only qualifies a subject; without one there is no
 		// writer to name.
-		if subject != "" && p.TenantID != uuid.Nil {
+		if subject != "" && p.TenantID != uuid.Nil() {
 			tenant = p.TenantID.String()
 		}
 	}

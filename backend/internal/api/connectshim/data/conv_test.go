@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
@@ -167,7 +167,7 @@ func TestAssertJWTTenant(t *testing.T) {
 	// A token with no tenant cannot be scoped, so it must be refused rather
 	// than treated as "matches everything".
 	t.Run("token without a tenant is denied", func(t *testing.T) {
-		err := assertJWTTenant(ctxTenant(uuid.Nil), tenantA.String())
+		err := assertJWTTenant(ctxTenant(uuid.Nil()), tenantA.String())
 		if code(err) != connect.CodePermissionDenied {
 			t.Errorf("code = %v, want PermissionDenied", code(err))
 		}
@@ -579,7 +579,7 @@ func TestNameParsersScopeTheRequestToTheNamedTenant(t *testing.T) {
 			return ctx, err
 		},
 		"versionParent": func(ctx context.Context) (context.Context, error) {
-			ctx, _, err := versionParent(ctx, objName+"/versions/"+uuid.NewString())
+			ctx, _, err := versionParent(ctx, objName+"/versions/"+uuid.New().String())
 			return ctx, err
 		},
 		"sessionRef": func(ctx context.Context) (context.Context, error) {

@@ -24,10 +24,10 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/tests/testimage"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -104,7 +104,7 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 
 	repo := adapters.NewIdempotencyRepo(sqlc.New(pool))
 	const method = "/paladin.admin.v1.CapabilityService/Issue"
-	key := uuid.NewString()
+	key := uuid.New().String()
 	rec := middleware.IdempotencyRecord{
 		Response:    []byte("capability-response-bytes"),
 		RequestHash: []byte("request-fingerprint-32-bytes----"),
@@ -138,7 +138,7 @@ func TestIdempotencyReplayAgainstPartitionedTable(t *testing.T) {
 
 	// A row written before request_hash existed reads back with no
 	// fingerprint, which the interceptor treats as matching any request.
-	legacyKey := uuid.NewString()
+	legacyKey := uuid.New().String()
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO idempotency_keys (tenant_id, method, key, response, response_sha, expires_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,

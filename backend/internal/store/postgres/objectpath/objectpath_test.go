@@ -2,8 +2,7 @@ package objectpath
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func TestLockKey(t *testing.T) {

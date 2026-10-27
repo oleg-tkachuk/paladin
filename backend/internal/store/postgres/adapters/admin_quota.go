@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -52,8 +52,8 @@ func (r *QuotaRepoV2) UpsertTenantTx(ctx context.Context, tx pgx.Tx, q admindoma
 }
 
 func upsertTenantQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quota) error {
-	if q.QuotaID == uuid.Nil {
-		q.QuotaID = uuid.Must(uuid.NewV7())
+	if q.QuotaID == uuid.Nil() {
+		q.QuotaID = uuid.NewV7()
 	}
 	_, err := qq.UpsertTenantQuota(ctx,
 		pgUUID(q.QuotaID),
@@ -77,8 +77,8 @@ func (r *QuotaRepoV2) UpsertBucketTx(ctx context.Context, tx pgx.Tx, q admindoma
 }
 
 func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quota) error {
-	if q.QuotaID == uuid.Nil {
-		q.QuotaID = uuid.Must(uuid.NewV7())
+	if q.QuotaID == uuid.Nil() {
+		q.QuotaID = uuid.NewV7()
 	}
 	_, err := qq.UpsertBucketQuota(ctx,
 		pgUUID(q.QuotaID),

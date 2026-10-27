@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
@@ -116,7 +116,7 @@ func TestRebindRefusedByAPublicRule(t *testing.T) {
 			return publicread.Rulef("a public collection never moves")
 		},
 	}, allowAll())
-	_, err := h.BindCollectionToBucket(authedCtx(uuid.New()), uuid.Nil, "photos", "storageBackends/aws-eu/buckets/other", 0)
+	_, err := h.BindCollectionToBucket(authedCtx(uuid.New()), uuid.Nil(), "photos", "storageBackends/aws-eu/buckets/other", 0)
 	var cerr *connect.Error
 	if !errors.As(err, &cerr) || cerr.Code() != connect.CodeFailedPrecondition || len(cerr.Details()) == 0 {
 		t.Errorf("err = %v, want FailedPrecondition carrying the rule's reason", err)

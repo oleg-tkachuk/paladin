@@ -5,8 +5,7 @@ package components
 import (
 	"slices"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"

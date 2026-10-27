@@ -16,8 +16,8 @@ import (
 	"context"
 	"errors"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"

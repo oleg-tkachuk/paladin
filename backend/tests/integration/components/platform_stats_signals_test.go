@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
@@ -35,7 +35,7 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 	quiet, _ := mkTenant(t, ctx, pool, "shared")
 	owner, _ := mkTenant(t, ctx, pool, "shared")
 	s := signalSeed{busy: f.tenantID, quiet: quiet, owner: owner}
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	backend := backendOf(t, ctx, pool, f)
 
 	bucket := func(name string, owner uuid.UUID) string {
@@ -81,7 +81,7 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 	now := time.Now()
 	capability := func(tenant uuid.UUID, expiresIn time.Duration, revoked bool) {
 		t.Helper()
-		id := seedCapability(t, ctx, pool, tenant, limes.PrincipalTypeService, now.Add(expiresIn), uuid.Nil)
+		id := seedCapability(t, ctx, pool, tenant, limes.PrincipalTypeService, now.Add(expiresIn), uuid.Nil())
 		if revoked {
 			seedRevocation(t, ctx, pool, id)
 		}
@@ -99,7 +99,7 @@ func seedSignals(t *testing.T, ctx context.Context, pool *pgxpool.Pool) signalSe
 			`INSERT INTO api_tokens (id, tenant_id, name, prefix, token_hmac,
 			                         audience, created_by, expires_at)
 			 VALUES ($1, $2, $3, 'pfx', $4, '{admin}', 'fixture-issuer', now() + $5::interval)`,
-			id, tenant, "tok-"+uuid.NewString()[:8], id[:], expiresIn)
+			id, tenant, "tok-"+uuid.New().String()[:8], id[:], expiresIn)
 	}
 	token(s.quiet, "2 days")
 	token(s.quiet, "3 days")

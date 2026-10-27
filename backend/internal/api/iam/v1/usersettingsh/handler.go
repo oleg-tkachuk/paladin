@@ -23,9 +23,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -248,7 +248,7 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 // confirmed dead the fallback can go.
 func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.UUID, error) {
 	if h.users == nil {
-		return uuid.Nil, connect.NewError(connect.CodeInternal,
+		return uuid.Nil(), connect.NewError(connect.CodeInternal,
 			"user repository not wired")
 	}
 	if id, perr := uuid.Parse(p.Subject); perr == nil {
@@ -259,7 +259,7 @@ func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.
 	}
 	u, err := h.users.GetBySubject(ctx, p.TenantID, p.Subject)
 	if err != nil {
-		return uuid.Nil, rpcerr.New(connect.CodeUnauthenticated, fmt.Errorf("resolve user: %w", err))
+		return uuid.Nil(), rpcerr.New(connect.CodeUnauthenticated, fmt.Errorf("resolve user: %w", err))
 	}
 	return u.UserID, nil
 }

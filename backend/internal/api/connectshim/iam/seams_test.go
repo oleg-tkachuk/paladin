@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
@@ -219,7 +218,7 @@ func TestEveryIAMShimPropagatesHandlerErrors(t *testing.T) {
 			return err
 		}},
 		{"User.RevokeOAuthGrant", func() error {
-			_, err := userSrv.RevokeOAuthGrant(ctx, &pb.RevokeOAuthGrantRequest{Name: userName, GrantId: uuid.NewString()})
+			_, err := userSrv.RevokeOAuthGrant(ctx, &pb.RevokeOAuthGrantRequest{Name: userName, GrantId: uuid.New().String()})
 			return err
 		}},
 

@@ -3,8 +3,8 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -55,7 +55,7 @@ func (h *Handler) record(ctx context.Context, e admindomain.AuditEntry, detail a
 	if h.audit == nil {
 		return
 	}
-	e.EntryID = uuid.Must(uuid.NewV7())
+	e.EntryID = uuid.NewV7()
 	e.At = h.now().UTC()
 	e.ActorAudience = auth.AudienceIAM
 	if a, ok := clientip.FromContext(ctx); ok {

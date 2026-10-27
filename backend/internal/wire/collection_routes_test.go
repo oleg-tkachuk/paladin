@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"

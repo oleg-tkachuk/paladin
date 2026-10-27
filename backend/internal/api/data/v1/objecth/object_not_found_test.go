@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 )
 
 // lookupRepo answers every object lookup with err.
@@ -36,7 +36,7 @@ func TestDeleteObjectLookupFailures(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tenantID := uuid.New()
 			h := &Handler{repo: &lookupRepo{err: tc.err}, storage: noopStorage{}, policy: allowAll{}, presign: testPresignConfig()}
-			err := h.DeleteObject(purgeCtx(tenantID), "docs", uuid.NewString(), "1", false, false)
+			err := h.DeleteObject(purgeCtx(tenantID), "docs", uuid.New().String(), "1", false, false)
 			if got := connect.CodeOf(err); got != tc.code {
 				t.Fatalf("code = %v (%v), want %v", got, err, tc.code)
 			}

@@ -3,7 +3,7 @@
   "cases": [
     {"name": "not a Biscuit", "token": "not-issued", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: biscuit encoding: illegal base64 data at input byte 8"},
     {"name": "not a JWT", "token": "a.b.c", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: decode header: illegal base64 data at input byte 0"},
-    {"name": "another algorithm", "token": "eyJhbGciOiJFZERTQSJ9.e30.c2ln", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: unexpected alg \"EdDSA\" (want Ed25519)"},
+    {"name": "an untyped JWT", "token": "eyJhbGciOiJFZDI1NTE5In0.e30.c2ln", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: typ \"\" is not one of [\"limes-cap-v6+jwt\" \"at+jwt\"]"},
     {"name": "another issuer's token", "token": "{foreign_token}", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN"},
     {"name": "another issuer's Biscuit", "token": "{foreign_biscuit}", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN"}
   ]

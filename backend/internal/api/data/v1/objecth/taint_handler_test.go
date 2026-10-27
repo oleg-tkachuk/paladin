@@ -5,9 +5,9 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -42,7 +42,7 @@ func TestSetTaintNormalisesAndAsksItsOwnAction(t *testing.T) {
 	policy := &actionRecorder{}
 	h, repo, tenantID := newTaintHandler(policy)
 
-	obj, err := h.SetTaint(lockCtx(tenantID), "docs", uuid.NewString(), []string{TaintSecrets, TaintPII, TaintSecrets})
+	obj, err := h.SetTaint(lockCtx(tenantID), "docs", uuid.New().String(), []string{TaintSecrets, TaintPII, TaintSecrets})
 	if err != nil {
 		t.Fatalf("SetTaint: %v", err)
 	}
@@ -54,19 +54,19 @@ func TestSetTaintNormalisesAndAsksItsOwnAction(t *testing.T) {
 	}
 
 	// Clearing is an empty list, and goes through the same gate.
-	if _, err := h.SetTaint(lockCtx(tenantID), "docs", uuid.NewString(), nil); err != nil || len(repo.stored) != 0 {
+	if _, err := h.SetTaint(lockCtx(tenantID), "docs", uuid.New().String(), nil); err != nil || len(repo.stored) != 0 {
 		t.Fatalf("clear: stored %v, err %v", repo.stored, err)
 	}
 }
 
 func TestSetTaintRefusals(t *testing.T) {
 	h, repo, tenantID := newTaintHandler(&actionRecorder{})
-	if _, err := h.SetTaint(lockCtx(tenantID), "docs", uuid.NewString(), []string{"TAINT_SIGNAL_UNSPECIFIED"}); connect.CodeOf(err) != connect.CodeInvalidArgument || !errors.Is(err, ErrUnknownTaintSignal) {
+	if _, err := h.SetTaint(lockCtx(tenantID), "docs", uuid.New().String(), []string{"TAINT_SIGNAL_UNSPECIFIED"}); connect.CodeOf(err) != connect.CodeInvalidArgument || !errors.Is(err, ErrUnknownTaintSignal) {
 		t.Errorf("unknown signal: err = %v, want InvalidArgument / ErrUnknownTaintSignal", err)
 	}
 
 	denied, _, tenantID2 := newTaintHandler(denyAll{})
-	if _, err := denied.SetTaint(lockCtx(tenantID2), "docs", uuid.NewString(), []string{TaintPII}); connect.CodeOf(err) != connect.CodePermissionDenied {
+	if _, err := denied.SetTaint(lockCtx(tenantID2), "docs", uuid.New().String(), []string{TaintPII}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("Cedar deny: err = %v, want PermissionDenied", err)
 	}
 
@@ -75,7 +75,7 @@ func TestSetTaintRefusals(t *testing.T) {
 		Subject: limes.Principal{TenantID: tenantID},
 		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}},
 	})
-	if _, err := h.SetTaint(auth.WithCapability(lockCtx(tenantID), reader), "docs", uuid.NewString(), nil); !errors.Is(err, limes.ErrOpNotAllowed) {
+	if _, err := h.SetTaint(auth.WithCapability(lockCtx(tenantID), reader), "docs", uuid.New().String(), nil); !errors.Is(err, limes.ErrOpNotAllowed) {
 		t.Errorf("capability without OpManage: err = %v, want ErrOpNotAllowed", err)
 	}
 	if repo.setCalls != 0 {

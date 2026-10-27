@@ -6,8 +6,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -30,7 +29,7 @@ import (
 
 func auditFixture(tenantID uuid.UUID) admindomain.AuditEntry {
 	return admindomain.AuditEntry{
-		EntryID:       uuid.Must(uuid.NewV7()),
+		EntryID:       uuid.NewV7(),
 		At:            time.Now().UTC().Truncate(time.Microsecond),
 		ActorSubject:  "actor-subject",
 		ActorTenantID: tenantID,
@@ -43,7 +42,7 @@ func auditFixture(tenantID uuid.UUID) admindomain.AuditEntry {
 		RequestJSON:   []byte(`{"name":"tenants/t"}`),
 		StateBefore:   []byte(`{"display_name":"before"}`),
 		StateAfter:    []byte(`{"display_name":"after"}`),
-		CapabilityID:  uuid.Must(uuid.NewV7()),
+		CapabilityID:  uuid.NewV7(),
 		RelayedBy:     "relayed-by",
 		UserAgent:     "paladin-sdk-go/0.97.0 gateway/1.4",
 	}
@@ -144,7 +143,7 @@ func TestAuditInsertDefaults(t *testing.T) {
 	t.Run("unset values are filled", func(t *testing.T) {
 		before := time.Now().UTC().Add(-time.Minute)
 		entry := auditFixture(tenantID)
-		entry.EntryID = uuid.Nil
+		entry.EntryID = uuid.Nil()
 		entry.At = time.Time{}
 		entry.RequestID = "unset-defaults-probe"
 
@@ -165,7 +164,7 @@ func TestAuditInsertDefaults(t *testing.T) {
 		if found == nil {
 			t.Fatal("the entry inserted without an id is not in the listing")
 		}
-		if found.EntryID == uuid.Nil {
+		if found.EntryID == uuid.Nil() {
 			t.Error("EntryID = Nil, want a generated id")
 		}
 		if found.At.Before(before) {

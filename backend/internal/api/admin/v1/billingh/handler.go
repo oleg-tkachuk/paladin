@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"

@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	jwt "github.com/nats-io/jwt/v2"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	natstest "github.com/nats-io/nats-server/v2/test"
@@ -31,7 +31,7 @@ type fakeStore struct {
 
 func (f *fakeStore) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
 	f.lastListArgs = args
-	if args.TenantID == uuid.Nil {
+	if args.TenantID == uuid.Nil() {
 		return f.subs, "", nil
 	}
 	var out []admindomain.EventSubscription
@@ -78,8 +78,8 @@ func (f *fakeOutbox) snapshot() []OutboxRow {
 // synchronously" test. The producer no longer touches the network —
 // it writes one row per matching sub to the outbox and returns.
 func TestDispatchWritesOutbox(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
-	subID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
+	subID := uuid.NewV7()
 	cfg, _ := json.Marshal(map[string]any{
 		"url":                "http://nowhere.invalid",
 		"signing_secret_ref": "test-secret",
@@ -128,19 +128,19 @@ func TestDispatchWritesOutbox(t *testing.T) {
 // filtering in-process — at scale the unscoped form both leaks work
 // across tenants and silently truncates past the page cap.
 func TestDispatchScopesListToTenant(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
-	otherTenant := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
+	otherTenant := uuid.NewV7()
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
 	store := &fakeStore{
 		subs: []admindomain.EventSubscription{
 			{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
+				SubscriptionID: uuid.NewV7(),
 				TenantID:       tenantID,
 				SinkKind:       "http",
 				SinkConfig:     cfg,
 			},
 			{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
+				SubscriptionID: uuid.NewV7(),
 				TenantID:       otherTenant,
 				SinkKind:       "http",
 				SinkConfig:     cfg,
@@ -272,7 +272,7 @@ func (s *pagingStore) List(_ context.Context, args admindomain.ListEventSubscrip
 		if sub.TenantID != args.TenantID {
 			continue
 		}
-		if args.AfterID != uuid.Nil && sub.SubscriptionID.String() <= args.AfterID.String() {
+		if args.AfterID != uuid.Nil() && sub.SubscriptionID.String() <= args.AfterID.String() {
 			continue // keyset cursor (v7 ids sort lexicographically by creation time)
 		}
 		eligible = append(eligible, sub)
@@ -302,13 +302,13 @@ func (s *pagingStore) Get(_ context.Context, id uuid.UUID) (admindomain.EventSub
 // subscription across pages — the old single-page cap silently dropped subs
 // beyond the page size.
 func TestDispatch_PagesAllSubscriptions(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
 	const n = 5
 	subs := make([]admindomain.EventSubscription, n)
 	for i := range subs {
 		subs[i] = admindomain.EventSubscription{
-			SubscriptionID: uuid.Must(uuid.NewV7()),
+			SubscriptionID: uuid.NewV7(),
 			TenantID:       tenantID,
 			SinkKind:       "http",
 			SinkConfig:     cfg, // empty filter → matches every event
@@ -344,13 +344,13 @@ func TestDispatchRejectsInvalidTenantID(t *testing.T) {
 }
 
 func TestDispatchSkipsDisabled(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
 	out := &fakeOutbox{}
 	d := &Dispatcher{
 		Store: &fakeStore{
 			subs: []admindomain.EventSubscription{{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
+				SubscriptionID: uuid.NewV7(),
 				TenantID:       tenantID,
 				SinkKind:       "http",
 				SinkConfig:     cfg,
@@ -376,7 +376,7 @@ func TestDispatchSkipsDisabled(t *testing.T) {
 // ones drop, richer predicates over envelope fields work, and an
 // uncompilable filter fails closed rather than fanning out.
 func TestDispatchFilterMatch(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
 
 	newDispatcher := func(filter string) (*Dispatcher, *fakeOutbox) {
@@ -384,7 +384,7 @@ func TestDispatchFilterMatch(t *testing.T) {
 		return &Dispatcher{
 			Store: &fakeStore{
 				subs: []admindomain.EventSubscription{{
-					SubscriptionID: uuid.Must(uuid.NewV7()),
+					SubscriptionID: uuid.NewV7(),
 					TenantID:       tenantID,
 					SinkKind:       "http",
 					SinkConfig:     cfg,
@@ -487,7 +487,7 @@ func TestDispatchFilterMatch(t *testing.T) {
 // honest — operators clicked Test, they want a HTTP round-trip and
 // a result, no outbox row written.
 func TestDeliverOneSucceeds(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	var (
 		mu     sync.Mutex
 		bodies [][]byte
@@ -509,7 +509,7 @@ func TestDeliverOneSucceeds(t *testing.T) {
 		MaxAttempts: 1,
 	}
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
 		TenantID:       tenantID,
 		SinkKind:       "http",
 		SinkConfig:     cfg,
@@ -561,8 +561,8 @@ func TestDispatcher_NATSDelivery(t *testing.T) {
 		t.Fatalf("flush sub: %v", err)
 	}
 
-	tenantID := uuid.Must(uuid.NewV7())
-	subID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
+	subID := uuid.NewV7()
 	subject := "paladin.events." + tenantID.String() + ".object.uploaded"
 	cfg, _ := json.Marshal(map[string]any{
 		"url":     url,
@@ -636,19 +636,19 @@ func TestDispatcher_NATSEventID(t *testing.T) {
 		t.Fatalf("flush: %v", err)
 	}
 
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	cfg, _ := json.Marshal(map[string]any{"url": url, "subject": "paladin.events.x"})
 	pool := NewNatsConnPool(nil)
 	defer pool.Close()
 	d := &Dispatcher{NATS: pool}
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
 		TenantID:       tenantID,
 		SinkKind:       "nats",
 		SinkConfig:     cfg,
 	}
 
-	id1, id2 := uuid.NewString(), uuid.NewString()
+	id1, id2 := uuid.New().String(), uuid.New().String()
 	for _, id := range []string{id1, id2} {
 		if _, err := d.deliverNATS(context.Background(), sub, Event{
 			Type:         "paladin.object.uploaded",
@@ -701,8 +701,8 @@ func TestDispatcher_NATSMissingConfig(t *testing.T) {
 	d := &Dispatcher{NATS: pool}
 	cfg, _ := json.Marshal(map[string]any{"subject": "paladin.events.x"}) // url missing
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
-		TenantID:       uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
+		TenantID:       uuid.NewV7(),
 		SinkKind:       "nats",
 		SinkConfig:     cfg,
 	}
@@ -794,14 +794,14 @@ func natsAuthRoundTrip(t *testing.T, url, credsRef string) {
 		t.Fatalf("flush sub: %v", err)
 	}
 
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	subject := "paladin.events." + tenantID.String() + ".object.uploaded"
 	cfg, _ := json.Marshal(map[string]any{"url": url, "subject": subject, "credentials_ref": credsRef})
 	pool := NewNatsConnPool(nil)
 	defer pool.Close()
 	d := &Dispatcher{NATS: pool, MaxAttempts: 1}
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
 		TenantID:       tenantID,
 		SinkKind:       "nats",
 		SinkConfig:     cfg,

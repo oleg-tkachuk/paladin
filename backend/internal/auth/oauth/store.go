@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -124,7 +124,7 @@ var (
 
 // PgxStore implements Store over a DB. uuid columns are passed as
 // strings with ::uuid casts and scanned back as strings — pgx v5's default
-// type map doesn't register google/uuid, and this keeps the store free of
+// type map doesn't register a UUID type, and this keeps the store free of
 // pgtype plumbing.
 type PgxStore struct {
 	pool DB

@@ -40,8 +40,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -96,7 +96,7 @@ func New(pool *pgxpool.Pool, cfg Config) (*Lease, error) {
 	if cfg.Name == "" {
 		return nil, errors.New("lease: Name required")
 	}
-	if cfg.HolderID == uuid.Nil {
+	if cfg.HolderID == uuid.Nil() {
 		return nil, errors.New("lease: HolderID required")
 	}
 	if cfg.Logger == nil {

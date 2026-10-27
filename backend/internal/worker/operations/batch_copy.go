@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -125,7 +125,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
-	if args.TenantID == uuid.Nil ||
+	if args.TenantID == uuid.Nil() ||
 		args.SrcCollection == "" ||
 		args.DstCollection == "" ||
 		len(args.ObjectIDs) == 0 {
@@ -329,7 +329,7 @@ func (e *BatchCopyExecutor) occupiedDestination(ctx context.Context, job copyJob
 func (e *BatchCopyExecutor) adoptPending(ctx context.Context, job copyJob, dst objecth.Object) error {
 	inProgress := fmt.Errorf("destination key %q has a write in progress; retry once it settles", job.dstKey)
 	creator := dst.CreatedByOperation
-	if creator == uuid.Nil || creator == job.op.OperationID {
+	if creator == uuid.Nil() || creator == job.op.OperationID {
 		// Not a batch copy's row — an upload — or this very operation's.
 		return inProgress
 	}

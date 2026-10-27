@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	natsserver "github.com/nats-io/nats-server/v2/server"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -25,7 +25,7 @@ func kafkaBatchItems(t *testing.T, n int, cfg kafkaSinkConfig) []kafkaBatchItem 
 		items[i] = kafkaBatchItem{
 			RowID: uuid.New(),
 			Sub:   kafkaTestSub(t, cfg),
-			Evt:   Event{Type: "paladin.object.uploaded", TenantID: uuid.NewString()},
+			Evt:   Event{Type: "paladin.object.uploaded", TenantID: uuid.New().String()},
 		}
 	}
 	return items

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/limes"
@@ -56,8 +56,8 @@ var issuanceCases = []struct {
 	code   connect.Code
 	reason commonv1.ErrorReason
 }{
-	{"an unknown tenant", fmt.Errorf("%w: %s", limes.ErrUnknownTenant, uuid.NewString()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
-	{"a deleted tenant", fmt.Errorf("%w: %s", limes.ErrTenantDeleted, uuid.NewString()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
+	{"an unknown tenant", fmt.Errorf("%w: %s", limes.ErrUnknownTenant, uuid.New().String()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
+	{"a deleted tenant", fmt.Errorf("%w: %s", limes.ErrTenantDeleted, uuid.New().String()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
 	{"a store failure", errDriver, connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 }
 
@@ -162,8 +162,8 @@ func TestDelegateAnswersALineageRefusal(t *testing.T) {
 		err  error
 		code connect.Code
 	}{
-		{"a chain too deep", fmt.Errorf("%w: %s", limes.ErrDelegationTooDeep, uuid.NewString()), connect.CodeFailedPrecondition},
-		{"a child in another tenant", fmt.Errorf("%w: tenant %s", limes.ErrDelegationTooWide, uuid.NewString()), connect.CodePermissionDenied},
+		{"a chain too deep", fmt.Errorf("%w: %s", limes.ErrDelegationTooDeep, uuid.New().String()), connect.CodeFailedPrecondition},
+		{"a child in another tenant", fmt.Errorf("%w: tenant %s", limes.ErrDelegationTooWide, uuid.New().String()), connect.CodePermissionDenied},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &failingInsertStore{}

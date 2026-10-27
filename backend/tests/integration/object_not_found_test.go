@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -26,7 +25,7 @@ func TestObjectFindByNameNotFound(t *testing.T) {
 	present := mustInsertAvailableObject(t, h.PoolMigrate, tenant, "docs", "here.txt")
 
 	for name, id := range map[string]string{
-		"no such object":           uuid.NewString(),
+		"no such object":           uuid.New().String(),
 		"an id that is not a UUID": "not-a-uuid",
 	} {
 		if _, err := repo.FindByName(context.Background(), tenant, "docs", id); !errors.Is(err, objecth.ErrObjectNotFound) {

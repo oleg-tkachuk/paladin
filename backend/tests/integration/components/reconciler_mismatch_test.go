@@ -7,8 +7,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -51,7 +50,7 @@ func TestReconcilerDiscardsBytesThatBreakTheRegistration(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, checksum, presign_expires_at)
@@ -85,7 +84,7 @@ func TestReconcilerDiscardsAChecksumMismatch(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, checksum, presign_expires_at)
@@ -110,7 +109,7 @@ func TestReconcilerKeepsAMismatchPendingWhileItsBytesRemain(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, presign_expires_at)
@@ -134,7 +133,7 @@ func TestReconcilerPromotesBytesThatMatchTheRegistration(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	id := uuid.Must(uuid.NewV7())
+	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, checksum, presign_expires_at)

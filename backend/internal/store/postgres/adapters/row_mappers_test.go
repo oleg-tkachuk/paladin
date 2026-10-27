@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -113,7 +113,7 @@ func TestBucketQuotaFromSQLC(t *testing.T) {
 		want  any
 	}{
 		{"QuotaID", got.QuotaID, id},
-		{"TenantID", got.TenantID, uuid.Nil},
+		{"TenantID", got.TenantID, uuid.Nil()},
 		{"OwnerTenantID", got.OwnerTenantID, owner},
 		{"BackendID", got.BackendID, "backend-name"},
 		{"BucketName", got.BucketName, "bucket-name"},
@@ -424,7 +424,7 @@ func TestAuditEntryFromModel(t *testing.T) {
 	if bare.SourceIP != "" || bare.ErrorMessage != "" {
 		t.Errorf("NULL columns = (%q, %q), want empty", bare.SourceIP, bare.ErrorMessage)
 	}
-	if bare.CapabilityID != uuid.Nil {
+	if bare.CapabilityID != uuid.Nil() {
 		t.Errorf("CapabilityID with no capability = %v, want Nil", bare.CapabilityID)
 	}
 }

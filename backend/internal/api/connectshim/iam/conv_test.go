@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -180,7 +180,7 @@ func TestTenantParent(t *testing.T) {
 	srv := &UserServer{}
 	t.Run("empty means unfiltered", func(t *testing.T) {
 		got, err := srv.tenantParent(context.Background(), "")
-		if err != nil || got != uuid.Nil {
+		if err != nil || got != uuid.Nil() {
 			t.Errorf("got %v, %v", got, err)
 		}
 	})

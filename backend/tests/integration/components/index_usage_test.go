@@ -6,8 +6,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -79,7 +79,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 		SELECT id FROM objects
 		 WHERE tenant_id = $1 AND collection_id = $2 AND id > $3
 		 ORDER BY id
-		 LIMIT 50`, f.tenantID, probeCollectionID, uuid.Nil)
+		 LIMIT 50`, f.tenantID, probeCollectionID, uuid.Nil())
 
 	assertPlanUses(t, plan, "idx_objects_keyset_state", "ListObjects keyset page")
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects keyset page")
@@ -100,7 +100,7 @@ func TestIndexUsage_ObjectsKeysetPagination(t *testing.T) {
 		SELECT id FROM objects
 		 WHERE tenant_id = $1 AND collection_id = $2 AND id > $3
 		 ORDER BY id
-		 LIMIT 50`, f.tenantID, empty, uuid.Nil)
+		 LIMIT 50`, f.tenantID, empty, uuid.Nil())
 
 	assertPlanUses(t, plan, "idx_objects_keyset_state", "ListObjects on an empty Collection")
 	assertPlanAvoidsSeqScan(t, plan, "objects", "ListObjects on an empty Collection")
@@ -149,8 +149,7 @@ func TestIndexUsage_MultipartReaper(t *testing.T) {
 			 SELECT $1, o.tenant_id, $2, 's3-upload', 5242880, 4, c.bucket_id,
 			        'test', 'user', now() - make_interval(hours => $3)
 			   FROM objects o JOIN collections c ON c.id = o.collection_id
-			  WHERE o.id = $2`,
-			uuid.Must(uuid.NewV7()), oid, i%200)
+			  WHERE o.id = $2`, uuid.NewV7(), oid, i%200)
 	}
 	analyze(t, ctx, pool, "multipart_uploads")
 
@@ -201,7 +200,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 		SELECT id FROM operations
 		 WHERE tenant_id = $1 AND id > $2
 		 ORDER BY id
-		 LIMIT 50`, f.tenantID, uuid.Nil)
+		 LIMIT 50`, f.tenantID, uuid.Nil())
 
 	assertPlanUses(t, plan, "idx_operations_tenant_keyset", "ListOperations keyset page")
 	assertPlanAvoidsSeqScan(t, plan, "operations", "ListOperations keyset page")
@@ -214,7 +213,7 @@ func TestIndexUsage_OperationsKeysetPagination(t *testing.T) {
 		SELECT id FROM operations
 		 WHERE tenant_id = $1 AND id > $2
 		 ORDER BY id
-		 LIMIT 50`, quiet, uuid.Nil)
+		 LIMIT 50`, quiet, uuid.Nil())
 
 	assertPlanUses(t, plan, "idx_operations_tenant_keyset", "ListOperations for a quiet tenant")
 	assertPlanAvoidsSeqScan(t, plan, "operations", "ListOperations for a quiet tenant")
@@ -262,7 +261,7 @@ func seedTenants(t *testing.T, ctx context.Context, pool *pgxpool.Pool, n int) u
 	var picked uuid.UUID
 	for i := 0; i < n; i++ {
 		id := uuid.New()
-		hex := uuid.NewString()[:8]
+		hex := uuid.New().String()[:8]
 		mustExec(t, ctx, pool,
 			`INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 			id, "t-"+hex, "tn-"+hex)
@@ -331,7 +330,7 @@ func seedCollections(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fi
 	}
 	out := make([]string, 0, n)
 	for i := 0; i < n; i++ {
-		name := "ok-" + uuid.NewString()[:8]
+		name := "ok-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool,
 			`INSERT INTO collections (tenant_id, name, bucket_id) VALUES ($1, $2, $3)`,
 			f.tenantID, name, bucketID)

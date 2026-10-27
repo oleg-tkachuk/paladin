@@ -29,12 +29,12 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -181,7 +181,7 @@ func TestAdminMux_DisabledSubsystemAnswersThroughTheMux(t *testing.T) {
 	// to be well-formed or the answer is InvalidArgument and says nothing
 	// about which handler is mounted.
 	req := &adminv1.CapabilityServiceListRequest{
-		TenantId:      uuid.NewString(),
+		TenantId:      uuid.New().String(),
 		PrincipalKind: adminv1.PrincipalKind_PRINCIPAL_KIND_USER,
 		Subject:       "agent-1",
 	}

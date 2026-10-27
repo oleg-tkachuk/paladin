@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Resource-name segments, as the server spells them.

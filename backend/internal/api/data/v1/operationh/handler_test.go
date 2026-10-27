@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -286,7 +286,7 @@ func TestListOperations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if fr.lastList.afterID != uuid.Nil {
+		if fr.lastList.afterID != uuid.Nil() {
 			t.Fatalf("afterID: got %v want nil for empty token", fr.lastList.afterID)
 		}
 		if fr.lastList.state == nil || *fr.lastList.state != StateRunning {
@@ -341,7 +341,7 @@ func TestSubmit(t *testing.T) {
 		}}, allowAuthorizer())
 		id, err := h.Submit(authedCtx(tid), "BatchDelete", nil)
 		wantCode(t, err, connect.CodeInternal)
-		if id != uuid.Nil {
+		if id != uuid.Nil() {
 			t.Fatalf("expected Nil id on error, got %v", id)
 		}
 	})
@@ -353,7 +353,7 @@ func TestSubmit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
-		if id == uuid.Nil {
+		if id == uuid.Nil() {
 			t.Fatalf("expected generated operation id, got Nil")
 		}
 		if fr.lastCreate.OperationID != id {

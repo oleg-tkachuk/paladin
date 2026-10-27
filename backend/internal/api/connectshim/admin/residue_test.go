@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -167,7 +167,7 @@ func TestResetUsageRoutesByScopeAndReportsTheReset(t *testing.T) {
 	h = &recordingQuota{}
 	_, _ = (&QuotaServer{H: h}).ResetUsage(context.Background(),
 		&pb.ResetUsageRequest{Name: "storageBackends/b1/buckets/n1/quota"})
-	if h.bucketScope != [2]string{"b1", "n1"} || h.tenantScope != uuid.Nil {
+	if h.bucketScope != [2]string{"b1", "n1"} || h.tenantScope != uuid.Nil() {
 		t.Errorf("bucket scope = %v, tenant = %v", h.bucketScope, h.tenantScope)
 	}
 }
@@ -196,7 +196,7 @@ func TestResetUsageAnswersWithTheClearedCounters(t *testing.T) {
 		QuotaID: uuid.New(), UsageBytesToday: bytesToday, UsageObjectsToday: objectsToday,
 	}}
 	resp, err := (&QuotaServer{H: h}).ResetUsage(context.Background(),
-		&pb.ResetUsageRequest{Name: "tenants/" + uuid.NewString() + "/quota"})
+		&pb.ResetUsageRequest{Name: "tenants/" + uuid.New().String() + "/quota"})
 	if err != nil {
 		t.Fatalf("ResetUsage: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestResetUsageAnswersWithTheClearedCounters(t *testing.T) {
 }
 
 func TestParseQuotaNameNeedsTheTenantsPrefix(t *testing.T) {
-	if _, err := parseQuotaName("collections/" + uuid.NewString() + "/quota"); err == nil {
+	if _, err := parseQuotaName("collections/" + uuid.New().String() + "/quota"); err == nil {
 		t.Error("a three-segment name that is not a tenant's was read as one")
 	}
 }
@@ -217,7 +217,7 @@ func TestParseQuotaNameNeedsTheTenantsPrefix(t *testing.T) {
 type slugTenants struct{ id uuid.UUID }
 
 func (s slugTenants) GetTenantBySlug(context.Context, string) (*tenanth.Tenant, error) {
-	if s.id == uuid.Nil {
+	if s.id == uuid.Nil() {
 		return nil, errBoom
 	}
 	return &tenanth.Tenant{TenantID: s.id}, nil
@@ -238,7 +238,7 @@ func TestSubscriptionNameBySlug(t *testing.T) {
 
 func TestListSubscriptionsCursor(t *testing.T) {
 	after := uuid.New()
-	for tok, want := range map[string]uuid.UUID{after.String(): after, "not-a-uuid": uuid.Nil, "": uuid.Nil} {
+	for tok, want := range map[string]uuid.UUID{after.String(): after, "not-a-uuid": uuid.Nil(), "": uuid.Nil()} {
 		h := &recordingSubs{}
 		if _, err := (&EventSubscriptionServer{H: h}).ListSubscriptions(context.Background(),
 			&pb.ListSubscriptionsRequest{Page: &commonv1.PageRequest{PageToken: tok}}); err != nil {
@@ -256,7 +256,7 @@ func (deliveringSubs) TestSubscription(context.Context, uuid.UUID, uuid.UUID) er
 
 func TestTestSubscriptionReportsDelivery(t *testing.T) {
 	resp, err := (&EventSubscriptionServer{H: deliveringSubs{}}).TestSubscription(context.Background(),
-		&pb.TestSubscriptionRequest{Name: "tenants/" + uuid.NewString() + "/eventSubscriptions/" + uuid.NewString()})
+		&pb.TestSubscriptionRequest{Name: "tenants/" + uuid.New().String() + "/eventSubscriptions/" + uuid.New().String()})
 	if err != nil || !resp.GetDelivered() {
 		t.Fatalf("delivered = %v, %v", resp, err)
 	}
@@ -398,7 +398,7 @@ func TestTenantBudgetSetForwardsThePeriodEnd(t *testing.T) {
 	store := &fakeUsageStore{}
 	end := time.Unix(1_767_225_600, 0).UTC()
 	if _, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
-		TenantId: uuid.NewString(), PeriodEnd: timestamppb.New(end), BudgetCeiling: unlimitedIn(""),
+		TenantId: uuid.New().String(), PeriodEnd: timestamppb.New(end), BudgetCeiling: unlimitedIn(""),
 	}); err != nil {
 		t.Fatal(err)
 	}

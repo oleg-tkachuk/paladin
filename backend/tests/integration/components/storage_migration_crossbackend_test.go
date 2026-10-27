@@ -9,8 +9,7 @@ import (
 	"crypto/sha256"
 	"io"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	objpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -431,7 +431,7 @@ func TestSwitchTenant_DisabledInTarget(t *testing.T) {
 func TestSwitchTenant_TargetRequired(t *testing.T) {
 	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice"}
 	h := newHandler(&fakeUsers{user: caller}, &fakeRefresh{}, &stubMinter{})
-	if _, err := h.SwitchTenant(ctxAsUser(caller.UserID), uuid.Nil, ""); code(err) != connect.CodeInvalidArgument {
+	if _, err := h.SwitchTenant(ctxAsUser(caller.UserID), uuid.Nil(), ""); code(err) != connect.CodeInvalidArgument {
 		t.Errorf("code = %v, want InvalidArgument", code(err))
 	}
 }

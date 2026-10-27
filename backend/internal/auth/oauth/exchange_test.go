@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -233,7 +232,7 @@ func TestTokenExchange_Refusals(t *testing.T) {
 	}
 	planeToken := mint(issuer.AccessClaims{Subject: u.UserID.String(), TenantID: u.TenantID, Audience: auth.AudienceData, OAuthClientID: agentWithMCPID})
 	noGrant := mint(issuer.AccessClaims{Subject: u.UserID.String(), TenantID: u.TenantID, Audience: auth.AudienceMCP})
-	stranger := mint(issuer.AccessClaims{Subject: uuid.NewString(), TenantID: u.TenantID, Audience: auth.AudienceMCP, OAuthClientID: agentWithMCPID})
+	stranger := mint(issuer.AccessClaims{Subject: uuid.New().String(), TenantID: u.TenantID, Audience: auth.AudienceMCP, OAuthClientID: agentWithMCPID})
 	otherTenant := mint(issuer.AccessClaims{Subject: u.UserID.String(), TenantID: uuid.New(), Audience: auth.AudienceMCP, OAuthClientID: agentWithMCPID})
 
 	public := agentWithMCP()

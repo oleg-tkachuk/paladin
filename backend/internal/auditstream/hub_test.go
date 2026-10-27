@@ -10,15 +10,14 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 func payload(tenantID, action string) string {
 	b, _ := json.Marshal(Entry{
-		EntryID:       uuid.NewString(),
+		EntryID:       uuid.New().String(),
 		At:            "2026-07-01T00:00:00.000000Z",
 		ActorSubject:  "op-1",
 		ActorTenantID: tenantID,
@@ -31,7 +30,7 @@ func payload(tenantID, action string) string {
 
 func TestHub_DispatchRoutesPerTenant(t *testing.T) {
 	h := NewHub(nil)
-	tA, tB := uuid.NewString(), uuid.NewString()
+	tA, tB := uuid.New().String(), uuid.New().String()
 	chA, cancelA := h.Subscribe(tA)
 	defer cancelA()
 	chB, cancelB := h.Subscribe(tB)
@@ -56,7 +55,7 @@ func TestHub_DispatchRoutesPerTenant(t *testing.T) {
 
 func TestHub_DispatchDropsUndecodableAndTenantless(t *testing.T) {
 	h := NewHub(nil)
-	ch, cancel := h.Subscribe(uuid.NewString())
+	ch, cancel := h.Subscribe(uuid.New().String())
 	defer cancel()
 	h.Dispatch("{not json")
 	h.Dispatch(payload("", "iam.Login")) // NULL actor_tenant_id → routed nowhere
@@ -69,7 +68,7 @@ func TestHub_DispatchDropsUndecodableAndTenantless(t *testing.T) {
 
 func TestHub_SlowConsumerDropsInsteadOfBlocking(t *testing.T) {
 	h := NewHub(nil)
-	tid := uuid.NewString()
+	tid := uuid.New().String()
 	_, cancel := h.Subscribe(tid) // never drained — fills the 64-slot buffer
 	defer cancel()
 	done := make(chan struct{})
@@ -88,7 +87,7 @@ func TestHub_SlowConsumerDropsInsteadOfBlocking(t *testing.T) {
 
 func TestHub_CancelUnsubscribesAndCloses(t *testing.T) {
 	h := NewHub(nil)
-	tid := uuid.NewString()
+	tid := uuid.New().String()
 	ch, cancel := h.Subscribe(tid)
 	cancel()
 	cancel() // idempotent
@@ -192,7 +191,7 @@ func TestSSEHandler_StreamsTenantEvents(t *testing.T) {
 	// The subscription is registered before the connected comment is written,
 	// so dispatching now is race-free.
 	h.Dispatch(payload(tid.String(), "admin.UpdateTenant"))
-	h.Dispatch(payload(uuid.NewString(), "other.Tenant")) // must NOT arrive
+	h.Dispatch(payload(uuid.New().String(), "other.Tenant")) // must NOT arrive
 
 	var dataLine string
 	deadline := time.After(3 * time.Second)

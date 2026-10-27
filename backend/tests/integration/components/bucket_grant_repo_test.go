@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
@@ -35,7 +34,7 @@ func TestBucketGrantRepository(t *testing.T) {
 
 	owner, _ := mkTenant(t, ctx, pool, "shared")
 	other, _ := mkTenant(t, ctx, pool, "shared")
-	backend := "be-" + uuid.NewString()[:8]
+	backend := "be-" + uuid.New().String()[:8]
 	const bucket = "granted-bucket"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
 	var bucketID uuid.UUID
@@ -112,7 +111,7 @@ func TestCollectionCreateRefusedWithoutAGrant(t *testing.T) {
 	pool := startPostgres(t)
 	owner, _ := mkTenant(t, ctx, pool, "shared")
 	other, _ := mkTenant(t, ctx, pool, "shared")
-	backend := "be-" + uuid.NewString()[:8]
+	backend := "be-" + uuid.New().String()[:8]
 	const bucket = "owned-bucket"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
 	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
@@ -139,7 +138,7 @@ func TestDefaultBindingNeedsAGrant(t *testing.T) {
 
 	operator, _ := mkTenant(t, ctx, pool, "shared")
 	stranger, _ := mkTenant(t, ctx, pool, "shared")
-	backend := "be-" + uuid.NewString()[:8]
+	backend := "be-" + uuid.New().String()[:8]
 	const pooled = "operator-pool"
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
 	mustExec(t, ctx, pool, `INSERT INTO buckets (backend_id, name, owner_tenant_id)
@@ -156,7 +155,7 @@ func TestDefaultBindingNeedsAGrant(t *testing.T) {
 		t.Fatalf("binding by default once granted: %v", err)
 	}
 
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	created, err := tenants.Create(ctx, tenanth.CreateTenantArgs{
 		TenantID: uuid.New(), Slug: "t-" + hex, DisplayName: "tn-" + hex, StorageLayout: "shared",
 		DefaultBackendID: backend, DefaultBucketName: pooled,

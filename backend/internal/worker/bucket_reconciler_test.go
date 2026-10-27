@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -199,7 +199,7 @@ func TestBucketReconciler_SharedBucketIsNotTagged(t *testing.T) {
 	prov := &fakeProvisioner{}
 	r := newReconciler(repo, prov)
 
-	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); err != nil {
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil())); err != nil {
 		t.Errorf("reconcile = %v, want nil", err)
 	}
 
@@ -218,7 +218,7 @@ func TestBucketReconciler_MarkReadyFailureRecordsNoFailure(t *testing.T) {
 	repo := &fakeBucketRepo{readyErr: errBackend}
 	r := newReconciler(repo, &fakeProvisioner{})
 
-	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, errBackend) {
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil())); !errors.Is(err, errBackend) {
 		t.Errorf("reconcile = %v, want %v", err, errBackend)
 	}
 
@@ -249,7 +249,7 @@ func TestBucketReconciler_ClassifiesProvisionErrors(t *testing.T) {
 			repo := &fakeBucketRepo{}
 			r := newReconciler(repo, &fakeProvisioner{createErr: tc.err})
 
-			if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, tc.err) {
+			if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil())); !errors.Is(err, tc.err) {
 				t.Errorf("reconcile = %v, want %v", err, tc.err)
 			}
 
@@ -270,7 +270,7 @@ func TestBucketReconciler_NoProvisionerKeepsTheRowRetryable(t *testing.T) {
 	repo := &fakeBucketRepo{}
 	r := NewBucketReconciler(repo, nil, BucketReconcilerConfig{}, nil)
 
-	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); err != nil {
+	if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil())); err != nil {
 		t.Errorf("reconcile = %v, want nil", err)
 	}
 
@@ -437,11 +437,11 @@ func TestBucketReconciler_LogsTerminalAndTransientDifferently(t *testing.T) {
 			r := NewBucketReconciler(repo, prov, BucketReconcilerConfig{}, zap.New(core))
 
 			if tc.del {
-				if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, tc.err) {
+				if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil())); !errors.Is(err, tc.err) {
 					t.Errorf("reconcile = %v, want %v", err, tc.err)
 				}
 			} else {
-				if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); !errors.Is(err, tc.err) {
+				if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil())); !errors.Is(err, tc.err) {
 					t.Errorf("reconcile = %v, want %v", err, tc.err)
 				}
 			}
@@ -489,11 +489,11 @@ func TestBucketReconciler_DiscardFailedWriteFailureStopsThere(t *testing.T) {
 			r := NewBucketReconciler(repo, prov, BucketReconcilerConfig{}, zap.New(core))
 
 			if tc.del {
-				if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil)); err == nil {
+				if err := r.reconcileDeleteOne(context.Background(), provisionRow(uuid.Nil())); err == nil {
 					t.Error("reconcile = nil, want the failure")
 				}
 			} else {
-				if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil)); err == nil {
+				if err := r.reconcileOne(context.Background(), provisionRow(uuid.Nil())); err == nil {
 					t.Error("reconcile = nil, want the failure")
 				}
 			}
@@ -584,7 +584,7 @@ func TestBucketReconciler_PublicBucketGetsItsPolicy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := &fakeBucketRepo{}
 			prov := &fakeProvisioner{policyErr: tc.policyErr}
-			row := provisionRow(uuid.Nil)
+			row := provisionRow(uuid.Nil())
 			row.PublicRead = tc.public
 			if err := newReconciler(repo, prov).reconcileOne(context.Background(), row); (err == nil) != tc.ready {
 				t.Errorf("reconcile = %v, want an error exactly when the bucket is not ready", err)
@@ -609,7 +609,7 @@ func TestBucketReconciler_TickReturnsTheFirstFailure(t *testing.T) {
 	listFailure := errors.New("list pending provisions failed")
 	repo := &fakeBucketRepo{
 		listProvisionsErr: listFailure,
-		deletions:         []admindomain.BucketProvisionRow{provisionRow(uuid.Nil)},
+		deletions:         []admindomain.BucketProvisionRow{provisionRow(uuid.Nil())},
 		getResult:         markedBucket(),
 	}
 	prov := &fakeProvisioner{deleteErr: errBackend}
@@ -625,7 +625,7 @@ func TestBucketReconciler_TickReturnsTheFirstFailure(t *testing.T) {
 
 // A row failure later in the tick is reported when the listings succeed.
 func TestBucketReconciler_TickReturnsARowFailure(t *testing.T) {
-	repo := &fakeBucketRepo{provisions: []admindomain.BucketProvisionRow{provisionRow(uuid.Nil)}}
+	repo := &fakeBucketRepo{provisions: []admindomain.BucketProvisionRow{provisionRow(uuid.Nil())}}
 	r := newReconciler(repo, &fakeProvisioner{createErr: errBackend})
 	if err := r.tick(context.Background()); !errors.Is(err, errBackend) {
 		t.Errorf("tick = %v, want %v", err, errBackend)
@@ -633,7 +633,7 @@ func TestBucketReconciler_TickReturnsARowFailure(t *testing.T) {
 }
 
 func TestBucketReconciler_CleanTickSucceeds(t *testing.T) {
-	repo := &fakeBucketRepo{provisions: []admindomain.BucketProvisionRow{provisionRow(uuid.Nil)}}
+	repo := &fakeBucketRepo{provisions: []admindomain.BucketProvisionRow{provisionRow(uuid.Nil())}}
 	if err := newReconciler(repo, &fakeProvisioner{}).tick(context.Background()); err != nil {
 		t.Errorf("tick = %v, want nil", err)
 	}

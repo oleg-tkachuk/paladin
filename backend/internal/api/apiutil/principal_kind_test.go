@@ -2,8 +2,7 @@ package apiutil
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -40,7 +39,7 @@ func TestCedarPrincipalFor_PinsTheTenant(t *testing.T) {
 	if got := CedarPrincipalFor(p, other); got.TenantID != other {
 		t.Fatalf("TenantID = %s, want the override %s", got.TenantID, other)
 	}
-	if got := CedarPrincipalFor(p, uuid.Nil); got.TenantID != own {
+	if got := CedarPrincipalFor(p, uuid.Nil()); got.TenantID != own {
 		t.Fatalf("TenantID = %s, want the principal's own %s", got.TenantID, own)
 	}
 }

@@ -5,8 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // memStore is an in-memory Store stub for tests. Keyed by the HMAC digest,

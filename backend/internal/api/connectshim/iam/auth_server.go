@@ -3,9 +3,9 @@ package iam
 import (
 	"context"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"

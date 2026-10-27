@@ -5,9 +5,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
@@ -226,7 +226,7 @@ func TestMemoizeRoundTrip(t *testing.T) {
 	store := newMemStore()
 	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	req := &iamv1.UpdateMineRequest{}
 
 	first, err := client.UpdateMine(withIdempotencyKey(ctx, key), req)
@@ -276,7 +276,7 @@ func TestNoMemoizeOnError(t *testing.T) {
 	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 	svc.failOnce = true
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	req := &iamv1.UpdateMineRequest{}
 
 	// First call: handler returns Unavailable — must NOT cache.
@@ -313,7 +313,7 @@ func TestSkipMethodsIsNotMemoized(t *testing.T) {
 		},
 	})
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	for i := 0; i < 2; i++ {
 		req := &iamv1.UpdateMineRequest{}
 		if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), req); err != nil {
@@ -360,7 +360,7 @@ func TestKeyReusedWithADifferentRequestIsRefused(t *testing.T) {
 	store := newMemStore()
 	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	first := &iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"}
 	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), first); err != nil {
 		t.Fatalf("first call: %v", err)
@@ -392,7 +392,7 @@ func TestRecordWithoutFingerprintStillReplays(t *testing.T) {
 	store := newMemStore()
 	client, svc, ctx := newSystemServer(t, store, IdempotencyConfig{TTL: time.Minute})
 
-	key := uuid.NewString()
+	key := uuid.New().String()
 	seed := &iamv1.UpdateMineRequest{Timezone: "Europe/Kyiv"}
 	if _, err := client.UpdateMine(withIdempotencyKey(ctx, key), seed); err != nil {
 		t.Fatalf("seed call: %v", err)

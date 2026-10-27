@@ -3,9 +3,9 @@ package storagebootstraph
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -89,7 +89,7 @@ func (o *fakeCollections) EnsureCollection(ctx context.Context, args objectkey.C
 func ctxWithPAT(tenantID uuid.UUID) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{
 		TenantID: tenantID,
-		Subject:  "apikey:" + uuid.NewString(),
+		Subject:  "apikey:" + uuid.New().String(),
 		Audience: auth.AudienceData,
 		Kind:     auth.PrincipalKindApiKey,
 	})

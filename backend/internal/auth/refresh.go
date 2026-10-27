@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // RefreshDecoder verifies a refresh token's signature against the IAM-audience
@@ -19,40 +18,40 @@ type RefreshDecoder struct {
 // DecodeRefresh implements iam/authh.RefreshTokenDecoder.
 func (d *RefreshDecoder) DecodeRefresh(token string) (jti, userID, tenantID uuid.UUID, err error) {
 	if d.Verifier == nil {
-		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("auth: no verifier configured")
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), errors.New("auth: no verifier configured")
 	}
 	// Verify signature/exp via the standard verifier; we re-use Principal
 	// extraction to confirm the audience matches IAM.
 	p, err := d.Verifier.Verify(context.Background(), token)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("refresh token: %w", err)
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), fmt.Errorf("refresh token: %w", err)
 	}
 	if p.Audience != AudienceIAM {
-		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("refresh token: wrong audience")
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), errors.New("refresh token: wrong audience")
 	}
 
 	// Re-parse claim payload for the refresh-specific fields. Verifier already
 	// validated signature; we just need user_id / jti.
 	claims, err := decodeClaims(token)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, uuid.Nil, err
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), err
 	}
 	if !claims.Refresh {
-		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("refresh token: missing `refresh:true` claim")
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), errors.New("refresh token: missing `refresh:true` claim")
 	}
 	jtiStr, _ := claims.JTI.(string)
 	if jtiStr == "" {
-		return uuid.Nil, uuid.Nil, uuid.Nil, errors.New("refresh token: missing jti")
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), errors.New("refresh token: missing jti")
 	}
 	jti, err = uuid.Parse(jtiStr)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("refresh token: jti: %w", err)
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), fmt.Errorf("refresh token: jti: %w", err)
 	}
 	userID, err = uuid.Parse(claims.UserID)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, uuid.Nil, fmt.Errorf("refresh token: user_id: %w", err)
+		return uuid.Nil(), uuid.Nil(), uuid.Nil(), fmt.Errorf("refresh token: user_id: %w", err)
 	}
-	if p.TenantID != uuid.Nil {
+	if p.TenantID != uuid.Nil() {
 		tenantID = p.TenantID
 	}
 	return jti, userID, tenantID, nil

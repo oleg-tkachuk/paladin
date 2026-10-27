@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 
-	"github.com/google/uuid"
 	"github.com/oleg-tkachuk/limes"
 	"go.uber.org/zap"
 

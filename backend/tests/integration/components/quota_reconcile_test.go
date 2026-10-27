@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -113,7 +113,7 @@ func TestReconcileQuotaUsage_CoversBucketScopedRows(t *testing.T) {
 	// An unrelated bucket with a quota and no objects must land on 0, not
 	// inherit the other bucket's rollup.
 	emptyQuota := uuid.New()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO buckets (backend_id, name, owner_tenant_id)
 		 SELECT sb.id, $2, $3 FROM storage_backends sb WHERE sb.name = $1`, backendID, "bkt-e-"+hex, f.tenantID)
@@ -297,9 +297,8 @@ func insertObj(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture,
 		`INSERT INTO objects (id, tenant_id, collection_id, path, state,
 		                      content_type, checksum_algorithm, size_bytes)
 		 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6
-		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-		uuid.Must(uuid.NewV7()), f.tenantID, f.collection,
-		"k-"+uuid.NewString()[:8], state, size)
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection,
+		"k-"+uuid.New().String()[:8], state, size)
 }
 
 // quotaUsage reads a quota of either scope: the id is unique across both tables.

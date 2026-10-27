@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
 )
 
 // PublicURL is where an object in a public bucket is read unsigned

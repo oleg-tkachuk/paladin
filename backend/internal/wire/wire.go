@@ -19,12 +19,11 @@ package wire
 
 import (
 	"context"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 
 	"errors"
-
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/audith"

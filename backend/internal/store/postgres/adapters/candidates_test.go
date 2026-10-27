@@ -5,8 +5,8 @@ import (
 	"slices"
 	"sort"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -35,7 +35,7 @@ func TestMergeCandidatePagesWalksTheExactUnion(t *testing.T) {
 		for i := range universe {
 			size := int64(rng.IntN(5))
 			universe[i] = sqlc.Object{
-				ID:        pgtype.UUID{Bytes: uuid.Must(uuid.NewV7()), Valid: true},
+				ID:        pgtype.UUID{Bytes: uuid.NewV7(), Valid: true},
 				Path:      []string{"a", "b", "B", "c/d"}[rng.IntN(4)],
 				SizeBytes: &size,
 			}
@@ -143,7 +143,7 @@ func TestCompareObjectRows_TextIsBytewise(t *testing.T) {
 	keys := []string{"b", "a", "B", "a/z", "A"}
 	objs := make([]sqlc.Object, len(keys))
 	for i, k := range keys {
-		objs[i] = sqlc.Object{Path: k, ID: pgtype.UUID{Bytes: uuid.Must(uuid.NewV7()), Valid: true}}
+		objs[i] = sqlc.Object{Path: k, ID: pgtype.UUID{Bytes: uuid.NewV7(), Valid: true}}
 	}
 	sortObjects(keyset.Order{Field: objecth.OrderByKey}, objs)
 	got := make([]string, len(objs))

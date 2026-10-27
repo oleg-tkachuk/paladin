@@ -6,8 +6,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
@@ -56,7 +56,7 @@ func TestCollectControlPlane(t *testing.T) {
 
 	// A trashed, dedicated tenant with no default binding.
 	trashed := uuid.New()
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 	mustExec(t, ctx, pool,
 		`INSERT INTO tenants (id, slug, display_name, storage_layout, deleted_at)
 		 VALUES ($1, $2, $3, 'dedicated', now())`,
@@ -123,8 +123,7 @@ func TestCollectRLSObjects(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, size_bytes)
 		 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6
-		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-			uuid.Must(uuid.NewV7()), tenantID, collection, "k-"+uuid.NewString()[:8], state, size)
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), tenantID, collection, "k-"+uuid.New().String()[:8], state, size)
 	}
 	insert(big.tenantID, big.collection, "AVAILABLE", 100)
 	insert(big.tenantID, big.collection, "AVAILABLE", 200)
@@ -197,8 +196,7 @@ func TestCollectRLSPagesTheTenants(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, size_bytes)
 		 SELECT $1, $2, c.id, $4, 'AVAILABLE', 'application/octet-stream', 0, 1
-		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
-			uuid.Must(uuid.NewV7()), tenantID, collection, "k-"+uuid.NewString()[:8])
+		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), tenantID, collection, "k-"+uuid.New().String()[:8])
 	}
 	insert(big.tenantID, big.collection)
 	insert(big.tenantID, big.collection)
@@ -247,7 +245,7 @@ func TestCollectRLSSiblings(t *testing.T) {
 	ctx := context.Background()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool) // seeds 1 enabled http subscription
-	hex := uuid.NewString()[:8]
+	hex := uuid.New().String()[:8]
 
 	// ─── quotas ─────────────────────────────────────────────────────────
 	// Tenant-scoped row sitting exactly on its object cap → at_limit.
@@ -270,9 +268,9 @@ func TestCollectRLSSiblings(t *testing.T) {
 
 	// ─── capabilities ───────────────────────────────────────────────────
 	now := time.Now()
-	active := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(48*time.Hour), uuid.Nil)
-	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(-time.Hour), uuid.Nil)
-	revoked := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeUser, now.Add(48*time.Hour), uuid.Nil)
+	active := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(48*time.Hour), uuid.Nil())
+	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(-time.Hour), uuid.Nil())
+	revoked := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeUser, now.Add(48*time.Hour), uuid.Nil())
 	// Delegated child of the active one, expiring inside the 24h window.
 	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(time.Hour), active)
 	seedRevocation(t, ctx, pool, revoked)
@@ -290,7 +288,7 @@ func TestCollectRLSSiblings(t *testing.T) {
 			                         revoked_at, last_used_at)
 			 VALUES ($1, $2, $3, 'pfx', $4, '{admin}', 'fixture-issuer',
 			         now() + $5::interval, $6, $7)`,
-			id, f.tenantID, "tok-"+uuid.NewString()[:8], hmac, expiresIn,
+			id, f.tenantID, "tok-"+uuid.New().String()[:8], hmac, expiresIn,
 			revokedAt, lastUsed)
 	}
 	insertToken("720 hours", nil, nil)   // active, never used
@@ -410,7 +408,7 @@ func TestCollectRLSCountsAChildOfARevokedCapabilityAsRevoked(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 	now := time.Now()
-	parent := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(48*time.Hour), uuid.Nil)
+	parent := seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeService, now.Add(48*time.Hour), uuid.Nil())
 	seedCapability(t, ctx, pool, f.tenantID, limes.PrincipalTypeAgent, now.Add(time.Hour), parent)
 	seedRevocation(t, ctx, pool, parent)
 

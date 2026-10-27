@@ -13,11 +13,11 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -512,8 +512,8 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// reserved as the in-memory sentinel meaning "no value" — reject
 	// it explicitly so a caller passing all-zeros doesn't silently get
 	// a server-generated row.
-	if args.TenantID == uuid.Nil {
-		args.TenantID = uuid.Must(uuid.NewV7())
+	if args.TenantID == uuid.Nil() {
+		args.TenantID = uuid.NewV7()
 	}
 	// Slug is required. `001_initial_schema.sql` makes the column NOT NULL
 	// and UNIQUE among live tenants, and the API contract follows: no auto-derivation from tenant_id.
@@ -1165,7 +1165,7 @@ func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageTok
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, "", err
 	}
-	if err := h.authorize(ctx, cedar.ActionReadTenant, uuid.Nil); err != nil {
+	if err := h.authorize(ctx, cedar.ActionReadTenant, uuid.Nil()); err != nil {
 		return nil, "", err
 	}
 	if pageToken != "" {

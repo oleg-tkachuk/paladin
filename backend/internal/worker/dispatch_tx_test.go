@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -30,11 +30,11 @@ func (f *fakeTx) Exec(context.Context, string, ...any) (pgconn.CommandTag, error
 // caller's tx (not the pool), and returns the queued count — the
 // transactional fan-out used by the promote path.
 func TestDispatchTxWritesRowsOnTx(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	store := &fakeStore{subs: []admindomain.EventSubscription{
-		{SubscriptionID: uuid.Must(uuid.NewV7()), TenantID: tenantID, SinkKind: "http"},
-		{SubscriptionID: uuid.Must(uuid.NewV7()), TenantID: tenantID, SinkKind: "http"},
-		{SubscriptionID: uuid.Must(uuid.NewV7()), TenantID: tenantID, SinkKind: "http", Disabled: true},
+		{SubscriptionID: uuid.NewV7(), TenantID: tenantID, SinkKind: "http"},
+		{SubscriptionID: uuid.NewV7(), TenantID: tenantID, SinkKind: "http"},
+		{SubscriptionID: uuid.NewV7(), TenantID: tenantID, SinkKind: "http", Disabled: true},
 	}}
 	d := &Dispatcher{Store: store} // NOTE: no Outbox — DispatchTx must not need it
 	tx := &fakeTx{}
@@ -54,9 +54,9 @@ func TestDispatchTxWritesRowsOnTx(t *testing.T) {
 // An insert failure on the tx propagates so the caller can roll back the
 // whole transaction (state change + outbox) — the atomicity guarantee.
 func TestDispatchTxPropagatesInsertError(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	store := &fakeStore{subs: []admindomain.EventSubscription{
-		{SubscriptionID: uuid.Must(uuid.NewV7()), TenantID: tenantID, SinkKind: "http"},
+		{SubscriptionID: uuid.NewV7(), TenantID: tenantID, SinkKind: "http"},
 	}}
 	d := &Dispatcher{Store: store}
 	tx := &fakeTx{execErr: errors.New("tx insert failed")}

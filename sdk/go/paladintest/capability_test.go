@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -154,7 +154,7 @@ func TestStrictIssueStaysInTheCallersTenant(t *testing.T) {
 	srv := paladintest.New(t, paladintest.WithStrictAuth())
 	admin := srv.Connect(paladin.WithBearerToken(srv.IssueBearerToken(srv.Tenant()))).Admin.Capability
 	elsewhere := issueRequest(srv, paladin.OpGet)
-	elsewhere.Subject.TenantId = uuid.NewString()
+	elsewhere.Subject.TenantId = uuid.New().String()
 	if _, err := admin.Issue(context.Background(), elsewhere); !errors.Is(err, paladin.ErrPermissionDenied) {
 		t.Errorf("issue for another tenant: %v, want PermissionDenied", err)
 	}
@@ -281,7 +281,7 @@ func TestRevokeAndGet(t *testing.T) {
 	for _, token := range []string{parent.GetToken(), parent.GetBiscuit(), child.GetToken()} {
 		wantRefused(t, getObject(srv.Connect(paladin.WithCapability(token)), obj), capabilityRevoked)
 	}
-	unknown := uuid.NewString()
+	unknown := uuid.New().String()
 	if _, err := admin.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: unknown}); !errors.Is(err, paladin.ErrNotFound) {
 		t.Errorf("revoke an unknown id: %v, want NotFound", err)
 	}
@@ -299,7 +299,7 @@ func TestCapabilityServiceFaultsAndGaps(t *testing.T) {
 	if _, err := admin.Issue(context.Background(), issueRequest(srv, paladin.OpGet)); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Errorf("a failed Issue: %v, want Unavailable", err)
 	}
-	if _, err := admin.GetUsage(context.Background(), &adminv1.CapabilityServiceGetUsageRequest{Id: uuid.NewString()}); connect.CodeOf(err) != connect.CodeUnimplemented {
+	if _, err := admin.GetUsage(context.Background(), &adminv1.CapabilityServiceGetUsageRequest{Id: uuid.New().String()}); connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Errorf("GetUsage: %v, want Unimplemented", err)
 	}
 }
@@ -318,7 +318,7 @@ func TestListCountsAChildOfARevokedParentRevoked(t *testing.T) {
 		t.Fatalf("delegate: %v", err)
 	}
 	elsewhere := issueRequest(srv, paladin.OpGet)
-	elsewhere.Subject.TenantId = uuid.NewString()
+	elsewhere.Subject.TenantId = uuid.New().String()
 	issue(t, admin, elsewhere)
 	if _, err := admin.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: parent.GetCapability().GetId()}); err != nil {
 		t.Fatalf("revoke: %v", err)
@@ -353,7 +353,7 @@ func TestStrictListStaysInTheCallersTenant(t *testing.T) {
 	if _, err := admin.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant()}); err != nil {
 		t.Errorf("own tenant: %v", err)
 	}
-	_, err := admin.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString()})
+	_, err := admin.List(context.Background(), &adminv1.CapabilityServiceListRequest{TenantId: uuid.New().String()})
 	if !errors.Is(err, paladin.ErrPermissionDenied) {
 		t.Errorf("another tenant: %v, want PermissionDenied", err)
 	}
@@ -372,7 +372,7 @@ func TestListRefusesACursorOfAnotherTenant(t *testing.T) {
 	if err != nil || first.GetNextPageToken() == "" {
 		t.Fatalf("first page: %v, next %q", err, first.GetNextPageToken())
 	}
-	_, err = admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: uuid.NewString(), PageToken: first.GetNextPageToken()})
+	_, err = admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: uuid.New().String(), PageToken: first.GetNextPageToken()})
 	if !errors.Is(err, paladin.ErrInvalidArgument) {
 		t.Errorf("another tenant's cursor: %v, want InvalidArgument", err)
 	}

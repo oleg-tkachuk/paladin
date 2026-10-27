@@ -18,8 +18,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
@@ -100,7 +99,7 @@ func newTarget(t *testing.T) *target {
 	bucket := os.Getenv("PALADIN_CONFORMANCE_BUCKET")
 	owns := bucket == ""
 	if owns {
-		bucket = "paladin-conf-" + uuid.NewString()[:8]
+		bucket = "paladin-conf-" + uuid.New().String()[:8]
 	}
 
 	backend := config.StorageBackend{

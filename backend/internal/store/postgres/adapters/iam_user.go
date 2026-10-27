@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -30,8 +30,8 @@ func NewUserRepo(q *sqlc.Queries) *UserRepo { return &UserRepo{q: q} }
 var _ authstore.UserRepository = (*UserRepo)(nil)
 
 func (r *UserRepo) Create(ctx context.Context, u authstore.User) (authstore.User, error) {
-	if u.UserID == uuid.Nil {
-		u.UserID = uuid.Must(uuid.NewV7())
+	if u.UserID == uuid.Nil() {
+		u.UserID = uuid.NewV7()
 	}
 	roles, _ := json.Marshal(u.Roles)
 	scopes, _ := json.Marshal(scopesToWire(u.Scopes))
@@ -167,7 +167,7 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 	createdGTE, createdLTE := createdBounds(pd)
 
 	var rows []sqlc.User
-	if args.TenantID == uuid.Nil {
+	if args.TenantID == uuid.Nil() {
 		got, err := r.q.ListUsersAll(ctx, pgUUID(afterID),
 			subjectIn, subjectLike, displayIn, displayLike, disabled,
 			createdGTE, createdLTE, limit)

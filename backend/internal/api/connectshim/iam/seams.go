@@ -2,8 +2,7 @@ package iam
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"

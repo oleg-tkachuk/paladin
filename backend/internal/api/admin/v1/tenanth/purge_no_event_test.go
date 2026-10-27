@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -84,7 +84,7 @@ func TestPurgeActiveTenantPointsAtDeleteTenant(t *testing.T) {
 	if strings.Contains(err.Error(), "force") {
 		t.Errorf("message still points at a flag that is gone: %v", err)
 	}
-	if repo.lastPurge.TenantID != uuid.Nil {
+	if repo.lastPurge.TenantID != uuid.Nil() {
 		t.Errorf("an active tenant was purged: %+v", repo.lastPurge)
 	}
 }

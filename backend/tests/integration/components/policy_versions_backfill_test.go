@@ -5,8 +5,8 @@ package components
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
@@ -25,12 +25,12 @@ func TestPolicyWriterTenantIsBackfilled(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	f := seedFixture(t, ctx, pool)
 
-	userID := uuid.Must(uuid.NewV7())
+	userID := uuid.NewV7()
 	mustExec(t, ctx, pool,
 		`INSERT INTO users (id, tenant_id, subject) VALUES ($1, $2, 'writer')`, userID, f.tenantID)
-	recorded := uuid.Must(uuid.NewV7())
+	recorded := uuid.NewV7()
 
-	owner := uuid.Must(uuid.NewV7())
+	owner := uuid.NewV7()
 	insert := func(version int, writer, writerTenant any) {
 		t.Helper()
 		mustExec(t, ctx, pool, `

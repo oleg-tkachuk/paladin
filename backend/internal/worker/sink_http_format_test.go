@@ -7,8 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
@@ -30,8 +29,8 @@ func captureHTTPSink(t *testing.T, format string) (*Dispatcher, admindomain.Even
 	cfg, _ := json.Marshal(map[string]any{"url": srv.URL, "format": format})
 	d := &Dispatcher{HTTPClient: srv.Client(), MaxAttempts: 1}
 	sub := admindomain.EventSubscription{
-		SubscriptionID: uuid.Must(uuid.NewV7()),
-		TenantID:       uuid.Must(uuid.NewV7()),
+		SubscriptionID: uuid.NewV7(),
+		TenantID:       uuid.NewV7(),
 		SinkKind:       "http",
 		SinkConfig:     cfg,
 	}
@@ -53,8 +52,8 @@ func TestDeliverHTTP_EmitsEventIdHeaderBothFormats(t *testing.T) {
 			cfg, _ := json.Marshal(map[string]any{"url": srv.URL, "format": format})
 			d := &Dispatcher{HTTPClient: srv.Client(), MaxAttempts: 1}
 			sub := admindomain.EventSubscription{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
-				TenantID:       uuid.Must(uuid.NewV7()),
+				SubscriptionID: uuid.NewV7(),
+				TenantID:       uuid.NewV7(),
 				SinkKind:       "http",
 				SinkConfig:     cfg,
 			}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -49,7 +49,7 @@ type uploadRepo struct {
 
 func (r *uploadRepo) CreateObject(_ context.Context, args CreateObjectArgs) (Object, error) {
 	return Object{
-		ObjectID:   uuid.Must(uuid.NewV7()),
+		ObjectID:   uuid.NewV7(),
 		TenantID:   args.TenantID,
 		Collection: args.Collection,
 		Key:        args.Key,
@@ -120,7 +120,7 @@ type getRepo struct {
 }
 
 func (r *getRepo) FindByName(_ context.Context, _ uuid.UUID, collection, _ string) (Object, error) {
-	return Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: collection, Key: "k"}, nil
+	return Object{ObjectID: uuid.NewV7(), Collection: collection, Key: "k"}, nil
 }
 func (r *getRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
 	return "be", r.bucket, nil

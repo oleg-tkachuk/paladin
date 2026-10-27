@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
@@ -65,7 +65,7 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 	if err := json.Unmarshal(op.Metadata, &args); err != nil {
 		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
-	if args.TenantID == uuid.Nil || args.Collection == "" || len(args.ObjectIDs) == 0 {
+	if args.TenantID == uuid.Nil() || args.Collection == "" || len(args.ObjectIDs) == 0 {
 		return nil, errors.New("invalid metadata: tenant_id, collection, object_ids required")
 	}
 	if args.TenantID != op.TenantID {

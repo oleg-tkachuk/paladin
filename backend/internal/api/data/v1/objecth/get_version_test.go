@@ -3,9 +3,9 @@ package objecth
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -49,8 +49,8 @@ func versionHandler(parent Object, versions *fakeVersionRepo) (*VersionHandler, 
 }
 
 func TestGetVersionReturnsTheVersionAndMarksTheCurrentOne(t *testing.T) {
-	objectID := uuid.Must(uuid.NewV7())
-	versionID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
+	versionID := uuid.NewV7()
 	versions := newFakeVersionRepo()
 	versions.fixedGet = map[uuid.UUID]ObjectVersion{
 		versionID: {VersionID: versionID, ObjectID: objectID, SizeBytes: 12},
@@ -73,9 +73,9 @@ func TestGetVersionReturnsTheVersionAndMarksTheCurrentOne(t *testing.T) {
 }
 
 func TestGetVersionLeavesAnOlderVersionUnmarked(t *testing.T) {
-	objectID := uuid.Must(uuid.NewV7())
-	older := uuid.Must(uuid.NewV7())
-	newer := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
+	older := uuid.NewV7()
+	newer := uuid.NewV7()
 	versions := newFakeVersionRepo()
 	versions.fixedGet = map[uuid.UUID]ObjectVersion{
 		older: {VersionID: older, ObjectID: objectID},
@@ -96,9 +96,9 @@ func TestGetVersionLeavesAnOlderVersionUnmarked(t *testing.T) {
 func TestGetVersionRefusesAVersionBelongingToAnotherObject(t *testing.T) {
 	// The guard that matters. The version exists and the parent exists; they
 	// are simply unrelated, and a UUID carries no evidence either way.
-	parentID := uuid.Must(uuid.NewV7())
-	strangerID := uuid.Must(uuid.NewV7())
-	versionID := uuid.Must(uuid.NewV7())
+	parentID := uuid.NewV7()
+	strangerID := uuid.NewV7()
+	versionID := uuid.NewV7()
 	versions := newFakeVersionRepo()
 	versions.fixedGet = map[uuid.UUID]ObjectVersion{
 		versionID: {VersionID: versionID, ObjectID: strangerID},
@@ -114,13 +114,13 @@ func TestGetVersionRefusesAVersionBelongingToAnotherObject(t *testing.T) {
 
 func TestGetVersionRejectsMalformedNames(t *testing.T) {
 	versions := newFakeVersionRepo()
-	h, ctx, tenantID := versionHandler(Object{ObjectID: uuid.Must(uuid.NewV7())}, versions)
+	h, ctx, tenantID := versionHandler(Object{ObjectID: uuid.NewV7()}, versions)
 
 	for _, name := range []string{
 		"",
 		"collections/docs/objects/x/versions/y",
-		"tenants/" + tenantID.String() + "/collections/docs/objects/" + uuid.NewString(),
-		"tenants/" + tenantID.String() + "/collections/docs/objects/" + uuid.NewString() + "/versions/not-a-uuid",
+		"tenants/" + tenantID.String() + "/collections/docs/objects/" + uuid.New().String(),
+		"tenants/" + tenantID.String() + "/collections/docs/objects/" + uuid.New().String() + "/versions/not-a-uuid",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := h.GetVersion(ctx, name); connect.CodeOf(err) != connect.CodeInvalidArgument {
@@ -137,18 +137,18 @@ func TestGetVersionUnknownParentIsNotFound(t *testing.T) {
 	h := NewVersionHandler(&parentRepo{findErr: ErrObjectNotFound}, versions)
 	h.SetAuthorizer(allowAll{})
 
-	_, err := h.GetVersion(ctx, versionName(tenantID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())))
+	_, err := h.GetVersion(ctx, versionName(tenantID, uuid.NewV7(), uuid.NewV7()))
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}
 }
 
 func TestGetVersionUnknownVersionIsNotFound(t *testing.T) {
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	versions := newFakeVersionRepo() // fixedGet empty → ErrVersionNotFound
 	h, ctx, tenantID := versionHandler(Object{ObjectID: objectID, Collection: "docs"}, versions)
 
-	_, err := h.GetVersion(ctx, versionName(tenantID, objectID, uuid.Must(uuid.NewV7())))
+	_, err := h.GetVersion(ctx, versionName(tenantID, objectID, uuid.NewV7()))
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}

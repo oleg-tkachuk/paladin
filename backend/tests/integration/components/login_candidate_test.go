@@ -6,8 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -40,7 +39,7 @@ func TestLoginCandidatesExcludeTrashedTenants(t *testing.T) {
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
 
-	subject := "shared-" + uuid.NewString()[:8] + "@local"
+	subject := "shared-" + uuid.New().String()[:8] + "@local"
 	live, _ := mkTenant(t, ctx, pool, "shared")
 	mustExec(t, ctx, pool,
 		`INSERT INTO users (tenant_id, subject, password_hash, roles) VALUES ($1, $2, 'real', '{}')`,
@@ -78,7 +77,7 @@ func TestLoginCandidatesPreferRecentlyUsed(t *testing.T) {
 	pool := startPostgres(t)
 	q := sqlc.New(pool)
 
-	subject := "many-" + uuid.NewString()[:8] + "@local"
+	subject := "many-" + uuid.New().String()[:8] + "@local"
 	var wanted uuid.UUID
 	for i := 0; i < 7; i++ {
 		tn, _ := mkTenant(t, ctx, pool, "shared")
@@ -169,7 +168,7 @@ func TestCreateBackendTwiceIsAlreadyExists(t *testing.T) {
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
 	b := admindomain.StorageBackend{
-		BackendID: "be-" + uuid.NewString()[:8],
+		BackendID: "be-" + uuid.New().String()[:8],
 		Kind:      "s3-compatible",
 		Endpoint:  "http://x.invalid:3900",
 		Region:    "us-east-1",
@@ -189,7 +188,7 @@ func TestBootstrapStillUpserts(t *testing.T) {
 	repo := adapters.NewBackendRepoV2(sqlc.New(pool), pool)
 
 	b := admindomain.StorageBackend{
-		BackendID: "be-" + uuid.NewString()[:8],
+		BackendID: "be-" + uuid.New().String()[:8],
 		Kind:      "s3-compatible",
 		Endpoint:  "http://first.invalid:3900",
 		Region:    "us-east-1",

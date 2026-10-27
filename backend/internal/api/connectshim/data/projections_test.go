@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	rpccode "google.golang.org/genproto/googleapis/rpc/code"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -55,7 +55,7 @@ func TestListOperationsFacetCounts(t *testing.T) {
 		counted bool
 	}{
 		{"asked, first page", true, "", true},
-		{"asked, a later page", true, uuid.NewString(), false},
+		{"asked, a later page", true, uuid.New().String(), false},
 		{"not asked", false, "", false},
 	} {
 		h := &recordingOperations{}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -80,7 +80,7 @@ func (r *completeRepo) CreateObject(_ context.Context, a CreateObjectArgs) (Obje
 	if r.createErr != nil {
 		return Object{}, r.createErr
 	}
-	return Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: a.Collection, Key: a.Key}, nil
+	return Object{ObjectID: uuid.NewV7(), Collection: a.Collection, Key: a.Key}, nil
 }
 
 // headStorage answers HEAD with values the test chooses.
@@ -117,7 +117,7 @@ func TestCompleteObjectIsANoOpOnAnAlreadyAvailableObject(t *testing.T) {
 	// way the answer is the object, not an error: this is what makes
 	// at-least-once delivery safe on this RPC.
 	obj := Object{
-		ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", Key: "a.txt",
+		ObjectID: uuid.NewV7(), Collection: "docs", Key: "a.txt",
 		State: statemachine.StateAvailable, SizeBytes: 9,
 	}
 	h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{})
@@ -133,7 +133,7 @@ func TestCompleteObjectIsANoOpOnAnAlreadyAvailableObject(t *testing.T) {
 
 func TestCompleteObjectAuthzResourceCarriesBucket(t *testing.T) {
 	obj := Object{
-		ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", Key: "a.txt",
+		ObjectID: uuid.NewV7(), Collection: "docs", Key: "a.txt",
 		State: statemachine.StateAvailable, SizeBytes: 9, ContentType: "text/plain",
 	}
 	h, authz, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{})
@@ -153,7 +153,7 @@ func TestCompleteObjectSurvivesAnUnresolvableBucketOnTheNoOpPath(t *testing.T) {
 	// The idempotent no-op predates the bucket binding and must not start
 	// failing for callers whose collection resolves to nothing: the read-side
 	// lookup error is dropped on purpose.
-	obj := Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", State: statemachine.StateAvailable}
+	obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: statemachine.StateAvailable}
 	h, authz, ctx, _ := completeHandler(&completeRepo{obj: obj, bucketErr: errors.New("no binding")}, headStorage{})
 
 	if _, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()}); err != nil {
@@ -167,7 +167,7 @@ func TestCompleteObjectSurvivesAnUnresolvableBucketOnTheNoOpPath(t *testing.T) {
 func TestCompleteObjectRefusesATerminalState(t *testing.T) {
 	for _, state := range []statemachine.State{statemachine.StateDeleted} {
 		t.Run(string(state), func(t *testing.T) {
-			obj := Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", State: state}
+			obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: state}
 			h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{})
 
 			_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()})
@@ -182,7 +182,7 @@ func TestCompleteObjectRefusesWhenNothingWasUploaded(t *testing.T) {
 	// PENDING plus a HEAD that finds nothing means the client is completing an
 	// upload it never made. FailedPrecondition, not Internal: the caller can
 	// fix it by uploading.
-	obj := Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", State: statemachine.StatePending}
+	obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: statemachine.StatePending}
 	h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{err: errors.New("404")})
 
 	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()})
@@ -194,7 +194,7 @@ func TestCompleteObjectRefusesWhenNothingWasUploaded(t *testing.T) {
 func TestCompleteObjectRefusesAnETagMismatch(t *testing.T) {
 	// The client says what it uploaded; the backend says what it holds. A
 	// mismatch means the bytes are not the ones being promised.
-	obj := Object{ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", State: statemachine.StatePending}
+	obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: statemachine.StatePending}
 	h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{etag: "actual", size: 4})
 
 	_, err := h.CompleteObject(ctx, CompleteObjectInput{
@@ -219,7 +219,7 @@ func TestCompleteObjectRequiresCollectionAndObjectID(t *testing.T) {
 func TestCompleteObjectUnknownObjectIsNotFound(t *testing.T) {
 	h, _, ctx, _ := completeHandler(&completeRepo{findErr: ErrObjectNotFound}, headStorage{})
 
-	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: uuid.NewString()})
+	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: uuid.New().String()})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
 	}
@@ -229,7 +229,7 @@ func TestCompleteObjectUnknownObjectIsNotFound(t *testing.T) {
 
 func availableSource() Object {
 	return Object{
-		ObjectID: uuid.Must(uuid.NewV7()), Collection: "src", Key: "original.txt",
+		ObjectID: uuid.NewV7(), Collection: "src", Key: "original.txt",
 		State: statemachine.StateAvailable, SizeBytes: 33, ContentType: "text/plain",
 		Tags: map[string]string{"env": "prod"},
 	}
@@ -243,7 +243,7 @@ func TestCopyObjectAuthorizesAgainstTheDestination(t *testing.T) {
 	h, authz, ctx, _ := completeHandler(repo, headStorage{})
 
 	_, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(),
+		SourceCollection: "src", SourceObjectID: uuid.New().String(),
 		DestCollection: "dst", DestKey: "copy.txt",
 	})
 	if err == nil {
@@ -269,7 +269,7 @@ func TestCopyObjectDefaultsTheDestinationKeyToTheSourceKey(t *testing.T) {
 	h, _, ctx, _ := completeHandler(repo, headStorage{})
 
 	_, _ = h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	})
 	if repo.created == nil {
 		t.Fatal("CreateObject was never reached")
@@ -293,7 +293,7 @@ func TestCopyObjectRefusesANonAvailableSource(t *testing.T) {
 			h, _, ctx, _ := completeHandler(&completeRepo{obj: src}, headStorage{})
 
 			_, err := h.CopyObject(ctx, CopyObjectInput{
-				SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+				SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 			})
 			if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 				t.Fatalf("code = %v, want FailedPrecondition copying from %s", connect.CodeOf(err), state)
@@ -325,7 +325,7 @@ func TestCopyObjectUnknownSourceIsNotFound(t *testing.T) {
 	h, _, ctx, _ := completeHandler(&completeRepo{findErr: ErrObjectNotFound}, headStorage{})
 
 	_, err := h.CopyObject(ctx, CopyObjectInput{
-		SourceCollection: "src", SourceObjectID: uuid.NewString(), DestCollection: "dst",
+		SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst",
 	})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))

@@ -10,8 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // The ways a page token is refused. Both are the caller's error.
@@ -57,7 +56,7 @@ func Decode(token string, want Order) (Cursor, error) {
 	if err := json.Unmarshal(b, &w); err != nil {
 		return Cursor{}, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
-	if w.ID == uuid.Nil {
+	if w.ID == uuid.Nil() {
 		return Cursor{}, fmt.Errorf("%w: no row id", ErrMalformed)
 	}
 	got := Order{Field: w.Field, Desc: w.Desc}

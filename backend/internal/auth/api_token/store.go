@@ -3,8 +3,7 @@ package api_token
 import (
 	"context"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Store is the persistence seam. Production wires the Postgres

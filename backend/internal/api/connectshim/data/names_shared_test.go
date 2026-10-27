@@ -6,8 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 )
@@ -84,7 +83,7 @@ func TestServerParsesTheSharedNames(t *testing.T) {
 				if !c.OK {
 					// As a platform admin, so a refusal is the parser's, not the
 					// tenant check's.
-					if _, err := parse(ctxTenant(uuid.Nil, apiutil.RolePlatformAdmin), c.In); err == nil {
+					if _, err := parse(ctxTenant(uuid.Nil(), apiutil.RolePlatformAdmin), c.In); err == nil {
 						t.Fatal("accepted a name the SDKs refuse")
 					}
 					return

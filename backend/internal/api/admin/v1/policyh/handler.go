@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -98,7 +98,7 @@ const validateName = "policy"
 // everything the engine provides (Object.tag_values). A protocol error is
 // returned only when the caller is unauthorized.
 func (h *Handler) ValidatePolicy(ctx context.Context, text string) (*ValidateOutput, error) {
-	if err := h.authorizeInspect(ctx, uuid.Nil, ""); err != nil {
+	if err := h.authorizeInspect(ctx, uuid.Nil(), ""); err != nil {
 		return nil, err
 	}
 	if err := cedar.Validate(text); err != nil {
@@ -193,14 +193,14 @@ func parseSimulateResource(name string, fallbackTenant uuid.UUID) (uuid.UUID, st
 	if len(parts) >= 4 && parts[0] == "tenants" && parts[2] == "collections" {
 		id, err := uuid.Parse(parts[1])
 		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("invalid tenant id in %q: %w", name, err)
+			return uuid.Nil(), "", fmt.Errorf("invalid tenant id in %q: %w", name, err)
 		}
 		return id, parts[3], nil
 	}
 	if len(parts) >= 2 && parts[0] == "tenants" {
 		id, err := uuid.Parse(parts[1])
 		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("invalid tenant id in %q: %w", name, err)
+			return uuid.Nil(), "", fmt.Errorf("invalid tenant id in %q: %w", name, err)
 		}
 		return id, "", nil
 	}

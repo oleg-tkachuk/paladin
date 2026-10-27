@@ -10,8 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
@@ -169,15 +168,15 @@ func parseCanonical(name string) (CanonicalRef, error) {
 func splitTenantCollection(s string) (uuid.UUID, string, error) {
 	i := strings.Index(s, collectionsSep)
 	if i <= 0 {
-		return uuid.Nil, "", fmt.Errorf("missing %q in %q", collectionsSep, s)
+		return uuid.Nil(), "", fmt.Errorf("missing %q in %q", collectionsSep, s)
 	}
 	tid, err := uuid.Parse(s[:i])
 	if err != nil {
-		return uuid.Nil, "", err
+		return uuid.Nil(), "", err
 	}
 	ok := s[i+len(collectionsSep):]
 	if ok == "" {
-		return uuid.Nil, "", fmt.Errorf("empty collection body in %q", s)
+		return uuid.Nil(), "", fmt.Errorf("empty collection body in %q", s)
 	}
 	return tid, ok, nil
 }

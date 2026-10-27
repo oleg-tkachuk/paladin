@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 )
@@ -43,7 +42,7 @@ func TestCollectQuotas_CountsExactlyOnEachBoundary(t *testing.T) {
 	// nearLimitRatio is 0.9, so "near" starts at exactly 90% of a cap.
 	quota := func(caps [4]*int64, usage [4]int64) {
 		t.Helper()
-		hex := uuid.NewString()[:8]
+		hex := uuid.New().String()[:8]
 		tenantID := uuid.New()
 		mustExec(t, ctx, pool, `INSERT INTO tenants (id, slug, display_name) VALUES ($1, $2, $3)`,
 			tenantID, "t-"+hex, "tn-"+hex)

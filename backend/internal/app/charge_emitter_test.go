@@ -5,8 +5,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -103,7 +103,7 @@ func TestChargeEmitter_EmitsChargedEvent(t *testing.T) {
 // fan-out target and must be dropped rather than emitting a malformed event
 // with an empty tenant_id.
 func TestChargeEmitter_DropsTenantless(t *testing.T) {
-	for _, tenant := range []string{"", uuid.Nil.String()} {
+	for _, tenant := range []string{"", uuid.Nil().String()} {
 		fake := &fakeEventDispatcher{}
 		e := &chargeEmitter{dispatcher: fake, log: zap.NewNop()}
 		if err := e.EmitChargedTx(context.Background(), nil, tenant, uuid.New().String(), "get", "a", limes.NanosPerUnit, "USD"); err != nil {

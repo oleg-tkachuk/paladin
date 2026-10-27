@@ -3,8 +3,7 @@ package auth
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
@@ -27,7 +26,7 @@ func newTenantRecordingUsage(usage *usageStore) *tenantRecordingUsage {
 func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	tid, err := EffectiveTenant(ctx)
 	if err != nil {
-		tid = uuid.Nil
+		tid = uuid.Nil()
 	}
 	u.seen[call] = tid
 }

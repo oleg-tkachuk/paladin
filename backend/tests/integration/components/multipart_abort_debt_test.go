@@ -5,8 +5,7 @@ package components
 import (
 	"context"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // A multipart session is reachable by ON DELETE CASCADE from objects and from
@@ -23,8 +22,8 @@ func TestMultipartAbortDebt(t *testing.T) {
 	seed := func(t *testing.T) (tenant, object, upload uuid.UUID, storageID string) {
 		t.Helper()
 		tenant, _ = mkTenant(t, ctx, pool, "shared")
-		backend := "be-" + uuid.NewString()[:8]
-		bucket := "bk-" + uuid.NewString()[:8]
+		backend := "be-" + uuid.New().String()[:8]
+		bucket := "bk-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool,
 			`INSERT INTO storage_backends (name, kind, provider, endpoint, region)
 			 VALUES ($1,'s3-compatible','garage','http://x.invalid:3900','us-east-1')`, backend)
@@ -36,7 +35,7 @@ func TestMultipartAbortDebt(t *testing.T) {
 			`INSERT INTO buckets (backend_id, name, owner_tenant_id)
 			 SELECT id, $2, $3 FROM storage_backends WHERE name = $1`, backend, bucket, owner)
 		grantBucket(t, ctx, pool, tenant, backend, bucket)
-		collection := "col-" + uuid.NewString()[:8]
+		collection := "col-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool,
 			`INSERT INTO collections (tenant_id, name, bucket_id)
 			 SELECT $1, $2, id FROM buckets WHERE name = $3`, tenant, collection, bucket)
@@ -44,9 +43,9 @@ func TestMultipartAbortDebt(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type)
 			 SELECT $1, $2, id, $4, 'PENDING', 'application/octet-stream' FROM collections WHERE tenant_id = $2 AND name = $3`,
-			object, tenant, collection, "k-"+uuid.NewString()[:8])
+			object, tenant, collection, "k-"+uuid.New().String()[:8])
 		upload = uuid.New()
-		storageID = "s3-upload-" + uuid.NewString()[:8]
+		storageID = "s3-upload-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool,
 			`INSERT INTO multipart_uploads
 			   (id, tenant_id, object_id, bucket_id, storage_upload_id, part_size_bytes,

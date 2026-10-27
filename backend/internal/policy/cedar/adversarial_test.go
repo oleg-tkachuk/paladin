@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Adversarial tenant-isolation matrix (ADR-0016). Membership keys on the

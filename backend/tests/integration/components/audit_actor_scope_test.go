@@ -5,8 +5,8 @@ package components
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -44,7 +44,7 @@ func TestAuditRowIsWrittenInItsActorsTenant(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			action := "test." + uuid.NewString()
+			action := "test." + uuid.New().String()
 			if err := write(admindomain.AuditEntry{
 				ActorSubject: "user", ActorTenantID: actor, ActorAudience: auth.AudienceIAM,
 				Action: action, ResourceName: "users/user",

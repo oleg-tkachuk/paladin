@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // roleCapabilityIssuer mirrors apiutil.RoleCapabilityIssuer, spelled out for

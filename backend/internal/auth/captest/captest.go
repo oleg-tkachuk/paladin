@@ -8,8 +8,7 @@ import (
 	"crypto/ed25519"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
@@ -107,7 +106,7 @@ func (m *Minter) MintExact(tb testing.TB, template limes.Capability) (limes.Veri
 		tb.Fatal("captest: a key-bound capability verifies only with a proof of its key")
 	}
 	subject := template.Subject
-	if subject.TenantID == uuid.Nil {
+	if subject.TenantID == uuid.Nil() {
 		subject.TenantID = uuid.New()
 	}
 	if subject.Type == limes.PrincipalTypeUnspecified {

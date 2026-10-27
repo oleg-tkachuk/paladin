@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
@@ -71,7 +71,7 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 // the caller rolls back; nil-safe (and skips a Nil tenant, same as
 // dispatchEvent).
 func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
-	if h.events == nil || tenantID == uuid.Nil {
+	if h.events == nil || tenantID == uuid.Nil() {
 		return nil
 	}
 	actor := ""
@@ -174,7 +174,7 @@ func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []stri
 	if err != nil {
 		return nil, err
 	}
-	tenantScope := q.TenantID != uuid.Nil
+	tenantScope := q.TenantID != uuid.Nil()
 	bucketScope := q.BackendID != "" && q.BucketName != ""
 	if tenantScope == bucketScope {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -275,7 +275,7 @@ func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
 		return err
 	}
 	now := time.Now().UTC()
-	if q.TenantID == uuid.Nil {
+	if q.TenantID == uuid.Nil() {
 		// A bucket quota is platform configuration outside RLS
 		// (044_bucket_quotas.sql); there is no tenant to act as.
 		return apiutil.MapError(h.repo.ResetBucketDaily(ctx, quotaID, now))

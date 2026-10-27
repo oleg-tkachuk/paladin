@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -39,7 +39,7 @@ func TestGetPlatformTimeSeriesSumsEveryTenant(t *testing.T) {
 		t.Errorf("series = %s %+v, want %s %+v", ts.UnitCode, ts.Buckets, spendCurrency, want)
 	}
 	req := ledger.requests[0]
-	if !req.AllTenants || req.TenantID != uuid.Nil || req.Bucket != meter.ChargeBucketDay {
+	if !req.AllTenants || req.TenantID != uuid.Nil() || req.Bucket != meter.ChargeBucketDay {
 		t.Errorf("request = %+v, want every tenant by day", req)
 	}
 	if !auth.CrossTenantRead(ledger.ctx) {

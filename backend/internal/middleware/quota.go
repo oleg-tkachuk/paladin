@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -143,7 +143,7 @@ func (q *QuotaSoftCheck) CheckUpload(ctx context.Context, procedure string, msg 
 		return nil
 	}
 	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil || p.TenantID == uuid.Nil {
+	if err != nil || p.TenantID == uuid.Nil() {
 		// No tenant = nothing to enforce against — let downstream auth reject.
 		return nil
 	}
@@ -194,7 +194,7 @@ func uploadTenant(ctx context.Context, p *auth.Principal, msg any) (context.Cont
 		return ctx, p.TenantID
 	}
 	ref, err := resolve.ParseCollectionName(ctx, name)
-	if err != nil || ref.TenantID == uuid.Nil || ref.TenantID == p.TenantID {
+	if err != nil || ref.TenantID == uuid.Nil() || ref.TenantID == p.TenantID {
 		return ctx, p.TenantID
 	}
 	return auth.WithActingTenant(ctx, ref.TenantID), ref.TenantID

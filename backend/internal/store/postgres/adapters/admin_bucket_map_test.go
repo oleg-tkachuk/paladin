@@ -3,8 +3,7 @@ package adapters
 import (
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -166,7 +165,7 @@ func TestBucketRowMapperNulls(t *testing.T) {
 	if got.ObjectLock.DefaultMode != "" {
 		t.Errorf("DefaultMode = %q, want \"\"", got.ObjectLock.DefaultMode)
 	}
-	if got.OwnerTenantID != uuid.Nil {
+	if got.OwnerTenantID != uuid.Nil() {
 		t.Errorf("OwnerTenantID = %v, want Nil", got.OwnerTenantID)
 	}
 	if !got.CreatedAt.IsZero() || !got.UpdatedAt.IsZero() {

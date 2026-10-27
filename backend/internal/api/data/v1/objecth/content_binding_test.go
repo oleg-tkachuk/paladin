@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -82,7 +82,7 @@ func (s *deletingStorage) DeleteObject(_ context.Context, _, _ string, _ uuid.UU
 
 func registeredPendingObject() Object {
 	return Object{
-		ObjectID: uuid.Must(uuid.NewV7()), Collection: "docs", Key: "a.txt",
+		ObjectID: uuid.NewV7(), Collection: "docs", Key: "a.txt",
 		State: statemachine.StatePending, ChecksumAlgo: checksum.SHA256, Checksum: testChecksumValue,
 	}
 }

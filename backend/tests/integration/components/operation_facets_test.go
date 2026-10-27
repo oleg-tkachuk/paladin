@@ -6,8 +6,7 @@ import (
 	"context"
 	"maps"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
@@ -41,8 +40,7 @@ func TestCountOperationFacets_EachWithoutItsOwnChoices(t *testing.T) {
 		{facetCopy, operationh.StateFailed},
 		{facetCopy, operationh.StateRunning},
 	} {
-		mustExec(t, ctx, pool, `INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, $3, $4)`,
-			uuid.Must(uuid.NewV7()), tenantID, op.typ, string(op.state))
+		mustExec(t, ctx, pool, `INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, $3, $4)`, uuid.NewV7(), tenantID, op.typ, string(op.state))
 	}
 
 	counts := func(f operationh.Facets) map[string]map[string]int64 {

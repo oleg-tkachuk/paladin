@@ -14,11 +14,11 @@ import (
 	"slices"
 	"strconv"
 	"time"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -104,10 +104,10 @@ type SessionRef struct {
 // disagreement is the caller's bookkeeping, not a probe — and saying so is
 // more useful than pretending the session is missing.
 func assertSessionMatches(sess Session, want SessionRef) error {
-	if want.ObjectID == uuid.Nil && want.Collection == "" {
+	if want.ObjectID == uuid.Nil() && want.Collection == "" {
 		return nil // caller did not name an object (internal call sites)
 	}
-	if want.ObjectID != uuid.Nil && sess.ObjectID != want.ObjectID {
+	if want.ObjectID != uuid.Nil() && sess.ObjectID != want.ObjectID {
 		return connect.Errorf(connect.CodeInvalidArgument,
 			"object_name names object %s but upload %s belongs to %s",
 			want.ObjectID, sess.UploadID, sess.ObjectID)
@@ -317,7 +317,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage initiate: %w", err))
 	}
 
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	session, err := h.repo.InitiateSession(ctx, args, objectID, storageUploadID, backendID, bucket)
 	if err != nil {
 		// Best-effort rollback: abort the orphan storage session. Log and

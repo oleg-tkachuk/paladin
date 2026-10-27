@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
@@ -60,7 +60,7 @@ func TestCredentialResponsesAreStoredRedacted(t *testing.T) {
 	store := newMemStore()
 	client, _ := newUserServer(t, store)
 
-	first, err := resetWithKey(client, uuid.NewString())
+	first, err := resetWithKey(client, uuid.New().String())
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestCredentialResponsesAreStoredRedacted(t *testing.T) {
 
 func TestCredentialResponsesAreNotReplayed(t *testing.T) {
 	client, svc := newUserServer(t, newMemStore())
-	key := uuid.NewString()
+	key := uuid.New().String()
 	if _, err := resetWithKey(client, key); err != nil {
 		t.Fatalf("first call: %v", err)
 	}

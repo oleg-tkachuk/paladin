@@ -6,12 +6,12 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
@@ -160,12 +160,12 @@ func sqsBatchItems(t *testing.T, cfg sqsSinkConfig, n int) []sqsBatchItem {
 	raw, _ := json.Marshal(cfg)
 	items := make([]sqsBatchItem, n)
 	for i := range items {
-		id := uuid.Must(uuid.NewV7())
+		id := uuid.NewV7()
 		items[i] = sqsBatchItem{
 			RowID: id,
 			Sub: admindomain.EventSubscription{
-				SubscriptionID: uuid.Must(uuid.NewV7()),
-				TenantID:       uuid.Must(uuid.NewV7()),
+				SubscriptionID: uuid.NewV7(),
+				TenantID:       uuid.NewV7(),
 				SinkKind:       "sqs",
 				SinkConfig:     raw,
 			},

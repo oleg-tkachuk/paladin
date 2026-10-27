@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -50,7 +50,7 @@ func TestDeleteCollection_SaysWhatHoldsIt(t *testing.T) {
 			return CollectionHolding{Trashed: 1}, nil
 		},
 	}
-	err := NewHandler(fr, allowAll()).DeleteCollection(authedCtx(tid), uuid.Nil, "assets", 1)
+	err := NewHandler(fr, allowAll()).DeleteCollection(authedCtx(tid), uuid.Nil(), "assets", 1)
 	wantCode(t, err, connect.CodeFailedPrecondition)
 	info := errorInfo(t, err)
 	if info.GetReason() != commonv1.ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY.String() {
@@ -73,7 +73,7 @@ func TestDeleteCollection_RefusalSurvivesAFailedCount(t *testing.T) {
 			return CollectionHolding{}, errors.New("db down")
 		},
 	}
-	err := NewHandler(fr, allowAll()).DeleteCollection(authedCtx(uuid.New()), uuid.Nil, "assets", 1)
+	err := NewHandler(fr, allowAll()).DeleteCollection(authedCtx(uuid.New()), uuid.Nil(), "assets", 1)
 	wantCode(t, err, connect.CodeFailedPrecondition)
 	if md := errorInfo(t, err).GetMetadata(); len(md) != 0 {
 		t.Errorf("metadata = %v, want none", md)

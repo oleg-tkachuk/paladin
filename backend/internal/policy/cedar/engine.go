@@ -14,10 +14,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"uuid"
 
 	cedar "github.com/cedar-policy/cedar-go"
 	cedartypes "github.com/cedar-policy/cedar-go/types"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/capop"
@@ -1341,9 +1341,9 @@ func storageBackendUID(backendID string) cedartypes.EntityUID {
 //   - User           when TargetUserID or TargetSubject set
 //   - Tenant         when only TenantID set (admin tenant ops)
 func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID {
-	if r.Key != "" || r.ObjectID != uuid.Nil {
+	if r.Key != "" || r.ObjectID != uuid.Nil() {
 		id := r.ObjectID.String()
-		if r.ObjectID == uuid.Nil {
+		if r.ObjectID == uuid.Nil() {
 			id = r.Collection + "/" + r.Key
 		}
 		return cedartypes.NewEntityUID(entityTypeObject, cedartypes.String(id))
@@ -1357,7 +1357,7 @@ func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID 
 	if r.BackendID != "" {
 		return storageBackendUID(r.BackendID)
 	}
-	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
+	if r.TargetUserID != uuid.Nil() || r.TargetSubject != "" {
 		return targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
 	}
 	// Tenant-as-resource: key on the DB-authoritative slug so this UID matches
@@ -1370,7 +1370,7 @@ func (e *Engine) resourceUID(r *Resource, authSlug string) cedartypes.EntityUID 
 // by tenant + UUID so policies can write `principal != resource` cleanly.
 func targetUserUID(tenantID, userID uuid.UUID, subject string) cedartypes.EntityUID {
 	id := tenantID.String() + "/"
-	if userID != uuid.Nil {
+	if userID != uuid.Nil() {
 		id += userID.String()
 	} else {
 		id += subject
@@ -1401,7 +1401,7 @@ func actionUID(name string) cedartypes.EntityUID {
 // collection/bucket key and a principal scoped by those is denied (fail-closed).
 func resourceScopeKeys(r *Resource) []string {
 	keys := make([]string, 0, 4)
-	if r.TenantID != uuid.Nil {
+	if r.TenantID != uuid.Nil() {
 		keys = append(keys, "tenant:"+r.TenantID.String())
 	}
 	if r.BackendID != "" {
@@ -1461,7 +1461,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	// not the request/JWT slug, so the entity graph reflects the tenant's real
 	// identity. The Collection/Object hierarchy parents under this entity.
 	var tUID cedartypes.EntityUID
-	if r.TenantID != uuid.Nil || r.TenantSlug != "" {
+	if r.TenantID != uuid.Nil() || r.TenantSlug != "" {
 		tUID = tenantUID(r.TenantID, authSlug)
 		m[tUID] = cedartypes.Entity{
 			UID: tUID,
@@ -1487,9 +1487,9 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	// (role permits like platform.admin are unaffected — they don't key on
 	// membership).
 	userParents := cedartypes.EntityUIDSet{}
-	if p.TenantID != uuid.Nil || p.TenantSlug != "" {
+	if p.TenantID != uuid.Nil() || p.TenantSlug != "" {
 		var pTUID cedartypes.EntityUID
-		if r.TenantID != uuid.Nil && p.TenantID == r.TenantID {
+		if r.TenantID != uuid.Nil() && p.TenantID == r.TenantID {
 			pTUID = tUID // same tenant → the DB-authoritative resource Tenant entity
 		} else {
 			// Different (or no) resource tenant → anchor under the principal's
@@ -1562,7 +1562,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 
 	// Collection — child of Tenant (and Bucket when bucket is in scope).
 	var okUID cedartypes.EntityUID
-	if r.Collection != "" && r.TenantID != uuid.Nil {
+	if r.Collection != "" && r.TenantID != uuid.Nil() {
 		okUID = e.collectionUIDFor(r)
 		parents := cedartypes.NewEntityUIDSet(tUID)
 		if r.BackendID != "" && r.BucketName != "" {
@@ -1582,7 +1582,7 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	}
 
 	// Object — child of Collection.
-	if r.Key != "" || r.ObjectID != uuid.Nil {
+	if r.Key != "" || r.ObjectID != uuid.Nil() {
 		oUID := e.resourceUID(r, authSlug)
 		// tags: Set<String> of KEYS (membership tests, back-compat).
 		// tag_values: Record<String,String> of key→value, so policies can test
@@ -1622,10 +1622,10 @@ func (e *Engine) buildEntities(p *Principal, r *Resource, authSlug string) cedar
 	// User-as-resource — distinct UID family from the principal-User. Policies
 	// can write rules about managing other users; principal != resource
 	// because Subjects and (tenant_id/user_id) keys never collide.
-	if r.TargetUserID != uuid.Nil || r.TargetSubject != "" {
+	if r.TargetUserID != uuid.Nil() || r.TargetSubject != "" {
 		uResUID := targetUserUID(r.TenantID, r.TargetUserID, r.TargetSubject)
 		var parents cedartypes.EntityUIDSet
-		if r.TenantID != uuid.Nil {
+		if r.TenantID != uuid.Nil() {
 			parents = cedartypes.NewEntityUIDSet(tUID)
 		}
 		m[uResUID] = cedartypes.Entity{

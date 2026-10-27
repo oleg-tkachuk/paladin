@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 

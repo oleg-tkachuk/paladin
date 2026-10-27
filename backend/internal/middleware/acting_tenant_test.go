@@ -3,8 +3,8 @@ package middleware
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -19,7 +19,7 @@ func collectionIn(tenant uuid.UUID) string {
 }
 
 func objectIn(tenant uuid.UUID) string {
-	return collectionIn(tenant) + "/objects/" + uuid.NewString()
+	return collectionIn(tenant) + "/objects/" + uuid.New().String()
 }
 
 // The tenant a request acts on is decided before the rate limiter and the
@@ -44,20 +44,20 @@ func TestActOnNamedTenant(t *testing.T) {
 		{"admin, names only inside a selector", admin, &datav1.BatchDeleteObjectsRequest{
 			Selector: &datav1.ObjectSelector{Names: []string{objectIn(target), objectIn(target)}},
 		}, target},
-		{"admin, its own tenant", admin, &datav1.ListObjectsRequest{Parent: collectionIn(own)}, uuid.Nil},
+		{"admin, its own tenant", admin, &datav1.ListObjectsRequest{Parent: collectionIn(own)}, uuid.Nil()},
 		{"admin, names spanning tenants", admin, &datav1.CopyObjectRequest{
 			SourceName: objectIn(target), DestinationCollection: collectionIn(other),
-		}, uuid.Nil},
-		{"admin, no name", admin, &datav1.EnsureTenantStorageRequest{BackendId: "primary", Bucket: "b"}, uuid.Nil},
+		}, uuid.Nil()},
+		{"admin, no name", admin, &datav1.EnsureTenantStorageRequest{BackendId: "primary", Bucket: "b"}, uuid.Nil()},
 		{"admin, another tenant in a field that is not a name", admin, &datav1.UploadObjectRequest{
 			Parent: collectionIn(target), Key: apiutil.TenantNamePrefix + other.String() + "/report.pdf",
 		}, target},
-		{"member, another tenant", member, &datav1.ListObjectsRequest{Parent: collectionIn(target)}, uuid.Nil},
+		{"member, another tenant", member, &datav1.ListObjectsRequest{Parent: collectionIn(target)}, uuid.Nil()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, set := auth.ActingTenant(actingOnNamedTenant(tc.ctx, tc.msg))
-			if tc.want == uuid.Nil {
+			if tc.want == uuid.Nil() {
 				if set {
 					t.Errorf("acting tenant set to %s, want none", got)
 				}

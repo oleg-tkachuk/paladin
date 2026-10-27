@@ -14,8 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
@@ -262,7 +261,7 @@ func mintRefresh(t *testing.T, userID, tenantID uuid.UUID) string {
 	}
 	rt, _, err := iss.MintRefresh(issuer.RefreshClaims{
 		Subject: userID.String(), TenantID: tenantID, UserID: userID,
-		TokenID: uuid.Must(uuid.NewV7()),
+		TokenID: uuid.NewV7(),
 	})
 	if err != nil {
 		t.Fatalf("mint refresh: %v", err)

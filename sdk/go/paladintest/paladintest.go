@@ -53,12 +53,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 	"connectrpc.com/connect/v2/connectproto"
-	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -479,7 +479,7 @@ func New(t testing.TB, opts ...Option) *Server {
 // returns it with the function that stops it.
 func Start(opts ...Option) (*Server, func()) {
 	s := &Server{
-		tenant:  uuid.NewString(),
+		tenant:  uuid.New().String(),
 		objects: map[string]*object{},
 		uploads: map[string]*multipart{},
 		buckets: map[string]bool{},
@@ -635,7 +635,7 @@ func (s *Server) Content(name string) ([]byte, bool) {
 }
 
 func (s *Server) newObject(parent, key, contentType string) *object {
-	id := uuid.NewString()
+	id := uuid.New().String()
 	if key == "" {
 		key = id
 	}
@@ -1049,7 +1049,7 @@ func (s *Server) InitiateMultipartUpload(ctx context.Context, req *datav1.Initia
 	if err != nil {
 		return nil, err
 	}
-	id := uuid.NewString()
+	id := uuid.New().String()
 	s.uploads[id] = &multipart{
 		name: o.msg.GetName(), size: req.GetSizeBytes(), total: int32(total), algo: algorithmName(req.GetChecksumAlgorithm()),
 		parts: map[int32][]byte{}, bindings: map[int32]binding{},

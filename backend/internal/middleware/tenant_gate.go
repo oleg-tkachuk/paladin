@@ -5,9 +5,9 @@ import (
 	"errors"
 	"sync"
 	"time"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -106,7 +106,7 @@ type tenantGate struct{ states auth.TenantStateReader }
 
 func (g tenantGate) check(ctx context.Context) error {
 	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil || p == nil || p.TenantID == uuid.Nil || apiutil.HoldsPlatformRole(p) {
+	if err != nil || p == nil || p.TenantID == uuid.Nil() || apiutil.HoldsPlatformRole(p) {
 		return nil
 	}
 	state, err := g.states.TenantState(ctx, p.TenantID)

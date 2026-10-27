@@ -3,9 +3,9 @@ package objecth
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -40,11 +40,11 @@ func versionListHandler(repo Repository, versions *fakeVersionRepo) (*VersionHan
 }
 
 func TestListVersionsReturnsTheHistoryAndItsCursor(t *testing.T) {
-	objectID := uuid.Must(uuid.NewV7())
+	objectID := uuid.NewV7()
 	versions := newFakeVersionRepo()
 	versions.fixedList = []ObjectVersion{
-		{VersionID: uuid.Must(uuid.NewV7()), ObjectID: objectID, SizeBytes: 10},
-		{VersionID: uuid.Must(uuid.NewV7()), ObjectID: objectID, SizeBytes: 20},
+		{VersionID: uuid.NewV7(), ObjectID: objectID, SizeBytes: 10},
+		{VersionID: uuid.NewV7(), ObjectID: objectID, SizeBytes: 20},
 	}
 	h, ctx, _ := versionListHandler(&versionListRepo{parent: Object{ObjectID: objectID}}, versions)
 
@@ -68,7 +68,7 @@ func TestListVersionsResolvesTheParentUnderTheCallersTenant(t *testing.T) {
 	h, ctx, _ := versionListHandler(&versionListRepo{findErr: ErrObjectNotFound}, versions)
 
 	_, _, err := h.ListVersions(ctx, ListVersionsInput{
-		Collection: "docs", ObjectID: uuid.Must(uuid.NewV7()).String(),
+		Collection: "docs", ObjectID: uuid.NewV7().String(),
 	})
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", connect.CodeOf(err))
@@ -83,7 +83,7 @@ func TestListVersionsRejectsMalformedInput(t *testing.T) {
 		name string
 		in   ListVersionsInput
 	}{
-		{"no collection", ListVersionsInput{ObjectID: uuid.NewString()}},
+		{"no collection", ListVersionsInput{ObjectID: uuid.New().String()}},
 		{"no object id", ListVersionsInput{Collection: "docs"}},
 		{"object id is not a uuid", ListVersionsInput{Collection: "docs", ObjectID: "not-a-uuid"}},
 	} {
@@ -101,7 +101,7 @@ func TestListVersionsUnauthenticated(t *testing.T) {
 	h.SetAuthorizer(allowAll{})
 
 	_, _, err := h.ListVersions(context.Background(), ListVersionsInput{
-		Collection: "docs", ObjectID: uuid.NewString(),
+		Collection: "docs", ObjectID: uuid.New().String(),
 	})
 	if err == nil {
 		t.Fatal("an unauthenticated caller listed version history")

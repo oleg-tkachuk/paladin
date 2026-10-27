@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -73,7 +73,7 @@ func TestSplitBucketName(t *testing.T) {
 }
 
 func TestReplicationWorkerCopiesAvailableNewerThanCutoff(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	now := time.Now()
 	src := &fakeReplSource{
 		buckets: []admindomain.Bucket{{
@@ -91,9 +91,9 @@ func TestReplicationWorkerCopiesAvailableNewerThanCutoff(t *testing.T) {
 	committedNew := now.Add(-30 * time.Second)
 	committedOld := now.Add(-2 * time.Hour) // outside lookback
 	objs := &fakeObjIter{rows: []LifecycleObjectRow{
-		{ObjectID: uuid.Must(uuid.NewV7()), State: "AVAILABLE", CommittedAt: &committedNew},
-		{ObjectID: uuid.Must(uuid.NewV7()), State: "AVAILABLE", CommittedAt: &committedOld},
-		{ObjectID: uuid.Must(uuid.NewV7()), State: "PENDING", CommittedAt: &committedNew}, // skipped
+		{ObjectID: uuid.NewV7(), State: "AVAILABLE", CommittedAt: &committedNew},
+		{ObjectID: uuid.NewV7(), State: "AVAILABLE", CommittedAt: &committedOld},
+		{ObjectID: uuid.NewV7(), State: "PENDING", CommittedAt: &committedNew}, // skipped
 	}}
 	rep := &fakeReplicator{}
 	w := &ReplicationWorker{
@@ -142,7 +142,7 @@ func TestReplicationWorkerSkipsDisabledBuckets(t *testing.T) {
 }
 
 func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	now := time.Now()
 	src := &fakeReplSource{
 		buckets: []admindomain.Bucket{{
@@ -159,7 +159,7 @@ func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
 	}
 	committed := now.Add(-30 * time.Second)
 	objs := &fakeObjIter{rows: []LifecycleObjectRow{
-		{ObjectID: uuid.Must(uuid.NewV7()), State: "AVAILABLE", CommittedAt: &committed},
+		{ObjectID: uuid.NewV7(), State: "AVAILABLE", CommittedAt: &committed},
 	}}
 	w := &ReplicationWorker{
 		Buckets: src, Objects: objs, Replicator: nil,
@@ -185,7 +185,7 @@ func TestReplicationWorkerDryRunWithNilReplicator(t *testing.T) {
 //
 // So this starts from the copying fixture and changes exactly one field.
 func TestReplicationWorkerSkipsADisabledBucketThatWouldOtherwiseCopy(t *testing.T) {
-	tenantID := uuid.Must(uuid.NewV7())
+	tenantID := uuid.NewV7()
 	now := time.Now()
 	committed := now.Add(-30 * time.Second)
 
@@ -207,7 +207,7 @@ func TestReplicationWorkerSkipsADisabledBucketThatWouldOtherwiseCopy(t *testing.
 		},
 	}
 	objs := &fakeObjIter{rows: []LifecycleObjectRow{
-		{ObjectID: uuid.Must(uuid.NewV7()), State: "AVAILABLE", CommittedAt: &committed},
+		{ObjectID: uuid.NewV7(), State: "AVAILABLE", CommittedAt: &committed},
 	}}
 	rep := &fakeReplicator{}
 	w := &ReplicationWorker{
@@ -240,7 +240,7 @@ const (
 // replicatingFixture is one enabled bucket with one binding holding two
 // objects inside the lookback window, so a tick copies both.
 func replicatingFixture(now time.Time) (*fakeReplSource, *fakeObjIter, CollectionBinding, admindomain.Bucket) {
-	bind := CollectionBinding{TenantID: uuid.Must(uuid.NewV7()), Collection: "k"}
+	bind := CollectionBinding{TenantID: uuid.NewV7(), Collection: "k"}
 	bucket := admindomain.Bucket{
 		BackendID:  "primary",
 		BucketName: "paladin-archive",
@@ -255,8 +255,8 @@ func replicatingFixture(now time.Time) (*fakeReplSource, *fakeObjIter, Collectio
 	}
 	committed := now.Add(-replicationTestAge)
 	objs := &fakeObjIter{rows: []LifecycleObjectRow{
-		{ObjectID: uuid.Must(uuid.NewV7()), Key: "a", State: "AVAILABLE", CommittedAt: &committed},
-		{ObjectID: uuid.Must(uuid.NewV7()), Key: "b", State: "AVAILABLE", CommittedAt: &committed},
+		{ObjectID: uuid.NewV7(), Key: "a", State: "AVAILABLE", CommittedAt: &committed},
+		{ObjectID: uuid.NewV7(), Key: "b", State: "AVAILABLE", CommittedAt: &committed},
 	}}
 	return src, objs, bind, bucket
 }

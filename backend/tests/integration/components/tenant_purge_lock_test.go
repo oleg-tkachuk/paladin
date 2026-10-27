@@ -26,8 +26,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -159,7 +159,7 @@ func TestTrashedTenantWithLockedObjectCannotBePurged(t *testing.T) {
 					if _, e := tx.Exec(ctx, `SET LOCAL ROLE paladin_app`); e != nil {
 						t.Fatalf("set role: %v", e)
 					}
-					if _, e := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, uuid.NewString()); e != nil {
+					if _, e := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, uuid.New().String()); e != nil {
 						t.Fatalf("scope session: %v", e)
 					}
 					_, e := tx.Exec(ctx, `DELETE FROM tenants WHERE id = $1`, f.tenant)
@@ -321,7 +321,7 @@ func TestLockOnANonCurrentVersionStillBlocks(t *testing.T) {
 			// The fixture's version becomes the older one, locked; a newer,
 			// unlocked version becomes current.
 			lock.apply(t, ctx, f, f.versionID)
-			newer := uuid.Must(uuid.NewV7())
+			newer := uuid.NewV7()
 			mustExec(t, ctx, f.pool,
 				`INSERT INTO object_versions (id, tenant_id, object_id, storage_path)
 				 VALUES ($1, $2, $3, 'tenant/docs/report.pdf')`, newer, f.tenant, f.objectID)

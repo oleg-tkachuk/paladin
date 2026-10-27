@@ -3,9 +3,9 @@ package operationh
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/google/uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -28,9 +28,9 @@ func TestListOperationsOfANamedTenant(t *testing.T) {
 		wantCode connect.Code
 	}{
 		{"a platform admin, another tenant", admin, other, other, 0},
-		{"a platform admin, none named", admin, uuid.Nil, own, 0},
+		{"a platform admin, none named", admin, uuid.Nil(), own, 0},
 		{"a tenant's own member, its own tenant", member, own, own, 0},
-		{"a tenant's member, another tenant", member, other, uuid.Nil, connect.CodePermissionDenied},
+		{"a tenant's member, another tenant", member, other, uuid.Nil(), connect.CodePermissionDenied},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
