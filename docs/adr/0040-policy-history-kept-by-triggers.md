@@ -39,5 +39,7 @@
     compared.
   - A version is per layer, not per effective stack: what a resource was
     authorised under at a time is the versions of its layers then.
-  - The writer is a subject (a user's UUID, an agent's `agent:…`); showing a
-    name is the reader's join.
+  - The writer is a subject (a user's UUID, an agent's `agent:…`) and the
+    writer's own tenant (`paladin.actor_tenant`, migration `102`), since a
+    subject names a user only within its tenant and a platform admin edits
+    other tenants' policies. Showing a name is the reader's join.

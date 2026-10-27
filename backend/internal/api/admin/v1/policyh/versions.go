@@ -47,7 +47,10 @@ type Version struct {
 	// WrittenBy is the subject of the principal whose request wrote it; nil
 	// when no request did (a migration, an operator's psql).
 	WrittenBy *string
-	WrittenAt time.Time
+	// WrittenByTenant is the writer's own tenant, where its subject names a
+	// user; nil with WrittenBy, and for a version written before migration 102.
+	WrittenByTenant *uuid.UUID
+	WrittenAt       time.Time
 }
 
 // ErrLayerNotFound is a layer whose owning row does not exist.

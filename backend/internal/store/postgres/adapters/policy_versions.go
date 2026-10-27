@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -53,10 +54,11 @@ func (r *PolicyVersionRepo) ListPolicyVersions(ctx context.Context, ref policyh.
 	out := make([]policyh.Version, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, policyh.Version{
-			Version:     row.Version,
-			CedarPolicy: row.CedarPolicy,
-			WrittenBy:   row.WrittenBy,
-			WrittenAt:   row.WrittenAt.Time,
+			Version:         row.Version,
+			CedarPolicy:     row.CedarPolicy,
+			WrittenBy:       row.WrittenBy,
+			WrittenByTenant: optionalUUID(row.WrittenByTenantID),
+			WrittenAt:       row.WrittenAt.Time,
 		})
 	}
 	return out, nil
@@ -85,4 +87,13 @@ func (r *PolicyVersionRepo) owner(ctx context.Context, ref policyh.LayerRef) (pg
 		return pgtype.UUID{}, fmt.Errorf("list policy versions: %w", err)
 	}
 	return id, nil
+}
+
+// optionalUUID is a nullable column's id, nil for NULL.
+func optionalUUID(v pgtype.UUID) *uuid.UUID {
+	if !v.Valid {
+		return nil
+	}
+	id := uuid.UUID(v.Bytes)
+	return &id
 }

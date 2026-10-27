@@ -82,6 +82,10 @@ func TestPolicyVersions(t *testing.T) {
 		if g.Version != w.version || g.CedarPolicy != w.text || !sameWriter(g.WrittenBy, w.writer) {
 			t.Errorf("version %d = {%d %q %v}, want {%d %q %v}", i, g.Version, g.CedarPolicy, writerName(g.WrittenBy), w.version, w.text, writerName(w.writer))
 		}
+		wantTenant := w.writer != nil
+		if (g.WrittenByTenant != nil) != wantTenant || (wantTenant && *g.WrittenByTenant != tenant) {
+			t.Errorf("version %d writer tenant = %v, want %v", g.Version, g.WrittenByTenant, wantTenant)
+		}
 		if g.WrittenAt.IsZero() {
 			t.Errorf("version %d has no time", g.Version)
 		}
@@ -124,6 +128,19 @@ func TestPolicyVersions(t *testing.T) {
 		v := history(asNew, policyh.LayerRef{Layer: policyh.LayerTenant, TenantID: id})
 		if len(v) != 1 || v[0].Version != 1 || v[0].CedarPolicy != policyV1 || v[0].WrittenBy != nil {
 			t.Errorf("tenant history = %+v, want version 1 with the default text and no writer", v)
+		}
+	})
+
+	t.Run("an admin acting on a tenant is recorded under its own tenant", func(t *testing.T) {
+		const admin = "01a00000-0000-7000-8000-0000000000ad"
+		asAdmin := auth.WithActingTenant(auth.WithPrincipal(ctx, &auth.Principal{Subject: admin, TenantID: other}), tenant)
+		if _, err := pool.Exec(asAdmin, `UPDATE tenants SET inherited_cedar_policy = $1 WHERE id = $2`, policyV2, tenant); err != nil {
+			t.Fatalf("set tenant policy: %v", err)
+		}
+		v := history(asTenant, policyh.LayerRef{Layer: policyh.LayerTenant, TenantID: tenant})
+		if len(v) == 0 || v[0].CedarPolicy != policyV2 || !sameWriter(v[0].WrittenBy, ptr(admin)) ||
+			v[0].WrittenByTenant == nil || *v[0].WrittenByTenant != other {
+			t.Errorf("newest tenant version = %+v, want the admin under its own tenant %s", v, other)
 		}
 	})
 

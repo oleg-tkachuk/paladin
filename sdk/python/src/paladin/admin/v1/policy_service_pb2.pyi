@@ -106,13 +106,15 @@ class ListPolicyVersionsResponse(_message.Message):
     def __init__(self, versions: _Optional[_Iterable[_Union[PolicyVersion, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ...) -> None: ...
 
 class PolicyVersion(_message.Message):
-    __slots__ = ("version", "cedar_policy", "written_by", "written_at")
+    __slots__ = ("version", "cedar_policy", "written_by", "written_at", "written_by_tenant_id")
     VERSION_FIELD_NUMBER: _ClassVar[int]
     CEDAR_POLICY_FIELD_NUMBER: _ClassVar[int]
     WRITTEN_BY_FIELD_NUMBER: _ClassVar[int]
     WRITTEN_AT_FIELD_NUMBER: _ClassVar[int]
+    WRITTEN_BY_TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     version: int
     cedar_policy: str
     written_by: str
     written_at: _timestamp_pb2.Timestamp
-    def __init__(self, version: _Optional[int] = ..., cedar_policy: _Optional[str] = ..., written_by: _Optional[str] = ..., written_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    written_by_tenant_id: str
+    def __init__(self, version: _Optional[int] = ..., cedar_policy: _Optional[str] = ..., written_by: _Optional[str] = ..., written_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., written_by_tenant_id: _Optional[str] = ...) -> None: ...

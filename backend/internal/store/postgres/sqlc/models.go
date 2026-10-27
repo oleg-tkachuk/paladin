@@ -672,14 +672,15 @@ type PendingPurge struct {
 }
 
 type PolicyVersion struct {
-	ID          int64              `json:"id"`
-	Layer       PolicyLayer        `json:"layer"`
-	OwnerID     pgtype.UUID        `json:"owner_id"`
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	Version     int32              `json:"version"`
-	CedarPolicy string             `json:"cedar_policy"`
-	WrittenBy   *string            `json:"written_by"`
-	WrittenAt   pgtype.Timestamptz `json:"written_at"`
+	ID                int64              `json:"id"`
+	Layer             PolicyLayer        `json:"layer"`
+	OwnerID           pgtype.UUID        `json:"owner_id"`
+	TenantID          pgtype.UUID        `json:"tenant_id"`
+	Version           int32              `json:"version"`
+	CedarPolicy       string             `json:"cedar_policy"`
+	WrittenBy         *string            `json:"written_by"`
+	WrittenAt         pgtype.Timestamptz `json:"written_at"`
+	WrittenByTenantID pgtype.UUID        `json:"written_by_tenant_id"`
 }
 
 type Quota struct {

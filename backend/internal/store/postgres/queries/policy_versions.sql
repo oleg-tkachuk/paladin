@@ -4,7 +4,7 @@
 -- name: ListPolicyVersions :many
 -- A layer's versions, newest first. before_version 0 starts at the newest;
 -- otherwise the page holds the versions below it.
-SELECT version, cedar_policy, written_by, written_at
+SELECT version, cedar_policy, written_by, written_by_tenant_id, written_at
   FROM policy_versions
  WHERE layer = sqlc.arg('layer')::policy_layer
    AND owner_id = sqlc.arg('owner_id')

@@ -128,4 +128,8 @@ message PolicyVersion {
   // agent's agent:… — and absent when no request did (a migration, psql).
   optional string written_by = 3;
   google.protobuf.Timestamp written_at = 4;
+  // The writer's own tenant, in which written_by names a user — not the
+  // tenant whose policy it wrote. Absent with written_by, and for a version
+  // written before the server recorded it.
+  optional string written_by_tenant_id = 5;
 }
