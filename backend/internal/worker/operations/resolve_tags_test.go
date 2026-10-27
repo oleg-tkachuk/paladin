@@ -1,7 +1,7 @@
 package operations
 
 import (
-	"reflect"
+	"maps"
 	"testing"
 )
 
@@ -59,10 +59,10 @@ func TestResolveTags(t *testing.T) {
 				cur[k] = v
 			}
 			got := resolveTags(cur, tc.supplied, tc.replace)
-			if !reflect.DeepEqual(got, tc.want) {
+			if !maps.Equal(got, tc.want) {
 				t.Fatalf("resolveTags = %v, want %v", got, tc.want)
 			}
-			if !tc.replace && !reflect.DeepEqual(cur, current) {
+			if !tc.replace && !maps.Equal(cur, current) {
 				t.Errorf("merge mutated the object's own tag map: %v", cur)
 			}
 		})

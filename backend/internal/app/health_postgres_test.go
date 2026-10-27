@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"errors"
-	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -34,7 +34,7 @@ func TestPoolDetails(t *testing.T) {
 		{Name: detailIdle, Value: "2"},
 		{Name: detailNoIdle, Value: "7"},
 	}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Errorf("poolDetails = %v, want %v", got, want)
 	}
 }
@@ -86,7 +86,7 @@ func TestSchemaComponent(t *testing.T) {
 			if comp.Status != tc.want || !strings.Contains(comp.Message, tc.wantMessage) {
 				t.Errorf("component = %+v, want %s with %q", comp, tc.want, tc.wantMessage)
 			}
-			if !reflect.DeepEqual(comp.Details, tc.details) {
+			if !slices.Equal(comp.Details, tc.details) {
 				t.Errorf("details = %v, want %v", comp.Details, tc.details)
 			}
 		})
@@ -155,7 +155,7 @@ func TestLimesSchemaComponent(t *testing.T) {
 			if comp.Status != tc.want || !strings.Contains(comp.Message, tc.wantMessage) {
 				t.Errorf("component = %+v, want %s with %q", comp, tc.want, tc.wantMessage)
 			}
-			if !reflect.DeepEqual(comp.Details, tc.details) {
+			if (comp.Details == nil) != (tc.details == nil) || !slices.Equal(comp.Details, tc.details) {
 				t.Errorf("details = %v, want %v", comp.Details, tc.details)
 			}
 		})

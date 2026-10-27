@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
-	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -65,7 +65,7 @@ func TestPageTenants_WalksEveryTenantOnce(t *testing.T) {
 				}
 				page.After = next
 			}
-			if want := ids(tc.tenants); len(want) != 0 && !reflect.DeepEqual(seen, want) {
+			if want := ids(tc.tenants); len(want) != 0 && !slices.Equal(seen, want) {
 				t.Errorf("walked %v, want %v", seen, want)
 			}
 		})
@@ -101,7 +101,7 @@ func TestPageTenants_ResumesAfterTheCursorRowNotAnOffset(t *testing.T) {
 	_, next, _ := pageTenants(tenants, TenantPage{Size: 2})
 
 	got, _, _ := pageTenants(tenants[1:], TenantPage{Size: 2, After: next})
-	if want := []string{"t002", "t003"}; !reflect.DeepEqual(ids(got), want) {
+	if want := []string{"t002", "t003"}; !slices.Equal(ids(got), want) {
 		t.Errorf("after the first tenant vanished: %v, want %v", ids(got), want)
 	}
 }

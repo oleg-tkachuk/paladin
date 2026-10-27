@@ -2,7 +2,6 @@ package billingh
 
 import (
 	"context"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -70,7 +69,7 @@ func TestRankSpend(t *testing.T) {
 		{TenantID: foreign, UnitCode: otherUnit, Amount: units(500), ChargeCount: 9},
 		{TenantID: mixed, UnitCode: otherUnit, Amount: units(7), ChargeCount: 4},
 	}
-	if got := rankSpend(sums, spendCurrency); !reflect.DeepEqual(got, want) {
+	if got := rankSpend(sums, spendCurrency); !slices.Equal(got, want) {
 		t.Errorf("rankSpend =\n%+v\nwant\n%+v", got, want)
 	}
 	if got := rankSpend(nil, spendCurrency); len(got) != 0 {
