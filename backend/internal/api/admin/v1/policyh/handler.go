@@ -27,7 +27,13 @@ import (
 type Handler struct {
 	engine cedar.Authorizer
 	store  cedar.Store
+	// versions reads a layer's history; nil leaves ListPolicyVersions
+	// unimplemented.
+	versions VersionStore
 }
+
+// SetVersionStore wires the policy history ListPolicyVersions reads.
+func (h *Handler) SetVersionStore(v VersionStore) { h.versions = v }
 
 // NewHandler constructs a handler. engine and store are required.
 func NewHandler(engine cedar.Authorizer, store cedar.Store) *Handler {

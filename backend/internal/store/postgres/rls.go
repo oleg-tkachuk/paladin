@@ -71,12 +71,15 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 			if err := setCrossTenant(ctx, conn, auth.CrossTenantRead(ctx)); err != nil {
 				return false, err
 			}
-			return true, nil
+			return true, setActor(ctx, conn)
 		}
 		if _, err := conn.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, false)`, tenantID.String()); err != nil {
 			return false, err
 		}
 		if err := setCrossTenant(ctx, conn, auth.CrossTenantRead(ctx)); err != nil {
+			return false, err
+		}
+		if err := setActor(ctx, conn); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -87,6 +90,12 @@ func EnableRLS(cfg *pgxpool.Config) *pgxpool.Config {
 		// request. Failing closed here is the point.
 		if _, err := conn.Exec(context.Background(),
 			`SELECT set_config('paladin.cross_tenant', '', false)`); err != nil {
+			return false
+		}
+		// The actor goes with it, or the next request's policy writes would
+		// be recorded under the last one's name.
+		if _, err := conn.Exec(context.Background(),
+			`SELECT set_config('paladin.actor', '', false)`); err != nil {
 			return false
 		}
 		// Wipe the GUC on release so a connection returning to the
@@ -110,5 +119,18 @@ func setCrossTenant(ctx context.Context, conn *pgx.Conn, on bool) error {
 		v = "on"
 	}
 	_, err := conn.Exec(ctx, `SELECT set_config('paladin.cross_tenant', $1, false)`, v)
+	return err
+}
+
+// setActor writes `paladin.actor`, the subject of the request's principal,
+// which the policy-version triggers (migration 101) record as who wrote a
+// policy. Always written, ” without a principal, for setCrossTenant's
+// reason: a reused connection must not keep the previous request's name.
+func setActor(ctx context.Context, conn *pgx.Conn) error {
+	subject := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil && p != nil {
+		subject = p.Subject
+	}
+	_, err := conn.Exec(ctx, `SELECT set_config('paladin.actor', $1, false)`, subject)
 	return err
 }

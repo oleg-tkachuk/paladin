@@ -41,6 +41,11 @@ vi.mock("@/lib/connect/client", () => ({
     updateMine: vi.fn(),
   },
 }));
+vi.mock("@/components/features/policy/PolicyHistory", () => ({
+  PolicyHistory: ({ resourceName }: { resourceName: string }) => (
+    <p>history of {resourceName}</p>
+  ),
+}));
 vi.mock("./BackendActions", () => ({ BackendActions: () => null }));
 vi.mock("@/hooks/useBackends", () => ({ useBackends: () => h.backends }));
 vi.mock("@/hooks/useBuckets", () => ({
@@ -248,5 +253,23 @@ describe("StorageBackendDetailPage status panel", () => {
     expect(
       screen.getByRole("tab", { name: "S3 features" }),
     ).toBeInTheDocument();
+  });
+});
+
+// The backend's policy is edited in its Edit dialog; its earlier texts show on
+// the page, and not for a backend that could not be read.
+describe("StorageBackendDetailPage policy history", () => {
+  it("shows the backend's policy history", () => {
+    render(<StorageBackendDetailPage />);
+    expect(
+      screen.getByText("history of storageBackends/primary"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows none for a backend the list could not read", () => {
+    h.backends.backends = [];
+    h.backends.error = "unavailable: upstream";
+    render(<StorageBackendDetailPage />);
+    expect(screen.queryByText(/^history of/)).toBeNull();
   });
 });

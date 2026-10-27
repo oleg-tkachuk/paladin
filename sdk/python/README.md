@@ -692,7 +692,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `MCPInspectService` | `inspect`, `list_sessions`, `get_bridge_status` |
 | `OAuthClientService` | `delete_o_auth_client` |
 | `PlatformOperationService` | `get_operation`, `list_operations`, `cancel_operation`, `dismiss_operations` |
-| `PolicyService` | `validate`, `simulate_authz`, `get_effective_policy` |
+| `PolicyService` | `validate`, `simulate_authz`, `get_effective_policy`, `list_policy_versions` |
 | `QuotaService` | `get_quota`, `set_quota`, `reset_usage` |
 | `SystemService` | `get_config`, `get_dispatcher_stats`, `get_platform_stats`, `list_platform_stats_tenants` |
 | `TenantBudgetService` | `get`, `set`, `summarize` |

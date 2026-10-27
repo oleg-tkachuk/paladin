@@ -13,6 +13,10 @@ import {
   serviceDesc,
 } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
+import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -21,8 +25,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_policy_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3BvbGljeV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIjAKD1ZhbGlkYXRlUmVxdWVzdBIdCgxjZWRhcl9wb2xpY3kYASABKAlCB7pIBHICEAEiVwoQVmFsaWRhdGVSZXNwb25zZRIKCgJvaxgBIAEoCBI3CgtkaWFnbm9zdGljcxgCIAMoCzIiLnBhbGFkaW4uYWRtaW4udjEuUG9saWN5RGlhZ25vc3RpYyJTChBQb2xpY3lEaWFnbm9zdGljEhAKCHNldmVyaXR5GAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDAoEbGluZRgDIAEoBRIOCgZjb2x1bW4YBCABKAUiwQEKFFNpbXVsYXRlQXV0aHpSZXF1ZXN0EiIKEXByaW5jaXBhbF9zdWJqZWN0GAEgASgJQge6SARyAhABEhsKE3ByaW5jaXBhbF90ZW5hbnRfaWQYAiABKAkSFwoPcHJpbmNpcGFsX3JvbGVzGAMgAygJEhcKBmFjdGlvbhgEIAEoCUIHukgEcgIQARIeCg1yZXNvdXJjZV9uYW1lGAUgASgJQge6SARyAhABEhYKDnByaW5jaXBhbF9raW5kGAYgASgJIlcKFVNpbXVsYXRlQXV0aHpSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhgKEG1hdGNoZWRfcG9saWNpZXMYAiADKAkSEwoLZXhwbGFuYXRpb24YAyABKAkiOwoZR2V0RWZmZWN0aXZlUG9saWN5UmVxdWVzdBIeCg1yZXNvdXJjZV9uYW1lGAEgASgJQge6SARyAhABImgKGkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlEhsKE21lcmdlZF9jZWRhcl9wb2xpY3kYASABKAkSLQoGbGF5ZXJzGAIgAygLMh0ucGFsYWRpbi5hZG1pbi52MS5Qb2xpY3lMYXllciJjCgtQb2xpY3lMYXllchIOCgZzb3VyY2UYASABKAkSFAoMY2VkYXJfcG9saWN5GAIgASgJEg4KBmZyb3plbhgDIAEoCBIeChZldmFsdWF0ZWRfY2VkYXJfcG9saWN5GAQgASgJMsQCCg1Qb2xpY3lTZXJ2aWNlElYKCFZhbGlkYXRlEiEucGFsYWRpbi5hZG1pbi52MS5WYWxpZGF0ZVJlcXVlc3QaIi5wYWxhZGluLmFkbWluLnYxLlZhbGlkYXRlUmVzcG9uc2UiA5ACARJlCg1TaW11bGF0ZUF1dGh6EiYucGFsYWRpbi5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVxdWVzdBonLnBhbGFkaW4uYWRtaW4udjEuU2ltdWxhdGVBdXRoelJlc3BvbnNlIgOQAgESdAoSR2V0RWZmZWN0aXZlUG9saWN5EisucGFsYWRpbi5hZG1pbi52MS5HZXRFZmZlY3RpdmVQb2xpY3lSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5HZXRFZmZlY3RpdmVQb2xpY3lSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
-    [file_buf_validate_validate],
+    "CiVwYWxhZGluL2FkbWluL3YxL3BvbGljeV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIjAKD1ZhbGlkYXRlUmVxdWVzdBIdCgxjZWRhcl9wb2xpY3kYASABKAlCB7pIBHICEAEiVwoQVmFsaWRhdGVSZXNwb25zZRIKCgJvaxgBIAEoCBI3CgtkaWFnbm9zdGljcxgCIAMoCzIiLnBhbGFkaW4uYWRtaW4udjEuUG9saWN5RGlhZ25vc3RpYyJTChBQb2xpY3lEaWFnbm9zdGljEhAKCHNldmVyaXR5GAEgASgJEg8KB21lc3NhZ2UYAiABKAkSDAoEbGluZRgDIAEoBRIOCgZjb2x1bW4YBCABKAUiwQEKFFNpbXVsYXRlQXV0aHpSZXF1ZXN0EiIKEXByaW5jaXBhbF9zdWJqZWN0GAEgASgJQge6SARyAhABEhsKE3ByaW5jaXBhbF90ZW5hbnRfaWQYAiABKAkSFwoPcHJpbmNpcGFsX3JvbGVzGAMgAygJEhcKBmFjdGlvbhgEIAEoCUIHukgEcgIQARIeCg1yZXNvdXJjZV9uYW1lGAUgASgJQge6SARyAhABEhYKDnByaW5jaXBhbF9raW5kGAYgASgJIlcKFVNpbXVsYXRlQXV0aHpSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhgKEG1hdGNoZWRfcG9saWNpZXMYAiADKAkSEwoLZXhwbGFuYXRpb24YAyABKAkiOwoZR2V0RWZmZWN0aXZlUG9saWN5UmVxdWVzdBIeCg1yZXNvdXJjZV9uYW1lGAEgASgJQge6SARyAhABImgKGkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlEhsKE21lcmdlZF9jZWRhcl9wb2xpY3kYASABKAkSLQoGbGF5ZXJzGAIgAygLMh0ucGFsYWRpbi5hZG1pbi52MS5Qb2xpY3lMYXllciJjCgtQb2xpY3lMYXllchIOCgZzb3VyY2UYASABKAkSFAoMY2VkYXJfcG9saWN5GAIgASgJEg4KBmZyb3plbhgDIAEoCBIeChZldmFsdWF0ZWRfY2VkYXJfcG9saWN5GAQgASgJImkKGUxpc3RQb2xpY3lWZXJzaW9uc1JlcXVlc3QSHgoNcmVzb3VyY2VfbmFtZRgBIAEoCUIHukgEcgIQARIsCgRwYWdlGAIgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QifgoaTGlzdFBvbGljeVZlcnNpb25zUmVzcG9uc2USMQoIdmVyc2lvbnMYASADKAsyHy5wYWxhZGluLmFkbWluLnYxLlBvbGljeVZlcnNpb24SLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSKOAQoNUG9saWN5VmVyc2lvbhIPCgd2ZXJzaW9uGAEgASgFEhQKDGNlZGFyX3BvbGljeRgCIAEoCRIXCgp3cml0dGVuX2J5GAMgASgJSACIAQESLgoKd3JpdHRlbl9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCDQoLX3dyaXR0ZW5fYnkyugMKDVBvbGljeVNlcnZpY2USVgoIVmFsaWRhdGUSIS5wYWxhZGluLmFkbWluLnYxLlZhbGlkYXRlUmVxdWVzdBoiLnBhbGFkaW4uYWRtaW4udjEuVmFsaWRhdGVSZXNwb25zZSIDkAIBEmUKDVNpbXVsYXRlQXV0aHoSJi5wYWxhZGluLmFkbWluLnYxLlNpbXVsYXRlQXV0aHpSZXF1ZXN0GicucGFsYWRpbi5hZG1pbi52MS5TaW11bGF0ZUF1dGh6UmVzcG9uc2UiA5ACARJ0ChJHZXRFZmZlY3RpdmVQb2xpY3kSKy5wYWxhZGluLmFkbWluLnYxLkdldEVmZmVjdGl2ZVBvbGljeVJlcXVlc3QaLC5wYWxhZGluLmFkbWluLnYxLkdldEVmZmVjdGl2ZVBvbGljeVJlc3BvbnNlIgOQAgESdAoSTGlzdFBvbGljeVZlcnNpb25zEisucGFsYWRpbi5hZG1pbi52MS5MaXN0UG9saWN5VmVyc2lvbnNSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5MaXN0UG9saWN5VmVyc2lvbnNSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    [
+      file_buf_validate_validate,
+      file_google_protobuf_timestamp,
+      file_paladin_common_v1_pagination,
+    ],
   );
 
 /**
@@ -280,6 +288,99 @@ export const PolicyLayerSchema: GenMessage<PolicyLayer> =
   messageDesc(file_paladin_admin_v1_policy_service, 7);
 
 /**
+ * @generated from message paladin.admin.v1.ListPolicyVersionsRequest
+ */
+export type ListPolicyVersionsRequest =
+  Message<"paladin.admin.v1.ListPolicyVersionsRequest"> & {
+    /**
+     * @generated from field: string resource_name = 1;
+     */
+    resourceName: string;
+
+    /**
+     * page_size 0 is the server's default; above its cap, the cap. page_token
+     * is page.next_page_token from the previous response.
+     *
+     * @generated from field: paladin.common.v1.PageRequest page = 2;
+     */
+    page?: PageRequest | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListPolicyVersionsRequest.
+ * Use `create(ListPolicyVersionsRequestSchema)` to create a new message.
+ */
+export const ListPolicyVersionsRequestSchema: GenMessage<ListPolicyVersionsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_policy_service, 8);
+
+/**
+ * @generated from message paladin.admin.v1.ListPolicyVersionsResponse
+ */
+export type ListPolicyVersionsResponse =
+  Message<"paladin.admin.v1.ListPolicyVersionsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.PolicyVersion versions = 1;
+     */
+    versions: PolicyVersion[];
+
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListPolicyVersionsResponse.
+ * Use `create(ListPolicyVersionsResponseSchema)` to create a new message.
+ */
+export const ListPolicyVersionsResponseSchema: GenMessage<ListPolicyVersionsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_policy_service, 9);
+
+/**
+ * PolicyVersion is one text a policy layer has held.
+ *
+ * @generated from message paladin.admin.v1.PolicyVersion
+ */
+export type PolicyVersion = Message<"paladin.admin.v1.PolicyVersion"> & {
+  /**
+   * version counts the layer's texts from 1; each change takes the next.
+   *
+   * @generated from field: int32 version = 1;
+   */
+  version: number;
+
+  /**
+   * The text, "" for a version that cleared the policy.
+   *
+   * @generated from field: string cedar_policy = 2;
+   */
+  cedarPolicy: string;
+
+  /**
+   * The subject of the principal whose request wrote it — a user's id, an
+   * agent's agent:… — and absent when no request did (a migration, psql).
+   *
+   * @generated from field: optional string written_by = 3;
+   */
+  writtenBy?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp written_at = 4;
+   */
+  writtenAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message paladin.admin.v1.PolicyVersion.
+ * Use `create(PolicyVersionSchema)` to create a new message.
+ */
+export const PolicyVersionSchema: GenMessage<PolicyVersion> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_policy_service, 10);
+
+/**
  * PolicyService offers Cedar policy authoring helpers — validation,
  * dry-run evaluation, and inspection of effective (merged) policies.
  * Used heavily by the MCP server and the admin UI.
@@ -319,5 +420,20 @@ export const PolicyService: GenService<{
     methodKind: "unary";
     input: typeof GetEffectivePolicyRequestSchema;
     output: typeof GetEffectivePolicyResponseSchema;
+  };
+  /**
+   * ListPolicyVersions pages through the texts one policy layer has held,
+   * newest first, with who wrote each and when (ADR-0040). resource_name
+   * names the layer: storageBackends/{id}, storageBackends/{id}/buckets/{name},
+   * tenants/{id} or tenants/{id}/collections/{name}. Gated as
+   * GetEffectivePolicy is. NOT_FOUND for a bucket or collection that does
+   * not exist, or one the caller's tenant cannot see.
+   *
+   * @generated from rpc paladin.admin.v1.PolicyService.ListPolicyVersions
+   */
+  listPolicyVersions: {
+    methodKind: "unary";
+    input: typeof ListPolicyVersionsRequestSchema;
+    output: typeof ListPolicyVersionsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_policy_service, 0);

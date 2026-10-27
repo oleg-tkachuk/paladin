@@ -132,7 +132,7 @@ Every service and RPC in `proto/`, by plane.
 | `MCPInspectService` | 3 | `Inspect`, `ListSessions`, `GetBridgeStatus` |
 | `OAuthClientService` | 1 | `DeleteOAuthClient` |
 | `PlatformOperationService` | 4 | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
-| `PolicyService` | 3 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
+| `PolicyService` | 4 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy`, `ListPolicyVersions` |
 | `QuotaService` | 3 | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | 4 | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
 | `TenantBudgetService` | 3 | `Get`, `Set`, `Summarize` |

@@ -840,16 +840,3 @@ order they are being taken up.
   tenant down to its collections (the tenant view already shows them per
   tenant), read on demand rather than all at once.
 - **Blockers:** none — taken up when it is asked for.
-
-
-#### Diff a policy against its earlier versions
-
-- **Status:** Blocked.
-- **Reason:** a Cedar policy is stored in place on its tenant, bucket or
-  collection and no RPC returns an earlier text, so the policy editor diffs
-  only the draft against what is saved. The audit log's before/after
-  snapshots of a policy write are the nearest thing, one entry at a time.
-- **Definition of Done:** the API serves a policy's previous versions, with
-  who wrote each and when, and the policy editor diffs any two of them in
-  `DiffView`.
-- **Blockers:** the backend keeping a policy's history.

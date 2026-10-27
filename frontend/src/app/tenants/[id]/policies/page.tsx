@@ -14,6 +14,7 @@ import { collectionClient } from "@/lib/connect/client";
 import { effectivePolicyQuery } from "@/lib/queries/details";
 import { API_PAGE_SIZE_MAX } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { PolicyHistory } from "@/components/features/policy/PolicyHistory";
 import { PolicyLayers } from "@/components/features/policy/PolicyLayers";
 import { Card } from "@/components/ui/Card";
 import { Label } from "@/components/ui/label";
@@ -101,6 +102,11 @@ export default function TenantPoliciesPage() {
         ) : (
           <PolicyLayers layers={effective.data.layers} />
         )}
+      </Card>
+
+      {/* The picked layer's own texts: the tenant's, or the collection's. */}
+      <Card className="p-4">
+        <PolicyHistory resourceName={resourceName} />
       </Card>
     </div>
   );

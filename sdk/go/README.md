@@ -671,7 +671,7 @@ what each field means, are documented in the `.proto` files under
 | `MCPInspectService` | `Inspect`, `ListSessions`, `GetBridgeStatus` |
 | `OAuthClientService` | `DeleteOAuthClient` |
 | `PlatformOperationService` | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
-| `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy` |
+| `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy`, `ListPolicyVersions` |
 | `QuotaService` | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
 | `TenantBudgetService` | `Get`, `Set`, `Summarize` |

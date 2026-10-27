@@ -3,7 +3,7 @@
 import { Confirmation } from "@/components/ui/Confirmation";
 import { useConfirmation } from "@/hooks/useConfirmation";
 import React, { useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -50,7 +50,9 @@ import { failedRead, ListLoadError } from "@/components/ui/ListLoadError";
 import { useCedarValidation, hasCedarErrors } from "@/hooks/useCedarValidation";
 import { CedarIndicator } from "@/components/ui/CedarIndicator";
 import { DiffView } from "@/components/ui/DiffView";
+import { PolicyHistory } from "@/components/features/policy/PolicyHistory";
 import { PolicyLayers } from "@/components/features/policy/PolicyLayers";
+import { invalidatePolicyVersions } from "@/lib/queries/policyVersions";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import type { PolicyLayer } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
@@ -96,6 +98,7 @@ function collectionResourceName(tenantId: string, collection: string) {
 
 export default function PoliciesPage() {
   const { showNotification } = useNotification();
+  const qc = useQueryClient();
 
   // ─── scope + target selection ────────────────────────────────────────────
   const [scope, setScope] = useState<Scope>("tenant");
@@ -359,6 +362,8 @@ export default function PoliciesPage() {
         setResourceVersion(updated.resourceVersion);
       }
       setServerSnapshot(policyText);
+      // The save is the layer's newest version.
+      void invalidatePolicyVersions(qc, target);
       confirmSaved();
     } catch (err) {
       const msg = errorMessage(err, "Save failed");
@@ -377,6 +382,7 @@ export default function PoliciesPage() {
     policyText,
     showNotification,
     confirmSaved,
+    qc,
   ]);
 
   // The scope's list failed to load. Its select said "No buckets available"
@@ -597,6 +603,11 @@ export default function PoliciesPage() {
               </p>
             )}
           </Card>
+          {target && (
+            <Card className="p-4">
+              <PolicyHistory resourceName={target} draft={policyText} />
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="effective" className="space-y-4">

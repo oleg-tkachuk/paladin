@@ -31,6 +31,11 @@ vi.mock("@/lib/connect/client", () => ({
   policyClient: { getEffectivePolicy: h.getEffectivePolicy },
   collectionClient: { listCollections: h.listCollections },
 }));
+vi.mock("@/components/features/policy/PolicyHistory", () => ({
+  PolicyHistory: ({ resourceName }: { resourceName: string }) => (
+    <p>history of {resourceName}</p>
+  ),
+}));
 vi.mock("../tenant-context", () => ({
   useTenantChangesBlocked: () => null,
   useTenant: () => ({ tenantId: h.tenantId, displayName: "Acme" }),
@@ -83,5 +88,19 @@ describe("TenantPoliciesPage", () => {
     rerender(<TenantPoliciesPage />);
     expect(await screen.findByText("tenants/t-2")).toBeInTheDocument();
     h.tenantId = "t-1";
+  });
+});
+
+// The picked layer's own earlier texts show under its effective policy.
+describe("TenantPoliciesPage policy history", () => {
+  it("shows the tenant's history, then the picked collection's", async () => {
+    render(<TenantPoliciesPage />);
+    expect(screen.getByText("history of tenants/t-1")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText("Scope"));
+    await user.click(await screen.findByRole("option", { name: /docs/ }));
+    expect(
+      await screen.findByText("history of tenants/t-1/collections/docs"),
+    ).toBeInTheDocument();
   });
 });

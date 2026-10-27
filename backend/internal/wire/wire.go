@@ -65,12 +65,14 @@ import (
 // Repos bundles all repository interfaces. The caller constructs this from
 // its Postgres adapters (see cmd/server).
 type Repos struct {
-	Object     objecth.Repository
-	Collection objectkey.Repository
-	Tenant     tenanth.Repository
-	Presign    presignh.Repository
-	Multipart  multiparth.Repository
-	Operation  operationh.Repository
+	// PolicyVersions reads policy history (ListPolicyVersions).
+	PolicyVersions policyh.VersionStore
+	Object         objecth.Repository
+	Collection     objectkey.Repository
+	Tenant         tenanth.Repository
+	Presign        presignh.Repository
+	Multipart      multiparth.Repository
+	Operation      operationh.Repository
 
 	// v2 admin/iam stores.
 	BackendV2 admindomain.BackendRepository
@@ -266,8 +268,12 @@ func ProvideEventSubHandler(repos Repos, pe *policy.Engine, sinks config.Dispatc
 	return h
 }
 
-func ProvidePolicyHandler(engine *policy.Engine, store policy.Store) *policyh.Handler {
-	return policyh.NewHandler(engine, store)
+func ProvidePolicyHandler(repos Repos, engine *policy.Engine, store policy.Store) *policyh.Handler {
+	h := policyh.NewHandler(engine, store)
+	if repos.PolicyVersions != nil {
+		h.SetVersionStore(repos.PolicyVersions)
+	}
+	return h
 }
 
 func ProvideVersionHandler(repos Repos, pe policy.Authorizer) *objecth.VersionHandler {

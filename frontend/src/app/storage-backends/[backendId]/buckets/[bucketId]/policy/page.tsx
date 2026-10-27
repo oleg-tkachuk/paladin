@@ -9,6 +9,7 @@
 import { Confirmation } from "@/components/ui/Confirmation";
 import { useConfirmation } from "@/hooks/useConfirmation";
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   CheckCircleIcon,
@@ -23,6 +24,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 
 import { bucketClient, policyClient } from "@/lib/connect/client";
+import { invalidatePolicyVersions } from "@/lib/queries/policyVersions";
+import { PolicyHistory } from "@/components/features/policy/PolicyHistory";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { cn } from "@/lib/utils";
 import { validateNotice } from "@/lib/policyValidation";
@@ -33,6 +36,7 @@ import { errorMessage } from "@/hooks/errorContract";
 export default function BucketPolicyPage() {
   const { bucket, setBucket, changesBlocked } = useBucket();
   const { showNotification } = useNotification();
+  const qc = useQueryClient();
 
   const [policyText, setPolicyText] = useState(bucket.cedarPolicy);
   const [validating, setValidating] = useState(false);
@@ -83,6 +87,8 @@ export default function BucketPolicyPage() {
         cedarPolicy: policyText,
       });
       setBucket(updated);
+      // The save is the layer's newest version.
+      void invalidatePolicyVersions(qc, bucket.name);
       confirmSaved();
     } catch (err) {
       const msg = errorMessage(err, "Save failed");
@@ -90,7 +96,7 @@ export default function BucketPolicyPage() {
     } finally {
       setSaving(false);
     }
-  }, [bucket, policyText, setBucket, showNotification, confirmSaved]);
+  }, [bucket, policyText, setBucket, showNotification, confirmSaved, qc]);
 
   return (
     <Card>
@@ -168,6 +174,11 @@ export default function BucketPolicyPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+        {bucket.resourceVersion !== "" && (
+          <div className="border-t border-border pt-3">
+            <PolicyHistory resourceName={bucket.name} draft={policyText} />
           </div>
         )}
       </CardContent>

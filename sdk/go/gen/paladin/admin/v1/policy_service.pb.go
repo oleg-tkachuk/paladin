@@ -12,8 +12,10 @@ import (
 	unsafe "unsafe"
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -514,11 +516,190 @@ func (x *PolicyLayer) GetEvaluatedCedarPolicy() string {
 	return ""
 }
 
+type ListPolicyVersionsRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ResourceName string                 `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	// page_size 0 is the server's default; above its cap, the cap. page_token
+	// is page.next_page_token from the previous response.
+	Page          *v1.PageRequest `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPolicyVersionsRequest) Reset() {
+	*x = ListPolicyVersionsRequest{}
+	mi := &file_paladin_admin_v1_policy_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPolicyVersionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPolicyVersionsRequest) ProtoMessage() {}
+
+func (x *ListPolicyVersionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_policy_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPolicyVersionsRequest.ProtoReflect.Descriptor instead.
+func (*ListPolicyVersionsRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_policy_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListPolicyVersionsRequest) GetResourceName() string {
+	if x != nil {
+		return x.ResourceName
+	}
+	return ""
+}
+
+func (x *ListPolicyVersionsRequest) GetPage() *v1.PageRequest {
+	if x != nil {
+		return x.Page
+	}
+	return nil
+}
+
+type ListPolicyVersionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Versions      []*PolicyVersion       `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
+	Page          *v1.PageResponse       `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPolicyVersionsResponse) Reset() {
+	*x = ListPolicyVersionsResponse{}
+	mi := &file_paladin_admin_v1_policy_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPolicyVersionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPolicyVersionsResponse) ProtoMessage() {}
+
+func (x *ListPolicyVersionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_policy_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPolicyVersionsResponse.ProtoReflect.Descriptor instead.
+func (*ListPolicyVersionsResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_policy_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListPolicyVersionsResponse) GetVersions() []*PolicyVersion {
+	if x != nil {
+		return x.Versions
+	}
+	return nil
+}
+
+func (x *ListPolicyVersionsResponse) GetPage() *v1.PageResponse {
+	if x != nil {
+		return x.Page
+	}
+	return nil
+}
+
+// PolicyVersion is one text a policy layer has held.
+type PolicyVersion struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// version counts the layer's texts from 1; each change takes the next.
+	Version int32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// The text, "" for a version that cleared the policy.
+	CedarPolicy string `protobuf:"bytes,2,opt,name=cedar_policy,json=cedarPolicy,proto3" json:"cedar_policy,omitempty"`
+	// The subject of the principal whose request wrote it — a user's id, an
+	// agent's agent:… — and absent when no request did (a migration, psql).
+	WrittenBy     *string                `protobuf:"bytes,3,opt,name=written_by,json=writtenBy,proto3,oneof" json:"written_by,omitempty"`
+	WrittenAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=written_at,json=writtenAt,proto3" json:"written_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyVersion) Reset() {
+	*x = PolicyVersion{}
+	mi := &file_paladin_admin_v1_policy_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyVersion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyVersion) ProtoMessage() {}
+
+func (x *PolicyVersion) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_policy_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyVersion.ProtoReflect.Descriptor instead.
+func (*PolicyVersion) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_policy_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *PolicyVersion) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *PolicyVersion) GetCedarPolicy() string {
+	if x != nil {
+		return x.CedarPolicy
+	}
+	return ""
+}
+
+func (x *PolicyVersion) GetWrittenBy() string {
+	if x != nil && x.WrittenBy != nil {
+		return *x.WrittenBy
+	}
+	return ""
+}
+
+func (x *PolicyVersion) GetWrittenAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.WrittenAt
+	}
+	return nil
+}
+
 var File_paladin_admin_v1_policy_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/policy_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\"=\n" +
+	"%paladin/admin/v1/policy_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\"=\n" +
 	"\x0fValidateRequest\x12*\n" +
 	"\fcedar_policy\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcedarPolicy\"h\n" +
 	"\x10ValidateResponse\x12\x0e\n" +
@@ -549,11 +730,26 @@ const file_paladin_admin_v1_policy_service_proto_rawDesc = "" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12!\n" +
 	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy\x12\x16\n" +
 	"\x06frozen\x18\x03 \x01(\bR\x06frozen\x124\n" +
-	"\x16evaluated_cedar_policy\x18\x04 \x01(\tR\x14evaluatedCedarPolicy2\xc4\x02\n" +
+	"\x16evaluated_cedar_policy\x18\x04 \x01(\tR\x14evaluatedCedarPolicy\"}\n" +
+	"\x19ListPolicyVersionsRequest\x12,\n" +
+	"\rresource_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fresourceName\x122\n" +
+	"\x04page\x18\x02 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\x8e\x01\n" +
+	"\x1aListPolicyVersionsResponse\x12;\n" +
+	"\bversions\x18\x01 \x03(\v2\x1f.paladin.admin.v1.PolicyVersionR\bversions\x123\n" +
+	"\x04page\x18\x02 \x01(\v2\x1f.paladin.common.v1.PageResponseR\x04page\"\xba\x01\n" +
+	"\rPolicyVersion\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x05R\aversion\x12!\n" +
+	"\fcedar_policy\x18\x02 \x01(\tR\vcedarPolicy\x12\"\n" +
+	"\n" +
+	"written_by\x18\x03 \x01(\tH\x00R\twrittenBy\x88\x01\x01\x129\n" +
+	"\n" +
+	"written_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\twrittenAtB\r\n" +
+	"\v_written_by2\xba\x03\n" +
 	"\rPolicyService\x12V\n" +
 	"\bValidate\x12!.paladin.admin.v1.ValidateRequest\x1a\".paladin.admin.v1.ValidateResponse\"\x03\x90\x02\x01\x12e\n" +
 	"\rSimulateAuthz\x12&.paladin.admin.v1.SimulateAuthzRequest\x1a'.paladin.admin.v1.SimulateAuthzResponse\"\x03\x90\x02\x01\x12t\n" +
-	"\x12GetEffectivePolicy\x12+.paladin.admin.v1.GetEffectivePolicyRequest\x1a,.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
+	"\x12GetEffectivePolicy\x12+.paladin.admin.v1.GetEffectivePolicyRequest\x1a,.paladin.admin.v1.GetEffectivePolicyResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x12ListPolicyVersions\x12+.paladin.admin.v1.ListPolicyVersionsRequest\x1a,.paladin.admin.v1.ListPolicyVersionsResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_policy_service_proto_rawDescOnce sync.Once
@@ -567,7 +763,7 @@ func file_paladin_admin_v1_policy_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_policy_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_policy_service_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_paladin_admin_v1_policy_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_paladin_admin_v1_policy_service_proto_goTypes = []any{
 	(*ValidateRequest)(nil),            // 0: paladin.admin.v1.ValidateRequest
 	(*ValidateResponse)(nil),           // 1: paladin.admin.v1.ValidateResponse
@@ -577,21 +773,33 @@ var file_paladin_admin_v1_policy_service_proto_goTypes = []any{
 	(*GetEffectivePolicyRequest)(nil),  // 5: paladin.admin.v1.GetEffectivePolicyRequest
 	(*GetEffectivePolicyResponse)(nil), // 6: paladin.admin.v1.GetEffectivePolicyResponse
 	(*PolicyLayer)(nil),                // 7: paladin.admin.v1.PolicyLayer
+	(*ListPolicyVersionsRequest)(nil),  // 8: paladin.admin.v1.ListPolicyVersionsRequest
+	(*ListPolicyVersionsResponse)(nil), // 9: paladin.admin.v1.ListPolicyVersionsResponse
+	(*PolicyVersion)(nil),              // 10: paladin.admin.v1.PolicyVersion
+	(*v1.PageRequest)(nil),             // 11: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),            // 12: paladin.common.v1.PageResponse
+	(*timestamppb.Timestamp)(nil),      // 13: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_policy_service_proto_depIdxs = []int32{
-	2, // 0: paladin.admin.v1.ValidateResponse.diagnostics:type_name -> paladin.admin.v1.PolicyDiagnostic
-	7, // 1: paladin.admin.v1.GetEffectivePolicyResponse.layers:type_name -> paladin.admin.v1.PolicyLayer
-	0, // 2: paladin.admin.v1.PolicyService.Validate:input_type -> paladin.admin.v1.ValidateRequest
-	3, // 3: paladin.admin.v1.PolicyService.SimulateAuthz:input_type -> paladin.admin.v1.SimulateAuthzRequest
-	5, // 4: paladin.admin.v1.PolicyService.GetEffectivePolicy:input_type -> paladin.admin.v1.GetEffectivePolicyRequest
-	1, // 5: paladin.admin.v1.PolicyService.Validate:output_type -> paladin.admin.v1.ValidateResponse
-	4, // 6: paladin.admin.v1.PolicyService.SimulateAuthz:output_type -> paladin.admin.v1.SimulateAuthzResponse
-	6, // 7: paladin.admin.v1.PolicyService.GetEffectivePolicy:output_type -> paladin.admin.v1.GetEffectivePolicyResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	2,  // 0: paladin.admin.v1.ValidateResponse.diagnostics:type_name -> paladin.admin.v1.PolicyDiagnostic
+	7,  // 1: paladin.admin.v1.GetEffectivePolicyResponse.layers:type_name -> paladin.admin.v1.PolicyLayer
+	11, // 2: paladin.admin.v1.ListPolicyVersionsRequest.page:type_name -> paladin.common.v1.PageRequest
+	10, // 3: paladin.admin.v1.ListPolicyVersionsResponse.versions:type_name -> paladin.admin.v1.PolicyVersion
+	12, // 4: paladin.admin.v1.ListPolicyVersionsResponse.page:type_name -> paladin.common.v1.PageResponse
+	13, // 5: paladin.admin.v1.PolicyVersion.written_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: paladin.admin.v1.PolicyService.Validate:input_type -> paladin.admin.v1.ValidateRequest
+	3,  // 7: paladin.admin.v1.PolicyService.SimulateAuthz:input_type -> paladin.admin.v1.SimulateAuthzRequest
+	5,  // 8: paladin.admin.v1.PolicyService.GetEffectivePolicy:input_type -> paladin.admin.v1.GetEffectivePolicyRequest
+	8,  // 9: paladin.admin.v1.PolicyService.ListPolicyVersions:input_type -> paladin.admin.v1.ListPolicyVersionsRequest
+	1,  // 10: paladin.admin.v1.PolicyService.Validate:output_type -> paladin.admin.v1.ValidateResponse
+	4,  // 11: paladin.admin.v1.PolicyService.SimulateAuthz:output_type -> paladin.admin.v1.SimulateAuthzResponse
+	6,  // 12: paladin.admin.v1.PolicyService.GetEffectivePolicy:output_type -> paladin.admin.v1.GetEffectivePolicyResponse
+	9,  // 13: paladin.admin.v1.PolicyService.ListPolicyVersions:output_type -> paladin.admin.v1.ListPolicyVersionsResponse
+	10, // [10:14] is the sub-list for method output_type
+	6,  // [6:10] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_policy_service_proto_init() }
@@ -599,13 +807,14 @@ func file_paladin_admin_v1_policy_service_proto_init() {
 	if File_paladin_admin_v1_policy_service_proto != nil {
 		return
 	}
+	file_paladin_admin_v1_policy_service_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_policy_service_proto_rawDesc), len(file_paladin_admin_v1_policy_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

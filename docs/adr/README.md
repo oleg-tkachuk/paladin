@@ -49,6 +49,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0037](0037-revocation-answers-cached-by-the-signal.md) | Revocation answers are cached for as long as the revocation signal vouches for them | Accepted |
 | [0038](0038-a-capability-does-what-its-caveats-allow.md) | A capability does what its caveats allow, without a tenant policy | Accepted |
 | [0039](0039-the-name-is-qualified-where-it-is-published.md) | Paladin keeps its name, qualified wherever it is published | Accepted |
+| [0040](0040-policy-history-kept-by-triggers.md) | A policy's history is kept by triggers, with the writer the pool names | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

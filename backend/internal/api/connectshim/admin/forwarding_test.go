@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 
@@ -667,5 +668,52 @@ func TestBucketOwnerTenant_EmptyIsShared(t *testing.T) {
 	}
 	if update.updateArgs.Bucket.OwnerTenantID != uuid.Nil {
 		t.Errorf("update clearing the owner: owner = %v, want none", update.updateArgs.Bucket.OwnerTenantID)
+	}
+}
+
+type versionedPolicy struct {
+	failingPolicy
+	page    policyh.VersionsPage
+	gotName string
+	gotSize int32
+	gotTok  string
+}
+
+func (v *versionedPolicy) ListPolicyVersions(_ context.Context, name string, size int32, token string) (policyh.VersionsPage, error) {
+	v.gotName, v.gotSize, v.gotTok = name, size, token
+	return v.page, nil
+}
+
+// Each version reaches the wire as the handler read it, an unrecorded writer
+// staying absent rather than becoming "".
+func TestListPolicyVersions_ForwardsEachVersion(t *testing.T) {
+	writer := "01a00000-0000-7000-8000-00000000beef"
+	at := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+	const size, token, next = 2, "5", "3"
+	h := &versionedPolicy{page: policyh.VersionsPage{
+		Versions: []policyh.Version{
+			{Version: 4, CedarPolicy: "permit (principal, action, resource);", WrittenBy: &writer, WrittenAt: at},
+			{Version: 3, CedarPolicy: ""},
+		},
+		NextPageToken: next,
+	}}
+	resp, err := (&PolicyServer{H: h}).ListPolicyVersions(context.Background(), &pb.ListPolicyVersionsRequest{
+		ResourceName: "tenants/t1", Page: &commonv1.PageRequest{PageSize: size, PageToken: token},
+	})
+	if err != nil {
+		t.Fatalf("ListPolicyVersions: %v", err)
+	}
+	if h.gotName != "tenants/t1" || h.gotSize != size || h.gotTok != token {
+		t.Errorf("handler got %q %d %q", h.gotName, h.gotSize, h.gotTok)
+	}
+	v := resp.GetVersions()
+	if len(v) != 2 || v[0].GetVersion() != 4 || v[0].GetWrittenBy() != writer || !v[0].GetWrittenAt().AsTime().Equal(at) {
+		t.Fatalf("versions = %v", v)
+	}
+	if v[1].WrittenBy != nil || v[1].GetCedarPolicy() != "" {
+		t.Errorf("an unrecorded writer reached the wire as %v", v[1].WrittenBy)
+	}
+	if resp.GetPage().GetNextPageToken() != next {
+		t.Errorf("next page token = %q, want %q", resp.GetPage().GetNextPageToken(), next)
 	}
 }

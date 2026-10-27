@@ -229,6 +229,50 @@ func (ns NullOperationState) Value() (driver.Value, error) {
 	return string(ns.OperationState), nil
 }
 
+type PolicyLayer string
+
+const (
+	PolicyLayerStorageBackend PolicyLayer = "storage_backend"
+	PolicyLayerBucket         PolicyLayer = "bucket"
+	PolicyLayerCollection     PolicyLayer = "collection"
+	PolicyLayerTenant         PolicyLayer = "tenant"
+)
+
+func (e *PolicyLayer) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PolicyLayer(s)
+	case string:
+		*e = PolicyLayer(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PolicyLayer: %T", src)
+	}
+	return nil
+}
+
+type NullPolicyLayer struct {
+	PolicyLayer PolicyLayer `json:"policy_layer"`
+	Valid       bool        `json:"valid"` // Valid is true if PolicyLayer is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPolicyLayer) Scan(value interface{}) error {
+	if value == nil {
+		ns.PolicyLayer, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PolicyLayer.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPolicyLayer) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PolicyLayer), nil
+}
+
 type TenantStorageLayout string
 
 const (
@@ -625,6 +669,17 @@ type PendingPurge struct {
 	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
 	LastError      *string            `json:"last_error"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type PolicyVersion struct {
+	ID          int64              `json:"id"`
+	Layer       PolicyLayer        `json:"layer"`
+	OwnerID     pgtype.UUID        `json:"owner_id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Version     int32              `json:"version"`
+	CedarPolicy string             `json:"cedar_policy"`
+	WrittenBy   *string            `json:"written_by"`
+	WrittenAt   pgtype.Timestamptz `json:"written_at"`
 }
 
 type Quota struct {

@@ -25,6 +25,7 @@ import {
   type StorageBackend,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { backendsQuery } from "@/lib/queries/backends";
+import { policyVersionsKey } from "@/lib/queries/policyVersions";
 
 function client() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -278,6 +279,30 @@ describe("useBackends changes", () => {
     });
     await waitFor(() => expect(cached()?.[0].displayName).toBe("Primary"));
     expect(cached()?.[0].region).toBe("eu");
+  });
+
+  // A policy written is the backend layer's newest version; an edit that
+  // leaves the policy alone does not touch its history.
+  it.each([
+    ["a policy edit reads the layer's history again", "permit", true],
+    ["an edit without the policy does not", undefined, false],
+  ] as const)("%s", async (_, cedarPolicy, reread) => {
+    h.updateBackend.mockResolvedValue(backend("a"));
+    const { qc, result } = seeded();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    await act(() =>
+      result.current.updateBackend("a", "v1", {
+        displayName: "A",
+        endpoint: "http://minio:9000",
+        publicEndpoint: "",
+        region: "",
+        forcePathStyle: false,
+        ...(cedarPolicy !== undefined && { cedarPolicy }),
+      }),
+    );
+    const historyKey = { queryKey: policyVersionsKey("storageBackends/a") };
+    if (reread) expect(invalidate).toHaveBeenCalledWith(historyKey);
+    else expect(invalidate).not.toHaveBeenCalledWith(historyKey);
   });
 
   it("throws the refusal on to the caller and reads every list again", async () => {

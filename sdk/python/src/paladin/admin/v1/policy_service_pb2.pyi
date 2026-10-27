@@ -1,4 +1,8 @@
+import datetime
+
 from buf.validate import validate_pb2 as _validate_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from paladin.common.v1 import pagination_pb2 as _pagination_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -84,3 +88,31 @@ class PolicyLayer(_message.Message):
     frozen: bool
     evaluated_cedar_policy: str
     def __init__(self, source: _Optional[str] = ..., cedar_policy: _Optional[str] = ..., frozen: _Optional[bool] = ..., evaluated_cedar_policy: _Optional[str] = ...) -> None: ...
+
+class ListPolicyVersionsRequest(_message.Message):
+    __slots__ = ("resource_name", "page")
+    RESOURCE_NAME_FIELD_NUMBER: _ClassVar[int]
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    resource_name: str
+    page: _pagination_pb2.PageRequest
+    def __init__(self, resource_name: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ...) -> None: ...
+
+class ListPolicyVersionsResponse(_message.Message):
+    __slots__ = ("versions", "page")
+    VERSIONS_FIELD_NUMBER: _ClassVar[int]
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    versions: _containers.RepeatedCompositeFieldContainer[PolicyVersion]
+    page: _pagination_pb2.PageResponse
+    def __init__(self, versions: _Optional[_Iterable[_Union[PolicyVersion, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ...) -> None: ...
+
+class PolicyVersion(_message.Message):
+    __slots__ = ("version", "cedar_policy", "written_by", "written_at")
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    CEDAR_POLICY_FIELD_NUMBER: _ClassVar[int]
+    WRITTEN_BY_FIELD_NUMBER: _ClassVar[int]
+    WRITTEN_AT_FIELD_NUMBER: _ClassVar[int]
+    version: int
+    cedar_policy: str
+    written_by: str
+    written_at: _timestamp_pb2.Timestamp
+    def __init__(self, version: _Optional[int] = ..., cedar_policy: _Optional[str] = ..., written_by: _Optional[str] = ..., written_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
