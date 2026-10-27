@@ -24,6 +24,7 @@ import {
   WRITER_NOT_RECORDED,
   isCleared,
   layerTenantId,
+  writerTenantId,
   resolveComparison,
   sideLabel,
   sideText,
@@ -114,7 +115,10 @@ function VersionRow({
       </td>
       <td className={cn(CELL, "max-w-60 truncate")}>
         {version.writtenBy ? (
-          <ActorName subject={version.writtenBy} tenantId={tenantId} />
+          <ActorName
+            subject={version.writtenBy}
+            tenantId={writerTenantId(version, tenantId)}
+          />
         ) : (
           <span className="text-muted-foreground italic">
             {WRITER_NOT_RECORDED}

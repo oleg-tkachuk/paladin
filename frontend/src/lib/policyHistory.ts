@@ -108,9 +108,22 @@ export function resolveComparison(
 }
 
 /**
- * The tenant a layer belongs to, which names its writers' user records: the
- * id in "tenants/{id}/…", and "" for a backend's or a bucket's layer.
+ * The tenant a layer belongs to: the id in "tenants/{id}/…", and "" for a
+ * backend's or a bucket's layer.
  */
 export function layerTenantId(resourceName: string): string {
   return TENANT_LAYER.exec(resourceName)?.[1] ?? "";
+}
+
+/**
+ * The tenant in which a version's writer names a user: the writer's own, as
+ * the server recorded it — a platform admin editing a tenant's policy is the
+ * platform's — or, for a version written before the server recorded it, the
+ * layer's.
+ */
+export function writerTenantId(
+  version: Pick<PolicyVersion, "writtenByTenantId">,
+  layerTenant: string,
+): string {
+  return version.writtenByTenantId ?? layerTenant;
 }

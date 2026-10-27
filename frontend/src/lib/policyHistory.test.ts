@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { formatTimestamp } from "@/lib/format/timestamp";
 import {
+  writerTenantId,
   CLEARED_LABEL,
   DRAFT_LABEL,
   DRAFT_SIDE,
@@ -182,5 +183,20 @@ describe("layerTenantId", () => {
     ["", ""],
   ])("%s → %j", (name, want) => {
     expect(layerTenantId(name)).toBe(want);
+  });
+});
+
+describe("writerTenantId", () => {
+  const LAYER = "11111111-1111-4111-8111-111111111111";
+  const PLATFORM = "22222222-2222-4222-8222-222222222222";
+  it.each([
+    [
+      "the writer's own tenant, when recorded",
+      { writtenByTenantId: PLATFORM },
+      PLATFORM,
+    ],
+    ["the layer's, when not", {}, LAYER],
+  ])("%s", (_, version, want) => {
+    expect(writerTenantId(version, LAYER)).toBe(want);
   });
 });
