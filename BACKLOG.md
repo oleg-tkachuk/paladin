@@ -139,18 +139,25 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
-### Token exchange and introspection limes now ships
+### MCP authorization on limes' token exchange
 
 - **Status:** Deferred.
-- **Reason:** limes v1.0.0-rc.6 to rc.9 added an `exchange` module (OAuth
-  access tokens for capabilities, RFC 8693, with OAuth metadata) and RFC
-  7662 introspection, while Paladin keeps its own exchange in
-  `backend/internal/auth/oauth/exchange.go` and `backend/internal/mcp/exchange.go`;
-  the bump to rc.9 took only the type changes.
-- **Definition of Done:** Paladin's exchange and token introspection run on
-  limes' and the code that duplicates it is gone, or a note here says why
-  limes' cannot serve Paladin's case.
-- **Blockers:** none; the size of the redesign.
+- **Reason:** limes' `exchange` module (v1.0.0-rc.6 on) trades an access
+  token for a capability, which would give each agent session its own
+  budget, caveats on operations and resources, and immediate revocation.
+  It does not duplicate Paladin's exchange
+  (`backend/internal/auth/oauth/exchange.go`, ADR-0036), which issues a
+  plane's IAM access token that stays the user's, so nothing is removed by
+  adopting it: it is a redesign. It changes how the planes see the
+  principal (Cedar authorizes the token's user today), and ADR-0035's
+  `paladin.write` rule would have to be expressed as caveats. It is set
+  aside for the control-plane stability focus. limes' RFC 7662
+  introspection has no counterpart in Paladin and no consumer yet.
+- **Definition of Done:** an ADR superseding ADR-0036 decides how the MCP
+  server exchanges an agent's token for a capability and how the planes
+  authorize it; the bridge runs on `exchange`, the plane-token exchange is
+  gone, and `paladin.write` holds as a caveat.
+- **Blockers:** the control-plane stability focus.
 
 ## Agentic plane / single-binary multi-mode migration
 
