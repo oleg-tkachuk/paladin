@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -77,7 +77,7 @@ func TestScope(t *testing.T) {
 			if err := Scope(tc.ctx, tx); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(tx.set, tc.want) {
+			if !slices.Equal(tx.set, tc.want) {
 				t.Errorf("settings = %v, want %v", tx.set, tc.want)
 			}
 		})

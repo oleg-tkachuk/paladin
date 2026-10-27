@@ -3,7 +3,7 @@ package health
 import (
 	"context"
 	"errors"
-	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -20,7 +20,7 @@ func TestDetailsAreReportedWhetherTheCheckPassesOrNot(t *testing.T) {
 		Check{Name: "down", Func: func(context.Context) error { return errors.New("refused") }, Describe: describe},
 	}}
 	for _, c := range h.Snapshot(context.Background(), "api").Components {
-		if !reflect.DeepEqual(c.Details, poolDetails) {
+		if !slices.Equal(c.Details, poolDetails) {
 			t.Errorf("%s details = %v, want %v", c.Name, c.Details, poolDetails)
 		}
 	}

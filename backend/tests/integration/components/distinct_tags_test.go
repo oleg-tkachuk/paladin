@@ -5,7 +5,8 @@ package components
 import (
 	"context"
 	"fmt"
-	"reflect"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -59,10 +60,10 @@ func TestListDistinctTags(t *testing.T) {
 		"env":  {"prod", "staging"}, // distinct + sorted, no "ghost"
 		"team": {"data"},
 	}
-	if !reflect.DeepEqual(page.Values, want) {
+	if !maps.EqualFunc(page.Values, want, slices.Equal[[]string]) {
 		t.Fatalf("distinct tags = %v, want %v", page.Values, want)
 	}
-	if !reflect.DeepEqual(page.Keys, []string{"env", "team"}) {
+	if !slices.Equal(page.Keys, []string{"env", "team"}) {
 		t.Fatalf("keys = %v, want [env team] in ascending order", page.Keys)
 	}
 	if page.NextKey != "" {
@@ -108,7 +109,7 @@ func TestListDistinctTagsPaging(t *testing.T) {
 			cursor = page.NextKey
 		}
 		want := []string{"colour", "k0", "k1", "k2", "k3", "k4"}
-		if !reflect.DeepEqual(seen, want) {
+		if !slices.Equal(seen, want) {
 			t.Fatalf("paged keys = %v, want %v", seen, want)
 		}
 	})
