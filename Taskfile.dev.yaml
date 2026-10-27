@@ -242,6 +242,7 @@ tasks:
       - task: verify:stack-disk
       - task: verify:portable-shell
       - task: verify:conflict-markers
+      - task: verify:commit-subject
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
       - task: verify:chart-values
@@ -438,6 +439,11 @@ tasks:
     desc: "No tracked file keeps a merge's conflict markers"
     cmds:
       - ./scripts/conflict-markers.test.sh
+
+  verify:commit-subject:
+    desc: "The commit-msg and pre-push gates read subjects as semantic-release does"
+    cmds:
+      - ./scripts/commit-subject.test.sh
 
   verify:lefthook-single-thread:
     desc: "The git hooks run their jobs one at a time, the Go ones on one thread"
