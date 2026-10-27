@@ -8,6 +8,10 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 import { MAX_LIST_PAGES } from "@/hooks/useBuckets";
 import { backendClient } from "@/lib/connect/client";
 
+/** A backend's resource name, as BackendService and its policy layer take it. */
+export const backendResourceName = (backendId: string) =>
+  `storageBackends/${backendId}`;
+
 /** Every backends list, whatever its filter. */
 export const BACKENDS_QUERY_KEY = ["backends"] as const;
 

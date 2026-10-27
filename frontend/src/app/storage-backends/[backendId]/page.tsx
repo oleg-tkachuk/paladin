@@ -36,6 +36,8 @@ import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 import { ListLoadError } from "@/components/ui/ListLoadError";
 import { BackendActions } from "./BackendActions";
+import { PolicyHistory } from "@/components/features/policy/PolicyHistory";
+import { backendResourceName } from "@/lib/queries/backends";
 import { BackendHeader, kindLabel } from "./BackendHeader";
 import { FeaturesSummary } from "./FeaturesSummary";
 import { healthView } from "../backendView";
@@ -182,6 +184,14 @@ export default function StorageBackendDetailPage() {
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
             Backend not found.
           </CardContent>
+        </Card>
+      )}
+
+      {/* The backend's policy layer is edited in its Edit dialog; its earlier
+          texts are compared here. */}
+      {backend && (
+        <Card className="p-4">
+          <PolicyHistory resourceName={backendResourceName(backendId)} />
         </Card>
       )}
 

@@ -21,7 +21,12 @@ import { errorMessage } from "@/hooks/errorContract";
 import { fieldMask, type MaskField } from "@/lib/connect/fieldMask";
 import { useOptimistic } from "@/hooks/useOptimistic";
 import { edit, type OptimisticEdit } from "@/lib/optimistic";
-import { BACKENDS_QUERY_KEY, backendsQuery } from "@/lib/queries/backends";
+import {
+  BACKENDS_QUERY_KEY,
+  backendResourceName,
+  backendsQuery,
+} from "@/lib/queries/backends";
+import { invalidatePolicyVersions } from "@/lib/queries/policyVersions";
 
 // useBackends — list rows from the `backends` table via
 // admin/v1.BackendService.ListBackends. Use this for any UI that needs
@@ -307,16 +312,22 @@ export function useBackends({
         region: input.region,
         forcePathStyle: input.forcePathStyle,
       };
-      return run([changed(backendId, plain)], () =>
+      const name = backendResourceName(backendId);
+      const updated = await run([changed(backendId, plain)], () =>
         backendClient.updateBackend({
-          name: `storageBackends/${backendId}`,
+          name,
           resourceVersion,
           updateMask: fieldMask(StorageBackendSchema, ...updateMaskFor(input)),
           backend,
         }),
       );
+      // A policy written is the layer's newest version.
+      if (input.cedarPolicy !== undefined) {
+        void invalidatePolicyVersions(qc, name);
+      }
+      return updated;
     },
-    [run],
+    [run, qc],
   );
 
   // rotateCredentials — points the backend at a new secret-store ref via

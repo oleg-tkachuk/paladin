@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@/test/utils";
+import { render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 
 // Characterization net for the policies page. It orchestrates four admin
@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
   tenantsError: null as string | null,
   tenants: [] as Array<{ tenantId: string; displayName: string }>,
   getTenant: vi.fn(),
+  setInheritedPolicy: vi.fn(),
+  invalidatePolicyVersions: vi.fn(),
+  history: [] as Array<{ resourceName: string; draft?: string }>,
 }));
 
 vi.mock("@/hooks/useTenants", () => ({
@@ -52,7 +55,19 @@ vi.mock("@/lib/connect/client", () => ({
   bucketClient: { getBucket: vi.fn() },
   collectionClient: { getCollection: vi.fn() },
   policyClient: { getEffectivePolicy: vi.fn(), validatePolicy: vi.fn() },
-  tenantClient: { getTenant: h.getTenant },
+  tenantClient: {
+    getTenant: h.getTenant,
+    setInheritedPolicy: h.setInheritedPolicy,
+  },
+}));
+vi.mock("@/components/features/policy/PolicyHistory", () => ({
+  PolicyHistory: (props: { resourceName: string; draft?: string }) => (
+    h.history.push(props),
+    (<p>history of {props.resourceName}</p>)
+  ),
+}));
+vi.mock("@/lib/queries/policyVersions", () => ({
+  invalidatePolicyVersions: h.invalidatePolicyVersions,
 }));
 vi.mock("@/components/ui/Notification", () => ({
   useNotification: () => ({ showNotification: h.showNotification }),
@@ -162,6 +177,41 @@ describe("PoliciesPage unsaved changes", () => {
     });
     expect(diff).toHaveTextContent("forbid");
     expect(diff.querySelector('[data-diff="add"]')).not.toBeNull();
+    h.tenants = [];
+  });
+});
+
+// The layer's earlier texts sit under the editor, the draft among them, and a
+// save reads them again: the save is the newest.
+describe("PoliciesPage policy history", () => {
+  it("shows the target's history with the draft, and reads it again after a save", async () => {
+    h.tenants = [{ tenantId: "acme", displayName: "Acme" }];
+    h.getTenant.mockResolvedValue({
+      inheritedCedarPolicy: "permit (principal, action, resource);\n",
+      resourceVersion: "7",
+    });
+    h.setInheritedPolicy.mockResolvedValue({ resourceVersion: "8" });
+    const user = userEvent.setup();
+    render(<PoliciesPage />);
+    expect(screen.queryByText(/^history of/)).toBeNull();
+    await user.click(screen.getByLabelText("Target"));
+    await user.click(screen.getByRole("option", { name: /Acme/ }));
+    const editor = await screen.findByDisplayValue(/permit \(principal/);
+    expect(screen.getByText("history of tenants/acme")).toBeInTheDocument();
+
+    await user.type(editor, "x");
+    expect(h.history.at(-1)).toEqual({
+      resourceName: "tenants/acme",
+      draft: "permit (principal, action, resource);\nx",
+    });
+    expect(h.invalidatePolicyVersions).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /^Save/ }));
+    await waitFor(() =>
+      expect(h.invalidatePolicyVersions).toHaveBeenCalledWith(
+        expect.anything(),
+        "tenants/acme",
+      ),
+    );
     h.tenants = [];
   });
 });

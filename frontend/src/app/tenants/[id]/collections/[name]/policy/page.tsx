@@ -9,6 +9,7 @@ import { Confirmation } from "@/components/ui/Confirmation";
 import { useConfirmation } from "@/hooks/useConfirmation";
 import { useTenantChangesBlocked } from "../../../tenant-context";
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   CheckCircleIcon,
@@ -23,6 +24,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useNotification } from "@/components/ui/Notification";
 
 import { collectionClient, policyClient } from "@/lib/connect/client";
+import { invalidatePolicyVersions } from "@/lib/queries/policyVersions";
+import { PolicyHistory } from "@/components/features/policy/PolicyHistory";
 import type { PolicyDiagnostic } from "@/gen/paladin/admin/v1/policy_service_pb";
 import { cn } from "@/lib/utils";
 import { validateNotice } from "@/lib/policyValidation";
@@ -34,6 +37,7 @@ export default function CollectionPolicyPage() {
   const changesBlocked = useTenantChangesBlocked();
   const { collection, setCollection } = useCollection();
   const { showNotification } = useNotification();
+  const qc = useQueryClient();
 
   const [policyText, setPolicyText] = useState(collection.cedarPolicy);
   const [validating, setValidating] = useState(false);
@@ -83,6 +87,8 @@ export default function CollectionPolicyPage() {
         cedarPolicy: policyText,
       });
       setCollection(updated);
+      // The save is the layer's newest version.
+      void invalidatePolicyVersions(qc, collection.name);
       confirmSaved();
     } catch (err) {
       const msg = errorMessage(err, "Save failed");
@@ -90,7 +96,14 @@ export default function CollectionPolicyPage() {
     } finally {
       setSaving(false);
     }
-  }, [collection, policyText, setCollection, showNotification, confirmSaved]);
+  }, [
+    collection,
+    policyText,
+    setCollection,
+    showNotification,
+    confirmSaved,
+    qc,
+  ]);
 
   return (
     <Card>
@@ -168,6 +181,11 @@ export default function CollectionPolicyPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+        {collection.resourceVersion !== "" && (
+          <div className="border-t border-border pt-3">
+            <PolicyHistory resourceName={collection.name} draft={policyText} />
           </div>
         )}
       </CardContent>
