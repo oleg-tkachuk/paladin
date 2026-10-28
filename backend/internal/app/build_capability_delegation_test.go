@@ -37,6 +37,7 @@ func delegationFixture(t *testing.T) (*capabilityIssuers, limes.SigningKey, *mem
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: issuers.keys, Revocations: store, TrustedIssuers: issuers.trusted, KeyIssuers: issuers.keyIssuers,
+		Biscuit: &limes.BiscuitConfig{Revocations: store},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -150,5 +151,26 @@ func TestTokenExchangeNeedsCapability(t *testing.T) {
 	_, err := withDelegationExchange(t.Context(), nil, &SharedDeps{}, map[string]bool{"mcp": true}, usersFixed{})
 	if !errors.Is(err, errExchangeNeedsCapability) {
 		t.Errorf("err = %v, want errExchangeNeedsCapability", err)
+	}
+}
+
+// A capability issuer's Biscuit copy, which every capability is also handed
+// out as, verifies under the kid binding the delegation issuer brought.
+func TestCapabilityBiscuitsVerifyUnderKeyBinding(t *testing.T) {
+	issuers, _, _, verifier := delegationFixture(t)
+	token, err := issueWith(t, issuers.issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified, err := verifier.Verify(t.Context(), limes.VerifyRequest{Token: token, Audience: testCapAudience})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := issuers.issuer.Biscuit(t.Context(), limes.BiscuitRequest{Capability: verified})
+	if err != nil {
+		t.Fatalf("Biscuit: %v", err)
+	}
+	if _, err := verifier.Verify(t.Context(), limes.VerifyRequest{Token: b.Token, Audience: testCapAudience}); err != nil {
+		t.Errorf("the Biscuit copy is refused: %v", err)
 	}
 }

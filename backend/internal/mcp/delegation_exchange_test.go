@@ -264,3 +264,54 @@ func TestRequireBearerDelegates(t *testing.T) {
 		t.Errorf("session subject %q, want the caller's %s though the token is gone", subject, w.user.UserID)
 	}
 }
+
+// What the token endpoint answers that the caller cannot be told about —
+// a failure of the server's, or an answer that is no capability — is an
+// error of the server's, never a refusal of the caller.
+func TestDelegationClientServerFailures(t *testing.T) {
+	answer := func(status int, body string) *DelegationClient {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+		return NewDelegationClient(srv.Client(), srv.URL, bridgeClientID, bridgeSecret)
+	}
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+
+	for _, tc := range []struct {
+		name   string
+		client *DelegationClient
+	}{
+		{"the bridge's own client refused", answer(http.StatusUnauthorized, `{"error":"invalid_client"}`)},
+		{"a server error", answer(http.StatusInternalServerError, `{"error":"server_error"}`)},
+		{"an access token, not a capability", answer(http.StatusOK, `{"access_token":"x","issued_token_type":"`+exchange.TokenTypeAccessToken+`","expires_in":60}`)},
+		{"no token at all", answer(http.StatusOK, `{"issued_token_type":"`+exchange.IssuedTokenTypeCapability+`"}`)},
+		{"a body that is no JSON", answer(http.StatusOK, `not json`)},
+		{"an endpoint that is not there", NewDelegationClient(gone.Client(), gone.URL, bridgeClientID, bridgeSecret)},
+	} {
+		_, err := tc.client.Capability(t.Context(), "subject")
+		if err == nil || errors.Is(err, exchange.ErrInvalidGrant) || errors.Is(err, exchange.ErrInvalidTarget) || errors.Is(err, exchange.ErrInvalidScope) {
+			t.Errorf("%s: err = %v, want a server failure", tc.name, err)
+		}
+	}
+}
+
+// A server failure is answered as one at the edge, and the request goes no
+// further.
+func TestDelegationEdgeServerFailure(t *testing.T) {
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+	reached := false
+	edge := delegateCalls(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }),
+		NewDelegationClient(gone.Client(), gone.URL, bridgeClientID, bridgeSecret), "")
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)
+	r.Header.Set(paladin.HeaderAuthorization, "Bearer subject")
+	edge.ServeHTTP(rec, r)
+	if rec.Code != http.StatusInternalServerError || reached {
+		t.Errorf("status %d, reached %v; want 500 before the server", rec.Code, reached)
+	}
+}
