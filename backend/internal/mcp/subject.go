@@ -10,6 +10,10 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
+// subjectClaimTenant carries the token's tenant from the SubjectVerifier to
+// the delegation policy, which holds the user to it.
+const subjectClaimTenant = "tenant"
+
 // errNoClient is a paladin-mcp token no OAuth client was issued: there is
 // no grant, and so no consent, to exchange it under.
 var errNoClient = errors.New("the token names no OAuth client")
@@ -45,5 +49,6 @@ func (v *SubjectVerifier) VerifySubject(ctx context.Context, token string) (exch
 		Audience:  p.Audiences,
 		Scopes:    p.OAuthScopes,
 		ExpiresAt: p.ExpiresAt,
+		Claims:    map[string]any{subjectClaimTenant: p.TenantID.String()},
 	}, nil
 }

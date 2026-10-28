@@ -34,8 +34,9 @@
      `JWT`, and the verifier runs limes' `exchangetest` contract suite.
   2. **The capability acts for the user.** The exchange policy issues, per
      plane:
-     - `Subject`: the user (`sub`, a UUID) in their tenant, as an agent
-       whose `MCPClient` is the OAuth client;
+     - `Subject`: the agent, named by its OAuth client (`MCPClient`), in
+       the user's tenant; `OnBehalfOf`: the user (`sub`, a UUID). Both are
+       signed into the capability;
      - `Issuer`: an issuer of its own, `<issuer_name>/mcp`, signing with a
        key derived (HKDF) from the capability signing key under a kid of its
        own. The planes trust it, bound to that kid alone, so its `iss` is the

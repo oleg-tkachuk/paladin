@@ -165,7 +165,7 @@ func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal
 	return &Principal{
 		TenantID: t.TenantID,
 		Subject:  SubjectPrefixAPIToken + t.ID.String(),
-		Audience: principalAudienceFor(audienceLabel),
+		Audience: PlaneAudience(audienceLabel),
 		Kind:     PrincipalKindApiKey,
 		Scopes:   scopes,
 		// Roles were absent here, so a machine caller could not satisfy any
@@ -176,10 +176,10 @@ func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal
 	}, nil
 }
 
-// principalAudienceFor maps a short plane label carried by API tokens ("data"/"admin"/
+// PlaneAudience maps a short plane label carried by API tokens ("data"/"admin"/
 // "iam"/"mcp") to the canonical RequireAudience value ("paladin-data", …). Unknown labels pass
 // through unchanged (RequireAudience then rejects, which is the safe default).
-func principalAudienceFor(label string) string {
+func PlaneAudience(label string) string {
 	switch label {
 	case TokenPlaneData:
 		return AudienceData

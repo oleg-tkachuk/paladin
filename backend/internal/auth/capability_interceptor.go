@@ -402,7 +402,7 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 		// carrying the label through unmapped produced `token audience "data"
 		// is not allowed on "paladin-data" plane` — a request that had just
 		// authenticated, refused for a naming mismatch.
-		Audience: principalAudienceFor(i.audience),
+		Audience: PlaneAudience(i.audience),
 		Kind:     PrincipalKindCapability,
 	}), nil
 }
