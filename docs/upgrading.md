@@ -89,7 +89,16 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.125.0, sdk/python/v0.126.0 — a policy version names its writer's tenant
+## v40.3.0 — policy history names older writers, and agents can read it
+
+- **Migration `103`** fills in `written_by_tenant_id` for the versions
+  written before `102` whose `written_by` is a user's id; a writer that is no
+  user stays without one. Nothing to do.
+- **MCP tool `paladin_list_policy_versions`** reads a policy layer's
+  history, page by page. It matches `paladin_list_*`, so the `read_only` and
+  `agent_safe` profiles carry it. Additive.
+
+## v40.3.0, sdk/go/v0.125.0, sdk/python/v0.126.0 — a policy version names its writer's tenant
 
 - **`PolicyVersion.written_by_tenant_id`**: the writer's own tenant, in which
   `written_by` names a user — a platform admin editing another tenant's
@@ -98,7 +107,7 @@ here.
 - **Migration `102`** adds the column and records it; the pool sets
   `paladin.actor_tenant` beside `paladin.actor`.
 
-## sdk/go/v0.124.0, sdk/python/v0.125.0 — a policy layer keeps every text it has held
+## v40.3.0, sdk/go/v0.124.0, sdk/python/v0.125.0 — a policy layer keeps every text it has held
 
 - **`PolicyService.ListPolicyVersions`** pages through one layer's texts,
   newest first (`PolicyVersion`: `version`, `cedar_policy`, `written_by`,
