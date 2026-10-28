@@ -244,6 +244,7 @@ tasks:
       - task: verify:conflict-markers
       - task: verify:commit-subject
       - task: verify:mutate-script
+      - task: verify:coverage-profile
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
       - task: verify:chart-values
@@ -451,11 +452,18 @@ tasks:
     cmds:
       - ./scripts/mutate.test.sh
 
-  quality:crap:
-    desc: "CRAP scores of both Go modules, worst first (crap4go, pinned in tools/go.mod)"
+  verify:coverage-profile:
+    desc: "scripts/coverage-profile.sh lists each block once, covered by any package that reached it"
     cmds:
-      - for: [backend, sdk/go]
-        cmd: cd {{.ITEM}} && go tool -modfile={{.ROOT_DIR}}/tools/go.mod crap4go
+      - ./scripts/coverage-profile.test.sh
+
+  quality:crap:
+    desc: "CRAP scores of both Go modules, worst first, counting the integration tests' coverage (crap4go)"
+    cmds:
+      # The backend's stores and runners are tested against Postgres, under the
+      # integration tag; without it they read as untested.
+      - cmd: cd backend && go tool -modfile={{.ROOT_DIR}}/tools/go.mod crap4go --test-command "{{.ROOT_DIR}}/scripts/coverage-profile.sh {coverprofile} -tags integration -coverpkg=./... ./..."
+      - cmd: cd sdk/go && go tool -modfile={{.ROOT_DIR}}/tools/go.mod crap4go --test-command "{{.ROOT_DIR}}/scripts/coverage-profile.sh {coverprofile} -coverpkg=./... ./..."
 
   quality:dry:
     desc: "Candidate duplicate code in both Go modules, generated code left out (dry4go)"
