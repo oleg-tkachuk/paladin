@@ -143,3 +143,12 @@ func TestDelegatingUsersReadsIAM(t *testing.T) {
 		t.Errorf("a failing store: err = %v, want its failure", err)
 	}
 }
+
+// A token exchange with the capability subsystem off has no issuer to
+// delegate through, and refuses to start rather than serve nothing.
+func TestTokenExchangeNeedsCapability(t *testing.T) {
+	_, err := withDelegationExchange(t.Context(), nil, &SharedDeps{}, map[string]bool{"mcp": true}, usersFixed{})
+	if !errors.Is(err, errExchangeNeedsCapability) {
+		t.Errorf("err = %v, want errExchangeNeedsCapability", err)
+	}
+}
