@@ -10,71 +10,71 @@ import (
 	"testing"
 )
 
-func TestJWKSParserHandlesRSA(t *testing.T) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
+// rsaJWK is priv's public half as a JWK under kid, used for use.
+func rsaJWK(priv *rsa.PrivateKey, kid, use string) map[string]any {
 	enc := base64.RawURLEncoding
-	body := map[string]any{
-		"keys": []map[string]any{{
-			"kid": "k1",
-			"kty": "RSA",
-			"alg": "RS256",
-			"use": "sig",
-			"n":   enc.EncodeToString(priv.N.Bytes()),
-			"e":   enc.EncodeToString([]byte{0x01, 0x00, 0x01}), // 65537
-		}},
+	k := map[string]any{
+		"kid": kid,
+		"kty": "RSA",
+		"n":   enc.EncodeToString(priv.N.Bytes()),
+		"e":   enc.EncodeToString([]byte{0x01, 0x00, 0x01}), // 65537
 	}
-	raw, _ := json.Marshal(body)
-	keys, err := parseJWKS(raw)
-	if err != nil {
-		t.Fatalf("parseJWKS: %v", err)
+	if use != "" {
+		k["use"] = use
 	}
-	if _, ok := keys["k1"].(*rsa.PublicKey); !ok {
-		t.Errorf("expected *rsa.PublicKey for k1, got %T", keys["k1"])
-	}
+	return k
 }
 
-func TestJWKSSkipsEncryptionKeys(t *testing.T) {
-	body := map[string]any{
-		"keys": []map[string]any{
-			{"kid": "enc", "kty": "RSA", "alg": "RS256", "use": "enc", "n": "AA", "e": "AQAB"},
-			{"kid": "sig", "kty": "RSA", "alg": "RS256", "use": "sig", "n": "AA", "e": "AQAB"},
-		},
-	}
-	raw, _ := json.Marshal(body)
-	keys, err := parseJWKS(raw)
+// Of what a set publishes, only RSA and EC signing keys with a kid are kept:
+// not an encryption key, a shared secret, a key without a kid, or one that
+// does not parse.
+func TestJWKSSigningKeys(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, rsaTestBits)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := keys["enc"]; ok {
-		t.Error("encryption key should be filtered out")
+	raw, _ := json.Marshal(map[string]any{"keys": []map[string]any{
+		rsaJWK(priv, "sig", "sig"),
+		rsaJWK(priv, "unmarked", ""),
+		rsaJWK(priv, "enc", "enc"),
+		rsaJWK(priv, "", "sig"),
+		{"kid": "secret", "kty": "oct", "k": "c2VjcmV0"},
+		{"kid": "broken", "kty": "RSA", "n": "!", "e": "AQAB"},
+	}})
+	keys, err := signingKeys(raw)
+	if err != nil {
+		t.Fatalf("signingKeys: %v", err)
 	}
-	if _, ok := keys["sig"]; !ok {
-		t.Error("signing key should be present")
+	for _, kid := range []string{"sig", "unmarked"} {
+		if _, ok := keys.LookupKeyID(kid); !ok {
+			t.Errorf("signing key %q left out", kid)
+		}
+	}
+	for _, kid := range []string{"enc", "secret", "broken"} {
+		if _, ok := keys.LookupKeyID(kid); ok {
+			t.Errorf("key %q kept, want it left out", kid)
+		}
+	}
+	if keys.Len() != 2 {
+		t.Errorf("kept %d keys, want 2", keys.Len())
 	}
 }
 
 func TestJWKSEmptyResponseRejected(t *testing.T) {
-	_, err := parseJWKS([]byte(`{"keys":[]}`))
-	if err == nil {
+	if _, err := signingKeys([]byte(`{"keys":[]}`)); err == nil {
 		t.Error("empty key set should error")
+	}
+	if _, err := signingKeys([]byte(`{"keys":[{"kid":"secret","kty":"oct","k":"c2VjcmV0"}]}`)); err == nil {
+		t.Error("a set of shared secrets alone should error")
 	}
 }
 
 func TestJWKSVerifierUnknownKidForcesRefresh(t *testing.T) {
-	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-	enc := base64.RawURLEncoding
-	keyBody := map[string]any{
-		"keys": []map[string]any{{
-			"kid": "k-fresh",
-			"kty": "RSA",
-			"use": "sig",
-			"n":   enc.EncodeToString(priv.N.Bytes()),
-			"e":   enc.EncodeToString([]byte{0x01, 0x00, 0x01}),
-		}},
+	priv, err := rsa.GenerateKey(rand.Reader, rsaTestBits)
+	if err != nil {
+		t.Fatal(err)
 	}
+	keyBody := map[string]any{"keys": []map[string]any{rsaJWK(priv, "k-fresh", "sig")}}
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits++
@@ -84,8 +84,8 @@ func TestJWKSVerifierUnknownKidForcesRefresh(t *testing.T) {
 
 	v := NewJWKSVerifier(srv.URL)
 	v.HTTPClient = srv.Client()
-	if _, err := v.keyFor(t.Context(), "k-fresh"); err != nil {
-		t.Fatalf("keyFor: %v", err)
+	if _, err := v.keySetWith(t.Context(), "k-fresh"); err != nil {
+		t.Fatalf("keySetWith: %v", err)
 	}
 	if hits != 1 {
 		t.Errorf("expected one fetch on miss, got %d", hits)
