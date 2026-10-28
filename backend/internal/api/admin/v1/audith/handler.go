@@ -21,7 +21,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
-	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -50,23 +49,8 @@ func NewHandler(r admindomain.AuditRepository, policy cedar.Authorizer) *Handler
 // (audit lines are tenant-scoped); compliance roles can be granted
 // cross-tenant read by writing a permit without the tenant_id match.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{TenantID: tenantID},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	_, err := apiutil.Authorize(ctx, h.policy, action, &cedar.Resource{TenantID: tenantID})
+	return err
 }
 
 // maxFilteredBatches bounds how many store pages one ListAuditLog call reads

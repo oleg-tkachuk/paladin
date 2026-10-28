@@ -671,24 +671,12 @@ func (h *Handler) authorizeFull(
 	tenantID uuid.UUID,
 	collection, backendID, bucketName string, action cedar.Action,
 ) error {
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipalFor(p, tenantID),
-		action,
-		&cedar.Resource{
-			TenantID:   tenantID,
-			Collection: collection,
-			BackendID:  backendID,
-			BucketName: bucketName,
-		},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipalFor(p, tenantID), action, &cedar.Resource{
+		TenantID:   tenantID,
+		Collection: collection,
+		BackendID:  backendID,
+		BucketName: bucketName,
+	})
 }
 
 // ErrCollectionHasObjects is returned when a Delete is blocked because

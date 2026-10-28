@@ -69,21 +69,8 @@ func NewHandler(ledger meter.LedgerReader, usage meter.UsageStore, policy cedar.
 // tenant would otherwise see that tenant's rows filtered to nothing — a
 // summary of zeros, with nothing to say why.
 func (h *Handler) authorize(ctx context.Context, tenantID uuid.UUID) (context.Context, error) {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		cedar.ActionReadBilling,
-		&cedar.Resource{TenantID: tenantID},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return nil, connect.NewError(connect.CodePermissionDenied, "denied by policy")
+	if _, err := apiutil.Authorize(ctx, h.policy, cedar.ActionReadBilling, &cedar.Resource{TenantID: tenantID}); err != nil {
+		return nil, err
 	}
 	return auth.WithActingTenant(ctx, tenantID), nil
 }

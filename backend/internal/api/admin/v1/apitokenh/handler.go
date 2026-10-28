@@ -83,24 +83,7 @@ func NewHandler(
 // resource: CreateAPIToken, RevokeAPIToken or ReadAPIToken. Reaching another
 // tenant's tokens is handler-gated to platform.admin.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug},
-		cedar.RequestContext{},
-	)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	if decision != cedar.DecisionAllow {
-		return nil, connect.Errorf(connect.CodePermissionDenied,
-			"%s denied", action)
-	}
-	return p, nil
+	return apiutil.AuthorizeOwnTenant(ctx, h.policy, action)
 }
 
 // Create mints an API token and returns the plaintext exactly once.

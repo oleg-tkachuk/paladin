@@ -1,0 +1,6 @@
+github.com/unclebob/crap4go v0.0.0-20260521190544-bee16dbdadb4 h1:elj33LlQM2C/MP8TL6ShS7016NLK9nQTRARWhfsBacM=
+github.com/unclebob/crap4go v0.0.0-20260521190544-bee16dbdadb4/go.mod h1:wz9BTqkhHnNljT7oe4F+6AUyeis55zs7f/3U4fi66QY=
+github.com/unclebob/dry4go v0.0.0-20260511205932-78f4b4122b62 h1:dU0V5Uj/SbhTnhz3Ql1r2wvc5z/iZSpKka3nMw7Ip5o=
+github.com/unclebob/dry4go v0.0.0-20260511205932-78f4b4122b62/go.mod h1:p2mMsPfugANztFIQFN4FqmvI6CpCuYeO5QZRPSdDTuQ=
+github.com/unclebob/mutate4go v0.0.0-20260523153956-9016c7adafc1 h1:1pbTgwpAoRsiDZdk4qZhHhlmurh50wfQCTtoU364hxU=
+github.com/unclebob/mutate4go v0.0.0-20260523153956-9016c7adafc1/go.mod h1:ndFRJzGTpEogTVR2f4UXbGu54J9V2dSsTI1WesJ/4os=

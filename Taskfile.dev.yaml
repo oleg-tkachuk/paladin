@@ -243,6 +243,7 @@ tasks:
       - task: verify:portable-shell
       - task: verify:conflict-markers
       - task: verify:commit-subject
+      - task: verify:mutate-script
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
       - task: verify:chart-values
@@ -444,6 +445,28 @@ tasks:
     desc: "The commit-msg and pre-push gates read subjects as semantic-release does"
     cmds:
       - ./scripts/commit-subject.test.sh
+
+  verify:mutate-script:
+    desc: "scripts/mutate.sh fails on a surviving mutant and leaves the file as it was"
+    cmds:
+      - ./scripts/mutate.test.sh
+
+  quality:crap:
+    desc: "CRAP scores of both Go modules, worst first (crap4go, pinned in tools/go.mod)"
+    cmds:
+      - for: [backend, sdk/go]
+        cmd: cd {{.ITEM}} && go tool -modfile={{.ROOT_DIR}}/tools/go.mod crap4go
+
+  quality:dry:
+    desc: "Candidate duplicate code in both Go modules, generated code left out (dry4go)"
+    dir: backend
+    cmds:
+      - go tool -modfile={{.ROOT_DIR}}/tools/go.mod dry4go internal cmd ../sdk/go/paladin ../sdk/go/paladintest
+
+  quality:mutate:
+    desc: "Mutation-test one Go file against its package's tests: task -t Taskfile.dev.yaml quality:mutate -- <file.go>"
+    cmds:
+      - ./scripts/mutate.sh {{.CLI_ARGS}}
 
   verify:lefthook-single-thread:
     desc: "The git hooks run their jobs one at a time, the Go ones on one thread"

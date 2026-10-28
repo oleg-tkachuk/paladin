@@ -105,23 +105,7 @@ func hasOp(ops []limes.Op, want limes.Op) bool {
 // to its own members. Reaching another tenant is the handler's call
 // (spansTenants), never Cedar's.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Principal, error) {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug},
-		cedar.RequestContext{},
-	)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	if decision != cedar.DecisionAllow {
-		return nil, connect.Errorf(connect.CodePermissionDenied, "%s denied", action)
-	}
-	return p, nil
+	return apiutil.AuthorizeOwnTenant(ctx, h.policy, action)
 }
 
 // DirectClientID is the OAuth client a capability is granted to (RFC 9068

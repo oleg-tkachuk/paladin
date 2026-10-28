@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -62,21 +61,8 @@ func NewHandler(r admindomain.EventSubscriptionRepository, policy cedar.Authoriz
 //
 // existing role + tenant-isolation guards stay as defense-in-depth.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) (context.Context, error) {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{TenantID: tenantID},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return ctx, apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return ctx, connect.NewError(connect.CodePermissionDenied, "denied by policy")
+	if _, err := apiutil.Authorize(ctx, h.policy, action, &cedar.Resource{TenantID: tenantID}); err != nil {
+		return ctx, err
 	}
 	return auth.WithActingTenant(ctx, tenantID), nil
 }

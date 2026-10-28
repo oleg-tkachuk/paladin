@@ -47,23 +47,8 @@ func NewHandler(engine cedar.Authorizer, store cedar.Store) *Handler {
 // carries tenant + collection when known; ValidatePolicy passes empty
 // Resource and relies on policies that match by principal role.
 func (h *Handler) authorizeInspect(ctx context.Context, tenantID uuid.UUID, collection string) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.engine.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		cedar.ActionInspectPolicy,
-		&cedar.Resource{TenantID: tenantID, Collection: collection},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	_, err := apiutil.Authorize(ctx, h.engine, cedar.ActionInspectPolicy, &cedar.Resource{TenantID: tenantID, Collection: collection})
+	return err
 }
 
 // Diagnostic severities, as PolicyDiagnostic.severity spells them.
