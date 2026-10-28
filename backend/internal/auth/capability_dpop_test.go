@@ -125,6 +125,7 @@ func (f *dpopFixture) mint(t *testing.T, jkt string) string {
 	t.Helper()
 	tenant := uuid.New()
 	res, err := f.issuer.Issue(context.Background(), limes.IssueRequest{
+		ClientID: captest.ClientID,
 		IssuedBy: limes.Principal{Type: limes.PrincipalTypeUser, TenantID: tenant, Subject: "op"},
 		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
 		Audience: []string{TokenPlaneData},

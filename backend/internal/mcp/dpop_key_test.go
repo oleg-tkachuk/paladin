@@ -198,6 +198,7 @@ func newCapabilityPlane(t *testing.T) *capabilityPlane {
 func (p *capabilityPlane) issue(t *testing.T, jkt string) string {
 	t.Helper()
 	res, err := p.issuer.Issue(context.Background(), limes.IssueRequest{
+		ClientID: captest.ClientID,
 		IssuedBy: limes.Principal{Subject: "op"},
 		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: uuid.New(), Subject: "agent"},
 		Audience: []string{auth.TokenPlaneData},

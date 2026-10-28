@@ -62,7 +62,7 @@ var crossLangSeed = [ed25519.SeedSize]byte{
 }
 
 const (
-	crossLangKID    = "golden-kid"
+	crossLangKID    = jwks.KeyIDPrefix + "golden"
 	crossLangIssuer = "limes-golden"
 	// crossLangProofURL is the request the bound copy's proof is made for.
 	crossLangProofURL = "https://paladin.example/paladin.data.v1.ObjectService/GetObject"

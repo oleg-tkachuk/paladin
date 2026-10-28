@@ -16,6 +16,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
@@ -77,7 +78,8 @@ func (f *biscuitFixture) seal(t *testing.T, tenant uuid.UUID, subject string) (s
 	ctx := context.Background()
 	principal := limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: subject}
 	res, err := f.issuer.Issue(ctx, limes.IssueRequest{
-		Subject: principal, IssuedBy: seedIssuer, Audience: []string{biscuitAudience},
+		ClientID: captest.ClientID,
+		Subject:  principal, IssuedBy: seedIssuer, Audience: []string{biscuitAudience},
 		Caveats: limes.Caveats{
 			// A Biscuit is sealed only for a capability that may be shared,
 			// and a copy with limits of its own needs a quota to be counted.

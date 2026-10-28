@@ -1232,8 +1232,10 @@ type Capability struct {
 	// volume.
 	SigningKeyPath string `yaml:"signing_key_path" json:"signing_key_path"`
 
-	// SigningKeyKID is the key ID emitted in the JWT header. When
-	// empty, the boot path derives one from the public key bytes.
+	// SigningKeyKID is the key ID emitted in the JWT header, in limes's
+	// namespace (jwks.KeyIDPrefix and a name): limes refuses to sign under
+	// any other. When empty, the boot path derives one from the public key
+	// bytes.
 	SigningKeyKID string `yaml:"signing_key_kid" json:"signing_key_kid"`
 
 	// DefaultTTL caps Issue.TTL when the request omits it. Default 15

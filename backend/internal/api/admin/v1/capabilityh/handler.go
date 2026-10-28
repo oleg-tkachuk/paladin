@@ -124,6 +124,21 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action) (*auth.Pri
 	return p, nil
 }
 
+// DirectClientID is the OAuth client a capability is granted to (RFC 9068
+// client_id) when its issuer acts for none — a console session, an API token
+// — and so asks Paladin itself.
+const DirectClientID = "paladin"
+
+// clientID is the OAuth client a capability the caller issues is granted to:
+// the one the caller acts for, or Paladin. It describes the grant; limes
+// restricts nothing by it.
+func clientID(caller *auth.Principal) string {
+	if caller.ActsForOAuthClient() {
+		return caller.OAuthClientID
+	}
+	return DirectClientID
+}
+
 // spansTenants reports whether the caller may manage capabilities of tenants
 // other than its own: platform.admin, or platform.capability-issuer — the
 // narrow grant for a consumer that mints a capability per tenant it serves.
@@ -225,6 +240,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		TTL:             ttl,
 		NotBefore:       nbf,
 		ConfirmationJKT: req.GetConfirmationJkt(),
+		ClientID:        clientID(caller),
 	})
 	if err != nil {
 		// By kind: a malformed request, a tenant that is not (or no longer)

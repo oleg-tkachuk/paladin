@@ -31,6 +31,9 @@ const (
 	sealUnit = "USD"
 	// sealedBy is who the sealed capability records as requesting it.
 	sealedBy = "paladintest"
+	// sealedClient is the OAuth client the sealed capability is granted to
+	// (RFC 9068 client_id), which limes requires and nothing checks.
+	sealedClient = "paladintest"
 )
 
 // planes are every plane a copy may be presented to, for a call whose plane
@@ -92,6 +95,7 @@ func (s *sealer) seal(c *adminv1.Capability, now, expires time.Time) (string, er
 		Audience: c.GetAudience(),
 		Caveats:  sealedCaveats(c.GetCaveats()),
 		TTL:      sealedTTL(expires.Sub(now)),
+		ClientID: sealedClient,
 	})
 	if err != nil {
 		return "", err

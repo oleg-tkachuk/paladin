@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
@@ -72,6 +73,7 @@ func newCopyMinter(t *testing.T, records *pgstore.Store) *copyMinter {
 func (m *copyMinter) issue(t *testing.T, ctx context.Context, tenant uuid.UUID) limes.VerifiedCapability {
 	t.Helper()
 	res, err := m.issuer.Issue(ctx, limes.IssueRequest{
+		ClientID: captest.ClientID,
 		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent:copies"},
 		IssuedBy: seedIssuer,
 		Audience: []string{copyMinterAudience},
