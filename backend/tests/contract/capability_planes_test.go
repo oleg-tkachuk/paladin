@@ -17,10 +17,13 @@ import (
 // gates the data plane only, so that a change undoing the reason fails here
 // rather than silently widening what a capability can reach.
 //
-// The reason has two halves. Wiring: no capability can carry an admin or iam
-// request on its own — iam mounts no capability interceptor, and admin mounts
-// the additive one behind a JWT gate that does not step aside for
-// capabilities. And handlers: outside the data plane, a capability on the
+// The reason has two halves. Wiring: no capability of its own can carry an
+// admin or iam request — both planes mount the additive interceptor, which
+// establishes a principal only for a delegated capability (ADR-0041), and a
+// delegated capability stands for its user, whom Cedar and the write-scope
+// interceptor decide on as for the user's own token. So the JWT gates may
+// step aside for a capability only where the interceptor behind them accepts
+// delegation. And handlers: outside the data plane, a capability on the
 // context grants authority in exactly the places listed in capabilityReaders,
 // each of which checks the op it needs itself.
 func TestAdminAndIAMCapabilityReaders(t *testing.T) {
@@ -29,16 +32,18 @@ func TestAdminAndIAMCapabilityReaders(t *testing.T) {
 	t.Run("wiring", func(t *testing.T) {
 		t.Parallel()
 		admin := readSource(t, "internal", "app", "build_listeners_admin.go")
-		for _, forbidden := range []string{establishingCapInterceptor, capabilitySkippingJWTGate} {
-			if strings.Contains(admin, forbidden) {
-				t.Errorf("the admin plane now uses %s: a capability can carry an admin request alone, "+
-					"so admin RPCs need the AssertCapabilityOp gate too", forbidden)
-			}
+		if strings.Contains(admin, establishingCapInterceptor) {
+			t.Errorf("the admin plane now uses %s: a capability of its own can carry an admin request, "+
+				"so admin RPCs need the AssertCapabilityOp gate too", establishingCapInterceptor)
 		}
-		iam := iamInterceptorBlock(t, readSource(t, "internal", "app", "build_listeners_api.go"))
-		if lower := strings.ToLower(iam); strings.Contains(lower, capabilityWordStem) || strings.Contains(lower, capDataVar) {
-			t.Errorf("the iam interceptor chain mentions a capability; iam RPCs would need the " +
-				"AssertCapabilityOp gate too")
+		if strings.Contains(admin, capabilitySkippingJWTGate) && !strings.Contains(admin, delegationOption) {
+			t.Errorf("the admin JWT gate steps aside for a capability, and no interceptor behind it "+
+				"accepts delegation (%s): a capability-only call would reach nothing that names its caller", delegationOption)
+		}
+		api := readSource(t, "internal", "app", "build_listeners_api.go")
+		iam := iamCapabilityInterceptor(t, api)
+		if strings.Contains(iam, establishingCapInterceptor) || !strings.Contains(iam, delegationOption) {
+			t.Errorf("the iam capability interceptor must be the additive one, accepting delegation alone; got:\n%s", iam)
 		}
 	})
 
@@ -73,16 +78,13 @@ const (
 	establishingCapInterceptor = "CapabilityEstablishingInterceptor"
 	// capabilitySkippingJWTGate lets a capability-only request past the JWT gate.
 	capabilitySkippingJWTGate = "InterceptorSkipTokensAndCapabilities"
-	// iamServerDecl opens the iam plane's interceptor chain: the plane's one
-	// server, built with its interceptors.
-	iamServerDecl = "iamServer := connect.NewServer("
-	// serverBlockEnd closes a top-level connect.NewServer(...) call.
-	serverBlockEnd = "\n\t)\n"
-	// capabilityWordStem and capDataVar, lower-cased, would appear in the iam
-	// chain if a capability interceptor were mounted there — by constructor
-	// name, or as the data plane's variable reused.
-	capabilityWordStem = "capabilit"
-	capDataVar         = "capdata"
+	// delegationOption is the wiring that makes a capability interceptor
+	// accept delegated capabilities as their users (ADR-0041).
+	delegationOption = "delegationOption("
+	// iamCapDecl and iamCapEnd bound the iam plane's capability interceptor
+	// as the wiring builds it.
+	iamCapDecl = "capIAM = auth."
+	iamCapEnd  = "\n\t\t)\n"
 	// capabilityFromContext and verifiedCapabilityFromContext are how a
 	// handler reads a capability off the context: as granted, and as the
 	// verifier accepted it.
@@ -107,15 +109,17 @@ func readSource(t *testing.T, parts ...string) string {
 	return string(src)
 }
 
-func iamInterceptorBlock(t *testing.T, src string) string {
+// iamCapabilityInterceptor is the iam plane's capability interceptor as the
+// wiring builds it.
+func iamCapabilityInterceptor(t *testing.T, src string) string {
 	t.Helper()
-	start := strings.Index(src, iamServerDecl)
+	start := strings.Index(src, iamCapDecl)
 	if start < 0 {
-		t.Fatalf("could not find %q — the iam wiring moved; update this gate", iamServerDecl)
+		t.Fatalf("could not find %q — the iam wiring moved; update this gate", iamCapDecl)
 	}
-	end := strings.Index(src[start:], serverBlockEnd)
+	end := strings.Index(src[start:], iamCapEnd)
 	if end < 0 {
-		t.Fatalf("could not find the end of the iam interceptor chain")
+		t.Fatalf("could not find the end of the iam capability interceptor")
 	}
 	return src[start : start+end]
 }
