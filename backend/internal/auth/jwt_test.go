@@ -3,13 +3,19 @@ package auth
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
 // JWTVerifier.Verify decides whether every request to every plane is
@@ -231,5 +237,119 @@ func TestVerifyReportsEveryAudienceAndTheExpiry(t *testing.T) {
 				t.Errorf("expires = %v, want %v", p.ExpiresAt, exp)
 			}
 		})
+	}
+}
+
+// signedWith is claims signed as alg says, with key: a header the verifier
+// must not take at its word.
+func signedWith(t *testing.T, alg jwa.SignatureAlgorithm, key any, claims map[string]any) string {
+	t.Helper()
+	b := jwt.NewBuilder()
+	for k, v := range claims {
+		b.Claim(k, v)
+	}
+	tok, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := jwt.Sign(tok, jwt.WithKey(alg, key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(signed)
+}
+
+// The key decides the algorithm, never the token: an unsigned token, a token
+// signed with another algorithm, and an RSA public key read as an HMAC secret
+// are all refused.
+func TestVerifyRefusesAnotherAlgorithm(t *testing.T) {
+	secret := []byte("dev-secret-change-me-32-bytes-min")
+	now := time.Unix(1_700_000_000, 0)
+	priv, err := rsa.GenerateKey(rand.Reader, rsaTestBits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubPEM, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	body, _ := json.Marshal(baseClaims(now))
+	unsigned := head + "." + base64.RawURLEncoding.EncodeToString(body) + "."
+
+	for _, tc := range []struct {
+		name  string
+		key   any
+		token string
+	}{
+		{"an unsigned token", secret, unsigned},
+		{"RS256 against an HMAC secret", secret, signedWith(t, jwa.RS256(), priv, baseClaims(now))},
+		{"HS256 keyed by an RSA public key's bytes, against that key", &priv.PublicKey, signedWith(t, jwa.HS256(), pubPEM, baseClaims(now))},
+		{"HS256 against an RSA public key", &priv.PublicKey, hs256(t, secret, baseClaims(now))},
+	} {
+		v := newVerifier(secret, now)
+		v.Key = tc.key
+		if p, err := v.Verify(context.Background(), tc.token); err == nil {
+			t.Errorf("%s: accepted as %+v", tc.name, p)
+		}
+	}
+
+	// And the algorithms each key type stands for still verify.
+	ec := ecKey(t)
+	for _, tc := range []struct {
+		alg jwa.SignatureAlgorithm
+		key any
+		pub any
+	}{
+		{jwa.RS256(), priv, &priv.PublicKey},
+		{jwa.ES256(), ec, &ec.PublicKey},
+	} {
+		v := newVerifier(secret, now)
+		v.Key = tc.pub
+		if _, err := v.Verify(context.Background(), signedWith(t, tc.alg, tc.key, baseClaims(now))); err != nil {
+			t.Errorf("%s: %v", tc.alg, err)
+		}
+	}
+}
+
+// A token minted a moment ahead of this replica's clock is accepted: validity
+// runs from nbf, and iat is not checked.
+func TestVerifyIgnoresIssuedAt(t *testing.T) {
+	secret := []byte("dev-secret-change-me-32-bytes-min")
+	now := time.Unix(1_700_000_000, 0)
+	c := baseClaims(now)
+	c["iat"] = now.Add(time.Hour).Unix()
+	if _, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, c)); err != nil {
+		t.Errorf("a token issued ahead of the clock was refused: %v", err)
+	}
+}
+
+// A token an OAuth client holds names the client and its consented scopes; a
+// token with no exp has no expiry, not one in 1970.
+func TestVerifyMapsTheOAuthGrantAndAnOpenExpiry(t *testing.T) {
+	secret := []byte("dev-secret-change-me-32-bytes-min")
+	now := time.Unix(1_700_000_000, 0)
+
+	c := baseClaims(now)
+	c["client_id"] = "agent-client"
+	c["scope"] = "paladin.read paladin.write"
+	delete(c, "exp")
+	p, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, c))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if p.OAuthClientID != "agent-client" || !slices.Equal(p.OAuthScopes, []string{"paladin.read", "paladin.write"}) {
+		t.Errorf("grant = %q %v, want the client and both scopes", p.OAuthClientID, p.OAuthScopes)
+	}
+	if !p.ExpiresAt.IsZero() {
+		t.Errorf("expiry = %v, want none for a token without exp", p.ExpiresAt)
+	}
+
+	plain, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, baseClaims(now)))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if plain.OAuthClientID != "" || plain.OAuthScopes != nil {
+		t.Errorf("a token no client holds names grant %q %v", plain.OAuthClientID, plain.OAuthScopes)
 	}
 }

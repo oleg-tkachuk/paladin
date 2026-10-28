@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/lestrrat-go/jwx/v3/jws"
-	"github.com/lestrrat-go/jwx/v3/jwt"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"go.uber.org/zap"
 
@@ -115,8 +113,8 @@ func refreshEvery(interval time.Duration) time.Duration {
 }
 
 // Verify implements TokenVerifier: the signature by the key the token's kid
-// names, checked by jws against the set, then the time, issuer and audience
-// claims by jwt, then the Principal the claims name.
+// names, checked by jws against the set, then the claims as JWTVerifier
+// accepts them, then the Principal they name.
 func (v *JWKSVerifier) Verify(ctx context.Context, token string) (*Principal, error) {
 	msg, err := jws.ParseString(token)
 	if err != nil {
@@ -135,30 +133,11 @@ func (v *JWKSVerifier) Verify(ctx context.Context, token string) (*Principal, er
 	if err != nil {
 		return nil, fmt.Errorf("jwt: signature: %w", err)
 	}
-	if _, err := jwt.Parse(payload, append(v.claimChecks(), jwt.WithVerify(false))...); err != nil {
-		return nil, fmt.Errorf("jwt: %w", err)
-	}
-	var c jwtClaims
-	if err := json.Unmarshal(payload, &c); err != nil {
-		return nil, fmt.Errorf("jwt: claims parse: %w", err)
+	c, err := acceptedClaims(payload, v.ExpectedIssuer, v.ExpectedAudience, v.Leeway, v.Now)
+	if err != nil {
+		return nil, err
 	}
 	return principalFromClaims(c, v.ExpectedAudience)
-}
-
-// claimChecks are the claims a token must carry to be accepted now: exp and
-// nbf within the leeway, and the issuer and audience when set.
-func (v *JWKSVerifier) claimChecks() []jwt.ParseOption {
-	opts := []jwt.ParseOption{
-		jwt.WithAcceptableSkew(v.Leeway),
-		jwt.WithClock(jwt.ClockFunc(v.Now)),
-	}
-	if v.ExpectedIssuer != "" {
-		opts = append(opts, jwt.WithIssuer(v.ExpectedIssuer))
-	}
-	if v.ExpectedAudience != "" {
-		opts = append(opts, jwt.WithAudience(v.ExpectedAudience))
-	}
-	return opts
 }
 
 // keySetWith returns the cached key set once it holds kid; on a miss it
