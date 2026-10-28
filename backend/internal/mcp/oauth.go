@@ -156,13 +156,13 @@ type EdgeOption func(*edgeOptions)
 
 type edgeOptions struct {
 	onlyMCPAudience bool
-	delegation      *DelegationExchanger
+	delegation      capabilitySource
 }
 
 // WithDelegation exchanges each caller's token for the capability that acts
 // for its user (ADR-0041), and sends the bridge's calls with that capability
 // alone.
-func WithDelegation(d *DelegationExchanger) EdgeOption {
+func WithDelegation(d *DelegationClient) EdgeOption {
 	return func(o *edgeOptions) { o.delegation = d }
 }
 

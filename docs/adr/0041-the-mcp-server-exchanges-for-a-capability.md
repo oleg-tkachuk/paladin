@@ -14,11 +14,9 @@
   Paladin's own Authorization Server, as a confidential client. The token
   it gets back is the user's and nothing narrower:
   - no budget, request ceiling or source range bounds an agent session;
-  - the only way to stop one is to revoke the user's refresh family;
-  - the server holds a client secret, and the AS keeps a grant type for one
-    client.
+  - the only way to stop one is to revoke the user's refresh family.
 
-  limes' `exchange` module does this in process and issues a capability,
+  limes' `exchange` module serves the same grant and issues a capability,
   which carries all three. A capability alone does not reach what the bridge
   needs, though. Of the 81 tools in `DefaultCatalog`, 49 call the admin plane
   and 2 the IAM plane, whose Cedar built-ins permit by role. A capability has
@@ -27,11 +25,17 @@
   ride one at all.
 
 - **Decision.**
-  1. **The exchange is limes', in process.** The MCP server runs an
-     `exchange.Exchanger` with the capability issuer the admin plane uses.
-     Its `SubjectVerifier` is Paladin's own `auth.JWTVerifier`, which
-     accepts only `aud = paladin-mcp`. Paladin's IAM tokens stay HS256
-     `JWT`, and the verifier runs limes' `exchangetest` contract suite.
+  1. **The exchange is limes', at the Authorization Server.** The token
+     endpoint's RFC 8693 grant is served by limes' `exchange.Handler` over
+     an `exchange.Exchanger` with the delegation issuer below. The MCP
+     server stays its confidential client, configured by
+     `mcp.oauth.exchange` as before: the bridge runs in a pod of its own
+     with no database and faces the internet, so it holds neither the
+     capability key nor the user store. The `SubjectVerifier` is Paladin's
+     own `auth.JWTVerifier`, which accepts only `aud = paladin-mcp`;
+     Paladin's IAM tokens stay HS256 `JWT`, and the verifier runs limes'
+     `exchangetest` contract suite. The policy and the verifier live in
+     `internal/auth/delegation`, which the Authorization Server imports.
   2. **The capability acts for the user.** The exchange policy issues one
      capability per caller's token, cached until it nears expiry:
      - `Subject`: the agent, named by its OAuth client (`MCPClient`), in
@@ -61,10 +65,11 @@
      carries the scope the operations name, so the write interceptor and
      Cedar's `context.oauth_scopes` read it as they do today. One table in
      one package maps each scope to its operations.
-  5. **ADR-0036's exchange goes.** The AS's token-exchange grant, the MCP
-     client secret and `mcp.oauth.exchange` are removed. The `paladin-mcp`
-     audience, the edge's audience check and the protected resource metadata
-     stay.
+  5. **ADR-0036's plane tokens go.** The grant no longer mints an IAM
+     access token per plane with an `act` claim; the MCP server asks once
+     for every plane and gets one capability. The `paladin-mcp` audience,
+     the edge's audience check, the protected resource metadata and the
+     exchange client's configuration stay.
   6. **The edge swaps the token for the capability.** After the session is
      bound to the caller's token, the MCP edge replaces it with the
      capability, so the bridge's calls carry nothing else. A caller that
@@ -76,9 +81,12 @@
   - All 81 tools keep working, platform ones included, and a role removed
     from the user, or the user disabled, takes effect at the next call rather
     than at the next token refresh.
-  - The MCP server signs capabilities, so it holds the capability signing
-    key. KMS-wrapping that key stays its own BACKLOG item.
-  - A configuration naming `mcp.oauth.exchange` fails the strict loader;
-    the chart and local-iac drop it with the release that ships this.
-  - The audit log's `relayed_by` reads the capability's `IssuedBy`, and the
-    log gains the capability ID for each relayed call.
+  - The capability key stays where it was, with the planes and the
+    Authorization Server; the MCP server gains none. A refused exchange is
+    answered at the MCP edge as RFC 6750 says, before a tool runs.
+  - No configuration changes: `mcp.oauth.exchange` and the seed client's
+    `token_exchange` keep their meaning, and the grant needs
+    `capability.enabled`.
+  - The audit log's `relayed_by` still names `paladin-mcp`, now from the
+    capability rather than an `act` claim, and each relayed call's entry
+    carries the capability's ID.

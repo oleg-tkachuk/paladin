@@ -89,15 +89,6 @@ func (h *Handler) WithMCPResource(resourceURL string) *Handler {
 	return h
 }
 
-// WithTokenExchange serves the RFC 8693 token-exchange grant to clientIDs,
-// trading a paladin-mcp token that subjects verifies for one per plane
-// (ADR-0036). subjects must accept only paladin-mcp. Without it the grant
-// type is unsupported.
-func (h *Handler) WithTokenExchange(subjects auth.TokenVerifier, clientIDs map[string]bool) *Handler {
-	h.exchange = &tokenExchange{subjects: subjects, clients: clientIDs}
-	return h
-}
-
 // WithAuthorizer enables Cedar gating of the consent step (ActionAuthorizeOAuth).
 // Optional; nil leaves the AS on scope-subset + authentication only.
 func (h *Handler) WithAuthorizer(a Authorizer) *Handler {

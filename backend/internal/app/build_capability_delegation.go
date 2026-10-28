@@ -5,14 +5,18 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/jwks"
+	"go.uber.org/zap/exp/zapslog"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
@@ -101,4 +105,29 @@ func delegatingUsers(users userByID) auth.DelegatingUserLookup {
 // delegation issuer's capabilities as their users.
 func delegationOption(bundle *CapabilityBundle, users userByID) auth.CapabilityOption {
 	return auth.WithDelegation(auth.DelegationIssuerName(bundle.IssuerName), delegatingUsers(users))
+}
+
+// errExchangeNeedsCapability is a token exchange configured with the
+// capability subsystem off: there is no issuer to delegate through.
+var errExchangeNeedsCapability = errors.New("app: an oauth seed client with token_exchange needs capability.enabled")
+
+// withDelegationExchange serves the token-exchange grant on as to exchangers
+// (ADR-0041): a paladin-mcp token, verified as the MCP edge does, for a
+// capability of the delegation issuer, living no longer than the plane
+// token it stands in for.
+func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *SharedDeps, exchangers map[string]bool, users userByID) (*oauth.Handler, error) {
+	if deps.Capability == nil {
+		return nil, errExchangeNeedsCapability
+	}
+	cfg := deps.Cfg.Auth
+	tokens, err := BuildVerifier(ctx, cfg, auth.AudienceMCP, deps.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("oauth token exchange verifier: %w", err)
+	}
+	ex, err := delegation.NewExchanger(deps.Capability.Delegation, delegation.NewSubjectVerifier(tokens, cfg.Issuer),
+		users, cfg.AccessTokenTTL, slog.New(zapslog.NewHandler(deps.Logger.Named("delegation").Core())))
+	if err != nil {
+		return nil, err
+	}
+	return as.WithTokenExchange(ex, exchangers)
 }

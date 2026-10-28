@@ -1,17 +1,25 @@
 package oauth
 
 import (
-	"encoding/base64"
+	"crypto/ed25519"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/exchange"
+	"github.com/oleg-tkachuk/limes/jwks"
+	"github.com/oleg-tkachuk/limes/memstore"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
@@ -47,12 +55,60 @@ func mcpVerifier() *auth.JWTVerifier {
 	return &auth.JWTVerifier{Key: []byte(testSigningKey), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceMCP}
 }
 
+// The delegation issuer the exchange in these tests issues through, and how
+// long its capabilities live.
+const (
+	delegationIssuerName = "paladin-capability/mcp"
+	delegationTTL        = 15 * time.Minute
+)
+
 // exchangeFixture is a handler that maps the MCP resource and lets the
-// exchanger exchange, plus the agent's paladin-mcp token for u.
+// exchanger exchange, plus the agent's paladin-mcp token for u and the
+// verifier a plane checks the exchanged capability with.
 type exchangeFixture struct {
-	h       *Handler
-	store   *memStore
-	subject string
+	h        *Handler
+	store    *memStore
+	subject  string
+	verifier *limes.Verifier
+}
+
+// withExchange serves the exchange on h to the exchanger client, over a
+// delegation issuer of its own; the verifier checks what it issues.
+func withExchange(t *testing.T, h *Handler) (*Handler, *limes.Verifier) {
+	t.Helper()
+	key, err := limes.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := limes.NewSigner(limes.SignerConfig{KeyID: key.KeyID, Key: key.Private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := memstore.NewStore(memstore.StoreConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	capIssuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: delegationIssuerName, DefaultTTL: delegationTTL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := limes.NewVerifier(limes.VerifierConfig{Keys: keys, Revocations: store, TrustedIssuers: []string{delegationIssuerName}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex, err := delegation.NewExchanger(capIssuer, delegation.NewSubjectVerifier(mcpVerifier(), "paladin"), h.users, delegationTTL, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err = h.WithTokenExchange(ex, map[string]bool{exchangerID: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h, verifier
 }
 
 func newExchangeFixture(t *testing.T, u authstore.User) exchangeFixture {
@@ -60,46 +116,33 @@ func newExchangeFixture(t *testing.T, u authstore.User) exchangeFixture {
 	store := newMemStore()
 	store.clients[agentWithMCPID] = agentWithMCP()
 	store.clients[exchangerID] = exchanger(t)
-	h := testHandler(t, store, &memRefresh{}, u).
-		WithMCPResource(mcpResourceURL).
-		WithTokenExchange(mcpVerifier(), map[string]bool{exchangerID: true})
+	h, verifier := withExchange(t, testHandler(t, store, &memRefresh{}, u).WithMCPResource(mcpResourceURL))
 	tok := authorizeAndExchange(t, h, u, agentWithMCP(), mcpResourceURL)
-	return exchangeFixture{h: h, store: store, subject: tok.AccessToken}
+	return exchangeFixture{h: h, store: store, subject: tok.AccessToken, verifier: verifier}
 }
 
-func exchangeForm(subject, audience string) url.Values {
+func exchangeForm(subject string, planes ...string) url.Values {
 	return url.Values{
 		"grant_type": {GrantTypeTokenExchange}, "client_id": {exchangerID}, "client_secret": {exchangerSecret},
-		"subject_token": {subject}, "subject_token_type": {TokenTypeAccessToken}, "audience": {audience},
+		"subject_token": {subject}, "subject_token_type": {TokenTypeAccessToken}, "audience": planes,
 	}
 }
 
-type exchangedClaims struct {
-	Aud      string `json:"aud"`
-	Sub      string `json:"sub"`
-	Exp      int64  `json:"exp"`
-	ClientID string `json:"client_id"`
-	Scope    string `json:"scope"`
-	Act      struct {
-		Sub string `json:"sub"`
-	} `json:"act"`
+// exchangeAnswer is the RFC 8693 §2.2.1 answer.
+type exchangeAnswer struct {
+	AccessToken     string `json:"access_token"`
+	IssuedTokenType string `json:"issued_token_type"`
+	TokenType       string `json:"token_type"`
+	ExpiresIn       int    `json:"expires_in"`
 }
 
-func decodeExchanged(t *testing.T, token string) exchangedClaims {
+func decodeAnswer(t *testing.T, body []byte) exchangeAnswer {
 	t.Helper()
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		t.Fatalf("not a JWT: %q", token)
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
+	var a exchangeAnswer
+	if err := json.Unmarshal(body, &a); err != nil {
 		t.Fatal(err)
 	}
-	var c exchangedClaims
-	if err := json.Unmarshal(payload, &c); err != nil {
-		t.Fatal(err)
-	}
-	return c
+	return a
 }
 
 func oauthError(t *testing.T, body []byte) string {
@@ -154,43 +197,43 @@ func TestAuthorize_RefusesAnAudienceTheUserMayNotHold(t *testing.T) {
 	}
 }
 
-func TestTokenExchange_IssuesTheUsersTokenForAPlane(t *testing.T) {
+// The exchanger gets a capability that acts for the agent's user, on the
+// planes asked for, under the agent's grant, and no longer than its token.
+func TestTokenExchange_IssuesACapabilityForTheUser(t *testing.T) {
 	u := sampleUser()
 	f := newExchangeFixture(t, u)
-	rec := postForm(f.h, "/oauth/token", exchangeForm(f.subject, auth.AudienceData))
+	rec := postForm(f.h, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneData, auth.TokenPlaneIAM))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var resp exchangeResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+	a := decodeAnswer(t, rec.Body.Bytes())
+	if a.IssuedTokenType != exchange.IssuedTokenTypeCapability || a.TokenType != exchange.TokenTypeBearer || a.ExpiresIn <= 0 {
+		t.Errorf("answer = %+v", a)
+	}
+	v, err := f.verifier.Verify(t.Context(), limes.VerifyRequest{Token: a.AccessToken, Audience: auth.TokenPlaneIAM})
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	c := v.Capability()
+	if c.OnBehalfOf == nil || c.OnBehalfOf.Subject != u.UserID.String() || c.ClientID != agentWithMCPID {
+		t.Errorf("acts for %+v as %q, want user %s as %q", c.OnBehalfOf, c.ClientID, u.UserID, agentWithMCPID)
+	}
+	if want, _ := auth.DelegatedOps([]string{grantScope}); !slices.Equal(c.Caveats.Ops, want) {
+		t.Errorf("ops %v, want the grant's %v", c.Caveats.Ops, want)
+	}
+	subject, err := mcpVerifier().Verify(t.Context(), f.subject)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.IssuedTokenType != TokenTypeAccessToken || resp.TokenType != "Bearer" || resp.ExpiresIn <= 0 {
-		t.Errorf("response = %+v", resp)
-	}
-	if resp.Scope != grantScope {
-		t.Errorf("scope = %q, want the agent's %q", resp.Scope, grantScope)
-	}
-	got := decodeExchanged(t, resp.AccessToken)
-	want := decodeExchanged(t, f.subject)
-	if got.Aud != auth.AudienceData || got.Sub != u.UserID.String() {
-		t.Errorf("aud, sub = %q, %q; want %q, %q", got.Aud, got.Sub, auth.AudienceData, u.UserID)
-	}
-	if got.ClientID != agentWithMCPID || got.Scope != grantScope {
-		t.Errorf("grant = %q %q, want the agent's %q %q", got.ClientID, got.Scope, agentWithMCPID, grantScope)
-	}
-	if got.Act.Sub != exchangerID {
-		t.Errorf("act.sub = %q, want %q", got.Act.Sub, exchangerID)
-	}
-	if got.Exp > want.Exp {
-		t.Errorf("exchanged exp %d outlives the subject's %d", got.Exp, want.Exp)
+	if c.ExpiresAt.After(subject.ExpiresAt) {
+		t.Errorf("the capability outlives its token: %v after %v", c.ExpiresAt, subject.ExpiresAt)
 	}
 }
 
 // The client may authenticate with HTTP Basic instead of the form.
 func TestTokenExchange_AcceptsBasicClientAuthentication(t *testing.T) {
 	f := newExchangeFixture(t, sampleUser())
-	form := exchangeForm(f.subject, auth.AudienceData)
+	form := exchangeForm(f.subject, auth.TokenPlaneData)
 	form.Del("client_id")
 	form.Del("client_secret")
 	rec := postFormBasic(f.h, "/oauth/token", form, exchangerID, exchangerSecret)
@@ -199,10 +242,11 @@ func TestTokenExchange_AcceptsBasicClientAuthentication(t *testing.T) {
 	}
 }
 
+// The admin plane is the user's only with an admin role.
 func TestTokenExchange_AdminNeedsAnAdminRole(t *testing.T) {
 	user := sampleUser()
 	f := newExchangeFixture(t, user)
-	rec := postForm(f.h, "/oauth/token", exchangeForm(f.subject, auth.AudienceAdmin))
+	rec := postForm(f.h, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneAdmin))
 	if rec.Code != http.StatusBadRequest || oauthError(t, rec.Body.Bytes()) != "invalid_target" {
 		t.Errorf("tenant.user → admin: status %d body %s, want 400 invalid_target", rec.Code, rec.Body.String())
 	}
@@ -210,7 +254,7 @@ func TestTokenExchange_AdminNeedsAnAdminRole(t *testing.T) {
 	admin := sampleUser()
 	admin.Roles = []string{apiutil.RoleTenantAdmin}
 	g := newExchangeFixture(t, admin)
-	if rec := postForm(g.h, "/oauth/token", exchangeForm(g.subject, auth.AudienceAdmin)); rec.Code != http.StatusOK {
+	if rec := postForm(g.h, "/oauth/token", exchangeForm(g.subject, auth.TokenPlaneAdmin)); rec.Code != http.StatusOK {
 		t.Errorf("tenant.admin → admin: status %d body %s, want 200", rec.Code, rec.Body.String())
 	}
 }
@@ -254,6 +298,7 @@ func TestTokenExchange_Refusals(t *testing.T) {
 		{"a subject in another tenant", func(v url.Values) { v.Set("subject_token", otherTenant) }, http.StatusBadRequest, "invalid_grant"},
 		{"garbage as subject", func(v url.Values) { v.Set("subject_token", "not-a-jwt") }, http.StatusBadRequest, "invalid_grant"},
 		{"the mcp audience again", func(v url.Values) { v.Set("audience", auth.AudienceMCP) }, http.StatusBadRequest, "invalid_target"},
+		{"a plane's canonical name", func(v url.Values) { v.Set("audience", auth.AudienceData) }, http.StatusBadRequest, "invalid_target"},
 		{"no audience", func(v url.Values) { v.Del("audience") }, http.StatusBadRequest, "invalid_target"},
 		{"another subject token type", func(v url.Values) {
 			v.Set("subject_token_type", "urn:ietf:params:oauth:token-type:refresh_token")
@@ -262,10 +307,10 @@ func TestTokenExchange_Refusals(t *testing.T) {
 		{"no secret", func(v url.Values) { v.Del("client_secret") }, http.StatusUnauthorized, "invalid_client"},
 		{"an unknown client", func(v url.Values) { v.Set("client_id", "nobody") }, http.StatusUnauthorized, "invalid_client"},
 		{"a public client", func(v url.Values) { v.Set("client_id", public.ClientID) }, http.StatusUnauthorized, "invalid_client"},
-		{"a confidential client not allowed to exchange", func(v url.Values) { v.Set("client_id", unlisted.ClientID) }, http.StatusBadRequest, "unauthorized_client"},
+		{"a confidential client not allowed to exchange", func(v url.Values) { v.Set("client_id", unlisted.ClientID) }, http.StatusUnauthorized, "invalid_client"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			form := exchangeForm(f.subject, auth.AudienceData)
+			form := exchangeForm(f.subject, auth.TokenPlaneData)
 			tc.edit(form)
 			rec := postForm(f.h, "/oauth/token", form)
 			if rec.Code != tc.status {
@@ -282,7 +327,7 @@ func TestTokenExchange_UnsupportedUnlessConfigured(t *testing.T) {
 	store := newMemStore()
 	store.clients[exchangerID] = exchanger(t)
 	h := testHandler(t, store, &memRefresh{}, sampleUser())
-	rec := postForm(h, "/oauth/token", exchangeForm("x", auth.AudienceData))
+	rec := postForm(h, "/oauth/token", exchangeForm("x", auth.TokenPlaneData))
 	if rec.Code != http.StatusBadRequest || oauthError(t, rec.Body.Bytes()) != "unsupported_grant_type" {
 		t.Errorf("status %d body %s, want 400 unsupported_grant_type", rec.Code, rec.Body.String())
 	}
@@ -293,9 +338,8 @@ func TestTokenExchange_RefusesADisabledUser(t *testing.T) {
 	u := sampleUser()
 	f := newExchangeFixture(t, u)
 	u.Disabled = true
-	disabled := testHandler(t, f.store, &memRefresh{}, u).
-		WithTokenExchange(mcpVerifier(), map[string]bool{exchangerID: true})
-	rec := postForm(disabled, "/oauth/token", exchangeForm(f.subject, auth.AudienceData))
+	disabled, _ := withExchange(t, testHandler(t, f.store, &memRefresh{}, u))
+	rec := postForm(disabled, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneData))
 	if rec.Code != http.StatusBadRequest || oauthError(t, rec.Body.Bytes()) != "invalid_grant" {
 		t.Errorf("status %d body %s, want 400 invalid_grant", rec.Code, rec.Body.String())
 	}
@@ -317,19 +361,20 @@ func TestTokenExchange_ExpiresWithTheSubject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := postForm(f.h, "/oauth/token", exchangeForm(short, auth.AudienceData))
+	rec := postForm(f.h, "/oauth/token", exchangeForm(short, auth.TokenPlaneData))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var resp exchangeResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+	a := decodeAnswer(t, rec.Body.Bytes())
+	v, err := f.verifier.Verify(t.Context(), limes.VerifyRequest{Token: a.AccessToken, Audience: auth.TokenPlaneData})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := decodeExchanged(t, resp.AccessToken).Exp; got > subjectExp.Unix() {
-		t.Errorf("exchanged exp %d outlives the subject's %d", got, subjectExp.Unix())
+	if got := v.Capability().ExpiresAt; got.After(subjectExp) {
+		t.Errorf("the capability expires %v, after its token's %v", got, subjectExp)
 	}
-	if resp.ExpiresIn > int(subjectTTL/time.Second) {
-		t.Errorf("expires_in = %d, want at most %d", resp.ExpiresIn, int(subjectTTL/time.Second))
+	if a.ExpiresIn > int(subjectTTL/time.Second) {
+		t.Errorf("expires_in = %d, want at most %d", a.ExpiresIn, int(subjectTTL/time.Second))
 	}
 }
 
@@ -346,14 +391,15 @@ func TestTokenExchange_HasItsOwnRateLimit(t *testing.T) {
 	h := testHandlerCfg(t, f.store, &memRefresh{}, u, config.OAuthAS{
 		Enabled: true, AuthorizationCodeTTL: time.Minute, AllowedRedirectSchemes: []string{"https", "desktop-agent"},
 		TokenRateLimitPerMinute: tokenLimit, TokenExchangeRateLimitPerMinute: exchangeLimit,
-	}).WithMCPResource(mcpResourceURL).WithTokenExchange(mcpVerifier(), map[string]bool{exchangerID: true})
+	}).WithMCPResource(mcpResourceURL)
+	h, _ = withExchange(t, h)
 
 	for i := range exchangeLimit {
-		if rec := postForm(h, "/oauth/token", exchangeForm(f.subject, auth.AudienceData)); rec.Code != http.StatusOK {
+		if rec := postForm(h, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneData)); rec.Code != http.StatusOK {
 			t.Fatalf("exchange %d: status %d, want 200 under its own cap (body %s)", i+1, rec.Code, rec.Body.String())
 		}
 	}
-	if rec := postForm(h, "/oauth/token", exchangeForm(f.subject, auth.AudienceData)); rec.Code != http.StatusTooManyRequests {
+	if rec := postForm(h, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneData)); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("exchange past its cap: status %d, want 429", rec.Code)
 	}
 

@@ -522,14 +522,14 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			WithAudit(repos.Audit).
 			WithSkipConsent(skipConsent).
 			WithMCPResource(cfg.MCP.OAuth.ResourceURL)
-		// RFC 8693 exchange for the MCP server (ADR-0036): only when a seed
-		// client may call it, with a verifier that accepts paladin-mcp alone.
+		// RFC 8693 exchange for the MCP server (ADR-0041): only when a seed
+		// client may call it. It trades a paladin-mcp token for the capability
+		// that acts for its user, so it needs the delegation issuer.
 		if len(exchangers) > 0 {
-			verifierMCP, verr := BuildVerifier(ctx, cfg.Auth, auth.AudienceMCP, l)
-			if verr != nil {
-				return nil, nil, nil, fmt.Errorf("oauth token exchange verifier: %w", verr)
+			var xerr error
+			if as, xerr = withDelegationExchange(ctx, as, deps, exchangers, repos.IAMUser); xerr != nil {
+				return nil, nil, nil, xerr
 			}
-			as = as.WithTokenExchange(verifierMCP, exchangers)
 		}
 		as.Mount(iamMux)
 		// The metadata at the AS's own origin, where RFC 8414 puts it; the MCP

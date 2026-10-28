@@ -1,9 +1,10 @@
-package mcp
+package delegation
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 	"uuid"
 
@@ -15,12 +16,16 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
 
+// Planes are what a delegated capability may be asked for: the planes by
+// the labels their capability interceptors check.
+var Planes = []string{auth.TokenPlaneData, auth.TokenPlaneAdmin, auth.TokenPlaneIAM}
+
 // UserDirectory finds the user a paladin-mcp token names.
 type UserDirectory interface {
 	GetByID(ctx context.Context, id uuid.UUID) (authstore.User, error)
 }
 
-// DelegationPolicy is the exchange policy of ADR-0041: a caller's
+// Policy is the exchange policy of ADR-0041: a caller's
 // paladin-mcp token is exchanged for a capability the agent holds on its
 // user's behalf, for the planes asked for that the user may hold, with the
 // operations the user consented to, for at most ttl.
@@ -29,7 +34,7 @@ type UserDirectory interface {
 // policy refuses what the user could not do by their own token: a plane
 // their roles do not reach, and a user disabled, gone or in another tenant
 // since the token was issued.
-func DelegationPolicy(users UserDirectory, ttl time.Duration) exchange.Policy {
+func Policy(users UserDirectory, ttl time.Duration) exchange.Policy {
 	return func(ctx context.Context, g exchange.Grant) (limes.IssueRequest, error) {
 		user, err := delegatingUser(ctx, users, g.Subject)
 		if err != nil {
@@ -88,11 +93,11 @@ func delegatedPlanes(user authstore.User, g exchange.Grant) ([]string, error) {
 	targets := append(append([]string(nil), g.Resources...), g.Audiences...)
 	planes := make([]string, 0, len(targets))
 	for _, plane := range targets {
-		switch err := apiutil.AudienceEligible(user.Roles, auth.PlaneAudience(plane)); {
-		case errors.Is(err, apiutil.ErrAudienceRole):
+		if !slices.Contains(Planes, plane) {
+			return nil, fmt.Errorf("%w: %q is no plane", exchange.ErrInvalidTarget, plane)
+		}
+		if apiutil.AudienceEligible(user.Roles, auth.PlaneAudience(plane)) != nil {
 			continue
-		case err != nil:
-			return nil, fmt.Errorf("%w: %q is no plane: %w", exchange.ErrInvalidTarget, plane, err)
 		}
 		planes = append(planes, plane)
 	}

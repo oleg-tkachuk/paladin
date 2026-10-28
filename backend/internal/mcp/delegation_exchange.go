@@ -2,18 +2,23 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -23,18 +28,30 @@ import (
 // the expired entries go, and then everything.
 const delegationCacheMaxEntries = 1024
 
-// delegationPlanes is every plane a delegated capability is asked for; the
-// policy keeps those the user may hold.
-var delegationPlanes = []string{auth.TokenPlaneData, auth.TokenPlaneAdmin, auth.TokenPlaneIAM}
+// delegationErrorBodyLimit bounds how much of a refusal is read for its error.
+const delegationErrorBodyLimit = 1 << 12
 
-// DelegationExchanger exchanges a caller's paladin-mcp token for the
-// capability that acts for its user on every plane they may reach
-// (ADR-0041), in process, through limes' exchange. Each capability is
-// cached per token until paladin.TokenRefreshMargin before it expires.
-// Safe for concurrent use.
-type DelegationExchanger struct {
-	ex  *exchange.Exchanger
-	now func() time.Time
+// The RFC 6749 §5.2 and RFC 8707 errors the exchange answers with, as far as
+// they are the caller's to hear.
+var delegationRefusals = map[string]error{
+	"invalid_grant":  exchange.ErrInvalidGrant,
+	"invalid_target": exchange.ErrInvalidTarget,
+	"invalid_scope":  exchange.ErrInvalidScope,
+}
+
+// DelegationClient exchanges a caller's paladin-mcp token for the capability
+// that acts for its user on every plane they may reach (ADR-0041), at the
+// Authorization Server's token endpoint, as the confidential client the
+// operator registered. The MCP server holds no capability key and reads no
+// user: the exchange is the Authorization Server's. Each capability is
+// cached per token until paladin.TokenRefreshMargin before it expires. Safe
+// for concurrent use.
+type DelegationClient struct {
+	httpc    *http.Client
+	tokenURL string
+	clientID string
+	secret   string
+	now      func() time.Time
 
 	mu    sync.Mutex
 	cache map[string]delegated
@@ -45,24 +62,21 @@ type delegated struct {
 	expires time.Time
 }
 
-// NewDelegationExchanger builds the exchange over the delegation issuer:
-// subjects reads the callers' tokens, users finds their users, and each
-// capability lives at most ttl.
-func NewDelegationExchanger(issuer *limes.Issuer, subjects exchange.SubjectVerifier, users UserDirectory, ttl time.Duration, log *zap.Logger) (*DelegationExchanger, error) {
-	ex, err := exchange.NewExchanger(exchange.Config{
-		Issuer:   issuer,
-		Subjects: subjects,
-		Policy:   DelegationPolicy(users, ttl),
-		Logger:   SDKLogger(log),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("mcp: delegation exchange: %w", err)
+// NewDelegationClient posts to tokenURL over httpc as clientID.
+func NewDelegationClient(httpc *http.Client, tokenURL, clientID, secret string) *DelegationClient {
+	if httpc == nil {
+		httpc = http.DefaultClient
 	}
-	return &DelegationExchanger{ex: ex, now: time.Now, cache: map[string]delegated{}}, nil
+	return &DelegationClient{
+		httpc: httpc, tokenURL: tokenURL, clientID: clientID, secret: secret,
+		now: time.Now, cache: map[string]delegated{},
+	}
 }
 
-// Capability returns subject exchanged for its delegated capability.
-func (d *DelegationExchanger) Capability(ctx context.Context, subject string) (string, error) {
+// Capability returns subject exchanged for its delegated capability. A
+// refusal the caller should hear is exchange.ErrInvalidGrant,
+// ErrInvalidTarget or ErrInvalidScope; any other error is the server's.
+func (d *DelegationClient) Capability(ctx context.Context, subject string) (string, error) {
 	key := digest(subject)
 	d.mu.Lock()
 	hit, ok := d.cache[key]
@@ -71,11 +85,7 @@ func (d *DelegationExchanger) Capability(ctx context.Context, subject string) (s
 		return hit.token, nil
 	}
 
-	res, err := d.ex.Exchange(ctx, exchange.Request{
-		Client:       exchange.Client{ID: auth.DelegationIssuerSubject, SubjectAudiences: []string{auth.AudienceMCP}},
-		SubjectToken: subject,
-		Audiences:    delegationPlanes,
-	})
+	got, err := d.exchange(ctx, subject)
 	if err != nil {
 		return "", err
 	}
@@ -84,12 +94,12 @@ func (d *DelegationExchanger) Capability(ctx context.Context, subject string) (s
 	if len(d.cache) >= delegationCacheMaxEntries {
 		d.evictLocked()
 	}
-	d.cache[key] = delegated{token: res.Token, expires: res.Capability.ExpiresAt}
-	return res.Token, nil
+	d.cache[key] = got
+	return got.token, nil
 }
 
 // evictLocked drops the expired entries, or all of them when none has.
-func (d *DelegationExchanger) evictLocked() {
+func (d *DelegationClient) evictLocked() {
 	now := d.now()
 	for k, v := range d.cache {
 		if !now.Before(v.expires) {
@@ -101,6 +111,56 @@ func (d *DelegationExchanger) evictLocked() {
 	}
 }
 
+func (d *DelegationClient) exchange(ctx context.Context, subject string) (delegated, error) {
+	form := url.Values{
+		"grant_type":         {exchange.GrantTypeTokenExchange},
+		"subject_token":      {subject},
+		"subject_token_type": {exchange.TokenTypeAccessToken},
+		"audience":           delegation.Planes,
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return delegated{}, fmt.Errorf("mcp: token exchange request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// Raw, not form-encoded: the AS compares the Basic credentials as sent.
+	req.SetBasicAuth(d.clientID, d.secret)
+	resp, err := d.httpc.Do(req)
+	if err != nil {
+		return delegated{}, fmt.Errorf("mcp: token exchange: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		var refusal struct {
+			Error       string `json:"error"`
+			Description string `json:"error_description"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, delegationErrorBodyLimit)).Decode(&refusal)
+		if sentinel, ok := delegationRefusals[refusal.Error]; ok {
+			return delegated{}, fmt.Errorf("%w: %s", sentinel, refusal.Description)
+		}
+		return delegated{}, fmt.Errorf("mcp: token exchange: %d %s: %s", resp.StatusCode, refusal.Error, refusal.Description)
+	}
+	var body struct {
+		AccessToken     string `json:"access_token"`
+		IssuedTokenType string `json:"issued_token_type"`
+		ExpiresIn       int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return delegated{}, fmt.Errorf("mcp: token exchange response: %w", err)
+	}
+	if body.AccessToken == "" || body.IssuedTokenType != exchange.IssuedTokenTypeCapability {
+		return delegated{}, fmt.Errorf("mcp: token exchange issued no capability but %q", body.IssuedTokenType)
+	}
+	return delegated{token: body.AccessToken, expires: d.now().Add(time.Duration(body.ExpiresIn) * time.Second)}, nil
+}
+
+// capabilitySource is what the edge exchanges a caller's token through.
+type capabilitySource interface {
+	Capability(ctx context.Context, subject string) (string, error)
+}
+
 // delegationRefusedMessage is the log line of a token the exchange refused.
 const delegationRefusedMessage = "mcp token exchange refused"
 
@@ -109,7 +169,7 @@ const delegationRefusedMessage = "mcp token exchange refused"
 // planes as the user, narrowed by the capability, and the paladin-mcp token
 // never leaves the server. A request that brings a capability of its own
 // keeps it, and loses the token, which no plane accepts.
-func delegateCalls(next http.Handler, d *DelegationExchanger, resourceMetadataURL string) http.Handler {
+func delegateCalls(next http.Handler, d capabilitySource, resourceMetadataURL string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		own := r.Header.Get(paladin.HeaderCapability)
 		capability := own
@@ -145,4 +205,9 @@ func refuseDelegation(w http.ResponseWriter, r *http.Request, err error, resourc
 		log.Error("mcp token exchange failed", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
+}
+
+func digest(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

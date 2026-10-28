@@ -1,4 +1,4 @@
-package mcp
+package delegation
 
 import (
 	"context"
@@ -52,7 +52,7 @@ func delegationGrant(user authstore.User, scopes []string, audiences ...string) 
 // the plane asked for, with what they consented to and no further.
 func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Roles: []string{apiutil.AdminAudienceRoles[0]}}
-	policy := DelegationPolicy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL)
+	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL)
 
 	req, err := policy(t.Context(), delegationGrant(user, []string{auth.OAuthScopeRead}, allPlanes...))
 	if err != nil {
@@ -77,13 +77,13 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 }
 
 // allPlanes is every plane the MCP server asks a capability for.
-var allPlanes = []string{auth.TokenPlaneData, auth.TokenPlaneAdmin, auth.TokenPlaneIAM}
+var allPlanes = Planes
 
 // A plane the user's roles do not reach is left out of the capability, not
 // a reason to refuse the others.
 func TestDelegationPolicyLeavesOutWhatTheUserMayNotHold(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	policy := DelegationPolicy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, delegationTTL)
+	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, delegationTTL)
 	req, err := policy(t.Context(), delegationGrant(member, []string{auth.OAuthScopeRead}, allPlanes...))
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
 	disabled := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Disabled: true}
 	users := usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member, disabled.UserID: disabled}}
-	policy := DelegationPolicy(users, delegationTTL)
+	policy := Policy(users, delegationTTL)
 	read := []string{auth.OAuthScopeRead}
 
 	moved := delegationGrant(member, read, auth.TokenPlaneData)
@@ -114,6 +114,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 	}{
 		{"only the admin plane, without an admin role", delegationGrant(member, read, auth.TokenPlaneAdmin), exchange.ErrInvalidTarget},
 		{"a plane that is not one", delegationGrant(member, read, auth.TokenPlaneData, "billing"), exchange.ErrInvalidTarget},
+		{"a plane by its token audience", delegationGrant(member, read, auth.AudienceData), exchange.ErrInvalidTarget},
 		{"nothing asked for", delegationGrant(member, read), exchange.ErrInvalidTarget},
 		{"no consent", delegationGrant(member, []string{"openid"}, auth.TokenPlaneData), exchange.ErrInvalidScope},
 		{"a disabled user", delegationGrant(disabled, read, auth.TokenPlaneData), exchange.ErrInvalidGrant},
@@ -132,7 +133,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 func TestDelegationPolicyFailsWithTheDirectory(t *testing.T) {
 	down := errors.New("pool closed")
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	_, err := DelegationPolicy(usersByID{err: down}, delegationTTL)(t.Context(),
+	_, err := Policy(usersByID{err: down}, delegationTTL)(t.Context(),
 		delegationGrant(member, []string{auth.OAuthScopeRead}, auth.TokenPlaneData))
 	if !errors.Is(err, down) || errors.Is(err, exchange.ErrInvalidGrant) {
 		t.Errorf("err = %v, want the directory's failure and no refusal", err)

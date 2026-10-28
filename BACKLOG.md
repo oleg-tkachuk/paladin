@@ -146,11 +146,11 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** the MCP server trades the caller's token for a plane IAM
   token at the AS (ADR-0036), which leaves an agent session the user's full
   authority, unbounded and revocable only with the user's login.
-- **Definition of Done:** ADR-0041 implemented: the bridge exchanges in
-  process with limes' `exchange` for a capability issued by `paladin-mcp`;
-  the planes authorize it as a `delegated` principal with the user's roles;
-  `paladin.write` holds as a caveat; the AS token-exchange grant and
-  `mcp.oauth.exchange` are gone; verified live on the cluster.
+- **Definition of Done:** ADR-0041 implemented: the Authorization Server
+  serves the exchange through limes' `exchange` for a delegated capability;
+  the MCP edge swaps the caller's token for it; the planes authorize it as
+  its user with the user's roles; `paladin.write` holds as a caveat;
+  verified live on the cluster.
 - **Blockers:** none.
 
 ## Agentic plane / single-binary multi-mode migration

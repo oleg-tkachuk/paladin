@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"context"
 	"crypto/ed25519"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -16,22 +18,46 @@ import (
 	"github.com/oleg-tkachuk/limes/memstore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// delegationIssuerTest is the capability issuer whose delegation issuer the
-// exchange in these tests issues through.
-const delegationIssuerTest = "paladin-capability"
+// The exchange in these tests: the IAM issuer of callers' tokens, the
+// delegation issuer of their capabilities, and the MCP server's client.
+const (
+	callerIssuer     = "paladin"
+	callerKey        = "caller-test-signing-key-32-bytes-long!"
+	delegationIssuer = "paladin-capability/mcp"
+	delegationTTL    = 15 * time.Minute
+	bridgeClientID   = "paladin-mcp-server"
+	bridgeSecret     = "bridge-secret"
+	callerClientID   = "agent"
+)
 
-// delegationWorld is a delegation exchange over one user, and the verifier a
-// plane would check its capabilities with.
+// errNotTheBridge is a token request from any client but the bridge.
+var errNotTheBridge = errors.New("not the bridge")
+
+// usersByID is a user directory holding a fixed set of users.
+type usersByID map[uuid.UUID]authstore.User
+
+func (u usersByID) GetByID(_ context.Context, id uuid.UUID) (authstore.User, error) {
+	if user, ok := u[id]; ok {
+		return user, nil
+	}
+	return authstore.User{}, authstore.ErrNotFound
+}
+
+// delegationWorld is the Authorization Server's token endpoint running
+// limes' exchange over one user, the bridge's client of it, and the
+// verifier a plane would check the capabilities with.
 type delegationWorld struct {
-	user      authstore.User
-	exchanger *DelegationExchanger
-	verifier  *limes.Verifier
-	tokens    *issuer.Issuer
+	user     authstore.User
+	client   *DelegationClient
+	verifier *limes.Verifier
+	tokens   *issuer.Issuer
+	calls    *int
 }
 
 func newDelegationWorld(t *testing.T) delegationWorld {
@@ -48,8 +74,7 @@ func newDelegationWorld(t *testing.T) delegationWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := auth.DelegationIssuerName(delegationIssuerTest)
-	capIssuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: name, DefaultTTL: delegationTTL})
+	capIssuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: delegationIssuer, DefaultTTL: delegationTTL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,22 +82,48 @@ func newDelegationWorld(t *testing.T) delegationWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifier, err := limes.NewVerifier(limes.VerifierConfig{Keys: keys, Revocations: store, TrustedIssuers: []string{name}})
+	verifier, err := limes.NewVerifier(limes.VerifierConfig{Keys: keys, Revocations: store, TrustedIssuers: []string{delegationIssuer}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	subjects := NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
-	}, subjectIssuer)
-	ex, err := NewDelegationExchanger(capIssuer, subjects, usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL, nil)
+	subjects := delegation.NewSubjectVerifier(&auth.JWTVerifier{
+		Key: []byte(callerKey), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP,
+	}, callerIssuer)
+	ex, err := delegation.NewExchanger(capIssuer, subjects, usersByID{user.UserID: user}, delegationTTL, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := exchange.NewHandler(exchange.HandlerConfig{
+		Exchanger: ex,
+		Authenticate: func(r *http.Request) (exchange.Client, error) {
+			if id, secret, ok := r.BasicAuth(); !ok || id != bridgeClientID || secret != bridgeSecret {
+				return exchange.Client{}, errNotTheBridge
+			}
+			return exchange.Client{ID: bridgeClientID, SubjectAudiences: []string{auth.AudienceMCP}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := new(int)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*calls++
+		endpoint.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+
+	tokens, err := issuer.New(issuer.Config{
+		Issuer: callerIssuer, SigningKey: []byte(callerKey),
+		AccessTokenTTL: time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return delegationWorld{
-		user: user, exchanger: ex, verifier: verifier,
-		tokens: subjectMinter(t, subjectIssuer, subjectKey, time.Now()),
+		user: user, verifier: verifier, tokens: tokens, calls: calls,
+		client: NewDelegationClient(srv.Client(), srv.URL, bridgeClientID, bridgeSecret),
 	}
 }
 
@@ -82,7 +133,7 @@ func (w delegationWorld) token(t *testing.T, subject string, tenant uuid.UUID, s
 	t.Helper()
 	tok, _, err := w.tokens.MintAccess(issuer.AccessClaims{
 		Subject: subject, TenantID: tenant, Audience: auth.AudienceMCP,
-		OAuthClientID: subjectClientID, OAuthScopes: scopes,
+		OAuthClientID: callerClientID, OAuthScopes: scopes,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +148,7 @@ func TestDelegationExchangerIssuesForTheCaller(t *testing.T) {
 	w := newDelegationWorld(t)
 	subject := w.token(t, w.user.UserID.String(), w.user.TenantID, auth.OAuthScopeRead)
 
-	got, err := w.exchanger.Capability(t.Context(), subject)
+	got, err := w.client.Capability(t.Context(), subject)
 	if err != nil {
 		t.Fatalf("Capability: %v", err)
 	}
@@ -114,8 +165,8 @@ func TestDelegationExchangerIssuesForTheCaller(t *testing.T) {
 		t.Error("a user without an admin role got the admin plane")
 	}
 
-	again, err := w.exchanger.Capability(t.Context(), subject)
-	if err != nil || again != got {
+	again, err := w.client.Capability(t.Context(), subject)
+	if err != nil || again != got || *w.calls != 1 {
 		t.Errorf("a second exchange gave another capability (%v)", err)
 	}
 }
@@ -126,12 +177,12 @@ func TestDelegationExchangerRefusesAGoneUser(t *testing.T) {
 	w := newDelegationWorld(t)
 	gone := w.token(t, uuid.New().String(), w.user.TenantID, auth.OAuthScopeRead)
 	for range 2 {
-		if _, err := w.exchanger.Capability(t.Context(), gone); !errors.Is(err, exchange.ErrInvalidGrant) {
+		if _, err := w.client.Capability(t.Context(), gone); !errors.Is(err, exchange.ErrInvalidGrant) {
 			t.Errorf("err = %v, want ErrInvalidGrant", err)
 		}
 	}
-	if len(w.exchanger.cache) != 0 {
-		t.Errorf("a refusal was cached: %d entries", len(w.exchanger.cache))
+	if len(w.client.cache) != 0 || *w.calls != 2 {
+		t.Errorf("a refusal was cached: %d entries, %d exchanges", len(w.client.cache), *w.calls)
 	}
 }
 
@@ -145,7 +196,7 @@ func TestDelegationEdge(t *testing.T) {
 		seen = r.Header.Clone()
 		rw.WriteHeader(http.StatusOK)
 	})
-	edge := delegateCalls(next, w.exchanger, "")
+	edge := delegateCalls(next, w.client, "")
 	send := func(token, own string) *httptest.ResponseRecorder {
 		seen = nil
 		rec := httptest.NewRecorder()
@@ -198,8 +249,8 @@ func TestRequireBearerDelegates(t *testing.T) {
 		seen = r.Header.Clone()
 		rw.WriteHeader(http.StatusOK)
 	})
-	verifier := &auth.JWTVerifier{Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP}
-	edge := RequireBearer(next, verifier, "", OnlyMCPAudience(), WithDelegation(w.exchanger))
+	verifier := &auth.JWTVerifier{Key: []byte(callerKey), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP}
+	edge := RequireBearer(next, verifier, "", OnlyMCPAudience(), WithDelegation(w.client))
 
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil)

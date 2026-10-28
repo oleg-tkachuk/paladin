@@ -1,4 +1,4 @@
-package mcp
+package delegation
 
 import (
 	"context"

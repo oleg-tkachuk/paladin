@@ -28,7 +28,6 @@ func TestLogToolFailure(t *testing.T) {
 	}{
 		{"an unreachable plane", connect.NewError(connect.CodeUnavailable, "dial tcp 10.0.0.1:8080: connection refused"), true},
 		{"an internal error", connect.NewError(connect.CodeInternal, "pool closed"), true},
-		{"a refused exchange", &ExchangeRefusal{Code: "invalid_client"}, true},
 		{"a transport error", errors.New("context deadline exceeded"), true},
 		{"a denial", connect.NewError(connect.CodePermissionDenied, "denied by policy"), false},
 		{"a missing object", connect.NewError(connect.CodeNotFound, "no backend"), false},
