@@ -307,7 +307,11 @@ func TestTokenExchange_Refusals(t *testing.T) {
 		{"no secret", func(v url.Values) { v.Del("client_secret") }, http.StatusUnauthorized, "invalid_client"},
 		{"an unknown client", func(v url.Values) { v.Set("client_id", "nobody") }, http.StatusUnauthorized, "invalid_client"},
 		{"a public client", func(v url.Values) { v.Set("client_id", public.ClientID) }, http.StatusUnauthorized, "invalid_client"},
-		{"a confidential client not allowed to exchange", func(v url.Values) { v.Set("client_id", unlisted.ClientID) }, http.StatusUnauthorized, "invalid_client"},
+		{"a confidential client not allowed to exchange", func(v url.Values) { v.Set("client_id", unlisted.ClientID) }, http.StatusBadRequest, "unauthorized_client"},
+		{"a client not allowed to exchange, with a wrong secret", func(v url.Values) {
+			v.Set("client_id", unlisted.ClientID)
+			v.Set("client_secret", "wrong")
+		}, http.StatusUnauthorized, "invalid_client"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			form := exchangeForm(f.subject, auth.TokenPlaneData)
@@ -407,5 +411,19 @@ func TestTokenExchange_HasItsOwnRateLimit(t *testing.T) {
 	postForm(h, "/oauth/token", refresh)
 	if rec := postForm(h, "/oauth/token", refresh); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("a second refresh under a cap of %d: status %d, want 429", tokenLimit, rec.Code)
+	}
+}
+
+// limes' handler takes the client only from tokenExchange: a request that
+// reached it any other way names none.
+func TestExchangeClientNeedsAnAuthenticatedClient(t *testing.T) {
+	f := newExchangeFixture(t, sampleUser())
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, TokenPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetBasicAuth(exchangerID, exchangerSecret)
+	if _, err := f.h.exchangeClient(r); err == nil {
+		t.Error("a request with no authenticated client was given one")
 	}
 }

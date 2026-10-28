@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/limes/exchange"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // The endpoints Mount serves.
@@ -58,36 +60,48 @@ func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string
 	return h, nil
 }
 
-// tokenExchange answers the grant. The form is already parsed, which limes'
-// handler reads as it stands.
+// tokenExchange answers the grant. The client is authenticated here, before
+// limes' handler, so the two refusals RFC 6749 §5.2 tells apart stay apart:
+// a client that fails authentication is invalid_client (401); one that
+// passes but may not exchange is unauthorized_client (400). limes' handler
+// reads the form as it stands, already parsed, and takes the client from
+// the request's context.
 func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
-	h.exchange.handler.ServeHTTP(w, r)
-}
-
-// exchangeClient authenticates a client of the exchange: one of the
-// operator's, confidential, by its secret. A public client could present
-// any agent's token. Its subject tokens must be paladin-mcp: issued to the
-// MCP server it is.
-func (h *Handler) exchangeClient(r *http.Request) (exchange.Client, error) {
 	clientID := r.PostForm.Get("client_id")
 	if u, _, ok := r.BasicAuth(); ok && clientID == "" {
 		clientID = u
 	}
-	if !h.exchange.clients[clientID] {
-		return exchange.Client{}, fmt.Errorf("%w: %q", errExchangeClient, clientID)
+	client, ok := h.tokenClient(w, r, clientID)
+	if !ok {
+		return
 	}
-	client, err := h.store.GetClient(r.Context(), clientID)
-	if err != nil {
-		if !errors.Is(err, ErrClientNotFound) {
-			logServerError(r.Context(), "client lookup failed", err, zap.String("client_id", clientID))
-		}
-		return exchange.Client{}, fmt.Errorf("client %q: %w", clientID, err)
-	}
+	// A public client could present any agent's token.
 	if client.Public || len(client.SecretHash) == 0 {
-		return exchange.Client{}, fmt.Errorf("client %q: token exchange needs a confidential client", clientID)
+		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "token exchange needs a confidential client")
+		return
 	}
 	if err := h.authenticateClient(r, client); err != nil {
-		return exchange.Client{}, fmt.Errorf("client %q: %w", clientID, err)
+		h.jsonError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+		return
+	}
+	if !h.exchange.clients[client.ClientID] {
+		logger.FromContext(r.Context()).Warn("token exchange refused", zap.String("client_id", client.ClientID), zap.Error(errExchangeClient))
+		h.jsonError(w, http.StatusBadRequest, "unauthorized_client", errExchangeClient.Error())
+		return
+	}
+	h.exchange.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), exchangeClientKey{}, client.ClientID)))
+}
+
+// exchangeClientKey carries the client tokenExchange authenticated.
+type exchangeClientKey struct{}
+
+// exchangeClient is the client tokenExchange authenticated, for limes'
+// handler. Its subject tokens must be paladin-mcp: issued to the MCP server
+// it is.
+func (h *Handler) exchangeClient(r *http.Request) (exchange.Client, error) {
+	clientID, _ := r.Context().Value(exchangeClientKey{}).(string)
+	if clientID == "" {
+		return exchange.Client{}, errExchangeClient
 	}
 	return exchange.Client{ID: clientID, SubjectAudiences: []string{auth.AudienceMCP}}, nil
 }
