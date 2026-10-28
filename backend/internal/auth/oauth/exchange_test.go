@@ -233,6 +233,22 @@ func TestTokenExchange_IssuesACapabilityForTheUser(t *testing.T) {
 	}
 }
 
+// A client that authenticates in the Authorization header and fails is
+// answered 401 with a challenge in its scheme (RFC 6749 §5.2); one that
+// sends its secret in the form is answered 400.
+func TestTokenExchange_ChallengesABasicClient(t *testing.T) {
+	f := newExchangeFixture(t, sampleUser())
+	form := exchangeForm(f.subject, auth.TokenPlaneData)
+	form.Del("client_id")
+	form.Del("client_secret")
+	rec := postFormBasic(f.h, "/oauth/token", form, exchangerID, "wrong")
+	if rec.Code != http.StatusUnauthorized || oauthError(t, rec.Body.Bytes()) != "invalid_client" ||
+		!strings.HasPrefix(rec.Header().Get("WWW-Authenticate"), "Basic") {
+		t.Errorf("status %d, challenge %q, body %s; want 401 invalid_client with a Basic challenge",
+			rec.Code, rec.Header().Get("WWW-Authenticate"), rec.Body.String())
+	}
+}
+
 // The client may authenticate with HTTP Basic instead of the form.
 func TestTokenExchange_AcceptsBasicClientAuthentication(t *testing.T) {
 	f := newExchangeFixture(t, sampleUser())
@@ -306,15 +322,15 @@ func TestTokenExchange_Refusals(t *testing.T) {
 		{"another subject token type", func(v url.Values) {
 			v.Set("subject_token_type", "urn:ietf:params:oauth:token-type:refresh_token")
 		}, http.StatusBadRequest, "invalid_request"},
-		{"a wrong secret", func(v url.Values) { v.Set("client_secret", "wrong") }, http.StatusUnauthorized, "invalid_client"},
-		{"no secret", func(v url.Values) { v.Del("client_secret") }, http.StatusUnauthorized, "invalid_client"},
-		{"an unknown client", func(v url.Values) { v.Set("client_id", "nobody") }, http.StatusUnauthorized, "invalid_client"},
-		{"a public client", func(v url.Values) { v.Set("client_id", public.ClientID) }, http.StatusUnauthorized, "invalid_client"},
+		{"a wrong secret", func(v url.Values) { v.Set("client_secret", "wrong") }, http.StatusBadRequest, "invalid_client"},
+		{"no secret", func(v url.Values) { v.Del("client_secret") }, http.StatusBadRequest, "invalid_client"},
+		{"an unknown client", func(v url.Values) { v.Set("client_id", "nobody") }, http.StatusBadRequest, "invalid_client"},
+		{"a public client", func(v url.Values) { v.Set("client_id", public.ClientID) }, http.StatusBadRequest, "invalid_client"},
 		{"a confidential client not allowed to exchange", func(v url.Values) { v.Set("client_id", unlisted.ClientID) }, http.StatusBadRequest, "unauthorized_client"},
 		{"a client not allowed to exchange, with a wrong secret", func(v url.Values) {
 			v.Set("client_id", unlisted.ClientID)
 			v.Set("client_secret", "wrong")
-		}, http.StatusUnauthorized, "invalid_client"},
+		}, http.StatusBadRequest, "invalid_client"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			form := exchangeForm(f.subject, auth.TokenPlaneData)
@@ -414,19 +430,5 @@ func TestTokenExchange_HasItsOwnRateLimit(t *testing.T) {
 	postForm(h, "/oauth/token", refresh)
 	if rec := postForm(h, "/oauth/token", refresh); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("a second refresh under a cap of %d: status %d, want 429", tokenLimit, rec.Code)
-	}
-}
-
-// limes' handler takes the client only from tokenExchange: a request that
-// reached it any other way names none.
-func TestExchangeClientNeedsAnAuthenticatedClient(t *testing.T) {
-	f := newExchangeFixture(t, sampleUser())
-	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, TokenPath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r.SetBasicAuth(exchangerID, exchangerSecret)
-	if _, err := f.h.exchangeClient(r); err == nil {
-		t.Error("a request with no authenticated client was given one")
 	}
 }

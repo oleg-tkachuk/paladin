@@ -153,19 +153,6 @@ the same commit. Treat this file like a runtime invariant.
   verified live on the cluster.
 - **Blockers:** none.
 
-
-### Token exchange refuses an unlisted client through limes
-
-- **Status:** Deferred.
-- **Reason:** limes' `exchange.Handler` answers every `Authenticate` error
-  as `invalid_client` (401) and has no `unauthorized_client` (400), so the
-  Authorization Server authenticates the exchanging client and checks it
-  may exchange before handing the request to limes
-  (`internal/auth/oauth/exchange.go`, `tokenExchange`).
-- **Definition of Done:** limes' `exchange` gains a sentinel its handler
-  answers as `unauthorized_client`; Paladin takes the release, moves the
-  check into `Authenticate`, and drops the client from the request context.
-- **Blockers:** a limes release with the sentinel.
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport
