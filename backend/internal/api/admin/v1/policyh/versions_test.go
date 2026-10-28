@@ -66,7 +66,9 @@ func TestParseLayerName(t *testing.T) {
 			t.Errorf("parseLayerName(%q) = %+v, %v; want %+v", c.name, got, err, c.want)
 		}
 	}
-	for _, bad := range []string{"", "tenants/acme", "storageBackends/x", "storageBackends/" + backend.String() + "/other/y", "buckets/b1", "tenants/" + tenant.String() + "/objects/x"} {
+	// A bare id names no layer: the collection's and bucket's segments, and
+	// the prefix, say which one.
+	for _, bad := range []string{"", backend.String(), "tenants/acme", "storageBackends/x", "storageBackends/" + backend.String() + "/other/y", "buckets/b1", "tenants/" + tenant.String() + "/objects/x"} {
 		if _, err := parseLayerName(bad); err == nil {
 			t.Errorf("parseLayerName(%q) accepted a name that addresses no layer", bad)
 		}
@@ -125,6 +127,15 @@ func TestListPolicyVersions(t *testing.T) {
 		last, err := h.ListPolicyVersions(authedCtx(caller), collection, pageSize, page.NextPageToken)
 		if err != nil || len(last.Versions) != 1 || last.Versions[0].Version != 1 || last.NextPageToken != "" {
 			t.Errorf("last page = %+v, %v; want version 1 and no token", last, err)
+		}
+	})
+
+	t.Run("a history that fills the page exactly has no next page", func(t *testing.T) {
+		h := NewHandler(allowEngine(), &fakeStore{})
+		h.SetVersionStore(&fakeVersions{versions: history(pageSize)})
+		page, err := h.ListPolicyVersions(authedCtx(caller), collection, pageSize, "")
+		if err != nil || len(page.Versions) != pageSize || page.NextPageToken != "" {
+			t.Errorf("page = %+v, %v; want both versions and no token", page, err)
 		}
 	})
 
