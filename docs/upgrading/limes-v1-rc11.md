@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.11
+## sdk/go/v0.126.0, sdk/python/v0.127.0 — limes v1.0.0-rc.11
 
 - **Every capability is reissued.** limes issues one token format, an RFC
   9068 access token (`typ: at+jwt`), and refuses the earlier
