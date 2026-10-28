@@ -118,14 +118,16 @@ func (d *DelegationClient) exchange(ctx context.Context, subject string) (delega
 		"subject_token_type": {exchange.TokenTypeAccessToken},
 		"audience":           delegation.Planes,
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.tokenURL, strings.NewReader(form.Encode()))
+	// The token URL is the operator's configuration (mcp.oauth.exchange), never
+	// a caller's input.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.tokenURL, strings.NewReader(form.Encode())) // #nosec G704 -- configured token endpoint
 	if err != nil {
 		return delegated{}, fmt.Errorf("mcp: token exchange request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	// Raw, not form-encoded: the AS compares the Basic credentials as sent.
 	req.SetBasicAuth(d.clientID, d.secret)
-	resp, err := d.httpc.Do(req)
+	resp, err := d.httpc.Do(req) // #nosec G704 -- configured token endpoint
 	if err != nil {
 		return delegated{}, fmt.Errorf("mcp: token exchange: %w", err)
 	}

@@ -57,6 +57,7 @@ func TestSubjectVerifierKeepsTheContract(t *testing.T) {
 
 	exchangetest.TestSubjectVerifier(t, v, exchangetest.Tokens{
 		Valid: func(t *testing.T) (string, exchange.Subject) {
+			t.Helper()
 			tok, exp := mintSubject(t, subjectMinter(t, subjectIssuer, subjectKey, now), subjectClientID)
 			return tok, exchange.Subject{
 				Issuer: subjectIssuer, Subject: subjectUser, ClientID: subjectClientID,
@@ -64,18 +65,22 @@ func TestSubjectVerifierKeepsTheContract(t *testing.T) {
 			}
 		},
 		Expired: func(t *testing.T) string {
+			t.Helper()
 			tok, _ := mintSubject(t, subjectMinter(t, subjectIssuer, subjectKey, now.Add(-subjectExpiredAgo)), subjectClientID)
 			return tok
 		},
 		OtherIssuer: func(t *testing.T) string {
+			t.Helper()
 			tok, _ := mintSubject(t, subjectMinter(t, "elsewhere", subjectKey, now), subjectClientID)
 			return tok
 		},
 		Forged: func(t *testing.T) string {
+			t.Helper()
 			tok, _ := mintSubject(t, subjectMinter(t, subjectIssuer, subjectOtherKey, now), subjectClientID)
 			return tok
 		},
 		NoClient: func(t *testing.T) string {
+			t.Helper()
 			tok, _ := mintSubject(t, subjectMinter(t, subjectIssuer, subjectKey, now), "")
 			return tok
 		},
