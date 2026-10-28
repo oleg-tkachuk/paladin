@@ -32,17 +32,17 @@
      Its `SubjectVerifier` is Paladin's own `auth.JWTVerifier`, which
      accepts only `aud = paladin-mcp`. Paladin's IAM tokens stay HS256
      `JWT`, and the verifier runs limes' `exchangetest` contract suite.
-  2. **The capability acts for the user.** The exchange policy issues, per
-     plane:
+  2. **The capability acts for the user.** The exchange policy issues one
+     capability per caller's token, cached until it nears expiry:
      - `Subject`: the agent, named by its OAuth client (`MCPClient`), in
        the user's tenant; `OnBehalfOf`: the user (`sub`, a UUID). Both are
        signed into the capability;
      - `Issuer`: an issuer of its own, `<issuer_name>/mcp`, signing with the
-       capability key under a kid of its own. The planes trust it, bound to that kid alone, so its `iss` is the
-       mark of a delegated capability: signed, and written by no other
-       issuer. `IssuedBy` records the `paladin-mcp` service;
-     - `Audience`: the plane, refused (`invalid_target`) when the user may
-       not hold it (`apiutil.AudienceEligible`);
+       capability key under a kid of its own. The planes trust it, bound to
+       that kid alone, so its `iss` marks a delegated capability: signed,
+       and written by no other issuer. `IssuedBy` records the `paladin-mcp` service;
+     - `Audience`: every plane the user may hold
+       (`apiutil.AudienceEligible`); none is `invalid_target`;
      - lifetime: no later than the subject token, and at most the plane
        token lifetime it replaces;
      - caveats: the operations below, and no `share`, so it cannot be
@@ -55,8 +55,9 @@
      user's own token. A capability from any other issuer keeps ADR-0010
      unchanged: no roles.
   4. **`paladin.write` is a caveat.** Consent to `paladin.read` issues the
-     operations `paladin:read`, `get` and `list`; consent to `paladin.write`
-     adds `paladin:write`, `put`, `delete` and `object:tag`. The principal
+     operations `paladin:read`, `get`, `list` and `object:presign`; consent to
+     `paladin.write` adds `paladin:write`, `put`, `delete`, `manage` and
+     `object:tag`. The principal
      carries the scope the operations name, so the write interceptor and
      Cedar's `context.oauth_scopes` read it as they do today. One table in
      one package maps each scope to its operations.
@@ -64,6 +65,10 @@
      client secret and `mcp.oauth.exchange` are removed. The `paladin-mcp`
      audience, the edge's audience check and the protected resource metadata
      stay.
+  6. **The edge swaps the token for the capability.** After the session is
+     bound to the caller's token, the MCP edge replaces it with the
+     capability, so the bridge's calls carry nothing else. A caller that
+     sends a capability of its own keeps it, and the token is dropped.
 
 - **Consequences.**
   - An agent session is bounded and revocable on its own: revoking its

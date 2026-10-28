@@ -22,8 +22,8 @@ type UserDirectory interface {
 
 // DelegationPolicy is the exchange policy of ADR-0041: a caller's
 // paladin-mcp token is exchanged for a capability the agent holds on its
-// user's behalf, for one plane the user may hold, with the operations the
-// user consented to, for at most ttl.
+// user's behalf, for the planes asked for that the user may hold, with the
+// operations the user consented to, for at most ttl.
 //
 // The plane authorizes the user it names, with the user's roles, so the
 // policy refuses what the user could not do by their own token: a plane
@@ -35,7 +35,7 @@ func DelegationPolicy(users UserDirectory, ttl time.Duration) exchange.Policy {
 		if err != nil {
 			return limes.IssueRequest{}, err
 		}
-		plane, err := delegatedPlane(user, g)
+		planes, err := delegatedPlanes(user, g)
 		if err != nil {
 			return limes.IssueRequest{}, err
 		}
@@ -53,7 +53,7 @@ func DelegationPolicy(users UserDirectory, ttl time.Duration) exchange.Policy {
 				Type: limes.PrincipalTypeUser, TenantID: user.TenantID, Subject: user.UserID.String(),
 			},
 			IssuedBy: auth.DelegationIssuer(),
-			Audience: []string{plane},
+			Audience: planes,
 			Caveats:  limes.Caveats{Ops: ops},
 			TTL:      ttl,
 			ClientID: client,
@@ -81,15 +81,23 @@ func delegatingUser(ctx context.Context, users UserDirectory, subject exchange.S
 	return user, nil
 }
 
-// delegatedPlane is the one plane g asks for, when user may hold it.
-func delegatedPlane(user authstore.User, g exchange.Grant) (string, error) {
+// delegatedPlanes is what g asks for that user may hold: every target must
+// be a plane, and a plane the user's roles do not reach is left out, as
+// ExchangeAudience would refuse it. Nothing left is a refusal.
+func delegatedPlanes(user authstore.User, g exchange.Grant) ([]string, error) {
 	targets := append(append([]string(nil), g.Resources...), g.Audiences...)
-	if len(targets) != 1 {
-		return "", fmt.Errorf("%w: one plane per capability, asked for %v", exchange.ErrInvalidTarget, targets)
+	planes := make([]string, 0, len(targets))
+	for _, plane := range targets {
+		switch err := apiutil.AudienceEligible(user.Roles, auth.PlaneAudience(plane)); {
+		case errors.Is(err, apiutil.ErrAudienceRole):
+			continue
+		case err != nil:
+			return nil, fmt.Errorf("%w: %q is no plane: %w", exchange.ErrInvalidTarget, plane, err)
+		}
+		planes = append(planes, plane)
 	}
-	plane := targets[0]
-	if err := apiutil.AudienceEligible(user.Roles, auth.PlaneAudience(plane)); err != nil {
-		return "", fmt.Errorf("%w: plane %q: %w", exchange.ErrInvalidTarget, plane, err)
+	if len(planes) == 0 {
+		return nil, fmt.Errorf("%w: the user may hold none of %v", exchange.ErrInvalidTarget, targets)
 	}
-	return plane, nil
+	return planes, nil
 }

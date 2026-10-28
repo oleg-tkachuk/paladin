@@ -54,27 +54,42 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Roles: []string{apiutil.AdminAudienceRoles[0]}}
 	policy := DelegationPolicy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL)
 
-	for _, plane := range []string{auth.TokenPlaneData, auth.TokenPlaneAdmin, auth.TokenPlaneIAM} {
-		req, err := policy(t.Context(), delegationGrant(user, []string{auth.OAuthScopeRead}, plane))
-		if err != nil {
-			t.Fatalf("%s: %v", plane, err)
-		}
-		if s := req.Subject; s.Type != limes.PrincipalTypeAgent || s.Subject != subjectClientID ||
-			s.TenantID != user.TenantID || s.Agent == nil || s.Agent.MCPClient != subjectClientID {
-			t.Errorf("%s: subject = %+v, want the agent %q in the user's tenant", plane, s, subjectClientID)
-		}
-		if o := req.OnBehalfOf; o == nil || o.Type != limes.PrincipalTypeUser || o.Subject != user.UserID.String() || o.TenantID != user.TenantID {
-			t.Errorf("%s: on behalf of %+v, want the user", plane, o)
-		}
-		if ib := req.IssuedBy; ib.Type != auth.DelegationIssuer().Type || ib.Subject != auth.DelegationIssuerSubject || req.ClientID != subjectClientID {
-			t.Errorf("%s: issued by %+v for %q, want the MCP server for the agent", plane, req.IssuedBy, req.ClientID)
-		}
-		if !slices.Equal(req.Audience, []string{plane}) || req.TTL != delegationTTL {
-			t.Errorf("%s: audience %v, TTL %v; want [%s] and %v", plane, req.Audience, req.TTL, plane, delegationTTL)
-		}
-		if want, _ := auth.DelegatedOps([]string{auth.OAuthScopeRead}); !slices.Equal(req.Caveats.Ops, want) {
-			t.Errorf("%s: ops %v, want %v", plane, req.Caveats.Ops, want)
-		}
+	req, err := policy(t.Context(), delegationGrant(user, []string{auth.OAuthScopeRead}, allPlanes...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := req.Subject; s.Type != limes.PrincipalTypeAgent || s.Subject != subjectClientID ||
+		s.TenantID != user.TenantID || s.Agent == nil || s.Agent.MCPClient != subjectClientID {
+		t.Errorf("subject = %+v, want the agent %q in the user's tenant", s, subjectClientID)
+	}
+	if o := req.OnBehalfOf; o == nil || o.Type != limes.PrincipalTypeUser || o.Subject != user.UserID.String() || o.TenantID != user.TenantID {
+		t.Errorf("on behalf of %+v, want the user", o)
+	}
+	if ib := req.IssuedBy; ib.Type != auth.DelegationIssuer().Type || ib.Subject != auth.DelegationIssuerSubject || req.ClientID != subjectClientID {
+		t.Errorf("issued by %+v for %q, want the MCP server for the agent", ib, req.ClientID)
+	}
+	if !slices.Equal(req.Audience, allPlanes) || req.TTL != delegationTTL {
+		t.Errorf("audience %v, TTL %v; want %v and %v", req.Audience, req.TTL, allPlanes, delegationTTL)
+	}
+	if want, _ := auth.DelegatedOps([]string{auth.OAuthScopeRead}); !slices.Equal(req.Caveats.Ops, want) {
+		t.Errorf("ops %v, want %v", req.Caveats.Ops, want)
+	}
+}
+
+// allPlanes is every plane the MCP server asks a capability for.
+var allPlanes = []string{auth.TokenPlaneData, auth.TokenPlaneAdmin, auth.TokenPlaneIAM}
+
+// A plane the user's roles do not reach is left out of the capability, not
+// a reason to refuse the others.
+func TestDelegationPolicyLeavesOutWhatTheUserMayNotHold(t *testing.T) {
+	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
+	policy := DelegationPolicy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, delegationTTL)
+	req, err := policy(t.Context(), delegationGrant(member, []string{auth.OAuthScopeRead}, allPlanes...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{auth.TokenPlaneData, auth.TokenPlaneIAM}; !slices.Equal(req.Audience, want) {
+		t.Errorf("audience %v, want %v", req.Audience, want)
 	}
 }
 
@@ -97,9 +112,9 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 		grant exchange.Grant
 		want  error
 	}{
-		{"the admin plane without an admin role", delegationGrant(member, read, auth.TokenPlaneAdmin), exchange.ErrInvalidTarget},
-		{"a plane that is not one", delegationGrant(member, read, "billing"), exchange.ErrInvalidTarget},
-		{"two planes at once", delegationGrant(member, read, auth.TokenPlaneData, auth.TokenPlaneIAM), exchange.ErrInvalidTarget},
+		{"only the admin plane, without an admin role", delegationGrant(member, read, auth.TokenPlaneAdmin), exchange.ErrInvalidTarget},
+		{"a plane that is not one", delegationGrant(member, read, auth.TokenPlaneData, "billing"), exchange.ErrInvalidTarget},
+		{"nothing asked for", delegationGrant(member, read), exchange.ErrInvalidTarget},
 		{"no consent", delegationGrant(member, []string{"openid"}, auth.TokenPlaneData), exchange.ErrInvalidScope},
 		{"a disabled user", delegationGrant(disabled, read, auth.TokenPlaneData), exchange.ErrInvalidGrant},
 		{"a user who is gone", delegationGrant(authstore.User{UserID: uuid.New(), TenantID: member.TenantID}, read, auth.TokenPlaneData), exchange.ErrInvalidGrant},

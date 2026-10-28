@@ -52,8 +52,12 @@ func headerToken(h http.Header) string {
 			return strings.TrimSpace(authz[len(prefix):])
 		}
 	}
-	return h.Get("X-Paladin-Token")
+	return h.Get(legacyTokenHeader)
 }
+
+// legacyTokenHeader is where a bridge deployment that predates OAuth sends
+// its token.
+const legacyTokenHeader = "X-Paladin-Token"
 
 // protectedResourceMetadata is the RFC 9728 document.
 type protectedResourceMetadata struct {
@@ -106,6 +110,11 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.delegation != nil {
+		// Inside the session binding, which reads the token from
+		// Authorization before it is replaced.
+		next = delegateCalls(next, o.delegation, resourceMetadataURL)
+	}
 	bound := bindSession(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok := BearerToken(r)
@@ -147,6 +156,14 @@ type EdgeOption func(*edgeOptions)
 
 type edgeOptions struct {
 	onlyMCPAudience bool
+	delegation      *DelegationExchanger
+}
+
+// WithDelegation exchanges each caller's token for the capability that acts
+// for its user (ADR-0041), and sends the bridge's calls with that capability
+// alone.
+func WithDelegation(d *DelegationExchanger) EdgeOption {
+	return func(o *edgeOptions) { o.delegation = d }
 }
 
 // OnlyMCPAudience refuses every credential but a paladin-mcp token; the
@@ -225,6 +242,12 @@ func bindSession(next http.Handler) http.Handler {
 // An empty resourceMetadataURL omits that parameter entirely — an empty
 // resource_metadata="" would be a promise of a document that isn't served.
 func writeChallenge(w http.ResponseWriter, resourceMetadataURL, errCode, errDesc string) {
+	writeChallengeStatus(w, http.StatusUnauthorized, resourceMetadataURL, errCode, errDesc)
+}
+
+// writeChallengeStatus is writeChallenge with another status: 403 for
+// insufficient_scope (RFC 6750 §3.1).
+func writeChallengeStatus(w http.ResponseWriter, status int, resourceMetadataURL, errCode, errDesc string) {
 	var b strings.Builder
 	b.WriteString("Bearer")
 	if resourceMetadataURL != "" {
@@ -244,7 +267,7 @@ func writeChallenge(w http.ResponseWriter, resourceMetadataURL, errCode, errDesc
 	}
 	w.Header().Set("WWW-Authenticate", b.String())
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
+	w.WriteHeader(status)
 	payload := map[string]string{"error": "unauthorized"}
 	if errCode != "" {
 		payload["error"] = errCode
