@@ -70,24 +70,12 @@ func (h *Handler) DeleteOAuthClient(ctx context.Context, req *adminv1.DeleteOAut
 }
 
 func (h *Handler) authorize(ctx context.Context) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
+	if _, err := auth.PrincipalFromContext(ctx); err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		return connect.NewError(connect.CodePermissionDenied, "an OAuth client spans every tenant; only a platform admin may manage one")
 	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		cedar.ActionManageOAuthClient,
-		&cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug},
-		cedar.RequestContext{},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "managing OAuth clients is denied")
-	}
-	return nil
+	_, err := apiutil.AuthorizeOwnTenant(ctx, h.policy, cedar.ActionManageOAuthClient)
+	return err
 }

@@ -82,21 +82,8 @@ func (h *Handler) ListTenantSpend(ctx context.Context, periodStart, periodEnd ti
 // on the caller's own tenant, as the actions that reach past it are resourced,
 // then the platform.admin role, which alone may read another tenant's.
 func (h *Handler) authorizeAcrossTenants(ctx context.Context) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		cedar.ActionReadBilling,
-		&cedar.Resource{TenantID: p.TenantID},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
+	if _, err := apiutil.AuthorizeOwnTenant(ctx, h.policy, cedar.ActionReadBilling); err != nil {
+		return err
 	}
 	return apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin)
 }

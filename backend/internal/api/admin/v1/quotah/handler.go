@@ -97,25 +97,12 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 // caller's own. A bucket-scoped quota carries no tenant; the context is
 // returned unchanged there and the caller's own scope applies.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, q admindomain.Quota) (context.Context, error) {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{
-			TenantID:   q.TenantID,
-			BackendID:  q.BackendID,
-			BucketName: q.BucketName,
-		},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return ctx, apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return ctx, connect.NewError(connect.CodePermissionDenied, "denied by policy")
+	if _, err := apiutil.Authorize(ctx, h.policy, action, &cedar.Resource{
+		TenantID:   q.TenantID,
+		BackendID:  q.BackendID,
+		BucketName: q.BucketName,
+	}); err != nil {
+		return ctx, err
 	}
 	return auth.WithActingTenant(ctx, q.TenantID), nil
 }

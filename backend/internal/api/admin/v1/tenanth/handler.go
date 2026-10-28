@@ -481,23 +481,8 @@ func (h *Handler) ClearDefaultBinding(ctx context.Context, tenantID uuid.UUID) e
 
 // authorize evaluates Cedar against the Tenant resource.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID uuid.UUID) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{TenantID: tenantID},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	_, err := apiutil.Authorize(ctx, h.policy, action, &cedar.Resource{TenantID: tenantID})
+	return err
 }
 
 func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Tenant, error) {

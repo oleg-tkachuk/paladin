@@ -25,7 +25,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
-	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -79,23 +78,8 @@ func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
 // shape every other admin handler uses. Action is InspectMCP — the
 // inspect surface is read-only.
 func (h *Handler) authorize(ctx context.Context) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		cedar.ActionInspectMCP,
-		&cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug},
-		cedar.RequestContext{},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "mcp inspect denied")
-	}
-	return nil
+	_, err := apiutil.AuthorizeOwnTenant(ctx, h.policy, cedar.ActionInspectMCP)
+	return err
 }
 
 // defaultSessionPageSize bounds the merged fan-out result when the caller

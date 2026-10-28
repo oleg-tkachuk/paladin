@@ -158,27 +158,12 @@ func bucketResourceName(tenantID uuid.UUID, backendID, bucketName string) string
 // is anchored under StorageBackend, so the engine sees both the backend
 // and the bucket attributes.
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID, bucketName string, ownerTenantID uuid.UUID) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{
-			BackendID:     backendID,
-			BucketName:    bucketName,
-			OwnerTenantID: ownerTenantID,
-		},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	_, err := apiutil.Authorize(ctx, h.policy, action, &cedar.Resource{
+		BackendID:     backendID,
+		BucketName:    bucketName,
+		OwnerTenantID: ownerTenantID,
+	})
+	return err
 }
 
 // authorizeStored authorizes action on the bucket as it is stored: with its
