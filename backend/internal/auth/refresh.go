@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"uuid"
+
+	"github.com/lestrrat-go/jwx/v3/jws"
 )
 
 // RefreshDecoder verifies a refresh token's signature against the IAM-audience
@@ -63,31 +65,16 @@ type refreshClaims struct {
 	Refresh bool   `json:"refresh"`
 }
 
+// decodeClaims reads the refresh-specific claims of a token whose signature
+// the verifier has already checked.
 func decodeClaims(token string) (refreshClaims, error) {
-	parts := splitOnDot(token)
-	if len(parts) != 3 {
-		return refreshClaims{}, errors.New("refresh token: malformed")
-	}
-	body, err := b64Decode(parts[1])
+	msg, err := jws.ParseString(token)
 	if err != nil {
-		return refreshClaims{}, fmt.Errorf("refresh token: claims decode: %w", err)
+		return refreshClaims{}, fmt.Errorf("refresh token: malformed: %w", err)
 	}
 	var c refreshClaims
-	if err := json.Unmarshal(body, &c); err != nil {
+	if err := json.Unmarshal(msg.Payload(), &c); err != nil {
 		return refreshClaims{}, fmt.Errorf("refresh token: claims parse: %w", err)
 	}
 	return c, nil
-}
-
-func splitOnDot(s string) []string {
-	out := make([]string, 0, 3)
-	last := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '.' {
-			out = append(out, s[last:i])
-			last = i + 1
-		}
-	}
-	out = append(out, s[last:])
-	return out
 }

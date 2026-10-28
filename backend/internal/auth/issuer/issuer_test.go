@@ -2,11 +2,14 @@ package issuer
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
@@ -243,5 +246,146 @@ func TestMintAccessNamesTheActor(t *testing.T) {
 				t.Errorf("Actor = %q, want %q", p.Actor, tc.actor)
 			}
 		})
+	}
+}
+
+// A minted token says what it is: a JWT, signed by HS256 — what any client
+// reading the header expects, and what the verifier's key requires.
+func TestMintAccessHeader(t *testing.T) {
+	iss := newTestIssuer(t)
+	tok, _, err := iss.MintAccess(AccessClaims{
+		Subject: uuid.NewV7().String(), TenantID: uuid.NewV7(), Audience: auth.AudienceData,
+		Kind: auth.PrincipalKindUser,
+	})
+	if err != nil {
+		t.Fatalf("MintAccess: %v", err)
+	}
+	msg, err := jws.ParseString(tok)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	hdr := msg.Signatures()[0].ProtectedHeaders()
+	alg, _ := hdr.Algorithm()
+	typ, _ := hdr.Type()
+	if alg != jwa.HS256() || typ != tokenType {
+		t.Errorf("header alg %s typ %q, want HS256 and %q", alg, typ, tokenType)
+	}
+}
+
+var issuerNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// issuerWith is an issuer whose clock stands at issuerNow, configured by edit.
+func issuerWith(t *testing.T, edit func(*Config)) *Issuer {
+	t.Helper()
+	cfg := Config{
+		Issuer:     "paladin-test",
+		SigningKey: []byte(strings.Repeat("k", MinSigningKeyBytes)),
+		Now:        func() time.Time { return issuerNow },
+	}
+	if edit != nil {
+		edit(&cfg)
+	}
+	iss, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return iss
+}
+
+// accessTTL is how long a token minted with ttl lives.
+func accessTTL(t *testing.T, iss *Issuer, ttl time.Duration) time.Duration {
+	t.Helper()
+	_, exp, err := iss.MintAccess(AccessClaims{Subject: "s", Audience: auth.AudienceData, TTL: ttl, Kind: auth.PrincipalKindUser})
+	if err != nil {
+		t.Fatalf("MintAccess: %v", err)
+	}
+	return exp.Sub(issuerNow)
+}
+
+// A signing key shorter than HS256's output is refused; one of that length is
+// not.
+func TestNewSigningKeyLength(t *testing.T) {
+	short := strings.Repeat("k", MinSigningKeyBytes-1)
+	if _, err := New(Config{Issuer: "i", SigningKey: []byte(short)}); err == nil {
+		t.Errorf("a %d-byte key was accepted", len(short))
+	}
+	issuerWith(t, nil)
+}
+
+// A lifetime the config leaves at zero or below is the default; one it sets,
+// however short, is kept; and no access token outlives the scoped maximum.
+func TestIssuerLifetimes(t *testing.T) {
+	const short = time.Nanosecond
+	for _, tc := range []struct {
+		name string
+		edit func(*Config)
+		ttl  time.Duration
+		want time.Duration
+	}{
+		{"the default access lifetime", nil, 0, DefaultAccessTokenTTL},
+		{"a negative access lifetime", func(c *Config) { c.AccessTokenTTL = -time.Second }, 0, DefaultAccessTokenTTL},
+		{"a set access lifetime", func(c *Config) { c.AccessTokenTTL = short }, 0, short},
+		{"a lifetime the caller asks for", nil, time.Minute, time.Minute},
+		{"the shortest lifetime a caller asks for", nil, short, short},
+		{"past the default maximum", nil, DefaultScopedTokenMaxTTL + time.Hour, DefaultScopedTokenMaxTTL},
+		{"a negative maximum is the default", func(c *Config) { c.ScopedTokenMaxTTL = -time.Second }, DefaultScopedTokenMaxTTL + time.Hour, DefaultScopedTokenMaxTTL},
+		{"a set maximum", func(c *Config) { c.ScopedTokenMaxTTL = short }, time.Minute, short},
+	} {
+		if got := accessTTL(t, issuerWith(t, tc.edit), tc.ttl); got != tc.want {
+			t.Errorf("%s: lifetime %s, want %s", tc.name, got, tc.want)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		edit func(*Config)
+		want time.Duration
+	}{
+		{"the default refresh lifetime", nil, DefaultRefreshTokenTTL},
+		{"a negative refresh lifetime", func(c *Config) { c.RefreshTokenTTL = -time.Second }, DefaultRefreshTokenTTL},
+		{"a set refresh lifetime", func(c *Config) { c.RefreshTokenTTL = short }, short},
+	} {
+		_, exp, err := issuerWith(t, tc.edit).MintRefresh(RefreshClaims{TokenID: uuid.NewV7(), UserID: uuid.NewV7()})
+		if err != nil {
+			t.Fatalf("%s: MintRefresh: %v", tc.name, err)
+		}
+		if got := exp.Sub(issuerNow); got != tc.want {
+			t.Errorf("%s: lifetime %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A claim with nothing to say is left out: no tenant for a principal of none,
+// no labels when there are none.
+func TestMintAccessLeavesOutEmptyClaims(t *testing.T) {
+	iss := issuerWith(t, nil)
+	claimsOf := func(c AccessClaims) map[string]any {
+		t.Helper()
+		tok, _, err := iss.MintAccess(c)
+		if err != nil {
+			t.Fatalf("MintAccess: %v", err)
+		}
+		msg, err := jws.ParseString(tok)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out map[string]any
+		if err := json.Unmarshal(msg.Payload(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	bare := claimsOf(AccessClaims{Subject: "s", Audience: auth.AudienceData, Kind: auth.PrincipalKindUser})
+	for _, claim := range []string{"tenant", "tenant_slug", "labels"} {
+		if _, ok := bare[claim]; ok {
+			t.Errorf("claim %q set with nothing to say", claim)
+		}
+	}
+	full := claimsOf(AccessClaims{Subject: "s", Audience: auth.AudienceData, Kind: auth.PrincipalKindUser,
+		TenantID: uuid.NewV7(), TenantSlug: "acme", Labels: map[string]string{"team": "a"}})
+	for _, claim := range []string{"tenant", "tenant_slug", "labels"} {
+		if _, ok := full[claim]; !ok {
+			t.Errorf("claim %q missing", claim)
+		}
 	}
 }
