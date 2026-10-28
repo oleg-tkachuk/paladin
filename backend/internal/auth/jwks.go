@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v4/jwa"
-	"github.com/lestrrat-go/jwx/v4/jwk"
-	"github.com/lestrrat-go/jwx/v4/jws"
-	"github.com/lestrrat-go/jwx/v4/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/lestrrat-go/jwx/v3/jws"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"go.uber.org/zap"
 
@@ -255,16 +255,15 @@ func (v *JWKSVerifier) refresh(ctx context.Context) error {
 // an anti-pattern, and it would let anyone holding the set sign — as are
 // encryption keys, keys jwk could not read, and keys no token could name.
 func signingKeys(body []byte) (jwk.Set, error) {
-	all, err := jwk.Parse(body)
+	// A key jwk cannot read is skipped rather than failing the set: an
+	// identity provider mid-rotation may publish shapes it does not know.
+	all, err := jwk.Parse(body, jwk.WithIgnoreParseError(true))
 	if err != nil {
 		return nil, fmt.Errorf("jwks: decode: %w", err)
 	}
 	out := jwk.NewSet()
 	for i := range all.Len() {
 		k, _ := all.Key(i)
-		if jwk.IsUnsupportedKey(k) {
-			continue
-		}
 		if kt := k.KeyType(); kt != jwa.RSA() && kt != jwa.EC() {
 			continue
 		}
