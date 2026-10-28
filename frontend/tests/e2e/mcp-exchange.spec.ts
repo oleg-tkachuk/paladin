@@ -1,9 +1,11 @@
 /**
- * The MCP server is its own audience (ADR-0036), end to end.
+ * The MCP server is its own audience (ADR-0036) and acts through a
+ * delegated capability (ADR-0041), end to end.
  *
  * An agent authorizes for the MCP resource URL and is issued paladin-mcp,
  * which no plane accepts; the MCP server takes nothing else, and exchanges
- * it for each plane a tool calls, so one session reaches them all. The IAM
+ * it for one capability that acts for the user on every plane, so one
+ * session reaches them all. The IAM
  * plane is not called: no profile offers an IAM tool.
  *
  * MCP is spoken by hand over streamable HTTP, one JSON-RPC message a POST.
