@@ -1,6 +1,11 @@
 package auth
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"connectrpc.com/connect/v2"
+)
 
 // allowsMissing decides which procedures may be called with NO Authorization
 // header. It is the allow-list for unauthenticated access and it had no test.
@@ -61,5 +66,37 @@ func TestEmptyAllowListAllowsNothing(t *testing.T) {
 		if p.allowsMissing(proc) {
 			t.Errorf("%s allowed with an empty allow-list", proc)
 		}
+	}
+}
+
+// On the IAM plane a capability the MCP server exchanged is the whole
+// credential (ADR-0041): the permissive gate steps aside for any capability
+// when told to, and refuses a capability-only call otherwise.
+func TestPermissiveInterceptorDefersACapability(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		skip bool
+		want connect.Code
+	}{
+		{"told to step aside", true, 0},
+		{"not told", false, connect.CodeUnauthenticated},
+	} {
+		p := &PermissiveInterceptor{SkipCapabilities: tc.skip}
+		c := callProbe(context.Background(), []connect.ServerInterceptor{p.Intercept},
+			HeaderCapability, sampleCapability)
+		if connect.CodeOf(c.err) != tc.want && (c.err != nil || tc.want != 0) {
+			t.Errorf("%s: err = %v, want %v", tc.name, c.err, tc.want)
+		}
+		if tc.skip && c.handlerCtx != nil {
+			if _, err := PrincipalFromContext(c.handlerCtx); err == nil {
+				t.Errorf("%s: the gate established a principal", tc.name)
+			}
+		}
+	}
+
+	// A call with neither credential is still refused.
+	p := &PermissiveInterceptor{SkipCapabilities: true}
+	if c := callProbe(context.Background(), []connect.ServerInterceptor{p.Intercept}); connect.CodeOf(c.err) != connect.CodeUnauthenticated {
+		t.Errorf("no credential: err = %v, want Unauthenticated", c.err)
 	}
 }

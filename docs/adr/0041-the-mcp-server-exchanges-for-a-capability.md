@@ -37,9 +37,8 @@
      - `Subject`: the agent, named by its OAuth client (`MCPClient`), in
        the user's tenant; `OnBehalfOf`: the user (`sub`, a UUID). Both are
        signed into the capability;
-     - `Issuer`: an issuer of its own, `<issuer_name>/mcp`, signing with a
-       key derived (HKDF) from the capability signing key under a kid of its
-       own. The planes trust it, bound to that kid alone, so its `iss` is the
+     - `Issuer`: an issuer of its own, `<issuer_name>/mcp`, signing with the
+       capability key under a kid of its own. The planes trust it, bound to that kid alone, so its `iss` is the
        mark of a delegated capability: signed, and written by no other
        issuer. `IssuedBy` records the `paladin-mcp` service;
      - `Audience`: the plane, refused (`invalid_target`) when the user may

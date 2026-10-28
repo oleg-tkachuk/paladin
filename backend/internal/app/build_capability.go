@@ -32,10 +32,13 @@ type CapabilityBundle struct {
 	Usage     meter.UsageStore
 	// Ledger reads the charges ledger for billing, and removes its old
 	// charges for the capability purger when asked to.
-	Ledger   *pgstore.Ledger
-	Issuer   *limes.Issuer
-	Verifier *limes.Verifier
-	Keys     *jwks.Static
+	Ledger *pgstore.Ledger
+	Issuer *limes.Issuer
+	// Delegation issues the capabilities the MCP server exchanges callers'
+	// tokens for, which act for their user (ADR-0041).
+	Delegation *limes.Issuer
+	Verifier   *limes.Verifier
+	Keys       *jwks.Static
 
 	// Revocations is the verifier's revocation cache, which the watcher
 	// keeps in step; its Stats say whether a revocation reaches this
@@ -118,11 +121,6 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		)
 	}
 
-	signer, err := limes.NewSigner(limes.SignerConfig{KeyID: key.KeyID, Key: key.Private})
-	if err != nil {
-		return nil, fmt.Errorf("app: capability signer: %w", err)
-	}
-
 	store, err := capabilitypg.New(deps.Pool)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability store: %w", err)
@@ -132,24 +130,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability records: %w", err)
 	}
 
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{
-		Signer:     signer,
-		Store:      store,
-		IssuerName: cfg.IssuerName,
-		DefaultTTL: cfg.DefaultTTL,
-	})
+	// The capability issuer, and the delegation issuer the MCP server
+	// exchanges callers' tokens through (ADR-0041).
+	issuers, err := newCapabilityIssuers(key, store, cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL)
 	if err != nil {
-		return nil, fmt.Errorf("app: capability issuer: %w", err)
-	}
-
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{key.KeyID: key.Public()}})
-	if err != nil {
-		return nil, fmt.Errorf("app: capability keys: %w", err)
-	}
-
-	trusted := cfg.TrustedIssuers
-	if len(trusted) == 0 {
-		trusted = []string{cfg.IssuerName}
+		return nil, err
 	}
 
 	// One cache answers for capabilities and for Biscuit copies alike. It
@@ -213,9 +198,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}
 
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
-		Keys:           keys,
+		Keys:           issuers.keys,
 		Revocations:    cache,
-		TrustedIssuers: trusted,
+		TrustedIssuers: issuers.trusted,
+		KeyIssuers:     issuers.keyIssuers,
 		Leeway:         cfg.VerifierLeeway,
 		// Every capability is also handed out as a Biscuit its holder can
 		// narrow offline (CapabilityService.Issue), so every plane takes one.
@@ -258,9 +244,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Records:      records,
 		Usage:        usage,
 		Ledger:       ledger,
-		Issuer:       issuer,
+		Issuer:       issuers.issuer,
+		Delegation:   issuers.delegation,
 		Verifier:     verifier,
-		Keys:         keys,
+		Keys:         issuers.keys,
 		Replay:       replay,
 		PublicKeys:   map[string]ed25519.PublicKey{key.KeyID: key.Public()},
 		IssuerName:   cfg.IssuerName,
