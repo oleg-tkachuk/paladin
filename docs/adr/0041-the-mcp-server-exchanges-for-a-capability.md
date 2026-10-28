@@ -36,9 +36,11 @@
      plane:
      - `Subject`: the user (`sub`, a UUID) in their tenant, as an agent
        whose `MCPClient` is the OAuth client;
-     - `IssuedBy`: the service principal `paladin-mcp`. `CapabilityService`
-       issues only with a user as `IssuedBy`, so no caller can mint this
-       mark;
+     - `Issuer`: an issuer of its own, `<issuer_name>/mcp`, signing with a
+       key derived (HKDF) from the capability signing key under a kid of its
+       own. The planes trust it, bound to that kid alone, so its `iss` is the
+       mark of a delegated capability: signed, and written by no other
+       issuer. `IssuedBy` records the `paladin-mcp` service;
      - `Audience`: the plane, refused (`invalid_target`) when the user may
        not hold it (`apiutil.AudienceEligible`);
      - lifetime: no later than the subject token, and at most the plane
@@ -46,12 +48,12 @@
      - caveats: the operations below, and no `share`, so it cannot be
        delegated.
   3. **The plane authorizes the user, narrowed by the caveats.** A
-     capability issued by `paladin-mcp` establishes a principal of kind
-     `delegated`: the user's subject and tenant, the user's current roles
-     read from IAM (cached briefly), the OAuth client and scopes, and the
-     `paladin-mcp` actor. Cedar decides on that principal as for the user's
-     own token. ADR-0038's capability permits do not apply to it, and a
-     capability from any other issuer keeps ADR-0010 unchanged: no roles.
+     delegated capability establishes the principal ADR-0036's exchanged
+     token did: kind `user`, the user's subject and tenant, the user's
+     current roles read from IAM (cached briefly), the OAuth client and
+     scopes, and `paladin-mcp` as the actor. Cedar decides on it as for the
+     user's own token. A capability from any other issuer keeps ADR-0010
+     unchanged: no roles.
   4. **`paladin.write` is a caveat.** Consent to `paladin.read` issues the
      operations `paladin:read`, `get` and `list`; consent to `paladin.write`
      adds `paladin:write`, `put`, `delete` and `object:tag`. The principal
