@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -325,19 +324,9 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 	if h.buckets != nil {
 		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, collection, false)
 	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
+	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(p), action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, BackendID: backendID, BucketName: bucket},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+		cedar.RequestContext{})
 }
 
 // chargeAndSubmit charges the per-request capability budget BEFORE

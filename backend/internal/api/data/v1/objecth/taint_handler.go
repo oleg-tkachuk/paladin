@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -94,7 +93,7 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 		return nil, err
 	}
 	if h.policy != nil {
-		decision, err := h.policy.IsAuthorized(ctx,
+		if err := apiutil.Decide(ctx, h.policy,
 			apiutil.CedarPrincipal(principal),
 			cedar.ActionSetObjectTaint,
 			&cedar.Resource{
@@ -107,14 +106,9 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 				ContentType: obj.ContentType,
 				Tags:        obj.Tags,
 			},
-			cedar.RequestContext{SizeBytes: obj.SizeBytes, ContentType: obj.ContentType, Now: time.Now()},
-		)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		if decision != cedar.DecisionAllow {
-			return nil, connect.NewError(connect.CodePermissionDenied,
-				"not authorised to set taint on this object")
+			cedar.RequestContext{SizeBytes: obj.SizeBytes, ContentType: obj.ContentType},
+		); err != nil {
+			return nil, err
 		}
 	}
 	stored, err := h.taints.SetTaint(ctx, tenantID, obj.ObjectID, signals)

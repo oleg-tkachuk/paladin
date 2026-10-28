@@ -10,6 +10,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
 // recordingPolicy answers one decision and keeps the request it decided.
@@ -19,10 +20,11 @@ type recordingPolicy struct {
 	called   bool
 	resource *cedar.Resource
 	tenant   uuid.UUID
+	request  cedar.RequestContext
 }
 
-func (r *recordingPolicy) IsAuthorized(_ context.Context, p *cedar.Principal, _ cedar.Action, res *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
-	r.called, r.resource, r.tenant = true, res, p.TenantID
+func (r *recordingPolicy) IsAuthorized(_ context.Context, p *cedar.Principal, _ cedar.Action, res *cedar.Resource, rc cedar.RequestContext) (cedar.Decision, error) {
+	r.called, r.resource, r.tenant, r.request = true, res, p.TenantID, rc
 	return r.decision, r.err
 }
 
@@ -78,15 +80,39 @@ func TestAuthorizeOwnTenant(t *testing.T) {
 	}
 }
 
-// Deciding as a given principal asks with it, not with the context's.
+// Deciding as a given principal asks with it, not with the context's, and
+// with the request the caller describes: an upload's size and type.
 func TestDecide(t *testing.T) {
+	const size, contentType = 42, "text/plain"
 	pinned := uuid.New()
 	policy := &recordingPolicy{decision: cedar.DecisionDeny}
-	err := Decide(context.Background(), policy, &cedar.Principal{TenantID: pinned}, cedar.ActionInspectPolicy, &cedar.Resource{})
+	err := Decide(context.Background(), policy, &cedar.Principal{TenantID: pinned}, cedar.ActionInspectPolicy, &cedar.Resource{},
+		cedar.RequestContext{SizeBytes: size, ContentType: contentType})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("err = %v, want permission denied", err)
 	}
 	if policy.tenant != pinned {
 		t.Errorf("asked as tenant %s, want %s", policy.tenant, pinned)
+	}
+	if policy.request.SizeBytes != size || policy.request.ContentType != contentType {
+		t.Errorf("asked with %+v, want size %d and type %q", policy.request, size, contentType)
+	}
+}
+
+// errBrokenPolicy stands for an engine failure a domain registers a code for,
+// as collectionh registers cedar.ErrPolicyUnparseable.
+var errBrokenPolicy = errors.New("tenant policy does not parse")
+
+func init() {
+	RegisterError(errBrokenPolicy, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_POLICY_UNPARSEABLE)
+}
+
+// An engine failure the domain gave a code is answered with that code, not as
+// the server's own fault.
+func TestTheGateMapsARegisteredEngineFailure(t *testing.T) {
+	asCaller := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "alice", TenantID: uuid.New()})
+	_, err := Authorize(asCaller, &recordingPolicy{err: errBrokenPolicy}, cedar.ActionSetObjectTaint, &cedar.Resource{})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !errors.Is(err, errBrokenPolicy) {
+		t.Errorf("err = %v, want FailedPrecondition caused by the engine's failure", err)
 	}
 }
