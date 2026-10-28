@@ -152,3 +152,36 @@ func TestTokenExchangeNeedsCapability(t *testing.T) {
 		t.Errorf("err = %v, want errExchangeNeedsCapability", err)
 	}
 }
+
+// tenantRecorder records the tenant each insert is scoped to.
+type tenantRecorder struct {
+	limes.IssuanceStore
+	scoped uuid.UUID
+}
+
+func (r *tenantRecorder) Insert(ctx context.Context, req limes.InsertRequest) error {
+	r.scoped, _ = auth.EffectiveTenant(ctx)
+	return r.IssuanceStore.Insert(ctx, req)
+}
+
+// The delegation issuer writes a capability under its user's tenant: at the
+// token endpoint nothing else names one, and RLS refuses a row under none.
+func TestDelegatedIssuanceIsScopedToItsTenant(t *testing.T) {
+	_, key, store, _ := delegationFixture(t)
+	rec := &tenantRecorder{IssuanceStore: store}
+	issuer, err := newCapabilityIssuer(delegationKeyID(key.KeyID), key, tenantScopedIssuance{rec}, auth.DelegationIssuerName(testIssuerName), testCapTTL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := uuid.New()
+	if _, err := issuer.Issue(t.Context(), limes.IssueRequest{
+		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
+		IssuedBy: auth.DelegationIssuer(), Audience: []string{testCapAudience},
+		Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet}}, ClientID: "agent",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if rec.scoped != tenant {
+		t.Errorf("the insert was scoped to %s, want the capability's tenant %s", rec.scoped, tenant)
+	}
+}
