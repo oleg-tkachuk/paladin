@@ -18,6 +18,10 @@ const capabilityIssuerName = "paladin-capability"
 
 var delegationIssuer = DelegationIssuerName(capabilityIssuerName)
 
+// relay is the MCP server's client of the exchange, which holds every
+// delegated capability these tests make.
+const relay = "paladin-mcp-server"
+
 // delegatedCapability is one the MCP server exchanged for user's token,
 // under the scopes the user consented to.
 func delegatedCapability(t *testing.T, user DelegatingUser, id uuid.UUID, scopes ...string) *limes.Capability {
@@ -28,7 +32,7 @@ func delegatedCapability(t *testing.T, user DelegatingUser, id uuid.UUID, scopes
 	}
 	return &limes.Capability{
 		ID: uuid.New(), Issuer: delegationIssuer, ClientID: "agent",
-		Subject:    limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: user.TenantID, Subject: "agent"},
+		Subject:    limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: user.TenantID, Subject: relay},
 		OnBehalfOf: &limes.Principal{Type: limes.PrincipalTypeUser, TenantID: user.TenantID, Subject: id.String()},
 		Caveats:    limes.Caveats{Ops: ops},
 		ExpiresAt:  time.Now().Add(time.Minute).Truncate(time.Second),
@@ -81,8 +85,8 @@ func TestDelegatedCapabilityActsForTheUser(t *testing.T) {
 	if p.Audience != AudienceAdmin || !slices.Equal(p.Audiences, []string{AudienceAdmin}) {
 		t.Errorf("audience %q %v, want the plane's", p.Audience, p.Audiences)
 	}
-	if p.OAuthClientID != c.ClientID || !p.MayWrite() || p.Actor != DelegationIssuerSubject {
-		t.Errorf("grant %q %v, actor %q; want the agent's write grant relayed by %s", p.OAuthClientID, p.OAuthScopes, p.Actor, DelegationIssuerSubject)
+	if p.OAuthClientID != c.ClientID || !p.MayWrite() || p.Actor != relay {
+		t.Errorf("grant %q %v, actor %q; want the agent's write grant relayed by %s", p.OAuthClientID, p.OAuthScopes, p.Actor, relay)
 	}
 	if !p.ExpiresAt.Equal(c.ExpiresAt) {
 		t.Errorf("expires %v, want the capability's %v", p.ExpiresAt, c.ExpiresAt)

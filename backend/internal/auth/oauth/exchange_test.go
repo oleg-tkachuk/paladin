@@ -215,6 +215,9 @@ func TestTokenExchange_IssuesACapabilityForTheUser(t *testing.T) {
 		t.Fatalf("Verify: %v", err)
 	}
 	c := v.Capability()
+	if c.Subject.Subject != exchangerID {
+		t.Errorf("held by %q, want the exchanging client %q, which the audit names as the relay", c.Subject.Subject, exchangerID)
+	}
 	if c.OnBehalfOf == nil || c.OnBehalfOf.Subject != u.UserID.String() || c.ClientID != agentWithMCPID {
 		t.Errorf("acts for %+v as %q, want user %s as %q", c.OnBehalfOf, c.ClientID, u.UserID, agentWithMCPID)
 	}

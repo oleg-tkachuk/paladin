@@ -12,7 +12,7 @@
 - **An agent session is revocable on its own.** Each MCP caller's calls
   carry a capability issued under `<capability.issuer_name>/mcp`; revoking
   it stops the session without signing the user out. The audit log's
-  `relayed_by` still names `paladin-mcp`.
+  `relayed_by` still names the MCP server's exchange client.
 - **A user's roles and status apply at the next call.** The planes read
   the user behind a delegated capability on every call, so a role removed
   or a user disabled stops their agents at once.

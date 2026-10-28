@@ -44,9 +44,13 @@ func delegationGrant(user authstore.User, scopes []string, audiences ...string) 
 			Subject: user.UserID.String(), ClientID: subjectClientID, Scopes: scopes,
 			Claims: map[string]any{subjectClaimTenant: user.TenantID.String()},
 		},
+		Client:    exchange.Client{ID: relayClientID},
 		Audiences: audiences,
 	}
 }
+
+// relayClientID is the MCP server, the client of the exchange.
+const relayClientID = "paladin-mcp-server"
 
 // The capability issued for a user acts for that user, in their tenant, on
 // the plane asked for, with what they consented to and no further.
@@ -58,9 +62,9 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s := req.Subject; s.Type != limes.PrincipalTypeAgent || s.Subject != subjectClientID ||
+	if s := req.Subject; s.Type != limes.PrincipalTypeAgent || s.Subject != relayClientID ||
 		s.TenantID != user.TenantID || s.Agent == nil || s.Agent.MCPClient != subjectClientID {
-		t.Errorf("subject = %+v, want the agent %q in the user's tenant", s, subjectClientID)
+		t.Errorf("subject = %+v, want the relay %q for the agent %q in the user's tenant", s, relayClientID, subjectClientID)
 	}
 	if o := req.OnBehalfOf; o == nil || o.Type != limes.PrincipalTypeUser || o.Subject != user.UserID.String() || o.TenantID != user.TenantID {
 		t.Errorf("on behalf of %+v, want the user", o)

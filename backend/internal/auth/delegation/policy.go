@@ -51,8 +51,10 @@ func Policy(users UserDirectory, ttl time.Duration, unit string) exchange.Policy
 		}
 		client := g.Subject.ClientID
 		return limes.IssueRequest{
+			// The MCP server holds and presents it, as the exchange's client,
+			// for the agent's MCP client; the audit names it as the relay.
 			Subject: limes.Principal{
-				Type: limes.PrincipalTypeAgent, TenantID: user.TenantID, Subject: client,
+				Type: limes.PrincipalTypeAgent, TenantID: user.TenantID, Subject: g.Client.ID,
 				Agent: &limes.AgentPrincipal{MCPClient: client},
 			},
 			OnBehalfOf: &limes.Principal{

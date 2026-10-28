@@ -38,9 +38,10 @@
      `internal/auth/delegation`, which the Authorization Server imports.
   2. **The capability acts for the user.** The exchange policy issues one
      capability per caller's token, cached until it nears expiry:
-     - `Subject`: the agent, named by its OAuth client (`MCPClient`), in
-       the user's tenant; `OnBehalfOf`: the user (`sub`, a UUID). Both are
-       signed into the capability;
+     - `Subject`: the MCP server that holds and presents it, named by its
+       client of the exchange, as an agent serving the agent's OAuth client
+       (`MCPClient`), in the user's tenant; `OnBehalfOf`: the user (`sub`, a
+       UUID). All are signed into the capability;
      - `Issuer`: an issuer of its own, `<issuer_name>/mcp`, signing with the
        capability key under a kid of its own. The planes trust it, bound to
        that kid alone, so its `iss` marks a delegated capability: signed,
@@ -51,15 +52,15 @@
        token lifetime it replaces;
      - caveats: the operations below, and no `share`, so it cannot be
        delegated; no request or budget ceiling, the user's authority bounding
-       it as it bounds their token; no `AllowTaintedRead`, since the bridge is an agent and a
-       tainted object is closed to agents.
+       it as it bounds their token; no `AllowTaintedRead`, since the
+       bridge is an agent and a tainted object is closed to agents.
   3. **The plane authorizes the user, narrowed by the caveats.** A
      delegated capability establishes the principal ADR-0036's exchanged
      token did: kind `user`, the user's subject and tenant, the user's
      current roles read from IAM on every call, the OAuth client and
-     scopes, and `paladin-mcp` as the actor. Cedar decides on it as for the
-     user's own token. A capability from any other issuer keeps ADR-0010
-     unchanged: no roles.
+     scopes, and the capability's subject, the MCP server, as the actor.
+     Cedar decides on it as for the user's own token. A capability from
+     any other issuer keeps ADR-0010 unchanged: no roles.
   4. **`paladin.write` is a caveat.** Consent to `paladin.read` issues the
      operations `paladin:read`, `get`, `list` and `object:presign`; consent to
      `paladin.write` adds `paladin:write`, `put`, `delete`, `manage` and
@@ -92,6 +93,6 @@
   - No configuration changes: `mcp.oauth.exchange` and the seed client's
     `token_exchange` keep their meaning, and the grant needs
     `capability.enabled`.
-  - The audit log's `relayed_by` still names `paladin-mcp`, now from the
-    capability rather than an `act` claim, and each relayed call's entry
-    carries the capability's ID.
+  - The audit log's `relayed_by` still names the exchanging client, now
+    from the capability's subject rather than an `act` claim, and each
+    relayed call's entry carries the capability's ID.

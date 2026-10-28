@@ -106,6 +106,6 @@ func (i *capabilityInterceptor) delegatedPrincipal(ctx context.Context, c *limes
 		Kind:          PrincipalKindUser,
 		OAuthClientID: c.ClientID,
 		OAuthScopes:   DelegatedScopes(c.Caveats.Ops),
-		Actor:         DelegationIssuerSubject,
+		Actor:         c.Subject.Subject,
 	}, nil
 }
