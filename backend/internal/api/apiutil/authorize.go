@@ -22,7 +22,7 @@ func Authorize(ctx context.Context, policy cedar.Authorizer, action cedar.Action
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := Decide(ctx, policy, CedarPrincipal(p), action, resource); err != nil {
+	if err := Decide(ctx, policy, CedarPrincipal(p), action, resource, cedar.RequestContext{}); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -36,16 +36,17 @@ func AuthorizeOwnTenant(ctx context.Context, policy cedar.Authorizer, action ced
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if err := Decide(ctx, policy, CedarPrincipal(p), action, &cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug}); err != nil {
+	if err := Decide(ctx, policy, CedarPrincipal(p), action, &cedar.Resource{TenantID: p.TenantID, TenantSlug: p.TenantSlug}, cedar.RequestContext{}); err != nil {
 		return nil, err
 	}
 	return p, nil
 }
 
-// Decide asks policy whether principal may take action on resource, for a
-// gate that builds the principal itself.
-func Decide(ctx context.Context, policy cedar.Authorizer, principal *cedar.Principal, action cedar.Action, resource *cedar.Resource) error {
-	decision, err := policy.IsAuthorized(ctx, principal, action, resource, cedar.RequestContext{})
+// Decide asks policy whether principal may take action on resource in the
+// request rc describes, for a gate that builds the principal itself. The
+// engine fills in rc's time when it has none.
+func Decide(ctx context.Context, policy cedar.Authorizer, principal *cedar.Principal, action cedar.Action, resource *cedar.Resource, rc cedar.RequestContext) error {
+	decision, err := policy.IsAuthorized(ctx, principal, action, resource, rc)
 	if err != nil {
 		return MapError(fmt.Errorf("authz: %w", err))
 	}

@@ -265,39 +265,16 @@ func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.
 }
 
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, action cedar.Action, target authstore.User) error {
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{
-			TenantID:      target.TenantID,
-			TargetUserID:  target.UserID,
-			TargetSubject: target.Subject,
-		},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(p), action, &cedar.Resource{
+		TenantID:      target.TenantID,
+		TargetUserID:  target.UserID,
+		TargetSubject: target.Subject,
+	}, cedar.RequestContext{})
 }
 
 func (h *Handler) authorizeTenant(ctx context.Context, p *auth.Principal, action cedar.Action, tenantID uuid.UUID) error {
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{TenantID: tenantID},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(p), action,
+		&cedar.Resource{TenantID: tenantID}, cedar.RequestContext{})
 }
 
 func applyMask(s *Settings, in UpdateMineInput) error {

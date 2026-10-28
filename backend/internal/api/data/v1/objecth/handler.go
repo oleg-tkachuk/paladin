@@ -783,7 +783,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 
 	// 3. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
-	decision, err := h.policy.IsAuthorized(ctx,
+	if err := apiutil.Decide(ctx, h.policy,
 		apiutil.CedarPrincipal(principal),
 		cedar.ActionPresignPut,
 		&cedar.Resource{
@@ -796,17 +796,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			SizeBytes:   in.SizeBytes,
 			Tags:        in.Tags,
 		},
-		cedar.RequestContext{
-			SizeBytes:   in.SizeBytes,
-			ContentType: in.ContentType,
-			Now:         time.Now(),
-		},
-	)
-	if err != nil {
-		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return nil, connect.NewError(connect.CodePermissionDenied, "denied by policy")
+		cedar.RequestContext{SizeBytes: in.SizeBytes, ContentType: in.ContentType},
+	); err != nil {
+		return nil, err
 	}
 
 	completion := CompletionModeExplicit
@@ -2244,19 +2236,8 @@ func (h *Handler) authorize(
 	sizeBytes int64,
 	contentType string,
 ) error {
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(principal),
-		action,
-		res,
-		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType, Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(principal), action, res,
+		cedar.RequestContext{SizeBytes: sizeBytes, ContentType: contentType})
 }
 
 func parseInt64(s string) (int64, error) {

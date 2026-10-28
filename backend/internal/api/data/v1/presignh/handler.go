@@ -284,17 +284,7 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 // resolvable) leaves the resource without those scope keys, which only ever
 // denies a scoped principal — unscoped/roles-only callers are unaffected.
 func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key, backendID, bucket string, action cedar.Action) error {
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
+	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(p), action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, Key: key, BackendID: backendID, BucketName: bucket},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied, "denied by policy")
-	}
-	return nil
+		cedar.RequestContext{})
 }

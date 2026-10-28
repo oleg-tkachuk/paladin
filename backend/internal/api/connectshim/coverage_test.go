@@ -28,6 +28,10 @@ var gateMarkers = []string{
 	"h.engine.IsAuthorized",
 	"h.authorize",
 	"h.authorizeInspect",
+	// The Cedar gate every handler shares (apiutil/authorize.go).
+	"apiutil.Authorize",
+	"apiutil.AuthorizeOwnTenant",
+	"apiutil.Decide",
 	"requireRole",
 	"requireAnyRole",
 	"requirePlatformAdmin",

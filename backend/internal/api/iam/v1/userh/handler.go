@@ -67,28 +67,12 @@ func readCtx(ctx context.Context) context.Context {
 }
 
 func (h *Handler) authorize(ctx context.Context, action cedar.Action, target authstore.User) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	decision, err := h.policy.IsAuthorized(ctx,
-		apiutil.CedarPrincipal(p),
-		action,
-		&cedar.Resource{
-			TenantID:      target.TenantID,
-			TargetUserID:  target.UserID,
-			TargetSubject: target.Subject,
-		},
-		cedar.RequestContext{Now: time.Now()},
-	)
-	if err != nil {
-		return apiutil.MapError(fmt.Errorf("authz: %w", err))
-	}
-	if decision != cedar.DecisionAllow {
-		return connect.NewError(connect.CodePermissionDenied,
-			"denied by policy")
-	}
-	return nil
+	_, err := apiutil.Authorize(ctx, h.policy, action, &cedar.Resource{
+		TenantID:      target.TenantID,
+		TargetUserID:  target.UserID,
+		TargetSubject: target.Subject,
+	})
+	return err
 }
 
 // ─── Create ─────────────────────────────────────────────────────────────────

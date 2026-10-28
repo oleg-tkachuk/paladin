@@ -676,7 +676,7 @@ func (h *Handler) authorizeFull(
 		Collection: collection,
 		BackendID:  backendID,
 		BucketName: bucketName,
-	})
+	}, cedar.RequestContext{})
 }
 
 // ErrCollectionHasObjects is returned when a Delete is blocked because
