@@ -36,6 +36,20 @@ func watchRevocations(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cac
 	})
 }
 
+// waitSynced waits until the watcher listens for cache: it clears the cache
+// whole once it does, so a revocation committed before then reaches the cache
+// as that clear rather than as its notification.
+func waitSynced(t *testing.T, cache *limes.RevocationCache) {
+	t.Helper()
+	deadline := time.Now().Add(notifyDeadline)
+	for !cache.Stats().Synced {
+		if time.Now().After(deadline) {
+			t.Fatalf("the revocation watcher was not listening after %s", notifyDeadline)
+		}
+		time.Sleep(notifyPoll)
+	}
+}
+
 // A revocation committed anywhere must reach a replica's cache by
 // notification, not by waiting out the TTL. The cache here holds answers for
 // an hour, so only the watcher can make the revoked capability — and its
@@ -53,6 +67,7 @@ func TestRevocationNotificationClearsOtherReplicasCache(t *testing.T) {
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
 	watchRevocations(t, watchCtx, f.pool, cache)
+	waitSynced(t, cache)
 
 	if r, err := cache.IsRevoked(ctx, f.child); err != nil || r {
 		t.Fatalf("child before revoke: revoked=%v err=%v", r, err)
@@ -97,6 +112,7 @@ func TestRevocationNotificationClearsOnlyWhatItOutdates(t *testing.T) {
 	watchCtx, stop := context.WithCancel(ctx)
 	t.Cleanup(stop)
 	watchRevocations(t, watchCtx, f.pool, cache)
+	waitSynced(t, cache)
 
 	for _, id := range []uuid.UUID{f.child, unrelated} {
 		if r, err := cache.IsRevoked(ctx, id); err != nil || r {
