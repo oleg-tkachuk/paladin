@@ -141,7 +141,7 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 			info = &mcpauth.TokenInfo{
 				UserID:     principalIdentity(p),
 				Expiration: p.ExpiresAt,
-				Extra:      map[string]any{TokenInfoAudiences: p.Audiences},
+				Extra:      map[string]any{TokenInfoAudiences: p.Audiences, tokenInfoSubject: p.Subject},
 			}
 		}
 		bound.ServeHTTP(w, withTokenInfo(r, tok, info))
@@ -194,6 +194,23 @@ func RequireToken(next http.Handler) http.Handler {
 // TokenInfoAudiences is the TokenInfo.Extra key holding the token's `aud`
 // values, for handlers that explain which planes a session can reach.
 const TokenInfoAudiences = "audiences"
+
+// tokenInfoSubject is the TokenInfo.Extra key holding the verified token's
+// subject, for SessionSubject.
+const tokenInfoSubject = "subject"
+
+// SessionSubject is the subject of the token the edge verified for r, or ""
+// when it verified none. It reads what the edge put on the request rather
+// than the request's headers: with delegation the token is gone from them
+// by the time a session is tracked (ADR-0041).
+func SessionSubject(r *http.Request) string {
+	info, _ := r.Context().Value(tokenInfoKey{}).(*mcpauth.TokenInfo)
+	if info == nil {
+		return ""
+	}
+	subject, _ := info.Extra[tokenInfoSubject].(string)
+	return subject
+}
 
 // principalIdentity names a verified principal for session binding: the
 // tenant and the subject, since a subject is unique only within its tenant.

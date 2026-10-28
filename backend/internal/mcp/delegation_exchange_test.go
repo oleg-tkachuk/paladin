@@ -245,8 +245,9 @@ func TestDelegationEdge(t *testing.T) {
 func TestRequireBearerDelegates(t *testing.T) {
 	w := newDelegationWorld(t)
 	var seen http.Header
+	var subject string
 	next := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		seen = r.Header.Clone()
+		seen, subject = r.Header.Clone(), SessionSubject(r)
 		rw.WriteHeader(http.StatusOK)
 	})
 	verifier := &auth.JWTVerifier{Key: []byte(callerKey), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP}
@@ -258,5 +259,8 @@ func TestRequireBearerDelegates(t *testing.T) {
 	edge.ServeHTTP(rec, r)
 	if rec.Code != http.StatusOK || seen.Get(paladin.HeaderAuthorization) != "" || seen.Get(paladin.HeaderCapability) == "" {
 		t.Errorf("status %d, headers %v; want the capability in the token's place", rec.Code, seen)
+	}
+	if subject != w.user.UserID.String() {
+		t.Errorf("session subject %q, want the caller's %s though the token is gone", subject, w.user.UserID)
 	}
 }

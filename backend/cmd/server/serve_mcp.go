@@ -565,6 +565,11 @@ func agentSubjectFn(ctx context.Context, a config.Auth, l *zap.Logger) func(*htt
 		return func(*http.Request) string { return "" }
 	}
 	return func(r *http.Request) string {
+		// The edge has verified the token already, and with delegation it
+		// is no longer on the request (ADR-0041).
+		if subject := mcp.SessionSubject(r); subject != "" {
+			return subject
+		}
 		tok := mcp.BearerToken(r)
 		if tok == "" {
 			return ""
