@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.126.0, sdk/python/v0.127.0 — limes v1.0.0-rc.11
+## v41.0.0, sdk/go/v0.126.0, sdk/python/v0.127.0 — limes v1.0.0-rc.11
 
 - **Every capability is reissued.** limes issues one token format, an RFC
   9068 access token (`typ: at+jwt`), and refuses the earlier
