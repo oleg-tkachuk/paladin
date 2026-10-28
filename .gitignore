@@ -116,3 +116,7 @@ lefthook-local.yml
 /.github/ci/node_modules/
 
 **/CLAUDE.md
+
+# The metrics and mutation workers crapper and mutator write
+.metrics/
+target/
