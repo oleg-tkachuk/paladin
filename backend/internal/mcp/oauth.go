@@ -52,8 +52,12 @@ func headerToken(h http.Header) string {
 			return strings.TrimSpace(authz[len(prefix):])
 		}
 	}
-	return h.Get("X-Paladin-Token")
+	return h.Get(legacyTokenHeader)
 }
+
+// legacyTokenHeader is where a bridge deployment that predates OAuth sends
+// its token.
+const legacyTokenHeader = "X-Paladin-Token"
 
 // protectedResourceMetadata is the RFC 9728 document.
 type protectedResourceMetadata struct {
@@ -106,6 +110,11 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.delegation != nil {
+		// Inside the session binding, which reads the token from
+		// Authorization before it is replaced.
+		next = delegateCalls(next, o.delegation, resourceMetadataURL)
+	}
 	bound := bindSession(next)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok := BearerToken(r)
@@ -132,7 +141,7 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 			info = &mcpauth.TokenInfo{
 				UserID:     principalIdentity(p),
 				Expiration: p.ExpiresAt,
-				Extra:      map[string]any{TokenInfoAudiences: p.Audiences},
+				Extra:      map[string]any{TokenInfoAudiences: p.Audiences, tokenInfoSubject: p.Subject},
 			}
 		}
 		bound.ServeHTTP(w, withTokenInfo(r, tok, info))
@@ -147,6 +156,14 @@ type EdgeOption func(*edgeOptions)
 
 type edgeOptions struct {
 	onlyMCPAudience bool
+	delegation      capabilitySource
+}
+
+// WithDelegation exchanges each caller's token for the capability that acts
+// for its user (ADR-0041), and sends the bridge's calls with that capability
+// alone.
+func WithDelegation(d *DelegationClient) EdgeOption {
+	return func(o *edgeOptions) { o.delegation = d }
 }
 
 // OnlyMCPAudience refuses every credential but a paladin-mcp token; the
@@ -177,6 +194,23 @@ func RequireToken(next http.Handler) http.Handler {
 // TokenInfoAudiences is the TokenInfo.Extra key holding the token's `aud`
 // values, for handlers that explain which planes a session can reach.
 const TokenInfoAudiences = "audiences"
+
+// tokenInfoSubject is the TokenInfo.Extra key holding the verified token's
+// subject, for SessionSubject.
+const tokenInfoSubject = "subject"
+
+// SessionSubject is the subject of the token the edge verified for r, or ""
+// when it verified none. It reads what the edge put on the request rather
+// than the request's headers: with delegation the token is gone from them
+// by the time a session is tracked (ADR-0041).
+func SessionSubject(r *http.Request) string {
+	info, _ := r.Context().Value(tokenInfoKey{}).(*mcpauth.TokenInfo)
+	if info == nil {
+		return ""
+	}
+	subject, _ := info.Extra[tokenInfoSubject].(string)
+	return subject
+}
 
 // principalIdentity names a verified principal for session binding: the
 // tenant and the subject, since a subject is unique only within its tenant.
@@ -225,6 +259,12 @@ func bindSession(next http.Handler) http.Handler {
 // An empty resourceMetadataURL omits that parameter entirely — an empty
 // resource_metadata="" would be a promise of a document that isn't served.
 func writeChallenge(w http.ResponseWriter, resourceMetadataURL, errCode, errDesc string) {
+	writeChallengeStatus(w, http.StatusUnauthorized, resourceMetadataURL, errCode, errDesc)
+}
+
+// writeChallengeStatus is writeChallenge with another status: 403 for
+// insufficient_scope (RFC 6750 §3.1).
+func writeChallengeStatus(w http.ResponseWriter, status int, resourceMetadataURL, errCode, errDesc string) {
 	var b strings.Builder
 	b.WriteString("Bearer")
 	if resourceMetadataURL != "" {
@@ -244,7 +284,7 @@ func writeChallenge(w http.ResponseWriter, resourceMetadataURL, errCode, errDesc
 	}
 	w.Header().Set("WWW-Authenticate", b.String())
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
+	w.WriteHeader(status)
 	payload := map[string]string{"error": "unauthorized"}
 	if errCode != "" {
 		payload["error"] = errCode

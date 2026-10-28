@@ -53,10 +53,6 @@ type jwtClaims struct {
 	// holds (ADR-0035).
 	ClientID string `json:"client_id"`
 	Scope    string `json:"scope"`
-	// Act is the RFC 8693 actor of an exchanged token (ADR-0036).
-	Act *struct {
-		Sub string `json:"sub"`
-	} `json:"act"`
 }
 
 // tenantClaim returns the effective tenant identifier from the claim
@@ -169,9 +165,6 @@ func principalFromClaims(c jwtClaims, audience string) (*Principal, error) {
 	if c.ClientID != "" {
 		p.OAuthClientID = c.ClientID
 		p.OAuthScopes = strings.Fields(c.Scope)
-	}
-	if c.Act != nil {
-		p.Actor = c.Act.Sub
 	}
 	if c.Exp > 0 {
 		p.ExpiresAt = time.Unix(c.Exp, 0)

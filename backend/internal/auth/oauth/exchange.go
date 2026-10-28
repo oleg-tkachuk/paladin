@@ -1,16 +1,19 @@
 package oauth
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
-	"time"
-	"uuid"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/exp/zapslog"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/limes/exchange"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // The endpoints Mount serves.
@@ -26,34 +29,43 @@ const (
 const (
 	GrantTypeAuthorizationCode = "authorization_code"
 	GrantTypeRefreshToken      = "refresh_token"
-	GrantTypeTokenExchange     = "urn:ietf:params:oauth:grant-type:token-exchange" // #nosec G101 -- an RFC 8693 identifier, not a credential
-	// TokenTypeAccessToken is the only subject and issued token type.
-	TokenTypeAccessToken = "urn:ietf:params:oauth:token-type:access_token" // #nosec G101 -- an RFC 8693 identifier, not a credential
+	GrantTypeTokenExchange     = exchange.GrantTypeTokenExchange
+	// TokenTypeAccessToken is the subject token type the exchange takes.
+	TokenTypeAccessToken = exchange.TokenTypeAccessToken
 )
 
-// tokenExchange is the configuration of the RFC 8693 grant (ADR-0036).
+// tokenExchange is the RFC 8693 grant of ADR-0041: limes' token endpoint,
+// trading a paladin-mcp token for the capability that acts for its user,
+// for the confidential clients the operator named.
 type tokenExchange struct {
-	// subjects verifies a subject token, and accepts only paladin-mcp.
-	subjects auth.TokenVerifier
-	// clients may call the grant: the MCP server.
+	handler http.Handler
 	clients map[string]bool
 }
 
-// exchangeResponse is the RFC 8693 §2.2.1 success body. No refresh token:
-// the exchanged token lives no longer than the one it was exchanged for.
-type exchangeResponse struct {
-	AccessToken     string `json:"access_token"`
-	IssuedTokenType string `json:"issued_token_type"`
-	TokenType       string `json:"token_type"`
-	ExpiresIn       int    `json:"expires_in"`
-	Scope           string `json:"scope,omitempty"`
+// errExchangeClient is a client the exchange does not serve.
+var errExchangeClient = errors.New("the client may not exchange tokens")
+
+// WithTokenExchange serves the token-exchange grant to clientIDs through ex
+// (ADR-0041). Without it the grant type is unsupported.
+func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string]bool) (*Handler, error) {
+	handler, err := exchange.NewHandler(exchange.HandlerConfig{
+		Exchanger:    ex,
+		Authenticate: h.exchangeClient,
+		Logger:       slog.New(zapslog.NewHandler(h.log.Named("token-exchange").Core())),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("oauth: token exchange: %w", err)
+	}
+	h.exchange = &tokenExchange{handler: handler, clients: clientIDs}
+	return h, nil
 }
 
-// tokenExchange trades the caller's paladin-mcp token for a token to one
-// plane. The result is still the user's — subject, tenant, roles, and the
-// OAuth grant the agent holds, so ADR-0035's write rule applies downstream
-// — with an `act` claim naming the client that relayed it. It expires with
-// the subject token.
+// tokenExchange answers the grant. The client is authenticated here, before
+// limes' handler, so the two refusals RFC 6749 §5.2 tells apart stay apart:
+// a client that fails authentication is invalid_client (401); one that
+// passes but may not exchange is unauthorized_client (400). limes' handler
+// reads the form as it stands, already parsed, and takes the client from
+// the request's context.
 func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	clientID := r.PostForm.Get("client_id")
 	if u, _, ok := r.BasicAuth(); ok && clientID == "" {
@@ -63,8 +75,7 @@ func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// A public client could present any agent's token; the exchange is for
-	// the one confidential client the operator named.
+	// A public client could present any agent's token.
 	if client.Public || len(client.SecretHash) == 0 {
 		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "token exchange needs a confidential client")
 		return
@@ -74,71 +85,23 @@ func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.exchange.clients[client.ClientID] {
-		h.jsonError(w, http.StatusBadRequest, "unauthorized_client", "the client may not exchange tokens")
+		logger.FromContext(r.Context()).Warn("token exchange refused", zap.String("client_id", client.ClientID), zap.Error(errExchangeClient))
+		h.jsonError(w, http.StatusBadRequest, "unauthorized_client", errExchangeClient.Error())
 		return
 	}
-	if r.PostForm.Get("subject_token_type") != TokenTypeAccessToken {
-		h.jsonError(w, http.StatusBadRequest, "invalid_request", "subject_token_type must be "+TokenTypeAccessToken)
-		return
-	}
+	h.exchange.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), exchangeClientKey{}, client.ClientID)))
+}
 
-	subject, err := h.exchange.subjects.Verify(r.Context(), r.PostForm.Get("subject_token"))
-	if err != nil {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "subject token is not a valid "+auth.AudienceMCP+" token")
-		return
-	}
-	// paladin-mcp is issued only by /authorize, so it always carries a grant;
-	// one without would leave the exchanged token unbounded by any consent.
-	if !subject.ActsForOAuthClient() {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "subject token carries no OAuth grant")
-		return
-	}
-	userID, err := uuid.Parse(subject.Subject)
-	if err != nil {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "subject token names no user")
-		return
-	}
-	u, ok := h.eligibleUser(w, r, userID, subject.TenantID, clientID)
-	if !ok {
-		return
-	}
+// exchangeClientKey carries the client tokenExchange authenticated.
+type exchangeClientKey struct{}
 
-	audience := r.PostForm.Get("audience")
-	if err := apiutil.AudienceEligible(u.Roles, audience); err != nil {
-		desc := "audience must be a plane's"
-		if errors.Is(err, apiutil.ErrAudienceRole) {
-			desc = "the user may not be issued " + audience
-		}
-		h.jsonError(w, http.StatusBadRequest, "invalid_target", desc)
-		return
+// exchangeClient is the client tokenExchange authenticated, for limes'
+// handler. Its subject tokens must be paladin-mcp: issued to the MCP server
+// it is.
+func (h *Handler) exchangeClient(r *http.Request) (exchange.Client, error) {
+	clientID, _ := r.Context().Value(exchangeClientKey{}).(string)
+	if clientID == "" {
+		return exchange.Client{}, errExchangeClient
 	}
-	ttl := subject.ExpiresAt.Sub(h.now())
-	if subject.ExpiresAt.IsZero() || ttl <= 0 {
-		h.jsonError(w, http.StatusBadRequest, "invalid_grant", "subject token has expired")
-		return
-	}
-
-	access, accessExp, err := h.iss.MintAccess(issuer.AccessClaims{
-		Subject:       u.UserID.String(),
-		TenantID:      u.TenantID,
-		Audience:      audience,
-		Roles:         u.Roles,
-		Scopes:        u.Scopes,
-		Kind:          auth.PrincipalKindUser,
-		OAuthClientID: subject.OAuthClientID,
-		OAuthScopes:   subject.OAuthScopes,
-		Actor:         client.ClientID,
-		TTL:           ttl,
-	})
-	if err != nil {
-		h.serverError(r.Context(), w, "mint access failed", err, zap.String("client_id", client.ClientID))
-		return
-	}
-	writeJSON(w, http.StatusOK, exchangeResponse{
-		AccessToken:     access,
-		IssuedTokenType: TokenTypeAccessToken,
-		TokenType:       "Bearer",
-		ExpiresIn:       int(accessExp.Sub(h.now()) / time.Second),
-		Scope:           scopesJoin(subject.OAuthScopes),
-	})
+	return exchange.Client{ID: clientID, SubjectAudiences: []string{auth.AudienceMCP}}, nil
 }

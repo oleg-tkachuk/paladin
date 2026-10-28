@@ -25,6 +25,9 @@ import (
 type PermissiveInterceptor struct {
 	Verifier        TokenVerifier
 	AllowMissingFor []string
+	// SkipCapabilities lets a request carrying a capability past untouched,
+	// for a downstream capability interceptor to authenticate.
+	SkipCapabilities bool
 }
 
 func NewPermissiveInterceptor(v TokenVerifier, allowMissingFor ...string) *PermissiveInterceptor {
@@ -35,7 +38,11 @@ func NewPermissiveInterceptor(v TokenVerifier, allowMissingFor ...string) *Permi
 // Authorization header.
 func (p *PermissiveInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
-		ctx, err := p.attach(ctx, unary.Info(ctx).RequestHeader().Get("Authorization"), spec.Procedure)
+		h := unary.Info(ctx).RequestHeader()
+		if p.SkipCapabilities && capabilityPresented(h) {
+			return next(ctx, spec, stream)
+		}
+		ctx, err := p.attach(ctx, h.Get("Authorization"), spec.Procedure)
 		if err != nil {
 			return err
 		}

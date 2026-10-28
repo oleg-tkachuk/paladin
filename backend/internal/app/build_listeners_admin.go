@@ -139,6 +139,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
 			chargeEm,
+			// Additive for a capability of its own, which names no role; a
+			// capability the MCP server exchanged acts for its user (ADR-0041).
+			delegationOption(deps.Capability, repos.IAMUser),
 		)
 	} else {
 		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0)
@@ -215,13 +218,20 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// a missing or invalid non-PAT bearer is still rejected, so auth stays
 		// mandatory; a roleless PAT gets no principal here and is denied
 		// downstream exactly as before.
-		auth.InterceptorSkipAPITokens(verifierAdmin),
+		// Steps aside for a capability too: one the MCP server exchanged is
+		// the whole credential of the user it acts for (ADR-0041), and capAdmin
+		// below authenticates it. Any other capability establishes nothing
+		// here, so RequireAudience still refuses it.
+		auth.InterceptorSkipTokensAndCapabilities(verifierAdmin),
 		// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
 		// check reads the principal, so with the API-token interceptor after it
 		// a PAT bearer was refused as "no authenticated principal" before it
 		// could be authenticated at all. Both paths — JWT and role-bearing PAT —
 		// must land a principal first.
 		apiTokAdmin,
+		// Before RequireAudience, as apiTokAdmin: a delegated capability
+		// establishes the principal the audience check reads.
+		capAdmin,
 		auth.RequireAudience(auth.AudienceAdmin),
 		// After the principal, which carries the OAuth grant (ADR-0035).
 		auth.RequireOAuthWriteScope(),
@@ -230,7 +240,6 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		tenantRL.Intercept,
 		// See the data plane: after otel (span) and after auth (principal).
 		middleware.LogContext(l),
-		capAdmin,
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.

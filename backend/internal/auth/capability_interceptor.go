@@ -238,6 +238,9 @@ type capabilityInterceptor struct {
 	chargePerRequestAmount limes.Nanos
 	emitter                ChargeEventEmitter
 	taintLookup            TaintLookup
+	// delegation recognises a capability the MCP server issued for a user;
+	// nil when none is accepted.
+	delegation *delegation
 }
 
 // interceptor verifies the capability a call carries. A unary call's
@@ -309,9 +312,9 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if err := i.enforceCaveats(ctx, verified); err != nil {
 		return ctx, err
 	}
-	ctx, err = i.withCapabilityPrincipal(ctx, cap)
+	ctx, err = i.withPrincipal(ctx, cap)
 	if err != nil {
-		return ctx, capabilityError(connect.CodePermissionDenied, err)
+		return ctx, err
 	}
 	ctx = WithChargeStore(ctx, i.usage)
 	ctx = WithChargeAmount(ctx, i.chargePerRequestAmount)
@@ -402,7 +405,7 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 		// carrying the label through unmapped produced `token audience "data"
 		// is not allowed on "paladin-data" plane` — a request that had just
 		// authenticated, refused for a naming mismatch.
-		Audience: principalAudienceFor(i.audience),
+		Audience: PlaneAudience(i.audience),
 		Kind:     PrincipalKindCapability,
 	}), nil
 }

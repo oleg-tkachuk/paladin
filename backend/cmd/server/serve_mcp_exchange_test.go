@@ -31,13 +31,13 @@ func TestExchangeTokenURL(t *testing.T) {
 	}
 }
 
-func TestExchangeOptions(t *testing.T) {
-	off := config.MCP{}
-	if got := exchangeOptions(off, nil, mcp.InlineIAMURL); got != nil {
-		t.Errorf("exchange off: %d options, want none", len(got))
+// The edge exchanges only when mcp.oauth.exchange names a client.
+func TestDelegationClient(t *testing.T) {
+	if got := delegationClient(config.MCP{}, nil, mcp.InlineIAMURL); got != nil {
+		t.Error("exchange off: a delegation client was built")
 	}
 	on := config.MCP{OAuth: config.MCPOAuth{Enabled: true, Exchange: config.MCPOAuthExchange{ClientID: "mcp", ClientSecret: "s"}}}
-	if got := exchangeOptions(on, nil, mcp.InlineIAMURL); len(got) != 1 {
-		t.Errorf("exchange on: %d options, want one", len(got))
+	if got := delegationClient(on, nil, mcp.InlineIAMURL); got == nil {
+		t.Error("exchange on: no delegation client")
 	}
 }

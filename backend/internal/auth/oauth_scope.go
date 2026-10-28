@@ -22,10 +22,6 @@ const (
 	ClaimScope    = "scope"
 	// ScopeSeparator joins the scope claim's values (RFC 6749 §3.3).
 	ScopeSeparator = " "
-	// ClaimActor is the RFC 8693 §4.1 `act` claim of an exchanged token: the
-	// party that relayed it, named by ClaimActorSubject inside it (ADR-0036).
-	ClaimActor        = "act"
-	ClaimActorSubject = "sub"
 )
 
 // ActsForOAuthClient reports whether p holds an OAuth client's grant.

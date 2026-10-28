@@ -32,17 +32,6 @@ var catalogAudience = func() map[string]string {
 // NotFound or a Cedar denial is the answer the model needs.
 func toolError(tool string, err error) error {
 	plane := catalogAudience[tool]
-	// Before the codes: a refused exchange names why, and the code alone would
-	// read an internal refusal as the plane being down.
-	var refusal *ExchangeRefusal
-	if errors.As(err, &refusal) {
-		why := refusal.Description
-		if why == "" {
-			why = refusal.Code
-		}
-		return fmt.Errorf("%s calls the %s plane, and the MCP server could not get a token for it: %s",
-			tool, plane, why)
-	}
 	var ce *connect.Error
 	if !errors.As(err, &ce) {
 		return err

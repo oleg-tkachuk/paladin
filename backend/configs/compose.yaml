@@ -259,10 +259,12 @@ mcp:
 # scenario when adding agentic-flow tests.
 capability:
   # Enabled for the Playwright e2e suite (US4 exercises Issue/List/Revoke).
-  # signing_key_path empty → an ephemeral Ed25519 keypair is generated at
-  # boot (fine for the throwaway test stack); trusted_issuers auto-defaults
-  # to [issuer_name].
+  # One key for every process: the compose stacks' capability-key service
+  # writes it to the volume mounted here, since api issues the capabilities
+  # the MCP exchange hands out (ADR-0041) and admin verifies them.
+  # trusted_issuers auto-defaults to [issuer_name].
   enabled: true
+  signing_key_path: /app/keys/capability.pem
   issuer_name: paladin-e2e
   currency: XXX
 api_token:

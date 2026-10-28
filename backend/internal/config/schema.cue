@@ -225,7 +225,7 @@ auth: {
     consent_url:              string | *""
     token_rate_limit_per_minute:    int | *60
     // The exchange grant's own cap: the MCP server's sessions all count
-    // against one client (ADR-0036).
+    // against one client (ADR-0041).
     token_exchange_rate_limit_per_minute: int | *6000
     token_endpoint_allowed_origins: [...string] | *[]
     seed_clients: [...{
@@ -238,7 +238,7 @@ auth: {
       // A confidential client's secret: inline for dev, a Secret otherwise.
       client_secret?:     string
       client_secret_ref?: #SecretRef
-      // RFC 8693 token exchange, for the MCP server (ADR-0036).
+      // RFC 8693 token exchange, for the MCP server (ADR-0041).
       token_exchange: bool | *false
     }] | *[]
   }
@@ -644,7 +644,7 @@ mcp: {
       registration_endpoint:  string | *""
       jwks_uri:               string | *""
     }
-    // RFC 8693 exchange per plane (ADR-0036). Empty client_id: off.
+    // RFC 8693 exchange for a delegated capability (ADR-0041). Empty client_id: off.
     exchange: {
       client_id:          string | *""
       client_secret:      string | *""

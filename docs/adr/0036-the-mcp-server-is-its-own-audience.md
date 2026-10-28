@@ -1,6 +1,7 @@
 # ADR-0036: The MCP server is its own audience and exchanges the caller's token
 
-- **Status:** Accepted. Implemented 2026-10-16, behind `mcp.oauth.exchange`;
+- **Status:** Accepted; decisions 2 and 3 superseded by
+  [ADR-0041](0041-the-mcp-server-exchanges-for-a-capability.md). Implemented 2026-10-16, behind `mcp.oauth.exchange`;
   recording the actor in the audit log is deferred work (BACKLOG, "The MCP
   server is its own audience").
 - **Related:** supersedes the "not audience" bullet of

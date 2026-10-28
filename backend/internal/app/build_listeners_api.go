@@ -167,7 +167,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// token stays additive — the existing principal wins.
 		// The taint lookup is what gives AllowTaintedRead something to act
 		// on: a capability without it is refused reads of flagged objects.
-		var capOpts []auth.CapabilityOption
+		// A capability the MCP server exchanged acts for its user (ADR-0041).
+		capOpts := []auth.CapabilityOption{delegationOption(deps.Capability, repos.IAMUser)}
 		if taintH != nil {
 			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
 		}
@@ -181,6 +182,26 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		)
 	} else {
 		capData = auth.CapabilityInterceptor(nil, "", nil, 0)
+	}
+
+	// The IAM plane serves Login and the token RPCs without a credential;
+	// with the capability subsystem on, a capability-only call passes the
+	// JWT gate to capIAM, which accepts the delegation issuer's alone.
+	iamGate := auth.NewPermissiveInterceptor(verifierIAM,
+		"Login",
+		"RefreshToken",
+		"ExchangeAudience",
+	)
+	capIAM := auth.CapabilityInterceptor(nil, "", nil, 0)
+	if deps.Capability != nil {
+		iamGate.SkipCapabilities = true
+		capIAM = auth.CapabilityInterceptor(
+			deps.Capability.Verifier,
+			auth.TokenPlaneIAM,
+			deps.Capability.Usage,
+			cfg.Capability.ChargePerRequestAmount,
+			delegationOption(deps.Capability, repos.IAMUser),
+		)
 	}
 
 	// APIToken interceptor — additive, parallel to capability and JWT.
@@ -356,12 +377,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// wave of failed authentications leaving no log line was the
 		// widest part of this gap. Failures only; successes are otel's job.
 		middleware.LogOutcome(l),
-		auth.NewPermissiveInterceptor(verifierIAM,
-			"Login",
-			"RefreshToken",
-			"ExchangeAudience",
-		).Intercept,
+		iamGate.Intercept,
 		apiTokIAM,
+		// A capability the MCP server exchanged acts for its user (ADR-0041);
+		// any other establishes nothing on this plane.
+		capIAM,
 		// After the principal, which carries the OAuth grant (ADR-0035). A
 		// permissive RPC with no principal passes it.
 		auth.RequireOAuthWriteScope(),
@@ -502,14 +522,14 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 			WithAudit(repos.Audit).
 			WithSkipConsent(skipConsent).
 			WithMCPResource(cfg.MCP.OAuth.ResourceURL)
-		// RFC 8693 exchange for the MCP server (ADR-0036): only when a seed
-		// client may call it, with a verifier that accepts paladin-mcp alone.
+		// RFC 8693 exchange for the MCP server (ADR-0041): only when a seed
+		// client may call it. It trades a paladin-mcp token for the capability
+		// that acts for its user, so it needs the delegation issuer.
 		if len(exchangers) > 0 {
-			verifierMCP, verr := BuildVerifier(ctx, cfg.Auth, auth.AudienceMCP, l)
-			if verr != nil {
-				return nil, nil, nil, fmt.Errorf("oauth token exchange verifier: %w", verr)
+			var xerr error
+			if as, xerr = withDelegationExchange(ctx, as, deps, exchangers, repos.IAMUser); xerr != nil {
+				return nil, nil, nil, xerr
 			}
-			as = as.WithTokenExchange(verifierMCP, exchangers)
 		}
 		as.Mount(iamMux)
 		// The metadata at the AS's own origin, where RFC 8414 puts it; the MCP

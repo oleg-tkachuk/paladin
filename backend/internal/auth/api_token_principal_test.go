@@ -208,8 +208,8 @@ func TestAPITokenPrincipalScopes(t *testing.T) {
 func TestPrincipalAudienceFor(t *testing.T) {
 	cases := map[string]string{"data": AudienceData, "admin": AudienceAdmin, "iam": AudienceIAM, "mcp": "mcp"}
 	for label, want := range cases {
-		if got := principalAudienceFor(label); got != want {
-			t.Errorf("principalAudienceFor(%q) = %q, want %q", label, got, want)
+		if got := PlaneAudience(label); got != want {
+			t.Errorf("PlaneAudience(%q) = %q, want %q", label, got, want)
 		}
 	}
 }

@@ -134,7 +134,7 @@ comment. What each top-level block owns:
 | `storage` | backends, routing, SSE, per-backend auth mode ([backend-registry.md](../backend/docs/backend-registry.md)) |
 | `ingest` | the storage-notification receiver: driver, webhook, dedup ([storage-ingest.md](storage-ingest.md)) |
 | `cedar` | policy cache TTL, canonical collection entity UIDs ([cedar-authoring.md](../backend/docs/cedar-authoring.md)) |
-| `mcp` | the MCP server and its upstreams, its OAuth resource-server posture and per-plane token exchange (ADR-0036), tool profiles and `always_deny`, the bridge's DPoP key |
+| `mcp` | the MCP server and its upstreams, its OAuth resource-server posture and token exchange for a delegated capability (ADR-0041), tool profiles and `always_deny`, the bridge's DPoP key |
 | `capability` | issuer, signing key, verification, budgets, DPoP server nonces |
 | `api_token` | the HMAC key for token lookup digests |
 

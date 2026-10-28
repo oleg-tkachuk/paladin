@@ -141,24 +141,31 @@ the same commit. Treat this file like a runtime invariant.
 
 ### MCP authorization on limes' token exchange
 
-- **Status:** Deferred.
-- **Reason:** limes' `exchange` module (v1.0.0-rc.6 on) trades an access
-  token for a capability, which would give each agent session its own
-  budget, caveats on operations and resources, and immediate revocation.
-  It does not duplicate Paladin's exchange
-  (`backend/internal/auth/oauth/exchange.go`, ADR-0036), which issues a
-  plane's IAM access token that stays the user's, so nothing is removed by
-  adopting it: it is a redesign. It changes how the planes see the
-  principal (Cedar authorizes the token's user today), and ADR-0035's
-  `paladin.write` rule would have to be expressed as caveats. It is set
-  aside for the control-plane stability focus. limes' RFC 7662
-  introspection has no counterpart in Paladin and no consumer yet.
-- **Definition of Done:** an ADR superseding ADR-0036 decides how the MCP
-  server exchanges an agent's token for a capability and how the planes
-  authorize it; the bridge runs on `exchange`, the plane-token exchange is
-  gone, and `paladin.write` holds as a caveat.
-- **Blockers:** the control-plane stability focus.
+- **Status:** In progress — [ADR-0041](docs/adr/0041-the-mcp-server-exchanges-for-a-capability.md)
+  decides it.
+- **Reason:** the MCP server trades the caller's token for a plane IAM
+  token at the AS (ADR-0036), which leaves an agent session the user's full
+  authority, unbounded and revocable only with the user's login.
+- **Definition of Done:** ADR-0041 implemented: the Authorization Server
+  serves the exchange through limes' `exchange` for a delegated capability;
+  the MCP edge swaps the caller's token for it; the planes authorize it as
+  its user with the user's roles; `paladin.write` holds as a caveat;
+  verified live on the cluster.
+- **Blockers:** none.
 
+
+### Token exchange refuses an unlisted client through limes
+
+- **Status:** Deferred.
+- **Reason:** limes' `exchange.Handler` answers every `Authenticate` error
+  as `invalid_client` (401) and has no `unauthorized_client` (400), so the
+  Authorization Server authenticates the exchanging client and checks it
+  may exchange before handing the request to limes
+  (`internal/auth/oauth/exchange.go`, `tokenExchange`).
+- **Definition of Done:** limes' `exchange` gains a sentinel its handler
+  answers as `unauthorized_client`; Paladin takes the release, moves the
+  check into `Authenticate`, and drops the client from the request context.
+- **Blockers:** a limes release with the sentinel.
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

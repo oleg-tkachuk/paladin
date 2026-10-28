@@ -235,7 +235,7 @@ export function MCPAuthorization({ inspect }: { inspect: MCPInspectResponse }) {
             label="Accepted audience"
             hint={
               exchanging
-                ? "No plane accepts it; the server exchanges it per plane."
+                ? "No plane accepts it; the server exchanges it for a capability that acts for the user."
                 : "The server forwards the token it is given."
             }
           >

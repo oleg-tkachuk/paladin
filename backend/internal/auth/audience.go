@@ -20,7 +20,7 @@ const (
 )
 
 // The short plane labels a token's audience lists: an API token's, as
-// APITokenService.Create takes them, and a capability's. principalAudienceFor
+// APITokenService.Create takes them, and a capability's. PlaneAudience
 // maps each to the audience above.
 const (
 	TokenPlaneData  = string(paladin.PlaneData)
