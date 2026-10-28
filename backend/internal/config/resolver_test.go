@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -411,6 +412,9 @@ func TestResolveSecret_DoesNotRetryARefusal(t *testing.T) {
 		apierrors.NewNotFound(gr, "pg"),
 		apierrors.NewForbidden(gr, "pg", errors.New("rbac")),
 		apierrors.NewUnauthorized("token expired"),
+		apierrors.NewBadRequest("malformed"),
+		apierrors.NewInvalid(schema.GroupKind{Kind: "Secret"}, "pg", nil),
+		apierrors.NewMethodNotSupported(gr, "get"),
 	} {
 		r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "v"))
 		calls := failGets(r, secretReadAttempts, refusal)
@@ -505,5 +509,54 @@ func TestResolveConfig_InCluster_OAuthSeedClientSecret(t *testing.T) {
 	}
 	if err := r.ResolveConfig(context.Background(), missing); err == nil {
 		t.Error("ResolveConfig() with a missing Secret = nil, want an error")
+	}
+}
+
+// A read is retried only while it may yet succeed: not once the caller has
+// given up, whichever way that reaches the read.
+func TestRetryableSecretRead(t *testing.T) {
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+	unreachable := errors.New("connection refused")
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+		err  error
+		want bool
+	}{
+		{"an unreachable API", context.Background(), unreachable, true},
+		{"the caller's context ended", ended, unreachable, false},
+		{"a read cancelled", context.Background(), context.Canceled, false},
+		{"a read that ran out of time", context.Background(), context.DeadlineExceeded, false},
+	} {
+		if got := retryableSecretRead(tc.ctx, tc.err); got != tc.want {
+			t.Errorf("%s: retryable = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// Each retry is logged, as an unanswered API, and a read the API refused is
+// not: there is nothing to wait out.
+func TestResolveSecret_LogsEachRetry(t *testing.T) {
+	const transientFailures = 2
+	tokenPath, nsPath := inCluster(t)
+	gr := schema.GroupResource{Resource: "secrets"}
+	for _, tc := range []struct {
+		name  string
+		err   error
+		fails int
+		warns int
+	}{
+		{"an unreachable API, then the secret", errors.New("connection refused"), transientFailures, transientFailures},
+		{"a refusal", apierrors.NewNotFound(gr, "pg"), 1, 0},
+	} {
+		r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "v"))
+		core, logs := observer.New(zap.WarnLevel)
+		r.log = zap.New(core)
+		failGets(r, tc.fails, tc.err)
+		_, _ = r.ResolveSecret(context.Background(), &SecretRef{Name: "pg", Key: "password"})
+		if got := logs.FilterMessageSnippet("did not answer a secret read").Len(); got != tc.warns {
+			t.Errorf("%s: %d retry warnings, want %d", tc.name, got, tc.warns)
+		}
 	}
 }
