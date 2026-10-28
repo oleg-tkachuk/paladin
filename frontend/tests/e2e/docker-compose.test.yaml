@@ -73,6 +73,7 @@ x-paladin-base: &paladin-base
   image: ${PALADIN_IMAGE_PREFIX:-registry.local/paladin}/paladin-core:${PALADIN_CORE_TAG:-latest}
   volumes:
     - ../../../backend/configs:/app/configs:ro
+    - capability-key:/app/keys:ro
   environment:
     # ── bootstrap admin (fixture credential) ─────────────────
     # NEVER true in prod. Mirrors fixtures/credentials.ts.
@@ -225,6 +226,18 @@ services:
   # One-shot: runs SQL migrations and exits 0. Subsequent
   # services gate on `service_completed_successfully` so they
   # never see a half-migrated schema.
+  # One capability signing key for every process of the stack. api (the
+  # token exchange, ADR-0041) and admin verify each other's capabilities, so
+  # a key each generated for itself would refuse the other's. The postgres
+  # image is already pinned here and carries openssl, whose default output
+  # is the PKCS#8 PEM limes reads.
+  capability-key:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    restart: "no"
+    entrypoint: ["sh", "-c", "test -s /keys/capability.pem || (openssl genpkey -algorithm ed25519 -out /keys/capability.pem && chmod 0444 /keys/capability.pem)"]
+    volumes:
+      - capability-key:/keys
+
   migrate:
     <<: *paladin-base
     restart: "no"
@@ -239,6 +252,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      capability-key:
+        condition: service_completed_successfully
 
   # One-shot: gives paladin_app a way to log in.
   #
@@ -401,3 +416,6 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+
+volumes:
+  capability-key:

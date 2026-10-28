@@ -40,6 +40,7 @@ x-paladin-base: &paladin-base
     args: *build-meta
   volumes:
     - ../configs:/app/configs:ro
+    - capability-key:/app/keys:ro
 
 services:
   postgres:
@@ -93,6 +94,19 @@ services:
   # One-shot: applies SQL migrations and exits 0. The api/admin/worker/mcp
   # services gate on `service_completed_successfully` so they never see a
   # half-migrated schema.
+  # One capability signing key for every process of the stack. api (the
+  # token exchange, ADR-0041) and admin verify each other's capabilities, so
+  # a key each generated for itself would refuse the other's. The postgres
+  # image is already pinned here and carries openssl, whose default output
+  # is the PKCS#8 PEM limes reads.
+  paladin-capability-key:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    container_name: paladin-capability-key
+    restart: "no"
+    entrypoint: ["sh", "-c", "test -s /keys/capability.pem || (openssl genpkey -algorithm ed25519 -out /keys/capability.pem && chmod 0444 /keys/capability.pem)"]
+    volumes:
+      - capability-key:/keys
+
   paladin-migrate:
     <<: *paladin-base
     container_name: paladin-migrate
@@ -107,6 +121,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      paladin-capability-key:
+        condition: service_completed_successfully
 
   # One-shot: gives paladin_app a way to log in. 002 creates the role NOLOGIN —
   # production provisions its credential out of band — and every service below
@@ -264,5 +280,6 @@ services:
         condition: service_started
 
 volumes:
+  capability-key:
   paladin_pg_data:
   paladin_seaweed_data:
