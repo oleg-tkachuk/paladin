@@ -23,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
@@ -106,6 +107,7 @@ func TestDPoPProofSeenOnOneReplicaIsRefusedOnAnother(t *testing.T) {
 	}
 	tenant := uuid.New()
 	res, err := issuer.Issue(ctx, limes.IssueRequest{
+		ClientID:        captest.ClientID,
 		IssuedBy:        limes.Principal{Type: limes.PrincipalTypeUser, TenantID: tenant, Subject: "op"},
 		Subject:         limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
 		Audience:        []string{auth.TokenPlaneData},

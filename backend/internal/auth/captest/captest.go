@@ -29,6 +29,10 @@ const TTL = time.Hour
 // none.
 const Subject = "captest-agent"
 
+// ClientID is the OAuth client a minted capability is granted to (RFC 9068
+// client_id), which limes requires.
+const ClientID = "captest"
+
 // Unit is the currency a minted budget that names none is in: limes assumes
 // no unit for an empty one.
 const Unit = "USD"
@@ -129,6 +133,7 @@ func (m *Minter) MintExact(tb testing.TB, template limes.Capability) (limes.Veri
 		Audience: audience,
 		Caveats:  caveats,
 		TTL:      TTL,
+		ClientID: ClientID,
 	})
 	if err != nil {
 		tb.Fatalf("captest: issue: %v", err)

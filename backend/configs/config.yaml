@@ -462,7 +462,7 @@ capability:
   issuer_name: ""                    # `iss` claim; conventional: external URL or "paladin-prod-eu"
   trusted_issuers: []                # `iss` values the verifier accepts; include issuer_name
   signing_key_path: ""               # PEM PKCS#8 Ed25519 private key; empty → ephemeral keypair (dev only)
-  signing_key_kid: ""                # JWT header kid; empty → derived from public key bytes
+  signing_key_kid: ""                # JWT header kid, "limes:" and a name; empty → derived from public key bytes
   default_ttl: 15m                   # cap when Issue.TTL omitted
   verifier_leeway: 30s               # clock-skew window for nbf / exp
   charge_per_request_amount: 0       # amount auto-charged on billable handler calls, in the capability's own unit; 0 = no auto-charge
