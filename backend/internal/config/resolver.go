@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"slices"
@@ -152,210 +153,107 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		)
 	}
 
-	// Postgres
-	if cfg.Datastores.Postgres.PasswordSecret != nil {
-		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.PasswordSecret)
+	for _, b := range secretBindings(cfg) {
+		value, err := r.resolveSecret(ctx, b.ref)
 		if err != nil {
-			return fmt.Errorf("postgres.password_secret: %w", err)
+			return fmt.Errorf("%s: %w", b.path, err)
 		}
-		cfg.Datastores.Postgres.Password = pwd
-		cfg.Datastores.Postgres.PasswordSecret = nil
+		b.fill(value)
 	}
-	// Migration role secret is independent — production deploys keep the
-	// DDL credential in a separate, more tightly access-controlled secret
-	// than the runtime credential.
-	if cfg.Datastores.Postgres.MigratePasswordSecret != nil {
-		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.MigratePasswordSecret)
-		if err != nil {
-			return fmt.Errorf("postgres.migrate_password_secret: %w", err)
+	return nil
+}
+
+// secretBinding is one configuration field a Secret fills: its path, as an
+// error names it, the reference, and fill, which stores the value and drops
+// the reference so nothing downstream reads it again.
+type secretBinding struct {
+	path string
+	ref  *SecretRef
+	fill func(value string)
+}
+
+// secretBindings is every field of cfg whose Secret is to be read, in a fixed
+// order: those that name a Secret, and of the replica and the bootstrap admin
+// only while they are on, so a stale reference left behind cannot stop boot.
+func secretBindings(cfg *Config) []secretBinding {
+	var out []secretBinding
+	// bind adds a field held by pointer, set when the pointer is.
+	bind := func(path string, ref **SecretRef, value *string) {
+		if *ref == nil {
+			return
 		}
-		cfg.Datastores.Postgres.MigratePassword = pwd
-		cfg.Datastores.Postgres.MigratePasswordSecret = nil
+		out = append(out, secretBinding{path, *ref, func(v string) { *value, *ref = v, nil }})
 	}
-	// Reaper role secret — the least-privilege BYPASSRLS DML credential the
-	// worker's background jobs use. Independent of both the runtime and the
-	// migrate secret.
-	if cfg.Datastores.Postgres.ReaperPasswordSecret != nil {
-		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.ReaperPasswordSecret)
-		if err != nil {
-			return fmt.Errorf("postgres.reaper_password_secret: %w", err)
+	// bindValue adds a field held by value, set when it names a Secret.
+	bindValue := func(path string, ref *SecretRef, value *string) {
+		if ref.Name == "" {
+			return
 		}
-		cfg.Datastores.Postgres.ReaperPassword = pwd
-		cfg.Datastores.Postgres.ReaperPasswordSecret = nil
+		named := *ref
+		out = append(out, secretBinding{path, &named, func(v string) { *value, *ref = v, SecretRef{} }})
 	}
 
-	// Read-replica secret — only when the replica is on, so a stale Secret
-	// reference left behind with enabled: false cannot crash boot.
-	if cfg.Datastores.Postgres.Replica.Enabled && cfg.Datastores.Postgres.Replica.PasswordSecret != nil {
-		pwd, err := r.resolveSecret(ctx, cfg.Datastores.Postgres.Replica.PasswordSecret)
-		if err != nil {
-			return fmt.Errorf("postgres.replica.password_secret: %w", err)
-		}
-		cfg.Datastores.Postgres.Replica.Password = pwd
-		cfg.Datastores.Postgres.Replica.PasswordSecret = nil
+	pg := &cfg.Datastores.Postgres
+	bind("postgres.password_secret", &pg.PasswordSecret, &pg.Password)
+	// The migration and reaper roles are separate credentials, each in its
+	// own, more tightly held Secret.
+	bind("postgres.migrate_password_secret", &pg.MigratePasswordSecret, &pg.MigratePassword)
+	bind("postgres.reaper_password_secret", &pg.ReaperPasswordSecret, &pg.ReaperPassword)
+	if pg.Replica.Enabled {
+		bind("postgres.replica.password_secret", &pg.Replica.PasswordSecret, &pg.Replica.Password)
 	}
-
-	// Bootstrap admin password — only resolved when bootstrap.admin.enabled
-	// is true. Skip otherwise so a misconfigured Secret doesn't crash boot
-	// in clusters where bootstrap is intentionally off.
-	if cfg.Bootstrap.Admin.Enabled && cfg.Bootstrap.Admin.PasswordSecret != nil {
-		pwd, err := r.resolveSecret(ctx, cfg.Bootstrap.Admin.PasswordSecret)
-		if err != nil {
-			return fmt.Errorf("bootstrap.admin.password_secret: %w", err)
-		}
-		cfg.Bootstrap.Admin.Password = pwd
-		cfg.Bootstrap.Admin.PasswordSecret = nil
+	if cfg.Bootstrap.Admin.Enabled {
+		bind("bootstrap.admin.password_secret", &cfg.Bootstrap.Admin.PasswordSecret, &cfg.Bootstrap.Admin.Password)
 	}
-
-	// Auth signing key — the HMAC key used to both sign and verify every
-	// JWT. Resolving it from a SecretRef lets prod keep the key in a
-	// (Sealed)Secret instead of inline in Helm values; Validate() already
-	// rejects setting both auth.signing_key and auth.signing_key_secret.
-	if cfg.Auth.SigningKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Auth.SigningKeySecret)
-		if err != nil {
-			return fmt.Errorf("auth.signing_key_secret: %w", err)
-		}
-		cfg.Auth.SigningKey = key
-		cfg.Auth.SigningKeySecret = nil
-	}
-
-	// API-token HMAC key — the server-side pepper for the token lookup
-	// digest. Resolving it from a SecretRef keeps the key out of inline
-	// Helm values; Validate() rejects setting both api_token.hmac_key and
-	// api_token.hmac_key_secret.
-	if cfg.APIToken.HMACKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.APIToken.HMACKeySecret)
-		if err != nil {
-			return fmt.Errorf("api_token.hmac_key_secret: %w", err)
-		}
-		cfg.APIToken.HMACKey = key
-		cfg.APIToken.HMACKeySecret = nil
-	}
-
-	// DPoP nonce key — shared by every replica, so a nonce one issues the
-	// next can check. Validate() rejects setting both key and key_secret.
-	if cfg.Capability.DPoPNonce.KeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.Capability.DPoPNonce.KeySecret)
-		if err != nil {
-			return fmt.Errorf("capability.dpop_nonce.key_secret: %w", err)
-		}
-		cfg.Capability.DPoPNonce.Key = key
-		cfg.Capability.DPoPNonce.KeySecret = nil
-	}
-
-	// MCP bridge DPoP key — shared by every bridge replica, so a capability
-	// delegated to its thumbprint works through any of them.
-	if cfg.MCP.DPoPKeySecret != nil {
-		key, err := r.resolveSecret(ctx, cfg.MCP.DPoPKeySecret)
-		if err != nil {
-			return fmt.Errorf("mcp.dpop_key_secret: %w", err)
-		}
-		cfg.MCP.DPoPKey = key
-		cfg.MCP.DPoPKeySecret = nil
-	}
-
-	// Health snapshot token — gates /system/health.json. From a SecretRef so
-	// a production token stays out of the config ConfigMap; Validate()
-	// rejects setting both runtime.health_snapshot_token and the reference.
-	if cfg.Runtime.HealthSnapshotTokenSecret != nil {
-		tok, err := r.resolveSecret(ctx, cfg.Runtime.HealthSnapshotTokenSecret)
-		if err != nil {
-			return fmt.Errorf("runtime.health_snapshot_token_secret: %w", err)
-		}
-		cfg.Runtime.HealthSnapshotToken = tok
-		cfg.Runtime.HealthSnapshotTokenSecret = nil
-	}
-
-	// Ingest webhook HMAC shared secret — the key the storage-event publisher
-	// signs bodies with. SharedSecretRef is a value type, so an empty Name is
-	// "not set" (the inline shared_secret, or dev's empty-passes-check, is used
-	// instead). Resolving it keeps the HMAC key out of inline values too.
-	if cfg.Ingest.Webhook.SharedSecretRef.Name != "" {
-		sec, err := r.resolveSecret(ctx, &cfg.Ingest.Webhook.SharedSecretRef)
-		if err != nil {
-			return fmt.Errorf("ingest.webhook.shared_secret_ref: %w", err)
-		}
-		cfg.Ingest.Webhook.SharedSecret = sec
-		cfg.Ingest.Webhook.SharedSecretRef = SecretRef{}
-	}
-
-	// Ingest broker credentials, the same way: the NATS token, and the AMQP
-	// URL, which carries its user and password. The schema accepted both
-	// references long before anything resolved them, so a deploy that set one
-	// connected with no credential at all.
-	if cfg.Ingest.NATS.TokenRef.Name != "" {
-		tok, err := r.resolveSecret(ctx, &cfg.Ingest.NATS.TokenRef)
-		if err != nil {
-			return fmt.Errorf("ingest.nats.token_ref: %w", err)
-		}
-		cfg.Ingest.NATS.Token = tok
-		cfg.Ingest.NATS.TokenRef = SecretRef{}
-	}
-	if cfg.Ingest.RabbitMQ.URLRef.Name != "" {
-		url, err := r.resolveSecret(ctx, &cfg.Ingest.RabbitMQ.URLRef)
-		if err != nil {
-			return fmt.Errorf("ingest.rabbitmq.url_ref: %w", err)
-		}
-		cfg.Ingest.RabbitMQ.URL = url
-		cfg.Ingest.RabbitMQ.URLRef = SecretRef{}
-	}
-
-	// The MCP server's own client secret, for its token exchange.
-	if cfg.MCP.OAuth.Exchange.ClientSecretRef != nil {
-		sec, err := r.resolveSecret(ctx, cfg.MCP.OAuth.Exchange.ClientSecretRef)
-		if err != nil {
-			return fmt.Errorf("mcp.oauth.exchange.client_secret_ref: %w", err)
-		}
-		cfg.MCP.OAuth.Exchange.ClientSecret = sec
-		cfg.MCP.OAuth.Exchange.ClientSecretRef = nil
-	}
-
-	// OAuth seed clients' secrets — the MCP server's above all, which
-	// authenticates its token exchange (ADR-0036).
+	// Validate() refuses a key given both inline and by reference.
+	bind("auth.signing_key_secret", &cfg.Auth.SigningKeySecret, &cfg.Auth.SigningKey)
+	bind("api_token.hmac_key_secret", &cfg.APIToken.HMACKeySecret, &cfg.APIToken.HMACKey)
+	bind("capability.dpop_nonce.key_secret", &cfg.Capability.DPoPNonce.KeySecret, &cfg.Capability.DPoPNonce.Key)
+	bind("mcp.dpop_key_secret", &cfg.MCP.DPoPKeySecret, &cfg.MCP.DPoPKey)
+	bind("runtime.health_snapshot_token_secret", &cfg.Runtime.HealthSnapshotTokenSecret, &cfg.Runtime.HealthSnapshotToken)
+	bindValue("ingest.webhook.shared_secret_ref", &cfg.Ingest.Webhook.SharedSecretRef, &cfg.Ingest.Webhook.SharedSecret)
+	bindValue("ingest.nats.token_ref", &cfg.Ingest.NATS.TokenRef, &cfg.Ingest.NATS.Token)
+	bindValue("ingest.rabbitmq.url_ref", &cfg.Ingest.RabbitMQ.URLRef, &cfg.Ingest.RabbitMQ.URL)
+	bind("mcp.oauth.exchange.client_secret_ref", &cfg.MCP.OAuth.Exchange.ClientSecretRef, &cfg.MCP.OAuth.Exchange.ClientSecret)
 	for i := range cfg.Auth.OAuth.SeedClients {
 		sc := &cfg.Auth.OAuth.SeedClients[i]
-		if sc.ClientSecretRef == nil {
+		bind(fmt.Sprintf("auth.oauth.seed_clients[%s].client_secret_ref", sc.ClientID), &sc.ClientSecretRef, &sc.ClientSecret)
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Storage.Backends)) {
+		out = append(out, backendBindings(cfg.Storage.Backends, name)...)
+	}
+	return out
+}
+
+// backendBindings are a storage backend's credential fields. The map holds
+// backends by value, so each fill writes the backend back.
+func backendBindings(backends map[string]StorageBackend, name string) []secretBinding {
+	var out []secretBinding
+	b := backends[name]
+	for _, f := range []struct {
+		field string
+		ref   *SecretRef
+		set   func(*StorageBackendAuth, string)
+	}{
+		{"access_key_secret", b.Auth.AccessKeySecret, func(a *StorageBackendAuth, v string) { a.AccessKey, a.AccessKeySecret = v, nil }},
+		{"secret_key_secret", b.Auth.SecretKeySecret, func(a *StorageBackendAuth, v string) { a.SecretKey, a.SecretKeySecret = v, nil }},
+		{"session_token_secret", b.Auth.SessionTokenSecret, func(a *StorageBackendAuth, v string) { a.SessionToken, a.SessionTokenSecret = v, nil }},
+	} {
+		if f.ref == nil {
 			continue
 		}
-		sec, err := r.resolveSecret(ctx, sc.ClientSecretRef)
-		if err != nil {
-			return fmt.Errorf("auth.oauth.seed_clients[%s].client_secret_ref: %w", sc.ClientID, err)
-		}
-		sc.ClientSecret = sec
-		sc.ClientSecretRef = nil
+		set := f.set
+		out = append(out, secretBinding{
+			path: fmt.Sprintf("storage.backends.%s.auth.%s", name, f.field),
+			ref:  f.ref,
+			fill: func(v string) {
+				b := backends[name]
+				set(&b.Auth, v)
+				backends[name] = b
+			},
+		})
 	}
-
-	// Per-backend credential secrets.
-	for name, b := range cfg.Storage.Backends {
-		if b.Auth.AccessKeySecret != nil {
-			key, err := r.resolveSecret(ctx, b.Auth.AccessKeySecret)
-			if err != nil {
-				return fmt.Errorf("storage.backends.%s.auth.access_key_secret: %w", name, err)
-			}
-			b.Auth.AccessKey = key
-			b.Auth.AccessKeySecret = nil
-		}
-		if b.Auth.SecretKeySecret != nil {
-			key, err := r.resolveSecret(ctx, b.Auth.SecretKeySecret)
-			if err != nil {
-				return fmt.Errorf("storage.backends.%s.auth.secret_key_secret: %w", name, err)
-			}
-			b.Auth.SecretKey = key
-			b.Auth.SecretKeySecret = nil
-		}
-		if b.Auth.SessionTokenSecret != nil {
-			tok, err := r.resolveSecret(ctx, b.Auth.SessionTokenSecret)
-			if err != nil {
-				return fmt.Errorf("storage.backends.%s.auth.session_token_secret: %w", name, err)
-			}
-			b.Auth.SessionToken = tok
-			b.Auth.SessionTokenSecret = nil
-		}
-		cfg.Storage.Backends[name] = b
-	}
-
-	return nil
+	return out
 }
 
 // ResolveSecret reads one key from a K8s Secret at runtime via the pod's
