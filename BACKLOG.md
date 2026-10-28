@@ -141,23 +141,17 @@ the same commit. Treat this file like a runtime invariant.
 
 ### MCP authorization on limes' token exchange
 
-- **Status:** Deferred.
-- **Reason:** limes' `exchange` module (v1.0.0-rc.6 on) trades an access
-  token for a capability, which would give each agent session its own
-  budget, caveats on operations and resources, and immediate revocation.
-  It does not duplicate Paladin's exchange
-  (`backend/internal/auth/oauth/exchange.go`, ADR-0036), which issues a
-  plane's IAM access token that stays the user's, so nothing is removed by
-  adopting it: it is a redesign. It changes how the planes see the
-  principal (Cedar authorizes the token's user today), and ADR-0035's
-  `paladin.write` rule would have to be expressed as caveats. It is set
-  aside for the control-plane stability focus. limes' RFC 7662
-  introspection has no counterpart in Paladin and no consumer yet.
-- **Definition of Done:** an ADR superseding ADR-0036 decides how the MCP
-  server exchanges an agent's token for a capability and how the planes
-  authorize it; the bridge runs on `exchange`, the plane-token exchange is
-  gone, and `paladin.write` holds as a caveat.
-- **Blockers:** the control-plane stability focus.
+- **Status:** In progress — [ADR-0041](docs/adr/0041-the-mcp-server-exchanges-for-a-capability.md)
+  decides it.
+- **Reason:** the MCP server trades the caller's token for a plane IAM
+  token at the AS (ADR-0036), which leaves an agent session the user's full
+  authority, unbounded and revocable only with the user's login.
+- **Definition of Done:** ADR-0041 implemented: the bridge exchanges in
+  process with limes' `exchange` for a capability issued by `paladin-mcp`;
+  the planes authorize it as a `delegated` principal with the user's roles;
+  `paladin.write` holds as a caveat; the AS token-exchange grant and
+  `mcp.oauth.exchange` are gone; verified live on the cluster.
+- **Blockers:** none.
 
 ## Agentic plane / single-binary multi-mode migration
 

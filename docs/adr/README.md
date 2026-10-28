@@ -45,11 +45,12 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0033](0033-console-separates-platform-from-tenant-workspace.md) | The console separates the platform from a tenant's workspace | Accepted |
 | [0034](0034-the-product-releases-as-a-train.md) | The product releases as a train; the dev cluster follows dev builds | Accepted |
 | [0035](0035-an-oauth-grant-is-bound-and-its-scopes-enforced.md) | An OAuth grant is bound to its client, and its scopes are enforced | Accepted |
-| [0036](0036-the-mcp-server-is-its-own-audience.md) | The MCP server is its own audience and exchanges the caller's token | Accepted |
+| [0036](0036-the-mcp-server-is-its-own-audience.md) | The MCP server is its own audience and exchanges the caller's token | Superseded in part by 0041 |
 | [0037](0037-revocation-answers-cached-by-the-signal.md) | Revocation answers are cached for as long as the revocation signal vouches for them | Accepted |
 | [0038](0038-a-capability-does-what-its-caveats-allow.md) | A capability does what its caveats allow, without a tenant policy | Accepted |
 | [0039](0039-the-name-is-qualified-where-it-is-published.md) | Paladin keeps its name, qualified wherever it is published | Accepted |
 | [0040](0040-policy-history-kept-by-triggers.md) | A policy's history is kept by triggers, with the writer the pool names | Accepted |
+| [0041](0041-the-mcp-server-exchanges-for-a-capability.md) | The MCP server exchanges the caller's token for a capability that acts for the user | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
