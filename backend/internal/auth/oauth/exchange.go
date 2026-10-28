@@ -63,8 +63,9 @@ func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
 
 // exchangeClient authenticates a client of the exchange by its secret, and
 // lets it exchange when the operator named it. limes answers a client that
-// fails authentication as invalid_client (401), and one that passes but may
-// not exchange as unauthorized_client (400, exchange.ErrUnauthorizedClient).
+// fails authentication as invalid_client, one that passes but may not
+// exchange as unauthorized_client (exchange.ErrUnauthorizedClient), and a
+// client store that cannot be read as server_error (exchange.ErrServerError).
 // A public client could present any agent's token, so it fails
 // authentication. Its subject tokens must be paladin-mcp: issued to the MCP
 // server it is.
@@ -74,13 +75,13 @@ func (h *Handler) exchangeClient(r *http.Request) (exchange.Client, error) {
 		clientID = u
 	}
 	client, err := h.store.GetClient(r.Context(), clientID)
-	if err != nil {
-		// limes has no answer for the server's own failure here: the client
-		// hears invalid_client, and the cause is in this line.
-		if !errors.Is(err, ErrClientNotFound) {
-			logServerError(r.Context(), "client lookup failed", err, zap.String("client_id", clientID))
-		}
+	switch {
+	case errors.Is(err, ErrClientNotFound):
 		return exchange.Client{}, fmt.Errorf("client %q: %w", clientID, err)
+	case err != nil:
+		// The server's failure, which limes answers as server_error.
+		logServerError(r.Context(), "client lookup failed", err, zap.String("client_id", clientID))
+		return exchange.Client{}, fmt.Errorf("%w: client %q: %w", exchange.ErrServerError, clientID, err)
 	}
 	if client.Public || len(client.SecretHash) == 0 {
 		return exchange.Client{}, fmt.Errorf("client %q: token exchange needs a confidential client", clientID)

@@ -18,7 +18,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // capabilityIssuers are the capability issuer and the delegation issuer the
@@ -38,10 +37,13 @@ type capabilityIssuers struct {
 // delegationKeyID is the kid the delegation issuer signs under.
 func delegationKeyID(kid string) string { return kid + auth.DelegationIssuerSuffix }
 
-// newCapabilityIssuers builds both issuers over store. extraTrusted are the
+// newCapabilityIssuers builds both issuers: the capability issuer over
+// store, and the delegation issuer over delegated, which must record a
+// capability under its own tenant, since the token endpoint it issues
+// behind names none (pgstore.ScopedIssuance). extraTrusted are the
 // issuers the operator also trusts (capability.trusted_issuers), kept as
 // configured; with none, the capability issuer alone.
-func newCapabilityIssuers(key limes.SigningKey, store limes.IssuanceStore, issuerName string, extraTrusted []string, ttl time.Duration) (*capabilityIssuers, error) {
+func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceStore, issuerName string, extraTrusted []string, ttl time.Duration) (*capabilityIssuers, error) {
 	delegationName := auth.DelegationIssuerName(issuerName)
 	delegationKID := delegationKeyID(key.KeyID)
 
@@ -49,7 +51,7 @@ func newCapabilityIssuers(key limes.SigningKey, store limes.IssuanceStore, issue
 	if err != nil {
 		return nil, err
 	}
-	delegation, err := newCapabilityIssuer(delegationKID, key, capabilitypg.TenantScopedIssuance(store), delegationName, ttl)
+	delegation, err := newCapabilityIssuer(delegationKID, key, delegated, delegationName, ttl)
 	if err != nil {
 		return nil, err
 	}

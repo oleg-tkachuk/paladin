@@ -1,8 +1,10 @@
 package oauth
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -430,5 +432,25 @@ func TestTokenExchange_HasItsOwnRateLimit(t *testing.T) {
 	postForm(h, "/oauth/token", refresh)
 	if rec := postForm(h, "/oauth/token", refresh); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("a second refresh under a cap of %d: status %d, want 429", tokenLimit, rec.Code)
+	}
+}
+
+// failingClients is a client store that cannot be read.
+type failingClients struct {
+	*memStore
+	err error
+}
+
+func (f failingClients) GetClient(context.Context, string) (Client, error) { return Client{}, f.err }
+
+// A client store that cannot be read is the server's failure: the client is
+// told so, not that its credentials are wrong (RFC 6749 §5.2).
+func TestTokenExchange_AStoreFailureIsTheServers(t *testing.T) {
+	u := sampleUser()
+	store := failingClients{memStore: newMemStore(), err: errors.New("pool closed")}
+	h, _ := withExchange(t, testHandler(t, store, &memRefresh{}, u))
+	rec := postForm(h, "/oauth/token", exchangeForm("subject", auth.TokenPlaneData))
+	if rec.Code != http.StatusInternalServerError || oauthError(t, rec.Body.Bytes()) != "server_error" {
+		t.Errorf("status %d body %s, want 500 server_error", rec.Code, rec.Body.String())
 	}
 }

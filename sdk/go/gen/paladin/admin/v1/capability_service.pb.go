@@ -577,7 +577,8 @@ type isCapabilityCaveats_RequestCeiling interface {
 }
 
 type CapabilityCaveats_MaxRequests struct {
-	// max_requests is the limit; 0 allows none.
+	// max_requests is the limit, at least 1: a capability no request can
+	// use is refused rather than issued.
 	MaxRequests int64 `protobuf:"varint,12,opt,name=max_requests,json=maxRequests,proto3,oneof"`
 }
 
@@ -2210,7 +2211,7 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\x12allow_tainted_read\x18\x06 \x01(\bR\x10allowTaintedRead\x128\n" +
 	"\x18idempotency_key_required\x18\a \x01(\bR\x16idempotencyKeyRequired\x12$\n" +
 	"\x0esource_ip_cidr\x18\b \x03(\tR\fsourceIpCidr\x12,\n" +
-	"\fmax_requests\x18\f \x01(\x03B\a\xbaH\x04\"\x02(\x00H\x00R\vmaxRequests\x128\n" +
+	"\fmax_requests\x18\f \x01(\x03B\a\xbaH\x04\"\x02(\x01H\x00R\vmaxRequests\x128\n" +
 	"\x12unlimited_requests\x18\r \x01(\bB\a\xbaH\x04j\x02\b\x01H\x00R\x11unlimitedRequests\x12\xce\x01\n" +
 	"\n" +
 	"max_budget\x18\v \x01(\v2\x12.google.type.MoneyB\x98\x01\xbaH\x94\x01\xba\x01\x90\x01\n" +

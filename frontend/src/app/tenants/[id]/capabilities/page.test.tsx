@@ -60,6 +60,7 @@ import {
 import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
 
 import CapabilitiesPage from "./page";
+import { MIN_MAX_REQUESTS } from "./_ceilings";
 
 // The page has its own Subject box for browsing; this is the dialog's.
 const dialogSubject = () =>
@@ -362,7 +363,7 @@ describe("CapabilitiesPage", () => {
   });
 
   // 0 is a limit now, not "none": a capability can be issued frozen.
-  it("sends a typed zero as a limit that allows nothing", async () => {
+  it("sends the least request limit as typed, and never a zero", async () => {
     h.issue.mockRejectedValue(new Error("boom"));
     render(<CapabilitiesPage />);
     await userEvent.click(issueButtons()[0]);
@@ -371,12 +372,18 @@ describe("CapabilitiesPage", () => {
     await userEvent.click(
       dialog.getAllByRole("button", { name: /Unlimited/ })[0],
     );
-    await userEvent.type(dialog.getByLabelText(/Max requests/), "0");
+    const limit = dialog.getByLabelText(/Max requests/);
+    await userEvent.type(limit, "0");
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    expect(h.issue).not.toHaveBeenCalled();
+
+    await userEvent.clear(limit);
+    await userEvent.type(limit, String(MIN_MAX_REQUESTS));
     fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
     await waitFor(() => expect(h.issue).toHaveBeenCalled());
     expect(h.issue.mock.calls[0][0].caveats.requestCeiling).toEqual({
       case: "maxRequests",
-      value: 0n,
+      value: MIN_MAX_REQUESTS,
     });
   });
 

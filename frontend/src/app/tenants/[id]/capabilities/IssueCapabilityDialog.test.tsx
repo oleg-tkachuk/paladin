@@ -196,11 +196,18 @@ describe("IssueCapabilityDialog", () => {
       screen.getByRole("button", { name: "Issue capability" }),
     ).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Max requests"), {
-      target: { value: "-3" },
-    });
-    expect(screen.getByLabelText("Max requests")).toHaveAccessibleDescription(
-      "A whole number (0 allows none), or Unlimited.",
-    );
+    // A negative limit, and a limit no request could use, are refused here
+    // as the server would refuse them.
+    for (const value of ["-3", "0"]) {
+      fireEvent.change(screen.getByLabelText("Max requests"), {
+        target: { value },
+      });
+      expect(screen.getByLabelText("Max requests")).toHaveAccessibleDescription(
+        "A whole number, at least 1, or Unlimited.",
+      );
+      expect(
+        screen.getByRole("button", { name: "Issue capability" }),
+      ).toBeDisabled();
+    }
   });
 });
