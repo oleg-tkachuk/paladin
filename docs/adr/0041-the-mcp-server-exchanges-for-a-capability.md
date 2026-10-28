@@ -50,7 +50,8 @@
      - lifetime: no later than the subject token, and at most the plane
        token lifetime it replaces;
      - caveats: the operations below, and no `share`, so it cannot be
-       delegated; no `AllowTaintedRead`, since the bridge is an agent and a
+       delegated; no request or budget ceiling, the user's authority bounding
+       it as it bounds their token; no `AllowTaintedRead`, since the bridge is an agent and a
        tainted object is closed to agents.
   3. **The plane authorizes the user, narrowed by the caveats.** A
      delegated capability establishes the principal ADR-0036's exchanged

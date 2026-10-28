@@ -126,7 +126,7 @@ func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *Shared
 		return nil, fmt.Errorf("oauth token exchange verifier: %w", err)
 	}
 	ex, err := delegation.NewExchanger(deps.Capability.Delegation, delegation.NewSubjectVerifier(tokens, cfg.Issuer),
-		users, cfg.AccessTokenTTL, slog.New(zapslog.NewHandler(deps.Logger.Named("delegation").Core())))
+		users, cfg.AccessTokenTTL, deps.Cfg.Capability.Currency, slog.New(zapslog.NewHandler(deps.Logger.Named("delegation").Core())))
 	if err != nil {
 		return nil, err
 	}

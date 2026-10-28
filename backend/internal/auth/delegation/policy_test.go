@@ -52,7 +52,7 @@ func delegationGrant(user authstore.User, scopes []string, audiences ...string) 
 // the plane asked for, with what they consented to and no further.
 func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Roles: []string{apiutil.AdminAudienceRoles[0]}}
-	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL)
+	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL, limes.AbstractUnitCode)
 
 	req, err := policy(t.Context(), delegationGrant(user, []string{auth.OAuthScopeRead}, allPlanes...))
 	if err != nil {
@@ -76,6 +76,9 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	}
 	// The bridge is an agent: a flagged object stays closed to it, as to
 	// any agent's capability without AllowTaintedRead.
+	if r, b := req.Caveats.Requests, req.Caveats.Budget; !r.Unlimited || !b.Unlimited || b.UnitCode != limes.AbstractUnitCode {
+		t.Errorf("requests %+v, budget %+v; want both unlimited, the budget in %s", r, b, limes.AbstractUnitCode)
+	}
 	if req.Caveats.AllowTaintedRead {
 		t.Error("a delegated capability reads tainted objects")
 	}
@@ -88,7 +91,7 @@ var allPlanes = Planes
 // a reason to refuse the others.
 func TestDelegationPolicyLeavesOutWhatTheUserMayNotHold(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, delegationTTL)
+	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, delegationTTL, limes.AbstractUnitCode)
 	req, err := policy(t.Context(), delegationGrant(member, []string{auth.OAuthScopeRead}, allPlanes...))
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +107,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
 	disabled := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Disabled: true}
 	users := usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member, disabled.UserID: disabled}}
-	policy := Policy(users, delegationTTL)
+	policy := Policy(users, delegationTTL, limes.AbstractUnitCode)
 	read := []string{auth.OAuthScopeRead}
 
 	moved := delegationGrant(member, read, auth.TokenPlaneData)
@@ -138,7 +141,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 func TestDelegationPolicyFailsWithTheDirectory(t *testing.T) {
 	down := errors.New("pool closed")
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	_, err := Policy(usersByID{err: down}, delegationTTL)(t.Context(),
+	_, err := Policy(usersByID{err: down}, delegationTTL, limes.AbstractUnitCode)(t.Context(),
 		delegationGrant(member, []string{auth.OAuthScopeRead}, auth.TokenPlaneData))
 	if !errors.Is(err, down) || errors.Is(err, exchange.ErrInvalidGrant) {
 		t.Errorf("err = %v, want the directory's failure and no refusal", err)

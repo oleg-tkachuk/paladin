@@ -28,13 +28,14 @@ type UserDirectory interface {
 // Policy is the exchange policy of ADR-0041: a caller's
 // paladin-mcp token is exchanged for a capability the agent holds on its
 // user's behalf, for the planes asked for that the user may hold, with the
-// operations the user consented to, for at most ttl.
+// operations the user consented to, for at most ttl. unit is the platform's
+// currency (capability.currency), which an unlimited budget names.
 //
 // The plane authorizes the user it names, with the user's roles, so the
 // policy refuses what the user could not do by their own token: a plane
 // their roles do not reach, and a user disabled, gone or in another tenant
 // since the token was issued.
-func Policy(users UserDirectory, ttl time.Duration) exchange.Policy {
+func Policy(users UserDirectory, ttl time.Duration, unit string) exchange.Policy {
 	return func(ctx context.Context, g exchange.Grant) (limes.IssueRequest, error) {
 		user, err := delegatingUser(ctx, users, g.Subject)
 		if err != nil {
@@ -59,7 +60,14 @@ func Policy(users UserDirectory, ttl time.Duration) exchange.Policy {
 			},
 			IssuedBy: auth.DelegationIssuer(),
 			Audience: planes,
-			Caveats:  limes.Caveats{Ops: ops},
+			// The user's own authority bounds it, as it bounds their token: no
+			// request or budget ceiling, which limes reads as none allowed when
+			// left at zero. A budget that may be spent names its unit.
+			Caveats: limes.Caveats{
+				Ops:      ops,
+				Requests: limes.RequestCeiling{Unlimited: true},
+				Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: unit},
+			},
 			TTL:      ttl,
 			ClientID: client,
 		}, nil
