@@ -40,7 +40,7 @@ require (
 	github.com/nats-io/nkeys v0.4.16
 	github.com/oasdiff/yaml3 v0.0.16
 	// limes is the capability primitive the auth planes run on.
-	github.com/oleg-tkachuk/limes v1.0.0-rc.11
+	github.com/oleg-tkachuk/limes v1.0.0-rc.12
 	github.com/oleg-tkachuk/limes/otelmetric v0.10.7
 	github.com/oleg-tkachuk/limes/pgstore v0.42.2
 	github.com/oleg-tkachuk/paladin/sdk/go v0.125.0
