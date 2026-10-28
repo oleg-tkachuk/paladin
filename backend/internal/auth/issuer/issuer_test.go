@@ -217,38 +217,6 @@ func TestMintAccessCarriesTheOAuthGrant(t *testing.T) {
 	}
 }
 
-func TestMintAccessNamesTheActor(t *testing.T) {
-	iss := newTestIssuer(t)
-	v := &auth.JWTVerifier{
-		Key:              []byte("test-signing-key-32-bytes-min--padding"),
-		ExpectedIssuer:   "paladin-test",
-		ExpectedAudience: auth.AudienceData,
-	}
-	for _, tc := range []struct {
-		name  string
-		actor string
-	}{
-		{"exchanged", "paladin-mcp-server"},
-		{"not exchanged", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			tok, _, err := iss.MintAccess(AccessClaims{
-				Subject: "u", TenantID: uuid.New(), Audience: auth.AudienceData, Actor: tc.actor,
-			})
-			if err != nil {
-				t.Fatalf("MintAccess: %v", err)
-			}
-			p, err := v.Verify(context.Background(), tok)
-			if err != nil {
-				t.Fatalf("Verify: %v", err)
-			}
-			if p.Actor != tc.actor {
-				t.Errorf("Actor = %q, want %q", p.Actor, tc.actor)
-			}
-		})
-	}
-}
-
 // A minted token says what it is: a JWT, signed by HS256 — what any client
 // reading the header expects, and what the verifier's key requires.
 func TestMintAccessHeader(t *testing.T) {

@@ -50,9 +50,8 @@ type Principal struct {
 	// console session, an API token and a capability.
 	OAuthClientID string
 	OAuthScopes   []string
-	// Actor is the OAuth client that exchanged this token on the subject's
-	// behalf — the MCP server (ADR-0036). Empty when the token was not
-	// exchanged.
+	// Actor is the party that relays the subject's calls: the MCP server,
+	// for a delegated capability (ADR-0041). Empty otherwise.
 	Actor string
 }
 
