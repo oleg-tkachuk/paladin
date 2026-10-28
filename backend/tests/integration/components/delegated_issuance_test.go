@@ -4,13 +4,14 @@ package components
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/oleg-tkachuk/limes"
 
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // delegatedTTL is how long the capabilities issued here live.
@@ -18,7 +19,7 @@ const delegatedTTL = time.Minute
 
 // The MCP exchange issues at the token endpoint, where nothing names a
 // tenant (ADR-0041). Under the role the server runs as, RLS refuses the
-// capability row there, and TenantScopedIssuance writes it under the
+// capability row there, and pgstore.ScopedIssuance writes it under the
 // capability's own tenant.
 func TestDelegatedIssuanceIsWrittenUnderItsTenant(t *testing.T) {
 	t.Parallel()
@@ -46,16 +47,17 @@ func TestDelegatedIssuanceIsWrittenUnderItsTenant(t *testing.T) {
 			Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
 			IssuedBy: auth.DelegationIssuer(),
 			Audience: []string{auth.TokenPlaneData},
-			Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet}},
+			Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet}, Requests: limes.RequestCeiling{Unlimited: true}},
 			ClientID: "agent",
 		})
 		return err
 	}
 
-	if err := issue(store); err == nil {
-		t.Error("a capability issued with no tenant in scope was written")
+	// Refused by the database, not by limes: the request itself is sound.
+	if err := issue(store); err == nil || errors.Is(err, limes.ErrInvalidRequest) {
+		t.Errorf("issued with no tenant in scope: err = %v, want the store's refusal", err)
 	}
-	if err := issue(capstore.TenantScopedIssuance(store)); err != nil {
+	if err := issue(pgstore.ScopedIssuance(store)); err != nil {
 		t.Errorf("a capability issued under its own tenant: %v", err)
 	}
 }

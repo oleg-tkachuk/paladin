@@ -169,20 +169,3 @@ func checkTenant(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID) error {
 	}
 	return nil
 }
-
-// TenantScopedIssuance writes each capability under its own tenant, for an
-// issuer that runs where no principal acts on a tenant: the delegation
-// issuer at the token endpoint (ADR-0041). Through store alone the row
-// would land under no tenant and RLS refuse it. The caller's own check is
-// the authorization for the write — the exchange policy, which read the
-// tenant from IAM and signs it into the capability — as CapabilityService's
-// Cedar gate is for its own issuance.
-func TenantScopedIssuance(store limes.IssuanceStore) limes.IssuanceStore {
-	return tenantScopedIssuance{store}
-}
-
-type tenantScopedIssuance struct{ limes.IssuanceStore }
-
-func (s tenantScopedIssuance) Insert(ctx context.Context, req limes.InsertRequest) error {
-	return s.IssuanceStore.Insert(auth.WithActingTenant(ctx, req.Capability.Subject.TenantID), req)
-}

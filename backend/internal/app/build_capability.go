@@ -132,7 +132,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 
 	// The capability issuer, and the delegation issuer the MCP server
 	// exchanges callers' tokens through (ADR-0041).
-	issuers, err := newCapabilityIssuers(key, store, cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL)
+	issuers, err := newCapabilityIssuers(key, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL)
 	if err != nil {
 		return nil, err
 	}
