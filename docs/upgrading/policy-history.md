@@ -1,4 +1,4 @@
-## sdk/go/v0.124.0, sdk/python/v0.125.0 — a policy layer keeps every text it has held
+## v40.3.0, sdk/go/v0.124.0, sdk/python/v0.125.0 — a policy layer keeps every text it has held
 
 - **`PolicyService.ListPolicyVersions`** pages through one layer's texts,
   newest first (`PolicyVersion`: `version`, `cedar_policy`, `written_by`,
