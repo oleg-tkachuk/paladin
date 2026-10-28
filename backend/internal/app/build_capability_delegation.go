@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // capabilityIssuers are the capability issuer and the delegation issuer the
@@ -48,7 +49,7 @@ func newCapabilityIssuers(key limes.SigningKey, store limes.IssuanceStore, issue
 	if err != nil {
 		return nil, err
 	}
-	delegation, err := newCapabilityIssuer(delegationKID, key, tenantScopedIssuance{store}, delegationName, ttl)
+	delegation, err := newCapabilityIssuer(delegationKID, key, capabilitypg.TenantScopedIssuance(store), delegationName, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -67,18 +68,6 @@ func newCapabilityIssuers(key limes.SigningKey, store limes.IssuanceStore, issue
 		trusted:    append(trusted, delegationName),
 		keyIssuers: map[string]string{key.KeyID: issuerName, delegationKID: delegationName},
 	}, nil
-}
-
-// tenantScopedIssuance writes each capability under its own tenant. The
-// delegation issuer runs at the token endpoint, where no principal acts on
-// a tenant, so the row would land under none and the tenant's RLS refuse
-// it. The tenant is the user's, which the exchange policy read from IAM
-// and signed into the capability: the policy is the authorization for
-// this write, as CapabilityService's Cedar gate is for its own.
-type tenantScopedIssuance struct{ limes.IssuanceStore }
-
-func (s tenantScopedIssuance) Insert(ctx context.Context, req limes.InsertRequest) error {
-	return s.IssuanceStore.Insert(auth.WithActingTenant(ctx, req.Capability.Subject.TenantID), req)
 }
 
 func newCapabilityIssuer(kid string, key limes.SigningKey, store limes.IssuanceStore, name string, ttl time.Duration) (*limes.Issuer, error) {
