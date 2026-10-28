@@ -49,7 +49,12 @@ import { CapabilityOpGrants } from "@/components/features/capabilities/Capabilit
 import { ToggleRow } from "./_form-fields";
 import { missingBiscuitReason } from "./_biscuit";
 import { LimitInput } from "@/components/ui/LimitInput";
-import { copyCeiling, requestCeiling, wholeNumber } from "./_ceilings";
+import {
+  copyCeiling,
+  issuableRequestLimit,
+  requestCeiling,
+  wholeNumber,
+} from "./_ceilings";
 import { budgetCeiling } from "@/lib/format/budgetCeiling";
 import {
   TTL_OPTIONS,
@@ -161,10 +166,11 @@ export function IssueCapabilityDialog({
     setter(next);
   };
 
-  // Unlimited is its own value on the wire; 0 is a limit that allows none.
-  // With Unlimited off the operator must have entered a whole number, held
-  // otherwise, so the dialog never sends a limit nobody typed.
-  const maxRequests = wholeNumber(issueMaxRequests);
+  // Unlimited is its own value on the wire. A request limit is at least 1:
+  // the server refuses a capability no request can use. With Unlimited off
+  // the operator must have entered one, held otherwise, so the dialog never
+  // sends a limit nobody typed.
+  const maxRequests = issuableRequestLimit(issueMaxRequests);
   const maxCopies = wholeNumber(issueMaxCopies);
   // Parsed straight to Money, never through a float: "0.1" is 100000000
   // nanos.
@@ -173,7 +179,7 @@ export function IssueCapabilityDialog({
     !issueMaxRequestsUnlimited &&
     issueMaxRequests !== "" &&
     maxRequests === null
-      ? "A whole number (0 allows none), or Unlimited."
+      ? "A whole number, at least 1, or Unlimited."
       : null;
   const maxCopiesError =
     !issueMaxCopiesUnlimited && issueMaxCopies !== "" && maxCopies === null

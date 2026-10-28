@@ -17,6 +17,7 @@ import (
 	"errors"
 	"net/netip"
 	"testing"
+	"uuid"
 
 	"connectrpc.com/connect/v2"
 
@@ -129,18 +130,22 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		}
 	})
 
-	t.Run("a ceiling of zero refuses the first call", func(t *testing.T) {
-		// Zero used to mean "unlimited"; it now allows none, so a capability
-		// minted for no requests cannot make one.
-		m, usage := newMeteredMinter(t)
-		i := &capabilityInterceptor{usage: usage}
-		c, _ := m.MintExact(t, limes.Capability{Caveats: limes.Caveats{
-			Requests: limes.RequestCeiling{},
-			Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: captest.Unit},
-		}})
-		err := i.enforceCaveats(context.Background(), c)
-		if connect.CodeOf(err) != connect.CodeResourceExhausted || !errors.Is(err, limes.ErrRequestLimitExceeded) {
-			t.Fatalf("err = %v, want ResourceExhausted wrapping ErrRequestLimitExceeded", err)
+	t.Run("a ceiling of zero is never issued", func(t *testing.T) {
+		// Zero allows no request, so a capability with it could do nothing:
+		// limes refuses to issue one, and no verifier ever meets it.
+		m, _ := newMeteredMinter(t)
+		_, err := m.Issuer.Issue(context.Background(), limes.IssueRequest{
+			Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: uuid.New(), Subject: captest.Subject},
+			IssuedBy: limes.Principal{Type: limes.PrincipalTypeUser, TenantID: uuid.New(), Subject: captest.Subject},
+			Audience: []string{captest.Audience},
+			Caveats: limes.Caveats{
+				Ops:    []limes.Op{limes.OpGet},
+				Budget: limes.BudgetCeiling{Unlimited: true, UnitCode: captest.Unit},
+			},
+			ClientID: captest.ClientID,
+		})
+		if !errors.Is(err, limes.ErrInvalidRequest) {
+			t.Errorf("err = %v, want ErrInvalidRequest", err)
 		}
 	})
 

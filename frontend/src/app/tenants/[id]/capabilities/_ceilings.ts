@@ -1,5 +1,6 @@
 // A capability's request ceiling and its quota of Biscuit copies, as the API
-// spells them: a limit, where 0 allows nothing, or unlimited. Its budget
+// spells them: a limit or unlimited. A request limit is at least
+// MIN_MAX_REQUESTS; a copy quota of 0 allows no copy with limits of its own. Its budget
 // ceiling is every budget's (@/lib/format/budgetCeiling).
 
 import type { CapabilityCaveats } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -25,6 +26,18 @@ export function requestLimit(c: CapabilityCaveats | undefined): bigint | null {
 export function wholeNumber(text: string): bigint | null {
   const trimmed = text.trim();
   return /^\d+$/.test(trimmed) ? BigInt(trimmed) : null;
+}
+
+/**
+ * The least request limit the server issues a capability with: one no
+ * request can use is refused (max_requests in capability_service.proto).
+ */
+export const MIN_MAX_REQUESTS = BigInt(1);
+
+/** A request limit an operator typed that can be issued, or null. */
+export function issuableRequestLimit(text: string): bigint | null {
+  const limit = wholeNumber(text);
+  return limit !== null && limit >= MIN_MAX_REQUESTS ? limit : null;
 }
 
 /** The quota of Biscuit copies to issue with: unlimited, or `limit`. */

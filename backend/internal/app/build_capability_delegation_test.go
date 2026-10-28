@@ -52,7 +52,7 @@ func issueWith(t *testing.T, issuer *limes.Issuer) (string, error) {
 		Subject:  limes.Principal{Type: limes.PrincipalTypeAgent, TenantID: tenant, Subject: "agent"},
 		IssuedBy: auth.DelegationIssuer(),
 		Audience: []string{testCapAudience},
-		Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet}},
+		Caveats:  limes.Caveats{Ops: []limes.Op{limes.OpGet}, Requests: limes.RequestCeiling{Unlimited: true}},
 		ClientID: "agent",
 	})
 	return res.Token, err

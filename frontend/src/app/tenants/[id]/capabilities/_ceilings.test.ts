@@ -6,6 +6,8 @@ import { CapabilityCaveatsSchema } from "@/gen/paladin/admin/v1/capability_servi
 import {
   copyCeiling,
   copyLimit,
+  issuableRequestLimit,
+  MIN_MAX_REQUESTS,
   requestCeiling,
   requestLimit,
   wholeNumber,
@@ -75,6 +77,21 @@ describe("whole numbers", () => {
     expect(wholeNumber("0")).toBe(ZERO);
     for (const text of ["", "-1", "1.5", "1e3", "seven"]) {
       expect(wholeNumber(text)).toBeNull();
+    }
+  });
+});
+
+describe("request limits an operator may issue", () => {
+  it("takes a whole number from the least the server issues", () => {
+    expect(issuableRequestLimit(String(MIN_MAX_REQUESTS))).toBe(
+      MIN_MAX_REQUESTS,
+    );
+    expect(issuableRequestLimit(" 1000 ")).toBe(BigInt(1000));
+  });
+
+  it("refuses a limit no request could use, and what is no number", () => {
+    for (const text of ["0", "-3", "1.5", "", "many"]) {
+      expect(issuableRequestLimit(text)).toBeNull();
     }
   });
 });

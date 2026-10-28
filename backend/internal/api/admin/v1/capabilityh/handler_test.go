@@ -279,9 +279,9 @@ const (
 	childMaxRequests  = 3
 )
 
-// A delegation that sets no request ceiling keeps the parent's; one that
-// sets a number narrows it, and 0 freezes the child. The budget, never set
-// here, stays the parent's throughout.
+// A delegation that sets no request ceiling keeps the parent's, and one that
+// sets a number narrows it. The budget, never set here, stays the parent's
+// throughout.
 func TestDelegate_UnsetCeilingKeepsTheParents(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
@@ -299,7 +299,6 @@ func TestDelegate_UnsetCeilingKeepsTheParents(t *testing.T) {
 	}{
 		"unset keeps the parent's": {nil, parentMaxRequests},
 		"a number narrows it":      {limit(childMaxRequests), childMaxRequests},
-		"zero freezes the child":   {limit(0), 0},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -320,6 +319,25 @@ func TestDelegate_UnsetCeilingKeepsTheParents(t *testing.T) {
 				t.Errorf("max_budget = %v, want the parent's %v", got.GetMaxBudget(), parentBudget)
 			}
 		})
+	}
+}
+
+// A child no request could use is refused as the caller's mistake, not
+// issued: revoking it is how a capability is stopped.
+func TestDelegate_RefusesAZeroRequestCeiling(t *testing.T) {
+	m := captest.NewMinter(t)
+	parent, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{
+		Ops:      []limes.Op{limes.OpGet, limes.OpShare},
+		Requests: limes.RequestCeiling{Max: parentMaxRequests},
+	}})
+	h := delegateHandler(m, &denyAuthorizer{})
+	req := delegateReq(parent)
+	req.Caveats = &adminv1.CapabilityCaveats{
+		Ops:            []string{string(limes.OpGet)},
+		RequestCeiling: &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: 0},
+	}
+	if _, err := h.Delegate(auth.WithCapability(context.Background(), parent), req); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("err = %v, want InvalidArgument", err)
 	}
 }
 

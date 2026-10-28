@@ -158,8 +158,9 @@ message CapabilityCaveats {
   reserved "unit_code", "max_budget_micros";
   // request_ceiling is how many requests the capability may make.
   oneof request_ceiling {
-    // max_requests is the limit; 0 allows none.
-    int64 max_requests = 12 [(buf.validate.field).int64.gte = 0];
+    // max_requests is the limit, at least 1: a capability no request can
+    // use is refused rather than issued.
+    int64 max_requests = 12 [(buf.validate.field).int64.gte = 1];
     // unlimited_requests sets no limit. Only true is meaningful.
     bool unlimited_requests = 13 [(buf.validate.field).bool.const = true];
   }
