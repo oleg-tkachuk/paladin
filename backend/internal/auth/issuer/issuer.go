@@ -17,9 +17,6 @@
 package issuer
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,6 +24,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
@@ -46,21 +45,32 @@ type Issuer struct {
 	cfg Config
 }
 
+// MinSigningKeyBytes is the shortest HMAC key New accepts: HS256's own
+// output size, below which the key, not the hash, bounds a forgery.
+const MinSigningKeyBytes = 32
+
+// What New takes for a TTL the config leaves at zero or below.
+const (
+	DefaultAccessTokenTTL    = 15 * time.Minute
+	DefaultRefreshTokenTTL   = 7 * 24 * time.Hour
+	DefaultScopedTokenMaxTTL = 24 * time.Hour
+)
+
 func New(cfg Config) (*Issuer, error) {
 	if cfg.Issuer == "" {
 		return nil, errors.New("issuer: Issuer claim is required")
 	}
-	if len(cfg.SigningKey) < 32 {
-		return nil, errors.New("issuer: SigningKey must be at least 32 bytes")
+	if len(cfg.SigningKey) < MinSigningKeyBytes {
+		return nil, fmt.Errorf("issuer: SigningKey must be at least %d bytes", MinSigningKeyBytes)
 	}
 	if cfg.AccessTokenTTL <= 0 {
-		cfg.AccessTokenTTL = 15 * time.Minute
+		cfg.AccessTokenTTL = DefaultAccessTokenTTL
 	}
 	if cfg.RefreshTokenTTL <= 0 {
-		cfg.RefreshTokenTTL = 7 * 24 * time.Hour
+		cfg.RefreshTokenTTL = DefaultRefreshTokenTTL
 	}
 	if cfg.ScopedTokenMaxTTL <= 0 {
-		cfg.ScopedTokenMaxTTL = 24 * time.Hour
+		cfg.ScopedTokenMaxTTL = DefaultScopedTokenMaxTTL
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -202,19 +212,23 @@ func kindString(k auth.PrincipalKind) string {
 	return ""
 }
 
+// tokenType is the typ header of every token the issuer mints.
+const tokenType = "JWT"
+
+// signHS256 is claims as a compact JWT signed with secret by HS256, through
+// jws.
 func signHS256(secret []byte, claims map[string]any) (string, error) {
-	header := map[string]string{"alg": "HS256", "typ": "JWT"}
-	hb, err := json.Marshal(header)
-	if err != nil {
-		return "", fmt.Errorf("issuer: header: %w", err)
-	}
-	cb, err := json.Marshal(claims)
+	payload, err := json.Marshal(claims)
 	if err != nil {
 		return "", fmt.Errorf("issuer: claims: %w", err)
 	}
-	enc := base64.RawURLEncoding
-	signing := enc.EncodeToString(hb) + "." + enc.EncodeToString(cb)
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(signing))
-	return signing + "." + enc.EncodeToString(mac.Sum(nil)), nil
+	hdr := jws.NewHeaders()
+	if err := hdr.Set(jws.TypeKey, tokenType); err != nil {
+		return "", fmt.Errorf("issuer: header: %w", err)
+	}
+	tok, err := jws.Sign(payload, jws.WithKey(jwa.HS256(), secret, jws.WithProtectedHeaders(hdr)))
+	if err != nil {
+		return "", fmt.Errorf("issuer: sign: %w", err)
+	}
+	return string(tok), nil
 }
