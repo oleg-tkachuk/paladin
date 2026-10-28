@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.14: a capability no request can use is refused
+## sdk/go/v0.126.1, sdk/python/v0.127.1 — limes v1.0.0-rc.14: a capability no request can use is refused
 
 - **`max_requests` is at least 1.** `CapabilityService.Issue` and
   `Delegate` refuse `max_requests: 0` as `INVALID_ARGUMENT`: a capability

@@ -89,6 +89,42 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/go/v0.126.1, sdk/python/v0.127.1 — limes v1.0.0-rc.14: a capability no request can use is refused
+
+- **`max_requests` is at least 1.** `CapabilityService.Issue` and
+  `Delegate` refuse `max_requests: 0` as `INVALID_ARGUMENT`: a capability
+  that may make no request can do nothing, and limes no longer issues one.
+  To stop a capability, revoke it; to bound it, set a limit of 1 or more, or
+  `unlimited_requests`. Capabilities issued before the upgrade keep their
+  ceilings. The console's issue dialog asks for at least 1.
+- A Biscuit copy's own `max_requests` may still be 0.
+
+## Unreleased — the MCP server acts through a capability that acts for its user
+
+- **The token-exchange grant issues a capability** (ADR-0041). `/oauth/token`
+  with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` answers
+  with one limes capability for every plane the user may hold
+  (`issued_token_type` `https://github.com/oleg-tkachuk/limes/exchange#capability`),
+  no longer with an IAM access token per plane. `audience` names planes by
+  their labels, `data`, `admin` and `iam`, and may repeat. The MCP server
+  is its only client and moves with it; nothing to do there.
+- **The grant needs `capability.enabled`.** A seed client with
+  `token_exchange: true` and the capability subsystem off refuses to start.
+- **An agent session is revocable on its own.** Each MCP caller's calls
+  carry a capability issued under `<capability.issuer_name>/mcp`; revoking
+  it stops the session without signing the user out. The audit log's
+  `relayed_by` still names the MCP server's exchange client.
+- **A user's roles and status apply at the next call.** The planes read
+  the user behind a delegated capability on every call, so a role removed
+  or a user disabled stops their agents at once.
+- **A tainted object is closed to MCP agents.** The delegated capability
+  has no `allow_tainted_read`, so a read of a flagged object through the
+  MCP server is refused, as for any agent's capability; under the plane
+  tokens it was not. A person reads it through their own session.
+- **A caller that sends its own capability keeps it.** The MCP edge then
+  forwards that capability alone; it no longer forwards the caller's
+  `paladin-mcp` token, which no plane accepts.
+
 ## v41.0.0, sdk/go/v0.126.0, sdk/python/v0.127.0 — limes v1.0.0-rc.11
 
 - **Every capability is reissued.** limes issues one token format, an RFC
