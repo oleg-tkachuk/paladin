@@ -62,3 +62,21 @@ func TestDelegatedOpsRefuseNoConsent(t *testing.T) {
 		}
 	}
 }
+
+// Every operation a handler can assert — limes' own and the data plane's —
+// is in a write grant's capability, but share: a tool that works under the
+// user's token must not fail for want of an operation.
+func TestDelegatedOpsCoverEveryOperation(t *testing.T) {
+	ops, err := DelegatedOps([]string{OAuthScopeWrite})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range []limes.Op{
+		limes.OpGet, limes.OpPut, limes.OpList, limes.OpDelete, limes.OpManage,
+		OpPresign, OpTag,
+	} {
+		if !slices.Contains(ops, op) {
+			t.Errorf("a write grant lacks %q", op)
+		}
+	}
+}

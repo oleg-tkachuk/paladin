@@ -74,6 +74,11 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	if want, _ := auth.DelegatedOps([]string{auth.OAuthScopeRead}); !slices.Equal(req.Caveats.Ops, want) {
 		t.Errorf("ops %v, want %v", req.Caveats.Ops, want)
 	}
+	// The bridge is an agent: a flagged object stays closed to it, as to
+	// any agent's capability without AllowTaintedRead.
+	if req.Caveats.AllowTaintedRead {
+		t.Error("a delegated capability reads tainted objects")
+	}
 }
 
 // allPlanes is every plane the MCP server asks a capability for.

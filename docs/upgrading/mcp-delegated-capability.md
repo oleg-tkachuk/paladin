@@ -16,6 +16,10 @@
 - **A user's roles and status apply at the next call.** The planes read
   the user behind a delegated capability on every call, so a role removed
   or a user disabled stops their agents at once.
+- **A tainted object is closed to MCP agents.** The delegated capability
+  has no `allow_tainted_read`, so a read of a flagged object through the
+  MCP server is refused, as for any agent's capability; under the plane
+  tokens it was not. A person reads it through their own session.
 - **A caller that sends its own capability keeps it.** The MCP edge then
   forwards that capability alone; it no longer forwards the caller's
   `paladin-mcp` token, which no plane accepts.

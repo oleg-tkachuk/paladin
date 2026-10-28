@@ -50,7 +50,8 @@
      - lifetime: no later than the subject token, and at most the plane
        token lifetime it replaces;
      - caveats: the operations below, and no `share`, so it cannot be
-       delegated.
+       delegated; no `AllowTaintedRead`, since the bridge is an agent and a
+       tainted object is closed to agents.
   3. **The plane authorizes the user, narrowed by the caveats.** A
      delegated capability establishes the principal ADR-0036's exchanged
      token did: kind `user`, the user's subject and tenant, the user's
@@ -78,6 +79,9 @@
 - **Consequences.**
   - An agent session is bounded and revocable on its own: revoking its
     capability stops it without logging the user out.
+  - A tainted object is closed to the bridge, as to every agent's
+    capability without `AllowTaintedRead`; through ADR-0036's plane tokens
+    it was not. Reading one stays the user's, by their own session.
   - All 81 tools keep working, platform ones included, and a role removed
     from the user, or the user disabled, takes effect at the next call rather
     than at the next token refresh.
