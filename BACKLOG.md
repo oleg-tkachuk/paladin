@@ -374,10 +374,11 @@ open deliberately — each notes why._
   (`cmd/server/serve_mcp.go`) to `auth.NewJWKSVerifier`, but nothing sets it:
   every JWT today is HS256 minted by the IAM plane itself.
 - **Reconsider only if:** a customer mandates SSO against their own IdP.
-  Then finish the verifier (cache + rotation grace window, required
-  `kid` matched against the active key set, role-claim mapping such as
-  `cognito:groups` → Paladin roles) plus an end-to-end test issuing a token
-  from a mock OAuth2 provider and verifying it through the data plane.
+  The verifier reads the set and checks tokens through jwx, matching each
+  token's `kid` against the active set; what remains is a rotation grace
+  window, role-claim mapping such as `cognito:groups` → Paladin roles, and
+  an end-to-end test issuing a token from a mock OAuth2 provider and
+  verifying it through the data plane.
 
 ### Audit-log encryption at rest beyond filesystem-level
 

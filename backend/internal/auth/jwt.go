@@ -128,6 +128,12 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		return nil, errors.New("jwt: audience mismatch")
 	}
 
+	return principalFromClaims(c, v.ExpectedAudience)
+}
+
+// principalFromClaims is the Principal a verified token's claims name, the
+// token having been accepted for audience.
+func principalFromClaims(c jwtClaims, audience string) (*Principal, error) {
 	scopes, err := ParseScopes(c.Scopes)
 	if err != nil {
 		return nil, fmt.Errorf("jwt: scopes claim: %w", err)
@@ -136,7 +142,7 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 		Subject:    c.Sub,
 		Roles:      c.Roles,
 		Scopes:     scopes,
-		Audience:   v.ExpectedAudience,
+		Audience:   audience,
 		Audiences:  audiences(c.Aud),
 		Kind:       parseKind(c.Kind),
 		Labels:     c.Labels,

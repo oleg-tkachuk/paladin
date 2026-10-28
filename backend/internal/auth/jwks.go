@@ -2,20 +2,18 @@ package auth
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"go.uber.org/zap"
 
@@ -27,8 +25,9 @@ import (
 // (default 1h). Verification dispatches on the token header's `kid`; an
 // unknown kid triggers a forced refresh before rejecting.
 //
-// Algorithm support: RS256 (RSA), ES256 (P-256). HS-family is intentionally
-// rejected because JWKS-published symmetric secrets are an anti-pattern.
+// The set is read and tokens are verified by jwx: RSA and EC keys, by the
+// algorithm each key names or its type implies. A JWKS-published symmetric
+// secret is never used, since anyone who can read the set could sign.
 type JWKSVerifier struct {
 	URL              string
 	HTTPClient       *http.Client
@@ -49,15 +48,23 @@ type JWKSVerifier struct {
 	// refresh succeeds. nil keeps the failure silent.
 	Logger *zap.Logger
 
-	mu         sync.RWMutex
-	keys       map[string]any // kid → *rsa.PublicKey | *ecdsa.PublicKey
-	loadedAt   time.Time
-	refreshErr error
+	mu       sync.RWMutex
+	keys     jwk.Set // the public signing keys, by kid
+	loadedAt time.Time
 
 	// sf collapses concurrent miss-driven refreshes into one outbound
 	// fetch — a kid-spray of N parallel requests does 1 HTTP GET, not N.
 	sf singleflight.Group
 }
+
+// What NewJWKSVerifier and a refresh fall back to.
+const (
+	defaultJWKSFetchTimeout   = 5 * time.Second
+	defaultRefreshInterval    = time.Hour
+	defaultMinRefreshInterval = 30 * time.Second
+	// maxJWKSBytes bounds the JWK Set read from the identity provider.
+	maxJWKSBytes = 1 << 20
+)
 
 // NewJWKSVerifier constructs a verifier. Call Start(ctx) before serving
 // requests so the key cache is warm — Verify() also lazy-loads on first hit
@@ -65,10 +72,9 @@ type JWKSVerifier struct {
 func NewJWKSVerifier(url string) *JWKSVerifier {
 	return &JWKSVerifier{
 		URL:             url,
-		HTTPClient:      &http.Client{Timeout: 5 * time.Second},
-		RefreshInterval: 1 * time.Hour,
+		HTTPClient:      &http.Client{Timeout: defaultJWKSFetchTimeout},
+		RefreshInterval: defaultRefreshInterval,
 		Now:             time.Now,
-		keys:            map[string]any{},
 	}
 }
 
@@ -83,10 +89,7 @@ func (v *JWKSVerifier) Start(ctx context.Context) error {
 }
 
 func (v *JWKSVerifier) loop(ctx context.Context) {
-	if v.RefreshInterval <= 0 {
-		v.RefreshInterval = 1 * time.Hour
-	}
-	t := time.NewTicker(v.RefreshInterval)
+	t := time.NewTicker(refreshEvery(v.RefreshInterval))
 	defer t.Stop()
 	for {
 		select {
@@ -101,61 +104,78 @@ func (v *JWKSVerifier) loop(ctx context.Context) {
 	}
 }
 
-// Verify implements TokenVerifier. Decodes the JWT, picks the right key by
-// kid, validates the signature + standard claims, returns Principal.
-func (v *JWKSVerifier) Verify(ctx context.Context, token string) (*Principal, error) {
-	parts := strings.SplitN(token, ".", 3)
-	if len(parts) != 3 {
-		return nil, errors.New("jwt: malformed token")
+// refreshEvery is how often the set is fetched again: interval, or the
+// default when it names none. The loop reads it once rather than writing the
+// default into the verifier, which Verify reads concurrently.
+func refreshEvery(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return defaultRefreshInterval
 	}
-	headerB, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, fmt.Errorf("jwt: header decode: %w", err)
-	}
-	var hdr struct {
-		Alg string `json:"alg"`
-		Kid string `json:"kid"`
-	}
-	if err := json.Unmarshal(headerB, &hdr); err != nil {
-		return nil, fmt.Errorf("jwt: header parse: %w", err)
-	}
-	if hdr.Alg == "HS256" || hdr.Alg == "HS384" || hdr.Alg == "HS512" {
-		return nil, errors.New("jwt: HS-family rejected by JWKS verifier")
-	}
+	return interval
+}
 
-	key, err := v.keyFor(ctx, hdr.Kid)
+// Verify implements TokenVerifier: the signature by the key the token's kid
+// names, checked by jws against the set, then the time, issuer and audience
+// claims by jwt, then the Principal the claims name.
+func (v *JWKSVerifier) Verify(ctx context.Context, token string) (*Principal, error) {
+	msg, err := jws.ParseString(token)
+	if err != nil {
+		return nil, fmt.Errorf("jwt: malformed token: %w", err)
+	}
+	sigs := msg.Signatures()
+	if len(sigs) != 1 {
+		return nil, errors.New("jwt: want exactly one signature")
+	}
+	kid, _ := sigs[0].ProtectedHeaders().KeyID()
+	set, err := v.keySetWith(ctx, kid)
 	if err != nil {
 		return nil, err
 	}
-
-	// Reuse the existing JWTVerifier signature check by faking a thin
-	// wrapper; this keeps the algorithm-dispatch in one place.
-	jwtv := &JWTVerifier{
-		Key:              key,
-		ExpectedIssuer:   v.ExpectedIssuer,
-		ExpectedAudience: v.ExpectedAudience,
-		Leeway:           v.Leeway,
-		Now:              v.Now,
+	payload, err := jws.Verify([]byte(token), jws.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)))
+	if err != nil {
+		return nil, fmt.Errorf("jwt: signature: %w", err)
 	}
-	return jwtv.Verify(ctx, token)
+	if _, err := jwt.Parse(payload, append(v.claimChecks(), jwt.WithVerify(false))...); err != nil {
+		return nil, fmt.Errorf("jwt: %w", err)
+	}
+	var c jwtClaims
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return nil, fmt.Errorf("jwt: claims parse: %w", err)
+	}
+	return principalFromClaims(c, v.ExpectedAudience)
 }
 
-// keyFor returns the cached public key for kid; on miss it forces one
-// refresh before reporting absence. The forced refresh is debounced
-// (MinRefreshInterval) and singleflighted so a flood of unknown-kid
-// requests can't turn into an outbound-fetch storm.
-func (v *JWKSVerifier) keyFor(ctx context.Context, kid string) (any, error) {
-	v.mu.RLock()
-	if k, ok := v.keys[kid]; ok {
-		v.mu.RUnlock()
-		return k, nil
+// claimChecks are the claims a token must carry to be accepted now: exp and
+// nbf within the leeway, and the issuer and audience when set.
+func (v *JWKSVerifier) claimChecks() []jwt.ParseOption {
+	opts := []jwt.ParseOption{
+		jwt.WithAcceptableSkew(v.Leeway),
+		jwt.WithClock(jwt.ClockFunc(v.Now)),
 	}
-	loadedAt := v.loadedAt
+	if v.ExpectedIssuer != "" {
+		opts = append(opts, jwt.WithIssuer(v.ExpectedIssuer))
+	}
+	if v.ExpectedAudience != "" {
+		opts = append(opts, jwt.WithAudience(v.ExpectedAudience))
+	}
+	return opts
+}
+
+// keySetWith returns the cached key set once it holds kid; on a miss it
+// forces one refresh before reporting absence. The forced refresh is
+// debounced (MinRefreshInterval) and singleflighted so a flood of unknown-kid
+// requests can't turn into an outbound-fetch storm.
+func (v *JWKSVerifier) keySetWith(ctx context.Context, kid string) (jwk.Set, error) {
+	v.mu.RLock()
+	set, loadedAt := v.keys, v.loadedAt
 	v.mu.RUnlock()
+	if holds(set, kid) {
+		return set, nil
+	}
 
 	minRefresh := v.MinRefreshInterval
 	if minRefresh <= 0 {
-		minRefresh = 30 * time.Second
+		minRefresh = defaultMinRefreshInterval
 	}
 	// Debounce: if we refreshed very recently, the kid is genuinely
 	// unknown — don't hammer the IdP on every spray request.
@@ -180,14 +200,24 @@ func (v *JWKSVerifier) keyFor(ctx context.Context, kid string) (any, error) {
 
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-	if k, ok := v.keys[kid]; ok {
-		return k, nil
+	if holds(v.keys, kid) {
+		return v.keys, nil
 	}
 	return nil, fmt.Errorf("jwks: unknown kid %q", kid)
 }
 
-// refresh fetches the JWK Set, parses each key, and atomically swaps the
-// cache. Old keys are dropped — IdPs that overlap kids during rotation
+// holds reports whether set has a key under kid; a token without a kid
+// matches none.
+func holds(set jwk.Set, kid string) bool {
+	if set == nil || kid == "" {
+		return false
+	}
+	_, ok := set.LookupKeyID(kid)
+	return ok
+}
+
+// refresh fetches the JWK Set, keeps its signing keys, and atomically swaps
+// the cache. Old keys are dropped — IdPs that overlap kids during rotation
 // republish the previous one.
 func (v *JWKSVerifier) refresh(ctx context.Context) error {
 	if v.URL == "" {
@@ -205,127 +235,51 @@ func (v *JWKSVerifier) refresh(ctx context.Context) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("jwks: status %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB cap
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJWKSBytes))
 	if err != nil {
 		return err
 	}
-	keys, err := parseJWKS(body)
+	keys, err := signingKeys(body)
 	if err != nil {
 		return err
 	}
 	v.mu.Lock()
 	v.keys = keys
 	v.loadedAt = v.Now()
-	v.refreshErr = nil
 	v.mu.Unlock()
 	return nil
 }
 
-// jwk is the wire shape of a JSON Web Key (subset Paladin needs).
-type jwk struct {
-	Kid string `json:"kid"`
-	Kty string `json:"kty"` // "RSA" | "EC"
-	Alg string `json:"alg"`
-	Use string `json:"use"`
-	// RSA fields
-	N string `json:"n"`
-	E string `json:"e"`
-	// EC fields
-	Crv string `json:"crv"` // "P-256" | "P-384" | "P-521"
-	X   string `json:"x"`
-	Y   string `json:"y"`
-}
-
-func parseJWKS(body []byte) (map[string]any, error) {
-	var doc struct {
-		Keys []jwk `json:"keys"`
-	}
-	if err := json.Unmarshal(body, &doc); err != nil {
+// signingKeys is the set's public signing keys: RSA or EC, for signatures,
+// under a kid. A shared secret is left out — a JWKS-published symmetric key is
+// an anti-pattern, and it would let anyone holding the set sign — as are
+// encryption keys, keys jwk could not read, and keys no token could name.
+func signingKeys(body []byte) (jwk.Set, error) {
+	all, err := jwk.Parse(body)
+	if err != nil {
 		return nil, fmt.Errorf("jwks: decode: %w", err)
 	}
-	out := make(map[string]any, len(doc.Keys))
-	for _, k := range doc.Keys {
-		if k.Use != "" && k.Use != "sig" {
-			continue // signing keys only
-		}
-		key, err := jwkToPublicKey(k)
-		if err != nil {
-			// Skip unparseable keys but keep going — rotation may yield
-			// transient mixed shapes; one bad key shouldn't fail the set.
+	out := jwk.NewSet()
+	for i := range all.Len() {
+		k, _ := all.Key(i)
+		if jwk.IsUnsupportedKey(k) {
 			continue
 		}
-		if k.Kid == "" {
+		if kt := k.KeyType(); kt != jwa.RSA() && kt != jwa.EC() {
 			continue
 		}
-		out[k.Kid] = key
+		if use, ok := k.KeyUsage(); ok && use != string(jwk.ForSignature) {
+			continue
+		}
+		if kid, ok := k.KeyID(); !ok || kid == "" {
+			continue
+		}
+		if err := out.AddKey(k); err != nil {
+			return nil, fmt.Errorf("jwks: %w", err)
+		}
 	}
-	if len(out) == 0 {
+	if out.Len() == 0 {
 		return nil, errors.New("jwks: no usable signing keys in response")
 	}
 	return out, nil
-}
-
-func jwkToPublicKey(k jwk) (any, error) {
-	switch k.Kty {
-	case "RSA":
-		nb, err := base64.RawURLEncoding.DecodeString(k.N)
-		if err != nil {
-			return nil, fmt.Errorf("jwks: RSA N: %w", err)
-		}
-		eb, err := base64.RawURLEncoding.DecodeString(k.E)
-		if err != nil {
-			return nil, fmt.Errorf("jwks: RSA E: %w", err)
-		}
-		// Exponent fits in int.
-		var ev int
-		for _, b := range eb {
-			ev = ev<<8 | int(b)
-		}
-		return &rsa.PublicKey{
-			N: new(big.Int).SetBytes(nb),
-			E: ev,
-		}, nil
-	case "EC":
-		var curve elliptic.Curve
-		switch k.Crv {
-		case "P-256":
-			curve = elliptic.P256()
-		case "P-384":
-			curve = elliptic.P384()
-		case "P-521":
-			curve = elliptic.P521()
-		default:
-			return nil, fmt.Errorf("jwks: unsupported curve %q", k.Crv)
-		}
-		xb, err := base64.RawURLEncoding.DecodeString(k.X)
-		if err != nil {
-			return nil, fmt.Errorf("jwks: EC X: %w", err)
-		}
-		yb, err := base64.RawURLEncoding.DecodeString(k.Y)
-		if err != nil {
-			return nil, fmt.Errorf("jwks: EC Y: %w", err)
-		}
-		// ParseUncompressedPublicKey rather than setting X/Y directly: those
-		// fields are deprecated as of Go 1.26 and assembling a key from raw
-		// coordinates skips the on-curve check, so a malformed JWKS response
-		// would yield a PublicKey that fails deep inside Verify instead of
-		// here. It takes SEC 1 uncompressed form (0x04 || X || Y), with both
-		// coordinates left-padded to the curve's byte size — JWK stores them
-		// unpadded when the leading byte is zero.
-		size := (curve.Params().BitSize + 7) / 8
-		if len(xb) > size || len(yb) > size {
-			return nil, fmt.Errorf("jwks: EC coordinate too wide for %s", k.Crv)
-		}
-		point := make([]byte, 1+2*size)
-		point[0] = 4
-		copy(point[1+size-len(xb):1+size], xb)
-		copy(point[1+2*size-len(yb):], yb)
-		pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
-		if err != nil {
-			return nil, fmt.Errorf("jwks: EC point: %w", err)
-		}
-		return pub, nil
-	default:
-		return nil, fmt.Errorf("jwks: unsupported kty %q", k.Kty)
-	}
 }
