@@ -355,7 +355,7 @@ type OAuthAS struct {
 	TokenRateLimitPerMinute int `yaml:"token_rate_limit_per_minute" json:"token_rate_limit_per_minute"`
 	// TokenExchangeRateLimitPerMinute caps the RFC 8693 exchange grant per
 	// client_id, apart from the other grants. Every exchange the MCP server
-	// makes is one client's — each agent session costs one per plane — so the
+	// makes is one client's — each agent session costs one per token — so the
 	// cap that guards a client secret from guessing would refuse them under
 	// ordinary load. The exchanging client authenticates on every call.
 	TokenExchangeRateLimitPerMinute int `yaml:"token_exchange_rate_limit_per_minute" json:"token_exchange_rate_limit_per_minute"`
@@ -371,7 +371,7 @@ type OAuthAS struct {
 
 // OAuthSeedClient is a pre-registered (usually public / PKCE) OAuth client.
 // TokenExchangeEnabled reports whether the RFC 8693 grant is served: the AS
-// is on and a seed client may call it (ADR-0036).
+// is on and a seed client may call it (ADR-0041).
 func (o OAuthAS) TokenExchangeEnabled() bool {
 	if !o.Enabled {
 		return false
@@ -403,8 +403,9 @@ type OAuthSeedClient struct {
 	// ClientSecretRef resolves ClientSecret from a Kubernetes Secret at boot.
 	ClientSecretRef *SecretRef `yaml:"client_secret_ref" json:"client_secret_ref"`
 	// TokenExchange lets this client call the RFC 8693 token-exchange grant:
-	// the MCP server, trading a caller's paladin-mcp token for one per plane
-	// (ADR-0036). Only a confidential client may hold it.
+	// the MCP server, trading a caller's paladin-mcp token for the capability
+	// that acts for its user (ADR-0041). Only a confidential client may hold
+	// it, and the grant needs capability.enabled.
 	TokenExchange bool `yaml:"token_exchange" json:"token_exchange"`
 }
 
@@ -1097,8 +1098,9 @@ type MCPOAuth struct {
 	// the contract internal/auth/oauth serves (ADR-0009).
 	AuthorizationServer MCPOAuthAS `yaml:"authorization_server" json:"authorization_server"`
 	// Exchange makes the MCP server a confidential client of the AS that
-	// exchanges each caller's paladin-mcp token for the plane a tool calls
-	// (ADR-0036). With it set, the edge accepts paladin-mcp tokens only.
+	// exchanges each caller's paladin-mcp token for the capability that acts
+	// for its user (ADR-0041). With it set, the edge accepts paladin-mcp
+	// tokens only.
 	Exchange MCPOAuthExchange `yaml:"exchange" json:"exchange"`
 }
 
