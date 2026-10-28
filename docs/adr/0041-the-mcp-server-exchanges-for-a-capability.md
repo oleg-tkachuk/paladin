@@ -51,7 +51,7 @@
   3. **The plane authorizes the user, narrowed by the caveats.** A
      delegated capability establishes the principal ADR-0036's exchanged
      token did: kind `user`, the user's subject and tenant, the user's
-     current roles read from IAM (cached briefly), the OAuth client and
+     current roles read from IAM on every call, the OAuth client and
      scopes, and `paladin-mcp` as the actor. Cedar decides on it as for the
      user's own token. A capability from any other issuer keeps ADR-0010
      unchanged: no roles.
@@ -70,8 +70,8 @@
   - An agent session is bounded and revocable on its own: revoking its
     capability stops it without logging the user out.
   - All 81 tools keep working, platform ones included, and a role removed
-    from the user takes effect within the role cache's lifetime rather than
-    at the next token refresh.
+    from the user, or the user disabled, takes effect at the next call rather
+    than at the next token refresh.
   - The MCP server signs capabilities, so it holds the capability signing
     key. KMS-wrapping that key stays its own BACKLOG item.
   - A configuration naming `mcp.oauth.exchange` fails the strict loader;
