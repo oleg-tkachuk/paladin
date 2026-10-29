@@ -45,10 +45,18 @@ func limesTablesWhere(keep func(pgstore.TableErase) bool) []string {
 // but the mark the erase itself writes.
 var limesTenantTables = limesTablesWhere(func(e pgstore.TableErase) bool { return e != pgstore.EraseMarks })
 
+// seedExchangeIssuer and seedExchangeTokenID name the subject token the
+// seeded capability is recorded as exchanged for.
+const (
+	seedExchangeIssuer  = "https://idp.purge.test"
+	seedExchangeTokenID = "subject-token-jti"
+)
+
 // seedEveryLimesTable gives tenant a row in every table of limesTenantTables
 // through the stores, acting on the tenant on the application role as a
-// request does: a capability, its revocation and that of a Biscuit copy, the
-// counters of both, a charge, a hold and a budget.
+// request does: a capability, the exchange it was issued for, its revocation
+// and that of a Biscuit copy, the counters of both, a charge, a hold and a
+// budget.
 func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, records *pgstore.Store, usage *capstore.UsageStore, tenant uuid.UUID) {
 	t.Helper()
 	acting := auth.WithActingTenant(ctx, tenant)
@@ -79,6 +87,11 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	}
 	if _, err := usage.Reserve(acting, meter.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {
 		t.Fatalf("reserve: %v", err)
+	}
+	if _, _, err := records.ClaimExchange(acting, limes.ExchangeKey{
+		TenantID: tenant, Issuer: seedExchangeIssuer, TokenID: seedExchangeTokenID,
+	}, c.ID); err != nil {
+		t.Fatalf("claim exchange: %v", err)
 	}
 	if _, err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {
 		t.Fatalf("revoke copy: %v", err)
