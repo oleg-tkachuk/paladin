@@ -44,7 +44,7 @@ require (
 	github.com/oleg-tkachuk/limes/exchange v0.9.0
 	github.com/oleg-tkachuk/limes/otelmetric v0.10.9
 	github.com/oleg-tkachuk/limes/pgstore v0.43.1
-	github.com/oleg-tkachuk/paladin/sdk/go v0.126.0
+	github.com/oleg-tkachuk/paladin/sdk/go v0.126.1
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.16.0
@@ -159,7 +159,7 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/goccy/go-json v0.11.2 // indirect
+	github.com/goccy/go-json v0.12.0 // indirect
 	github.com/google/cel-go v0.31.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
