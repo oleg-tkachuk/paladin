@@ -1,14 +1,17 @@
 package oauth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"uuid"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -38,11 +41,16 @@ const (
 type tokenExchange struct {
 	handler http.Handler
 	clients map[string]bool
+	// sessions revokes the capabilities a grant's session was exchanged
+	// for, when the session ends.
+	sessions limes.BulkRevoker
 }
 
 // WithTokenExchange serves the token-exchange grant to clientIDs through ex
-// (ADR-0041). Without it the grant type is unsupported.
-func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string]bool) (*Handler, error) {
+// (ADR-0041), and revokes through sessions what a grant's tokens were
+// exchanged for when its session ends. Without it the grant type is
+// unsupported.
+func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string]bool, sessions limes.BulkRevoker) (*Handler, error) {
 	handler, err := exchange.NewHandler(exchange.HandlerConfig{
 		Exchanger:    ex,
 		Authenticate: h.exchangeClient,
@@ -51,7 +59,7 @@ func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string
 	if err != nil {
 		return nil, fmt.Errorf("oauth: token exchange: %w", err)
 	}
-	h.exchange = &tokenExchange{handler: handler, clients: clientIDs}
+	h.exchange = &tokenExchange{handler: handler, clients: clientIDs, sessions: sessions}
 	return h, nil
 }
 
@@ -93,4 +101,31 @@ func (h *Handler) exchangeClient(r *http.Request) (exchange.Client, error) {
 		return exchange.Client{}, fmt.Errorf("%w: %q", exchange.ErrUnauthorizedClient, clientID)
 	}
 	return exchange.Client{ID: clientID, SubjectAudiences: []string{auth.AudienceMCP}}, nil
+}
+
+// sessionRevocationActor is who a capability revoked with its session is
+// recorded as revoked by: the authorization server, ending the grant.
+const sessionRevocationActor = "oauth"
+
+// revokeSession revokes every capability of tenant that a token of the
+// grant's session, the refresh-token family, was exchanged for, batch by
+// batch until none is left, and reports how many it revoked; why is the
+// note on each. Without the exchange there is none to revoke.
+func (h *Handler) revokeSession(ctx context.Context, tenant, family uuid.UUID, why string) (int64, error) {
+	if h.exchange == nil || h.exchange.sessions == nil {
+		return 0, nil
+	}
+	var revoked int64
+	for {
+		res, err := h.exchange.sessions.RevokeMatching(auth.WithActingTenant(ctx, tenant), limes.RevokeMatchingRequest{
+			TenantID: tenant, Session: family.String(), Note: why, Actor: sessionRevocationActor,
+		})
+		if err != nil {
+			return revoked, fmt.Errorf("oauth: revoke the capabilities of session %s: %w", family, err)
+		}
+		revoked += res.Revoked
+		if !res.More {
+			return revoked, nil
+		}
+	}
 }

@@ -39,6 +39,8 @@ type jwtClaims struct {
 	Exp int64           `json:"exp"`
 	Nbf int64           `json:"nbf"`
 	Jti string          `json:"jti"`
+	// Sid is the session the token was issued in (auth.ClaimSessionID).
+	Sid string `json:"sid"`
 	// Tenant — canonical claim name. Paladin's own issuer always emits this.
 	Tenant string `json:"tenant"`
 	// TenantAlt — accepted alias for compatibility with third-party IdPs
@@ -163,6 +165,7 @@ func principalFromClaims(c jwtClaims, audience string) (*Principal, error) {
 		Labels:     c.Labels,
 		TenantSlug: c.TenantSlug,
 		TokenID:    c.Jti,
+		SessionID:  c.Sid,
 	}
 	if c.ClientID != "" {
 		p.OAuthClientID = c.ClientID

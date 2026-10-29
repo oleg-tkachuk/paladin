@@ -93,6 +93,10 @@ type AccessClaims struct {
 	// Empty for every other token.
 	OAuthClientID string
 	OAuthScopes   []string
+	// SessionID is the session the token is issued in, minted as `sid`: an
+	// OAuth grant's refresh-token family, which revoking ends. Empty for a
+	// token issued in none.
+	SessionID string
 	// Optional explicit TTL override (must be ≤ scoped_token_max_ttl).
 	TTL time.Duration
 }
@@ -141,6 +145,9 @@ func (i *Issuer) MintAccess(c AccessClaims) (string, time.Time, error) {
 	if c.OAuthClientID != "" {
 		claims[auth.ClaimClientID] = c.OAuthClientID
 		claims[auth.ClaimScope] = strings.Join(c.OAuthScopes, auth.ScopeSeparator)
+	}
+	if c.SessionID != "" {
+		claims[auth.ClaimSessionID] = c.SessionID
 	}
 	tok, err := signHS256(i.cfg.SigningKey, claims)
 	if err != nil {

@@ -123,6 +123,46 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
+### Revoke delegated capabilities when a user or an OAuth client goes
+
+- **Status:** Blocked.
+- **Reason:** limes' `RevokeMatching` (ADR-0013 there) revokes by subject,
+  on-behalf-of or client, but within one tenant, and an OAuth client spans
+  every tenant. A deleted or disabled user's delegated capabilities are
+  already refused at the next call (ADR-0041), so only `DeleteOAuthClient`
+  leaves capabilities live until their token expires.
+- **Definition of Done:** `DeleteOAuthClient` revokes every capability whose
+  `client_id` is the client's, in every tenant, looping until none is left,
+  with a test that a capability exchanged under the client is refused after
+  the delete.
+- **Blockers:** a cross-tenant selector in limes, or a list of the tenants a
+  client holds capabilities in.
+
+### Put limes' error codes on the wire
+
+- **Status:** Deferred.
+- **Reason:** limes gives every error a stable code (`limes.Code`,
+  `meter.ProblemOf`). Paladin maps limes' errors onto connect codes by hand
+  (`auth.meterError`, `capabilityh`, `tenant_budget_server`), and its
+  choices differ from limes' HTTP statuses on purpose — an exhausted budget
+  is `ResourceExhausted`, not 403's `PermissionDenied` — so the statuses do
+  not replace the mapping. Only refusals carry a reason to clients today.
+- **Definition of Done:** every error that leaves Paladin from limes carries
+  its `limes.Code` in the `google.rpc.ErrorInfo` metadata, documented in the
+  SDKs, with a test that walks `limes.Codes()`.
+- **Blockers:** an SDK contract change; no current ask.
+
+### Show a capability's session in the console
+
+- **Status:** Deferred.
+- **Reason:** a capability now records the OAuth session it was exchanged in
+  (`limes.Record.Session`), but the capability API and the console do not
+  carry it.
+- **Definition of Done:** the capability proto carries the session, the
+  console's capability list and detail show it, and ending a session from
+  the console revokes its capabilities.
+- **Blockers:** none.
+
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

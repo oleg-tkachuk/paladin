@@ -543,13 +543,15 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 // console). Best-effort: failures here never change the caller's already
 // decided rejection.
 func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid.UUID) {
-	revoked, err := h.refresh.RevokeFamilyOf(auth.WithActingTenant(ctx, tenantID), jti)
+	acting := auth.WithActingTenant(ctx, tenantID)
+	revoked, err := h.refresh.RevokeFamilyOf(acting, jti)
 	if h.log != nil {
 		h.log.Warn("oauth refresh token reuse detected; revoked the token family",
 			zap.String("user_id", userID.String()),
 			zap.Int64("revoked", revoked),
 			zap.Error(err))
 	}
+	h.revokeReplayedSession(acting, jti, userID, tenantID)
 	h.record(ctx, admindomain.AuditEntry{
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,
@@ -557,6 +559,28 @@ func (h *Handler) onRefreshReuse(ctx context.Context, jti, userID, tenantID uuid
 		ResourceName:  "users/" + userID.String(),
 		ErrorMessage:  "rotated refresh token replayed; token family revoked",
 	}, nil)
+}
+
+// revokeReplayedSession revokes what the replayed token's session was
+// exchanged for: the chain is compromised, so its capabilities are too.
+// Best-effort, as the rest of the reuse handling is; a failure is logged.
+func (h *Handler) revokeReplayedSession(ctx context.Context, jti, userID, tenantID uuid.UUID) {
+	stored, err := h.refresh.GetAny(ctx, jti)
+	if err == nil {
+		var revoked int64
+		revoked, err = h.revokeSession(ctx, tenantID, stored.FamilyID, noteRefreshReuse)
+		if err == nil {
+			if h.log != nil && revoked > 0 {
+				h.log.Warn("oauth refresh token reuse: revoked the session's capabilities",
+					zap.String("user_id", userID.String()), zap.Int64("revoked", revoked))
+			}
+			return
+		}
+	}
+	if h.log != nil {
+		h.log.Error("oauth refresh token reuse: the session's capabilities were not revoked",
+			zap.String("user_id", userID.String()), zap.Error(err))
+	}
 }
 
 // tokenResponse is the RFC 6749 §5.1 success body.
@@ -586,6 +610,9 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		// not only /authorize (ADR-0035).
 		OAuthClientID: grant.ClientID,
 		OAuthScopes:   grant.Scopes,
+		// The refresh-token family is the grant's session: revoking it
+		// revokes what the token was exchanged for (ADR-0041).
+		SessionID: familyID.String(),
 	})
 	if err != nil {
 		h.serverError(ctx, w, "mint access failed", err, zap.String("client_id", grant.ClientID))

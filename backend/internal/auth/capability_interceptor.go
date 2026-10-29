@@ -823,8 +823,8 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 	return nil
 }
 
-// meterError maps a metering refusal to its transport status, by the limes
-// family it belongs to, so a refusal no retry mends never reads as one to
+// meterError maps a metering refusal to its transport status, by its limes
+// code through meterCodes, so a refusal no retry mends never reads as one to
 // retry:
 //
 //   - a limit exhausted — the capability's requests, budget or copies, or its
@@ -838,26 +838,12 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 //     for another amount, an external reference naming another charge — is
 //     Aborted;
 //   - anything else is the store failing, Unavailable.
-//
-// ErrUnitCodeMismatch is an ErrConflict too, so it is matched first.
 func meterError(err error) error {
-	switch {
-	case errors.Is(err, limes.ErrRequestLimitExceeded),
-		errors.Is(err, limes.ErrBudgetExceeded),
-		errors.Is(err, limes.ErrTenantBudgetExceeded):
-		return capabilityError(connect.CodeResourceExhausted, err)
-	case errors.Is(err, limes.ErrRevoked), errors.Is(err, limes.ErrExpired):
-		return capabilityError(connect.CodePermissionDenied, err)
-	case errors.Is(err, limes.ErrInvalidRequest):
-		return capabilityError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, limes.ErrUnitCodeMismatch),
-		errors.Is(err, meter.ErrCounterOverflow),
-		errors.Is(err, limes.ErrNotFound):
-		return capabilityError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, limes.ErrConflict):
-		return capabilityError(connect.CodeAborted, err)
+	code, ok := meter.CodeOf(err)
+	if !ok {
+		return capabilityError(meterUnknownCode, err)
 	}
-	return capabilityError(connect.CodeUnavailable, err)
+	return capabilityError(meterCodes[code], err)
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any

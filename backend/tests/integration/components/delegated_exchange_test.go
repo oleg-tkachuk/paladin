@@ -4,6 +4,7 @@ package components
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -143,6 +144,33 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 		}
 		if got := first.Capability.ExpiresAt; got.After(exp) || exp.Sub(got) > exchangeExpiryRounding {
 			t.Errorf("the capability expires %v, want with its token at %v", got, exp)
+		}
+	})
+
+	t.Run("ending the session revokes its capability", func(t *testing.T) {
+		session := uuid.NewV7().String()
+		tok, _, err := minter.MintAccess(issuer.AccessClaims{
+			Subject: user.UserID.String(), TenantID: tenant, Audience: auth.AudienceMCP,
+			OAuthClientID: exchangeAgentClient, OAuthScopes: []string{auth.OAuthScopeRead}, SessionID: session,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := one.Exchange(ctx, request(tok))
+		if err != nil {
+			t.Fatalf("exchange: %v", err)
+		}
+		acting := auth.WithActingTenant(ctx, tenant)
+		if rec, err := store.GetRecord(acting, res.Capability.ID); err != nil || rec.Session != session {
+			t.Fatalf("the capability's session = %q (%v), want %q", rec.Session, err, session)
+		}
+		// On the application role, as the authorization server revokes it.
+		ended, err := store.RevokeMatching(acting, limes.RevokeMatchingRequest{TenantID: tenant, Session: session})
+		if err != nil || ended.Revoked != 1 {
+			t.Fatalf("revoke the session: %+v, %v; want its one capability", ended, err)
+		}
+		if _, err := other.Exchange(ctx, request(tok)); !errors.Is(err, exchange.ErrInvalidGrant) {
+			t.Errorf("the session's token exchanged again: err = %v, want exchange.ErrInvalidGrant", err)
 		}
 	})
 }

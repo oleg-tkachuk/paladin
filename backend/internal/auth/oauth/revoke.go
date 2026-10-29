@@ -92,6 +92,13 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		h.serverError(r.Context(), w, "revocation failed", err, zap.String("client_id", clientID))
 		return
 	}
+	// The refresh tokens are gone; what the grant's tokens were exchanged
+	// for goes too, or it would outlive the grant until its token expired.
+	// A failure is answered so the client retries: both steps repeat safely.
+	if _, err := h.revokeSession(r.Context(), stored.TenantID, stored.FamilyID, noteGrantRevokedByClient); err != nil {
+		h.serverError(r.Context(), w, "session capability revocation failed", err, zap.String("client_id", clientID))
+		return
+	}
 	h.record(r.Context(), admindomain.AuditEntry{
 		ActorSubject:  userID.String(),
 		ActorTenantID: tenantID,

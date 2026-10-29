@@ -57,6 +57,10 @@ type CapabilityBundle struct {
 	// capability across every replica (ADR-0041).
 	Exchanges limes.ExchangeStore
 
+	// Sessions revokes the capabilities of an OAuth grant's session, in the
+	// tenant the caller acts on, when the session ends.
+	Sessions limes.BulkRevoker
+
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
 	// purger drops the ids that have expired.
@@ -251,6 +255,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		CopyUsage:    copyUsage,
 		Records:      records,
 		Exchanges:    pgstore.ScopedExchanges(store),
+		Sessions:     store,
 		Usage:        usage,
 		Ledger:       ledger,
 		Issuer:       issuers.issuer,
