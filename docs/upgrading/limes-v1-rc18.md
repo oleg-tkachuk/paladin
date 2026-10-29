@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.17: PostgreSQL 15 and pgstore's DPoP replay cache
+## Unreleased — limes v1.0.0-rc.18: PostgreSQL 15 and pgstore's DPoP replay cache
 
 - **PostgreSQL 15 or later.** pgstore v0.45 reads capability records through
   a `security_invoker` view, which an earlier PostgreSQL cannot create; the
