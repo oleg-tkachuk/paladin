@@ -10,8 +10,7 @@ import (
 // meterCodes is the transport code of a metering error, by its limes code
 // (limes.CodeOf, meter.CodeOf): one row per code limes and its meter define,
 // which TestMeterCodesCoverEveryLimesCode holds, so a code a release adds is
-// answered on purpose. An error that carries no code is the store failing,
-// answered as meterUnknownCode.
+// answered on purpose. Unavailable is kept for what a retry can mend.
 var meterCodes = map[limes.Code]connect.Code{
 	// A spent request, budget or copy limit: the caller waits or stops.
 	limes.CodeBudgetExceeded:       connect.CodeResourceExhausted,
@@ -19,12 +18,33 @@ var meterCodes = map[limes.Code]connect.Code{
 	limes.CodeRequestLimitExceeded: connect.CodeResourceExhausted,
 	limes.CodeTenantBudgetExceeded: connect.CodeResourceExhausted,
 
-	// The capability is no longer valid: told so with its reason, as a
-	// verifier's refusal is.
-	limes.CodeDelegationTooDeep: connect.CodePermissionDenied,
-	limes.CodeExpired:           connect.CodePermissionDenied,
-	limes.CodeRevoked:           connect.CodePermissionDenied,
-	limes.CodeTenantErased:      connect.CodePermissionDenied,
+	// The capability, or the credential presenting it, does not allow the
+	// call: told so with its reason, as a verifier's refusal is. No retry
+	// mends it.
+	limes.CodeAudienceMismatch:       connect.CodePermissionDenied,
+	limes.CodeAuthSchemeMismatch:     connect.CodePermissionDenied,
+	limes.CodeBiscuitAttenuation:     connect.CodePermissionDenied,
+	limes.CodeCaveatViolation:        connect.CodePermissionDenied,
+	limes.CodeDelegationTooDeep:      connect.CodePermissionDenied,
+	limes.CodeDelegationTooWide:      connect.CodePermissionDenied,
+	limes.CodeExpired:                connect.CodePermissionDenied,
+	limes.CodeIdempotencyKeyRequired: connect.CodePermissionDenied,
+	limes.CodeInvalidToken:           connect.CodePermissionDenied,
+	limes.CodeNoCredentials:          connect.CodePermissionDenied,
+	limes.CodeNonceRequired:          connect.CodePermissionDenied,
+	limes.CodeNotYetValid:            connect.CodePermissionDenied,
+	limes.CodeOpNotAllowed:           connect.CodePermissionDenied,
+	limes.CodeProofInvalid:           connect.CodePermissionDenied,
+	limes.CodeProofOfPossession:      connect.CodePermissionDenied,
+	limes.CodeProofReplayed:          connect.CodePermissionDenied,
+	limes.CodeProofRequired:          connect.CodePermissionDenied,
+	limes.CodeResourceNotAllowed:     connect.CodePermissionDenied,
+	limes.CodeRevoked:                connect.CodePermissionDenied,
+	limes.CodeSourceIPNotAllowed:     connect.CodePermissionDenied,
+	limes.CodeTaintedReadNotAllowed:  connect.CodePermissionDenied,
+	limes.CodeTenantErased:           connect.CodePermissionDenied,
+	limes.CodeUnauthenticated:        connect.CodePermissionDenied,
+	limes.CodeUnknownKID:             connect.CodePermissionDenied,
 
 	// A malformed request.
 	limes.CodeCursorMismatch:         connect.CodeInvalidArgument,
@@ -34,60 +54,59 @@ var meterCodes = map[limes.Code]connect.Code{
 	limes.CodeInvalidRequest:         connect.CodeInvalidArgument,
 	limes.CodeMalformedAuthorization: connect.CodeInvalidArgument,
 
-	// A unit other than the counters', a counter with no room, a record no
-	// longer there.
+	// A unit other than the counters', a counter with no room, a record or a
+	// tenant no longer there; and a key-bound capability on a plane that
+	// checks no proof, the deployment's fault, as the verify path answers it.
 	meter.CodeChargeNotFound:       connect.CodeFailedPrecondition,
 	meter.CodeCounterOverflow:      connect.CodeFailedPrecondition,
 	limes.CodeNotFound:             connect.CodeFailedPrecondition,
+	limes.CodeProofUnsupported:     connect.CodeFailedPrecondition,
 	meter.CodeReservationNotFound:  connect.CodeFailedPrecondition,
 	meter.CodeTenantBudgetNotFound: connect.CodeFailedPrecondition,
+	limes.CodeTenantDeleted:        connect.CodeFailedPrecondition,
 	limes.CodeUnitCodeMismatch:     connect.CodeFailedPrecondition,
+	limes.CodeUnknownTenant:        connect.CodeFailedPrecondition,
 	meter.CodeUsageNotFound:        connect.CodeFailedPrecondition,
 
+	// A record the request would create is there already.
+	limes.CodeAlreadyExists: connect.CodeAlreadyExists,
+
 	// A request that disagrees with what is on record: a reservation settled
-	// for another amount, an external reference naming another charge.
-	limes.CodeAlreadyExists:               connect.CodeAborted,
+	// for another amount, a refund beyond its charge, an external reference
+	// naming another charge.
 	limes.CodeConflict:                    connect.CodeAborted,
 	meter.CodeExternalRefConflict:         connect.CodeAborted,
+	meter.CodeRefundExceedsCharge:         connect.CodeAborted,
 	meter.CodeSettleConflict:              connect.CodeAborted,
 	meter.CodeTenantBudgetVersionMismatch: connect.CodeAborted,
 
-	// What the meter does not answer with on this path, and the server's own
-	// failures: the caller retries rather than drops a capability that may be
-	// sound.
-	limes.CodeAudienceMismatch:       connect.CodeUnavailable,
-	limes.CodeAuthSchemeMismatch:     connect.CodeUnavailable,
-	limes.CodeBiscuitAttenuation:     connect.CodeUnavailable,
-	limes.CodeCaveatViolation:        connect.CodeUnavailable,
-	limes.CodeCopyCountersNotMetered: connect.CodeUnavailable,
-	limes.CodeCursorRepeated:         connect.CodeUnavailable,
-	limes.CodeDelegationTooWide:      connect.CodeUnavailable,
-	limes.CodeIdempotencyKeyRequired: connect.CodeUnavailable,
-	limes.CodeInternal:               connect.CodeUnavailable,
-	limes.CodeInvalidConfig:          connect.CodeUnavailable,
-	limes.CodeInvalidToken:           connect.CodeUnavailable,
-	limes.CodeKeysUnavailable:        connect.CodeUnavailable,
-	limes.CodeNoCredentials:          connect.CodeUnavailable,
-	limes.CodeNoRevocationLineage:    connect.CodeUnavailable,
-	limes.CodeNonceRequired:          connect.CodeUnavailable,
-	limes.CodeNotYetValid:            connect.CodeUnavailable,
-	limes.CodeOpNotAllowed:           connect.CodeUnavailable,
-	limes.CodeProofInvalid:           connect.CodeUnavailable,
-	limes.CodeProofOfPossession:      connect.CodeUnavailable,
-	limes.CodeProofReplayed:          connect.CodeUnavailable,
-	limes.CodeProofRequired:          connect.CodeUnavailable,
-	limes.CodeProofUnsupported:       connect.CodeUnavailable,
-	meter.CodeRefundExceedsCharge:    connect.CodeUnavailable,
-	limes.CodeResourceNotAllowed:     connect.CodeUnavailable,
-	limes.CodeScopeMismatch:          connect.CodeUnavailable,
-	limes.CodeSourceIPNotAllowed:     connect.CodeUnavailable,
-	limes.CodeTaintedReadNotAllowed:  connect.CodeUnavailable,
-	limes.CodeTenantDeleted:          connect.CodeUnavailable,
-	limes.CodeUnauthenticated:        connect.CodeUnavailable,
-	limes.CodeUnknownKID:             connect.CodeUnavailable,
-	limes.CodeUnknownTenant:          connect.CodeUnavailable,
+	// The server's own fault, which no retry mends: a misconfiguration, a
+	// call scoped to the wrong tenant, a broken invariant.
+	limes.CodeCopyCountersNotMetered: connect.CodeInternal,
+	limes.CodeInternal:               connect.CodeInternal,
+	limes.CodeInvalidConfig:          connect.CodeInternal,
+	limes.CodeScopeMismatch:          connect.CodeInternal,
+
+	// A dependency failing — the keys, the store, the revocation upstream —
+	// which a retry may find recovered.
+	limes.CodeCursorRepeated:      connect.CodeUnavailable,
+	limes.CodeKeysUnavailable:     connect.CodeUnavailable,
+	limes.CodeNoRevocationLineage: connect.CodeUnavailable,
 }
 
-// meterUnknownCode answers a metering error that carries no limes code: the
-// store failing, which the caller retries.
+// meterUnknownCode answers a metering error that carries no limes code, or a
+// code meterCodes has no row for: the store failing, which the caller retries.
 const meterUnknownCode = connect.CodeUnavailable
+
+// meterStatus is err's row in table, or meterUnknownCode when err carries no
+// limes code or its code has none.
+func meterStatus(table map[limes.Code]connect.Code, err error) connect.Code {
+	code, ok := meter.CodeOf(err)
+	if !ok {
+		return meterUnknownCode
+	}
+	if status, ok := table[code]; ok {
+		return status
+	}
+	return meterUnknownCode
+}

@@ -157,13 +157,13 @@ func TestMeterErrorAnswersEachFamily(t *testing.T) {
 		fmt.Errorf("wrapped: %w", limes.ErrRevoked): connect.CodePermissionDenied,
 	}
 	for err, want := range cases {
-		if got := connect.CodeOf(meterError(err)); got != want {
+		if got := connect.CodeOf(meterError(context.Background(), err)); got != want {
 			t.Errorf("meterError(%v) = %v, want %v", err, got, want)
 		}
 	}
 	// A revoked capability is told so, by reason, as a verifier tells it.
 	var ce *connect.Error
-	if !errors.As(meterError(limes.ErrTenantErased), &ce) || len(ce.Details()) == 0 {
+	if !errors.As(meterError(context.Background(), limes.ErrTenantErased), &ce) || len(ce.Details()) == 0 {
 		t.Error("an erased tenant's refusal carries no reason")
 	}
 }

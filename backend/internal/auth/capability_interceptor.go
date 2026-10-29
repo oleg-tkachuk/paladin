@@ -450,7 +450,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 			// A store failure fails closed, as Unavailable: a capability
 			// with a request ceiling that can't be incremented atomically
 			// is safer to reject than to allow unbounded use.
-			return meterError(err)
+			return meterError(ctx, err)
 		}
 	}
 	return nil
@@ -672,7 +672,7 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 	if err != nil {
 		// The store is otelmetric's, which counts the attempt by outcome —
 		// a capability at its cap apart from a tenant at its cap.
-		return meterError(err)
+		return meterError(ctx, err)
 	}
 	metrics.RecordCapabilityChargeAmount(ctx, tenantID.String(), amount.Float64())
 	stampLastCharge(ctx, receipt.ChargeID)
@@ -737,7 +737,7 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 		if errors.Is(err, meter.ErrRefundExceedsCharge) {
 			return capabilityError(connect.CodeInvalidArgument, err)
 		}
-		return meterError(err)
+		return meterError(ctx, err)
 	}
 	return nil
 }
@@ -768,7 +768,7 @@ func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duratio
 		Actor:   cap.Subject.Subject,
 	})
 	if err != nil {
-		return uuid.Nil(), meterError(err)
+		return uuid.Nil(), meterError(ctx, err)
 	}
 	return r.ID, nil
 }
@@ -795,7 +795,7 @@ func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount lime
 		if errors.Is(err, meter.ErrReservationNotFound) {
 			return capabilityError(connect.CodeFailedPrecondition, err)
 		}
-		return meterError(err)
+		return meterError(ctx, err)
 	}
 	stampLastCharge(ctx, receipt.ChargeID)
 	return nil
@@ -818,32 +818,26 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 		Subject:       verified.MeterSubject(),
 		ReservationID: reservationID,
 	}); err != nil {
-		return meterError(err)
+		return meterError(ctx, err)
 	}
 	return nil
 }
 
-// meterError maps a metering refusal to its transport status, by its limes
-// code through meterCodes, so a refusal no retry mends never reads as one to
-// retry:
-//
-//   - a limit exhausted — the capability's requests, budget or copies, or its
-//     tenant's budget — is ResourceExhausted;
-//   - a capability revoked or expired, or its tenant erased, is
-//     PermissionDenied with its reason, as a verifier's refusal is;
-//   - a malformed request is InvalidArgument;
-//   - a unit other than the counters', a counter with no room and a record
-//     no longer there are FailedPrecondition;
-//   - a request that disagrees with what is on record — a reservation settled
-//     for another amount, an external reference naming another charge — is
-//     Aborted;
-//   - anything else is the store failing, Unavailable.
-func meterError(err error) error {
-	code, ok := meter.CodeOf(err)
-	if !ok {
-		return capabilityError(meterUnknownCode, err)
+// meterError maps a metering error to its transport status by its limes
+// code, through meterCodes, so a refusal no retry mends never reads as one
+// to retry: a spent limit is ResourceExhausted, a refusal of the capability
+// PermissionDenied with its reason, the server's own fault Internal, and
+// only a failing dependency Unavailable. The last two are logged with their
+// cause, which the caller is not told.
+func meterError(ctx context.Context, err error) error {
+	status := meterStatus(meterCodes, err)
+	switch status {
+	case connect.CodeInternal:
+		logger.FromContext(ctx).Error("capability: metering failed on the server's side", zap.Error(err))
+	case connect.CodeUnavailable:
+		logger.FromContext(ctx).Error("capability: metering store unavailable", zap.Error(err))
 	}
-	return capabilityError(meterCodes[code], err)
+	return capabilityError(status, err)
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any
