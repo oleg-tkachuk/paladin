@@ -173,11 +173,11 @@ importers:
   .:
     dependencies:
       '@connectrpc/connect':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.16.0)
+        specifier: ^2.3.0
+        version: 2.3.0(@bufbuild/protobuf@2.16.0)
       '@connectrpc/connect-web':
-        specifier: ^2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+        specifier: ^2.3.0
+        version: 2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
       '@heroicons/react':
         specifier: ^2.2.0
         version: 2.2.0(react@19.3.1)
@@ -203,8 +203,8 @@ importers:
         specifier: ^5.5.0
         version: 5.5.0
       lucide-react:
-        specifier: ^1.61.0
-        version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
+        specifier: ^1.63.0
+        version: 1.63.0(@types/react@19.3.0)(react@19.3.1)
       next:
         specifier: 16.4.3
         version: 16.4.3(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.64.1)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -252,8 +252,8 @@ importers:
         specifier: 4.14.0
         version: 4.14.0
       '@connectrpc/connect-node':
-        specifier: 2.2.0
-        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+        specifier: 2.3.0
+        version: 2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
@@ -477,21 +477,21 @@ packages:
   '@cedar-policy/cedar-wasm@4.14.0':
     resolution: {integrity: sha512-TPyz3zMl5r7W5iSHq51IgG+NTILGoXB0VPrEcXnzCEpPUqL/7b+AtMPVVHB/UoJWuXA8YORjLuWxKHUW33ePAA==}
 
-  '@connectrpc/connect-node@2.2.0':
-    resolution: {integrity: sha512-E6uUO6e11WdynAuBjuN+0WpHjqxEM9BNDdfDIJHcn49Esg/WxSIbn2y1KFt9XL96IJi01qdBbvubcdpBz1X3Zw==}
+  '@connectrpc/connect-node@2.3.0':
+    resolution: {integrity: sha512-kcQgV4GqFIESsl0MOHInC9/wNYU4aJDvG1OfGR5Lq6/l0gqycSGqEk+fixXGcUtPLc8vJBgS4V1nTmWlh4o9gw==}
     engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
-      '@connectrpc/connect': 2.2.0
+      '@connectrpc/connect': 2.3.0
 
-  '@connectrpc/connect-web@2.2.0':
-    resolution: {integrity: sha512-uuBUcBTYfb/r1o98LzCCZk1H90yx0vmZ5m21dpw/q4EUwsKwkCDGI8H0aEdjcZld+Q2jJ5A5ADvPqfb6lzQ/sg==}
+  '@connectrpc/connect-web@2.3.0':
+    resolution: {integrity: sha512-JPXOiWaVsj+ZwaXOQjwvhc0ORnkl0a1w36Qyl3j1WTuak6/VYyuWGl1Aq8I60gQfQRjsjLLFGr64tO0sjwstcg==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
-      '@connectrpc/connect': 2.2.0
+      '@connectrpc/connect': 2.3.0
 
-  '@connectrpc/connect@2.2.0':
-    resolution: {integrity: sha512-M63OQ1ZFcPUm85CuewJ9G9CMV8LjzGR9935xOnXNQGSazAbwMb3x2W7vXBYM1zqrP7XFD8uxp/dUAhirclgwnQ==}
+  '@connectrpc/connect@2.3.0':
+    resolution: {integrity: sha512-rjAn8L9KbAZrkwiB8m1qzDsLs74hkYmwwM2iSWuxTPVOTRm/EZw31smKbQqPU50AXqJC5eKKpEnA6Uf/swQOgQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
 
@@ -3179,8 +3179,8 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-react@1.61.0:
-    resolution: {integrity: sha512-v2SQPPPNjnr+BlhL9Spuzmo5yR+hLkftfuE4E3jaxdNPgSH0hJKPcLJBP7yAta87jQNPsSERS59PJjCJ/CorBA==}
+  lucide-react@1.63.0:
+    resolution: {integrity: sha512-GkBfQG+FUJ41x6y3/lNXiOziVU0Rcqqq0TCzhHS8avsFXHZmOdmfBqsVTvHSaVmbI+wbdGkxHRmhYWhD3N4/yA==}
     peerDependencies:
       '@types/react': '*'
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -4131,17 +4131,17 @@ snapshots:
 
   '@cedar-policy/cedar-wasm@4.14.0': {}
 
-  '@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))':
+  '@connectrpc/connect-node@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
 
-  '@connectrpc/connect-web@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))':
+  '@connectrpc/connect-web@2.3.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0))':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@connectrpc/connect': 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
 
-  '@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)':
+  '@connectrpc/connect@2.3.0(@bufbuild/protobuf@2.16.0)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
 
@@ -6834,7 +6834,7 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-react@1.61.0(@types/react@19.3.0)(react@19.3.1):
+  lucide-react@1.63.0(@types/react@19.3.0)(react@19.3.1):
     dependencies:
       react: 19.3.1
     optionalDependencies:

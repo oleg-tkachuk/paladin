@@ -7,7 +7,7 @@ toolchain go1.27.3
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
-	cel.dev/cel-go v0.33.0
+	cel.dev/cel-go v0.33.1
 	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/grpchealth/v2 v2.0.0
 	connectrpc.com/grpcreflect/v2 v2.0.0
@@ -44,7 +44,7 @@ require (
 	github.com/oleg-tkachuk/limes/exchange v0.9.0
 	github.com/oleg-tkachuk/limes/otelmetric v0.10.9
 	github.com/oleg-tkachuk/limes/pgstore v0.43.1
-	github.com/oleg-tkachuk/paladin/sdk/go v0.125.0
+	github.com/oleg-tkachuk/paladin/sdk/go v0.126.1
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.16.0
@@ -55,7 +55,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/redpanda v0.44.0
-	github.com/vektra/mockery/v3 v3.8.1
+	github.com/vektra/mockery/v3 v3.9.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.47.0
@@ -77,9 +77,9 @@ require (
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/client-go v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/client-go v0.37.2
 )
 
 require (
@@ -159,7 +159,7 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/goccy/go-json v0.11.2 // indirect
+	github.com/goccy/go-json v0.12.0 // indirect
 	github.com/google/cel-go v0.31.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
@@ -171,6 +171,7 @@ require (
 	github.com/gookit/color v1.6.1 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.33.0 // indirect
+	github.com/hashicorp/go-uuid v1.0.4 // indirect
 	github.com/huandu/xstrings v1.6.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
@@ -219,6 +220,7 @@ require (
 	github.com/openai/openai-go/v3 v3.52.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pandatix/go-abnf v0.5.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/pganalyze/pg_query_go/v6 v6.2.2 // indirect
@@ -229,7 +231,7 @@ require (
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20260418072757-ce92298d1124 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
-	github.com/prometheus/common v0.72.1 // indirect
+	github.com/prometheus/common v0.73.0 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20260803135053-1fd8a60d1ffc // indirect

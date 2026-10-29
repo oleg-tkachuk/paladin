@@ -21,7 +21,7 @@ require (
 )
 
 require (
-	cel.dev/cel-go v0.33.0 // indirect
+	cel.dev/cel-go v0.33.1 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	connectrpc.com/connect v1.21.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
