@@ -1,4 +1,4 @@
-## Unreleased — the MCP server acts through a capability that acts for its user
+## v41.1.0 — the MCP server acts through a capability that acts for its user
 
 - **The token-exchange grant issues a capability** (ADR-0041). `/oauth/token`
   with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` answers

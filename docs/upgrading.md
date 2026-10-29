@@ -89,7 +89,17 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/go/v0.126.1, sdk/python/v0.127.1 — limes v1.0.0-rc.14: a capability no request can use is refused
+## Unreleased — limes v1.0.0-rc.18: PostgreSQL 15 and pgstore's DPoP replay cache
+
+- **PostgreSQL 15 or later.** pgstore v0.45 reads capability records through
+  a `security_invoker` view, which an earlier PostgreSQL cannot create; the
+  migration fails there.
+- **DPoP proof ids move to `limes.dpop_seen_proofs`.** pgstore keeps the
+  replay cache now, and migration `104` drops Paladin's `dpop_seen_proofs`.
+  The new table starts empty: a proof accepted in the minute before the
+  upgrade could be presented once more in that minute. Nothing to do.
+
+## v41.1.0, sdk/go/v0.126.1, sdk/python/v0.127.1 — limes v1.0.0-rc.14: a capability no request can use is refused
 
 - **`max_requests` is at least 1.** `CapabilityService.Issue` and
   `Delegate` refuse `max_requests: 0` as `INVALID_ARGUMENT`: a capability
@@ -99,7 +109,7 @@ here.
   ceilings. The console's issue dialog asks for at least 1.
 - A Biscuit copy's own `max_requests` may still be 0.
 
-## Unreleased — the MCP server acts through a capability that acts for its user
+## v41.1.0 — the MCP server acts through a capability that acts for its user
 
 - **The token-exchange grant issues a capability** (ADR-0041). `/oauth/token`
   with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` answers
