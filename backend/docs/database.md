@@ -172,8 +172,8 @@ stop all writes and a reader could not tell the two apart.
 Biscuit, by block revocation id), `usage`, `copy_usage` (the counters of
 Biscuit copies with limits of their own), `reservations` (open budget holds),
 `charges` (the ledger billing reads), `tenant_budgets`, `exchanges` (the
-capability a subject token was exchanged for, when an exchange keeps one per
-token; Paladin's does not yet). Every table carries
+capability each paladin-mcp token was exchanged for, so that a token yields
+one, ADR-0041). Every table carries
 its tenant and none refers to `tenants`: purging a tenant erases its rows
 there through pgstore (`EraseTenant`), in the transaction that removes the
 tenant row. Its capabilities are revoked, and those not yet past

@@ -1,6 +1,7 @@
 # ADR-0041: The MCP server exchanges the caller's token for a capability that acts for the user
 
-- **Status:** Accepted. Implemented 2026-10-29.
+- **Status:** Accepted. Implemented 2026-10-29. Amended 2026-10-29: one
+  capability per token across replicas (decision 2).
 - **Related:** supersedes decisions 2 and 3 of
   [ADR-0036](0036-the-mcp-server-is-its-own-audience.md) (its `paladin-mcp`
   audience stays); amends [ADR-0010](0010-capability-as-establishing-credential.md)
@@ -36,8 +37,12 @@
      Paladin's IAM tokens stay HS256 `JWT`, and the verifier runs limes'
      `exchangetest` contract suite. The policy and the verifier live in
      `internal/auth/delegation`, which the Authorization Server imports.
-  2. **The capability acts for the user.** The exchange policy issues one
-     capability per caller's token, cached until it nears expiry:
+  2. **The capability acts for the user.** The exchange issues one
+     capability per caller's token, whichever replica exchanges it: limes'
+     `exchange.Config.Exchanges` records it in `limes.exchanges` by the
+     token's `iss` and `jti`, and a later exchange of the token is handed the
+     same capability, signed again from its record. The MCP edge still caches
+     it until it nears expiry, which spares the round trip:
      - `Subject`: the MCP server that holds and presents it, named by its
        client of the exchange, as an agent serving the agent's OAuth client
        (`MCPClient`), in the user's tenant; `OnBehalfOf`: the user (`sub`, a
@@ -48,8 +53,9 @@
        and written by no other issuer. `IssuedBy` records the `paladin-mcp` service;
      - `Audience`: every plane the user may hold
        (`apiutil.AudienceEligible`); none is `invalid_target`;
-     - lifetime: no later than the subject token, and at most the plane
-       token lifetime it replaces;
+     - lifetime: the subject token's: the policy names none, so the
+       capability lives exactly as long as the token it stands in for, and
+       a token is never left exchangeable for a capability that has expired;
      - caveats: the operations below, and no `share`, so it cannot be
        delegated; no request or budget ceiling, the user's authority bounding
        it as it bounds their token; no `AllowTaintedRead`, since the
@@ -80,7 +86,12 @@
 
 - **Consequences.**
   - An agent session is bounded and revocable on its own: revoking its
-    capability stops it without logging the user out.
+    capability stops it without logging the user out. Exchanging the same
+    token again is refused as `invalid_grant` rather than issued anew, so the
+    revocation holds until the agent's client fetches a new token.
+  - A token yields one capability record, not one per replica and cache
+    miss; a token without a `jti` is refused, and every IAM access token
+    carries one.
   - A tainted object is closed to the bridge, as to every agent's
     capability without `AllowTaintedRead`; through ADR-0036's plane tokens
     it was not. Reading one stays the user's, by their own session.

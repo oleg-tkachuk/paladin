@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"testing"
-	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
@@ -15,9 +14,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 )
-
-// delegationTTL is the longest a delegated capability lives in these tests.
-const delegationTTL = 15 * time.Minute
 
 // usersByID is a user directory holding a fixed set of users.
 type usersByID struct {
@@ -56,7 +52,7 @@ const relayClientID = "paladin-mcp-server"
 // the plane asked for, with what they consented to and no further.
 func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Roles: []string{apiutil.AdminAudienceRoles[0]}}
-	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, delegationTTL, limes.AbstractUnitCode)
+	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, limes.AbstractUnitCode)
 
 	req, err := policy(t.Context(), delegationGrant(user, []string{auth.OAuthScopeRead}, allPlanes...))
 	if err != nil {
@@ -72,8 +68,9 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	if ib := req.IssuedBy; ib.Type != auth.DelegationIssuer().Type || ib.Subject != auth.DelegationIssuerSubject || req.ClientID != subjectClientID {
 		t.Errorf("issued by %+v for %q, want the MCP server for the agent", ib, req.ClientID)
 	}
-	if !slices.Equal(req.Audience, allPlanes) || req.TTL != delegationTTL {
-		t.Errorf("audience %v, TTL %v; want %v and %v", req.Audience, req.TTL, allPlanes, delegationTTL)
+	// No lifetime of its own: the exchange gives it its token's.
+	if !slices.Equal(req.Audience, allPlanes) || req.TTL != 0 {
+		t.Errorf("audience %v, TTL %v; want %v and none", req.Audience, req.TTL, allPlanes)
 	}
 	if want, _ := auth.DelegatedOps([]string{auth.OAuthScopeRead}); !slices.Equal(req.Caveats.Ops, want) {
 		t.Errorf("ops %v, want %v", req.Caveats.Ops, want)
@@ -95,7 +92,7 @@ var allPlanes = Planes
 // a reason to refuse the others.
 func TestDelegationPolicyLeavesOutWhatTheUserMayNotHold(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, delegationTTL, limes.AbstractUnitCode)
+	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, limes.AbstractUnitCode)
 	req, err := policy(t.Context(), delegationGrant(member, []string{auth.OAuthScopeRead}, allPlanes...))
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +108,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
 	disabled := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Disabled: true}
 	users := usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member, disabled.UserID: disabled}}
-	policy := Policy(users, delegationTTL, limes.AbstractUnitCode)
+	policy := Policy(users, limes.AbstractUnitCode)
 	read := []string{auth.OAuthScopeRead}
 
 	moved := delegationGrant(member, read, auth.TokenPlaneData)
@@ -145,7 +142,7 @@ func TestDelegationPolicyRefuses(t *testing.T) {
 func TestDelegationPolicyFailsWithTheDirectory(t *testing.T) {
 	down := errors.New("pool closed")
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	_, err := Policy(usersByID{err: down}, delegationTTL, limes.AbstractUnitCode)(t.Context(),
+	_, err := Policy(usersByID{err: down}, limes.AbstractUnitCode)(t.Context(),
 		delegationGrant(member, []string{auth.OAuthScopeRead}, auth.TokenPlaneData))
 	if !errors.Is(err, down) || errors.Is(err, exchange.ErrInvalidGrant) {
 		t.Errorf("err = %v, want the directory's failure and no refusal", err)

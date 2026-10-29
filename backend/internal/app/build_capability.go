@@ -52,6 +52,11 @@ type CapabilityBundle struct {
 	// for List, and one for Get.
 	Records limes.RecordReporter
 
+	// Exchanges records the capability each paladin-mcp token was exchanged
+	// for, under the tenant the exchange names, so that a token yields one
+	// capability across every replica (ADR-0041).
+	Exchanges limes.ExchangeStore
+
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
 	// purger drops the ids that have expired.
@@ -245,6 +250,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Copies:       store,
 		CopyUsage:    copyUsage,
 		Records:      records,
+		Exchanges:    pgstore.ScopedExchanges(store),
 		Usage:        usage,
 		Ledger:       ledger,
 		Issuer:       issuers.issuer,

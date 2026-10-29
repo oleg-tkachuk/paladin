@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
@@ -28,14 +27,16 @@ type UserDirectory interface {
 // Policy is the exchange policy of ADR-0041: a caller's
 // paladin-mcp token is exchanged for a capability the agent holds on its
 // user's behalf, for the planes asked for that the user may hold, with the
-// operations the user consented to, for at most ttl. unit is the platform's
-// currency (capability.currency), which an unlimited budget names.
+// operations the user consented to. It names no lifetime: one capability
+// stands in for each token, so it lives as long as the token does (limes
+// exchange.Config.Exchanges). unit is the platform's currency
+// (capability.currency), which an unlimited budget names.
 //
 // The plane authorizes the user it names, with the user's roles, so the
 // policy refuses what the user could not do by their own token: a plane
 // their roles do not reach, and a user disabled, gone or in another tenant
 // since the token was issued.
-func Policy(users UserDirectory, ttl time.Duration, unit string) exchange.Policy {
+func Policy(users UserDirectory, unit string) exchange.Policy {
 	return func(ctx context.Context, g exchange.Grant) (limes.IssueRequest, error) {
 		user, err := delegatingUser(ctx, users, g.Subject)
 		if err != nil {
@@ -70,7 +71,6 @@ func Policy(users UserDirectory, ttl time.Duration, unit string) exchange.Policy
 				Requests: limes.RequestCeiling{Unlimited: true},
 				Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: unit},
 			},
-			TTL:      ttl,
 			ClientID: client,
 		}, nil
 	}

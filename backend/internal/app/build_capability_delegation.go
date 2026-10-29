@@ -116,9 +116,9 @@ func delegationOption(bundle *CapabilityBundle, users userByID) auth.CapabilityO
 var errExchangeNeedsCapability = errors.New("app: an oauth seed client with token_exchange needs capability.enabled")
 
 // withDelegationExchange serves the token-exchange grant on as to exchangers
-// (ADR-0041): a paladin-mcp token, verified as the MCP edge does, for a
-// capability of the delegation issuer, living no longer than the plane
-// token it stands in for.
+// (ADR-0041): a paladin-mcp token, verified as the MCP edge does, for the
+// one capability of the delegation issuer that stands in for it, recorded in
+// the capability store and living as long as the token.
 func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *SharedDeps, exchangers map[string]bool, users userByID) (*oauth.Handler, error) {
 	if deps.Capability == nil {
 		return nil, errExchangeNeedsCapability
@@ -129,7 +129,7 @@ func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *Shared
 		return nil, fmt.Errorf("oauth token exchange verifier: %w", err)
 	}
 	ex, err := delegation.NewExchanger(deps.Capability.Delegation, delegation.NewSubjectVerifier(tokens, cfg.Issuer),
-		users, cfg.AccessTokenTTL, deps.Cfg.Capability.Currency, slog.New(zapslog.NewHandler(deps.Logger.Named("delegation").Core())))
+		deps.Capability.Exchanges, users, deps.Cfg.Capability.Currency, slog.New(zapslog.NewHandler(deps.Logger.Named("delegation").Core())))
 	if err != nil {
 		return nil, err
 	}

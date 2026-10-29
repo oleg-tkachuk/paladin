@@ -91,7 +91,7 @@ func newDelegationWorld(t *testing.T) delegationWorld {
 	subjects := delegation.NewSubjectVerifier(&auth.JWTVerifier{
 		Key: []byte(callerKey), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, callerIssuer)
-	ex, err := delegation.NewExchanger(capIssuer, subjects, usersByID{user.UserID: user}, delegationTTL, limes.AbstractUnitCode, slog.Default())
+	ex, err := delegation.NewExchanger(capIssuer, subjects, store, usersByID{user.UserID: user}, limes.AbstractUnitCode, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
