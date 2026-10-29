@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"slices"
 	"testing"
 	"time"
 	"uuid"
@@ -25,19 +24,26 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// limesSchema is the schema pgstore keeps its tables in, and tenantIDColumn
-// the column each of its tables keeps a row's tenant in.
-const (
-	limesSchema    = "limes"
-	tenantIDColumn = "tenant_id"
-)
+// tenantIDColumn is the column each of pgstore.TenantTables keeps a row's
+// tenant in.
+const tenantIDColumn = "tenant_id"
 
-// limesTenantTables are the limes schema's tables that keep a tenant's rows,
-// each of which seedEveryLimesTable fills.
-var limesTenantTables = []string{
-	"biscuit_revocations", "capabilities", "charges", "copy_usage",
-	"reservations", "revocations", "tenant_budgets", "usage",
+// limesTablesWhere is the names of the pgstore.TenantTables whose erase
+// keep accepts.
+func limesTablesWhere(keep func(pgstore.TableErase) bool) []string {
+	var names []string
+	for _, table := range pgstore.TenantTables() {
+		if keep(table.Erase) {
+			names = append(names, table.Name)
+		}
+	}
+	return names
 }
+
+// limesTenantTables are the limes tables that keep a tenant's rows before an
+// erase, each of which seedEveryLimesTable fills: all of pgstore.TenantTables
+// but the mark the erase itself writes.
+var limesTenantTables = limesTablesWhere(func(e pgstore.TableErase) bool { return e != pgstore.EraseMarks })
 
 // seedEveryLimesTable gives tenant a row in every table of limesTenantTables
 // through the stores, acting on the tenant on the application role as a
@@ -82,11 +88,6 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	}
 }
 
-// limesEraseMarks is the limes table an erase writes a tenant into rather
-// than out of: the mark that refuses metering a tenant whose usage is gone
-// until the purger finds none of its records left.
-const limesEraseMarks = "erased_tenants"
-
 // limesRows counts tenant's rows in each of limesTenantTables, past RLS.
 func limesRows(t *testing.T, ctx context.Context, admin *pgxpool.Pool, tenant uuid.UUID) map[string]int {
 	t.Helper()
@@ -94,7 +95,7 @@ func limesRows(t *testing.T, ctx context.Context, admin *pgxpool.Pool, tenant uu
 	for _, table := range limesTenantTables {
 		var n int
 		if err := admin.QueryRow(ctx,
-			`SELECT count(*) FROM `+pgx.Identifier{limesSchema, table}.Sanitize()+
+			`SELECT count(*) FROM `+pgx.Identifier{pgstore.Schema, table}.Sanitize()+
 				` WHERE `+pgx.Identifier{tenantIDColumn}.Sanitize()+` = $1`, tenant,
 		).Scan(&n); err != nil {
 			t.Fatalf("count %s: %v", table, err)
@@ -107,7 +108,7 @@ func limesRows(t *testing.T, ctx context.Context, admin *pgxpool.Pool, tenant uu
 // limesMeterTables are the tables of limesTenantTables that keep a tenant's
 // meter: Purge erases all of them. The rest keep its records and their
 // revocations, which stay, revoked, until the purger takes them.
-var limesMeterTables = []string{"charges", "copy_usage", "reservations", "tenant_budgets", "usage"}
+var limesMeterTables = limesTablesWhere(func(e pgstore.TableErase) bool { return e == pgstore.EraseRemoves })
 
 // expiredLongAgo is when the purged tenant's expired capability lapsed:
 // further back than limes.MinPurgeRetention, so the erase removes it.
@@ -115,7 +116,8 @@ const expiredLongAgo = -2 * limes.MinPurgeRetention
 
 // The limes schema keeps no foreign key to tenants, so purging a tenant
 // erases its rows there through pgstore (EraseTenant), with the tenant row in
-// the same transaction. Every table with a tenant_id is seeded; the purged
+// the same transaction. Every table pgstore.TenantTables names is seeded, so
+// a table a limes release adds fails the seed until it is filled too; the purged
 // tenant keeps no meter row, every capability of it is revoked — a live one
 // stays on record so its token is refused, an expired one goes — and another
 // tenant's rows stay. It runs on the application role, so the purge must
@@ -124,25 +126,6 @@ func TestPurgingATenantErasesItsCapabilityRows(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	admin := startPostgres(t)
-
-	// Base tables only: a view (limes.capability_lineage) keeps no rows.
-	rows, err := admin.Query(ctx,
-		`SELECT c.table_name FROM information_schema.columns c
-		 JOIN information_schema.tables t USING (table_schema, table_name)
-		 WHERE c.table_schema = $1 AND c.column_name = $2 AND t.table_type = 'BASE TABLE'
-		 ORDER BY c.table_name`, limesSchema, tenantIDColumn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tables, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := append(slices.Clone(limesTenantTables), limesEraseMarks)
-	slices.Sort(want)
-	if !slices.Equal(tables, want) {
-		t.Fatalf("the limes schema keeps tenants' rows in %v; this test knows %v — seed the new table and check Purge erases it", tables, want)
-	}
 
 	f := newBiscuitFixture(t, admin)
 	pool := rlsPool(t, ctx, admin)
