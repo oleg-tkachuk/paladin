@@ -9,8 +9,8 @@ require (
 	buf.build/go/protovalidate v1.4.0
 	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/otelconnect v0.12.0
-	github.com/oleg-tkachuk/limes v1.0.0-rc.21
-	github.com/oleg-tkachuk/limes/biscuit v0.1.7
+	github.com/oleg-tkachuk/limes v1.0.0-rc.23
+	github.com/oleg-tkachuk/limes/biscuit v0.1.8
 	github.com/spiffe/go-spiffe/v2 v2.9.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0
