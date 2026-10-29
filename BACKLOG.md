@@ -109,22 +109,6 @@ the same commit. Treat this file like a runtime invariant.
   dropped from `DefaultAlwaysDeny` where it is listed there.
 - **Blockers:** a product call per item; no current ask.
 
-### One bridge key bounds key-bound traffic through MCP
-
-- **Status:** Deferred.
-- **Reason:** the bridge signs every forwarded call with one key, and
-  `capability/postgres.ReplayCache` keeps at most
-  `dpop.DefaultReplayEntriesPerHolder` (1000) live proofs per key, each live
-  for `dpop.DefaultWindow` (one minute). Past that the store refuses the
-  proof, so key-bound calls through the bridge stop at roughly 1000 a minute
-  across all its replicas. Unbound capabilities are not counted. No
-  deployment is near it today.
-- **Definition of Done:** the limit is lifted for the bridge without lifting
-  it for every key — a larger share for the bridge's thumbprint, or a key
-  per replica each published by `paladin_get_bridge_key` — with a test at
-  the boundary.
-- **Blockers:** none; wait for traffic that reaches it.
-
 ### Capability / API-token issuance via MCP — intentionally excluded
 
 - **Status:** Won't-do (by design) unless a human-gated profile is added.
