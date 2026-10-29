@@ -1,4 +1,4 @@
-## Unreleased — verifying and metering a capability answer alike
+## v41.2.0 — verifying and metering a capability answer alike
 
 - A spent request or copy limit refused while verifying a capability is
   `RESOURCE_EXHAUSTED`, not `PERMISSION_DENIED`, as it already was while

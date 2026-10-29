@@ -1,4 +1,4 @@
-## Unreleased — the MCP exchange issues one capability per token
+## v41.2.0 — the MCP exchange issues one capability per token
 
 - **A paladin-mcp token is exchanged for one capability**, whichever replica
   exchanges it, and that capability lives as long as the token. Revoking it

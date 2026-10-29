@@ -1,4 +1,4 @@
-## Unreleased — ending an OAuth grant revokes the capabilities it was exchanged for
+## v41.2.0 — ending an OAuth grant revokes the capabilities it was exchanged for
 
 - **Migration time.** pgstore adds `client_id`, `on_behalf_of` and
   `session` columns to `limes.capabilities`, fills the first two from every
