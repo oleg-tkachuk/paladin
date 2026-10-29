@@ -173,7 +173,9 @@ Biscuit, by block revocation id), `usage`, `copy_usage` (the counters of
 Biscuit copies with limits of their own), `reservations` (open budget holds),
 `charges` (the ledger billing reads), `tenant_budgets`, `exchanges` (the
 capability each paladin-mcp token was exchanged for, so that a token yields
-one, ADR-0041). Every table carries
+one, ADR-0041). A capability records the OAuth session its token was issued
+in (`capabilities.session`), by which ending the grant revokes it. Every
+table carries
 its tenant and none refers to `tenants`: purging a tenant erases its rows
 there through pgstore (`EraseTenant`), in the transaction that removes the
 tenant row. Its capabilities are revoked, and those not yet past

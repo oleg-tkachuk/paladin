@@ -29,6 +29,10 @@ const (
 	// actionGrantRevokedByClient is a client giving up a grant it holds at
 	// /oauth/revoke, as an agent does when it disconnects.
 	actionGrantRevokedByClient = "iam.OAuthGrantRevokedByClient"
+	// noteGrantRevokedByClient and noteRefreshReuse are why a session's
+	// capabilities were revoked, as their revocation records say.
+	noteGrantRevokedByClient = "the client revoked its OAuth grant"
+	noteRefreshReuse         = "a rotated refresh token of the session was replayed"
 )
 
 // clientResource names a client in the audit log, as OAuthClientService does.

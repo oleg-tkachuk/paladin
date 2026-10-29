@@ -121,7 +121,14 @@ func (m *memRefresh) Supersede(context.Context, uuid.UUID) error {
 	m.superseded++
 	return nil
 }
+
+// GetAny is Get, but reads a revoked row back, as the store's does.
 func (m *memRefresh) GetAny(ctx context.Context, jti uuid.UUID) (authstore.RefreshToken, error) {
+	if errors.Is(m.getErr, authstore.ErrTokenRevoked) {
+		saved := m.getErr
+		m.getErr = nil
+		defer func() { m.getErr = saved }()
+	}
 	return m.Get(ctx, jti)
 }
 func (m *memRefresh) RevokeForUser(context.Context, uuid.UUID) (int64, error) {

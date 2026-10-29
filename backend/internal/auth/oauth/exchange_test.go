@@ -72,6 +72,10 @@ type exchangeFixture struct {
 	store    *memStore
 	subject  string
 	verifier *limes.Verifier
+	// refresh holds the grant's refresh tokens, and refreshToken is the one
+	// the agent was issued beside subject.
+	refresh      *memRefresh
+	refreshToken string
 }
 
 // withExchange serves the exchange on h to the exchanger client, over a
@@ -106,7 +110,7 @@ func withExchange(t *testing.T, h *Handler) (*Handler, *limes.Verifier) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err = h.WithTokenExchange(ex, map[string]bool{exchangerID: true})
+	h, err = h.WithTokenExchange(ex, map[string]bool{exchangerID: true}, store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,9 +122,10 @@ func newExchangeFixture(t *testing.T, u authstore.User) exchangeFixture {
 	store := newMemStore()
 	store.clients[agentWithMCPID] = agentWithMCP()
 	store.clients[exchangerID] = exchanger(t)
-	h, verifier := withExchange(t, testHandler(t, store, &memRefresh{}, u).WithMCPResource(mcpResourceURL))
+	refresh := &memRefresh{}
+	h, verifier := withExchange(t, testHandler(t, store, refresh, u).WithMCPResource(mcpResourceURL))
 	tok := authorizeAndExchange(t, h, u, agentWithMCP(), mcpResourceURL)
-	return exchangeFixture{h: h, store: store, subject: tok.AccessToken, verifier: verifier}
+	return exchangeFixture{h: h, store: store, subject: tok.AccessToken, verifier: verifier, refresh: refresh, refreshToken: tok.RefreshToken}
 }
 
 func exchangeForm(subject string, planes ...string) url.Values {
@@ -452,5 +457,53 @@ func TestTokenExchange_AStoreFailureIsTheServers(t *testing.T) {
 	rec := postForm(h, "/oauth/token", exchangeForm("subject", auth.TokenPlaneData))
 	if rec.Code != http.StatusInternalServerError || oauthError(t, rec.Body.Bytes()) != "server_error" {
 		t.Errorf("status %d body %s, want 500 server_error", rec.Code, rec.Body.String())
+	}
+}
+
+// exchangedCapability exchanges f's token for a capability and checks a
+// plane accepts it.
+func exchangedCapability(t *testing.T, f exchangeFixture) string {
+	t.Helper()
+	rec := postForm(f.h, TokenPath, exchangeForm(f.subject, auth.TokenPlaneData))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("exchange: status %d body %s", rec.Code, rec.Body.String())
+	}
+	capability := decodeAnswer(t, rec.Body.Bytes()).AccessToken
+	if _, err := f.verifier.Verify(t.Context(), limes.VerifyRequest{Token: capability, Audience: auth.TokenPlaneData}); err != nil {
+		t.Fatalf("a plane refused the exchanged capability: %v", err)
+	}
+	return capability
+}
+
+// Ending a grant's session ends what its tokens were exchanged for: the
+// client revoking its grant, or a replayed refresh token revoking the
+// family, revokes the capability at once, not when its token expires.
+func TestTokenExchange_EndingTheSessionRevokesTheCapability(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		end  func(t *testing.T, f exchangeFixture)
+	}{
+		{"the client revokes its grant", func(t *testing.T, f exchangeFixture) {
+			t.Helper()
+			if rec := postForm(f.h, RevokePath, revokeForm(agentWithMCPID, f.refreshToken)); rec.Code != http.StatusOK {
+				t.Fatalf("revoke: status %d body %s", rec.Code, rec.Body.String())
+			}
+		}},
+		{"a rotated refresh token is replayed", func(t *testing.T, f exchangeFixture) {
+			t.Helper()
+			f.refresh.getErr = authstore.ErrTokenRevoked
+			if status, _ := refreshAs(f.h, agentWithMCPID, f.refreshToken); status != http.StatusBadRequest {
+				t.Fatalf("replayed refresh: status %d, want 400", status)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newExchangeFixture(t, sampleUser())
+			capability := exchangedCapability(t, f)
+			tc.end(t, f)
+			if _, err := f.verifier.Verify(t.Context(), limes.VerifyRequest{Token: capability, Audience: auth.TokenPlaneData}); !errors.Is(err, limes.ErrRevoked) {
+				t.Errorf("the session's capability after it ended: err = %v, want limes.ErrRevoked", err)
+			}
+		})
 	}
 }

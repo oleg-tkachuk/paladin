@@ -1,7 +1,8 @@
 # ADR-0041: The MCP server exchanges the caller's token for a capability that acts for the user
 
 - **Status:** Accepted. Implemented 2026-10-29. Amended 2026-10-29: one
-  capability per token across replicas (decision 2).
+  capability per token across replicas (decision 2), and ending a grant's
+  session revokes it (consequences).
 - **Related:** supersedes decisions 2 and 3 of
   [ADR-0036](0036-the-mcp-server-is-its-own-audience.md) (its `paladin-mcp`
   audience stays); amends [ADR-0010](0010-capability-as-establishing-credential.md)
@@ -92,6 +93,12 @@
   - A token yields one capability record, not one per replica and cache
     miss; a token without a `jti` is refused, and every IAM access token
     carries one.
+  - Ending a grant's session revokes its capabilities at once. An OAuth
+    access token names its refresh-token family as `sid`, the exchange
+    records it on the capability, and the client revoking its grant
+    (`/oauth/revoke`) or a replayed refresh token revoking the family
+    revokes every capability of that session through limes'
+    `RevokeMatching`, rather than leaving them live until the token expires.
   - A tainted object is closed to the bridge, as to every agent's
     capability without `AllowTaintedRead`; through ADR-0036's plane tokens
     it was not. Reading one stays the user's, by their own session.
