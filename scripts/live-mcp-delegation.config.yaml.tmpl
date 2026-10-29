@@ -1,0 +1,40 @@
+# The config of the MCP bridge scripts/live-mcp-delegation.sh runs beside a
+# deployed release: the deployed image, with the agent_safe profile the
+# cluster's own bridge does not serve, reaching the release's planes through
+# port-forwards. Rendered by yq's envsubst; the script reads every value but
+# the local addresses from the release's own config. The two secrets, the
+# signing key and the exchange client's secret, come in the environment.
+app:
+  name: ${APP_NAME}
+  env: dev
+auth:
+  # The issuer the edge verifies a paladin-mcp token against: the release's.
+  issuer: ${AUTH_ISSUER}
+datastores:
+  postgres:
+    # The bridge holds no database; the schema requires a DSN all the same.
+    dsn: ${UNUSED_DSN}
+mcp:
+  http:
+    enabled: true
+    addr: ${MCP_ADDR}
+    profile: ${MCP_PROFILE}
+  oauth:
+    enabled: true
+    authorization_server:
+      issuer: ${OAUTH_ISSUER}
+      authorization_endpoint: ${OAUTH_AUTHORIZE_URL}
+      token_endpoint: ${OAUTH_TOKEN_URL}
+      registration_endpoint: ${OAUTH_REGISTER_URL}
+    authorization_servers:
+      - ${OAUTH_ISSUER}
+    resource_url: ${MCP_RESOURCE_URL}
+    scopes_supported:
+      - paladin.read
+      - paladin.write
+    exchange:
+      client_id: ${EXCHANGE_CLIENT_ID}
+  upstreams:
+    admin_url: ${ADMIN_URL}
+    data_url: ${DATA_URL}
+    iam_url: ${IAM_URL}
