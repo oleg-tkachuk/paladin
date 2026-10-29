@@ -20,9 +20,6 @@ const (
 	planeAdmin = TokenPlaneAdmin
 )
 
-// bearerPrefix is the Authorization scheme an API token or a JWT rides in.
-const bearerPrefix = "Bearer "
-
 // probeCall is the outcome of one call through the Probe.
 type probeCall struct {
 	// handlerCtx is the context the handler ran under; nil when the

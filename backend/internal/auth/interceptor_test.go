@@ -82,3 +82,30 @@ func TestJWTGateDefersAnAPITokenInItsOwnHeader(t *testing.T) {
 		t.Errorf("token on the context = %v, %v; want the verified one", got, ok)
 	}
 }
+
+// A capability beside a bearer JWT stays additive: the gate verifies the JWT
+// and establishes its principal, as on every plane before ADR-0041. Only a
+// capability-only call is left to the capability interceptor; stepping aside
+// for this one left the call with no principal at all.
+func TestJWTGateVerifiesABearerBesideACapability(t *testing.T) {
+	user := &Principal{TenantID: uuid.New(), Subject: "someone", Kind: PrincipalKindUser}
+	for _, tc := range []struct {
+		name string
+		gate func(TokenVerifier) connect.ServerInterceptor
+	}{
+		{"strict gate", InterceptorSkipTokensAndCapabilities},
+		{"permissive gate", func(v TokenVerifier) connect.ServerInterceptor {
+			return (&PermissiveInterceptor{Verifier: v, SkipCapabilities: true}).Intercept
+		}},
+	} {
+		v := &recordingVerifier{principal: user}
+		c := callProbe(context.Background(), []connect.ServerInterceptor{tc.gate(v)},
+			paladin.HeaderAuthorization, bearerPrefix+"aaa.bbb.ccc", HeaderCapability, sampleCapability)
+		if c.err != nil {
+			t.Fatalf("%s: refused: %v", tc.name, c.err)
+		}
+		if p, err := PrincipalFromContext(c.handlerCtx); err != nil || p != user {
+			t.Errorf("%s: principal %+v, %v; want the bearer's (verifier called %v)", tc.name, p, err, v.called)
+		}
+	}
+}

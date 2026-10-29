@@ -353,13 +353,8 @@ func principalCoords(ctx context.Context) (subject string, tenantID uuid.UUID) {
 	return p.Subject, p.TenantID
 }
 
-// capabilityID returns the verified capability's ID if one was presented
-// on this request, else uuid.Nil. Read directly from the auth context
-// value the CapabilityInterceptor stamps on success — no extra lookup,
-// no fallback. JWT-only flows return uuid.Nil and the audit row has
-// NULL capability_id.
-// relayedBy is the client that relayed the call: the `act` of an exchanged
-// token (ADR-0036), or empty.
+// relayedBy is the client that relayed the call: the exchange client a
+// delegated capability was issued to (ADR-0041), or empty.
 func relayedBy(ctx context.Context) string {
 	p, err := auth.PrincipalFromContext(ctx)
 	if err != nil || p == nil {
@@ -368,6 +363,11 @@ func relayedBy(ctx context.Context) string {
 	return p.Actor
 }
 
+// capabilityID returns the verified capability's ID if one was presented
+// on this request, else uuid.Nil. Read directly from the auth context
+// value the CapabilityInterceptor stamps on success — no extra lookup,
+// no fallback. JWT-only flows return uuid.Nil and the audit row has
+// NULL capability_id.
 func capabilityID(ctx context.Context) uuid.UUID {
 	c, ok := auth.CapabilityFromContext(ctx)
 	if !ok || c == nil {

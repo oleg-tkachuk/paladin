@@ -235,8 +235,8 @@ type AuditEntry struct {
 	CapabilityID uuid.UUID
 
 	// RelayedBy is the OAuth client that relayed the call on the actor's
-	// behalf — the MCP server, from the `act` claim of the token it exchanged
-	// (ADR-0036). Empty for a call made directly.
+	// behalf — the MCP server, the exchange client its delegated capability
+	// was issued to (ADR-0041). Empty for a call made directly.
 	RelayedBy string
 
 	// UserAgent is the User-Agent the call arrived with: the SDK and its

@@ -218,10 +218,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// a missing or invalid non-PAT bearer is still rejected, so auth stays
 		// mandatory; a roleless PAT gets no principal here and is denied
 		// downstream exactly as before.
-		// Steps aside for a capability too: one the MCP server exchanged is
-		// the whole credential of the user it acts for (ADR-0041), and capAdmin
-		// below authenticates it. Any other capability establishes nothing
-		// here, so RequireAudience still refuses it.
+		// Steps aside for a capability that is the call's only credential: one
+		// the MCP server exchanged is the whole credential of the user it acts
+		// for (ADR-0041), and capAdmin below authenticates it. Any other
+		// capability alone establishes nothing, so RequireAudience still
+		// refuses it; one beside a bearer JWT stays additive to its principal.
 		auth.InterceptorSkipTokensAndCapabilities(verifierAdmin),
 		// apiTokAdmin BEFORE RequireAudience, as on the data plane: the audience
 		// check reads the principal, so with the API-token interceptor after it
