@@ -44,6 +44,7 @@ func (v *SubjectVerifier) VerifySubject(ctx context.Context, token string) (exch
 	}
 	return exchange.Subject{
 		Issuer:    v.issuer,
+		ID:        p.TokenID,
 		Subject:   p.Subject,
 		ClientID:  p.OAuthClientID,
 		Audience:  p.Audiences,

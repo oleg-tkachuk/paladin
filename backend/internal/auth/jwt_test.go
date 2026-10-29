@@ -353,3 +353,29 @@ func TestVerifyMapsTheOAuthGrantAndAnOpenExpiry(t *testing.T) {
 		t.Errorf("a token no client holds names grant %q %v", plain.OAuthClientID, plain.OAuthScopes)
 	}
 }
+
+// A token names itself by its jti, which the principal carries as it was
+// written; a token without one names none.
+func TestVerifyCarriesTheTokenID(t *testing.T) {
+	secret := []byte("dev-secret-change-me-32-bytes-min")
+	now := time.Unix(1_700_000_000, 0)
+	const jti = "0190a5b2-7c3e-7d4f-8a1b-2c3d4e5f6a7b"
+
+	c := baseClaims(now)
+	c["jti"] = jti
+	p, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, c))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if p.TokenID != jti {
+		t.Errorf("TokenID = %q, want %q", p.TokenID, jti)
+	}
+
+	plain, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, baseClaims(now)))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if plain.TokenID != "" {
+		t.Errorf("a token without a jti names TokenID %q", plain.TokenID)
+	}
+}
