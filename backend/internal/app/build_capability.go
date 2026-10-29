@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/meter"
@@ -207,7 +208,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// narrow offline (CapabilityService.Issue), so every plane takes one.
 		// The capability interceptor passes a copy's own limits to the usage
 		// store, which counts them (limes.copy_usage).
-		Biscuit: &limes.BiscuitConfig{Revocations: cache, MeterCopies: true},
+		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: cache, MeterCopies: true},
 		DPoP:    proofs,
 	})
 	if err != nil {

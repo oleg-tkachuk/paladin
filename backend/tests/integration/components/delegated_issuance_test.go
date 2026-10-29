@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -38,7 +39,8 @@ func TestDelegatedIssuanceIsWrittenUnderItsTenant(t *testing.T) {
 	}
 	issue := func(s limes.IssuanceStore) error {
 		issuer, err := limes.NewIssuer(limes.IssuerConfig{
-			Signer: signer, Store: s, IssuerName: auth.DelegationIssuerName("paladin-core/test"), DefaultTTL: delegatedTTL,
+			Biscuit: biscuit.Form(),
+			Signer:  signer, Store: s, IssuerName: auth.DelegationIssuerName("paladin-core/test"), DefaultTTL: delegatedTTL,
 		})
 		if err != nil {
 			t.Fatal(err)

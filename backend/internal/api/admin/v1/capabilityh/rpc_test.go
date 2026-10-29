@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -152,7 +153,7 @@ func TestIssueMintsAToken(t *testing.T) {
 	// The same capability as a Biscuit, which its holder can attenuate.
 	if b := resp.GetBiscuit(); b == "" {
 		t.Error("want a Biscuit beside the token")
-	} else if _, err := limes.Attenuate(b, limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
+	} else if _, err := biscuit.Attenuate(b, limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
 		t.Errorf("the returned Biscuit does not attenuate: %v", err)
 	}
 }
@@ -176,7 +177,7 @@ func TestIssueSealsABiscuitWithoutShare(t *testing.T) {
 	if resp.GetToken() == "" || resp.GetBiscuitStatus() != adminv1.BiscuitStatus_BISCUIT_STATUS_ISSUED {
 		t.Fatalf("token %t, status %v: want a token and a Biscuit", resp.GetToken() != "", resp.GetBiscuitStatus())
 	}
-	if _, err := limes.Attenuate(resp.GetBiscuit(), limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
+	if _, err := biscuit.Attenuate(resp.GetBiscuit(), limes.Attenuation{Ops: []limes.Op{limes.OpGet}}); err != nil {
 		t.Errorf("the returned Biscuit does not attenuate: %v", err)
 	}
 }

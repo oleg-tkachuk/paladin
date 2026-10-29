@@ -18,6 +18,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
@@ -30,8 +31,8 @@ import (
 // seed into python.biscuit (sdk/python/tests/test_biscuit.py), and the
 // verifier the server runs must read that token as the case expects.
 
-// The limes module, whose testdata the files below are copies of.
-const limesModule = "github.com/oleg-tkachuk/limes"
+// The limes Biscuit module, whose testdata the files below are copies of.
+const limesModule = "github.com/oleg-tkachuk/limes/biscuit"
 
 // sharedTestdata is where the SDKs keep the cases they share with the server.
 var sharedTestdata = filepath.Join("..", "..", "..", "sdk", "testdata")
@@ -70,7 +71,7 @@ const (
 
 func crossLangClock() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 
-// limesDir is the directory of the limes version backend/go.mod requires.
+// limesDir is the directory of the limes Biscuit module backend/go.mod requires.
 func limesDir(t *testing.T) string {
 	t.Helper()
 	out, err := exec.CommandContext(t.Context(), "go", "list", "-m", "-f", "{{.Dir}}", limesModule).Output()
@@ -165,7 +166,7 @@ func crossLangVerifier(t *testing.T) *limes.Verifier {
 	v, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys:           keys,
 		Revocations:    noBiscuitRevocations{},
-		Biscuit:        &limes.BiscuitConfig{Revocations: noBiscuitRevocations{}, MeterCopies: true},
+		Biscuit:        &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: noBiscuitRevocations{}, MeterCopies: true},
 		TrustedIssuers: []string{crossLangIssuer},
 		Now:            crossLangClock,
 		DPoP:           proofs,

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
@@ -46,7 +47,7 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	t.Helper()
 	acting := auth.WithActingTenant(ctx, tenant)
 	sealed, c := f.seal(t, tenant, "agent:purged")
-	copyToken, err := limes.Attenuate(sealed, limes.Attenuation{Requests: copyRequests(lineageRequests.Max)})
+	copyToken, err := biscuit.Attenuate(sealed, limes.Attenuation{Requests: copyRequests(lineageRequests.Max)})
 	if err != nil {
 		t.Fatalf("attenuate: %v", err)
 	}

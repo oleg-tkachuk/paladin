@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/meter"
 )
 
@@ -46,7 +47,7 @@ func TestCopiesReachTheMeter(t *testing.T) {
 	m, store := newMeteredMinter(t)
 	root, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpShare}}})
 	_, inner := m.Attenuated(t, root, limes.Attenuation{Requests: &limes.RequestCeiling{Max: copyRequests}})
-	outer, err := limes.Attenuate(inner, limes.Attenuation{Budget: &limes.BudgetCeiling{Max: copyBudget}})
+	outer, err := biscuit.Attenuate(inner, limes.Attenuation{Budget: &limes.BudgetCeiling{Max: copyBudget}})
 	if err != nil {
 		t.Fatalf("attenuate: %v", err)
 	}

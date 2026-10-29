@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/oleg-tkachuk/limes/pgstore"
+	"github.com/oleg-tkachuk/limes/pgstore/migrate"
 	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 
@@ -83,7 +83,7 @@ func MigrateLimes(ctx context.Context, cc *pgx.ConnConfig, roles ...string) erro
 		return fmt.Errorf("limes migrate: connect: %w", err)
 	}
 	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
-	if err := pgstore.Migrate(ctx, conn, pgstore.MigrateOptions{RuntimeRoles: roles}); err != nil {
+	if err := migrate.Run(ctx, conn, migrate.Options{RuntimeRoles: roles}); err != nil {
 		return fmt.Errorf("limes migrate: %w", err)
 	}
 	return nil

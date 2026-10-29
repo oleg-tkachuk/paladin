@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/memstore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -37,7 +38,7 @@ func delegationFixture(t *testing.T) (*capabilityIssuers, limes.SigningKey, *mem
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: issuers.keys, Revocations: store, TrustedIssuers: issuers.trusted, KeyIssuers: issuers.keyIssuers,
-		Biscuit: &limes.BiscuitConfig{Revocations: store},
+		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: store},
 	})
 	if err != nil {
 		t.Fatal(err)

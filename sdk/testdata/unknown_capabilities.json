@@ -1,7 +1,7 @@
 {
   "_comment": "How the data plane refuses a capability it did not issue, which the server and both SDKs' fakes are held to: each case is a token presented to get_object, and the answer it gets. {foreign_token} and {foreign_biscuit} are a capability token and its Biscuit from an issuer this server does not trust. The code and the reason hold for every implementation; the message, where given, is the server's library's words, which paladintest gives too and paladin.testing does not mirror: much of it is Go's own wording of a decoding error.",
   "cases": [
-    {"name": "not a Biscuit", "token": "not-issued", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: biscuit encoding: illegal base64 data at input byte 8"},
+    {"name": "not a Biscuit", "token": "not-issued", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: invalid token: biscuit encoding: illegal base64 data at input byte 8"},
     {"name": "not a JWT", "token": "a.b.c", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: decode header: illegal base64 data at input byte 0"},
     {"name": "an untyped JWT", "token": "eyJhbGciOiJFZDI1NTE5In0.e30.c2ln", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN", "message": "invalid token: typ \"\" is not \"at+jwt\""},
     {"name": "another issuer's token", "token": "{foreign_token}", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_INVALID_TOKEN"},
