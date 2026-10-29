@@ -125,9 +125,12 @@ func TestPurgingATenantErasesItsCapabilityRows(t *testing.T) {
 	ctx := context.Background()
 	admin := startPostgres(t)
 
+	// Base tables only: a view (limes.capability_lineage) keeps no rows.
 	rows, err := admin.Query(ctx,
-		`SELECT table_name FROM information_schema.columns
-		 WHERE table_schema = $1 AND column_name = $2 ORDER BY table_name`, limesSchema, tenantIDColumn)
+		`SELECT c.table_name FROM information_schema.columns c
+		 JOIN information_schema.tables t USING (table_schema, table_name)
+		 WHERE c.table_schema = $1 AND c.column_name = $2 AND t.table_type = 'BASE TABLE'
+		 ORDER BY c.table_name`, limesSchema, tenantIDColumn)
 	if err != nil {
 		t.Fatal(err)
 	}
