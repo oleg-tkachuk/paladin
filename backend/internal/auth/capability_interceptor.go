@@ -823,21 +823,10 @@ func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
 	return nil
 }
 
-// meterError maps a metering error to its transport status by its limes
-// code, through meterCodes, so a refusal no retry mends never reads as one
-// to retry: a spent limit is ResourceExhausted, a refusal of the capability
-// PermissionDenied with its reason, the server's own fault Internal, and
-// only a failing dependency Unavailable. The last two are logged with their
-// cause, which the caller is not told.
+// meterError maps a metering error to its transport status, as
+// capabilityFailure answers every error about a presented capability.
 func meterError(ctx context.Context, err error) error {
-	status := meterStatus(meterCodes, err)
-	switch status {
-	case connect.CodeInternal:
-		logger.FromContext(ctx).Error("capability: metering failed on the server's side", zap.Error(err))
-	case connect.CodeUnavailable:
-		logger.FromContext(ctx).Error("capability: metering store unavailable", zap.Error(err))
-	}
-	return capabilityError(status, err)
+	return capabilityFailure(ctx, "metering", err)
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any

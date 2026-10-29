@@ -34,33 +34,49 @@ func capabilityErrorReason(r limes.Reason) commonv1.ErrorReason {
 // logged instead.
 const capabilityUnchecked = "the capability could not be checked; retry"
 
+// capabilityServerFault is what a caller is told when the server's own fault
+// — its configuration, a broken invariant — kept the capability from being
+// checked: no retry mends it, and the cause is logged instead.
+const capabilityServerFault = "the capability could not be checked: the server is at fault"
+
 // proofUnchecked is what a caller is told when it presents a key-bound
 // capability to a plane that checks no proof: the deployment's fault, which
 // no retry mends.
 const proofUnchecked = "this plane checks no proof of possession; a key-bound capability cannot be used here"
 
-// verifyError maps a failed verification to its transport status. A refusal
-// of the capability is PermissionDenied with its reason. Keys the verifier
-// could not fetch, and a failure that refuses nothing — the revocation store
-// unreachable — are the server's, Unavailable: the caller retries rather than
-// drops a capability that may be sound. A key-bound capability on a plane
-// with no proof check is FailedPrecondition: the deployment's fault, which
-// no retry mends. All are logged with their cause,
-// which the outcome log, reading only the message, does not see.
+// verifyError maps a failed verification to its transport status, as
+// capabilityFailure answers every error about a presented capability.
 func verifyError(ctx context.Context, err error) error {
-	r, refused := limes.ReasonOf(err)
+	return capabilityFailure(ctx, "verification", err)
+}
+
+// capabilityFailure answers an error verifying or metering a presented
+// capability — stage names which — through capabilityCodes, so both answer one
+// caller alike: a spent limit is ResourceExhausted, a refusal of the
+// capability PermissionDenied with its reason, the server's own fault
+// Internal, and only a failing dependency Unavailable. A key-bound capability
+// on a plane with no proof check is FailedPrecondition, the deployment's
+// fault. Those last three are logged with their cause, and unless the error
+// is a refusal, whose reason the caller acts on, the caller is told a fixed
+// sentence rather than the server's internals.
+func capabilityFailure(ctx context.Context, stage string, err error) error {
+	status := capabilityStatus(capabilityCodes, err)
+	_, refused := limes.ReasonOf(err)
 	switch {
 	case errors.Is(err, limes.ErrProofUnsupported):
-		logger.FromContext(ctx).Error("capability: a key-bound capability reached a verifier with no DPoP check", zap.Error(err))
-		return connect.NewError(connect.CodeFailedPrecondition, proofUnchecked).WithCause(err)
-	case !refused:
-		logger.FromContext(ctx).Error("capability: verification failed on the server's side", zap.Error(err))
-		return connect.NewError(connect.CodeUnavailable, capabilityUnchecked).WithCause(err)
-	case r == limes.ReasonKeysUnavailable:
-		logger.FromContext(ctx).Error("capability: verification keys unavailable", zap.Error(err))
-		return capabilityError(connect.CodeUnavailable, err)
+		logger.FromContext(ctx).Error("capability: a key-bound capability reached a verifier with no DPoP check", zap.String("stage", stage), zap.Error(err))
+		return connect.NewError(status, proofUnchecked).WithCause(err)
+	case status == connect.CodeInternal, status == connect.CodeUnavailable:
+		logger.FromContext(ctx).Error("capability: failed on the server's side", zap.String("stage", stage), zap.Error(err))
+		if !refused {
+			told := capabilityUnchecked
+			if status == connect.CodeInternal {
+				told = capabilityServerFault
+			}
+			return connect.NewError(status, told).WithCause(err)
+		}
 	}
-	return capabilityError(connect.CodePermissionDenied, err)
+	return capabilityError(status, err)
 }
 
 // capabilityError is connect.NewError carrying, when err is a refusal of the

@@ -7,11 +7,12 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 )
 
-// meterCodes is the transport code of a metering error, by its limes code
-// (limes.CodeOf, meter.CodeOf): one row per code limes and its meter define,
-// which TestMeterCodesCoverEveryLimesCode holds, so a code a release adds is
+// capabilityCodes is the transport code of an error verifying or metering a
+// presented capability, by its limes code (limes.CodeOf, meter.CodeOf): one
+// row per code limes and its meter define,
+// which TestCapabilityCodesCoverEveryLimesCode holds, so a code a release adds is
 // answered on purpose. Unavailable is kept for what a retry can mend.
-var meterCodes = map[limes.Code]connect.Code{
+var capabilityCodes = map[limes.Code]connect.Code{
 	// A spent request, budget or copy limit: the caller waits or stops.
 	limes.CodeBudgetExceeded:       connect.CodeResourceExhausted,
 	meter.CodeCopyLimitExceeded:    connect.CodeResourceExhausted,
@@ -94,19 +95,19 @@ var meterCodes = map[limes.Code]connect.Code{
 	limes.CodeNoRevocationLineage: connect.CodeUnavailable,
 }
 
-// meterUnknownCode answers a metering error that carries no limes code, or a
-// code meterCodes has no row for: the store failing, which the caller retries.
-const meterUnknownCode = connect.CodeUnavailable
+// capabilityUnknownCode answers an error that carries no limes code, or a code
+// capabilityCodes has no row for: the store failing, which the caller retries.
+const capabilityUnknownCode = connect.CodeUnavailable
 
-// meterStatus is err's row in table, or meterUnknownCode when err carries no
+// capabilityStatus is err's row in table, or capabilityUnknownCode when err carries no
 // limes code or its code has none.
-func meterStatus(table map[limes.Code]connect.Code, err error) connect.Code {
+func capabilityStatus(table map[limes.Code]connect.Code, err error) connect.Code {
 	code, ok := meter.CodeOf(err)
 	if !ok {
-		return meterUnknownCode
+		return capabilityUnknownCode
 	}
 	if status, ok := table[code]; ok {
 		return status
 	}
-	return meterUnknownCode
+	return capabilityUnknownCode
 }
