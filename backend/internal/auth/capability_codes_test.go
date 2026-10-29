@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -18,41 +19,42 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
-// Every code limes and its meter define has a row in meterCodes, so a code a
+// Every code limes and its meter define has a row in capabilityCodes, so a code a
 // release adds fails here rather than answering as the store failing; and
 // every row names a code they define, so a renamed one cannot linger.
-func TestMeterCodesCoverEveryLimesCode(t *testing.T) {
+func TestCapabilityCodesCoverEveryLimesCode(t *testing.T) {
 	defined := map[limes.Code]bool{}
 	for _, c := range append(limes.Codes(), meter.Codes()...) {
 		defined[c] = true
-		if _, ok := meterCodes[c]; !ok {
-			t.Errorf("limes code %q has no row in meterCodes", c)
+		if _, ok := capabilityCodes[c]; !ok {
+			t.Errorf("limes code %q has no row in capabilityCodes", c)
 		}
 	}
-	for c := range meterCodes {
+	for c := range capabilityCodes {
 		if !defined[c] {
-			t.Errorf("meterCodes names %q, which limes does not define", c)
+			t.Errorf("capabilityCodes names %q, which limes does not define", c)
 		}
 	}
 }
 
 // A metering error answers by its code's row; one that carries no limes
 // code, or a code with no row, is the store failing.
-func TestMeterStatusFallsBackToUnavailable(t *testing.T) {
-	if got := meterStatus(meterCodes, errors.New("store down")); got != meterUnknownCode {
-		t.Errorf("an error with no limes code = %v, want %v", got, meterUnknownCode)
+func TestCapabilityStatusFallsBackToUnavailable(t *testing.T) {
+	if got := capabilityStatus(capabilityCodes, errors.New("store down")); got != capabilityUnknownCode {
+		t.Errorf("an error with no limes code = %v, want %v", got, capabilityUnknownCode)
 	}
-	if got := meterStatus(map[limes.Code]connect.Code{}, limes.ErrRevoked); got != meterUnknownCode {
-		t.Errorf("a code with no row = %v, want %v", got, meterUnknownCode)
+	if got := capabilityStatus(map[limes.Code]connect.Code{}, limes.ErrRevoked); got != capabilityUnknownCode {
+		t.Errorf("a code with no row = %v, want %v", got, capabilityUnknownCode)
 	}
-	if got := meterStatus(meterCodes, fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodePermissionDenied {
+	if got := capabilityStatus(capabilityCodes, fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodePermissionDenied {
 		t.Errorf("a wrapped revocation = %v, want its row's %v", got, connect.CodePermissionDenied)
 	}
 }
 
 // Unavailable is kept for what a retry can mend: a refusal of the
 // capability is PermissionDenied as on the verify path, the server's own
-// fault is Internal, and only those two answers are logged as errors.
+// fault is Internal; those, a failing dependency and the deployment's fault
+// are logged as errors, and a refusal is not.
 func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 	cases := map[string]struct {
 		err    error
@@ -62,7 +64,7 @@ func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 		"an operation the capability does not allow": {limes.ErrOpNotAllowed, connect.CodePermissionDenied, false},
 		"a replayed proof":                           {dpop.ErrReplayed, connect.CodePermissionDenied, false},
 		"a caveat violated":                          {limes.ErrCaveatViolation, connect.CodePermissionDenied, false},
-		"a key-bound capability with no proof check": {limes.ErrProofUnsupported, connect.CodeFailedPrecondition, false},
+		"a key-bound capability with no proof check": {limes.ErrProofUnsupported, connect.CodeFailedPrecondition, true},
 		"a record already there":                     {limes.ErrAlreadyExists, connect.CodeAlreadyExists, false},
 		"a refund beyond its charge":                 {meter.ErrRefundExceedsCharge, connect.CodeAborted, false},
 		"a deleted tenant":                           {limes.ErrTenantDeleted, connect.CodeFailedPrecondition, false},
@@ -82,5 +84,36 @@ func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 				t.Errorf("%d error lines logged, want logged = %v", got, tc.logged)
 			}
 		})
+	}
+}
+
+// Verifying a capability and metering it answer one caller about one
+// capability, so they answer every code alike: a spent copy limit is
+// ResourceExhausted on both, a misconfigured server Internal on both, and a
+// server-side failure keeps its internals from the caller on both.
+func TestVerifyAndMeterAnswerAlike(t *testing.T) {
+	const internals = "dial tcp 10.0.0.7:5432: connection refused"
+	for _, err := range []error{
+		meter.ErrCopyLimitExceeded,
+		limes.ErrRequestLimitExceeded,
+		limes.ErrRevoked,
+		limes.ErrInvalidConfig,
+		fmt.Errorf("%w: %s", limes.ErrInternal, internals),
+		fmt.Errorf("store: %s", internals),
+	} {
+		ctx := logger.WithContext(context.Background(), zap.NewNop())
+		verified, metered := verifyError(ctx, err), meterError(ctx, err)
+		if connect.CodeOf(verified) != connect.CodeOf(metered) {
+			t.Errorf("%v: verified %v, metered %v", err, connect.CodeOf(verified), connect.CodeOf(metered))
+		}
+		for name, answer := range map[string]error{"verified": verified, "metered": metered} {
+			var ce *connect.Error
+			if errors.As(answer, &ce) && strings.Contains(ce.Message(), internals) {
+				t.Errorf("%v %s: the caller is told the server's internals: %q", err, name, ce.Message())
+			}
+		}
+	}
+	if got := connect.CodeOf(verifyError(context.Background(), meter.ErrCopyLimitExceeded)); got != connect.CodeResourceExhausted {
+		t.Errorf("a spent copy limit at verification = %v, want %v", got, connect.CodeResourceExhausted)
 	}
 }
