@@ -99,6 +99,49 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## v41.2.0 — verifying and metering a capability answer alike
+
+- A spent request or copy limit refused while verifying a capability is
+  `RESOURCE_EXHAUSTED`, not `PERMISSION_DENIED`, as it already was while
+  metering.
+- The server's own fault while verifying a capability is `INTERNAL`, not
+  `UNAVAILABLE`, and is no longer worth retrying.
+- A server-side metering failure no longer tells the caller the store's
+  error text; the cause is logged.
+
+## v41.2.0 — metering errors answer with what a retry can mend
+
+- A metering error that is the server's own fault — a misconfiguration, a
+  call scoped to the wrong tenant, a broken invariant — is now `INTERNAL`,
+  not `UNAVAILABLE`, so clients stop retrying it.
+- A refusal of the capability met while metering is `PERMISSION_DENIED`, as
+  the same refusal is when the capability is verified, and a record that is
+  already there is `ALREADY_EXISTS`.
+- `UNAVAILABLE` is left for a failing dependency — the store, the keys, the
+  revocation upstream — which a retry may find recovered.
+
+## v41.2.0 — ending an OAuth grant revokes the capabilities it was exchanged for
+
+- **Migration time.** pgstore adds `client_id`, `on_behalf_of` and
+  `session` columns to `limes.capabilities`, fills the first two from every
+  existing record in one `UPDATE`, and builds four indexes `CONCURRENTLY`. On
+  a large table the migration takes longer, and the `UPDATE` holds the rows
+  it rewrites while it runs.
+- **OAuth access tokens carry `sid`**, the grant's refresh-token family.
+  Revoking a grant (`/oauth/revoke`), or a replayed refresh token revoking
+  its family, now revokes the capabilities the grant's tokens were exchanged
+  for at once.
+- Capabilities issued before the upgrade record no session, so ending a
+  session does not reach them; they expire with their token as before.
+
+## v41.2.0 — the MCP exchange issues one capability per token
+
+- **A paladin-mcp token is exchanged for one capability**, whichever replica
+  exchanges it, and that capability lives as long as the token. Revoking it
+  now also refuses the token's later exchanges (`invalid_grant`) until the
+  agent's client fetches a new token, where before the next exchange issued
+  a fresh capability. Nothing to configure.
+
 ## v41.1.0, sdk/go/v0.126.1, sdk/python/v0.127.1 — limes v1.0.0-rc.14: a capability no request can use is refused
 
 - **`max_requests` is at least 1.** `CapabilityService.Issue` and
