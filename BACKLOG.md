@@ -139,20 +139,6 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
-### MCP authorization on limes' token exchange
-
-- **Status:** In progress — [ADR-0041](docs/adr/0041-the-mcp-server-exchanges-for-a-capability.md)
-  decides it.
-- **Reason:** the MCP server trades the caller's token for a plane IAM
-  token at the AS (ADR-0036), which leaves an agent session the user's full
-  authority, unbounded and revocable only with the user's login.
-- **Definition of Done:** ADR-0041 implemented: the Authorization Server
-  serves the exchange through limes' `exchange` for a delegated capability;
-  the MCP edge swaps the caller's token for it; the planes authorize it as
-  its user with the user's roles; `paladin.write` holds as a caveat;
-  verified live on the cluster.
-- **Blockers:** none.
-
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

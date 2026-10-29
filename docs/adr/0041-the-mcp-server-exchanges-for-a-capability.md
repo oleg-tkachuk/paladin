@@ -1,6 +1,6 @@
 # ADR-0041: The MCP server exchanges the caller's token for a capability that acts for the user
 
-- **Status:** Accepted. Implementation in progress.
+- **Status:** Accepted. Implemented 2026-10-29.
 - **Related:** supersedes decisions 2 and 3 of
   [ADR-0036](0036-the-mcp-server-is-its-own-audience.md) (its `paladin-mcp`
   audience stays); amends [ADR-0010](0010-capability-as-establishing-credential.md)
