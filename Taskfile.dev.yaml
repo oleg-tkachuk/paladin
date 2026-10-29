@@ -426,6 +426,14 @@ tasks:
     cmds:
       - ./scripts/live-smoke.sh
 
+  verify:live-mcp:
+    desc: "Check that an MCP agent's write consent and relay hold on the deployed release (KUBE_CONTEXT, NAMESPACE)"
+    # Not part of verify-all: it needs a running cluster and Docker. It runs
+    # an agent_safe bridge from the deployed image beside the cluster's own,
+    # and removes it, the agent's client and its grants on exit.
+    cmds:
+      - ./scripts/live-mcp-delegation.sh
+
   verify:go-build-cache:
     desc: "The backend image's go build cache round-trips through scripts/go-build-cache.sh"
     # Not part of verify-all: it needs Docker and a throwaway buildx builder.
