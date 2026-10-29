@@ -39,6 +39,10 @@ type Principal struct {
 	Audiences []string
 	// ExpiresAt is the token's `exp`; zero when the claim is absent.
 	ExpiresAt time.Time
+	// TokenID is the token's `jti`, as written: what names one token
+	// among its user's, which the MCP exchange keys its capability on
+	// (ADR-0041). Empty when the claim is absent.
+	TokenID string
 	// PrincipalKind distinguishes a User-bound JWT from an ApiKey-derived
 	// token. Cedar policies may key on this for blast-radius limits.
 	Kind PrincipalKind

@@ -101,3 +101,32 @@ func TestSubjectVerifierReadsTheConsent(t *testing.T) {
 		t.Errorf("scopes = %v, want [%s]", got.Scopes, auth.OAuthScopeRead)
 	}
 }
+
+// A subject names its token by the token's jti, which the exchange keys the
+// one capability it issues per token on: two tokens of one user are two
+// subjects.
+func TestSubjectVerifierNamesTheToken(t *testing.T) {
+	tokens := &auth.JWTVerifier{Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP}
+	v := NewSubjectVerifier(tokens, subjectIssuer)
+	minter := subjectMinter(t, subjectIssuer, subjectKey, time.Now())
+
+	ids := make([]string, 0, 2)
+	for range 2 {
+		tok, _ := mintSubject(t, minter, subjectClientID)
+		got, err := v.VerifySubject(t.Context(), tok)
+		if err != nil {
+			t.Fatalf("VerifySubject: %v", err)
+		}
+		p, err := tokens.Verify(t.Context(), tok)
+		if err != nil {
+			t.Fatalf("Verify: %v", err)
+		}
+		if got.ID == "" || got.ID != p.TokenID {
+			t.Errorf("Subject.ID = %q, want the token's jti %q", got.ID, p.TokenID)
+		}
+		ids = append(ids, got.ID)
+	}
+	if ids[0] == ids[1] {
+		t.Errorf("two tokens share Subject.ID %q", ids[0])
+	}
+}

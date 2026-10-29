@@ -123,23 +123,6 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
-### One capability per paladin-mcp token in the exchange
-
-- **Status:** Deferred.
-- **Reason:** limes' exchange can issue one capability per subject token
-  across replicas (`exchange.Config.Exchanges` over `pgstore.ScopedExchanges`,
-  limes ADR-0009). It keys on the token's `jti`, which IAM access tokens
-  carry but `auth.Principal` does not surface, and it changes the exchange's
-  behaviour (a revoked capability refuses its token's later exchanges), so it
-  is a change of ADR-0041 rather than part of a dependency bump. Today every
-  exchange the MCP edge's per-replica cache misses issues a capability record
-  of its own.
-- **Definition of Done:** `auth.Principal` carries the access token's `jti`,
-  `delegation.SubjectVerifier` passes it as `exchange.Subject.ID`,
-  `delegation.NewExchanger` sets `Exchanges`, and an integration test shows
-  two exchanges of one token, from two exchangers, return one capability.
-- **Blockers:** none; picked up with the next change to the MCP exchange.
-
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

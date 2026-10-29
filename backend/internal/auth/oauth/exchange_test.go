@@ -102,7 +102,7 @@ func withExchange(t *testing.T, h *Handler) (*Handler, *limes.Verifier) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ex, err := delegation.NewExchanger(capIssuer, delegation.NewSubjectVerifier(mcpVerifier(), "paladin"), h.users, delegationTTL, limes.AbstractUnitCode, slog.Default())
+	ex, err := delegation.NewExchanger(capIssuer, delegation.NewSubjectVerifier(mcpVerifier(), "paladin"), store, h.users, limes.AbstractUnitCode, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
