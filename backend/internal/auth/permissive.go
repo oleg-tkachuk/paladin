@@ -25,8 +25,8 @@ import (
 type PermissiveInterceptor struct {
 	Verifier        TokenVerifier
 	AllowMissingFor []string
-	// SkipCapabilities lets a request carrying a capability past untouched,
-	// for a downstream capability interceptor to authenticate.
+	// SkipCapabilities lets a request whose only credential is a capability
+	// past untouched, for a downstream capability interceptor to authenticate.
 	SkipCapabilities bool
 }
 
@@ -39,7 +39,7 @@ func NewPermissiveInterceptor(v TokenVerifier, allowMissingFor ...string) *Permi
 func (p *PermissiveInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
 	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		h := unary.Info(ctx).RequestHeader()
-		if p.SkipCapabilities && capabilityPresented(h) {
+		if p.SkipCapabilities && capabilityOnly(h) {
 			return next(ctx, spec, stream)
 		}
 		ctx, err := p.attach(ctx, h.Get("Authorization"), spec.Procedure)
@@ -57,11 +57,10 @@ func (p *PermissiveInterceptor) attach(ctx context.Context, authz, procedure str
 		}
 		return ctx, rpcerr.New(connect.CodeUnauthenticated, missingAuthErr())
 	}
-	const bearer = "Bearer "
-	if !strings.HasPrefix(authz, bearer) {
+	if !strings.HasPrefix(authz, bearerPrefix) {
 		return ctx, rpcerr.New(connect.CodeUnauthenticated, expectedBearerErr())
 	}
-	token := strings.TrimSpace(authz[len(bearer):])
+	token := strings.TrimSpace(authz[len(bearerPrefix):])
 	if token == "" {
 		return ctx, rpcerr.New(connect.CodeUnauthenticated, emptyTokenErr())
 	}
