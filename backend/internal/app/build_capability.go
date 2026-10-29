@@ -6,8 +6,10 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/exp/zapslog"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/biscuit"
@@ -53,7 +55,7 @@ type CapabilityBundle struct {
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
 	// purger drops the ids that have expired.
-	Replay *capabilitypg.ReplayCache
+	Replay *pgstore.ReplayCache
 
 	// PublicKeys is the kid → public key map exposed via the JWKS
 	// endpoint. Refreshed in place when rotation lands; today it
@@ -178,8 +180,8 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}, cache)
 	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
-	replay, err := capabilitypg.NewReplayCache(capabilitypg.ReplayCacheConfig{
-		Pool: deps.Pool, Log: deps.Logger.Named("dpop-replay"),
+	replay, err := pgstore.NewReplayCache(pgstore.ReplayConfig{
+		DB: deps.Pool, Logger: slog.New(zapslog.NewHandler(deps.Logger.Named("dpop-replay").Core())),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)

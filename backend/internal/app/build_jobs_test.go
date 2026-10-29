@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -253,7 +253,7 @@ func TestBuildBackgroundJobs_CapabilityPurgerReplayWiring(t *testing.T) {
 		t.Errorf("Replay = %#v with no replay cache in the bundle, want a nil interface", p.Replay)
 	}
 
-	replay, err := capabilitypg.NewReplayCache(capabilitypg.ReplayCacheConfig{Pool: &pgxpool.Pool{}})
+	replay, err := pgstore.NewReplayCache(pgstore.ReplayConfig{DB: &pgxpool.Pool{}})
 	if err != nil {
 		t.Fatal(err)
 	}

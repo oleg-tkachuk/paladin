@@ -115,6 +115,7 @@ them, so they must exist before it runs.
 | `094` | `audit_log.after_json` is `request_json`, what it always held; the never-written `before_json` is dropped |
 | `095` | `objects` gains an index answering a collection's usage — available objects' count, bytes, newest commit — on its own |
 | `098` | `audit_log` drops `detail` and `outcome`, which nothing ever wrote |
+| `104` | `dpop_seen_proofs` goes: the DPoP replay cache is pgstore's `limes.dpop_seen_proofs` |
 
 Each file's header comment says why it exists.
 
@@ -140,8 +141,7 @@ among live tenants only; a soft-deleted tenant keeps its slug so the audit
 trail stays resolvable, and renames are recorded in `tenant_slug_history`.
 
 **Identity** — `users`, `user_settings`, `refresh_tokens`, `api_tokens`,
-`api_token_rate_buckets`, `oauth_clients`, `oauth_authorization_codes`,
-`dpop_seen_proofs`.
+`api_token_rate_buckets`, `oauth_clients`, `oauth_authorization_codes`.
 
 **Storage topology** — `storage_backends`, `storage_backend_health`,
 `storage_backend_features`, `buckets`, `bucket_grants`, `replication_state`. A bucket row can exist before the physical
@@ -263,9 +263,6 @@ reason: they are platform-level resources with no single owning tenant, so
 there is no tenant to scope a connection to. `bucket_quotas` and
 `bucket_grants` are platform configuration of the same kind (`044`, `080`), and
 `storage_backend_features` is an observation of a backend (`048`).
-`dpop_seen_proofs` has no policy
-either: a proof id belongs to no tenant and its uniqueness must hold across
-all of them.
 
 These policies are deliberately open:
 

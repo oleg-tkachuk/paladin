@@ -33,9 +33,9 @@ agent calls `CapabilityService.Delegate` itself, with its own proof and the
 share op, naming that thumbprint as `confirmation_jkt`. The child goes to the
 bridge in `X-Paladin-Capability`, and the bridge proves possession on every
 call it forwards. The bridge is then the child's holder: a copy of the child
-works through the bridge and nowhere else. Proof ids are recorded in the
-`dpop_seen_proofs` table, shared by every replica
-(`internal/capability/postgres/replay.go`), at most
+works through the bridge and nowhere else. Proof ids are recorded in pgstore's
+`limes.dpop_seen_proofs` table, shared by every replica
+(`pgstore.ReplayCache`), at most
 `dpop.DefaultReplayEntriesPerHolder` (1000) live per holder — the capability
 the proof is presented with — each for `dpop.DefaultWindow` (one minute), so
 one delegated child is refused past roughly 1000 key-bound calls a minute.

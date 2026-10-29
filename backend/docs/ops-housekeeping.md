@@ -26,7 +26,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `refresh_token_reaper` | deletes expired refresh tokens | `refresh_token_reap.interval` | `1h` |
 | `api_token_purger` | deletes API tokens expired for longer than the grace | `api_token.interval`, `.expired_for` | `1h`, `168h` |
 | `oauth_client_reaper` | deletes self-registered OAuth clients older than `max_age` that hold no live grant and no redeemable code, and authorization codes expired for longer than `expired_codes_for`; seeded clients are never removed; runs only on the reaper pool | `oauth_client_reap.interval`, `.max_age`, `.expired_codes_for` | `1h`, `168h`, `24h` |
-| `capability_purger` | releases expired budget reservations, deletes capabilities expired for longer than the grace, and drops DPoP proof ids (`dpop_seen_proofs`) past their window | `capability.interval`, `.expired_for` | `1h`, `24h` |
+| `capability_purger` | releases expired budget reservations, deletes capabilities expired for longer than the grace, and drops DPoP proof ids (`limes.dpop_seen_proofs`) past their window | `capability.interval`, `.expired_for` | `1h`, `24h` |
 | `storage-migration` | runs operator-started tenant storage migrations; always registered, idle without an active migration | none — `StorageMigrationWorker` default | `30s` |
 | `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after`; ticks every `housekeeping.interval`, at most `stale_after / 3`, at least `1m` | `operations.stale_after` | `15m` (so a `5m` tick) |
 | `replication` | cross-backend replication; dry-run | `replication.enabled`, `.interval` | `false`, `5m` |
