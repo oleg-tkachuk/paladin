@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
@@ -29,7 +30,7 @@ func TestCapabilityBiscuit_OfflineAttenuationIsEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 	full := sealed.Token
-	readOnly, err := limes.Attenuate(full, limes.Attenuation{
+	readOnly, err := biscuit.Attenuate(full, limes.Attenuation{
 		Ops:              []limes.Op{limes.OpGet},
 		ResourcePrefixes: []string{"corpus/public/"},
 	})

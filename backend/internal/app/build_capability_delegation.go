@@ -11,6 +11,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"go.uber.org/zap/exp/zapslog"
 
@@ -77,7 +78,7 @@ func newCapabilityIssuer(kid string, key limes.SigningKey, store limes.IssuanceS
 	if err != nil {
 		return nil, fmt.Errorf("app: capability signer %s: %w", kid, err)
 	}
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: name, DefaultTTL: ttl})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: name, DefaultTTL: ttl})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability issuer %s: %w", name, err)
 	}

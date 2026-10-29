@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -70,7 +71,7 @@ func mintCopy(t *testing.T, owner uuid.UUID, template limes.Capability, as ...li
 	}
 	token := b.Token
 	for _, a := range as {
-		if token, err = limes.Attenuate(token, a); err != nil {
+		if token, err = biscuit.Attenuate(token, a); err != nil {
 			t.Fatalf("attenuate: %v", err)
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -84,7 +85,8 @@ func newMinter(t *testing.T, store limes.Store) *captest.Minter {
 		t.Fatal(err)
 	}
 	issuer, err := limes.NewIssuer(limes.IssuerConfig{
-		Signer: signer, Store: store, IssuerName: captest.Issuer, DefaultTTL: captest.TTL,
+		Biscuit: biscuit.Form(),
+		Signer:  signer, Store: store, IssuerName: captest.Issuer, DefaultTTL: captest.TTL,
 	})
 	if err != nil {
 		t.Fatal(err)

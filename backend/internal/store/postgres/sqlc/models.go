@@ -450,13 +450,6 @@ type Collection struct {
 	CacheControl    string             `json:"cache_control"`
 }
 
-type DpopSeenProof struct {
-	Jkt       string             `json:"jkt"`
-	Jti       string             `json:"jti"`
-	Holder    string             `json:"holder"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-}
-
 type ErasedObject struct {
 	TenantID     pgtype.UUID        `json:"tenant_id"`
 	ObjectID     pgtype.UUID        `json:"object_id"`

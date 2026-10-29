@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 
@@ -62,7 +63,7 @@ func newSealer() (*sealer, error) {
 	if err != nil {
 		return nil, err
 	}
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: capabilityIssuer, DefaultTTL: DefaultCapabilityTTL})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: capabilityIssuer, DefaultTTL: DefaultCapabilityTTL})
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +73,7 @@ func newSealer() (*sealer, error) {
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: store, TrustedIssuers: []string{capabilityIssuer},
-		Biscuit: &limes.BiscuitConfig{Revocations: store, MeterCopies: true},
+		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: store, MeterCopies: true},
 	})
 	if err != nil {
 		return nil, err

@@ -382,7 +382,7 @@ Both SDKs run the same scenarios against the stack in CI
 ## Schema
 
 The core tables and their foreign keys, from `backend/migrations`. Left out:
-rate buckets, idempotency keys, OAuth, DPoP replay (`dpop_seen_proofs`), leases,
+rate buckets, idempotency keys, OAuth, leases,
 ingest dedup, the audit log (partitioned monthly), slug history, backend
 health and probed features (`storage_backend_features`), replication state,
 permanent-delete tombstones (`erased_objects`), and the purge and

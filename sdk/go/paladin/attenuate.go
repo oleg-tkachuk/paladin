@@ -7,6 +7,7 @@ import (
 	// limes writes the Biscuit blocks the server's verifier reads; none of
 	// its types cross this package's API.
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 )
 
 // Attenuation narrows a capability's Biscuit offline. A field left empty
@@ -40,7 +41,7 @@ type Attenuation struct {
 // attenuation that names nothing it could narrow to, wraps
 // ErrInvalidArgument.
 func Attenuate(token string, a Attenuation) (string, error) {
-	narrowed, err := limes.Attenuate(token, toLimes(a))
+	narrowed, err := biscuit.Attenuate(token, toLimes(a))
 	if err != nil {
 		return "", fmt.Errorf("%w: attenuate: %w", ErrInvalidArgument, err)
 	}

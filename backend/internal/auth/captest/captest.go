@@ -11,6 +11,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/memstore"
 )
@@ -60,7 +61,7 @@ func NewMinter(tb testing.TB) *Minter {
 	if err != nil {
 		tb.Fatal(err)
 	}
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: Issuer, DefaultTTL: TTL})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: Issuer, DefaultTTL: TTL})
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func NewMinter(tb testing.TB) *Minter {
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: store, TrustedIssuers: []string{Issuer},
-		Biscuit: &limes.BiscuitConfig{Revocations: store, MeterCopies: true},
+		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: store, MeterCopies: true},
 	})
 	if err != nil {
 		tb.Fatal(err)
@@ -173,7 +174,7 @@ func (m *Minter) Attenuated(tb testing.TB, v limes.VerifiedCapability, a limes.A
 	if err != nil {
 		tb.Fatalf("captest: biscuit: %v", err)
 	}
-	token, err := limes.Attenuate(b.Token, a)
+	token, err := biscuit.Attenuate(b.Token, a)
 	if err != nil {
 		tb.Fatalf("captest: attenuate: %v", err)
 	}

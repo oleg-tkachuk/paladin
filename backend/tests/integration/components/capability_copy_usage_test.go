@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
@@ -50,7 +51,7 @@ func newCopyMinter(t *testing.T, records *pgstore.Store) *copyMinter {
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: records, IssuerName: copyMinterIssuer, DefaultTTL: copyMinterTTL})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Biscuit: biscuit.Form(), Signer: signer, Store: records, IssuerName: copyMinterIssuer, DefaultTTL: copyMinterTTL})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +61,7 @@ func newCopyMinter(t *testing.T, records *pgstore.Store) *copyMinter {
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: records, TrustedIssuers: []string{copyMinterIssuer},
-		Biscuit: &limes.BiscuitConfig{Revocations: records, MeterCopies: true},
+		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: records, MeterCopies: true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +102,7 @@ func (m *copyMinter) copyOf(t *testing.T, ctx context.Context, v limes.VerifiedC
 	if err != nil {
 		t.Fatalf("biscuit: %v", err)
 	}
-	token, err := limes.Attenuate(b.Token, a)
+	token, err := biscuit.Attenuate(b.Token, a)
 	if err != nil {
 		t.Fatalf("attenuate: %v", err)
 	}

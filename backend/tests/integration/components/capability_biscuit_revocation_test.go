@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -53,7 +54,7 @@ func newBiscuitFixture(t *testing.T, admin *pgxpool.Pool) *biscuitFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Signer: signer, Store: store, IssuerName: biscuitIssuerName, Now: clock.Now})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: biscuitIssuerName, Now: clock.Now})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +64,7 @@ func newBiscuitFixture(t *testing.T, admin *pgxpool.Pool) *biscuitFixture {
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: store, TrustedIssuers: []string{biscuitIssuerName}, Now: clock.Now,
-		Biscuit: &limes.BiscuitConfig{Revocations: store, MeterCopies: true},
+		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: store, MeterCopies: true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +107,7 @@ func (f *biscuitFixture) seal(t *testing.T, tenant uuid.UUID, subject string) (s
 // attenuate narrows token to ops, a copy with a revocation id of its own.
 func attenuate(t *testing.T, token string, ops ...limes.Op) string {
 	t.Helper()
-	out, err := limes.Attenuate(token, limes.Attenuation{Ops: ops})
+	out, err := biscuit.Attenuate(token, limes.Attenuation{Ops: ops})
 	if err != nil {
 		t.Fatalf("attenuate: %v", err)
 	}
