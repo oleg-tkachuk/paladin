@@ -130,3 +130,26 @@ func TestSubjectVerifierNamesTheToken(t *testing.T) {
 		t.Errorf("two tokens share Subject.ID %q", ids[0])
 	}
 }
+
+// A subject names the session its token was issued in, which the exchange
+// records on the capability so revoking the session revokes it.
+func TestSubjectVerifierNamesTheSession(t *testing.T) {
+	v := NewSubjectVerifier(&auth.JWTVerifier{
+		Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
+	}, subjectIssuer)
+	session := uuid.NewV7().String()
+	tok, _, err := subjectMinter(t, subjectIssuer, subjectKey, time.Now()).MintAccess(issuer.AccessClaims{
+		Subject: subjectUser, TenantID: uuid.New(), Audience: auth.AudienceMCP,
+		OAuthClientID: subjectClientID, OAuthScopes: []string{auth.OAuthScopeRead}, SessionID: session,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := v.VerifySubject(t.Context(), tok)
+	if err != nil {
+		t.Fatalf("VerifySubject: %v", err)
+	}
+	if got.SessionID != session {
+		t.Errorf("Subject.SessionID = %q, want %q", got.SessionID, session)
+	}
+}

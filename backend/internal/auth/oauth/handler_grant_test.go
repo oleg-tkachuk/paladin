@@ -81,6 +81,7 @@ type grantClaims struct {
 	Aud      string `json:"aud"`
 	ClientID string `json:"client_id"`
 	Scope    string `json:"scope"`
+	Sid      string `json:"sid"`
 }
 
 func accessClaims(t *testing.T, token string) grantClaims {
@@ -190,6 +191,32 @@ func TestToken_AccessTokenCarriesTheGrant(t *testing.T) {
 		c := accessClaims(t, tok)
 		if c.ClientID != publicClient().ClientID || c.Scope != grantScope {
 			t.Errorf("%s: client_id=%q scope=%q, want %q %q", name, c.ClientID, c.Scope, publicClient().ClientID, grantScope)
+		}
+	}
+}
+
+// An access token names its grant's session, the refresh-token family that
+// revoking the grant ends, and a rotation keeps it.
+func TestToken_AccessNamesTheRefreshFamily(t *testing.T) {
+	store := newMemStore()
+	store.clients[adminClient().ClientID] = adminClient()
+	u := sampleUser()
+	u.Roles = []string{apiutil.RoleTenantAdmin}
+	refresh := &memRefresh{}
+	h := testHandler(t, store, refresh, u)
+
+	first := authorizeAndExchange(t, h, u, adminClient(), auth.AudienceAdmin)
+	status, rotated := refreshAs(h, adminClient().ClientID, first.RefreshToken)
+	if status != http.StatusOK {
+		t.Fatalf("refresh status = %d", status)
+	}
+	session := accessClaims(t, first.AccessToken).Sid
+	if session == "" || accessClaims(t, rotated.AccessToken).Sid != session {
+		t.Errorf("sid = %q, then %q; want one session across the rotation", session, accessClaims(t, rotated.AccessToken).Sid)
+	}
+	for _, row := range refresh.rows {
+		if row.FamilyID.String() != session {
+			t.Errorf("refresh family %s, but the access token names session %q", row.FamilyID, session)
 		}
 	}
 }

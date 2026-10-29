@@ -43,6 +43,10 @@ type Principal struct {
 	// among its user's, which the MCP exchange keys its capability on
 	// (ADR-0041). Empty when the claim is absent.
 	TokenID string
+	// SessionID is the token's `sid`: the session it was issued in, an
+	// OAuth grant's refresh-token family, by which the capabilities it was
+	// exchanged for are revoked. Empty when the claim is absent.
+	SessionID string
 	// PrincipalKind distinguishes a User-bound JWT from an ApiKey-derived
 	// token. Cedar policies may key on this for blast-radius limits.
 	Kind PrincipalKind

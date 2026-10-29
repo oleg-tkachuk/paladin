@@ -344,16 +344,40 @@ func TestMintAccessLeavesOutEmptyClaims(t *testing.T) {
 		return out
 	}
 	bare := claimsOf(AccessClaims{Subject: "s", Audience: auth.AudienceData, Kind: auth.PrincipalKindUser})
-	for _, claim := range []string{"tenant", "tenant_slug", "labels"} {
+	for _, claim := range []string{"tenant", "tenant_slug", "labels", auth.ClaimSessionID} {
 		if _, ok := bare[claim]; ok {
 			t.Errorf("claim %q set with nothing to say", claim)
 		}
 	}
 	full := claimsOf(AccessClaims{Subject: "s", Audience: auth.AudienceData, Kind: auth.PrincipalKindUser,
-		TenantID: uuid.NewV7(), TenantSlug: "acme", Labels: map[string]string{"team": "a"}})
-	for _, claim := range []string{"tenant", "tenant_slug", "labels"} {
+		TenantID: uuid.NewV7(), TenantSlug: "acme", Labels: map[string]string{"team": "a"}, SessionID: "session"})
+	for _, claim := range []string{"tenant", "tenant_slug", "labels", auth.ClaimSessionID} {
 		if _, ok := full[claim]; !ok {
 			t.Errorf("claim %q missing", claim)
+		}
+	}
+}
+
+// A token minted in a session names it as `sid`, which the verifier reads
+// back; one minted in none carries no `sid`.
+func TestMintAccessNamesItsSession(t *testing.T) {
+	iss := newTestIssuer(t)
+	v := &auth.JWTVerifier{
+		Key:              []byte("test-signing-key-32-bytes-min--padding"),
+		ExpectedIssuer:   "paladin-test",
+		ExpectedAudience: auth.AudienceData,
+	}
+	for _, session := range []string{uuid.NewV7().String(), ""} {
+		tok, _, err := iss.MintAccess(AccessClaims{Subject: "u", TenantID: uuid.New(), Audience: auth.AudienceData, SessionID: session})
+		if err != nil {
+			t.Fatalf("MintAccess: %v", err)
+		}
+		p, err := v.Verify(context.Background(), tok)
+		if err != nil {
+			t.Fatalf("Verify: %v", err)
+		}
+		if p.SessionID != session {
+			t.Errorf("SessionID = %q, want %q", p.SessionID, session)
 		}
 	}
 }

@@ -586,6 +586,9 @@ func (h *Handler) issueTokens(ctx context.Context, w http.ResponseWriter, u auth
 		// not only /authorize (ADR-0035).
 		OAuthClientID: grant.ClientID,
 		OAuthScopes:   grant.Scopes,
+		// The refresh-token family is the grant's session: revoking it
+		// revokes what the token was exchanged for (ADR-0041).
+		SessionID: familyID.String(),
 	})
 	if err != nil {
 		h.serverError(ctx, w, "mint access failed", err, zap.String("client_id", grant.ClientID))

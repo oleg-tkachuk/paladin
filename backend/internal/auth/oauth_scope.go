@@ -20,6 +20,9 @@ const (
 const (
 	ClaimClientID = "client_id"
 	ClaimScope    = "scope"
+	// ClaimSessionID names the session a token was issued in, as OpenID
+	// Connect names it (`sid`): an OAuth grant's refresh-token family.
+	ClaimSessionID = "sid"
 	// ScopeSeparator joins the scope claim's values (RFC 6749 §3.3).
 	ScopeSeparator = " "
 )
