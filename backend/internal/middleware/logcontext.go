@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -108,6 +109,23 @@ func withTrace(ctx context.Context, base *zap.Logger) *zap.Logger {
 	return logger.WithTrace(ctx, base)
 }
 
+// fieldCause is the field holding what a failure's message withheld.
+const fieldCause = "cause"
+
+// withheldCause is the text of the error a *connect.Error was made from, when
+// its message does not already say it: a handler that answers a store's
+// failure with "retry" keeps the store's error as the cause, for this line.
+func withheldCause(err error) string {
+	cerr, ok := errors.AsType[*connect.Error](err)
+	if !ok || cerr.Unwrap() == nil {
+		return ""
+	}
+	if cause := cerr.Unwrap().Error(); cause != cerr.Message() {
+		return cause
+	}
+	return ""
+}
+
 // logFailure is the whole decision, split out from the interceptor plumbing so
 // it can be tested at every code rather than at the two the plumbing makes
 // easy to produce.
@@ -128,6 +146,9 @@ func logFailure(base *zap.Logger, procedure, requestID string, took time.Duratio
 	// nothing the caller does not have; it is the difference between "an RPC
 	// failed" and knowing why without reproducing it.
 	fields = append(fields, zap.String("err", err.Error()))
+	if cause := withheldCause(err); cause != "" {
+		fields = append(fields, zap.String(fieldCause, cause))
+	}
 
 	switch code {
 	// The server is broken. Someone should be woken up by a rate of these.
