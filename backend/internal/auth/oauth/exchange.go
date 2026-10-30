@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/exp/zapslog"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -45,14 +44,14 @@ type tokenExchange struct {
 	clients map[string]bool
 	// sessions revokes the capabilities a grant's session was exchanged
 	// for, when the session ends.
-	sessions limes.BulkRevoker
+	sessions *auth.BulkRevocation
 }
 
 // WithTokenExchange serves the token-exchange grant to clientIDs through ex
 // (ADR-0041), and revokes through sessions what a grant's tokens were
 // exchanged for when its session ends. Without it the grant type is
 // unsupported.
-func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string]bool, sessions limes.BulkRevoker) (*Handler, error) {
+func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string]bool, sessions *auth.BulkRevocation) (*Handler, error) {
 	handler, err := exchange.NewHandler(exchange.HandlerConfig{
 		Exchanger:    ex,
 		Authenticate: h.exchangeClient,
@@ -119,7 +118,7 @@ func (h *Handler) revokeSession(ctx context.Context, tenant, family uuid.UUID, w
 	if h.exchange == nil || h.exchange.sessions == nil {
 		return 0, nil
 	}
-	revoked, err := auth.RevokeSession(ctx, h.exchange.sessions, tenant, family, why, sessionRevocationActor)
+	revoked, err := h.exchange.sessions.RevokeSession(ctx, tenant, family, why, sessionRevocationActor)
 	if err != nil {
 		return revoked, fmt.Errorf("oauth: %w", err)
 	}
