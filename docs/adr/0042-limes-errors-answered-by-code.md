@@ -32,8 +32,10 @@
     the SDKs' test servers already answered it.
   - A limes release that adds a code fails the test until the code is given
     an answer.
-  - The admin API's handlers still map limes errors themselves, because the
-    same code means something else per operation (`revoked` while
-    delegating is the parent's state, `FAILED_PRECONDITION`). Moving them
-    onto the table, with per-operation exceptions held to it the same way,
-    is the next step.
+  - The admin API answers limes errors through the same table, via
+    `auth.AnswerCapabilityError`, with each operation's exceptions as data:
+    the same code can mean something else per operation (`revoked` while
+    delegating is the parent's state, `FAILED_PRECONDITION`; a record the
+    request names is `NOT_FOUND`). A test holds every exception row to
+    codes limes defines. A store failing there is `UNAVAILABLE`, told only
+    to retry; its text is logged as the failure's cause.
