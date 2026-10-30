@@ -99,6 +99,56 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## sdk/go/v0.127.0, sdk/python/v0.128.0 — a capability shows the OAuth grant it was exchanged under
+
+- `Capability` carries `session` (the OAuth grant's id), `on_behalf_of` (the
+  user the subject acts for) and `client_id`, output only; `List` and `Get`
+  set `session`.
+- The console's capability list and detail link a delegated capability to
+  its grant on the user's page.
+
+## Unreleased — deleting an OAuth client revokes its capabilities
+
+- `OAuthClientService.DeleteOAuthClient` now revokes every capability
+  exchanged under the client, in every tenant, and releases their holds.
+  Before, they stayed usable until their tokens expired.
+- Deleting a client already gone still runs the revocation before answering
+  `NOT_FOUND`, so a retry finishes a delete whose revocation failed; that
+  failure answers `UNAVAILABLE`.
+- Revoking a grant's session, from the console or by the client, releases
+  the revoked capabilities' holds at once instead of when they expire.
+
+## sdk/go/v0.127.0 — limes v1.0.0-rc.24
+
+- pgstore v0.52.1 adds four migrations, applied at startup:
+  - `027` rebuilds the client and session indexes to span tenants
+    (`CREATE INDEX CONCURRENTLY`);
+  - `028` replaces the revocation notify trigger, sending a large
+    revocation in parts;
+  - `029` adds `limes.capabilities.run_id` and backfills it from each
+    capability's agent principal — a full pass over the table;
+  - `030` indexes it (`CREATE INDEX CONCURRENTLY`).
+
+## Unreleased — revoking a connected application stops its capabilities
+
+- Revoking an OAuth grant from the console (`UserService.RevokeOAuthGrant`)
+  now also revokes every capability exchanged under the grant's session, as
+  the client's own `/oauth/revoke` already did.
+- Revoking a grant that is already revoked succeeds instead of answering
+  `NOT_FOUND`, so a call that failed part-way is finished by a retry. A grant
+  that is not the user's is still `NOT_FOUND`.
+- If the capabilities could not be revoked, the call answers `UNAVAILABLE`;
+  retry it.
+
+## Unreleased — the admin API answers capability errors by limes code
+
+- A capability or tenant-budget store failing under the admin API is
+  `UNAVAILABLE`, worth a retry, not `INTERNAL`. The caller is told only to
+  retry; the store's error is logged as the failure's `cause`.
+- A limes refusal the admin API answers — a delegation wider than its
+  parent, a revoked or expired parent — carries the capability reason
+  (`ERROR_REASON_CAPABILITY_*`) it carries when verified.
+
 ## v41.2.0 — verifying and metering a capability answer alike
 
 - A spent request or copy limit refused while verifying a capability is
