@@ -217,6 +217,18 @@ message Capability {
   // disposition is what the capability is now. List and Get set it; the
   // other RPCs leave it unspecified.
   CapabilityDisposition disposition = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // session is the OAuth grant's session the capability was exchanged
+  // under — its refresh-token family, the grant's id — or its parent's.
+  // Revoking the grant revokes every capability of its session. Empty for
+  // one issued outside an OAuth grant. List and Get set it.
+  string session = 13 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // on_behalf_of is the principal the subject acts for — the user whose
+  // grant a delegated capability was exchanged under. Unset when the
+  // subject acts for itself.
+  CapabilityPrincipal on_behalf_of = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // client_id is the OAuth client the capability was granted to. Empty when
+  // it was issued to no client.
+  string client_id = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // CapabilityDisposition is what a capability is now, as the platform's

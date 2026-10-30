@@ -492,4 +492,30 @@ describe("CapabilityDetailsPanel", () => {
     await user.click(await screen.findByRole("button", { name: "Revoke" }));
     expect(h.revoke).toHaveBeenCalledWith(CAP);
   });
+
+  // A capability exchanged under an OAuth grant links to the grant, where
+  // revoking it revokes every capability of its session.
+  describe("its OAuth grant", () => {
+    const delegated = {
+      ...CAP,
+      session: "s-1",
+      clientId: "agent-client",
+      onBehalfOf: { kind: PrincipalKind.USER, tenantId: "t-1", subject: "u-1" },
+    } as unknown as Capability;
+
+    it("links the grant on its user's page", async () => {
+      h.get.mockResolvedValue({ capability: delegated });
+      open(delegated);
+      const link = await screen.findByRole("link", { name: "s-1" });
+      expect(link).toHaveAttribute("href", "/users/t-1/u-1?apps.id=s-1");
+      expect(screen.getByText("agent-client")).toBeInTheDocument();
+    });
+
+    it("shows no grant for a capability issued outside one", async () => {
+      h.get.mockResolvedValue({ capability: CAP });
+      open();
+      await screen.findByRole("group", { name: UNLOCKS });
+      expect(screen.queryByText("OAuth grant")).not.toBeInTheDocument();
+    });
+  });
 });

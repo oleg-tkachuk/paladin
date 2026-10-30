@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // The IAM issuer the paladin-mcp tokens below come from, the agent they are
@@ -163,6 +164,18 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 		acting := auth.WithActingTenant(ctx, tenant)
 		if rec, err := store.GetRecord(acting, res.Capability.ID); err != nil || rec.Session != session {
 			t.Fatalf("the capability's session = %q (%v), want %q", rec.Session, err, session)
+		}
+		// The listings the console reads carry it too.
+		census, err := capstore.NewCensus(rlsPool(t, ctx, admin))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if listed, err := census.GetRecordListing(acting, res.Capability.ID); err != nil || listed.Record.Session != session {
+			t.Errorf("the listing's session = %q (%v), want %q", listed.Record.Session, err, session)
+		}
+		page, err := census.ListRecords(acting, limes.ListRecordsRequest{TenantID: tenant, Session: session})
+		if err != nil || len(page.Items) != 1 || page.Items[0].Record.Session != session {
+			t.Errorf("listing by session: %d records (%v), want the one with session %q", len(page.Items), err, session)
 		}
 		// On the application role, as the authorization server revokes it.
 		ended, err := store.RevokeMatching(acting, limes.RevokeMatchingRequest{TenantID: tenant, Session: session})

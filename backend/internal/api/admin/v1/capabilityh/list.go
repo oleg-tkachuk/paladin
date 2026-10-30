@@ -61,7 +61,7 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 
 	out := make([]*adminv1.Capability, 0, len(page.Items))
 	for i := range page.Items {
-		c := capabilityToProto(&page.Items[i].Record.Capability)
+		c := recordToProto(&page.Items[i].Record)
 		c.Disposition = dispositionToProto(page.Items[i].Disposition)
 		out = append(out, c)
 	}

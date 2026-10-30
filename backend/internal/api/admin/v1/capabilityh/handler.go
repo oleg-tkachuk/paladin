@@ -411,7 +411,7 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	}
 	rec := listed.Record
 	out := &adminv1.CapabilityServiceGetResponse{
-		Capability: capabilityToProto(&rec.Capability),
+		Capability: recordToProto(&rec),
 		IssuedBy:   principalToProto(rec.IssuedBy),
 	}
 	out.Capability.Disposition = dispositionToProto(listed.Disposition)
@@ -723,6 +723,13 @@ func caveatsToProto(c limes.Caveats) *adminv1.CapabilityCaveats {
 	return out
 }
 
+// recordToProto is a record's capability, with what the record alone holds.
+func recordToProto(rec *limes.Record) *adminv1.Capability {
+	out := capabilityToProto(&rec.Capability)
+	out.Session = rec.Session
+	return out
+}
+
 func capabilityToProto(c *limes.Capability) *adminv1.Capability {
 	out := &adminv1.Capability{
 		Id:              c.ID.String(),
@@ -733,6 +740,10 @@ func capabilityToProto(c *limes.Capability) *adminv1.Capability {
 		IssuedAt:        timestamppb.New(c.IssuedAt),
 		ExpiresAt:       timestamppb.New(c.ExpiresAt),
 		ConfirmationJkt: c.ConfirmationJKT,
+		ClientId:        c.ClientID,
+	}
+	if c.OnBehalfOf != nil {
+		out.OnBehalfOf = principalToProto(*c.OnBehalfOf)
 	}
 	if !c.NotBefore.IsZero() {
 		out.NotBefore = timestamppb.New(c.NotBefore)
