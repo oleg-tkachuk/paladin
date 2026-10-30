@@ -131,7 +131,8 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, req meter.SetTenantBud
 
 // Scope scopes a transaction pgstore opens the way the request pool's
 // PrepareConn hook scopes every other connection (store/postgres.EnableRLS),
-// from the request's auth context: a platform-wide read (auth.WithCrossTenantRead)
+// from the request's auth context: a revocation across tenants
+// (auth.WithAllTenantsWrite) reads and writes every tenant; a platform-wide read (auth.WithCrossTenantRead)
 // reads every tenant and writes none, as paladin.cross_tenant widens only
 // reads; a request acting on a tenant (auth.EffectiveTenant) is scoped to it.
 // A call with neither — housekeeping, which runs on a timer with no principal
@@ -144,6 +145,11 @@ func (s *UsageStore) SetTenantBudget(ctx context.Context, req meter.SetTenantBud
 // rows that are not there. pgstore refuses a write under a platform-wide
 // read the same way, before it writes.
 func Scope(ctx context.Context, tx pgx.Tx) error {
+	// A revocation across tenants writes every tenant's, whatever tenant the
+	// request acts on.
+	if auth.AllTenantsWrite(ctx) {
+		return pgstore.ScopeFromContext(pgstore.WithAllTenants(ctx), tx)
+	}
 	if auth.CrossTenantRead(ctx) {
 		return pgstore.ScopeFromContext(pgstore.WithAllTenantsReadOnly(ctx), tx)
 	}

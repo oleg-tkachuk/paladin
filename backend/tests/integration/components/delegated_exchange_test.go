@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 )
 
 // The IAM issuer the paladin-mcp tokens below come from, the agent they are
@@ -164,6 +165,18 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 		if rec, err := store.GetRecord(acting, res.Capability.ID); err != nil || rec.Session != session {
 			t.Fatalf("the capability's session = %q (%v), want %q", rec.Session, err, session)
 		}
+		// The listings the console reads carry it too.
+		census, err := capstore.NewCensus(rlsPool(t, ctx, admin))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if listed, err := census.GetRecordListing(acting, res.Capability.ID); err != nil || listed.Record.Session != session {
+			t.Errorf("the listing's session = %q (%v), want %q", listed.Record.Session, err, session)
+		}
+		page, err := census.ListRecords(acting, limes.ListRecordsRequest{TenantID: tenant, Session: session})
+		if err != nil || len(page.Items) != 1 || page.Items[0].Record.Session != session {
+			t.Errorf("listing by session: %d records (%v), want the one with session %q", len(page.Items), err, session)
+		}
 		// On the application role, as the authorization server revokes it.
 		ended, err := store.RevokeMatching(acting, limes.RevokeMatchingRequest{TenantID: tenant, Session: session})
 		if err != nil || ended.Revoked != 1 {
@@ -171,6 +184,27 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 		}
 		if _, err := other.Exchange(ctx, request(tok)); !errors.Is(err, exchange.ErrInvalidGrant) {
 			t.Errorf("the session's token exchanged again: err = %v, want exchange.ErrInvalidGrant", err)
+		}
+	})
+
+	// Last: it revokes every capability of the client, the ones above too.
+	t.Run("deleting the client revokes its capabilities in every tenant", func(t *testing.T) {
+		tok, _ := mint(t)
+		res, err := one.Exchange(ctx, request(tok))
+		if err != nil {
+			t.Fatalf("exchange: %v", err)
+		}
+		// As a platform admin deletes it: acting on the admin's own tenant,
+		// which the revocation's every-tenant scope overrides.
+		adminCtx := auth.WithActingTenant(ctx, uuid.New())
+		bulk := &auth.BulkRevocation{Revoker: store}
+		revoked, err := bulk.RevokeMatching(adminCtx, limes.RevokeMatchingRequest{AllTenants: true, ClientID: exchangeAgentClient})
+		if err != nil || revoked == 0 {
+			t.Fatalf("revoke the client: %d, %v; want its capabilities", revoked, err)
+		}
+		rec, err := store.GetRecord(auth.WithActingTenant(ctx, tenant), res.Capability.ID)
+		if err != nil || rec.Revocation == nil {
+			t.Errorf("the client's capability: revocation %v (%v), want revoked", rec.Revocation, err)
 		}
 	})
 }

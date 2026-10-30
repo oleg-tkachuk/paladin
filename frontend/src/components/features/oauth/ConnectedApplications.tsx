@@ -39,8 +39,8 @@ import {
 } from "@/gen/paladin/iam/v1/user_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
+import { OAUTH_GRANTS_TABLE } from "@/lib/oauthGrants";
 import { useTableView } from "@/hooks/useTableView";
-import type { TableUrl } from "@/lib/table/urlState";
 import { useTableFacets } from "@/hooks/useTableFacets";
 import {
   LIFECYCLE_BADGE,
@@ -52,10 +52,6 @@ import { describeOAuthScope, grantsWrite } from "@/lib/auth/oauthScopes";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 import { Duration } from "@/components/Duration";
-
-// The list of applications keeps its search, sort and open grant in the URL
-// under its own names, beside the page's other tables.
-const APPS_TABLE: TableUrl = { namespace: "apps" };
 
 /**
  * The query key of a user's grants: every one whose rows remain, ended ones
@@ -126,7 +122,7 @@ export function ConnectedApplications({
   const queryClient = useQueryClient();
   const { showNotification } = useNotification();
   // The open grant is in the URL, so its address links to it.
-  const detail = useDetailPanel(undefined, APPS_TABLE);
+  const detail = useDetailPanel(undefined, OAUTH_GRANTS_TABLE);
   const [target, setTarget] = useState<OAuthGrant | null>(null);
   const query = useQuery({
     queryKey: oauthGrantsKey(userName),
@@ -138,11 +134,11 @@ export function ConnectedApplications({
     enabled: !!userName,
   });
   const grants = query.data?.grants ?? NO_GRANTS;
-  const facets = useTableFacets(grants, GRANT_FACETS, APPS_TABLE);
+  const facets = useTableFacets(grants, GRANT_FACETS, OAUTH_GRANTS_TABLE);
   const view = useTableView(facets.rows, {
     text: SEARCH_IN,
     accessors: SORT_BY,
-    url: APPS_TABLE,
+    url: OAUTH_GRANTS_TABLE,
   });
   const sortProps = { current: view.sort, onSort: view.toggleSort };
   // Read from every grant, not the rows the facets leave: a link may name an

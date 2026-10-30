@@ -19,6 +19,7 @@ import { CopyableId } from "@/components/ui/CopyableId";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { Duration } from "@/components/Duration";
 import { CapabilityOpGrants } from "@/components/features/capabilities/CapabilityOpGrants";
+import { capabilityGrant, type CapabilityGrant } from "@/lib/oauthGrants";
 
 // UsageEntry is the capability's usage: undefined while loading,
 // "unavailable" when the read failed.
@@ -263,6 +264,8 @@ export function DetailsBody({
         <IssuanceRows record={record} tenantId={cap.subject?.tenantId ?? ""} />
       </DetailsSection>
 
+      <GrantSection grant={capabilityGrant(cap)} />
+
       <DetailsSection title="Identifiers">
         <DetailRow label="Issuer" value={cap.issuer || "—"} mono />
         <DetailRow
@@ -287,6 +290,37 @@ export function DetailsBody({
         />
       </DetailsSection>
     </div>
+  );
+}
+
+// GrantSection shows the OAuth grant a capability was exchanged under — the
+// user it acts for, the client, and a link to the grant, where revoking it
+// revokes this capability with every other of its session. Nothing for one
+// issued outside a grant.
+function GrantSection({ grant }: { grant: CapabilityGrant | null }) {
+  if (!grant) return null;
+  return (
+    <DetailsSection title="OAuth grant">
+      <DetailRow
+        label="Acts for"
+        value={<ActorName subject={grant.userId} tenantId={grant.tenantId} />}
+        breakAll
+      />
+      <DetailRow label="Client" value={grant.clientId || "—"} mono breakAll />
+      <DetailRow
+        label="Grant"
+        value={
+          <Link
+            href={grant.href}
+            className="font-mono text-xs text-primary hover:underline"
+            title={grant.id}
+          >
+            {grant.id}
+          </Link>
+        }
+        breakAll
+      />
+    </DetailsSection>
   );
 }
 

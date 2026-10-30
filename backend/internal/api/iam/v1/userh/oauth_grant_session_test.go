@@ -40,7 +40,7 @@ func TestRevokeOAuthGrantEndsTheSessionsCapabilities(t *testing.T) {
 	grant := g.grants[0].ID
 	g.found = true
 	sessions := &fakeSessions{batches: batches}
-	h.WithSessionRevoker(sessions)
+	h.WithSessionRevoker(&auth.BulkRevocation{Revoker: sessions})
 
 	if err := h.RevokeOAuthGrant(ctxAs(uuid.New(), "platform.admin"), ref(u), grant); err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestRevokeOAuthGrantFinishesAnEndedGrant(t *testing.T) {
 	u, g, _, h := grantFixture(t)
 	g.found = false
 	sessions := &fakeSessions{}
-	h.WithSessionRevoker(sessions)
+	h.WithSessionRevoker(&auth.BulkRevocation{Revoker: sessions})
 
 	if err := h.RevokeOAuthGrant(ctxAs(u.TenantID), ref(u), g.grants[0].ID); err != nil {
 		t.Fatalf("an ended grant of the user's: %v, want done", err)
@@ -82,7 +82,7 @@ func TestRevokeOAuthGrantFinishesAnEndedGrant(t *testing.T) {
 func TestRevokeOAuthGrantTouchesNoOtherGrant(t *testing.T) {
 	u, g, _, h := grantFixture(t)
 	sessions := &fakeSessions{}
-	h.WithSessionRevoker(sessions)
+	h.WithSessionRevoker(&auth.BulkRevocation{Revoker: sessions})
 
 	if err := h.RevokeOAuthGrant(ctxAs(u.TenantID), ref(u), uuid.New()); code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
@@ -98,7 +98,7 @@ func TestRevokeOAuthGrantTouchesNoOtherGrant(t *testing.T) {
 func TestRevokeOAuthGrantReportsTheSessionFailing(t *testing.T) {
 	u, g, _, h := grantFixture(t)
 	g.found = true
-	h.WithSessionRevoker(&fakeSessions{err: errors.New("pgstore: connection refused")})
+	h.WithSessionRevoker(&auth.BulkRevocation{Revoker: &fakeSessions{err: errors.New("pgstore: connection refused")}})
 
 	if err := h.RevokeOAuthGrant(ctxAs(u.TenantID), ref(u), g.grants[0].ID); code(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v, want Unavailable", code(err))

@@ -114,7 +114,7 @@ class CapabilityCaveats(_message.Message):
     def __init__(self, ops: _Optional[_Iterable[str]] = ..., resource_prefixes: _Optional[_Iterable[str]] = ..., resource_uris: _Optional[_Iterable[str]] = ..., allow_tainted_read: _Optional[bool] = ..., idempotency_key_required: _Optional[bool] = ..., source_ip_cidr: _Optional[_Iterable[str]] = ..., max_requests: _Optional[int] = ..., unlimited_requests: _Optional[bool] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., max_copies: _Optional[int] = ..., unlimited_copies: _Optional[bool] = ...) -> None: ...
 
 class Capability(_message.Message):
-    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "confirmation_jkt", "disposition")
+    __slots__ = ("id", "issuer", "subject", "audience", "caveats", "issued_at", "not_before", "expires_at", "parent_id", "confirmation_jkt", "disposition", "session", "on_behalf_of", "client_id")
     ID_FIELD_NUMBER: _ClassVar[int]
     ISSUER_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -126,6 +126,9 @@ class Capability(_message.Message):
     PARENT_ID_FIELD_NUMBER: _ClassVar[int]
     CONFIRMATION_JKT_FIELD_NUMBER: _ClassVar[int]
     DISPOSITION_FIELD_NUMBER: _ClassVar[int]
+    SESSION_FIELD_NUMBER: _ClassVar[int]
+    ON_BEHALF_OF_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     id: str
     issuer: str
     subject: CapabilityPrincipal
@@ -137,7 +140,10 @@ class Capability(_message.Message):
     parent_id: str
     confirmation_jkt: str
     disposition: CapabilityDisposition
-    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., confirmation_jkt: _Optional[str] = ..., disposition: _Optional[_Union[CapabilityDisposition, str]] = ...) -> None: ...
+    session: str
+    on_behalf_of: CapabilityPrincipal
+    client_id: str
+    def __init__(self, id: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., audience: _Optional[_Iterable[str]] = ..., caveats: _Optional[_Union[CapabilityCaveats, _Mapping]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., not_before: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., parent_id: _Optional[str] = ..., confirmation_jkt: _Optional[str] = ..., disposition: _Optional[_Union[CapabilityDisposition, str]] = ..., session: _Optional[str] = ..., on_behalf_of: _Optional[_Union[CapabilityPrincipal, _Mapping]] = ..., client_id: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceIssueRequest(_message.Message):
     __slots__ = ("subject", "audience", "caveats", "ttl_seconds", "not_before", "confirmation_jkt", "require_biscuit")

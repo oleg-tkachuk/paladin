@@ -110,7 +110,7 @@ func withExchange(t *testing.T, h *Handler) (*Handler, *limes.Verifier) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err = h.WithTokenExchange(ex, map[string]bool{exchangerID: true}, store)
+	h, err = h.WithTokenExchange(ex, map[string]bool{exchangerID: true}, &auth.BulkRevocation{Revoker: store})
 	if err != nil {
 		t.Fatal(err)
 	}

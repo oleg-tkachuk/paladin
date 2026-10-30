@@ -13,11 +13,14 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	oauthpkg "github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -33,7 +36,20 @@ type Handler struct {
 	// one would last only until the next boot.
 	seeded map[string]struct{}
 	policy cedar.Authorizer
+	// revocation revokes the capabilities exchanged under a deleted client,
+	// in every tenant. Nil while the capability subsystem is off.
+	revocation *auth.BulkRevocation
 }
+
+// WithCapabilityRevocation lets deleting a client revoke the capabilities
+// exchanged under it.
+func (h *Handler) WithCapabilityRevocation(r *auth.BulkRevocation) *Handler {
+	h.revocation = r
+	return h
+}
+
+// noteClientDeleted is why a client's capabilities were revoked.
+const noteClientDeleted = "an operator deleted the OAuth client"
 
 var _ paladinadminv1connect.OAuthClientServiceHandler = (*Handler)(nil)
 
@@ -49,7 +65,11 @@ func NewHandler(clients oauthpkg.ClientDeleter, as config.OAuthAS, policy cedar.
 	return &Handler{clients: clients, seeded: seeded, policy: policy}
 }
 
-// DeleteOAuthClient removes a client, its codes and its grants.
+// DeleteOAuthClient removes a client, its codes and its grants, then revokes
+// every capability exchanged under it, in every tenant: a client spans them
+// all. The client goes first, so none is exchanged meanwhile; the revocation
+// runs even for a client already gone, so a retry after it failed finishes
+// it, and only then is a client that was not there NotFound.
 func (h *Handler) DeleteOAuthClient(ctx context.Context, req *adminv1.DeleteOAuthClientRequest) (*adminv1.DeleteOAuthClientResponse, error) {
 	if err := h.authorize(ctx); err != nil {
 		return nil, err
@@ -60,13 +80,31 @@ func (h *Handler) DeleteOAuthClient(ctx context.Context, req *adminv1.DeleteOAut
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Sprintf("client %q is seeded by auth.oauth.seed_clients and would be registered again at the next boot; remove it from the configuration first", id))
 	}
-	if err := h.clients.DeleteClient(ctx, id); err != nil {
-		if errors.Is(err, oauthpkg.ErrClientNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Sprintf("no OAuth client %q", id))
-		}
+	err := h.clients.DeleteClient(ctx, id)
+	gone := errors.Is(err, oauthpkg.ErrClientNotFound)
+	if err != nil && !gone {
 		return nil, apiutil.MapError(fmt.Errorf("delete oauth client: %w", err))
 	}
+	revoked, err := h.revocation.RevokeMatching(ctx, limes.RevokeMatchingRequest{
+		AllTenants: true, ClientID: id, Note: noteClientDeleted, Actor: callerSubject(ctx),
+	})
+	if err != nil {
+		return nil, auth.AnswerCapabilityError(fmt.Errorf("revoke the capabilities of oauth client %q: %w", id, err), nil)
+	}
+	logger.FromContext(ctx).Info("oauth client deleted",
+		zap.String("client_id", id), zap.Bool("found", !gone), zap.Int64("capabilities_revoked", revoked))
+	if gone {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Sprintf("no OAuth client %q", id))
+	}
 	return &adminv1.DeleteOAuthClientResponse{}, nil
+}
+
+// callerSubject is the subject of the principal ctx carries, empty for none.
+func callerSubject(ctx context.Context) string {
+	if p, err := auth.PrincipalFromContext(ctx); err == nil && p != nil {
+		return p.Subject
+	}
+	return ""
 }
 
 func (h *Handler) authorize(ctx context.Context) error {

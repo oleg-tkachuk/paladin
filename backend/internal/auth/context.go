@@ -226,6 +226,24 @@ func EffectiveTenant(ctx context.Context) (uuid.UUID, error) {
 	return TenantFromContext(ctx)
 }
 
+type allTenantsWriteKey struct{}
+
+// WithAllTenantsWrite lets the capability store write every tenant's rows
+// for the calls made with ctx: a revocation across tenants
+// (limes.RevokeMatchingRequest.AllTenants), which matches by client or
+// session alone. Only the capability store's scope reads it; Paladin's own
+// pool scopes a request as it always has. BulkRevocation sets it on the one
+// call it makes, and nothing else should.
+func WithAllTenantsWrite(ctx context.Context) context.Context {
+	return context.WithValue(ctx, allTenantsWriteKey{}, true)
+}
+
+// AllTenantsWrite reports whether ctx was marked by WithAllTenantsWrite.
+func AllTenantsWrite(ctx context.Context) bool {
+	v, _ := ctx.Value(allTenantsWriteKey{}).(bool)
+	return v
+}
+
 type crossTenantReadKey struct{}
 
 // WithCrossTenantRead marks the request as a platform-wide READ. The RLS

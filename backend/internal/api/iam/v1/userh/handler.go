@@ -15,7 +15,6 @@ import (
 	"connectrpc.com/connect/v2"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -35,13 +34,13 @@ type Handler struct {
 	grants authstore.OAuthGrantStore
 	// sessions revokes the capabilities exchanged under a grant's session
 	// when the grant ends. Nil while the capability subsystem is off.
-	sessions limes.BulkRevoker
+	sessions *auth.BulkRevocation
 	now      func() time.Time
 }
 
 // WithSessionRevoker lets ending a grant end the capabilities exchanged
 // under its session.
-func (h *Handler) WithSessionRevoker(s limes.BulkRevoker) *Handler {
+func (h *Handler) WithSessionRevoker(s *auth.BulkRevocation) *Handler {
 	h.sessions = s
 	return h
 }
@@ -503,7 +502,7 @@ func (h *Handler) RevokeOAuthGrant(ctx context.Context, ref UserRef, grantID uui
 	}
 	var revoked int64
 	if h.sessions != nil {
-		if revoked, err = auth.RevokeSession(ctx, h.sessions, u.TenantID, grantID, noteGrantRevokedByOperator, callerSubject(ctx)); err != nil {
+		if revoked, err = h.sessions.RevokeSession(ctx, u.TenantID, grantID, noteGrantRevokedByOperator, callerSubject(ctx)); err != nil {
 			return connect.NewError(connect.CodeUnavailable, "the grant's capabilities could not be revoked; retry").WithCause(err)
 		}
 	}

@@ -58,7 +58,9 @@ import {
   type CapabilityUsage,
   fetchCapabilityUsage,
 } from "@/lib/queries/details";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { capabilityGrant } from "@/lib/oauthGrants";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import {
@@ -497,6 +499,7 @@ export default function CapabilitiesPage() {
                       >
                         {c.subject?.subject || "—"}
                       </span>
+                      <GrantLink cap={c} />
                     </TableCell>
                     {/* Caveats wrap: resource prefixes are free text, and a
                         long one on a single line would widen the whole table. */}
@@ -704,5 +707,21 @@ export default function CapabilitiesPage() {
         onClose={() => setCopyUsageOpen(false)}
       />
     </div>
+  );
+}
+
+/** The OAuth grant a listed capability was exchanged under, as a link. */
+function GrantLink({ cap }: { cap: Capability }) {
+  const grant = capabilityGrant(cap);
+  if (!grant) return null;
+  return (
+    <Link
+      href={grant.href}
+      onClick={(e) => e.stopPropagation()}
+      className="block text-xs text-primary hover:underline"
+      title={`OAuth grant ${grant.id}`}
+    >
+      OAuth grant
+    </Link>
   );
 }

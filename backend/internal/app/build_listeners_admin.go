@@ -338,8 +338,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// The admin pool is enough: oauth_clients has no row-level security, and
 	// the cascade to refresh_tokens is the foreign key's, which RLS does not
 	// filter.
-	paladinadminv1connect.RegisterOAuthClientServiceHandler(adminServer,
-		oauthclienth.NewHandler(oauthClients, cfg.Auth.OAuth, polEngine))
+	oauthClientH := oauthclienth.NewHandler(oauthClients, cfg.Auth.OAuth, polEngine)
+	if deps.Capability != nil {
+		oauthClientH.WithCapabilityRevocation(deps.Capability.BulkRevocation)
+	}
+	paladinadminv1connect.RegisterOAuthClientServiceHandler(adminServer, oauthClientH)
 
 	paladinadminv1connect.RegisterSystemServiceHandler(adminServer, admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool)))
 
