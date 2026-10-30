@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
@@ -96,4 +97,32 @@ func TestEndpointsLogEveryRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A token exchange handed to limes is logged there — the exchange granted
+// or refused — so the endpoint does not log it a second time. The same
+// grant answered by Paladin itself, while the exchange is not configured,
+// is still logged here.
+func TestEndpointsLeaveADelegatedExchangeToLimes(t *testing.T) {
+	logged := func(logs *observer.ObservedLogs) int {
+		return logs.FilterMessage(requestServedMessage).Len() + logs.FilterMessage(requestRefusedMessage).Len()
+	}
+	f := newExchangeFixture(t, sampleUser())
+	for name, form := range map[string]url.Values{
+		"granted": exchangeForm(f.subject, auth.TokenPlaneData),
+		"refused": exchangeForm("not-a-token", auth.TokenPlaneData),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, logs := postMounted(t, f.h, TokenPath, form); logged(logs) != 0 {
+				t.Errorf("a delegated exchange was logged by the endpoint too: %v", logs.All())
+			}
+		})
+	}
+	t.Run("not configured", func(t *testing.T) {
+		store := newMemStore()
+		h := testHandler(t, store, &memRefresh{}, sampleUser())
+		if _, logs := postMounted(t, h, TokenPath, exchangeForm("not-a-token")); logged(logs) != 1 {
+			t.Errorf("%d lines for an exchange Paladin refused itself, want 1: %v", logged(logs), logs.All())
+		}
+	})
 }

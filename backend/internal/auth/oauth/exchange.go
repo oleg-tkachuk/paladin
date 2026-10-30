@@ -66,8 +66,10 @@ func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string
 }
 
 // tokenExchange answers the grant. The form is already parsed, which limes'
-// handler reads as it stands.
+// handler reads as it stands. limes logs every exchange it grants or
+// refuses, so the endpoint's own line is left out.
 func (h *Handler) tokenExchange(w http.ResponseWriter, r *http.Request) {
+	loggedDownstream(w)
 	h.exchange.handler.ServeHTTP(w, r)
 }
 
