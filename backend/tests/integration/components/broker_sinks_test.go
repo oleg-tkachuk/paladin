@@ -767,6 +767,41 @@ redpanda:
 	assertEnvelope(t, msg.Value, "paladin.bucket.updated")
 }
 
+// How long one rabbitmqctl call may take, and how often it is tried, before
+// the drop test gives up: the Erlang CLI can stall under a loaded parallel
+// run, and an unbounded call once held the whole package to its 10-minute
+// timeout. Closing every connection is idempotent, so a retry is safe.
+const (
+	rabbitCtlTimeout  = 30 * time.Second
+	rabbitCtlAttempts = 3
+)
+
+// rabbitDeliverTimeout bounds one delivery attempt in the redial loop, so the
+// loop's own deadline holds even if an attempt blocks on a dead connection.
+const rabbitDeliverTimeout = 10 * time.Second
+
+// closeAllRabbitConnections makes the broker in ctr force-close every AMQP
+// connection, retrying a call that stalls or fails.
+func closeAllRabbitConnections(ctx context.Context, t *testing.T, ctr testcontainers.Container) {
+	t.Helper()
+	var last string
+	for attempt := 1; attempt <= rabbitCtlAttempts; attempt++ {
+		callCtx, cancel := context.WithTimeout(ctx, rabbitCtlTimeout)
+		code, out, err := ctr.Exec(callCtx, []string{"rabbitmqctl", "close_all_connections", "test-forced-drop"})
+		var b []byte
+		if out != nil {
+			b, _ = io.ReadAll(out)
+		}
+		cancel()
+		if err == nil && code == 0 {
+			return
+		}
+		last = fmt.Sprintf("code=%d err=%v out=%s", code, err, b)
+		t.Logf("close_all_connections attempt %d of %d: %s", attempt, rabbitCtlAttempts, last)
+	}
+	t.Fatalf("close_all_connections: %s", last)
+}
+
 // TestRabbitMQSinkDelivery_ConnectionDropRedial pins the drop-mid-stream
 // behaviour under the real broker: after a successful delivery the broker
 // force-closes every AMQP connection (rabbitmqctl close_all_connections);
@@ -841,11 +876,7 @@ func TestRabbitMQSinkDelivery_ConnectionDropRedial(t *testing.T) {
 	delivered := 1
 
 	// 2) Broker force-closes EVERY connection — the pooled one included.
-	code, out, err := ctr.Exec(ctx, []string{"rabbitmqctl", "close_all_connections", "test-forced-drop"})
-	if err != nil || code != 0 {
-		b, _ := io.ReadAll(out)
-		t.Fatalf("close_all_connections: code=%d err=%v out=%s", code, err, b)
-	}
+	closeAllRabbitConnections(ctx, t, ctr)
 
 	// 3) Deliver repeatedly. Early attempts may hit the not-yet-detected dead
 	// connection and MUST fail loudly (the outbox would retry them); once the
@@ -853,7 +884,10 @@ func TestRabbitMQSinkDelivery_ConnectionDropRedial(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	recovered := false
 	for time.Now().Before(deadline) {
-		if err := d.DeliverOne(ctx, sub, "paladin.bucket.updated"); err == nil {
+		attemptCtx, cancel := context.WithTimeout(ctx, rabbitDeliverTimeout)
+		err := d.DeliverOne(attemptCtx, sub, "paladin.bucket.updated")
+		cancel()
+		if err == nil {
 			delivered++
 			recovered = true
 			break
