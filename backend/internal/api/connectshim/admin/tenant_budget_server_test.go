@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"uuid"
 
@@ -169,6 +170,24 @@ func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 	var connErr *connect.Error
 	if !errors.As(err, &connErr) || connErr.Code() != connect.CodeNotFound {
 		t.Errorf("expected CodeNotFound, got %v", err)
+	}
+}
+
+// Get answers the store failing as Unavailable, told only to retry: the
+// store's text is no message of the caller's.
+func TestTenantBudgetServer_Get_StoreFailureIsUnavailable(t *testing.T) {
+	const storeText = "pgstore: dial tcp 10.0.0.7:5432: connection refused"
+	srv := newServer(&fakeUsageStore{getErr: errors.New(storeText)})
+	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{TenantId: uuid.New().String()})
+	if connect.CodeOf(err) != connect.CodeUnavailable || strings.Contains(err.Error(), storeText) {
+		t.Errorf("err = %v, want Unavailable without the store's text", err)
+	}
+}
+
+// The rows Get answers by name codes limes defines.
+func TestTenantBudgetReadExceptionsNameLimesCodes(t *testing.T) {
+	if undefined := tenantBudgetReadExceptions.Undefined(); len(undefined) > 0 {
+		t.Errorf("exceptions name %v, which limes does not define", undefined)
 	}
 }
 
@@ -356,13 +375,13 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 }
 
 // Set answers each refusal of the store with the status the caller can act
-// on; only a failure that refuses nothing is Internal.
+// on; a failure that refuses nothing is the store's, told to retry.
 func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
 	cases := map[error]connect.Code{
 		meter.ErrTenantBudgetVersionMismatch: connect.CodeAborted,
 		limes.ErrUnitCodeMismatch:            connect.CodeFailedPrecondition,
 		limes.ErrInvalidAmount:               connect.CodeInvalidArgument,
-		errors.New("store down"):             connect.CodeInternal,
+		errors.New("store down"):             connect.CodeUnavailable,
 	}
 	for storeErr, want := range cases {
 		srv := newServer(&fakeUsageStore{setErr: storeErr})
