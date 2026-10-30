@@ -35,8 +35,12 @@ func (b *BulkRevocation) RevokeMatching(ctx context.Context, req limes.RevokeMat
 	if !req.AllTenants {
 		tenants = append(tenants, req.TenantID)
 	}
+	revokeCtx := WithActingTenant(ctx, req.TenantID)
+	if req.AllTenants {
+		revokeCtx = WithAllTenantsWrite(ctx)
+	}
 	for {
-		res, err := b.Revoker.RevokeMatching(WithActingTenant(ctx, req.TenantID), req)
+		res, err := b.Revoker.RevokeMatching(revokeCtx, req)
 		if err != nil {
 			return revoked, fmt.Errorf("revoke matching capabilities: %w", err)
 		}

@@ -58,10 +58,10 @@ type CapabilityBundle struct {
 	// capability across every replica (ADR-0041).
 	Exchanges limes.ExchangeStore
 
-	// Sessions revokes the capabilities of an OAuth grant's session, in the
-	// tenant the caller acts on, when the session ends, and releases their
-	// holds.
-	Sessions *auth.BulkRevocation
+	// BulkRevocation revokes capabilities together — an OAuth grant's
+	// session when it ends, a client when it is deleted — and releases
+	// their holds.
+	BulkRevocation *auth.BulkRevocation
 
 	// Replay records the DPoP proof ids every replica has accepted, so a
 	// proof replayed against any of them is refused. The capability
@@ -255,23 +255,23 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}
 
 	return &CapabilityBundle{
-		Store:        store,
-		Revocations:  cache,
-		Copies:       store,
-		CopyUsage:    copyUsage,
-		Records:      records,
-		Exchanges:    pgstore.ScopedExchanges(store),
-		Sessions:     &auth.BulkRevocation{Revoker: store, Holds: holds},
-		Usage:        usage,
-		Ledger:       ledger,
-		Issuer:       issuers.issuer,
-		Delegation:   issuers.delegation,
-		Verifier:     verifier,
-		Keys:         issuers.keys,
-		Replay:       replay,
-		PublicKeys:   map[string]ed25519.PublicKey{key.KeyID: key.Public()},
-		IssuerName:   cfg.IssuerName,
-		EphemeralKey: generated,
+		Store:          store,
+		Revocations:    cache,
+		Copies:         store,
+		CopyUsage:      copyUsage,
+		Records:        records,
+		Exchanges:      pgstore.ScopedExchanges(store),
+		BulkRevocation: &auth.BulkRevocation{Revoker: store, Holds: holds},
+		Usage:          usage,
+		Ledger:         ledger,
+		Issuer:         issuers.issuer,
+		Delegation:     issuers.delegation,
+		Verifier:       verifier,
+		Keys:           issuers.keys,
+		Replay:         replay,
+		PublicKeys:     map[string]ed25519.PublicKey{key.KeyID: key.Public()},
+		IssuerName:     cfg.IssuerName,
+		EphemeralKey:   generated,
 	}, nil
 }
 

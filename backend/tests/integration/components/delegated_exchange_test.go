@@ -173,4 +173,25 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 			t.Errorf("the session's token exchanged again: err = %v, want exchange.ErrInvalidGrant", err)
 		}
 	})
+
+	// Last: it revokes every capability of the client, the ones above too.
+	t.Run("deleting the client revokes its capabilities in every tenant", func(t *testing.T) {
+		tok, _ := mint(t)
+		res, err := one.Exchange(ctx, request(tok))
+		if err != nil {
+			t.Fatalf("exchange: %v", err)
+		}
+		// As a platform admin deletes it: acting on the admin's own tenant,
+		// which the revocation's every-tenant scope overrides.
+		adminCtx := auth.WithActingTenant(ctx, uuid.New())
+		bulk := &auth.BulkRevocation{Revoker: store}
+		revoked, err := bulk.RevokeMatching(adminCtx, limes.RevokeMatchingRequest{AllTenants: true, ClientID: exchangeAgentClient})
+		if err != nil || revoked == 0 {
+			t.Fatalf("revoke the client: %d, %v; want its capabilities", revoked, err)
+		}
+		rec, err := store.GetRecord(auth.WithActingTenant(ctx, tenant), res.Capability.ID)
+		if err != nil || rec.Revocation == nil {
+			t.Errorf("the client's capability: revocation %v (%v), want revoked", rec.Revocation, err)
+		}
+	})
 }

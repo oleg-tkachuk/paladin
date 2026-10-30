@@ -123,21 +123,6 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
-### Revoke delegated capabilities when a user or an OAuth client goes
-
-- **Status:** Blocked.
-- **Reason:** limes' `RevokeMatching` (ADR-0013 there) revokes by subject,
-  on-behalf-of or client, but within one tenant, and an OAuth client spans
-  every tenant. A deleted or disabled user's delegated capabilities are
-  already refused at the next call (ADR-0041), so only `DeleteOAuthClient`
-  leaves capabilities live until their token expires.
-- **Definition of Done:** `DeleteOAuthClient` revokes every capability whose
-  `client_id` is the client's, in every tenant, looping until none is left,
-  with a test that a capability exchanged under the client is refused after
-  the delete.
-- **Blockers:** a cross-tenant selector in limes, or a list of the tenants a
-  client holds capabilities in.
-
 ### Put limes' error codes on the wire
 
 - **Status:** Deferred.

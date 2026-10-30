@@ -133,5 +133,5 @@ func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *Shared
 	if err != nil {
 		return nil, err
 	}
-	return as.WithTokenExchange(ex, exchangers, deps.Capability.Sessions)
+	return as.WithTokenExchange(ex, exchangers, deps.Capability.BulkRevocation)
 }

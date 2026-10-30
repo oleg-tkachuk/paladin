@@ -63,6 +63,14 @@ func TestScope(t *testing.T) {
 		{"platform-wide read while acting on a tenant",
 			auth.WithCrossTenantRead(auth.WithActingTenant(context.Background(), tenant)),
 			scoped("", allTenantsRead)},
+		// A revocation across tenants writes every tenant's, over the tenant
+		// the request acts on and a platform-wide read alike.
+		{"revocation across tenants while acting on a tenant",
+			auth.WithAllTenantsWrite(auth.WithActingTenant(context.Background(), tenant)),
+			scoped("", allTenantsWrite)},
+		{"revocation across tenants under a platform-wide read",
+			auth.WithAllTenantsWrite(auth.WithCrossTenantRead(context.Background())),
+			scoped("", allTenantsWrite)},
 		// Housekeeping carries no principal; its pgstore scope decides.
 		{"housekeeping", pgstore.WithAllTenants(context.Background()),
 			scoped("", allTenantsWrite)},

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"uuid"
 
@@ -13,16 +14,20 @@ import (
 // fakeBulk revokes in batches — More until the last — naming tenants, and
 // records each release with the tenant its context acts on.
 type fakeBulk struct {
-	batches    int
-	tenants    []uuid.UUID
-	revokes    int
-	revokeErr  error
-	releases   []meter.ReleaseMatchingRequest
-	releasedIn []uuid.UUID
-	releaseErr error
+	// everyTenant records whether each revoke, then each release, was
+	// scoped to write every tenant.
+	everyTenant []bool
+	batches     int
+	tenants     []uuid.UUID
+	revokes     int
+	revokeErr   error
+	releases    []meter.ReleaseMatchingRequest
+	releasedIn  []uuid.UUID
+	releaseErr  error
 }
 
-func (f *fakeBulk) RevokeMatching(context.Context, limes.RevokeMatchingRequest) (limes.RevokeMatchingResult, error) {
+func (f *fakeBulk) RevokeMatching(ctx context.Context, _ limes.RevokeMatchingRequest) (limes.RevokeMatchingResult, error) {
+	f.everyTenant = append(f.everyTenant, AllTenantsWrite(ctx))
 	f.revokes++
 	if f.revokeErr != nil {
 		return limes.RevokeMatchingResult{}, f.revokeErr
@@ -31,6 +36,7 @@ func (f *fakeBulk) RevokeMatching(context.Context, limes.RevokeMatchingRequest) 
 }
 
 func (f *fakeBulk) ReleaseMatching(ctx context.Context, req meter.ReleaseMatchingRequest) (meter.ReleaseMatchingResult, error) {
+	f.everyTenant = append(f.everyTenant, AllTenantsWrite(ctx))
 	f.releases = append(f.releases, req)
 	t, _ := ActingTenant(ctx)
 	f.releasedIn = append(f.releasedIn, t)
@@ -97,5 +103,23 @@ func TestBulkRevocationWithoutItsParts(t *testing.T) {
 	var off *BulkRevocation
 	if n, err := off.RevokeMatching(context.Background(), limes.RevokeMatchingRequest{}); err != nil || n != 0 {
 		t.Errorf("off: %d, %v; want nothing", n, err)
+	}
+}
+
+// A revocation across tenants is scoped to write every tenant for its own
+// calls alone; each tenant's holds are released acting on that tenant.
+func TestBulkRevocationAcrossTenantsScopesOnlyTheRevocation(t *testing.T) {
+	tenant := uuid.New()
+	f := &fakeBulk{batches: 1, tenants: []uuid.UUID{tenant}}
+	b := &BulkRevocation{Revoker: f, Holds: f}
+	ctx := WithActingTenant(context.Background(), uuid.New())
+	if _, err := b.RevokeMatching(ctx, limes.RevokeMatchingRequest{AllTenants: true, ClientID: "agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []bool{true, false}; !slices.Equal(f.everyTenant, want) {
+		t.Errorf("every-tenant scope per call = %v, want %v", f.everyTenant, want)
+	}
+	if len(f.releasedIn) != 1 || f.releasedIn[0] != tenant {
+		t.Errorf("released in %v, want only %s, where the revocation wrote", f.releasedIn, tenant)
 	}
 }
