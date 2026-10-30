@@ -14,7 +14,9 @@
 # grant consented to as the bootstrap admin, the code exchanged with PKCE. Its
 # write is an upload into a collection no one has, named for the run, which
 # the data plane audits and refuses as not found: nothing is reserved. The
-# client and its grants are removed on exit.
+# client then revokes the grant, which revokes the capability its token was
+# exchanged for, so the same write is refused. The client and its grants are
+# removed on exit.
 #
 #   KUBE_CONTEXT=orbstack ./scripts/live-mcp-delegation.sh
 #
@@ -88,6 +90,8 @@ readonly WRITE_CONTENT_TYPE=text/plain
 # token it sent.
 readonly PLANE_NOT_FOUND_PREFIX="not_found: "
 readonly TOKEN_REFUSED="access token was refused"
+# The reason a plane gives for a capability whose session has ended.
+readonly REVOKED_REASON=revoked
 readonly AUDIT_PAGE_SIZE=50
 readonly AUDIT_POLLS=10
 readonly POLL_SECONDS=1
@@ -112,8 +116,11 @@ run_id=$(uuidgen | tr '[:upper:]' '[:lower:]')
 container="live-mcp-delegation-${run_id%%-*}"
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/live-mcp-delegation.XXXXXX")
+# The grants' refresh tokens, one per line: grant runs in a subshell, so an
+# array it appends to would never reach cleanup.
+refresh_file="$work/refresh_tokens"
 forwards=()
-client_id="" refresh_tokens=() token="" oauth_revoke_url=""
+client_id="" token="" oauth_revoke_url=""
 pass=0
 fail=0
 ok() { echo "PASS $1"; pass=$((pass + 1)); }
@@ -129,10 +136,10 @@ admin_rpc() { curl -s "$admin/paladin.admin.v1.$1" -H 'Content-Type: application
 # cleanup removes the bridge, the agent's grants and client, and the forwards.
 cleanup() {
     docker rm -f "$container" >/dev/null 2>&1
-    for rt in "${refresh_tokens[@]+"${refresh_tokens[@]}"}"; do
+    while read -r rt; do
         [[ -n "$rt" && -n "$oauth_revoke_url" ]] || continue
         curl -sk -o /dev/null "$oauth_revoke_url" --data-urlencode "client_id=$client_id" --data-urlencode "token=$rt"
-    done
+    done < <(cat "$refresh_file" 2>/dev/null)
     if [[ -n "$client_id" && -n "$token" ]]; then
         r=$(admin_rpc OAuthClientService/DeleteOAuthClient "$(jq -cn --arg c "$client_id" '{clientId:$c}')")
         [[ "$(printf %s "$r" | jq -r '.code // "ok"')" == ok ]] || echo "!!! delete OAuth client $client_id: $r" >&2
@@ -257,7 +264,7 @@ expect "an MCP agent registers" "$r" test "$(printf %s "$r" | tail -n1)" = "$HTT
 verifier="$(uuidgen)$(uuidgen)"
 challenge=$(printf %s "$verifier" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 # grant <scopes>: consent as the admin for the MCP resource; prints the
-# access token and keeps the refresh token for cleanup.
+# access token and keeps the refresh token in refresh_file, in grant order.
 grant() {
     local loc code body
     loc=$(curl -sk -o /dev/null -w '%{http_code} %{redirect_url}' "$OAUTH_AUTHORIZE_URL" \
@@ -272,7 +279,7 @@ grant() {
     body=$(curl -sk "$OAUTH_TOKEN_URL" --data-urlencode "grant_type=authorization_code" \
         --data-urlencode "code=$code" --data-urlencode "client_id=$client_id" \
         --data-urlencode "redirect_uri=$REDIRECT_URI" --data-urlencode "code_verifier=$verifier")
-    refresh_tokens+=("$(printf %s "$body" | jq -r '.refresh_token // empty')")
+    printf '%s\n' "$(printf %s "$body" | jq -r '.refresh_token // empty')" >>"$refresh_file"
     printf %s "$body" | jq -r '.access_token // empty'
 }
 writer=$(grant "$SCOPE_READ $SCOPE_WRITE")
@@ -337,6 +344,18 @@ expect "the write is audited once, relayed by $EXCHANGE_CLIENT_ID" "$entries" te
 expect "the audited actor is the user, on the data plane" "$entries" test \
     "$(jq -r '.[0] | "\(.actorSubject) \(.actorAudience)"' <<<"$entries")" = "$user $AUDIENCE_DATA"
 expect "the audited write names the delegated capability" "$entries" test -n "$(jq -r '.[0].capabilityId // empty' <<<"$entries")"
+
+# ── ending the grant's session revokes its capability ───────────────────────
+# The writer's grant was the first consented to. Revoking it revokes the
+# capability its token was exchanged for at once, though the token itself
+# lives on, so the bridge's write with the same token is refused.
+writer_refresh=$(sed -n 1p "$refresh_file")
+c=$(curl -sk -o /dev/null -w '%{http_code}' "$oauth_revoke_url" \
+    --data-urlencode "client_id=$client_id" --data-urlencode "token=$writer_refresh")
+expect "the client revokes its $SCOPE_WRITE grant" "answered $c" test "$c" = "$HTTP_OK"
+text=$(call "$writer" "$writing" "$WRITE_TOOL" "$args")
+expect "the revoked grant's capability no longer reaches the plane" "$text" test "$(reached_plane "$text" && echo reached)" != reached
+expect "the refusal says the capability is revoked" "$text" grep -qi "$REVOKED_REASON" <<<"$text"
 
 echo "== $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]
