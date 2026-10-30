@@ -100,7 +100,7 @@ func TestGetErrors(t *testing.T) {
 	}{
 		{"unknown id", &recordStore{rec: limes.Record{Capability: c}}, &allowAuthorizer{}, uuid.New().String(), connect.CodeNotFound},
 		{"malformed id", &recordStore{}, &allowAuthorizer{}, "nope", connect.CodeInvalidArgument},
-		{"store failure", &recordStore{err: errors.New("db down")}, &allowAuthorizer{}, c.ID.String(), connect.CodeInternal},
+		{"store failure", &recordStore{err: errors.New("db down")}, &allowAuthorizer{}, c.ID.String(), connect.CodeUnavailable},
 		{"denied", &recordStore{rec: limes.Record{Capability: c}}, &denyAuthorizer{}, c.ID.String(), connect.CodePermissionDenied},
 	}
 	for _, tc := range cases {

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -169,5 +170,29 @@ func TestFailureCarriesItsTrace(t *testing.T) {
 	}
 	if n > 1 {
 		t.Errorf("request_id written %d times", n)
+	}
+}
+
+// A handler that withholds a failure's text from the caller — a store's
+// error behind "retry" — keeps it as the error's cause, and the line carries
+// it: the caller is told less, the operator is not.
+func TestFailureCarriesTheCauseTheCallerWasNotTold(t *testing.T) {
+	const cause = "pgstore: dial tcp: connection refused"
+	for name, tc := range map[string]struct {
+		err  error
+		want string
+	}{
+		"a withheld cause":        {connect.NewError(connect.CodeUnavailable, "retry").WithCause(errors.New(cause)), cause},
+		"a cause already told":    {connect.NewError(connect.CodeUnavailable, cause).WithCause(errors.New(cause)), ""},
+		"no cause":                {connect.NewError(connect.CodeUnavailable, "retry"), ""},
+		"an error that is no RPC": {errors.New(cause), ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zap.DebugLevel)
+			logFailure(zap.New(core), "/pkg.Svc/M", "req-1", time.Millisecond, tc.err)
+			if got, _ := logs.All()[0].ContextMap()[fieldCause].(string); got != tc.want {
+				t.Errorf("cause = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

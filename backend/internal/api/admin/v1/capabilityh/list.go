@@ -8,7 +8,6 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -57,9 +56,7 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 		Limit:         int(req.GetPageSize()),
 	})
 	if err != nil {
-		// A page token the store cannot read is the caller's to fix
-		// (ErrInvalidRequest → InvalidArgument); anything else is Internal.
-		return nil, apiutil.MapError(err)
+		return nil, auth.AnswerCapabilityError(err, listExceptions)
 	}
 
 	out := make([]*adminv1.Capability, 0, len(page.Items))

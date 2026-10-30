@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"uuid"
@@ -12,7 +11,6 @@ import (
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -26,6 +24,13 @@ import (
 // budgetSegment names a tenant's budget in a resource name:
 // `tenants/{tenant}/budget`, as its quota is `tenants/{tenant}/quota`.
 const budgetSegment = "/budget"
+
+// tenantBudgetReadExceptions answer Get: a tenant with no budget on record
+// is NotFound to the admin API, where the table, for a meter that needs one,
+// says FailedPrecondition.
+var tenantBudgetReadExceptions = auth.Exceptions{
+	meter.CodeTenantBudgetNotFound: {Code: connect.CodeNotFound},
+}
 
 // TenantBudgetServer is the Connect adapter for meter.TenantBudgets —
 // the tenant-ceiling half of the usage store. It depends on nothing that
@@ -70,10 +75,7 @@ func (s *TenantBudgetServer) Get(
 	// as the tenant is what makes the read see it.
 	tb, err := s.Usage.GetTenantBudget(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		if errors.Is(err, meter.ErrTenantBudgetNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, auth.AnswerCapabilityError(err, tenantBudgetReadExceptions)
 	}
 	return &pb.TenantBudgetServiceGetResponse{
 		Budget: tenantBudgetToProto(tb),
@@ -131,19 +133,10 @@ func (s *TenantBudgetServer) Set(
 	// on the same policy, has always done this.
 	tb, err := s.Usage.SetTenantBudget(auth.WithActingTenant(ctx, tenantID), args)
 	if err != nil {
-		// A version mismatch is the caller's to resolve — re-read and retry —
-		// not a server fault, so it must not read as Internal.
-		switch {
-		case errors.Is(err, meter.ErrTenantBudgetVersionMismatch):
-			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
-		// Re-denominating a tenant that still counts spend or holds in its
-		// unit: no retry meets it until they are reset or released.
-		case errors.Is(err, limes.ErrUnitCodeMismatch):
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		case errors.Is(err, limes.ErrInvalidRequest):
-			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		// By the table: a version mismatch is Aborted, the caller's to re-read
+		// and retry; re-denominating a tenant that still counts spend or holds
+		// in its unit is FailedPrecondition until they are reset or released.
+		return nil, auth.AnswerCapabilityError(err, nil)
 	}
 	return &pb.TenantBudgetServiceSetResponse{
 		Budget: tenantBudgetToProto(tb),
@@ -174,10 +167,8 @@ func (s *TenantBudgetServer) Summarize(
 	// with no write allowed.
 	page, err := s.Usage.ListTenantBudgets(auth.WithCrossTenantRead(ctx), budgetListRequest(m))
 	if err != nil {
-		if errors.Is(err, limes.ErrInvalidRequest) { // a page token the store cannot read
-			return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		// A page token the store cannot read is InvalidArgument, by the table.
+		return nil, auth.AnswerCapabilityError(err, nil)
 	}
 	ids := make([]uuid.UUID, 0, len(page.Items))
 	for _, b := range page.Items {

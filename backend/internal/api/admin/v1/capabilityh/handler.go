@@ -149,7 +149,7 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	case errors.Is(err, limes.ErrNotFound):
 		return ctx, nil
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, auth.AnswerCapabilityError(err, nil)
 	}
 	return auth.WithActingTenant(ctx, rec.Capability.Subject.TenantID), nil
 }
@@ -230,7 +230,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		// By kind: a malformed request, a tenant that is not (or no longer)
 		// there, or the store or signer failing — which is not the caller's
 		// fault and must not read as a request to stop retrying.
-		return nil, apiutil.MapError(err)
+		return nil, auth.AnswerCapabilityError(err, issuanceExceptions)
 	}
 
 	apiutil.StashResource(ctx, capabilityResourceName(res.Capability.Subject.TenantID, res.Capability.ID))
@@ -335,17 +335,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		ConfirmationJKT: req.GetConfirmationJkt(),
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, limes.ErrDelegationTooWide),
-			errors.Is(err, limes.ErrUnitCodeMismatch),
-			errors.Is(err, limes.ErrOpNotAllowed):
-			return nil, connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err)
-		case errors.Is(err, limes.ErrRevoked), errors.Is(err, limes.ErrExpired):
-			// The parent can no longer delegate; that is a state the caller
-			// must act on, not a malformed request.
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
-		return nil, apiutil.MapError(err)
+		return nil, auth.AnswerCapabilityError(err, delegationExceptions)
 	}
 	apiutil.StashResource(ctx, capabilityResourceName(res.Capability.Subject.TenantID, res.Capability.ID))
 	return h.issued(ctx, res)
@@ -378,10 +368,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 		// a not-found here covers both "no such id" and "belongs to another
 		// tenant". Both answer NotFound: telling the caller which one it was
 		// would turn this endpoint into an id oracle.
-		if errors.Is(err, limes.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, auth.AnswerCapabilityError(err, recordExceptions)
 	}
 	stashCapabilityInScope(ctx, id)
 	return &adminv1.CapabilityServiceRevokeResponse{
@@ -420,10 +407,7 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	// an ancestor too, though the record holds only its own entry.
 	listed, err := h.records.GetRecordListing(ctx, id)
 	if err != nil {
-		if errors.Is(err, limes.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		return nil, apiutil.MapError(err)
+		return nil, auth.AnswerCapabilityError(err, recordExceptions)
 	}
 	rec := listed.Record
 	out := &adminv1.CapabilityServiceGetResponse{
@@ -470,10 +454,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGe
 	}
 	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
-		if errors.Is(err, meter.ErrUsageNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, auth.AnswerCapabilityError(err, recordExceptions)
 	}
 	return &adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),

@@ -138,26 +138,12 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a cross-tenant selector in limes, or a list of the tenants a
   client holds capabilities in.
 
-### Answer the admin API's limes errors through the capability table
-
-- **Status:** Deferred.
-- **Reason:** ADR-0042 answers every error about a presented capability
-  through `auth.capabilityCodes`, but `capabilityh`, `tenant_budget_server`
-  and the limes rows of `apiutil.RegisterError` still map limes errors with
-  their own `errors.Is` chains, and the same code means something else per
-  operation there (`revoked` while delegating is the parent's state).
-- **Definition of Done:** one mapper over `capabilityCodes` that takes an
-  operation's exceptions as data, every admin handler answering limes errors
-  through it, each exception table held to `limes.Codes` by a test, and the
-  limes rows gone from `apiutil.RegisterError`.
-- **Blockers:** none.
-
 ### Put limes' error codes on the wire
 
 - **Status:** Deferred.
 - **Reason:** limes gives every error a stable code (`limes.Code`,
   `meter.ProblemOf`). Paladin maps limes' errors onto connect codes by hand
-  (`auth.meterError`, `capabilityh`, `tenant_budget_server`), and its
+  (`auth.capabilityCodes` and each admin operation's exceptions), and its
   choices differ from limes' HTTP statuses on purpose — an exhausted budget
   is `ResourceExhausted`, not 403's `PermissionDenied` — so the statuses do
   not replace the mapping. Only refusals carry a reason to clients today.

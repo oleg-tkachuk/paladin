@@ -2,9 +2,9 @@ package capabilityh
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
@@ -49,10 +49,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	// check and the unit the copies' budgets are in.
 	record, err := h.store.GetRecord(ctx, c.CapabilityID())
 	if err != nil {
-		if errors.Is(err, limes.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, auth.AnswerCapabilityError(err, recordExceptions)
 	}
 
 	copies := c.Copies()
@@ -64,7 +61,7 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 		}
 		counted, err := h.copyUsage.CopyUsage(ctx, meter.CopyUsageRequest{CapabilityID: c.CapabilityID(), RevocationIDs: ids})
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+			return nil, auth.AnswerCapabilityError(err, nil)
 		}
 		for _, u := range counted.Copies {
 			byID[string(u.RevocationID)] = u

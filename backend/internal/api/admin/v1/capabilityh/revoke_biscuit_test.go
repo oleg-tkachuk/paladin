@@ -155,7 +155,7 @@ func TestRevokeBiscuitRefusals(t *testing.T) {
 		"not wired":              {&allowAuthorizer{}, nil, nil, connect.CodeUnavailable},
 		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidToken}, &copyStore{}, connect.CodeInvalidArgument},
 		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: limes.ErrNotFound}, connect.CodeNotFound},
-		"store fails":            {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: errors.New("db down")}, connect.CodeInternal},
+		"store fails":            {&allowAuthorizer{}, &fakeCopier{copy: good}, &copyStore{err: errors.New("db down")}, connect.CodeUnavailable},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
