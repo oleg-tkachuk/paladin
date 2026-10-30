@@ -382,6 +382,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		TenantId:      tenant.String(),
 		PrincipalKind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT,
 		Subject:       "agent-1",
+		Session:       "session-1",
 		Dispositions: []adminv1.CapabilityDisposition{
 			adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_EXPIRED,
 			adminv1.CapabilityDisposition_CAPABILITY_DISPOSITION_REVOKED,
@@ -400,6 +401,7 @@ func TestListForwardsFiltersAndPaging(t *testing.T) {
 		TenantID:      tenant,
 		PrincipalType: limes.PrincipalTypeAgent,
 		Subject:       "agent-1",
+		Session:       "session-1",
 		Dispositions:  []limes.RecordDisposition{limes.RecordDispositionExpired, limes.RecordDispositionRevoked},
 		Order:         limes.ListOrderDescending,
 		Cursor:        "cursor-1",

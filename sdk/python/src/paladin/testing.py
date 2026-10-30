@@ -1056,6 +1056,7 @@ class _CapabilityService(CapabilityServiceSync):
                     subject.tenant_id != request.tenant_id
                     or (request.principal_kind and subject.kind != request.principal_kind)
                     or (request.subject and subject.subject != request.subject)
+                    or (request.session and record.msg.session != request.session)
                 ):
                     continue
                 disposition = fake._disposition(record, now)
@@ -1076,10 +1077,11 @@ def _list_filters(
     request: capability_service_pb2.CapabilityServiceListRequest, wanted: set[int]
 ) -> str:
     """What ``request`` lists, as the server's cursor holds it: the tenant
-    (limes binds a cursor to it), the principal kind, the subject and the set
-    of dispositions."""
+    (limes binds a cursor to it), the principal kind, the subject, the session
+    and the set of dispositions."""
     key = (
-        f"{request.tenant_id}\x00{request.principal_kind}\x00{request.subject}\x00{sorted(wanted)}"
+        f"{request.tenant_id}\x00{request.principal_kind}\x00{request.subject}"
+        f"\x00{request.session}\x00{sorted(wanted)}"
     )
     return hashlib.sha256(key.encode()).hexdigest()
 

@@ -298,6 +298,7 @@ _ASC = [
         ({"dispositions": _ALL, "sort_order": SORT_ORDER_DESC}, _ASC[::-1]),
         ({"principal_kind": _AGENT, "dispositions": _ALL}, [c for c in _ASC if c[0] == _AGENT]),
         ({"subject": "agent:one", "dispositions": _ALL}, [c for c in _ASC if c[1] == "agent:one"]),
+        ({"session": "session-1", "dispositions": _ALL}, []),
         ({"dispositions": [_R]}, [c for c in _ASC if c[2] == _R]),
         ({"include_expired": True, "include_revoked": True}, _ASC),
         ({"dispositions": _ALL, "page_size": 2}, _ASC),
@@ -308,6 +309,7 @@ _ASC = [
         "every disposition, newest first",
         "a kind",
         "a subject",
+        "a session, under which the fake issues none",
         "revoked",
         "the include flags",
         "a page at a time",
@@ -339,8 +341,13 @@ def test_list_refuses_a_token_of_the_other_order(listed: FakePaladin, order: int
 
 @pytest.mark.parametrize(
     "other",
-    [{"principal_kind": _USER}, {"subject": "agent:one"}, {"dispositions": [_A]}],
-    ids=["another kind", "another subject", "other dispositions"],
+    [
+        {"principal_kind": _USER},
+        {"subject": "agent:one"},
+        {"session": "session-1"},
+        {"dispositions": [_A]},
+    ],
+    ids=["another kind", "another subject", "a session", "other dispositions"],
 )
 def test_list_refuses_a_token_of_other_filters(listed: FakePaladin, other) -> None:  # type: ignore[no-untyped-def]
     admin = listed.connect().admin.capability

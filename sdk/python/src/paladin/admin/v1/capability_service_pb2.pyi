@@ -264,7 +264,7 @@ class CapabilityServiceGetBiscuitUsageResponse(_message.Message):
     def __init__(self, capability_id: _Optional[str] = ..., copies: _Optional[_Iterable[_Union[CapabilityBiscuitCopyUsage, _Mapping]]] = ...) -> None: ...
 
 class CapabilityServiceListRequest(_message.Message):
-    __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token", "dispositions", "sort_order")
+    __slots__ = ("tenant_id", "principal_kind", "subject", "include_expired", "include_revoked", "page_size", "page_token", "dispositions", "sort_order", "session")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     PRINCIPAL_KIND_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -274,6 +274,7 @@ class CapabilityServiceListRequest(_message.Message):
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     DISPOSITIONS_FIELD_NUMBER: _ClassVar[int]
     SORT_ORDER_FIELD_NUMBER: _ClassVar[int]
+    SESSION_FIELD_NUMBER: _ClassVar[int]
     tenant_id: str
     principal_kind: PrincipalKind
     subject: str
@@ -283,7 +284,8 @@ class CapabilityServiceListRequest(_message.Message):
     page_token: str
     dispositions: _containers.RepeatedScalarFieldContainer[CapabilityDisposition]
     sort_order: _pagination_pb2.SortOrder
-    def __init__(self, tenant_id: _Optional[str] = ..., principal_kind: _Optional[_Union[PrincipalKind, str]] = ..., subject: _Optional[str] = ..., include_expired: _Optional[bool] = ..., include_revoked: _Optional[bool] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., dispositions: _Optional[_Iterable[_Union[CapabilityDisposition, str]]] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ...) -> None: ...
+    session: str
+    def __init__(self, tenant_id: _Optional[str] = ..., principal_kind: _Optional[_Union[PrincipalKind, str]] = ..., subject: _Optional[str] = ..., include_expired: _Optional[bool] = ..., include_revoked: _Optional[bool] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., dispositions: _Optional[_Iterable[_Union[CapabilityDisposition, str]]] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., session: _Optional[str] = ...) -> None: ...
 
 class CapabilityServiceListResponse(_message.Message):
     __slots__ = ("capabilities", "next_page_token")

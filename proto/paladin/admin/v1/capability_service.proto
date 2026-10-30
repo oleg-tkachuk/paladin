@@ -418,6 +418,10 @@ message CapabilityServiceListRequest {
   // when unspecified; descending, newest first. A page token holds the
   // order it was handed out for.
   paladin.common.v1.SortOrder sort_order = 9;
+  // session lists the capabilities exchanged under that OAuth session — a
+  // grant's id — exactly: what revoking the grant revokes. Empty, every
+  // session's and none.
+  string session = 10;
 }
 
 message CapabilityServiceListResponse {
