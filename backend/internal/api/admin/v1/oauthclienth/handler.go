@@ -92,7 +92,7 @@ func (h *Handler) DeleteOAuthClient(ctx context.Context, req *adminv1.DeleteOAut
 		return nil, auth.AnswerCapabilityError(fmt.Errorf("revoke the capabilities of oauth client %q: %w", id, err), nil)
 	}
 	logger.FromContext(ctx).Info("oauth client deleted",
-		zap.String("client_id", id), zap.Bool("found", !gone), zap.Int64("capabilities_revoked", revoked))
+		zap.String("client_id", id), zap.Bool("found", !gone), zap.Int64(auth.LogKeyCapabilitiesRevoked, revoked))
 	if gone {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Sprintf("no OAuth client %q", id))
 	}

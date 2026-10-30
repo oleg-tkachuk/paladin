@@ -508,7 +508,7 @@ func (h *Handler) RevokeOAuthGrant(ctx context.Context, ref UserRef, grantID uui
 	}
 	logger.FromContext(ctx).Info("oauth grant revoked",
 		zap.String("user_id", u.UserID.String()), zap.String("grant_id", grantID.String()),
-		zap.Int64("capabilities_revoked", revoked))
+		zap.Int64(auth.LogKeyCapabilitiesRevoked, revoked))
 	return nil
 }
 

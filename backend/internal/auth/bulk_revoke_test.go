@@ -7,8 +7,13 @@ import (
 	"testing"
 	"uuid"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // fakeBulk revokes in batches — More until the last — naming tenants, and
@@ -24,6 +29,10 @@ type fakeBulk struct {
 	releases    []meter.ReleaseMatchingRequest
 	releasedIn  []uuid.UUID
 	releaseErr  error
+	// released is how many holds each release reports; nothing makes every
+	// call report none, as a repeat finds.
+	released int64
+	nothing  bool
 }
 
 func (f *fakeBulk) RevokeMatching(ctx context.Context, _ limes.RevokeMatchingRequest) (limes.RevokeMatchingResult, error) {
@@ -31,6 +40,9 @@ func (f *fakeBulk) RevokeMatching(ctx context.Context, _ limes.RevokeMatchingReq
 	f.revokes++
 	if f.revokeErr != nil {
 		return limes.RevokeMatchingResult{}, f.revokeErr
+	}
+	if f.nothing {
+		return limes.RevokeMatchingResult{}, nil
 	}
 	return limes.RevokeMatchingResult{Revoked: 1, Tenants: f.tenants, More: f.revokes < f.batches}, nil
 }
@@ -40,7 +52,7 @@ func (f *fakeBulk) ReleaseMatching(ctx context.Context, req meter.ReleaseMatchin
 	f.releases = append(f.releases, req)
 	t, _ := ActingTenant(ctx)
 	f.releasedIn = append(f.releasedIn, t)
-	return meter.ReleaseMatchingResult{Released: 1}, f.releaseErr
+	return meter.ReleaseMatchingResult{Released: f.released}, f.releaseErr
 }
 
 // A revocation runs batch after batch, then releases the holds of what it
@@ -63,6 +75,56 @@ func TestBulkRevocationReleasesTheHoldsOfWhatItRevoked(t *testing.T) {
 	}
 	if r := f.releases[0]; r.TenantID != tenant || r.Session != "s1" {
 		t.Errorf("release = %+v, want tenant %s session s1", r, tenant)
+	}
+}
+
+// What a revocation stopped is logged — the capabilities and the holds,
+// which no caller otherwise reports — at info, and a repeat that found
+// nothing at debug.
+func TestBulkRevocationLogsWhatItStopped(t *testing.T) {
+	const batches = 2
+	tenant, other := uuid.New(), uuid.New()
+	cases := map[string]struct {
+		bulk         *fakeBulk
+		level        zapcore.Level
+		revoked      int64
+		holdsRelease int64
+	}{
+		"something stopped": {&fakeBulk{batches: batches, tenants: []uuid.UUID{other}, released: 1}, zapcore.InfoLevel, batches, 2},
+		"a retry releasing": {&fakeBulk{batches: 1, nothing: true, released: 1}, zapcore.InfoLevel, 0, 1},
+		"a repeat":          {&fakeBulk{batches: 1, nothing: true}, zapcore.DebugLevel, 0, 0},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.DebugLevel)
+			ctx := logger.WithContext(context.Background(), zap.New(core))
+			b := &BulkRevocation{Revoker: tc.bulk, Holds: tc.bulk}
+			if _, err := b.RevokeMatching(ctx, limes.RevokeMatchingRequest{TenantID: tenant, Session: "s1"}); err != nil {
+				t.Fatal(err)
+			}
+			lines := logs.FilterMessage("capabilities revoked in bulk").All()
+			if len(lines) != 1 {
+				t.Fatalf("%d lines, want 1", len(lines))
+			}
+			got := lines[0].ContextMap()
+			if lines[0].Level != tc.level || got[LogKeyCapabilitiesRevoked] != tc.revoked ||
+				got[logKeyHoldsReleased] != tc.holdsRelease || got["session"] != "s1" {
+				t.Errorf("logged %v %v, want %v with %d revoked and %d holds released", lines[0].Level, got, tc.level, tc.revoked, tc.holdsRelease)
+			}
+		})
+	}
+}
+
+// A failed release is the caller's to log: nothing claims it was released.
+func TestBulkRevocationLogsNoOutcomeOnFailure(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+	f := &fakeBulk{batches: 1, releaseErr: errors.New("pgstore: connection refused")}
+	if _, err := (&BulkRevocation{Revoker: f, Holds: f}).RevokeMatching(ctx, limes.RevokeMatchingRequest{TenantID: uuid.New(), ClientID: "c"}); err == nil {
+		t.Fatal("want the release's error")
+	}
+	if logs.Len() != 0 {
+		t.Errorf("logged %v, want nothing", logs.All())
 	}
 }
 
