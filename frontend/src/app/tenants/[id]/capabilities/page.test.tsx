@@ -141,6 +141,27 @@ describe("CapabilitiesPage", () => {
     });
   });
 
+  // A grant links here with its session: the list is what revoking it stops,
+  // until the operator widens it to every session.
+  it("lists one OAuth session's capabilities from the link, then every session's", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/tenants/t-1/capabilities?session=s-1",
+    );
+    render(<CapabilitiesPage />);
+    await waitFor(() => expect(h.list).toHaveBeenCalled());
+    expect(h.list.mock.calls[0][0]).toMatchObject({ session: "s-1" });
+    expect(screen.getByText("s-1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Every session" }));
+    await waitFor(() =>
+      expect(h.list.mock.lastCall?.[0]).toMatchObject({ session: "" }),
+    );
+    expect(window.location.search).toBe("");
+    window.history.replaceState(null, "", "/");
+  });
+
   // A list superseded by a newer filter is cancelled: that is no failure.
   it("says nothing of a list it cancelled", async () => {
     h.list.mockRejectedValue(new ConnectError("cancelled", Code.Canceled));

@@ -345,6 +345,32 @@ func TestListCountsAChildOfARevokedParentRevoked(t *testing.T) {
 	}
 }
 
+// A session lists the capabilities exchanged under it: none of the fake's,
+// which issues none under a session; and a cursor of another listing is
+// refused under it.
+func TestListBySession(t *testing.T) {
+	srv := paladintest.New(t)
+	admin := srv.Connect().Admin.Capability
+	ctx := context.Background()
+	for range 2 {
+		issue(t, admin, issueRequest(srv, paladin.OpGet))
+	}
+	resp, err := admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant(), Session: "session-1"})
+	if err != nil || len(resp.GetCapabilities()) != 0 {
+		t.Errorf("by session = %v, %v; want none", resp.GetCapabilities(), err)
+	}
+	first, err := admin.List(ctx, &adminv1.CapabilityServiceListRequest{TenantId: srv.Tenant(), PageSize: 1})
+	if err != nil || first.GetNextPageToken() == "" {
+		t.Fatalf("first page: %v, next %q", err, first.GetNextPageToken())
+	}
+	_, err = admin.List(ctx, &adminv1.CapabilityServiceListRequest{
+		TenantId: srv.Tenant(), Session: "session-1", PageToken: first.GetNextPageToken(),
+	})
+	if !errors.Is(err, paladin.ErrInvalidArgument) {
+		t.Errorf("another listing's cursor: %v, want InvalidArgument", err)
+	}
+}
+
 // Under strict authentication a caller lists its own tenant's capabilities
 // only, as the server refuses another's to all but a platform role.
 func TestStrictListStaysInTheCallersTenant(t *testing.T) {

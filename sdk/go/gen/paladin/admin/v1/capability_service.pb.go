@@ -1542,7 +1542,11 @@ type CapabilityServiceListRequest struct {
 	// sort_order is by id, which is by issue time: ascending, oldest first,
 	// when unspecified; descending, newest first. A page token holds the
 	// order it was handed out for.
-	SortOrder     v1.SortOrder `protobuf:"varint,9,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	SortOrder v1.SortOrder `protobuf:"varint,9,opt,name=sort_order,json=sortOrder,proto3,enum=paladin.common.v1.SortOrder" json:"sort_order,omitempty"`
+	// session lists the capabilities exchanged under that OAuth session — a
+	// grant's id — exactly: what revoking the grant revokes. Empty, every
+	// session's and none.
+	Session       string `protobuf:"bytes,10,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1640,6 +1644,13 @@ func (x *CapabilityServiceListRequest) GetSortOrder() v1.SortOrder {
 		return x.SortOrder
 	}
 	return v1.SortOrder(0)
+}
+
+func (x *CapabilityServiceListRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
 }
 
 type CapabilityServiceListResponse struct {
@@ -2341,7 +2352,7 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\r_max_requestsJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x11max_budget_microsR\fspent_microsR\x0freserved_micros\"\xa6\x01\n" +
 	"(CapabilityServiceGetBiscuitUsageResponse\x12#\n" +
 	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12D\n" +
-	"\x06copies\x18\x03 \x03(\v2,.paladin.admin.v1.CapabilityBiscuitCopyUsageR\x06copiesJ\x04\b\x02\x10\x03R\tunit_code\"\xeb\x03\n" +
+	"\x06copies\x18\x03 \x03(\v2,.paladin.admin.v1.CapabilityBiscuitCopyUsageR\x06copiesJ\x04\b\x02\x10\x03R\tunit_code\"\x85\x04\n" +
 	"\x1cCapabilityServiceListRequest\x12%\n" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12P\n" +
 	"\x0eprincipal_kind\x18\x02 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\b\xbaH\x05\x82\x01\x02\x10\x01R\rprincipalKind\x12\x18\n" +
@@ -2353,7 +2364,9 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"page_token\x18\a \x01(\tR\tpageToken\x12\\\n" +
 	"\fdispositions\x18\b \x03(\x0e2'.paladin.admin.v1.CapabilityDispositionB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\fdispositions\x12;\n" +
 	"\n" +
-	"sort_order\x18\t \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\"\x89\x01\n" +
+	"sort_order\x18\t \x01(\x0e2\x1c.paladin.common.v1.SortOrderR\tsortOrder\x12\x18\n" +
+	"\asession\x18\n" +
+	" \x01(\tR\asession\"\x89\x01\n" +
 	"\x1dCapabilityServiceListResponse\x12@\n" +
 	"\fcapabilities\x18\x01 \x03(\v2\x1c.paladin.admin.v1.CapabilityR\fcapabilities\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"7\n" +

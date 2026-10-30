@@ -7,7 +7,11 @@ import {
   PrincipalKind,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
-import { capabilityGrant, grantHref } from "./oauthGrants";
+import {
+  capabilityGrant,
+  grantCapabilitiesHref,
+  grantHref,
+} from "./oauthGrants";
 
 const TENANT = "t-1";
 const USER = "u-1";
@@ -35,6 +39,12 @@ function delegated(
 describe("oauthGrants", () => {
   it("links a grant on its user's page, opened in the grants table", () => {
     expect(grantHref(TENANT, USER, SESSION)).toBe("/users/t-1/u-1?apps.id=s-1");
+  });
+
+  it("lists a grant's capabilities in its user's tenant", () => {
+    expect(grantCapabilitiesHref(TENANT, SESSION)).toBe(
+      "/tenants/t-1/capabilities?session=s-1",
+    );
   });
 
   it("finds the grant a delegated capability was exchanged under", () => {

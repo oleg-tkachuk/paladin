@@ -60,7 +60,8 @@ import {
 } from "@/lib/queries/details";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { capabilityGrant } from "@/lib/oauthGrants";
+import { CAPABILITY_SESSION_PARAM, capabilityGrant } from "@/lib/oauthGrants";
+import { textParam, useUrlState } from "@/hooks/useUrlState";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import {
@@ -76,6 +77,9 @@ import { ListLoadError } from "@/components/ui/ListLoadError";
 
 // Where the list's query key holds its tenant.
 const CAPABILITIES_TENANT_INDEX = 1;
+
+/** The OAuth session the list is narrowed to, from a grant's link. */
+const SESSION_FILTER = textParam(CAPABILITY_SESSION_PARAM);
 
 // Per-capability usage keyed by capability id.
 type UsageMap = Map<string, CapabilityUsage>;
@@ -148,6 +152,8 @@ export default function CapabilitiesPage() {
   const subjectFilter = useDebouncedValue(subject.trim());
   const [statuses, setStatuses] =
     useState<readonly CapabilityDisposition[]>(DEFAULT_STATUSES);
+  // A grant links here with its session: what revoking it stops.
+  const [session, setSession] = useUrlState(SESSION_FILTER, "");
 
   const browseQuery = useInfiniteQuery({
     queryKey: [
@@ -156,6 +162,7 @@ export default function CapabilitiesPage() {
       principalKind,
       subjectFilter,
       statuses,
+      session,
     ],
     enabled: !!tenantId,
     retry: false, // queryFn toasts real failures.
@@ -167,6 +174,7 @@ export default function CapabilitiesPage() {
             tenantId,
             principalKind: Number(principalKind),
             subject: subjectFilter,
+            session,
             dispositions: [...statuses],
             sortOrder: SortOrder.DESC,
             pageSize: CAPABILITIES_PAGE_SIZE,
@@ -261,6 +269,7 @@ export default function CapabilitiesPage() {
   ) => {
     setPrincipalKind(kind);
     setSubject(subj);
+    setSession("");
     setStatuses((s) => toggleStatus(s, CapabilityDisposition.ACTIVE, true));
   };
 
@@ -396,6 +405,15 @@ export default function CapabilitiesPage() {
             })}
           </fieldset>
         </div>
+        {session ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">OAuth session</span>
+            <code className="font-mono text-xs break-all">{session}</code>
+            <Button variant="ghost" size="sm" onClick={() => setSession("")}>
+              Every session
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       {/* ─── Result table ────────────────────────────────────────────── */}

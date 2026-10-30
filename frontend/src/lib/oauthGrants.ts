@@ -1,5 +1,6 @@
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { tenantHref } from "@/lib/navigation/hrefs";
 import { tableParam, type TableUrl } from "@/lib/table/urlState";
 import { userHref, userResourceName } from "@/lib/userPath";
 
@@ -15,6 +16,18 @@ export function grantHref(tenant: string, user: string, grant: string): string {
     [tableParam("row", OAUTH_GRANTS_TABLE)]: grant,
   });
   return `${userHref(userResourceName(tenant, user))}?${params}`;
+}
+
+/**
+ * The capabilities page's parameter naming the session it lists: a grant's
+ * id, so the page lists what revoking the grant revokes.
+ */
+export const CAPABILITY_SESSION_PARAM = "session";
+
+/** The capabilities exchanged under a grant, in its user's tenant. */
+export function grantCapabilitiesHref(tenant: string, grant: string): string {
+  const params = new URLSearchParams({ [CAPABILITY_SESSION_PARAM]: grant });
+  return `${tenantHref(tenant)}/capabilities?${params}`;
 }
 
 /** The OAuth grant a capability was exchanged under. */

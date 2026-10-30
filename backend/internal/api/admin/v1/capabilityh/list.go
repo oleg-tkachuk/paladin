@@ -50,6 +50,7 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 		TenantID:      tenantID,
 		PrincipalType: protoToPrincipalKind(req.GetPrincipalKind()),
 		Subject:       req.GetSubject(),
+		Session:       req.GetSession(),
 		Dispositions:  listDispositions(req),
 		Order:         listOrder(req.GetSortOrder()),
 		Cursor:        req.GetPageToken(),
