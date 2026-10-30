@@ -15,14 +15,24 @@
 # write is an upload into a collection no one has, named for the run, which
 # the data plane audits and refuses as not found: nothing is reserved. The
 # client then revokes the grant, which revokes the capability its token was
-# exchanged for, so the same write is refused. The client and its grants are
-# removed on exit.
+# exchanged for, so the same write is refused.
+#
+# An operator then revokes the agent's read grant from the user's page while
+# a hold is open on its capability: the capability is revoked, the hold is
+# released at once and the revocation says so in the IAM plane's log.
+# Deleting the client revokes what is left. No metered request leaves a hold
+# open long enough to revoke under it, so the check opens one by hand in
+# limes's tables, through the database cluster's primary. The client and its
+# grants are removed on exit.
 #
 #   KUBE_CONTEXT=orbstack ./scripts/live-mcp-delegation.sh
 #
 # Runs as `task -t Taskfile.dev.yaml verify:live-mcp`. Not part of verify-all:
 # it needs a running cluster. Requires: kubectl, curl, jq, yq, docker,
 # openssl, uuidgen.
+#
+# PG_NAMESPACE, PG_CLUSTER and PG_DATABASE name the CloudNativePG cluster and
+# database the release keeps its capabilities in.
 #
 # `--render-config` prints the bridge's config from the environment and stops;
 # backend/internal/config/live_mcp_config_test.go loads it against the schema.
@@ -71,6 +81,7 @@ readonly BRIDGE_READY_PATH=/.well-known/oauth-protected-resource
 # The audiences of the admin's own tokens.
 readonly AUDIENCE_ADMIN=paladin-admin
 readonly AUDIENCE_DATA=paladin-data
+readonly AUDIENCE_IAM=paladin-iam
 # The consented scopes, as the OAuth server spells them.
 readonly SCOPE_READ=paladin.read
 readonly SCOPE_WRITE=paladin.write
@@ -98,6 +109,37 @@ readonly POLL_SECONDS=1
 # The AS's RFC 7009 revocation endpoint, under its issuer; the release's
 # config names no URL for it (backend/internal/auth/oauth: RevokePath).
 readonly OAUTH_REVOKE_PATH=/oauth/revoke
+# RFC 8693: the exchange the MCP server makes, for the data plane.
+readonly GRANT_TYPE_TOKEN_EXCHANGE=urn:ietf:params:oauth:grant-type:token-exchange
+readonly TOKEN_TYPE_ACCESS=urn:ietf:params:oauth:token-type:access_token
+readonly EXCHANGE_AUDIENCE=data
+# The list leaves revoked and expired capabilities out unless asked for them.
+readonly DISPOSITION_REVOKED=CAPABILITY_DISPOSITION_REVOKED
+readonly EVERY_DISPOSITION='["CAPABILITY_DISPOSITION_ACTIVE","CAPABILITY_DISPOSITION_EXPIRED","CAPABILITY_DISPOSITION_REVOKED"]'
+# The database cluster the release's capabilities live in: limes's tables,
+# where the check opens a hold.
+readonly PG_NAMESPACE="${PG_NAMESPACE:-database}"
+readonly PG_CLUSTER="${PG_CLUSTER:-paladin-postgresql}"
+readonly PG_DATABASE="${PG_DATABASE:-paladin}"
+readonly PG_PRIMARY_LABEL=cnpg.io/instanceRole=primary
+readonly PG_CLUSTER_LABEL=cnpg.io/cluster
+readonly PG_CONTAINER=postgres
+readonly PG_SUPERUSER=postgres
+# The hold: one whole unit in micro-units, as a metered read in flight leaves
+# it, open long enough that only the revocation can release it. limes writes
+# a counter with no budget in its abstract unit.
+readonly HOLD_MICROS=1000000
+readonly HOLD_TTL='1 hour'
+readonly HOLD_OP=get
+readonly HOLD_ACTOR=live-mcp-delegation
+readonly ABSTRACT_UNIT=XXX
+# The line a bulk revocation logs (backend/internal/auth: logRevoked), and
+# the components whose pods serve the operator's revocations: the IAM plane
+# runs in the api component.
+readonly BULK_REVOKED_MSG="capabilities revoked in bulk"
+readonly COMPONENT_LABEL=app.kubernetes.io/component
+readonly IAM_COMPONENT=api
+readonly ADMIN_COMPONENT=admin
 readonly HTTP_OK=200
 readonly HTTP_CREATED=201
 readonly HTTP_FOUND=302
@@ -120,7 +162,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/live-mcp-delegation.XXXXXX")
 # array it appends to would never reach cleanup.
 refresh_file="$work/refresh_tokens"
 forwards=()
-client_id="" token="" oauth_revoke_url=""
+client_id="" token="" iam_token="" oauth_revoke_url="" fixture_capability=""
 pass=0
 fail=0
 ok() { echo "PASS $1"; pass=$((pass + 1)); }
@@ -132,10 +174,29 @@ expect() {
 }
 admin_rpc() { curl -s "$admin/paladin.admin.v1.$1" -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" -d "$2"; }
+iam_rpc() { curl -s "$IAM_URL/paladin.iam.v1.$1" -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $iam_token" -d "$2"; }
+pg=(kubectl)
+[[ -n "${KUBE_CONTEXT:-}" ]] && pg+=(--context "$KUBE_CONTEXT")
+pg+=(-n "$PG_NAMESPACE")
+pg_pod=""
+# sql <name=value>...: runs the statements on stdin on the primary as the
+# superuser, which RLS does not scope, with each value as a psql variable.
+sql() {
+    local vars=()
+    for v in "$@"; do vars+=(-v "$v"); done
+    "${pg[@]}" exec -i "$pg_pod" -c "$PG_CONTAINER" -- \
+        psql -U "$PG_SUPERUSER" -d "$PG_DATABASE" -X -q -At -v ON_ERROR_STOP=1 "${vars[@]}"
+}
 
 # cleanup removes the bridge, the agent's grants and client, and the forwards.
 cleanup() {
     docker rm -f "$container" >/dev/null 2>&1
+    # The counter the hold was opened on, once nothing is held or spent on it.
+    if [[ -n "$fixture_capability" ]]; then
+        sql "cap=$fixture_capability" <<<"DELETE FROM limes.usage WHERE capability_id = :'cap' AND reserved = 0 AND spent = 0;" ||
+            echo "!!! remove the hold's counter of $fixture_capability" >&2
+    fi
     while read -r rt; do
         [[ -n "$rt" && -n "$oauth_revoke_url" ]] || continue
         curl -sk -o /dev/null "$oauth_revoke_url" --data-urlencode "client_id=$client_id" --data-urlencode "token=$rt"
@@ -231,7 +292,13 @@ if [[ -z "$token" ]]; then
 fi
 user=$(claim "$token" sub)
 tenant=$(claim "$token" tenant)
-ok "admin login"
+iam_token=$(login "$AUDIENCE_IAM")
+expect "admin login" "no IAM token" test -n "$iam_token"
+pg_pod=$("${pg[@]}" get pods -l "$PG_CLUSTER_LABEL=$PG_CLUSTER,$PG_PRIMARY_LABEL" -o name | head -n1)
+if [[ -z "$pg_pod" ]]; then
+    bad "find the database's primary" "no $PG_CLUSTER primary in namespace '$PG_NAMESPACE'"
+    exit 1
+fi
 
 # ── the agent_safe bridge, from the deployed image ──────────────────────────
 image=$("${kube[@]}" get deploy "$MCP_DEPLOYMENT" -o jsonpath='{.spec.template.spec.containers[0].image}')
@@ -286,6 +353,8 @@ writer=$(grant "$SCOPE_READ $SCOPE_WRITE")
 expect "consent to $SCOPE_READ $SCOPE_WRITE" "no token" test -n "$writer"
 reader=$(grant "$SCOPE_READ")
 expect "consent to $SCOPE_READ alone" "no token" test -n "$reader"
+leftover=$(grant "$SCOPE_READ")
+expect "consent to $SCOPE_READ again" "no token" test -n "$leftover"
 unset password
 
 # ── one session per grant, one write each ───────────────────────────────────
@@ -356,6 +425,111 @@ expect "the client revokes its $SCOPE_WRITE grant" "answered $c" test "$c" = "$H
 text=$(call "$writer" "$writing" "$WRITE_TOOL" "$args")
 expect "the revoked grant's capability no longer reaches the plane" "$text" test "$(reached_plane "$text" && echo reached)" != reached
 expect "the refusal says the capability is revoked" "$text" grep -qi "$REVOKED_REASON" <<<"$text"
+
+# ── an operator revoking a grant releases its capabilities' holds ───────────
+# exchange <token>: the capability the MCP server exchanges token for.
+exchange() {
+    curl -sk "$OAUTH_TOKEN_URL" --data-urlencode "grant_type=$GRANT_TYPE_TOKEN_EXCHANGE" \
+        --data-urlencode "client_id=$EXCHANGE_CLIENT_ID" \
+        --data-urlencode "client_secret=$PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET" \
+        --data-urlencode "subject_token=$1" --data-urlencode "subject_token_type=$TOKEN_TYPE_ACCESS" \
+        --data-urlencode "audience=$EXCHANGE_AUDIENCE" | jq -r '.access_token // empty'
+}
+# session_capabilities <session>: the capabilities the list finds under the
+# OAuth session, in every disposition.
+session_capabilities() {
+    admin_rpc CapabilityService/List "$(jq -cn --arg t "$tenant" --arg s "$1" --argjson d "$EVERY_DISPOSITION" \
+        '{tenantId:$t,session:$s,dispositions:$d}')" | jq -c '.capabilities // []'
+}
+# disposition_in_session <session> <capability>: the capability's disposition
+# as the list filtered to session reports it; empty if not listed.
+disposition_in_session() {
+    session_capabilities "$1" | jq -r --arg c "$2" 'map(select(.id == $c)) | .[0].disposition // empty'
+}
+# logged_revocation <component> <since> <jq condition>: whether a pod of the
+# component logged a bulk revocation since then that meets the condition.
+logged_revocation() {
+    local _
+    for _ in $(seq "$AUDIT_POLLS"); do
+        "${kube[@]}" logs -l "$COMPONENT_LABEL=$1" --since-time="$2" --tail=-1 2>/dev/null |
+            jq -Rc 'fromjson? // empty' |
+            jq -e --arg m "$BULK_REVOKED_MSG" "select(.msg == \$m and ($3))" >/dev/null && return 0
+        sleep "$POLL_SECONDS"
+    done
+    return 1
+}
+budget_reserved() {
+    sql "tenant=$tenant" <<<"SELECT coalesce((SELECT reserved FROM limes.tenant_budgets WHERE tenant_id = :'tenant'), 0);"
+}
+usage_reserved() {
+    sql "cap=$1" <<<"SELECT coalesce((SELECT reserved FROM limes.usage WHERE capability_id = :'cap'), 0);"
+}
+
+# The bridge exchanged the read grant's token when it relayed the refused
+# write; the list finds that capability by the grant's session.
+reader_session=$(claim "$reader" sid)
+listed=$(session_capabilities "$reader_session")
+reader_capability=$(jq -r 'if length == 1 then .[0].id else empty end' <<<"$listed")
+if [[ -z "$reader_capability" || "$(jq -r '.[0].disposition' <<<"$listed")" == "$DISPOSITION_REVOKED" ]]; then
+    bad "the capability list finds the grant's live capability by its OAuth session" "$listed"
+    echo "== $pass passed, $fail failed"
+    exit 1
+fi
+ok "the capability list finds the grant's live capability by its OAuth session"
+
+budget_before=$(budget_reserved)
+hold=$(uuidgen | tr '[:upper:]' '[:lower:]')
+fixture_capability=$reader_capability
+sql "cap=$reader_capability" "tenant=$tenant" "hold=$hold" "amount=$HOLD_MICROS" "ttl=$HOLD_TTL" \
+    "op=$HOLD_OP" "actor=$HOLD_ACTOR" "abstract=$ABSTRACT_UNIT" <<'SQL'
+BEGIN;
+SELECT coalesce((SELECT unit_code FROM limes.tenant_budgets WHERE tenant_id = :'tenant'), :'abstract') AS unit \gset
+INSERT INTO limes.usage (capability_id, tenant_id, reserved, unit_code) VALUES (:'cap', :'tenant', :amount, :'unit')
+    ON CONFLICT (capability_id) DO UPDATE SET reserved = limes.usage.reserved + :amount;
+UPDATE limes.tenant_budgets SET reserved = reserved + :amount WHERE tenant_id = :'tenant';
+INSERT INTO limes.reservations (id, capability_id, tenant_id, ancestors, amount, unit_code, op, actor, copies, expires_at)
+    VALUES (:'hold', :'cap', :'tenant', '{}', :amount, :'unit', :'op', :'actor', '[]', now() + :'ttl'::interval);
+COMMIT;
+SQL
+got=$(usage_reserved "$reader_capability")
+expect "a hold is open on the capability" "reserved $got" test "$got" = "$HOLD_MICROS"
+
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+r=$(iam_rpc UserService/RevokeOAuthGrant \
+    "$(jq -cn --arg n "tenants/$tenant/users/$user" --arg g "$reader_session" '{name:$n,grantId:$g}')")
+expect "an operator revokes the $SCOPE_READ grant" "$r" test "$(jq -r '.code // "ok"' <<<"$r")" = ok
+d=$(disposition_in_session "$reader_session" "$reader_capability")
+expect "the grant's capability is revoked" "disposition '$d'" test "$d" = "$DISPOSITION_REVOKED"
+left=$(sql "hold=$hold" <<<"SELECT count(*) FROM limes.reservations WHERE id = :'hold';")
+expect "the hold is released at once" "$left left" test "$left" = 0
+got=$(usage_reserved "$reader_capability")
+expect "the capability holds nothing" "reserved $got" test "$got" = 0
+got=$(budget_reserved)
+expect "the tenant's budget holds what it did before" "reserved $got, was $budget_before" test "$got" = "$budget_before"
+expect "the IAM plane logs the release" "no '$BULK_REVOKED_MSG' line for session $reader_session" \
+    logged_revocation "$IAM_COMPONENT" "$since" \
+    ".session == \"$reader_session\" and .capabilities_revoked >= 1 and .holds_released >= 1"
+
+# ── deleting the client revokes what is left ────────────────────────────────
+leftover_session=$(claim "$leftover" sid)
+leftover_capability=$(claim "$(exchange "$leftover")" jti)
+expect "the last grant's token is exchanged for a capability" "no capability" test -n "$leftover_capability"
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+r=$(admin_rpc OAuthClientService/DeleteOAuthClient "$(jq -cn --arg c "$client_id" '{clientId:$c}')")
+if [[ "$(jq -r '.code // "ok"' <<<"$r")" == ok ]]; then
+    ok "an operator deletes the client"
+    # Gone with its grants: nothing left for cleanup to revoke or delete.
+    deleted_client=$client_id
+    client_id=""
+else
+    bad "an operator deletes the client" "$r"
+    deleted_client=""
+fi
+d=$(disposition_in_session "$leftover_session" "$leftover_capability")
+expect "the deleted client's capability is revoked" "disposition '$d'" test "$d" = "$DISPOSITION_REVOKED"
+expect "the admin plane logs the revocation" "no '$BULK_REVOKED_MSG' line for client $deleted_client" \
+    logged_revocation "$ADMIN_COMPONENT" "$since" \
+    ".client_id == \"$deleted_client\" and .all_tenants == true and .capabilities_revoked >= 1"
 
 echo "== $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]
