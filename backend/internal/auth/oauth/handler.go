@@ -122,11 +122,11 @@ func NewHandler(cfg config.OAuthAS, store Store, users UserResolver, refresh aut
 
 // Mount registers the OAuth endpoints on the given mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
-	mux.HandleFunc(AuthorizePath, h.handleAuthorize)
-	mux.HandleFunc(TokenPath, h.handleToken)
-	mux.HandleFunc(RevokePath, h.handleRevoke)
+	mux.HandleFunc(AuthorizePath, logRequests(AuthorizePath, h.handleAuthorize))
+	mux.HandleFunc(TokenPath, logRequests(TokenPath, h.handleToken))
+	mux.HandleFunc(RevokePath, logRequests(RevokePath, h.handleRevoke))
 	if h.cfg.DynamicRegistration {
-		mux.HandleFunc("/oauth/register", h.handleRegister)
+		mux.HandleFunc(RegisterPath, logRequests(RegisterPath, h.handleRegister))
 	}
 }
 

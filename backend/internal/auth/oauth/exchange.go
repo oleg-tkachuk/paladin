@@ -23,6 +23,8 @@ const (
 	TokenPath     = "/oauth/token" // #nosec G101 -- an endpoint path, not a credential
 	// RevokePath is the RFC 7009 revocation endpoint.
 	RevokePath = "/oauth/revoke"
+	// RegisterPath is the RFC 7591 dynamic client registration endpoint.
+	RegisterPath = "/oauth/register"
 )
 
 // The grant types /oauth/token serves, and the RFC 8693 token type it
