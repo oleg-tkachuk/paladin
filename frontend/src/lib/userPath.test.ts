@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { USERS_INDEX_HREF, userHref, userResourceName } from "./userPath";
+import {
+  USERS_INDEX_HREF,
+  userHref,
+  userResourceName,
+  userTenant,
+} from "./userPath";
 
 describe("userPath", () => {
   it("maps a user's resource name to their page and back", () => {
@@ -15,5 +20,10 @@ describe("userPath", () => {
   it("falls back to the index for a name that is not a user's", () => {
     expect(userHref("users/u-1")).toBe(USERS_INDEX_HREF);
     expect(userHref("tenants/t-1/users/u-1/extra")).toBe(USERS_INDEX_HREF);
+  });
+
+  it("reads the tenant of a user's resource name", () => {
+    expect(userTenant("tenants/t-1/users/u-1")).toBe("t-1");
+    expect(userTenant("users/u-1")).toBeNull();
   });
 });

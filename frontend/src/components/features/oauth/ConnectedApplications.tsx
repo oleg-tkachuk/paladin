@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -39,7 +40,8 @@ import {
 } from "@/gen/paladin/iam/v1/user_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
-import { OAUTH_GRANTS_TABLE } from "@/lib/oauthGrants";
+import { OAUTH_GRANTS_TABLE, grantCapabilitiesHref } from "@/lib/oauthGrants";
+import { userTenant } from "@/lib/userPath";
 import { useTableView } from "@/hooks/useTableView";
 import { useTableFacets } from "@/hooks/useTableFacets";
 import {
@@ -144,6 +146,9 @@ export function ConnectedApplications({
   // Read from every grant, not the rows the facets leave: a link may name an
   // ended grant the default filter hides.
   const opened = grants.find((g) => g.id === detail.openId) ?? null;
+  // An operator follows a grant to its capabilities; a user's own page has
+  // no capabilities list to follow it to.
+  const tenant = own ? null : userTenant(userName);
 
   const revoke = async () => {
     if (!target) return;
@@ -317,6 +322,9 @@ export function ConnectedApplications({
       <ApplicationPanel
         id={detail.openId}
         grant={opened}
+        capabilitiesHref={
+          tenant && opened ? grantCapabilitiesHref(tenant, opened.id) : null
+        }
         loading={query.isPending}
         failed={query.isError}
         onClose={detail.close}
@@ -345,6 +353,7 @@ export function ConnectedApplications({
 function ApplicationPanel({
   id,
   grant,
+  capabilitiesHref,
   loading,
   failed,
   onClose,
@@ -353,6 +362,8 @@ function ApplicationPanel({
   /** The grant to show; null keeps the panel closed. */
   id: string | null;
   grant: OAuthGrant | null;
+  /** The capabilities exchanged under the grant; null where none are shown. */
+  capabilitiesHref: string | null;
   /** The list is still being read, so a missing grant may yet arrive. */
   loading: boolean;
   /** The list could not be read, so nothing says whether the grant exists. */
@@ -416,6 +427,16 @@ function ApplicationPanel({
           <RecordField label="Valid for">
             <Duration from={grant.grantedAt} to={grant.expiresAt} />
           </RecordField>
+          {capabilitiesHref ? (
+            <RecordField label="Capabilities">
+              <Link
+                href={capabilitiesHref}
+                className="text-primary hover:underline"
+              >
+                Exchanged under this grant
+              </Link>
+            </RecordField>
+          ) : null}
         </RecordFields>
       ) : (
         <p className={T.hint}>

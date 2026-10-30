@@ -11,6 +11,11 @@ export function userResourceName(tenant: string, user: string): string {
   return `tenants/${tenant}/users/${user}`;
 }
 
+/** The tenant of a user's resource name; null when it is not a user's. */
+export function userTenant(name: string): string | null {
+  return USER_NAME.exec(name)?.[1] ?? null;
+}
+
 /** The user's page; the index when the name is not a user's. */
 export function userHref(name: string): string {
   const match = USER_NAME.exec(name);
