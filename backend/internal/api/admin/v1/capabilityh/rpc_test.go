@@ -359,15 +359,15 @@ func TestRevokeSaysWhatItDid(t *testing.T) {
 	}
 }
 
-func TestRevokeStoreErrorIsInternal(t *testing.T) {
+func TestRevokeStoreErrorIsUnavailable(t *testing.T) {
 	store := &recordingStore{revokeErr: errors.New("db down")}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
 	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{
 		Id: uuid.New().String(),
 	})
-	if codeOf(err) != connect.CodeInternal {
-		t.Fatalf("code = %v, want Internal", codeOf(err))
+	if codeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v, want Unavailable: the store failing is retried", codeOf(err))
 	}
 }
 
@@ -549,15 +549,15 @@ func TestListRejectsBadTenant(t *testing.T) {
 	}
 }
 
-func TestListStoreErrorIsInternal(t *testing.T) {
+func TestListStoreErrorIsUnavailable(t *testing.T) {
 	store := &recordingStore{listErr: errors.New("db down")}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
 	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
 		TenantId: uuid.New().String(),
 	})
-	if codeOf(err) != connect.CodeInternal {
-		t.Fatalf("code = %v, want Internal", codeOf(err))
+	if codeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v, want Unavailable: the store failing is retried", codeOf(err))
 	}
 }
 
@@ -643,7 +643,7 @@ func TestGetUsageNotFound(t *testing.T) {
 	}
 }
 
-func TestGetUsageStoreErrorIsInternal(t *testing.T) {
+func TestGetUsageStoreErrorIsUnavailable(t *testing.T) {
 	store := &fakeStore{}
 	usage := &fakeUsage{err: errors.New("db down")}
 	h := mkHandler(t, store, usage, &allowAuthorizer{})
@@ -651,8 +651,8 @@ func TestGetUsageStoreErrorIsInternal(t *testing.T) {
 	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{
 		Id: uuid.New().String(),
 	})
-	if codeOf(err) != connect.CodeInternal {
-		t.Fatalf("code = %v, want Internal", codeOf(err))
+	if codeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v, want Unavailable: the store failing is retried", codeOf(err))
 	}
 }
 

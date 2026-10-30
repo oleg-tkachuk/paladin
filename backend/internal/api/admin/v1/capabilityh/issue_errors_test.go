@@ -58,7 +58,7 @@ var issuanceCases = []struct {
 }{
 	{"an unknown tenant", fmt.Errorf("%w: %s", limes.ErrUnknownTenant, uuid.New().String()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
 	{"a deleted tenant", fmt.Errorf("%w: %s", limes.ErrTenantDeleted, uuid.New().String()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
-	{"a store failure", errDriver, connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+	{"a store failure", errDriver, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 }
 
 func TestIssueAnswersAFailureByItsKind(t *testing.T) {
@@ -164,6 +164,9 @@ func TestDelegateAnswersALineageRefusal(t *testing.T) {
 	}{
 		{"a chain too deep", fmt.Errorf("%w: %s", limes.ErrDelegationTooDeep, uuid.New().String()), connect.CodeFailedPrecondition},
 		{"a child in another tenant", fmt.Errorf("%w: tenant %s", limes.ErrDelegationTooWide, uuid.New().String()), connect.CodePermissionDenied},
+		{"a revoked parent", fmt.Errorf("%w: parent", limes.ErrRevoked), connect.CodeFailedPrecondition},
+		{"an expired parent", fmt.Errorf("%w: parent", limes.ErrExpired), connect.CodeFailedPrecondition},
+		{"a unit other than the parent's", fmt.Errorf("%w: EUR", limes.ErrUnitCodeMismatch), connect.CodePermissionDenied},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &failingInsertStore{}
@@ -176,5 +179,18 @@ func TestDelegateAnswersALineageRefusal(t *testing.T) {
 				t.Fatalf("err = %v (%v), want %v", err, got, tc.code)
 			}
 		})
+	}
+}
+
+// Every operation's rows name codes limes defines: a code a release renames
+// would otherwise leave its row dead and the table answering instead.
+func TestExceptionsNameLimesCodes(t *testing.T) {
+	for name, e := range map[string]auth.Exceptions{
+		"issuance": issuanceExceptions, "delegation": delegationExceptions,
+		"record": recordExceptions, "list": listExceptions,
+	} {
+		if undefined := e.Undefined(); len(undefined) > 0 {
+			t.Errorf("%s exceptions name %v, which limes does not define", name, undefined)
+		}
 	}
 }
