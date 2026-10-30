@@ -6,8 +6,19 @@ import (
 	"slices"
 	"uuid"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+)
+
+// The log keys of a bulk revocation's outcome. A handler that reports the
+// count it was answered logs it under the same key.
+const (
+	LogKeyCapabilitiesRevoked = "capabilities_revoked"
+	logKeyHoldsReleased       = "holds_released"
 )
 
 // BulkRevocation revokes capabilities in bulk and releases at once the holds
@@ -54,32 +65,50 @@ func (b *BulkRevocation) RevokeMatching(ctx context.Context, req limes.RevokeMat
 			break
 		}
 	}
-	if b.Holds == nil {
-		return revoked, nil
-	}
-	for _, t := range tenants {
-		if err := b.releaseHolds(WithActingTenant(ctx, t), t, req); err != nil {
-			return revoked, err
+	var released int64
+	if b.Holds != nil {
+		for _, t := range tenants {
+			n, err := b.releaseHolds(WithActingTenant(ctx, t), t, req)
+			released += n
+			if err != nil {
+				return revoked, err
+			}
 		}
 	}
+	logRevoked(ctx, req, revoked, released)
 	return revoked, nil
 }
 
 // releaseHolds releases, batch after batch, the holds of tenant's revoked
-// capabilities that req selects.
-func (b *BulkRevocation) releaseHolds(ctx context.Context, tenant uuid.UUID, req limes.RevokeMatchingRequest) error {
+// capabilities that req selects, and reports how many it released.
+func (b *BulkRevocation) releaseHolds(ctx context.Context, tenant uuid.UUID, req limes.RevokeMatchingRequest) (int64, error) {
+	var released int64
 	for {
 		res, err := b.Holds.ReleaseMatching(ctx, meter.ReleaseMatchingRequest{
 			TenantID: tenant, Subject: req.Subject, OnBehalfOf: req.OnBehalfOf,
 			ClientID: req.ClientID, Session: req.Session, RunID: req.RunID,
 		})
+		released += res.Released
 		if err != nil {
-			return fmt.Errorf("release the holds of revoked capabilities in tenant %s: %w", tenant, err)
+			return released, fmt.Errorf("release the holds of revoked capabilities in tenant %s: %w", tenant, err)
 		}
 		if !res.More {
-			return nil
+			return released, nil
 		}
 	}
+}
+
+// logRevoked logs what a revocation selected and what it stopped: at info
+// when it revoked or released something, at debug when a repeat found
+// nothing left. A failure is the caller's to log, with what it answers.
+func logRevoked(ctx context.Context, req limes.RevokeMatchingRequest, revoked, released int64) {
+	level := zapcore.DebugLevel
+	if revoked > 0 || released > 0 {
+		level = zapcore.InfoLevel
+	}
+	logger.FromContext(ctx).Log(level, "capabilities revoked in bulk",
+		zap.Bool("all_tenants", req.AllTenants), zap.String("client_id", req.ClientID), zap.String("session", req.Session),
+		zap.Int64(LogKeyCapabilitiesRevoked, revoked), zap.Int64(logKeyHoldsReleased, released))
 }
 
 // RevokeSession revokes every capability exchanged under session — an OAuth
