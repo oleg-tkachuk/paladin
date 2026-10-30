@@ -89,7 +89,12 @@ func capabilityError(code connect.Code, err error) *connect.Error {
 	if !ok {
 		return e
 	}
-	reason := capabilityErrorReason(r)
+	return withErrorReason(e, capabilityErrorReason(r))
+}
+
+// withErrorReason is e carrying reason in its ErrorInfo; e as it is when the
+// reason is unspecified.
+func withErrorReason(e *connect.Error, reason commonv1.ErrorReason) *connect.Error {
 	if reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
 		return e
 	}
