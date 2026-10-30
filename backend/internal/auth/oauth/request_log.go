@@ -52,13 +52,14 @@ const firstClientErrorStatus = http.StatusBadRequest
 
 // logRequests serves endpoint through next and logs the outcome: a refusal
 // — a 4xx, or a redirect carrying an error to the client — at warn with its
-// error code, anything else short of a server error at info.
+// error code, anything else short of a server error at info. A request
+// handed on with loggedDownstream is the other handler's to log.
 func logRequests(endpoint string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rec := &outcomeRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
 		next(rec, r)
-		if rec.status >= firstServerErrorStatus {
+		if rec.loggedDownstream || rec.status >= firstServerErrorStatus {
 			return
 		}
 		errCode := rec.errorCode()
@@ -92,14 +93,23 @@ func clientIDOf(r *http.Request) string {
 	return r.URL.Query().Get(formClientID)
 }
 
+// loggedDownstream marks the request w answers as handed to a handler that
+// logs its outcome itself, so logRequests leaves it.
+func loggedDownstream(w http.ResponseWriter) {
+	if rec, ok := w.(*outcomeRecorder); ok {
+		rec.loggedDownstream = true
+	}
+}
+
 // outcomeRecorder remembers the status an endpoint answered with, and enough
 // of a refusal's body to read its error code. It unwraps to the writer it
 // wraps.
 type outcomeRecorder struct {
 	http.ResponseWriter
-	status      int
-	wroteHeader bool
-	body        bytes.Buffer
+	status           int
+	wroteHeader      bool
+	loggedDownstream bool
+	body             bytes.Buffer
 }
 
 func (o *outcomeRecorder) WriteHeader(code int) {
