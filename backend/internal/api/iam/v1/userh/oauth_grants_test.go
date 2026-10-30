@@ -66,7 +66,7 @@ func TestListOAuthGrants(t *testing.T) {
 
 func TestRevokeOAuthGrant(t *testing.T) {
 	u, g, az, h := grantFixture(t)
-	grant := uuid.New()
+	grant := g.grants[0].ID
 
 	g.found = true
 	if err := h.RevokeOAuthGrant(ctxAs(u.TenantID), ref(u), grant); err != nil {
@@ -79,8 +79,7 @@ func TestRevokeOAuthGrant(t *testing.T) {
 		t.Errorf("authorized %s, want %s", az.action, cedar.ActionRevokeOAuthGrant)
 	}
 
-	g.found = false
-	if err := h.RevokeOAuthGrant(ctxAs(u.TenantID), ref(u), grant); code(err) != connect.CodeNotFound {
+	if err := h.RevokeOAuthGrant(ctxAs(u.TenantID), ref(u), uuid.New()); code(err) != connect.CodeNotFound {
 		t.Errorf("a grant that is not the user's: code = %v, want NotFound", code(err))
 	}
 }

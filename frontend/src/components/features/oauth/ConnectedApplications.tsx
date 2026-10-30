@@ -334,7 +334,7 @@ export function ConnectedApplications({
         type="danger"
         title="Revoke access?"
         message={`${target?.clientId ?? "The client"} will have to be authorized again to reach Paladin.`}
-        warning="It cannot refresh its access after this. A token it already holds keeps working for a few minutes."
+        warning="It cannot refresh its access after this, and the capabilities it was granted through this access stop at once. An access token it already holds keeps working for a few minutes."
         confirmText="Revoke"
       />
     </>
