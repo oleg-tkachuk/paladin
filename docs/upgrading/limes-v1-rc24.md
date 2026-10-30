@@ -1,4 +1,4 @@
-## sdk/go/v0.127.0 — limes v1.0.0-rc.24
+## v41.3.0, sdk/go/v0.127.0 — limes v1.0.0-rc.24
 
 - pgstore v0.52.1 adds four migrations, applied at startup:
   - `027` rebuilds the client and session indexes to span tenants

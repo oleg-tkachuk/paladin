@@ -1,4 +1,4 @@
-## Unreleased — the admin API answers capability errors by limes code
+## v41.3.0 — the admin API answers capability errors by limes code
 
 - A capability or tenant-budget store failing under the admin API is
   `UNAVAILABLE`, worth a retry, not `INTERNAL`. The caller is told only to
