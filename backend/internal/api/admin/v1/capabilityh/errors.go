@@ -39,7 +39,8 @@ var issuanceExceptions = func() auth.Exceptions {
 }()
 
 // delegationExceptions answer Delegate: issuance's, and the parent's. A
-// parent revoked, expired or at the depth limit can no longer delegate,
+// parent revoked, expired, at the depth limit or in an erased tenant can no
+// longer delegate,
 // which is a state the caller must act on, not a refusal of this call; a
 // child in another unit than its parent's is wider than the parent allows.
 var delegationExceptions = func() auth.Exceptions {
@@ -48,6 +49,7 @@ var delegationExceptions = func() auth.Exceptions {
 		limes.CodeRevoked:           {Code: connect.CodeFailedPrecondition},
 		limes.CodeExpired:           {Code: connect.CodeFailedPrecondition},
 		limes.CodeDelegationTooDeep: {Code: connect.CodeFailedPrecondition},
+		limes.CodeTenantErased:      {Code: connect.CodeFailedPrecondition},
 		limes.CodeUnitCodeMismatch:  {Code: connect.CodePermissionDenied},
 	})
 	return e

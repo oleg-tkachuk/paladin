@@ -166,6 +166,7 @@ func TestDelegateAnswersALineageRefusal(t *testing.T) {
 		{"a child in another tenant", fmt.Errorf("%w: tenant %s", limes.ErrDelegationTooWide, uuid.New().String()), connect.CodePermissionDenied},
 		{"a revoked parent", fmt.Errorf("%w: parent", limes.ErrRevoked), connect.CodeFailedPrecondition},
 		{"an expired parent", fmt.Errorf("%w: parent", limes.ErrExpired), connect.CodeFailedPrecondition},
+		{"a parent in an erased tenant", fmt.Errorf("%w: parent", limes.ErrTenantErased), connect.CodeFailedPrecondition},
 		{"a unit other than the parent's", fmt.Errorf("%w: EUR", limes.ErrUnitCodeMismatch), connect.CodePermissionDenied},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
