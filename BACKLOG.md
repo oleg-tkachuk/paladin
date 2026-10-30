@@ -158,10 +158,12 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** a capability now records the OAuth session it was exchanged in
   (`limes.Record.Session`), but the capability API and the console do not
   carry it.
-- **Definition of Done:** the capability proto carries the session, the
-  console's capability list and detail show it, and ending a session from
-  the console revokes its capabilities.
-- **Blockers:** none.
+- **Definition of Done:** the capability proto carries the session, and the
+  console's capability list and detail show it, with a link to the OAuth
+  grant it belongs to.
+- **Blockers:** limes — `pgstore` returns `Record.Session` from `GetRecord`
+  only; `GetRecordListing` and `ListRecords`, which the console's detail
+  and list read, leave it empty.
 
 ## Agentic plane / single-binary multi-mode migration
 

@@ -7,16 +7,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	celpkg "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
@@ -29,7 +33,17 @@ type Handler struct {
 	// grants lists and ends the OAuth grants users gave clients. Nil
 	// answers both RPCs Unimplemented.
 	grants authstore.OAuthGrantStore
-	now    func() time.Time
+	// sessions revokes the capabilities exchanged under a grant's session
+	// when the grant ends. Nil while the capability subsystem is off.
+	sessions limes.BulkRevoker
+	now      func() time.Time
+}
+
+// WithSessionRevoker lets ending a grant end the capabilities exchanged
+// under its session.
+func (h *Handler) WithSessionRevoker(s limes.BulkRevoker) *Handler {
+	h.sessions = s
+	return h
 }
 
 // WithOAuthGrants lets the handler list and end users' OAuth grants.
@@ -447,9 +461,23 @@ func (h *Handler) ListOAuthGrants(ctx context.Context, ref UserRef, includeInact
 	return grants, nil
 }
 
+// callerSubject is the subject of the principal ctx carries, empty for none.
+func callerSubject(ctx context.Context) string {
+	if p, err := auth.PrincipalFromContext(ctx); err == nil && p != nil {
+		return p.Subject
+	}
+	return ""
+}
+
+// noteGrantRevokedByOperator is why a session's capabilities were revoked
+// when an operator ended its grant from the console.
+const noteGrantRevokedByOperator = "an operator revoked the OAuth grant"
+
 // RevokeOAuthGrant ends one of the user's grants: the client's refresh
-// tokens stop working at once, an access token it holds within its short
-// lifetime. A grant that is not the user's is not found.
+// tokens stop working at once, and so do the capabilities exchanged under
+// the grant's session; an access token it holds lasts its short lifetime.
+// A grant that is not the user's is not found. One already ended is ended
+// again, so a call that failed between the two steps is finished by a retry.
 func (h *Handler) RevokeOAuthGrant(ctx context.Context, ref UserRef, grantID uuid.UUID) error {
 	u, err := h.grantTarget(ctx, ref)
 	if err != nil {
@@ -458,13 +486,30 @@ func (h *Handler) RevokeOAuthGrant(ctx context.Context, ref UserRef, grantID uui
 	if err := h.authorize(ctx, cedar.ActionRevokeOAuthGrant, u); err != nil {
 		return err
 	}
-	found, err := h.grants.RevokeOAuthGrant(auth.WithActingTenant(ctx, u.TenantID), u.UserID, grantID)
+	ctx = auth.WithActingTenant(ctx, u.TenantID)
+	// The grant is checked to be the user's, ended or not, before anything
+	// is revoked: the session named is one the caller is authorized over.
+	grants, err := h.grants.ListOAuthGrants(ctx, u.UserID, h.now(), true)
 	if err != nil {
-		return rpcerr.New(connect.CodeInternal, fmt.Errorf("revoke oauth grant: %w", err))
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("list oauth grants: %w", err))
 	}
-	if !found {
+	if !slices.ContainsFunc(grants, func(g authstore.UserOAuthGrant) bool { return g.ID == grantID }) {
 		return connect.NewError(connect.CodeNotFound, "oauth grant not found")
 	}
+	// The refresh tokens first, so no new capability is exchanged under the
+	// session while its capabilities are revoked.
+	if _, err := h.grants.RevokeOAuthGrant(ctx, u.UserID, grantID); err != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("revoke oauth grant: %w", err))
+	}
+	var revoked int64
+	if h.sessions != nil {
+		if revoked, err = auth.RevokeSession(ctx, h.sessions, u.TenantID, grantID, noteGrantRevokedByOperator, callerSubject(ctx)); err != nil {
+			return connect.NewError(connect.CodeUnavailable, "the grant's capabilities could not be revoked; retry").WithCause(err)
+		}
+	}
+	logger.FromContext(ctx).Info("oauth grant revoked",
+		zap.String("user_id", u.UserID.String()), zap.String("grant_id", grantID.String()),
+		zap.Int64("capabilities_revoked", revoked))
 	return nil
 }
 

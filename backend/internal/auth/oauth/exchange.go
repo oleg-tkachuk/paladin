@@ -119,17 +119,9 @@ func (h *Handler) revokeSession(ctx context.Context, tenant, family uuid.UUID, w
 	if h.exchange == nil || h.exchange.sessions == nil {
 		return 0, nil
 	}
-	var revoked int64
-	for {
-		res, err := h.exchange.sessions.RevokeMatching(auth.WithActingTenant(ctx, tenant), limes.RevokeMatchingRequest{
-			TenantID: tenant, Session: family.String(), Note: why, Actor: sessionRevocationActor,
-		})
-		if err != nil {
-			return revoked, fmt.Errorf("oauth: revoke the capabilities of session %s: %w", family, err)
-		}
-		revoked += res.Revoked
-		if !res.More {
-			return revoked, nil
-		}
+	revoked, err := auth.RevokeSession(ctx, h.exchange.sessions, tenant, family, why, sessionRevocationActor)
+	if err != nil {
+		return revoked, fmt.Errorf("oauth: %w", err)
 	}
+	return revoked, nil
 }
