@@ -1,4 +1,4 @@
-## Unreleased — revoking a connected application stops its capabilities
+## v41.3.0 — revoking a connected application stops its capabilities
 
 - Revoking an OAuth grant from the console (`UserService.RevokeOAuthGrant`)
   now also revokes every capability exchanged under the grant's session, as

@@ -99,7 +99,7 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
-## sdk/go/v0.127.0, sdk/python/v0.128.0 — a capability shows the OAuth grant it was exchanged under
+## v41.3.0, sdk/go/v0.127.0, sdk/python/v0.128.0 — a capability shows the OAuth grant it was exchanged under
 
 - `Capability` carries `session` (the OAuth grant's id), `on_behalf_of` (the
   user the subject acts for) and `client_id`, output only; `List` and `Get`
@@ -107,7 +107,7 @@ here.
 - The console's capability list and detail link a delegated capability to
   its grant on the user's page.
 
-## Unreleased — deleting an OAuth client revokes its capabilities
+## v41.3.0 — deleting an OAuth client revokes its capabilities
 
 - `OAuthClientService.DeleteOAuthClient` now revokes every capability
   exchanged under the client, in every tenant, and releases their holds.
@@ -118,7 +118,7 @@ here.
 - Revoking a grant's session, from the console or by the client, releases
   the revoked capabilities' holds at once instead of when they expire.
 
-## sdk/go/v0.127.0 — limes v1.0.0-rc.24
+## v41.3.0, sdk/go/v0.127.0 — limes v1.0.0-rc.24
 
 - pgstore v0.52.1 adds four migrations, applied at startup:
   - `027` rebuilds the client and session indexes to span tenants
@@ -129,7 +129,7 @@ here.
     capability's agent principal — a full pass over the table;
   - `030` indexes it (`CREATE INDEX CONCURRENTLY`).
 
-## Unreleased — revoking a connected application stops its capabilities
+## v41.3.0 — revoking a connected application stops its capabilities
 
 - Revoking an OAuth grant from the console (`UserService.RevokeOAuthGrant`)
   now also revokes every capability exchanged under the grant's session, as
@@ -140,7 +140,7 @@ here.
 - If the capabilities could not be revoked, the call answers `UNAVAILABLE`;
   retry it.
 
-## Unreleased — the admin API answers capability errors by limes code
+## v41.3.0 — the admin API answers capability errors by limes code
 
 - A capability or tenant-budget store failing under the admin API is
   `UNAVAILABLE`, worth a retry, not `INTERNAL`. The caller is told only to

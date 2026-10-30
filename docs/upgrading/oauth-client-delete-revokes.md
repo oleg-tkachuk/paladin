@@ -1,4 +1,4 @@
-## Unreleased — deleting an OAuth client revokes its capabilities
+## v41.3.0 — deleting an OAuth client revokes its capabilities
 
 - `OAuthClientService.DeleteOAuthClient` now revokes every capability
   exchanged under the client, in every tenant, and releases their holds.
