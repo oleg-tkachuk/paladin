@@ -47,6 +47,14 @@ service TenantBudgetService {
   rpc Summarize(TenantBudgetServiceSummarizeRequest) returns (TenantBudgetServiceSummarizeResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ListReservations pages through the holds that make up a tenant's
+  // reserved amount: each a metered request's cost set aside until it
+  // settles, is released, or expires. Soonest to expire first; a hold past
+  // its expiry stays listed until it is released.
+  rpc ListReservations(TenantBudgetServiceListReservationsRequest) returns (TenantBudgetServiceListReservationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // TenantBudget is the typed metadata view of a per-tenant aggregate
@@ -83,6 +91,10 @@ message TenantBudget {
   }
   // spent is the spend in the current period, in the tenant's currency.
   google.type.Money spent = 12 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // reserved is what the tenant's open holds keep from the budget, in its
+  // currency: counted against the cap as spend is, until each hold settles
+  // or is released. ListReservations lists the holds.
+  google.type.Money reserved = 14 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message TenantBudgetServiceGetRequest {
@@ -184,4 +196,34 @@ message TenantBudgetServiceSummarizeResponse {
   repeated TenantBudgetSummary summaries = 1;
   // next_page_token fetches the next page; empty on the last one.
   string next_page_token = 2;
+}
+
+message TenantBudgetServiceListReservationsRequest {
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  // page_size — 0 is the server's default.
+  int32 page_size = 2 [(buf.validate.field).int32.gte = 0];
+  // page_token — the next_page_token of the previous page; empty for the
+  // first. Each page is read on its own: the pages of a walk are no snapshot.
+  string page_token = 3;
+}
+
+message TenantBudgetServiceListReservationsResponse {
+  repeated TenantReservation reservations = 1;
+  // next_page_token fetches the next page; empty on the last one.
+  string next_page_token = 2;
+}
+
+// TenantReservation is one hold on a tenant's budget.
+message TenantReservation {
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // capability_id is the capability whose request the hold is for.
+  string capability_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // amount is what the hold keeps, in the tenant's currency.
+  google.type.Money amount = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // op and actor are what the charge will name when the hold settles.
+  string op = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string actor = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // expires_at is when the hold stops counting, if nothing settles or
+  // releases it first; one past it is released by housekeeping.
+  google.protobuf.Timestamp expires_at = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
 }

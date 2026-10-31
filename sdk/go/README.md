@@ -674,7 +674,7 @@ what each field means, are documented in the `.proto` files under
 | `PolicyService` | `Validate`, `SimulateAuthz`, `GetEffectivePolicy`, `ListPolicyVersions` |
 | `QuotaService` | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
-| `TenantBudgetService` | `Get`, `Set`, `Summarize` |
+| `TenantBudgetService` | `Get`, `Set`, `Summarize`, `ListReservations` |
 | `TenantService` | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `PreviewPurgeTenant`, `RenameTenantSlug`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `ResolveRenamedSlug`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
 
 ### Data plane

@@ -43,18 +43,28 @@ var tenantBudgetReadExceptions = auth.Exceptions{
 // platform.admin (cross-tenant) and tenant.admin (own-tenant only).
 type TenantBudgetServer struct {
 	paladinadminv1connect.UnimplementedTenantBudgetServiceHandler
-	Usage meter.TenantBudgets
+	Usage TenantBudgetStore
 	// Tenants names the tenants a summary lists: the budget rows carry
 	// their ids alone.
 	Tenants tenanth.Names
 }
+
+// TenantBudgetStore is the part of the usage store the service serves: the
+// tenant budgets, and the holds that make up what each one has reserved.
+type TenantBudgetStore interface {
+	meter.TenantBudgets
+	meter.TenantReservationLister
+}
+
+// budgetUnavailable answers every RPC while the capability subsystem is off.
+const budgetUnavailable = "capability subsystem disabled; tenant budget unavailable"
 
 // NewTenantBudgetServer wires the handler. usage may be nil — the
 // capability subsystem is opt-in (cfg.Capability.Enabled). When nil,
 // every RPC returns CodeUnavailable so the operator notices the
 // misconfig immediately rather than getting silent NULL responses.
 // tenants is required with usage: Summarize names each row's tenant.
-func NewTenantBudgetServer(usage meter.TenantBudgets, tenants tenanth.Names) *TenantBudgetServer {
+func NewTenantBudgetServer(usage TenantBudgetStore, tenants tenanth.Names) *TenantBudgetServer {
 	return &TenantBudgetServer{Usage: usage, Tenants: tenants}
 }
 
@@ -63,7 +73,7 @@ func (s *TenantBudgetServer) Get(
 	req *pb.TenantBudgetServiceGetRequest,
 ) (*pb.TenantBudgetServiceGetResponse, error) {
 	if s.Usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "capability subsystem disabled; tenant budget unavailable")
+		return nil, connect.NewError(connect.CodeUnavailable, budgetUnavailable)
 	}
 	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
@@ -87,7 +97,7 @@ func (s *TenantBudgetServer) Set(
 	req *pb.TenantBudgetServiceSetRequest,
 ) (*pb.TenantBudgetServiceSetResponse, error) {
 	if s.Usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "capability subsystem disabled; tenant budget unavailable")
+		return nil, connect.NewError(connect.CodeUnavailable, budgetUnavailable)
 	}
 	m := req
 	tenantID, err := uuid.Parse(m.GetTenantId())
@@ -157,7 +167,7 @@ func (s *TenantBudgetServer) Summarize(
 	req *pb.TenantBudgetServiceSummarizeRequest,
 ) (*pb.TenantBudgetServiceSummarizeResponse, error) {
 	if s.Usage == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "capability subsystem disabled; tenant budget unavailable")
+		return nil, connect.NewError(connect.CodeUnavailable, budgetUnavailable)
 	}
 	m := req
 	if m.GetUnlimitedOnly() && m.GetThresholdPct() > 0 {
@@ -202,6 +212,48 @@ func (s *TenantBudgetServer) Summarize(
 // budgetListRequest is the store's listing for a summary request: the
 // unlimited tenants, the tenants at or past a threshold, or all of them —
 // threshold_pct 0 lists every tenant, as it always has.
+// ListReservations pages through the holds on a tenant's budget, acting as
+// the tenant: the holds are under the same row-level security as the budget.
+func (s *TenantBudgetServer) ListReservations(
+	ctx context.Context,
+	req *pb.TenantBudgetServiceListReservationsRequest,
+) (*pb.TenantBudgetServiceListReservationsResponse, error) {
+	if s.Usage == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, budgetUnavailable)
+	}
+	tenantID, err := uuid.Parse(req.GetTenantId())
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+	}
+	page, err := s.Usage.ListTenantReservations(auth.WithActingTenant(ctx, tenantID), meter.ListTenantReservationsRequest{
+		TenantID: tenantID, Limit: int(req.GetPageSize()), Cursor: req.GetPageToken(),
+	})
+	if err != nil {
+		// A page token the store cannot read is InvalidArgument, by the table.
+		return nil, auth.AnswerCapabilityError(err, nil)
+	}
+	out := &pb.TenantBudgetServiceListReservationsResponse{
+		Reservations:  make([]*pb.TenantReservation, 0, len(page.Items)),
+		NextPageToken: page.Next,
+	}
+	for _, r := range page.Items {
+		out.Reservations = append(out.Reservations, reservationToProto(r))
+	}
+	return out, nil
+}
+
+// reservationToProto is one hold as the API shows it.
+func reservationToProto(r meter.Reservation) *pb.TenantReservation {
+	return &pb.TenantReservation{
+		Id:           r.ID.String(),
+		CapabilityId: r.CapabilityID.String(),
+		Amount:       apiutil.MoneyOf(r.UnitCode, r.Amount),
+		Op:           string(r.Op),
+		Actor:        r.Actor,
+		ExpiresAt:    timestamppb.New(r.ExpiresAt),
+	}
+}
+
 func budgetListRequest(m *pb.TenantBudgetServiceSummarizeRequest) meter.ListTenantBudgetsRequest {
 	req := meter.ListTenantBudgetsRequest{Filter: meter.TenantBudgetFilterAll, Limit: int(m.GetLimit()), Cursor: m.GetPageToken()}
 	switch {
@@ -235,6 +287,7 @@ func tenantBudgetToProto(tb meter.TenantBudget) *pb.TenantBudget {
 	out := &pb.TenantBudget{
 		TenantId:        tb.TenantID.String(),
 		Spent:           apiutil.MoneyOf(tb.Ceiling.UnitCode, tb.SpentAmount),
+		Reserved:        apiutil.MoneyOf(tb.Ceiling.UnitCode, tb.ReservedAmount),
 		ResourceVersion: convx.ResourceVersion(tb.ResourceVersion),
 	}
 	limit, unlimited := apiutil.BudgetCeilingArms(tb.Ceiling, tb.Ceiling.UnitCode)

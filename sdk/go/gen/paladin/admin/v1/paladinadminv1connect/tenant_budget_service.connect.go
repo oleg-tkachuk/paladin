@@ -32,6 +32,9 @@ const (
 	// TenantBudgetServiceSummarizeProcedure is the procedure name of the TenantBudgetService's
 	// Summarize RPC.
 	TenantBudgetServiceSummarizeProcedure = "/paladin.admin.v1.TenantBudgetService/Summarize"
+	// TenantBudgetServiceListReservationsProcedure is the procedure name of the TenantBudgetService's
+	// ListReservations RPC.
+	TenantBudgetServiceListReservationsProcedure = "/paladin.admin.v1.TenantBudgetService/ListReservations"
 )
 
 var (
@@ -59,6 +62,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	tenantBudgetServiceListReservationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_budget_service_proto.Services().ByName("TenantBudgetService").Methods().ByName("ListReservations"),
+			Procedure:        TenantBudgetServiceListReservationsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // TenantBudgetServiceClient is a client for the paladin.admin.v1.TenantBudgetService service.
@@ -79,6 +90,11 @@ type TenantBudgetServiceClient interface {
 	// Filters keep the wire payload small on platforms with many
 	// tenants — typical operator query is "show me anyone over 80 %".
 	Summarize(context.Context, *v1.TenantBudgetServiceSummarizeRequest) (*v1.TenantBudgetServiceSummarizeResponse, error)
+	// ListReservations pages through the holds that make up a tenant's
+	// reserved amount: each a metered request's cost set aside until it
+	// settles, is released, or expires. Soonest to expire first; a hold past
+	// its expiry stays listed until it is released.
+	ListReservations(context.Context, *v1.TenantBudgetServiceListReservationsRequest) (*v1.TenantBudgetServiceListReservationsResponse, error)
 }
 
 // NewTenantBudgetServiceClient constructs a client for the paladin.admin.v1.TenantBudgetService
@@ -106,6 +122,11 @@ type TenantBudgetServiceHandler interface {
 	// Filters keep the wire payload small on platforms with many
 	// tenants — typical operator query is "show me anyone over 80 %".
 	Summarize(context.Context, *v1.TenantBudgetServiceSummarizeRequest) (*v1.TenantBudgetServiceSummarizeResponse, error)
+	// ListReservations pages through the holds that make up a tenant's
+	// reserved amount: each a metered request's cost set aside until it
+	// settles, is released, or expires. Soonest to expire first; a hold past
+	// its expiry stays listed until it is released.
+	ListReservations(context.Context, *v1.TenantBudgetServiceListReservationsRequest) (*v1.TenantBudgetServiceListReservationsResponse, error)
 }
 
 // RegisterTenantBudgetServiceHandler registers svc as the paladin.admin.v1.TenantBudgetService
@@ -116,6 +137,7 @@ func RegisterTenantBudgetServiceHandler(server *connect.Server, svc TenantBudget
 		connect.Method{Spec: tenantBudgetServiceGetSpec(), Handler: adapter.get},
 		connect.Method{Spec: tenantBudgetServiceSetSpec(), Handler: adapter.set},
 		connect.Method{Spec: tenantBudgetServiceSummarizeSpec(), Handler: adapter.summarize},
+		connect.Method{Spec: tenantBudgetServiceListReservationsSpec(), Handler: adapter.listReservations},
 	)
 }
 
@@ -132,6 +154,10 @@ func (UnimplementedTenantBudgetServiceHandler) Set(context.Context, *v1.TenantBu
 
 func (UnimplementedTenantBudgetServiceHandler) Summarize(context.Context, *v1.TenantBudgetServiceSummarizeRequest) (*v1.TenantBudgetServiceSummarizeResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantBudgetService.Summarize is not implemented")
+}
+
+func (UnimplementedTenantBudgetServiceHandler) ListReservations(context.Context, *v1.TenantBudgetServiceListReservationsRequest) (*v1.TenantBudgetServiceListReservationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantBudgetService.ListReservations is not implemented")
 }
 
 type tenantBudgetServiceClient struct {
@@ -157,6 +183,14 @@ func (c *tenantBudgetServiceClient) Set(ctx context.Context, req *v1.TenantBudge
 func (c *tenantBudgetServiceClient) Summarize(ctx context.Context, req *v1.TenantBudgetServiceSummarizeRequest) (*v1.TenantBudgetServiceSummarizeResponse, error) {
 	var res v1.TenantBudgetServiceSummarizeResponse
 	if err := c.client.CallUnary(ctx, tenantBudgetServiceSummarizeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantBudgetServiceClient) ListReservations(ctx context.Context, req *v1.TenantBudgetServiceListReservationsRequest) (*v1.TenantBudgetServiceListReservationsResponse, error) {
+	var res v1.TenantBudgetServiceListReservationsResponse
+	if err := c.client.CallUnary(ctx, tenantBudgetServiceListReservationsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -194,6 +228,18 @@ func (h tenantBudgetServiceHandler) summarize(ctx context.Context, _ connect.Spe
 		return err
 	}
 	res, err := h.svc.Summarize(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantBudgetServiceHandler) listReservations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TenantBudgetServiceListReservationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListReservations(ctx, &req)
 	if err != nil {
 		return err
 	}

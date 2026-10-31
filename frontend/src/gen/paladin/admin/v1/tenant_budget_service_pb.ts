@@ -28,7 +28,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_budget_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CixwYWxhZGluL2FkbWluL3YxL3RlbmFudF9idWRnZXRfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSL+AwoMVGVuYW50QnVkZ2V0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESGAoQcmVzb3VyY2VfdmVyc2lvbhgIIAEoCRI1CgxwZXJpb2Rfc3RhcnQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcGVyaW9kX2VuZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEi0KCm1heF9idWRnZXQYCyABKAsyEi5nb29nbGUudHlwZS5Nb25leUID4EEDSAASQgoQdW5saW1pdGVkX2J1ZGdldBgNIAEoCzIhLnBhbGFkaW4uYWRtaW4udjEuVW5saW1pdGVkQnVkZ2V0QgPgQQNIABImCgVzcGVudBgMIAEoCzISLmdvb2dsZS50eXBlLk1vbmV5QgPgQQNCEAoOYnVkZ2V0X2NlaWxpbmdKBAgCEANKBAgDEARKBAgHEAhKBAgJEApKBAgKEAtSEW1heF9idWRnZXRfYW1vdW50UgxzcGVudF9hbW91bnRSCXVuaXRfY29kZVIRbWF4X2J1ZGdldF9taWNyb3NSDHNwZW50X21pY3JvcyI8Ch1UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBIlAKHlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZRIuCgZidWRnZXQYASABKAsyHi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldCL+AwodVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIhChByZXNvdXJjZV92ZXJzaW9uGAYgASgJQge6SARyAhABEhMKC3Jlc2V0X3NwZW5kGAMgASgIEi4KCnBlcmlvZF9lbmQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEsMBCgptYXhfYnVkZ2V0GAggASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlCmAG6SJQBugGQAQoSbW9uZXkubm9uX25lZ2F0aXZlEjthbiBhbW91bnQgaXMgbm90IG5lZ2F0aXZlLCBhbmQgaXRzIG5hbm9zIGFyZSAwIHRvIDk5OTk5OTk5ORo9dGhpcy51bml0cyA+PSAwICYmIHRoaXMubmFub3MgPj0gMCAmJiB0aGlzLm5hbm9zIDw9IDk5OTk5OTk5OUgAEj0KEHVubGltaXRlZF9idWRnZXQYCSABKAsyIS5wYWxhZGluLmFkbWluLnYxLlVubGltaXRlZEJ1ZGdldEgAQhAKDmJ1ZGdldF9jZWlsaW5nSgQIAhADSgQIBRAGSgQIBxAIUhFtYXhfYnVkZ2V0X2Ftb3VudFIJdW5pdF9jb2RlUhFtYXhfYnVkZ2V0X21pY3JvcyJQCh5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2USLgoGYnVkZ2V0GAEgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXQilQEKE1RlbmFudEJ1ZGdldFN1bW1hcnkSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEi4KBmJ1ZGdldBgEIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0EhcKD3V0aWxpc2F0aW9uX3BjdBgFIAEoASK2AQojVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QSLgoNdGhyZXNob2xkX3BjdBgBIAEoAUIXukgUEhIZAAAAAAAAWUApAAAAAAAAAAASFgoOdW5saW1pdGVkX29ubHkYAiABKAgSGAoQZXhjbHVkZV9pbmFjdGl2ZRgDIAEoCBIZCgVsaW1pdBgEIAEoBUIKukgHGgUY9AMoABISCgpwYWdlX3Rva2VuGAUgASgJInkKJFRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZRI4CglzdW1tYXJpZXMYASADKAsyJS5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFN1bW1hcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJMvQCChNUZW5hbnRCdWRnZXRTZXJ2aWNlEm0KA0dldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXNwb25zZSIDkAIBEm0KA1NldBIvLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVNldFJlcXVlc3QaMC5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXNwb25zZSIDkAICEn8KCVN1bW1hcml6ZRI1LnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZVN1bW1hcml6ZVJlcXVlc3QaNi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CixwYWxhZGluL2FkbWluL3YxL3RlbmFudF9idWRnZXRfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKpBAoMVGVuYW50QnVkZ2V0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESGAoQcmVzb3VyY2VfdmVyc2lvbhgIIAEoCRI1CgxwZXJpb2Rfc3RhcnQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSMwoKcGVyaW9kX2VuZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEi0KCm1heF9idWRnZXQYCyABKAsyEi5nb29nbGUudHlwZS5Nb25leUID4EEDSAASQgoQdW5saW1pdGVkX2J1ZGdldBgNIAEoCzIhLnBhbGFkaW4uYWRtaW4udjEuVW5saW1pdGVkQnVkZ2V0QgPgQQNIABImCgVzcGVudBgMIAEoCzISLmdvb2dsZS50eXBlLk1vbmV5QgPgQQMSKQoIcmVzZXJ2ZWQYDiABKAsyEi5nb29nbGUudHlwZS5Nb25leUID4EEDQhAKDmJ1ZGdldF9jZWlsaW5nSgQIAhADSgQIAxAESgQIBxAISgQICRAKSgQIChALUhFtYXhfYnVkZ2V0X2Ftb3VudFIMc3BlbnRfYW1vdW50Ugl1bml0X2NvZGVSEW1heF9idWRnZXRfbWljcm9zUgxzcGVudF9taWNyb3MiPAodVGVuYW50QnVkZ2V0U2VydmljZUdldFJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABASJQCh5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2USLgoGYnVkZ2V0GAEgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXQi/gMKHVRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXF1ZXN0EhsKCXRlbmFudF9pZBgBIAEoCUIIukgFcgOwAQESIQoQcmVzb3VyY2VfdmVyc2lvbhgGIAEoCUIHukgEcgIQARITCgtyZXNldF9zcGVuZBgDIAEoCBIuCgpwZXJpb2RfZW5kGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBLDAQoKbWF4X2J1ZGdldBgIIAEoCzISLmdvb2dsZS50eXBlLk1vbmV5QpgBukiUAboBkAEKEm1vbmV5Lm5vbl9uZWdhdGl2ZRI7YW4gYW1vdW50IGlzIG5vdCBuZWdhdGl2ZSwgYW5kIGl0cyBuYW5vcyBhcmUgMCB0byA5OTk5OTk5OTkaPXRoaXMudW5pdHMgPj0gMCAmJiB0aGlzLm5hbm9zID49IDAgJiYgdGhpcy5uYW5vcyA8PSA5OTk5OTk5OTlIABI9ChB1bmxpbWl0ZWRfYnVkZ2V0GAkgASgLMiEucGFsYWRpbi5hZG1pbi52MS5VbmxpbWl0ZWRCdWRnZXRIAEIQCg5idWRnZXRfY2VpbGluZ0oECAIQA0oECAUQBkoECAcQCFIRbWF4X2J1ZGdldF9hbW91bnRSCXVuaXRfY29kZVIRbWF4X2J1ZGdldF9taWNyb3MiUAoeVGVuYW50QnVkZ2V0U2VydmljZVNldFJlc3BvbnNlEi4KBmJ1ZGdldBgBIAEoCzIeLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0IpUBChNUZW5hbnRCdWRnZXRTdW1tYXJ5EhEKCXRlbmFudF9pZBgBIAEoCRIMCgRzbHVnGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIuCgZidWRnZXQYBCABKAsyHi5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldBIXCg91dGlsaXNhdGlvbl9wY3QYBSABKAEitgEKI1RlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXF1ZXN0Ei4KDXRocmVzaG9sZF9wY3QYASABKAFCF7pIFBISGQAAAAAAAFlAKQAAAAAAAAAAEhYKDnVubGltaXRlZF9vbmx5GAIgASgIEhgKEGV4Y2x1ZGVfaW5hY3RpdmUYAyABKAgSGQoFbGltaXQYBCABKAVCCrpIBxoFGPQDKAASEgoKcGFnZV90b2tlbhgFIAEoCSJ5CiRUZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVzcG9uc2USOAoJc3VtbWFyaWVzGAEgAygLMiUucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTdW1tYXJ5EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJ5CipUZW5hbnRCdWRnZXRTZXJ2aWNlTGlzdFJlc2VydmF0aW9uc1JlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIaCglwYWdlX3NpemUYAiABKAVCB7pIBBoCKAASEgoKcGFnZV90b2tlbhgDIAEoCSKBAQorVGVuYW50QnVkZ2V0U2VydmljZUxpc3RSZXNlcnZhdGlvbnNSZXNwb25zZRI5CgxyZXNlcnZhdGlvbnMYASADKAsyIy5wYWxhZGluLmFkbWluLnYxLlRlbmFudFJlc2VydmF0aW9uEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSLDAQoRVGVuYW50UmVzZXJ2YXRpb24SDwoCaWQYASABKAlCA+BBAxIaCg1jYXBhYmlsaXR5X2lkGAIgASgJQgPgQQMSJwoGYW1vdW50GAMgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlCA+BBAxIPCgJvcBgEIAEoCUID4EEDEhIKBWFjdG9yGAUgASgJQgPgQQMSMwoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAzKLBAoTVGVuYW50QnVkZ2V0U2VydmljZRJtCgNHZXQSLy5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VHZXRSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlR2V0UmVzcG9uc2UiA5ACARJtCgNTZXQSLy5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTZXRSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU2V0UmVzcG9uc2UiA5ACAhJ/CglTdW1tYXJpemUSNS5wYWxhZGluLmFkbWluLnYxLlRlbmFudEJ1ZGdldFNlcnZpY2VTdW1tYXJpemVSZXF1ZXN0GjYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlU3VtbWFyaXplUmVzcG9uc2UiA5ACARKUAQoQTGlzdFJlc2VydmF0aW9ucxI8LnBhbGFkaW4uYWRtaW4udjEuVGVuYW50QnVkZ2V0U2VydmljZUxpc3RSZXNlcnZhdGlvbnNSZXF1ZXN0Gj0ucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRCdWRnZXRTZXJ2aWNlTGlzdFJlc2VydmF0aW9uc1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -109,6 +109,15 @@ export type TenantBudget = Message<"paladin.admin.v1.TenantBudget"> & {
    * @generated from field: google.type.Money spent = 12;
    */
   spent?: Money | undefined;
+
+  /**
+   * reserved is what the tenant's open holds keep from the budget, in its
+   * currency: counted against the cap as spend is, until each hold settles
+   * or is released. ListReservations lists the holds.
+   *
+   * @generated from field: google.type.Money reserved = 14;
+   */
+  reserved?: Money | undefined;
 };
 
 /**
@@ -383,6 +392,121 @@ export const TenantBudgetServiceSummarizeResponseSchema: GenMessage<TenantBudget
   messageDesc(file_paladin_admin_v1_tenant_budget_service, 7);
 
 /**
+ * @generated from message paladin.admin.v1.TenantBudgetServiceListReservationsRequest
+ */
+export type TenantBudgetServiceListReservationsRequest =
+  Message<"paladin.admin.v1.TenantBudgetServiceListReservationsRequest"> & {
+    /**
+     * @generated from field: string tenant_id = 1;
+     */
+    tenantId: string;
+
+    /**
+     * page_size — 0 is the server's default.
+     *
+     * @generated from field: int32 page_size = 2;
+     */
+    pageSize: number;
+
+    /**
+     * page_token — the next_page_token of the previous page; empty for the
+     * first. Each page is read on its own: the pages of a walk are no snapshot.
+     *
+     * @generated from field: string page_token = 3;
+     */
+    pageToken: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantBudgetServiceListReservationsRequest.
+ * Use `create(TenantBudgetServiceListReservationsRequestSchema)` to create a new message.
+ */
+export const TenantBudgetServiceListReservationsRequestSchema: GenMessage<TenantBudgetServiceListReservationsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_budget_service, 8);
+
+/**
+ * @generated from message paladin.admin.v1.TenantBudgetServiceListReservationsResponse
+ */
+export type TenantBudgetServiceListReservationsResponse =
+  Message<"paladin.admin.v1.TenantBudgetServiceListReservationsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.TenantReservation reservations = 1;
+     */
+    reservations: TenantReservation[];
+
+    /**
+     * next_page_token fetches the next page; empty on the last one.
+     *
+     * @generated from field: string next_page_token = 2;
+     */
+    nextPageToken: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantBudgetServiceListReservationsResponse.
+ * Use `create(TenantBudgetServiceListReservationsResponseSchema)` to create a new message.
+ */
+export const TenantBudgetServiceListReservationsResponseSchema: GenMessage<TenantBudgetServiceListReservationsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_budget_service, 9);
+
+/**
+ * TenantReservation is one hold on a tenant's budget.
+ *
+ * @generated from message paladin.admin.v1.TenantReservation
+ */
+export type TenantReservation =
+  Message<"paladin.admin.v1.TenantReservation"> & {
+    /**
+     * @generated from field: string id = 1;
+     */
+    id: string;
+
+    /**
+     * capability_id is the capability whose request the hold is for.
+     *
+     * @generated from field: string capability_id = 2;
+     */
+    capabilityId: string;
+
+    /**
+     * amount is what the hold keeps, in the tenant's currency.
+     *
+     * @generated from field: google.type.Money amount = 3;
+     */
+    amount?: Money | undefined;
+
+    /**
+     * op and actor are what the charge will name when the hold settles.
+     *
+     * @generated from field: string op = 4;
+     */
+    op: string;
+
+    /**
+     * @generated from field: string actor = 5;
+     */
+    actor: string;
+
+    /**
+     * expires_at is when the hold stops counting, if nothing settles or
+     * releases it first; one past it is released by housekeeping.
+     *
+     * @generated from field: google.protobuf.Timestamp expires_at = 6;
+     */
+    expiresAt?: Timestamp | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.TenantReservation.
+ * Use `create(TenantReservationSchema)` to create a new message.
+ */
+export const TenantReservationSchema: GenMessage<TenantReservation> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_budget_service, 10);
+
+/**
  * TenantBudgetService manages the per-tenant aggregate USD spend cap
  * for the capability subsystem (cfg.Capability.* + `tenant_budgets` in
  * `001_initial_schema.sql`). Distinct from QuotaService — quotas are bytes /
@@ -438,5 +562,18 @@ export const TenantBudgetService: GenService<{
     methodKind: "unary";
     input: typeof TenantBudgetServiceSummarizeRequestSchema;
     output: typeof TenantBudgetServiceSummarizeResponseSchema;
+  };
+  /**
+   * ListReservations pages through the holds that make up a tenant's
+   * reserved amount: each a metered request's cost set aside until it
+   * settles, is released, or expires. Soonest to expire first; a hold past
+   * its expiry stays listed until it is released.
+   *
+   * @generated from rpc paladin.admin.v1.TenantBudgetService.ListReservations
+   */
+  listReservations: {
+    methodKind: "unary";
+    input: typeof TenantBudgetServiceListReservationsRequestSchema;
+    output: typeof TenantBudgetServiceListReservationsResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_tenant_budget_service, 0);

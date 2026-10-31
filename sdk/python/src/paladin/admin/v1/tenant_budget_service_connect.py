@@ -18,7 +18,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .tenant_budget_service_pb2 import TenantBudgetServiceGetRequest, TenantBudgetServiceGetResponse, TenantBudgetServiceSetRequest, TenantBudgetServiceSetResponse, TenantBudgetServiceSummarizeRequest, TenantBudgetServiceSummarizeResponse
+from .tenant_budget_service_pb2 import TenantBudgetServiceGetRequest, TenantBudgetServiceGetResponse, TenantBudgetServiceListReservationsRequest, TenantBudgetServiceListReservationsResponse, TenantBudgetServiceSetRequest, TenantBudgetServiceSetResponse, TenantBudgetServiceSummarizeRequest, TenantBudgetServiceSummarizeResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -77,6 +77,15 @@ class TenantBudgetService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def list_reservations(self, request: TenantBudgetServiceListReservationsRequest, ctx: RequestContext[TenantBudgetServiceListReservationsRequest, TenantBudgetServiceListReservationsResponse], /) -> TenantBudgetServiceListReservationsResponse:
+        """
+        ListReservations pages through the holds that make up a tenant's
+        reserved amount: each a metered request's cost set aside until it
+        settles, is released, or expires. Soonest to expire first; a hold past
+        its expiry stays listed until it is released.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class TenantBudgetServiceASGIApplication(ConnectASGIApplication[TenantBudgetService]):
     def __init__(
@@ -120,6 +129,16 @@ class TenantBudgetServiceASGIApplication(ConnectASGIApplication[TenantBudgetServ
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=svc.summarize,
+                ),
+                "/paladin.admin.v1.TenantBudgetService/ListReservations": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListReservations",
+                        service_name="paladin.admin.v1.TenantBudgetService",
+                        input=TenantBudgetServiceListReservationsRequest,
+                        output=TenantBudgetServiceListReservationsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=svc.list_reservations,
                 ),
             },
             interceptors=interceptors,
@@ -256,6 +275,34 @@ class TenantBudgetServiceClient(ConnectClient):
             use_get=use_get,
         )
 
+    async def list_reservations(
+        self,
+        request: TenantBudgetServiceListReservationsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> TenantBudgetServiceListReservationsResponse:
+        """
+        ListReservations pages through the holds that make up a tenant's
+        reserved amount: each a metered request's cost set aside until it
+        settles, is released, or expires. Soonest to expire first; a hold past
+        its expiry stays listed until it is released.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListReservations",
+                service_name="paladin.admin.v1.TenantBudgetService",
+                input=TenantBudgetServiceListReservationsRequest,
+                output=TenantBudgetServiceListReservationsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+
 class TenantBudgetServiceSync(Protocol):
     """
     TenantBudgetService manages the per-tenant aggregate USD spend cap
@@ -296,6 +343,15 @@ class TenantBudgetServiceSync(Protocol):
 
         Filters keep the wire payload small on platforms with many
         tenants — typical operator query is "show me anyone over 80 %".
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_reservations(self, request: TenantBudgetServiceListReservationsRequest, ctx: RequestContext[TenantBudgetServiceListReservationsRequest, TenantBudgetServiceListReservationsResponse], /) -> TenantBudgetServiceListReservationsResponse:
+        """
+        ListReservations pages through the holds that make up a tenant's
+        reserved amount: each a metered request's cost set aside until it
+        settles, is released, or expires. Soonest to expire first; a hold past
+        its expiry stays listed until it is released.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -340,6 +396,16 @@ class TenantBudgetServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                     ),
                     function=service.summarize,
+                ),
+                "/paladin.admin.v1.TenantBudgetService/ListReservations": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListReservations",
+                        service_name="paladin.admin.v1.TenantBudgetService",
+                        input=TenantBudgetServiceListReservationsRequest,
+                        output=TenantBudgetServiceListReservationsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                    ),
+                    function=service.list_reservations,
                 ),
             },
             interceptors=interceptors,
@@ -467,6 +533,33 @@ class TenantBudgetServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.TenantBudgetService",
                 input=TenantBudgetServiceSummarizeRequest,
                 output=TenantBudgetServiceSummarizeResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def list_reservations(
+        self,
+        request: TenantBudgetServiceListReservationsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> TenantBudgetServiceListReservationsResponse:
+        """
+        ListReservations pages through the holds that make up a tenant's
+        reserved amount: each a metered request's cost set aside until it
+        settles, is released, or expires. Soonest to expire first; a hold past
+        its expiry stays listed until it is released.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListReservations",
+                service_name="paladin.admin.v1.TenantBudgetService",
+                input=TenantBudgetServiceListReservationsRequest,
+                output=TenantBudgetServiceListReservationsResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
             ),
             headers=headers,

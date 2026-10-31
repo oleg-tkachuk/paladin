@@ -12,8 +12,10 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
 // rlsUsage is a usage store on the app role, without BYPASSRLS, as the
@@ -156,5 +158,33 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 		if u, _ := f.usage.GetUsage(ledgerCtx, id); u.ReservedAmount != 0 {
 			t.Errorf("%s still holds %v after the sweep", id, u.ReservedAmount)
 		}
+	}
+}
+
+// The admin API lists a tenant's open holds from the store the server runs,
+// on the app role: the tenant's own, and none of them for another tenant.
+func TestTenantReservationsAreListedUnderRowLevelSecurity(t *testing.T) {
+	t.Parallel()
+	ctx, f := newLineageFixture(t)
+	f.usage = rlsUsage(t, ctx, f)
+	r, err := f.usage.Reserve(auth.WithActingTenant(ctx, f.tenant), meter.ReserveRequest{
+		Subject: f.subject(t, ctx, f.child), Amount: limes.MustParseAmount("15"), Op: "llm", Actor: "agent",
+	})
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	srv := admin.NewTenantBudgetServer(f.usage, nil)
+
+	resp, err := srv.ListReservations(ctx, &pb.TenantBudgetServiceListReservationsRequest{TenantId: f.tenant.String()})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if got := resp.GetReservations(); len(got) != 1 || got[0].GetId() != r.ID.String() ||
+		got[0].GetCapabilityId() != f.child.String() || got[0].GetAmount().GetUnits() != 15 || got[0].GetActor() != "agent" {
+		t.Errorf("listed %v, want the one hold %s of 15 by agent", got, r.ID)
+	}
+	other, err := srv.ListReservations(ctx, &pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String()})
+	if err != nil || len(other.GetReservations()) != 0 {
+		t.Errorf("another tenant: %v, %v; want no hold", other.GetReservations(), err)
 	}
 }

@@ -4,6 +4,8 @@
  * entity cannot be reached at two addresses that drift apart.
  */
 
+import { PAGE_TABLE, tableParam } from "@/lib/table/urlState";
+
 const enc = encodeURIComponent;
 
 /** A storage backend's page. */
@@ -24,6 +26,17 @@ export function bucketHref(
 /** A tenant's workspace, by slug or id. */
 export function tenantHref(tenant: string): string {
   return `/tenants/${enc(tenant)}`;
+}
+
+/**
+ * A capability on its tenant's capabilities page, its row opened: the page
+ * reads the row a link points at from the table's own parameter.
+ */
+export function capabilityHref(tenant: string, capabilityId: string): string {
+  const params = new URLSearchParams({
+    [tableParam("row", PAGE_TABLE)]: capabilityId,
+  });
+  return `${tenantHref(tenant)}/capabilities?${params}`;
 }
 
 /** A collection's page in its tenant's workspace. */

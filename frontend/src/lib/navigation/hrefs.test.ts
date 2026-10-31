@@ -8,6 +8,7 @@ import {
   parseBucketName,
   tenantBudgetHref,
   tenantHref,
+  capabilityHref,
 } from "./hrefs";
 
 describe("hrefs", () => {
@@ -51,5 +52,13 @@ describe("parseBucketName", () => {
     "storageBackends/a/buckets/b/c",
   ])("refuses %o", (name) => {
     expect(parseBucketName(name)).toBeNull();
+  });
+});
+
+describe("capabilityHref", () => {
+  it("opens the capability's row on its tenant's capabilities page", () => {
+    expect(capabilityHref("acme", "cap 1")).toBe(
+      "/tenants/acme/capabilities?id=cap+1",
+    );
   });
 });
