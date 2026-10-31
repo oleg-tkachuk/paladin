@@ -99,6 +99,14 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## sdk/go/v0.129.0, sdk/python/v0.130.0 — a tenant's holds on its budget
+
+- `TenantBudget.reserved` is what the tenant's open holds keep from the
+  budget, counted against the cap as spend is.
+- `TenantBudgetService.ListReservations` lists those holds, soonest to
+  expire first, a page at a time. It is a read, allowed to whoever may read
+  the tenant's budget.
+
 ## sdk/go/v0.128.1 — limes v1.0.0-rc.25
 
 - pgstore v0.53.0 adds migration `031`, applied at startup: it indexes the

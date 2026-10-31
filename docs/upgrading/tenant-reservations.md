@@ -1,4 +1,4 @@
-## Unreleased — a tenant's holds on its budget
+## sdk/go/v0.129.0, sdk/python/v0.130.0 — a tenant's holds on its budget
 
 - `TenantBudget.reserved` is what the tenant's open holds keep from the
   budget, counted against the cap as spend is.
