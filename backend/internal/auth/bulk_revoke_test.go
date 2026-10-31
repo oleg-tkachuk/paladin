@@ -24,6 +24,7 @@ type fakeBulk struct {
 	everyTenant []bool
 	batches     int
 	revokes     int
+	revokeReqs  []limes.RevokeMatchingRequest
 	revokeErr   error
 	// releaseBatches is how many release calls a release takes; one when
 	// zero.
@@ -37,8 +38,9 @@ type fakeBulk struct {
 	nothing  bool
 }
 
-func (f *fakeBulk) RevokeMatching(ctx context.Context, _ limes.RevokeMatchingRequest) (limes.RevokeMatchingResult, error) {
+func (f *fakeBulk) RevokeMatching(ctx context.Context, req limes.RevokeMatchingRequest) (limes.RevokeMatchingResult, error) {
 	f.everyTenant = append(f.everyTenant, AllTenantsWrite(ctx))
+	f.revokeReqs = append(f.revokeReqs, req)
 	f.revokes++
 	if f.revokeErr != nil {
 		return limes.RevokeMatchingResult{}, f.revokeErr
@@ -279,5 +281,35 @@ func TestReleaseRevokedWithoutItsParts(t *testing.T) {
 	}
 	if len(f.releases) != 0 {
 		t.Errorf("%d release calls, want none", len(f.releases))
+	}
+}
+
+// An agent run's capabilities are revoked by the run, in its tenant, with the
+// note and actor the operator gave, and their holds released by the same
+// run; the line names the run.
+func TestRevokeRunRevokesTheRunsCapabilities(t *testing.T) {
+	tenant, run := uuid.New(), uuid.New()
+	f := &fakeBulk{batches: 1}
+	core, logs := observer.New(zapcore.DebugLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+	b := &BulkRevocation{Revoker: f, Holds: f}
+
+	revoked, err := b.RevokeRun(ctx, tenant, run, "runaway agent", "user:operator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revoked != 1 || len(f.revokeReqs) != 1 {
+		t.Fatalf("revoked %d in %d calls, want 1 in 1", revoked, len(f.revokeReqs))
+	}
+	want := limes.RevokeMatchingRequest{TenantID: tenant, RunID: run, Note: "runaway agent", Actor: "user:operator"}
+	if f.revokeReqs[0] != want {
+		t.Errorf("revoke = %+v, want %+v", f.revokeReqs[0], want)
+	}
+	if len(f.releases) != 1 || f.releases[0].RunID != run || f.releases[0].TenantID != tenant {
+		t.Errorf("releases = %+v, want the run's in its tenant", f.releases)
+	}
+	lines := logs.FilterMessage("capabilities revoked in bulk").All()
+	if len(lines) != 1 || lines[0].ContextMap()[logKeyRunID] != run.String() {
+		t.Errorf("logged %v, want the run %s named", lines, run)
 	}
 }

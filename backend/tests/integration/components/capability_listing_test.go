@@ -119,6 +119,60 @@ func TestCapabilityListingAcrossTenants(t *testing.T) {
 	}
 }
 
+// RevokeRun revokes an agent run's capabilities on the application role, as
+// the admin plane calls it: the run's alone, in its tenant, and a repeat
+// revokes nothing; a listing by the run finds what it revoked.
+func TestRevokingAnAgentRun(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+	run, other := uuid.New(), uuid.New()
+	agent := func(subject string, runID uuid.UUID) limes.Capability {
+		c := mkCap(tenant, subject, time.Now().Add(time.Hour))
+		c.Subject.Type = limes.PrincipalTypeAgent
+		c.Subject.Agent = &limes.AgentPrincipal{AgentType: "worker", RunID: runID}
+		return c
+	}
+	first, second, bystander := agent("agent:a", run), agent("agent:b", run), agent("agent:c", other)
+	seed := newCapStore(t, admin)
+	for _, c := range []limes.Capability{first, second, bystander} {
+		if err := seed.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
+			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
+		}
+	}
+
+	pool := rlsPool(t, ctx, admin)
+	store := newCapStore(t, pool)
+	bulk := &auth.BulkRevocation{Revoker: store}
+	operator := auth.WithPrincipal(ctx, &auth.Principal{TenantID: tenant})
+	if n, err := bulk.RevokeRun(operator, tenant, run, "runaway agent", "user:operator"); err != nil || n != 2 {
+		t.Fatalf("revoke the run: %d, %v; want its two capabilities", n, err)
+	}
+	acting := auth.WithActingTenant(ctx, tenant)
+	for id, revoked := range map[uuid.UUID]bool{first.ID: true, second.ID: true, bystander.ID: false} {
+		rec, err := store.GetRecord(acting, id)
+		if err != nil || (rec.Revocation != nil) != revoked {
+			t.Errorf("%s: revocation %v (%v), want revoked %v", id, rec.Revocation, err, revoked)
+		}
+		if revoked && rec.Revocation != nil && (rec.Revocation.Note != "runaway agent" || rec.Revocation.Actor != "user:operator") {
+			t.Errorf("%s: revoked with %+v, want the operator's note and name", id, rec.Revocation)
+		}
+	}
+	if n, err := bulk.RevokeRun(operator, tenant, run, "again", "user:operator"); err != nil || n != 0 {
+		t.Errorf("repeat: %d, %v; want nothing left", n, err)
+	}
+
+	census, err := capstore.NewCensus(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := census.ListRecords(acting, limes.ListRecordsRequest{TenantID: tenant, RunID: run})
+	if err != nil || len(page.Items) != 2 {
+		t.Errorf("listing by the run: %d records (%v), want its two", len(page.Items), err)
+	}
+}
+
 // CapabilityService.Get reads a capability's disposition through IsRevoked,
 // under the operator's scope for the capability's tenant: a child delegated
 // from a revoked parent is revoked, though it holds no revocation of its own.

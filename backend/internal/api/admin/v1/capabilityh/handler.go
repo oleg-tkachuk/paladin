@@ -59,6 +59,8 @@ type Handler struct {
 	records limes.RecordReporter
 	// holds releases a revoked capability's holds; see WithHoldRelease.
 	holds HoldReleaser
+	// runs revokes an agent run's capabilities; see WithRunRevocation.
+	runs RunRevoker
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.

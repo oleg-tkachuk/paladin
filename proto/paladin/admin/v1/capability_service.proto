@@ -54,6 +54,14 @@ service CapabilityService {
     option idempotency_level = IDEMPOTENT;
   }
 
+  // RevokeRun revokes every capability of one agent run in a tenant — the
+  // run's own, and through them those delegated from them — and releases
+  // their holds at once: an agent gone wrong stopped in one call. Idempotent;
+  // a repeat revokes nothing and reports none.
+  rpc RevokeRun(CapabilityServiceRevokeRunRequest) returns (CapabilityServiceRevokeRunResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
   // RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
   // `token` is, and every copy attenuated from it. The capability, the copy
   // it was attenuated from and its other copies keep working; revoke the
@@ -323,6 +331,19 @@ message CapabilityServiceRevokeRequest {
   bool cascade_children = 3;
 }
 
+message CapabilityServiceRevokeRunRequest {
+  // tenant_id is the tenant whose capabilities of the run to revoke.
+  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  // run_id is the agent run, as its capabilities' subject.run_id names it.
+  string run_id = 2 [(buf.validate.field).string.uuid = true];
+  string reason = 3;
+}
+
+message CapabilityServiceRevokeRunResponse {
+  // revoked is how many capabilities this call revoked: none on a repeat.
+  int64 revoked = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
 message CapabilityServiceRevokeResponse {
   // already_revoked is a capability that had a revocation entry of its own
   // before the call, so the call wrote none: the first entry stands. One
@@ -430,6 +451,12 @@ message CapabilityServiceListRequest {
   // grant's id — exactly: what revoking the grant revokes. Empty, every
   // session's and none.
   string session = 10;
+  // run_id lists the capabilities of that agent run: what RevokeRun
+  // revokes. Empty, every run's and none.
+  string run_id = 11 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 message CapabilityServiceListResponse {

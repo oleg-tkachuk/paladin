@@ -79,6 +79,10 @@ func (disabledCapabilityServiceHandler) Revoke(ctx context.Context, _ *adminv1.C
 	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
+func (disabledCapabilityServiceHandler) RevokeRun(ctx context.Context, _ *adminv1.CapabilityServiceRevokeRunRequest) (*adminv1.CapabilityServiceRevokeRunResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
+}
+
 func (disabledCapabilityServiceHandler) RevokeBiscuit(ctx context.Context, _ *adminv1.CapabilityServiceRevokeBiscuitRequest) (*adminv1.CapabilityServiceRevokeBiscuitResponse, error) {
 	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }

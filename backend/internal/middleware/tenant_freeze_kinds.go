@@ -122,6 +122,7 @@ var procedureKinds = map[string]Kind{
 	admin.CapabilityServiceDelegateProcedure:            Changes,
 	admin.CapabilityServiceRevokeProcedure:              Withdraws,
 	admin.CapabilityServiceRevokeBiscuitProcedure:       Withdraws,
+	admin.CapabilityServiceRevokeRunProcedure:           Withdraws,
 	admin.CapabilityServiceGetBiscuitUsageProcedure:     Reads,
 	admin.CapabilityServiceListOperationGrantsProcedure: Reads,
 	admin.CapabilityServiceGetProcedure:                 Reads,

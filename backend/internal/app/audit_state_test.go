@@ -29,6 +29,7 @@ var noStateReader = map[string]string{
 	adminconnect.APITokenServiceRevokeProcedure:                           "the token's revocation is its own record, which Get shows",
 	adminconnect.CapabilityServiceRevokeProcedure:                         "the answer says what the capability was before and what stopped it",
 	adminconnect.CapabilityServiceRevokeBiscuitProcedure:                  "a copy of a Biscuit has no record of its own to read",
+	adminconnect.CapabilityServiceRevokeRunProcedure:                      "a run has no record of its own; the answer counts what it revoked",
 	adminconnect.EventSubscriptionServiceRedriveFailedDeliveriesProcedure: "acts on deliveries, not on the subscription",
 	adminconnect.EventSubscriptionServiceTestSubscriptionProcedure:        "sends a test event; the subscription is unchanged",
 	adminconnect.OAuthClientServiceDeleteOAuthClientProcedure:             "a client has no Get to read it by; the request names the client removed",

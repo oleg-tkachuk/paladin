@@ -36,12 +36,17 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 	if err != nil {
 		return nil, err
 	}
+	run, err := listRun(req.GetRunId())
+	if err != nil {
+		return nil, err
+	}
 	page, err := h.records.ListRecords(ctx, limes.ListRecordsRequest{
 		TenantID:      listing.TenantID,
 		AllTenants:    listing.AllTenants,
 		PrincipalType: protoToPrincipalKind(req.GetPrincipalKind()),
 		Subject:       req.GetSubject(),
 		Session:       req.GetSession(),
+		RunID:         run,
 		Dispositions:  listDispositions(req),
 		Order:         listOrder(req.GetSortOrder()),
 		Cursor:        req.GetPageToken(),
@@ -91,6 +96,18 @@ func listScope(ctx context.Context, caller *auth.Principal, tenant string) (lime
 	// needs the connection scoped to that tenant. Without this the admin
 	// console renders an empty list instead of an error — RLS filters.
 	return limes.ListRecordsRequest{TenantID: tenantID}, auth.WithActingTenant(ctx, tenantID), nil
+}
+
+// listRun is the agent run a listing narrows to; none when run is empty.
+func listRun(run string) (uuid.UUID, error) {
+	if run == "" {
+		return uuid.Nil(), nil
+	}
+	id, err := uuid.Parse(run)
+	if err != nil {
+		return uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("run_id: %w", err))
+	}
+	return id, nil
 }
 
 // listDispositions is what req lists: its dispositions, or, when it names
