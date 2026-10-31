@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.25
+## sdk/go/v0.128.1 — limes v1.0.0-rc.25
 
 - pgstore v0.53.0 adds migration `031`, applied at startup: it indexes the
   holds by tenant (`CREATE INDEX CONCURRENTLY`).
