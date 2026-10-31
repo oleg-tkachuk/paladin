@@ -50,6 +50,11 @@ describe("/capabilities", () => {
     expect(
       within(row).getByRole("link", { name: "mcp-relay" }).getAttribute("href"),
     ).toContain("/tenants/acme/capabilities");
+    // A client id runs long; it wraps within its cell rather than pushing
+    // the columns after it past the card.
+    expect(within(row).getByText("claude-agent").className).toContain(
+      "break-all",
+    );
     expect(h.list).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "",

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ArchiveBoxIcon } from "@heroicons/react/24/outline";
 
 import { render, screen } from "@/test/utils";
-import { EmptyState } from "./EmptyState";
+import { EmptyState, EmptyTableRow } from "./EmptyState";
 
 const action = (onClick = vi.fn()) => ({
   label: "Create the first bucket",
@@ -85,4 +85,24 @@ describe("EmptyState", () => {
       ).toBeNull();
     },
   );
+
+  // A table cell keeps its text on one line, so a long purpose ran past the
+  // table's card; the empty row lets its words wrap. jsdom lays nothing out,
+  // so the class that does it is what can be held.
+  it("lets an empty table row's words wrap", () => {
+    render(
+      <table>
+        <tbody>
+          <EmptyTableRow
+            colSpan={3}
+            icon={ArchiveBoxIcon}
+            what="capabilities"
+            reason="empty"
+            purpose="An agent you connect through OAuth gets one here each time it exchanges its token."
+          />
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByRole("cell").className).toContain("whitespace-normal");
+  });
 });

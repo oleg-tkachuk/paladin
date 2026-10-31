@@ -86,7 +86,12 @@ export function EmptyTableRow({
 }: EmptyStateProps & { colSpan: number }) {
   return (
     <TableRow>
-      <TableCell colSpan={colSpan} className="h-48 text-center">
+      {/* A table cell keeps its text on one line; the empty state's words
+          wrap within the table instead of running past its card. */}
+      <TableCell
+        colSpan={colSpan}
+        className="h-48 text-center whitespace-normal"
+      >
         <EmptyState {...props} />
       </TableCell>
     </TableRow>
