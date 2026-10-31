@@ -20,7 +20,7 @@
 // first one; non-zero cap activates server-side enforcement.
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
   BanknotesIcon,
@@ -66,6 +66,8 @@ import { useTenant, useTenantChangesBlocked } from "../tenant-context";
 import { Timestamp } from "@/components/Timestamp";
 import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import { Duration } from "@/components/Duration";
+import { TenantReservations } from "@/components/features/billing/TenantReservations";
+import { invalidateTenantReservations } from "@/lib/queries/tenantReservations";
 
 function progressColour(
   spent: Money | undefined,
@@ -119,6 +121,13 @@ export default function TenantBudgetPage() {
   // Apply out from under an operator who is already clicking it.
   const initialising = budgetQuery.isPending;
   const fetchBudget = () => budgetQuery.refetch();
+  const queryClient = useQueryClient();
+  // Refresh reads the holds again with the budget: the reserved figure and
+  // the list of holds that make it up must not disagree.
+  const refresh = () => {
+    void fetchBudget();
+    void invalidateTenantReservations(queryClient, tenantId);
+  };
 
   const [maxBudget, setMaxBudget] = useState<string>("");
   // "No cap" is its own value on the wire, not a 0: a zero cap allows no
@@ -270,7 +279,7 @@ export default function TenantBudgetPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => void fetchBudget()}
+          onClick={refresh}
           disabled={loading}
         >
           <ArrowPathIcon className={cn("size-4", loading && "animate-spin")} />
@@ -304,6 +313,14 @@ export default function TenantBudgetPage() {
                 <Label className="text-xs text-muted-foreground">Spent</Label>
                 <div className="font-mono text-2xl">
                   {formatMoney(spent, { fallbackUnit: budgetUnit })}
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Reserved
+                </Label>
+                <div className="font-mono text-2xl">
+                  {formatMoney(budget.reserved, { fallbackUnit: budgetUnit })}
                 </div>
               </div>
               <div>
@@ -387,6 +404,13 @@ export default function TenantBudgetPage() {
           </div>
         ) : null}
       </Card>
+
+      {budget && (
+        <TenantReservations
+          tenant={tenant.slug || tenantId}
+          tenantId={tenantId}
+        />
+      )}
 
       {/* Set form */}
       <Card>

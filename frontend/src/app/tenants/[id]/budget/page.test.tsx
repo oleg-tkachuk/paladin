@@ -5,9 +5,20 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 // The budget page reads/writes tenantBudgetClient and pulls tenantId from the
 // tenant context; mock both plus notifications.
-const h = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), notify: vi.fn() }));
+const h = vi.hoisted(() => ({
+  get: vi.fn(),
+  set: vi.fn(),
+  notify: vi.fn(),
+  listReservations: vi.fn(() =>
+    Promise.resolve({ reservations: [], nextPageToken: "" }),
+  ),
+}));
 vi.mock("@/lib/connect/client", () => ({
-  tenantBudgetClient: { get: h.get, set: h.set },
+  tenantBudgetClient: {
+    get: h.get,
+    set: h.set,
+    listReservations: h.listReservations,
+  },
   // The platform's currency (capability.currency) is EUR here, so a form
   // that sent a currency of its own rather than leaving it to the server
   // would show.
@@ -420,5 +431,30 @@ describe("TenantBudgetPage before the budget loads", () => {
     );
     await waitFor(() => expect(h.set).toHaveBeenCalledTimes(1));
     expect(h.set.mock.calls[0][0].resourceVersion).toBe(budget.resourceVersion);
+  });
+});
+
+describe("TenantBudgetPage holds", () => {
+  it("shows what the holds keep, lists them, and reads both again on Refresh", async () => {
+    h.get.mockResolvedValue({ budget: { ...budget, reserved: usd("2.5") } });
+    const before = h.listReservations.mock.calls.length;
+    render(<BudgetPage />);
+
+    const reserved = (await screen.findByText("Reserved")).parentElement!;
+    expect(reserved).toHaveTextContent("2.5");
+    expect(await screen.findByText("Open holds")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(h.listReservations.mock.calls.length).toBe(before + 1),
+    );
+    expect(
+      (h.listReservations.mock.calls.at(-1) as unknown[] | undefined)?.[0],
+    ).toMatchObject({
+      tenantId: "t-1",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    await waitFor(() =>
+      expect(h.listReservations.mock.calls.length).toBe(before + 2),
+    );
   });
 });
