@@ -99,6 +99,21 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## sdk/python/v0.130.1 — Python SDK on connectrpc 0.13
+
+- The Python SDK requires `connectrpc>=0.13,<0.14` and
+  `protobuf-py>=0.7,<0.8`; its stubs are regenerated for them. An
+  environment that pins connectrpc 0.12 or protobuf-py 0.6 must move with it.
+
+## Unreleased — limes v1.0.0-rc.27
+
+- `CapabilityService.Revoke` releases the revoked capability's open holds,
+  and those of the capabilities delegated from it, at once. Before, they
+  counted against the tenant's budget until they expired. A revoke retried
+  after a failed release finishes it.
+- pgx stays on 5.11: pgx 5.12 changes an interface pgstore v0.54.0
+  implements, and the backend does not build against it.
+
 ## sdk/go/v0.129.0, sdk/python/v0.130.0 — a tenant's holds on its budget
 
 - `TenantBudget.reserved` is what the tenant's open holds keep from the
