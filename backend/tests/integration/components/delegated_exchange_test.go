@@ -195,9 +195,10 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 			t.Fatalf("exchange: %v", err)
 		}
 		// As a platform admin deletes it: acting on the admin's own tenant,
-		// which the revocation's every-tenant scope overrides.
+		// which the revocation's every-tenant scope overrides, for the
+		// release of its holds in every tenant too.
 		adminCtx := auth.WithActingTenant(ctx, uuid.New())
-		bulk := &auth.BulkRevocation{Revoker: store}
+		bulk := &auth.BulkRevocation{Revoker: store, Holds: newUsageStore(t, rlsPool(t, ctx, admin))}
 		revoked, err := bulk.RevokeMatching(adminCtx, limes.RevokeMatchingRequest{AllTenants: true, ClientID: exchangeAgentClient})
 		if err != nil || revoked == 0 {
 			t.Fatalf("revoke the client: %d, %v; want its capabilities", revoked, err)

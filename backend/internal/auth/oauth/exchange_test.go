@@ -240,6 +240,32 @@ func TestTokenExchange_IssuesACapabilityForTheUser(t *testing.T) {
 	}
 }
 
+// exchangedAlready is how limes' token endpoint tells a client its subject
+// token was exchanged already for other targets (exchange.ErrTargetExchanged).
+const exchangedAlready = "exchanged already"
+
+// A token exchanged once is refused for other planes, and the client is told
+// why rather than handed the generic invalid_target: the MCP server asks for
+// every plane the agent may reach in one exchange.
+func TestTokenExchange_TellsTheClientItsTokenWasExchanged(t *testing.T) {
+	f := newExchangeFixture(t, sampleUser())
+	if rec := postForm(f.h, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneData)); rec.Code != http.StatusOK {
+		t.Fatalf("first exchange: status %d body %s", rec.Code, rec.Body.String())
+	}
+	rec := postForm(f.h, "/oauth/token", exchangeForm(f.subject, auth.TokenPlaneData, auth.TokenPlaneIAM))
+	var e struct {
+		Error       string `json:"error"`
+		Description string `json:"error_description"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("error body: %v (%s)", err, rec.Body.String())
+	}
+	if rec.Code != http.StatusBadRequest || e.Error != "invalid_target" || !strings.Contains(e.Description, exchangedAlready) {
+		t.Errorf("second exchange for other planes: status %d %+v, want 400 invalid_target saying the token was %s",
+			rec.Code, e, exchangedAlready)
+	}
+}
+
 // A client that authenticates in the Authorization header and fails is
 // answered 401 with a challenge in its scheme (RFC 6749 §5.2); one that
 // sends its secret in the form is answered 400.
