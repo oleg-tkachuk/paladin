@@ -99,6 +99,14 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## Unreleased — policy history names a backend by its name
+
+- `PolicyService.ListPolicyVersions` reads `storageBackends/{backend}` and
+  `storageBackends/{backend}/buckets/{bucket}` with the backend's name, as
+  every other admin RPC does. It refused those names before, so a backend's
+  and a bucket's history could not be read from the console; a backend's
+  row uuid no longer resolves there.
+
 ## sdk/go/v0.130.0, sdk/python/v0.131.0 — capabilities acting for a user
 
 - `UserService.ListUserCapabilities` (IAM) lists the capabilities acting on
