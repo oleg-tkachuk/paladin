@@ -48,6 +48,7 @@ import { useAuth } from "@/context/AuthContext";
 import { canUseAdminPlane } from "@/constants/roles";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
 import { BuildVersion } from "@/components/layout/BuildVersion";
+import { ACCOUNT_ICONS } from "@/components/layout/accountIcons";
 import { ACCOUNT_PAGES } from "@/lib/navigation/account";
 import { SECTION, sectionFor } from "@/lib/navigation/sections";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -259,7 +260,11 @@ const navigationGroups: Array<{
     // The signed-in user's own pages — the account, and what acts as them —
     // and nothing of a tenant's or the platform's. Last, as a user menu is.
     title: ACCOUNT_GROUP,
-    items: ACCOUNT_PAGES.map(({ name, path, icon }) => ({ name, path, icon })),
+    items: ACCOUNT_PAGES.map(({ name, path }) => ({
+      name,
+      path,
+      icon: ACCOUNT_ICONS[path],
+    })),
   },
 ];
 

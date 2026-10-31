@@ -40,6 +40,7 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
+import { ACCOUNT_ICONS } from "@/components/layout/accountIcons";
 import { ACCOUNT_PAGES } from "@/lib/navigation/account";
 import { SECTION } from "@/lib/navigation/sections";
 import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
@@ -294,7 +295,7 @@ export function CommandPalette() {
           type: "nav",
           title: page.name,
           subtitle: page.description,
-          icon: page.icon,
+          icon: ACCOUNT_ICONS[page.path],
           href: page.path,
           onSelect: () => router.push(page.path),
         })),

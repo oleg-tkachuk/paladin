@@ -2,6 +2,7 @@
 
 import { PinToggle } from "@/components/layout/ResourceLinks";
 import Link from "next/link";
+import { ACCOUNT_ICONS } from "@/components/layout/accountIcons";
 import { ACCOUNT_PAGES } from "@/lib/navigation/account";
 import { useRouter } from "next/navigation";
 import {
@@ -142,14 +143,17 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {ACCOUNT_PAGES.map(({ name, path, icon: Icon }) => (
-              <DropdownMenuItem key={path} asChild>
-                <Link href={path}>
-                  <Icon className="size-4" />
-                  {name}
-                </Link>
-              </DropdownMenuItem>
-            ))}
+            {ACCOUNT_PAGES.map(({ name, path }) => {
+              const Icon = ACCOUNT_ICONS[path];
+              return (
+                <DropdownMenuItem key={path} asChild>
+                  <Link href={path}>
+                    <Icon className="size-4" />
+                    {name}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
               <ArrowRightOnRectangleIcon className="size-4" />
