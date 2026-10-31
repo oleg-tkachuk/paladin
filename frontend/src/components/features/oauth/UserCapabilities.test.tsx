@@ -56,6 +56,37 @@ describe("UserCapabilities", () => {
     );
   });
 
+  // Opening on the active ones and finding none is an empty list, which says
+  // what it is for; clearing the state asks for every state.
+  it("says what the list is for when nothing acts for the user", async () => {
+    h.list.mockResolvedValue({ capabilities: [], nextPageToken: "" });
+    render(<UserCapabilities userName={USER} own />);
+    expect(await screen.findByText("No capabilities yet.")).toBeInTheDocument();
+    expect(screen.getByText(/exchanges its token/)).toBeInTheDocument();
+  });
+
+  it("asks for every state once the filters are cleared", async () => {
+    window.history.replaceState(null, "", "/my-capabilities?grant=grant-1");
+    h.list.mockResolvedValue({ capabilities: [], nextPageToken: "" });
+    render(<UserCapabilities userName={USER} own />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Clear filters" }),
+    );
+    await waitFor(() =>
+      expect(h.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          grantId: "",
+          states: [
+            UserCapability_State.ACTIVE,
+            UserCapability_State.REVOKED,
+            UserCapability_State.EXPIRED,
+          ],
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("says why a revoked one was revoked", async () => {
     h.list.mockResolvedValue({ capabilities: [REVOKED], nextPageToken: "" });
     render(<UserCapabilities userName={USER} own />);

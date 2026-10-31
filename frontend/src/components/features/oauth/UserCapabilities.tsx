@@ -34,7 +34,7 @@ import { textParam, useUrlState } from "@/hooks/useUrlState";
 import { emptyReason } from "@/lib/emptyState";
 import { grantHref, ownGrantHref } from "@/lib/oauthGrants";
 import { userCapabilitiesQuery } from "@/lib/queries/userCapabilities";
-import { FACET_COUNTING } from "@/lib/table/facets";
+import { FACET_COUNTING, narrowedFromInitial } from "@/lib/table/facets";
 import { LIFECYCLE_BADGE } from "@/lib/table/lifecycle";
 import type { SortAccessors } from "@/lib/table/view";
 import {
@@ -183,7 +183,12 @@ export function UserCapabilities({
                 what="capabilities"
                 reason={emptyReason({
                   filtered:
-                    view.query !== "" || facets.active > 0 || grant !== "",
+                    view.query !== "" ||
+                    grant !== "" ||
+                    narrowedFromInitial(
+                      USER_CAPABILITY_FACETS,
+                      facets.selection,
+                    ),
                 })}
                 onClearFilters={() => {
                   view.setQuery("");

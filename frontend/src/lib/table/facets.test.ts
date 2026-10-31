@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeFacets,
+  narrowedFromInitial,
   countedOptions,
   countOptions,
   FACET_COUNTING,
@@ -100,6 +101,28 @@ describe("activeFacets", () => {
   it("counts the facets with a choice", () => {
     expect(activeFacets({ state: ["on"], tag: [] })).toBe(1);
     expect(activeFacets(initialSelection([TAG]))).toBe(0);
+  });
+});
+
+describe("narrowedFromInitial", () => {
+  it("is false where the list opens", () => {
+    expect(narrowedFromInitial(FACETS, initialSelection(FACETS))).toBe(false);
+    // A facet the selection omits is at no choice, its initial for TAG.
+    expect(narrowedFromInitial(FACETS, { state: ["on"] })).toBe(false);
+  });
+
+  it.each([
+    ["a facet cleared", { state: [], tag: [] }],
+    ["another answer", { state: ["off"], tag: [] }],
+    ["an answer added", { state: ["on", "off"], tag: [] }],
+    ["a facet with none initially chosen", { state: ["on"], tag: ["eu"] }],
+  ])("is true for %s", (_, selection) => {
+    expect(narrowedFromInitial(FACETS, selection)).toBe(true);
+  });
+
+  it("ignores the order of the answers", () => {
+    const both: Facet<Row> = { ...STATE, initial: ["on", "off"] };
+    expect(narrowedFromInitial([both], { state: ["off", "on"] })).toBe(false);
   });
 });
 
