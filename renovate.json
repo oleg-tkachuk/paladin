@@ -7,11 +7,26 @@
     "Go and npm: enabled for minor/patch only, grouped into one PR per half per month. Majors stay manual, matching `task deps:update` (minor/patch, no majors, cross a major deliberately per CHANGELOG). Grouping rather than disabling: a public repository needs the security half of dependency automation to work, and a manager that is switched off raises no PR when an advisory lands.",
     "Vulnerability remediation is ungrouped and unscheduled — it should not wait for the monthly window.",
     "Code generators are versioned with the stubs they write, and Renovate cannot regenerate those stubs: a generator bump leaves them stale and the stale-stub gates fail. So generators move in their own PR, finished by running `task gen`, or not at all.",
+    "A pinned tool version a `# renovate: datasource=… depName=…` comment sits above — in the workflows, composite actions, Taskfiles, Dockerfiles and test scripts — is read by the annotation manager below and nothing else; without it the comment is only a comment. scripts/renovate-annotations.test.sh fails on one it would not read.",
     "ignorePaths is config:recommended's list without `**/tests/**`: the end-to-end compose stack lives under frontend/tests/e2e and must move with the backend's stack, which `task verify:compose-images` enforces."
   ],
   "ignorePaths": ["**/node_modules/**", "**/bower_components/**", "**/vendor/**", "**/examples/**", "**/__tests__/**", "**/test/**", "**/__fixtures__/**"],
   "enabledManagers": ["dockerfile", "docker-compose", "github-actions", "gomod", "nodenv", "npm", "pep621", "custom.regex"],
   "customManagers": [
+    {
+      "customType": "regex",
+      "description": "A pinned tool version on the line after its `# renovate:` annotation: a YAML key, a shell or Dockerfile assignment, or the `?ref=` of a URL, bare or quoted.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/",
+        "/^\\.github/actions/[^/]+/action\\.ya?ml$/",
+        "/(^|/)Taskfile[^/]*\\.ya?ml$/",
+        "/^scripts/[^/]+\\.sh$/",
+        "/(^|/)Dockerfile[^/]*$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*\\n\\s*(?:readonly\\s+|ARG\\s+)?[A-Za-z_][A-Za-z0-9_]*\\s*[:=]\\s*[\"']?(?:[^\"'\\n]*\\?ref=)?(?<currentValue>[^\"'\\s]+)[\"']?"
+      ]
+    },
     {
       "customType": "regex",
       "description": "The Postgres the Go test suites start, which no built-in manager reads.",
@@ -37,6 +52,17 @@
       "groupName": "base-image digests"
     },
     {
+      "matchManagers": ["custom.regex"],
+      "groupName": "pinned tools",
+      "description": "One PR for the tools CI and the Taskfiles pin. A tool pinned in two places (task in ci.yaml and release.yaml, the task library in every Taskfile) moves in both at once, which a half-applied bump would not."
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["oleg-tkachuk/taskfiles"],
+      "groupName": "task library",
+      "description": "Every Taskfile pins the library, and the committed .task/remote cache the offline hooks read is named after the pinned URL. Renovate moves the pins but cannot refresh the cache, so the PR is its own and finished by `task --download` with the cache committed."
+    },
+    {
       "matchDatasources": ["docker"],
       "matchPackageNames": ["postgres"],
       "groupName": "postgres",
@@ -52,6 +78,13 @@
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "go dependencies",
       "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["github.com/oleg-tkachuk/limes", "github.com/oleg-tkachuk/limes/**"],
+      "groupName": "limes",
+      "schedule": ["at any time"],
+      "description": "limes and its modules release together and move together: a partial bump compiles against two versions of one contract. Each bump also takes limes' new API and deletes the Paladin code it duplicates, which is finished by hand, so it is a PR of its own rather than a line in the monthly Go group."
     },
     {
       "matchManagers": ["npm"],
@@ -74,6 +107,12 @@
     },
     {
       "matchManagers": ["pep621"],
+      "matchPackageNames": ["connectrpc", "connectrpc-otel", "protoc-gen-connectrpc", "protobuf-py"],
+      "groupName": "python sdk connect stack",
+      "description": "The Connect runtime, the generator that writes the SDK's stubs against it, its OpenTelemetry interceptor and the Protobuf runtime it imports move as one: pre-1.0, each minor can break the others, and a generator bump leaves the stubs stale until sdk/python/scripts/generate.sh is run on the branch."
+    },
+    {
+      "matchManagers": ["pep621"],
       "matchPackageNames": ["grpcio-tools"],
       "enabled": false,
       "description": "Its protoc's version becomes the oldest protobuf runtime the Python SDK's stubs accept (ValidateProtobufRuntimeVersion). The SDK supports protobuf 6, so it stays on the newest release generating for it; see sdk/python/pyproject.toml."
@@ -85,10 +124,15 @@
       "description": "protoc-gen-es writes the console's stubs and must match the @bufbuild/protobuf runtime that reads them. Apart from the other npm updates, so the stale-stub gate failing here until `task gen` is run blocks nothing else."
     },
     {
-      "matchManagers": ["gomod", "npm", "pep621"],
+      "matchPackageNames": ["pnpm"],
+      "groupName": "pnpm",
+      "description": "pnpm is pinned twice: \"packageManager\" in frontend/package.json, which CI installs, and PNPM_VERSION in the console's Dockerfile. One PR moves both, as `task pnpm:pin` requires."
+    },
+    {
+      "matchManagers": ["gomod", "npm", "nodenv", "pep621", "custom.regex"],
       "matchUpdateTypes": ["major"],
       "enabled": false,
-      "description": "Majors are crossed by hand — a Go major can break the generated Connect stubs the frontend consumes, which no lockfile bump can tell you."
+      "description": "Majors are crossed by hand — a Go major can break the generated Connect stubs the frontend consumes, which no lockfile bump can tell you; a Node major is taken by CI (.github/ci/.node-version, NODE_VERSION) and the console image together; a pinned tool's or the task library's major changes what CI and the tasks run."
     }
   ],
   "vulnerabilityAlerts": {

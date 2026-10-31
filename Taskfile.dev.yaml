@@ -35,6 +35,7 @@ vars:
   # cannot hand a var upward. Held to the same version as Taskfile.yaml by
   # hand; a half-applied bump fails one entry point with a message about trust
   # rather than about the version.
+  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
   TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.1.0'
   # Pinned, and run through `uvx` rather than installed: the rules a scan
   # asserts against change between releases, so an unpinned checkov makes a
@@ -259,6 +260,7 @@ tasks:
       - task: verify:postgres-version
       - task: verify:release-age
       - task: verify:compose-images
+      - task: verify:renovate-annotations
       - task: verify:release-rules
       - task: verify:go-module-paths
       - task: verify:image-uid
@@ -637,6 +639,11 @@ tasks:
     desc: "Fail when Renovate would propose an npm release pnpm refuses to install"
     cmds:
       - ./scripts/release-age.test.sh
+
+  verify:renovate-annotations:
+    desc: "Fail when a `# renovate:` comment pins a version no Renovate manager reads"
+    cmds:
+      - ./scripts/renovate-annotations.test.sh
 
   verify:security-scans:
     desc: "The backend's security scan scripts fail when their scanner did not run"
