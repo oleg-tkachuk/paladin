@@ -280,8 +280,8 @@ github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsI
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
-github.com/jackc/pgx/v5 v5.11.0 h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=
-github.com/jackc/pgx/v5 v5.11.0/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
+github.com/jackc/pgx/v5 v5.12.0 h1:hWwax8YiGT0YiN50U1oIDn5kgR7KC2tG3rmavwpPkxY=
+github.com/jackc/pgx/v5 v5.12.0/go.mod h1:u2Fi6no03HCSBYE+ZVdLxbwdu3xyi2vU+K/YNJioSds=
 github.com/jackc/puddle/v2 v2.2.3 h1:f8HoREISb3l5eO9coPgK7U3hKLhWGokOFVcThl5jrao=
 github.com/jackc/puddle/v2 v2.2.3/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
 github.com/jackc/tern/v2 v2.4.3 h1:g293d3OZgW7OFEhsYXgEv0C21jea2boNr0VR4K5I7OY=
@@ -415,8 +415,8 @@ github.com/oleg-tkachuk/limes/exchange v0.15.2 h1:znp0NpyCHgBzyzNaZXza9YkMhMttOP
 github.com/oleg-tkachuk/limes/exchange v0.15.2/go.mod h1:ucxMUEObhxccaYB+UOd0Jmcc2YgF+ikY7BFfSBno49E=
 github.com/oleg-tkachuk/limes/otelmetric v0.13.1 h1:LW/6H4hLuzDmBaBPAaBR7J3kdaYISVk8GYVl+ChtUlo=
 github.com/oleg-tkachuk/limes/otelmetric v0.13.1/go.mod h1:ArCxshevWEFTKcphGHbmNeJg8DGAg/fr8K4TzSIdVcw=
-github.com/oleg-tkachuk/limes/pgstore v0.54.0 h1:vG/xWmC1SAU5XNN1KIHq5cmRJKSWZIRTznH43HNW0Io=
-github.com/oleg-tkachuk/limes/pgstore v0.54.0/go.mod h1:/LE8Merz8hAgVfL8j/rnsWy4pmV7zqOH3jKNbT6zsiI=
+github.com/oleg-tkachuk/limes/pgstore v0.54.1 h1:ng976zc2Q0l+Co4OjVI7QnbdctvD+Jc9e1w7GuMxNXs=
+github.com/oleg-tkachuk/limes/pgstore v0.54.1/go.mod h1:UVaiH3Fj5GupZTsp22vGD1LKlxcByojfhIx6/IcY6Pg=
 github.com/onsi/ginkgo/v2 v2.33.1 h1:62XfWJbEIjPSCSDYrsCPP/SHcmH7O0M8ne8zfqQ2iz4=
 github.com/onsi/ginkgo/v2 v2.33.1/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/gomega v1.44.0 h1:eAiGl3Pw5jz5GQdDff0BcxYpAX1JxW8xD7mFUuwNfZQ=
