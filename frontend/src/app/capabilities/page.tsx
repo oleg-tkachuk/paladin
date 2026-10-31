@@ -32,7 +32,7 @@ import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { errorMessage } from "@/hooks/errorContract";
 import { useServerFacets } from "@/hooks/useTableFacets";
 import { useTableView } from "@/hooks/useTableView";
-import { principalKindLabel } from "@/app/tenants/[id]/capabilities/_constants";
+import { principalKindLabel } from "@/lib/capabilityPrincipal";
 import {
   CAPABILITY_FACETS,
   capabilityLifecycle,

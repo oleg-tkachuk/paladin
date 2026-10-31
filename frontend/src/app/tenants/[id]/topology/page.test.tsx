@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   collections: [] as Array<Record<string, unknown>>,
   collectionsError: null as Error | null,
   backendsError: null as Error | null,
+  capabilitiesError: null as Error | null,
 }));
 
 vi.mock("@/lib/connect/client", () => ({
@@ -57,6 +58,17 @@ vi.mock("@/lib/connect/client", () => ({
       page: { nextPageToken: "" },
     })),
   },
+  capabilityClient: {
+    list: vi.fn(async () => {
+      if (h.capabilitiesError) throw h.capabilitiesError;
+      return {
+        capabilities: [
+          { subject: { kind: 2, tenantId: TENANT_ID, subject: "mcp-relay" } },
+        ],
+        nextPageToken: "",
+      };
+    }),
+  },
   backendClient: {
     listBackends: vi.fn(async () => {
       if (h.backendsError) throw h.backendsError;
@@ -94,6 +106,7 @@ beforeEach(() => {
   h.collections = [collection("docs", "home"), collection("media", "common")];
   h.collectionsError = null;
   h.backendsError = null;
+  h.capabilitiesError = null;
 });
 
 /** The drawing's node links, in the order focus moves through them. */
@@ -105,7 +118,7 @@ async function nodeLinks() {
 }
 
 describe("TenantTopologyPage", () => {
-  it("draws tenant → collections → buckets → backend, each a link to its page", async () => {
+  it("draws tenant → collections → buckets → backend and its access, each a link to its page", async () => {
     render(<TenantTopologyPage />);
     const links = await nodeLinks();
     // Column by column; each bucket level with the collection bound to it,
@@ -114,6 +127,8 @@ describe("TenantTopologyPage", () => {
       "/tenants/acme",
       "/tenants/acme/collections/docs",
       "/tenants/acme/collections/media",
+      // The tenant's access, a branch beside its collections.
+      "/tenants/acme/capabilities",
       "/storage-backends/be/buckets/home",
       "/storage-backends/be/buckets/common",
       "/storage-backends/be/buckets/spare",
@@ -223,5 +238,23 @@ describe("TenantTopologyPage", () => {
     expect(
       screen.queryByRole("img", { name: "Probe failed" }),
     ).not.toBeInTheDocument();
+  });
+
+  // The tenant's access is a branch off it: a principal holding live
+  // capabilities leads to them, and a failed read draws the rest without it.
+  it("draws each principal holding live capabilities off the tenant", async () => {
+    render(<TenantTopologyPage />);
+    const links = await nodeLinks();
+    const principal = links.find((l) => l.textContent?.includes("mcp-relay"));
+    expect(principal?.getAttribute("href")).toBe("/tenants/acme/capabilities");
+    expect(principal?.textContent).toContain("1 live capability");
+  });
+
+  it("draws without principals when the capabilities cannot be read", async () => {
+    h.capabilitiesError = new ConnectError("no", Code.PermissionDenied);
+    render(<TenantTopologyPage />);
+    const links = await nodeLinks();
+    expect(links.some((l) => l.textContent?.includes("mcp-relay"))).toBe(false);
+    expect(await screen.findByText(/Capabilities/)).toBeInTheDocument();
   });
 });

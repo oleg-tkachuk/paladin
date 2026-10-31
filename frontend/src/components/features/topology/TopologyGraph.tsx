@@ -22,6 +22,8 @@ import {
   MagnifyingGlassPlusIcon,
   RectangleGroupIcon,
   ServerStackIcon,
+  IdentificationIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
@@ -69,6 +71,8 @@ const KIND_ICON: Record<NodeKind, React.ElementType> = {
   collection: FolderIcon,
   bucket: ArchiveBoxIcon,
   backend: ServerStackIcon,
+  policy: ShieldCheckIcon,
+  principal: IdentificationIcon,
 };
 
 /** What each tone means, in the legend, whatever kind of thing wears it. */
