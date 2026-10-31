@@ -22,6 +22,8 @@ const ERROR_FIELDS = new Set(["error", "isError"]);
 
 // "<file under src>#<variable>" → what a failure renders, and why it is honest.
 const ALLOWED: Record<string, string> = {
+  "components/DashboardWidgets.tsx#trends":
+    "draws a trend beside each budget alert; a failed read leaves the rows as they were, without one",
   "app/capabilities/page.tsx#tenants":
     "names each row's tenant; a failed lookup shows the tenant's id, which the row already carries",
   "app/storage-backends/[backendId]/buckets/[bucketId]/layout.tsx#ownerQuery":

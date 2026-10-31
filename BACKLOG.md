@@ -757,20 +757,6 @@ request with tests and is deleted here by the one that closes it. Every entry
 is `Aspirational` with no blocker unless it says otherwise; the order is the
 order they are being taken up.
 
-#### Dashboard: a trend for the tenants nearest their limits
-
-- **Status:** Blocked.
-- **Reason:** the dashboard lists the user's operations, the tenants near
-  their budget (TenantBudgetService.Summarize), how many quotas sit at or
-  near their caps and a first-run checklist, and the tenants list tells each
-  tenant's limit state from the same reads, but neither shows how a tenant
-  got there: nothing serves a usage or spend series across tenants.
-- **Definition of Done:** a sparkline beside each tenant near its budget or
-  quota, from a cross-tenant series the API serves, not assembled in the
-  browser tenant by tenant.
-- **Blockers:** the cross-tenant read limes is growing — see "Billing has no
-  view across tenants".
-
 #### Motion: view transitions and micro-animations
 
 - **Status:** Deferred (owner decision 2026-10-19: animations are not wanted).

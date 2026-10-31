@@ -28,7 +28,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_billing_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKSAQoWTGlzdFRlbmFudFNwZW5kUmVxdWVzdBIwCgxwZXJpb2Rfc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhYKBWxpbWl0GAMgASgFQge6SAQaAigAImEKF0xpc3RUZW5hbnRTcGVuZFJlc3BvbnNlEi4KB3RlbmFudHMYASADKAsyHS5wYWxhZGluLmFkbWluLnYxLlRlbmFudFNwZW5kEhYKCXRydW5jYXRlZBgCIAEoCEID4EEDIqwBCgtUZW5hbnRTcGVuZBIWCgl0ZW5hbnRfaWQYASABKAlCA+BBAxIRCgRzbHVnGAIgASgJQgPgQQMSGQoMZGlzcGxheV9uYW1lGAMgASgJQgPgQQMSFAoHZGVsZXRlZBgEIAEoCEID4EEDEiYKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlCA+BBAxIZCgxjaGFyZ2VfY291bnQYBiABKANCA+BBAyIbChlHZXRCaWxsaW5nU2V0dGluZ3NSZXF1ZXN0IjgKGkdldEJpbGxpbmdTZXR0aW5nc1Jlc3BvbnNlEhoKDWN1cnJlbmN5X2NvZGUYASABKAlCA+BBAyKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIswDChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRIoCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlIABI9ChB1bmxpbWl0ZWRfYnVkZ2V0GAwgASgLMiEucGFsYWRpbi5hZG1pbi52MS5VbmxpbWl0ZWRCdWRnZXRIABI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANCEAoOYnVkZ2V0X2NlaWxpbmdKBAgBEAJKBAgCEANKBAgIEAlKBAgDEARKBAgJEApSDHRvdGFsX2Ftb3VudFIMdG90YWxfbWljcm9zUgl1bml0X2NvZGVSEW1heF9idWRnZXRfYW1vdW50UhFtYXhfYnVkZ2V0X21pY3JvcyJ1CghUb3BFbnRyeRINCgVsYWJlbBgBIAEoCRIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zIrABChpHZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEjAKDHBlcmlvZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZ3JhbnVsYXJpdHkYBCABKAkiXQobR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXRKBAgCEANSCXVuaXRfY29kZSKVAQocR2V0UGxhdGZvcm1UaW1lU2VyaWVzUmVxdWVzdBIwCgxwZXJpb2Rfc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAMgASgJIk4KHUdldFBsYXRmb3JtVGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXQimAEKClRpbWVCdWNrZXQSLgoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFAoMY2hhcmdlX2NvdW50GAMgASgDEiEKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlKBAgCEANKBAgEEAVSBmFtb3VudFINYW1vdW50X21pY3JvczLbBAoOQmlsbGluZ1NlcnZpY2USbgoQR2V0VGVuYW50U3VtbWFyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QaKi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXNwb25zZSIDkAIBEncKE0dldFRlbmFudFRpbWVTZXJpZXMSLC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXF1ZXN0Gi0ucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVzcG9uc2UiA5ACARJ9ChVHZXRQbGF0Zm9ybVRpbWVTZXJpZXMSLi5wYWxhZGluLmFkbWluLnYxLkdldFBsYXRmb3JtVGltZVNlcmllc1JlcXVlc3QaLy5wYWxhZGluLmFkbWluLnYxLkdldFBsYXRmb3JtVGltZVNlcmllc1Jlc3BvbnNlIgOQAgESawoPTGlzdFRlbmFudFNwZW5kEigucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50U3BlbmRSZXF1ZXN0GikucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50U3BlbmRSZXNwb25zZSIDkAIBEnQKEkdldEJpbGxpbmdTZXR0aW5ncxIrLnBhbGFkaW4uYWRtaW4udjEuR2V0QmlsbGluZ1NldHRpbmdzUmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuR2V0QmlsbGluZ1NldHRpbmdzUmVzcG9uc2UiA5ACAUJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    "CiZwYWxhZGluL2FkbWluL3YxL2JpbGxpbmdfc2VydmljZS5wcm90bxIQcGFsYWRpbi5hZG1pbi52MSKSAQoWTGlzdFRlbmFudFNwZW5kUmVxdWVzdBIwCgxwZXJpb2Rfc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhYKBWxpbWl0GAMgASgFQge6SAQaAigAImEKF0xpc3RUZW5hbnRTcGVuZFJlc3BvbnNlEi4KB3RlbmFudHMYASADKAsyHS5wYWxhZGluLmFkbWluLnYxLlRlbmFudFNwZW5kEhYKCXRydW5jYXRlZBgCIAEoCEID4EEDIqwBCgtUZW5hbnRTcGVuZBIWCgl0ZW5hbnRfaWQYASABKAlCA+BBAxIRCgRzbHVnGAIgASgJQgPgQQMSGQoMZGlzcGxheV9uYW1lGAMgASgJQgPgQQMSFAoHZGVsZXRlZBgEIAEoCEID4EEDEiYKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlCA+BBAxIZCgxjaGFyZ2VfY291bnQYBiABKANCA+BBAyIbChlHZXRCaWxsaW5nU2V0dGluZ3NSZXF1ZXN0IjgKGkdldEJpbGxpbmdTZXR0aW5nc1Jlc3BvbnNlEhoKDWN1cnJlbmN5X2NvZGUYASABKAlCA+BBAyKYAQoXR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QSGwoJdGVuYW50X2lkGAEgASgJQgi6SAVyA7ABARIwCgxwZXJpb2Rfc3RhcnQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIswDChhHZXRUZW5hbnRTdW1tYXJ5UmVzcG9uc2USIQoFdG90YWwYCiABKAsyEi5nb29nbGUudHlwZS5Nb25leRIoCgptYXhfYnVkZ2V0GAsgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlIABI9ChB1bmxpbWl0ZWRfYnVkZ2V0GAwgASgLMiEucGFsYWRpbi5hZG1pbi52MS5VbmxpbWl0ZWRCdWRnZXRIABI0ChB0b3BfY2FwYWJpbGl0aWVzGAQgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIuCgp0b3BfYWN0b3JzGAUgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIrCgd0b3Bfb3BzGAYgAygLMhoucGFsYWRpbi5hZG1pbi52MS5Ub3BFbnRyeRIUCgxjaGFyZ2VfY291bnQYByABKANCEAoOYnVkZ2V0X2NlaWxpbmdKBAgBEAJKBAgCEANKBAgIEAlKBAgDEARKBAgJEApSDHRvdGFsX2Ftb3VudFIMdG90YWxfbWljcm9zUgl1bml0X2NvZGVSEW1heF9idWRnZXRfYW1vdW50UhFtYXhfYnVkZ2V0X21pY3JvcyJ1CghUb3BFbnRyeRINCgVsYWJlbBgBIAEoCRIUCgxjaGFyZ2VfY291bnQYAyABKAMSIQoFc3BlbnQYBSABKAsyEi5nb29nbGUudHlwZS5Nb25leUoECAIQA0oECAQQBVIGYW1vdW50Ug1hbW91bnRfbWljcm9zIrABChpHZXRUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBIbCgl0ZW5hbnRfaWQYASABKAlCCLpIBXIDsAEBEjAKDHBlcmlvZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZ3JhbnVsYXJpdHkYBCABKAkiXQobR2V0VGVuYW50VGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXRKBAgCEANSCXVuaXRfY29kZSKVAQocR2V0UGxhdGZvcm1UaW1lU2VyaWVzUmVxdWVzdBIwCgxwZXJpb2Rfc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2dyYW51bGFyaXR5GAMgASgJIk4KHUdldFBsYXRmb3JtVGltZVNlcmllc1Jlc3BvbnNlEi0KB2J1Y2tldHMYASADKAsyHC5wYWxhZGluLmFkbWluLnYxLlRpbWVCdWNrZXQivQEKG0xpc3RUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBInCgp0ZW5hbnRfaWRzGAEgAygJQhO6SBCSAQ0IARAyGAEiBXIDsAEBEjAKDHBlcmlvZF9zdGFydBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZ3JhbnVsYXJpdHkYBCABKAkiUgocTGlzdFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZRIyCgZzZXJpZXMYASADKAsyIi5wYWxhZGluLmFkbWluLnYxLlRlbmFudFRpbWVTZXJpZXMiXgoQVGVuYW50VGltZVNlcmllcxIWCgl0ZW5hbnRfaWQYASABKAlCA+BBAxIyCgdidWNrZXRzGAIgAygLMhwucGFsYWRpbi5hZG1pbi52MS5UaW1lQnVja2V0QgPgQQMimAEKClRpbWVCdWNrZXQSLgoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSFAoMY2hhcmdlX2NvdW50GAMgASgDEiEKBXNwZW50GAUgASgLMhIuZ29vZ2xlLnR5cGUuTW9uZXlKBAgCEANKBAgEEAVSBmFtb3VudFINYW1vdW50X21pY3JvczLXBQoOQmlsbGluZ1NlcnZpY2USbgoQR2V0VGVuYW50U3VtbWFyeRIpLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3VtbWFyeVJlcXVlc3QaKi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN1bW1hcnlSZXNwb25zZSIDkAIBEncKE0dldFRlbmFudFRpbWVTZXJpZXMSLC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFRpbWVTZXJpZXNSZXF1ZXN0Gi0ucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRUaW1lU2VyaWVzUmVzcG9uc2UiA5ACARJ9ChVHZXRQbGF0Zm9ybVRpbWVTZXJpZXMSLi5wYWxhZGluLmFkbWluLnYxLkdldFBsYXRmb3JtVGltZVNlcmllc1JlcXVlc3QaLy5wYWxhZGluLmFkbWluLnYxLkdldFBsYXRmb3JtVGltZVNlcmllc1Jlc3BvbnNlIgOQAgESegoUTGlzdFRlbmFudFRpbWVTZXJpZXMSLS5wYWxhZGluLmFkbWluLnYxLkxpc3RUZW5hbnRUaW1lU2VyaWVzUmVxdWVzdBouLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudFRpbWVTZXJpZXNSZXNwb25zZSIDkAIBEmsKD0xpc3RUZW5hbnRTcGVuZBIoLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudFNwZW5kUmVxdWVzdBopLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudFNwZW5kUmVzcG9uc2UiA5ACARJ0ChJHZXRCaWxsaW5nU2V0dGluZ3MSKy5wYWxhZGluLmFkbWluLnYxLkdldEJpbGxpbmdTZXR0aW5nc1JlcXVlc3QaLC5wYWxhZGluLmFkbWluLnYxLkdldEJpbGxpbmdTZXR0aW5nc1Jlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
@@ -428,6 +428,92 @@ export const GetPlatformTimeSeriesResponseSchema: GenMessage<GetPlatformTimeSeri
   messageDesc(file_paladin_admin_v1_billing_service, 11);
 
 /**
+ * @generated from message paladin.admin.v1.ListTenantTimeSeriesRequest
+ */
+export type ListTenantTimeSeriesRequest =
+  Message<"paladin.admin.v1.ListTenantTimeSeriesRequest"> & {
+    /**
+     * tenant_ids are the tenants whose series to return, each once.
+     *
+     * @generated from field: repeated string tenant_ids = 1;
+     */
+    tenantIds: string[];
+
+    /**
+     * @generated from field: google.protobuf.Timestamp period_start = 2;
+     */
+    periodStart?: Timestamp | undefined;
+
+    /**
+     * @generated from field: google.protobuf.Timestamp period_end = 3;
+     */
+    periodEnd?: Timestamp | undefined;
+
+    /**
+     * granularity ∈ {hour, day, week}, as GetTenantTimeSeries takes it.
+     *
+     * @generated from field: string granularity = 4;
+     */
+    granularity: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListTenantTimeSeriesRequest.
+ * Use `create(ListTenantTimeSeriesRequestSchema)` to create a new message.
+ */
+export const ListTenantTimeSeriesRequestSchema: GenMessage<ListTenantTimeSeriesRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_billing_service, 12);
+
+/**
+ * @generated from message paladin.admin.v1.ListTenantTimeSeriesResponse
+ */
+export type ListTenantTimeSeriesResponse =
+  Message<"paladin.admin.v1.ListTenantTimeSeriesResponse"> & {
+    /**
+     * series holds one entry per tenant asked for, in the order asked: a
+     * tenant that spent nothing in the period has no buckets.
+     *
+     * @generated from field: repeated paladin.admin.v1.TenantTimeSeries series = 1;
+     */
+    series: TenantTimeSeries[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListTenantTimeSeriesResponse.
+ * Use `create(ListTenantTimeSeriesResponseSchema)` to create a new message.
+ */
+export const ListTenantTimeSeriesResponseSchema: GenMessage<ListTenantTimeSeriesResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_billing_service, 13);
+
+/**
+ * TenantTimeSeries is one tenant's spend a bucket at a time, in the unit
+ * most of its charges are in.
+ *
+ * @generated from message paladin.admin.v1.TenantTimeSeries
+ */
+export type TenantTimeSeries = Message<"paladin.admin.v1.TenantTimeSeries"> & {
+  /**
+   * @generated from field: string tenant_id = 1;
+   */
+  tenantId: string;
+
+  /**
+   * @generated from field: repeated paladin.admin.v1.TimeBucket buckets = 2;
+   */
+  buckets: TimeBucket[];
+};
+
+/**
+ * Describes the message paladin.admin.v1.TenantTimeSeries.
+ * Use `create(TenantTimeSeriesSchema)` to create a new message.
+ */
+export const TenantTimeSeriesSchema: GenMessage<TenantTimeSeries> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_billing_service, 14);
+
+/**
  * @generated from message paladin.admin.v1.TimeBucket
  */
 export type TimeBucket = Message<"paladin.admin.v1.TimeBucket"> & {
@@ -455,7 +541,7 @@ export type TimeBucket = Message<"paladin.admin.v1.TimeBucket"> & {
  */
 export const TimeBucketSchema: GenMessage<TimeBucket> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_billing_service, 12);
+  messageDesc(file_paladin_admin_v1_billing_service, 15);
 
 /**
  * BillingService surfaces per-tenant capability spend over the
@@ -504,6 +590,19 @@ export const BillingService: GenService<{
     methodKind: "unary";
     input: typeof GetPlatformTimeSeriesRequestSchema;
     output: typeof GetPlatformTimeSeriesResponseSchema;
+  };
+  /**
+   * ListTenantTimeSeries returns each named tenant's spend a bucket at a
+   * time, as GetTenantTimeSeries does for one, from one sum of the ledger
+   * across them: a trend beside each tenant a list shows. It reads every
+   * named tenant's rows, so it is gated as ListTenantSpend is.
+   *
+   * @generated from rpc paladin.admin.v1.BillingService.ListTenantTimeSeries
+   */
+  listTenantTimeSeries: {
+    methodKind: "unary";
+    input: typeof ListTenantTimeSeriesRequestSchema;
+    output: typeof ListTenantTimeSeriesResponseSchema;
   };
   /**
    * ListTenantSpend lists the tenants that spent anything over the period,

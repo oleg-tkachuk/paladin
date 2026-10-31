@@ -39,6 +39,14 @@ service BillingService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // ListTenantTimeSeries returns each named tenant's spend a bucket at a
+  // time, as GetTenantTimeSeries does for one, from one sum of the ledger
+  // across them: a trend beside each tenant a list shows. It reads every
+  // named tenant's rows, so it is gated as ListTenantSpend is.
+  rpc ListTenantTimeSeries(ListTenantTimeSeriesRequest) returns (ListTenantTimeSeriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // ListTenantSpend lists the tenants that spent anything over the period,
   // the most first, from one sum of the charges ledger across tenants.
   // Defaults to the last 30 days, as GetTenantSummary does. Gated by
@@ -174,6 +182,35 @@ message GetPlatformTimeSeriesRequest {
 
 message GetPlatformTimeSeriesResponse {
   repeated TimeBucket buckets = 1;
+}
+
+message ListTenantTimeSeriesRequest {
+  // tenant_ids are the tenants whose series to return, each once.
+  repeated string tenant_ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1,
+    max_items: 50,
+    unique: true,
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  google.protobuf.Timestamp period_start = 2;
+  google.protobuf.Timestamp period_end = 3;
+  // granularity ∈ {hour, day, week}, as GetTenantTimeSeries takes it.
+  string granularity = 4;
+}
+
+message ListTenantTimeSeriesResponse {
+  // series holds one entry per tenant asked for, in the order asked: a
+  // tenant that spent nothing in the period has no buckets.
+  repeated TenantTimeSeries series = 1;
+}
+
+// TenantTimeSeries is one tenant's spend a bucket at a time, in the unit
+// most of its charges are in.
+message TenantTimeSeries {
+  string tenant_id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  repeated TimeBucket buckets = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message TimeBucket {

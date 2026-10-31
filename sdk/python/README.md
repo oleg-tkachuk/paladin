@@ -683,7 +683,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `APITokenService` | `create`, `revoke`, `list`, `get`, `get_self`, `get_usage` |
 | `AuditLogService` | `list_audit_log`, `get_audit_log_entry`, `export_audit_log` |
 | `BackendService` | `create_backend`, `get_backend`, `update_backend`, `delete_backend`, `list_backends`, `rotate_credentials`, `test_backend`, `set_backend_enabled`, `set_backend_read_only`, `set_backend_maintenance` |
-| `BillingService` | `get_tenant_summary`, `get_tenant_time_series`, `get_platform_time_series`, `list_tenant_spend`, `get_billing_settings` |
+| `BillingService` | `get_tenant_summary`, `get_tenant_time_series`, `get_platform_time_series`, `list_tenant_time_series`, `list_tenant_spend`, `get_billing_settings` |
 | `BucketService` | `create_bucket`, `get_bucket`, `update_bucket`, `delete_bucket`, `list_buckets`, `set_bucket_policy`, `set_lifecycle_rules`, `set_object_lock`, `set_versioning`, `set_replication`, `grant_bucket`, `revoke_bucket_grant`, `list_bucket_grants`, `list_accessible_buckets` |
 | `CELService` | `validate` |
 | `CapabilityService` | `issue`, `delegate`, `revoke`, `revoke_biscuit`, `get_biscuit_usage`, `get`, `list`, `get_usage`, `list_operation_grants` |

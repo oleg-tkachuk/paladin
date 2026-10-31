@@ -70,3 +70,36 @@ export function platformSeriesQuery(
     },
   });
 }
+
+/**
+ * Each of the tenants' spend over the period, a bucket at a time, from one
+ * read across them — a trend beside each row a list shows. The platform
+ * admin's view; anyone else is refused.
+ */
+export function tenantSeriesQuery(
+  tenantIds: readonly string[],
+  period: BillingPeriod,
+  granularity: string,
+) {
+  return queryOptions({
+    queryKey: [
+      ...BILLING_QUERY_KEY,
+      "tenant-series",
+      [...tenantIds],
+      millis(period.periodStart),
+      millis(period.periodEnd),
+      granularity,
+    ] as const,
+    enabled: tenantIds.length > 0,
+    queryFn: async ({ signal }) => {
+      try {
+        return await billingClient.listTenantTimeSeries(
+          { tenantIds: [...tenantIds], ...period, granularity },
+          { signal },
+        );
+      } catch (err) {
+        throw normalizeError(err);
+      }
+    },
+  });
+}

@@ -116,6 +116,41 @@ func (s *BillingServer) GetPlatformTimeSeries(
 	return &pb.GetPlatformTimeSeriesResponse{Buckets: bucketsToProto(ts)}, nil
 }
 
+// ListTenantTimeSeries is GetTenantTimeSeries for each tenant named, in the
+// order named.
+func (s *BillingServer) ListTenantTimeSeries(
+	ctx context.Context,
+	req *pb.ListTenantTimeSeriesRequest,
+) (*pb.ListTenantTimeSeriesResponse, error) {
+	if s.H == nil {
+		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+	}
+	ids := make([]uuid.UUID, 0, len(req.GetTenantIds()))
+	for _, raw := range req.GetTenantIds() {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_ids: %w", err))
+		}
+		ids = append(ids, id)
+	}
+	got, err := s.H.ListTenantTimeSeries(ctx, ids,
+		timeFromPB(req.GetPeriodStart()),
+		timeFromPB(req.GetPeriodEnd()),
+		req.GetGranularity(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListTenantTimeSeriesResponse{Series: make([]*pb.TenantTimeSeries, 0, len(got))}
+	for i := range got {
+		out.Series = append(out.Series, &pb.TenantTimeSeries{
+			TenantId: got[i].TenantID.String(),
+			Buckets:  bucketsToProto(&got[i].Series),
+		})
+	}
+	return out, nil
+}
+
 // bucketsToProto is a series' buckets, each spent in the series' unit.
 func bucketsToProto(ts *billingh.TimeSeries) []*pb.TimeBucket {
 	out := make([]*pb.TimeBucket, 0, len(ts.Buckets))

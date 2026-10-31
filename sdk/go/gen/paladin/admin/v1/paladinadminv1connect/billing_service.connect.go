@@ -34,6 +34,9 @@ const (
 	// BillingServiceGetPlatformTimeSeriesProcedure is the procedure name of the BillingService's
 	// GetPlatformTimeSeries RPC.
 	BillingServiceGetPlatformTimeSeriesProcedure = "/paladin.admin.v1.BillingService/GetPlatformTimeSeries"
+	// BillingServiceListTenantTimeSeriesProcedure is the procedure name of the BillingService's
+	// ListTenantTimeSeries RPC.
+	BillingServiceListTenantTimeSeriesProcedure = "/paladin.admin.v1.BillingService/ListTenantTimeSeries"
 	// BillingServiceListTenantSpendProcedure is the procedure name of the BillingService's
 	// ListTenantSpend RPC.
 	BillingServiceListTenantSpendProcedure = "/paladin.admin.v1.BillingService/ListTenantSpend"
@@ -64,6 +67,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods().ByName("GetPlatformTimeSeries"),
 			Procedure:        BillingServiceGetPlatformTimeSeriesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	billingServiceListTenantTimeSeriesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_billing_service_proto.Services().ByName("BillingService").Methods().ByName("ListTenantTimeSeries"),
+			Procedure:        BillingServiceListTenantTimeSeriesProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -99,6 +110,11 @@ type BillingServiceClient interface {
 	// the unit most of the period's charges are in. It reads every tenant's
 	// rows, so it is gated as ListTenantSpend is.
 	GetPlatformTimeSeries(context.Context, *v1.GetPlatformTimeSeriesRequest) (*v1.GetPlatformTimeSeriesResponse, error)
+	// ListTenantTimeSeries returns each named tenant's spend a bucket at a
+	// time, as GetTenantTimeSeries does for one, from one sum of the ledger
+	// across them: a trend beside each tenant a list shows. It reads every
+	// named tenant's rows, so it is gated as ListTenantSpend is.
+	ListTenantTimeSeries(context.Context, *v1.ListTenantTimeSeriesRequest) (*v1.ListTenantTimeSeriesResponse, error)
 	// ListTenantSpend lists the tenants that spent anything over the period,
 	// the most first, from one sum of the charges ledger across tenants.
 	// Defaults to the last 30 days, as GetTenantSummary does. Gated by
@@ -130,6 +146,11 @@ type BillingServiceHandler interface {
 	// the unit most of the period's charges are in. It reads every tenant's
 	// rows, so it is gated as ListTenantSpend is.
 	GetPlatformTimeSeries(context.Context, *v1.GetPlatformTimeSeriesRequest) (*v1.GetPlatformTimeSeriesResponse, error)
+	// ListTenantTimeSeries returns each named tenant's spend a bucket at a
+	// time, as GetTenantTimeSeries does for one, from one sum of the ledger
+	// across them: a trend beside each tenant a list shows. It reads every
+	// named tenant's rows, so it is gated as ListTenantSpend is.
+	ListTenantTimeSeries(context.Context, *v1.ListTenantTimeSeriesRequest) (*v1.ListTenantTimeSeriesResponse, error)
 	// ListTenantSpend lists the tenants that spent anything over the period,
 	// the most first, from one sum of the charges ledger across tenants.
 	// Defaults to the last 30 days, as GetTenantSummary does. Gated by
@@ -149,6 +170,7 @@ func RegisterBillingServiceHandler(server *connect.Server, svc BillingServiceHan
 		connect.Method{Spec: billingServiceGetTenantSummarySpec(), Handler: adapter.getTenantSummary},
 		connect.Method{Spec: billingServiceGetTenantTimeSeriesSpec(), Handler: adapter.getTenantTimeSeries},
 		connect.Method{Spec: billingServiceGetPlatformTimeSeriesSpec(), Handler: adapter.getPlatformTimeSeries},
+		connect.Method{Spec: billingServiceListTenantTimeSeriesSpec(), Handler: adapter.listTenantTimeSeries},
 		connect.Method{Spec: billingServiceListTenantSpendSpec(), Handler: adapter.listTenantSpend},
 		connect.Method{Spec: billingServiceGetBillingSettingsSpec(), Handler: adapter.getBillingSettings},
 	)
@@ -167,6 +189,10 @@ func (UnimplementedBillingServiceHandler) GetTenantTimeSeries(context.Context, *
 
 func (UnimplementedBillingServiceHandler) GetPlatformTimeSeries(context.Context, *v1.GetPlatformTimeSeriesRequest) (*v1.GetPlatformTimeSeriesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.GetPlatformTimeSeries is not implemented")
+}
+
+func (UnimplementedBillingServiceHandler) ListTenantTimeSeries(context.Context, *v1.ListTenantTimeSeriesRequest) (*v1.ListTenantTimeSeriesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.BillingService.ListTenantTimeSeries is not implemented")
 }
 
 func (UnimplementedBillingServiceHandler) ListTenantSpend(context.Context, *v1.ListTenantSpendRequest) (*v1.ListTenantSpendResponse, error) {
@@ -200,6 +226,14 @@ func (c *billingServiceClient) GetTenantTimeSeries(ctx context.Context, req *v1.
 func (c *billingServiceClient) GetPlatformTimeSeries(ctx context.Context, req *v1.GetPlatformTimeSeriesRequest) (*v1.GetPlatformTimeSeriesResponse, error) {
 	var res v1.GetPlatformTimeSeriesResponse
 	if err := c.client.CallUnary(ctx, billingServiceGetPlatformTimeSeriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ListTenantTimeSeries(ctx context.Context, req *v1.ListTenantTimeSeriesRequest) (*v1.ListTenantTimeSeriesResponse, error) {
+	var res v1.ListTenantTimeSeriesResponse
+	if err := c.client.CallUnary(ctx, billingServiceListTenantTimeSeriesSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -253,6 +287,18 @@ func (h billingServiceHandler) getPlatformTimeSeries(ctx context.Context, _ conn
 		return err
 	}
 	res, err := h.svc.GetPlatformTimeSeries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) listTenantTimeSeries(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTenantTimeSeriesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTenantTimeSeries(ctx, &req)
 	if err != nil {
 		return err
 	}

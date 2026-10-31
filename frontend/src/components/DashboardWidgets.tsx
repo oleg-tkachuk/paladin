@@ -21,7 +21,8 @@
 // re-fetch on tenant context refresh from RefreshContext.
 
 import { alertTone, IconTone } from "@/components/ui/IconChip";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -50,6 +51,14 @@ import type { TenantBudgetSummary } from "@/gen/paladin/admin/v1/tenant_budget_s
 import { formatMoney, unitOf } from "@/lib/format/money";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { BUDGET_ALERT_THRESHOLD } from "@/lib/tenant/limits";
+import { Sparkline } from "@/components/ui/Sparkline";
+import { tenantSeriesQuery } from "@/lib/queries/billing";
+import {
+  TREND_DAYS,
+  TREND_GRANULARITY,
+  trendPeriod,
+  trendValues,
+} from "@/components/features/billing/tenantTrend";
 
 // Operation.result is a oneof — case "error" carries google.rpc.Status.
 function opError(o: Operation): string {
@@ -336,6 +345,30 @@ function BudgetAlertsWidget() {
     () => rows.filter((r) => r.utilisationPct >= 100).length,
     [rows],
   );
+  // How each tenant got there: its spend over the last days, every row's
+  // from one read. Fixed at mount, so the query's key holds still.
+  const [trendWindow] = useState(() => trendPeriod(new Date()));
+  const trendPeriodPb = useMemo(
+    () => ({
+      periodStart: timestampFromDate(trendWindow.start),
+      periodEnd: timestampFromDate(trendWindow.end),
+    }),
+    [trendWindow],
+  );
+  const tenantIds = useMemo(() => rows.map((r) => r.tenantId), [rows]);
+  const trends = useQuery(
+    tenantSeriesQuery(tenantIds, trendPeriodPb, TREND_GRANULARITY),
+  );
+  const trendOf = useMemo(
+    () =>
+      new Map(
+        (trends.data?.series ?? []).map((t) => [
+          t.tenantId,
+          trendValues(t.buckets, trendWindow),
+        ]),
+      ),
+    [trends.data, trendWindow],
+  );
   if (useQuiet(BUDGET_ALERTS_CARD, !loading && !error && rows.length === 0)) {
     return null;
   }
@@ -385,7 +418,11 @@ function BudgetAlertsWidget() {
         ) : (
           <ul className="space-y-1.5">
             {rows.map((r) => (
-              <BudgetAlertRow key={r.tenantId} row={r} />
+              <BudgetAlertRow
+                key={r.tenantId}
+                row={r}
+                trend={trendOf.get(r.tenantId)}
+              />
             ))}
           </ul>
         )}
@@ -400,7 +437,17 @@ function BudgetAlertsWidget() {
   );
 }
 
-function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
+/** What a budget alert's trend line is named for assistive technology. */
+export const TREND_LABEL = `Spend, last ${TREND_DAYS} days`;
+
+function BudgetAlertRow({
+  row,
+  trend,
+}: {
+  row: TenantBudgetSummary;
+  /** The tenant's recent daily spend; absent or empty draws no line. */
+  trend?: number[];
+}) {
   const pct = Math.round(row.utilisationPct);
   const over = pct >= 100;
   const spent = row.budget?.spent;
@@ -445,6 +492,11 @@ function BudgetAlertRow({ row }: { row: TenantBudgetSummary }) {
           {formatMoney(spent, { fallbackUnit: unit })} /{" "}
           {formatMoney(cap, { fallbackUnit: unit })}
         </p>
+        {trend && trend.length > 0 ? (
+          <div role="img" aria-label={TREND_LABEL} title={TREND_LABEL}>
+            <Sparkline data={trend} className="h-6 text-muted-foreground" />
+          </div>
+        ) : null}
       </Link>
     </li>
   );

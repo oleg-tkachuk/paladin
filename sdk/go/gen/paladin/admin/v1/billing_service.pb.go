@@ -790,6 +790,176 @@ func (x *GetPlatformTimeSeriesResponse) GetBuckets() []*TimeBucket {
 	return nil
 }
 
+type ListTenantTimeSeriesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// tenant_ids are the tenants whose series to return, each once.
+	TenantIds   []string               `protobuf:"bytes,1,rep,name=tenant_ids,json=tenantIds,proto3" json:"tenant_ids,omitempty"`
+	PeriodStart *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	// granularity ∈ {hour, day, week}, as GetTenantTimeSeries takes it.
+	Granularity   string `protobuf:"bytes,4,opt,name=granularity,proto3" json:"granularity,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTenantTimeSeriesRequest) Reset() {
+	*x = ListTenantTimeSeriesRequest{}
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTenantTimeSeriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTenantTimeSeriesRequest) ProtoMessage() {}
+
+func (x *ListTenantTimeSeriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTenantTimeSeriesRequest.ProtoReflect.Descriptor instead.
+func (*ListTenantTimeSeriesRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListTenantTimeSeriesRequest) GetTenantIds() []string {
+	if x != nil {
+		return x.TenantIds
+	}
+	return nil
+}
+
+func (x *ListTenantTimeSeriesRequest) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *ListTenantTimeSeriesRequest) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *ListTenantTimeSeriesRequest) GetGranularity() string {
+	if x != nil {
+		return x.Granularity
+	}
+	return ""
+}
+
+type ListTenantTimeSeriesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// series holds one entry per tenant asked for, in the order asked: a
+	// tenant that spent nothing in the period has no buckets.
+	Series        []*TenantTimeSeries `protobuf:"bytes,1,rep,name=series,proto3" json:"series,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTenantTimeSeriesResponse) Reset() {
+	*x = ListTenantTimeSeriesResponse{}
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTenantTimeSeriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTenantTimeSeriesResponse) ProtoMessage() {}
+
+func (x *ListTenantTimeSeriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTenantTimeSeriesResponse.ProtoReflect.Descriptor instead.
+func (*ListTenantTimeSeriesResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListTenantTimeSeriesResponse) GetSeries() []*TenantTimeSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+// TenantTimeSeries is one tenant's spend a bucket at a time, in the unit
+// most of its charges are in.
+type TenantTimeSeries struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TenantId      string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	Buckets       []*TimeBucket          `protobuf:"bytes,2,rep,name=buckets,proto3" json:"buckets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TenantTimeSeries) Reset() {
+	*x = TenantTimeSeries{}
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TenantTimeSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TenantTimeSeries) ProtoMessage() {}
+
+func (x *TenantTimeSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TenantTimeSeries.ProtoReflect.Descriptor instead.
+func (*TenantTimeSeries) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *TenantTimeSeries) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *TenantTimeSeries) GetBuckets() []*TimeBucket {
+	if x != nil {
+		return x.Buckets
+	}
+	return nil
+}
+
 type TimeBucket struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Start       *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
@@ -802,7 +972,7 @@ type TimeBucket struct {
 
 func (x *TimeBucket) Reset() {
 	*x = TimeBucket{}
-	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[12]
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -814,7 +984,7 @@ func (x *TimeBucket) String() string {
 func (*TimeBucket) ProtoMessage() {}
 
 func (x *TimeBucket) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[12]
+	mi := &file_paladin_admin_v1_billing_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -827,7 +997,7 @@ func (x *TimeBucket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimeBucket.ProtoReflect.Descriptor instead.
 func (*TimeBucket) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{12}
+	return file_paladin_admin_v1_billing_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TimeBucket) GetStart() *timestamppb.Timestamp {
@@ -910,16 +1080,29 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"period_end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12 \n" +
 	"\vgranularity\x18\x03 \x01(\tR\vgranularity\"W\n" +
 	"\x1dGetPlatformTimeSeriesResponse\x126\n" +
-	"\abuckets\x18\x01 \x03(\v2\x1c.paladin.admin.v1.TimeBucketR\abuckets\"\xb3\x01\n" +
+	"\abuckets\x18\x01 \x03(\v2\x1c.paladin.admin.v1.TimeBucketR\abuckets\"\xed\x01\n" +
+	"\x1bListTenantTimeSeriesRequest\x122\n" +
+	"\n" +
+	"tenant_ids\x18\x01 \x03(\tB\x13\xbaH\x10\x92\x01\r\b\x01\x102\x18\x01\"\x05r\x03\xb0\x01\x01R\ttenantIds\x12=\n" +
+	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12 \n" +
+	"\vgranularity\x18\x04 \x01(\tR\vgranularity\"Z\n" +
+	"\x1cListTenantTimeSeriesResponse\x12:\n" +
+	"\x06series\x18\x01 \x03(\v2\".paladin.admin.v1.TenantTimeSeriesR\x06series\"q\n" +
+	"\x10TenantTimeSeries\x12 \n" +
+	"\ttenant_id\x18\x01 \x01(\tB\x03\xe0A\x03R\btenantId\x12;\n" +
+	"\abuckets\x18\x02 \x03(\v2\x1c.paladin.admin.v1.TimeBucketB\x03\xe0A\x03R\abuckets\"\xb3\x01\n" +
 	"\n" +
 	"TimeBucket\x125\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\x05start\x12!\n" +
 	"\fcharge_count\x18\x03 \x01(\x03R\vchargeCount\x12(\n" +
-	"\x05spent\x18\x05 \x01(\v2\x12.google.type.MoneyR\x05spentJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05R\x06amountR\ramount_micros2\xdb\x04\n" +
+	"\x05spent\x18\x05 \x01(\v2\x12.google.type.MoneyR\x05spentJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05R\x06amountR\ramount_micros2\xd7\x05\n" +
 	"\x0eBillingService\x12n\n" +
 	"\x10GetTenantSummary\x12).paladin.admin.v1.GetTenantSummaryRequest\x1a*.paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12w\n" +
 	"\x13GetTenantTimeSeries\x12,.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a-.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01\x12}\n" +
-	"\x15GetPlatformTimeSeries\x12..paladin.admin.v1.GetPlatformTimeSeriesRequest\x1a/.paladin.admin.v1.GetPlatformTimeSeriesResponse\"\x03\x90\x02\x01\x12k\n" +
+	"\x15GetPlatformTimeSeries\x12..paladin.admin.v1.GetPlatformTimeSeriesRequest\x1a/.paladin.admin.v1.GetPlatformTimeSeriesResponse\"\x03\x90\x02\x01\x12z\n" +
+	"\x14ListTenantTimeSeries\x12-.paladin.admin.v1.ListTenantTimeSeriesRequest\x1a..paladin.admin.v1.ListTenantTimeSeriesResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x0fListTenantSpend\x12(.paladin.admin.v1.ListTenantSpendRequest\x1a).paladin.admin.v1.ListTenantSpendResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\x12GetBillingSettings\x12+.paladin.admin.v1.GetBillingSettingsRequest\x1a,.paladin.admin.v1.GetBillingSettingsResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
@@ -935,7 +1118,7 @@ func file_paladin_admin_v1_billing_service_proto_rawDescGZIP() []byte {
 	return file_paladin_admin_v1_billing_service_proto_rawDescData
 }
 
-var file_paladin_admin_v1_billing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_paladin_admin_v1_billing_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_paladin_admin_v1_billing_service_proto_goTypes = []any{
 	(*ListTenantSpendRequest)(nil),        // 0: paladin.admin.v1.ListTenantSpendRequest
 	(*ListTenantSpendResponse)(nil),       // 1: paladin.admin.v1.ListTenantSpendResponse
@@ -949,48 +1132,57 @@ var file_paladin_admin_v1_billing_service_proto_goTypes = []any{
 	(*GetTenantTimeSeriesResponse)(nil),   // 9: paladin.admin.v1.GetTenantTimeSeriesResponse
 	(*GetPlatformTimeSeriesRequest)(nil),  // 10: paladin.admin.v1.GetPlatformTimeSeriesRequest
 	(*GetPlatformTimeSeriesResponse)(nil), // 11: paladin.admin.v1.GetPlatformTimeSeriesResponse
-	(*TimeBucket)(nil),                    // 12: paladin.admin.v1.TimeBucket
-	(*timestamppb.Timestamp)(nil),         // 13: google.protobuf.Timestamp
-	(*money.Money)(nil),                   // 14: google.type.Money
-	(*UnlimitedBudget)(nil),               // 15: paladin.admin.v1.UnlimitedBudget
+	(*ListTenantTimeSeriesRequest)(nil),   // 12: paladin.admin.v1.ListTenantTimeSeriesRequest
+	(*ListTenantTimeSeriesResponse)(nil),  // 13: paladin.admin.v1.ListTenantTimeSeriesResponse
+	(*TenantTimeSeries)(nil),              // 14: paladin.admin.v1.TenantTimeSeries
+	(*TimeBucket)(nil),                    // 15: paladin.admin.v1.TimeBucket
+	(*timestamppb.Timestamp)(nil),         // 16: google.protobuf.Timestamp
+	(*money.Money)(nil),                   // 17: google.type.Money
+	(*UnlimitedBudget)(nil),               // 18: paladin.admin.v1.UnlimitedBudget
 }
 var file_paladin_admin_v1_billing_service_proto_depIdxs = []int32{
-	13, // 0: paladin.admin.v1.ListTenantSpendRequest.period_start:type_name -> google.protobuf.Timestamp
-	13, // 1: paladin.admin.v1.ListTenantSpendRequest.period_end:type_name -> google.protobuf.Timestamp
+	16, // 0: paladin.admin.v1.ListTenantSpendRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 1: paladin.admin.v1.ListTenantSpendRequest.period_end:type_name -> google.protobuf.Timestamp
 	2,  // 2: paladin.admin.v1.ListTenantSpendResponse.tenants:type_name -> paladin.admin.v1.TenantSpend
-	14, // 3: paladin.admin.v1.TenantSpend.spent:type_name -> google.type.Money
-	13, // 4: paladin.admin.v1.GetTenantSummaryRequest.period_start:type_name -> google.protobuf.Timestamp
-	13, // 5: paladin.admin.v1.GetTenantSummaryRequest.period_end:type_name -> google.protobuf.Timestamp
-	14, // 6: paladin.admin.v1.GetTenantSummaryResponse.total:type_name -> google.type.Money
-	14, // 7: paladin.admin.v1.GetTenantSummaryResponse.max_budget:type_name -> google.type.Money
-	15, // 8: paladin.admin.v1.GetTenantSummaryResponse.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
+	17, // 3: paladin.admin.v1.TenantSpend.spent:type_name -> google.type.Money
+	16, // 4: paladin.admin.v1.GetTenantSummaryRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 5: paladin.admin.v1.GetTenantSummaryRequest.period_end:type_name -> google.protobuf.Timestamp
+	17, // 6: paladin.admin.v1.GetTenantSummaryResponse.total:type_name -> google.type.Money
+	17, // 7: paladin.admin.v1.GetTenantSummaryResponse.max_budget:type_name -> google.type.Money
+	18, // 8: paladin.admin.v1.GetTenantSummaryResponse.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
 	7,  // 9: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
 	7,  // 10: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
 	7,  // 11: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
-	14, // 12: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
-	13, // 13: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	13, // 14: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	12, // 15: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
-	13, // 16: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	13, // 17: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	12, // 18: paladin.admin.v1.GetPlatformTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
-	13, // 19: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
-	14, // 20: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
-	5,  // 21: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
-	8,  // 22: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
-	10, // 23: paladin.admin.v1.BillingService.GetPlatformTimeSeries:input_type -> paladin.admin.v1.GetPlatformTimeSeriesRequest
-	0,  // 24: paladin.admin.v1.BillingService.ListTenantSpend:input_type -> paladin.admin.v1.ListTenantSpendRequest
-	3,  // 25: paladin.admin.v1.BillingService.GetBillingSettings:input_type -> paladin.admin.v1.GetBillingSettingsRequest
-	6,  // 26: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
-	9,  // 27: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
-	11, // 28: paladin.admin.v1.BillingService.GetPlatformTimeSeries:output_type -> paladin.admin.v1.GetPlatformTimeSeriesResponse
-	1,  // 29: paladin.admin.v1.BillingService.ListTenantSpend:output_type -> paladin.admin.v1.ListTenantSpendResponse
-	4,  // 30: paladin.admin.v1.BillingService.GetBillingSettings:output_type -> paladin.admin.v1.GetBillingSettingsResponse
-	26, // [26:31] is the sub-list for method output_type
-	21, // [21:26] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	17, // 12: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
+	16, // 13: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 14: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	15, // 15: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
+	16, // 16: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 17: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	15, // 18: paladin.admin.v1.GetPlatformTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
+	16, // 19: paladin.admin.v1.ListTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 20: paladin.admin.v1.ListTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	14, // 21: paladin.admin.v1.ListTenantTimeSeriesResponse.series:type_name -> paladin.admin.v1.TenantTimeSeries
+	15, // 22: paladin.admin.v1.TenantTimeSeries.buckets:type_name -> paladin.admin.v1.TimeBucket
+	16, // 23: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
+	17, // 24: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
+	5,  // 25: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
+	8,  // 26: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
+	10, // 27: paladin.admin.v1.BillingService.GetPlatformTimeSeries:input_type -> paladin.admin.v1.GetPlatformTimeSeriesRequest
+	12, // 28: paladin.admin.v1.BillingService.ListTenantTimeSeries:input_type -> paladin.admin.v1.ListTenantTimeSeriesRequest
+	0,  // 29: paladin.admin.v1.BillingService.ListTenantSpend:input_type -> paladin.admin.v1.ListTenantSpendRequest
+	3,  // 30: paladin.admin.v1.BillingService.GetBillingSettings:input_type -> paladin.admin.v1.GetBillingSettingsRequest
+	6,  // 31: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
+	9,  // 32: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
+	11, // 33: paladin.admin.v1.BillingService.GetPlatformTimeSeries:output_type -> paladin.admin.v1.GetPlatformTimeSeriesResponse
+	13, // 34: paladin.admin.v1.BillingService.ListTenantTimeSeries:output_type -> paladin.admin.v1.ListTenantTimeSeriesResponse
+	1,  // 35: paladin.admin.v1.BillingService.ListTenantSpend:output_type -> paladin.admin.v1.ListTenantSpendResponse
+	4,  // 36: paladin.admin.v1.BillingService.GetBillingSettings:output_type -> paladin.admin.v1.GetBillingSettingsResponse
+	31, // [31:37] is the sub-list for method output_type
+	25, // [25:31] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_billing_service_proto_init() }
@@ -1009,7 +1201,7 @@ func file_paladin_admin_v1_billing_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_billing_service_proto_rawDesc), len(file_paladin_admin_v1_billing_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

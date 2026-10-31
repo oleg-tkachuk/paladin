@@ -348,6 +348,57 @@ func (h *Handler) GetPlatformTimeSeries(ctx context.Context, periodStart, period
 	return out, nil
 }
 
+// TenantSeries is one tenant's spend series.
+type TenantSeries struct {
+	TenantID uuid.UUID
+	Series   TimeSeries
+}
+
+// ListTenantTimeSeries is GetTenantTimeSeries for each of tenantIDs, from one
+// sum of the ledger across them, grouped by tenant: one series per tenant, in
+// the order asked, each in the unit most of its charges are in. A tenant that
+// spent nothing has no buckets, in the platform's currency. It reads every
+// named tenant's rows, so it is gated as ListTenantSpend is.
+func (h *Handler) ListTenantTimeSeries(ctx context.Context, tenantIDs []uuid.UUID, periodStart, periodEnd time.Time, granularity string) ([]TenantSeries, error) {
+	if err := h.authorizeAcrossTenants(ctx); err != nil {
+		return nil, err
+	}
+	start, end, granularity, err := seriesWindow(periodStart, periodEnd, granularity)
+	if err != nil {
+		return nil, err
+	}
+	if h.ledger == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
+	}
+	byTenant := make(map[uuid.UUID][]meter.ChargeSum, len(tenantIDs))
+	if start.Before(end) && len(tenantIDs) > 0 {
+		req := meter.SumChargesRequest{
+			AllTenants: true, From: start, To: end, Bucket: ledgerBuckets[granularity],
+			GroupBy: []meter.ChargeDimension{meter.ChargeDimensionTenant},
+			Filter:  meter.ChargeFilter{Tenants: tenantIDs},
+		}
+		// The named tenants' rows, read with no write allowed.
+		if err := h.sumCharges(auth.WithCrossTenantRead(ctx), req, func(s meter.ChargeSum) bool {
+			byTenant[s.TenantID] = append(byTenant[s.TenantID], s)
+			return true
+		}); err != nil {
+			return nil, err
+		}
+	}
+	out := make([]TenantSeries, 0, len(tenantIDs))
+	for _, id := range tenantIDs {
+		ts := TimeSeries{Buckets: make([]TimeBucket, 0)}
+		if sums := byTenant[id]; len(sums) > 0 {
+			ts.UnitCode, ts.Buckets = series(sums)
+		}
+		if ts.UnitCode == "" {
+			ts.UnitCode = h.currency
+		}
+		out = append(out, TenantSeries{TenantID: id, Series: ts})
+	}
+	return out, nil
+}
+
 // Currency is the platform's currency, capability.currency, for a caller that
 // may read its own tenant's billing: a client shows it and defaults to it.
 func (h *Handler) Currency(ctx context.Context) (string, error) {

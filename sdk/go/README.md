@@ -662,7 +662,7 @@ what each field means, are documented in the `.proto` files under
 | `APITokenService` | `Create`, `Revoke`, `List`, `Get`, `GetSelf`, `GetUsage` |
 | `AuditLogService` | `ListAuditLog`, `GetAuditLogEntry`, `ExportAuditLog` |
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
-| `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `GetPlatformTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |
+| `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `GetPlatformTimeSeries`, `ListTenantTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |
 | `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
 | `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage`, `ListOperationGrants` |
 | `CELService` | `Validate` |
