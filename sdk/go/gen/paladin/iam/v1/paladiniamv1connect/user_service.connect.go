@@ -47,6 +47,9 @@ const (
 	// UserServiceRevokeOAuthGrantProcedure is the procedure name of the UserService's RevokeOAuthGrant
 	// RPC.
 	UserServiceRevokeOAuthGrantProcedure = "/paladin.iam.v1.UserService/RevokeOAuthGrant"
+	// UserServiceListUserCapabilitiesProcedure is the procedure name of the UserService's
+	// ListUserCapabilities RPC.
+	UserServiceListUserCapabilitiesProcedure = "/paladin.iam.v1.UserService/ListUserCapabilities"
 )
 
 var (
@@ -129,6 +132,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
+	userServiceListUserCapabilitiesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_iam_v1_user_service_proto.Services().ByName("UserService").Methods().ByName("ListUserCapabilities"),
+			Procedure:        UserServiceListUserCapabilitiesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // UserServiceClient is a client for the paladin.iam.v1.UserService service.
@@ -162,6 +173,11 @@ type UserServiceClient interface {
 	// RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
 	// at once, and an access token it already holds within its short lifetime.
 	RevokeOAuthGrant(context.Context, *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error)
+	// ListUserCapabilities returns the capabilities that act on the user's
+	// behalf: those an agent exchanged under one of the user's OAuth grants,
+	// and those delegated from them. Any user may list their own; a tenant
+	// admin those of the tenant's users.
+	ListUserCapabilities(context.Context, *v1.ListUserCapabilitiesRequest) (*v1.ListUserCapabilitiesResponse, error)
 }
 
 // NewUserServiceClient constructs a client for the paladin.iam.v1.UserService service. Multiple
@@ -201,6 +217,11 @@ type UserServiceHandler interface {
 	// RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
 	// at once, and an access token it already holds within its short lifetime.
 	RevokeOAuthGrant(context.Context, *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error)
+	// ListUserCapabilities returns the capabilities that act on the user's
+	// behalf: those an agent exchanged under one of the user's OAuth grants,
+	// and those delegated from them. Any user may list their own; a tenant
+	// admin those of the tenant's users.
+	ListUserCapabilities(context.Context, *v1.ListUserCapabilitiesRequest) (*v1.ListUserCapabilitiesResponse, error)
 }
 
 // RegisterUserServiceHandler registers svc as the paladin.iam.v1.UserService implementation on
@@ -218,6 +239,7 @@ func RegisterUserServiceHandler(server *connect.Server, svc UserServiceHandler) 
 		connect.Method{Spec: userServiceResetPasswordSpec(), Handler: adapter.resetPassword},
 		connect.Method{Spec: userServiceListOAuthGrantsSpec(), Handler: adapter.listOAuthGrants},
 		connect.Method{Spec: userServiceRevokeOAuthGrantSpec(), Handler: adapter.revokeOAuthGrant},
+		connect.Method{Spec: userServiceListUserCapabilitiesSpec(), Handler: adapter.listUserCapabilities},
 	)
 }
 
@@ -262,6 +284,10 @@ func (UnimplementedUserServiceHandler) ListOAuthGrants(context.Context, *v1.List
 
 func (UnimplementedUserServiceHandler) RevokeOAuthGrant(context.Context, *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.RevokeOAuthGrant is not implemented")
+}
+
+func (UnimplementedUserServiceHandler) ListUserCapabilities(context.Context, *v1.ListUserCapabilitiesRequest) (*v1.ListUserCapabilitiesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.iam.v1.UserService.ListUserCapabilities is not implemented")
 }
 
 type userServiceClient struct {
@@ -343,6 +369,14 @@ func (c *userServiceClient) ListOAuthGrants(ctx context.Context, req *v1.ListOAu
 func (c *userServiceClient) RevokeOAuthGrant(ctx context.Context, req *v1.RevokeOAuthGrantRequest) (*v1.RevokeOAuthGrantResponse, error) {
 	var res v1.RevokeOAuthGrantResponse
 	if err := c.client.CallUnary(ctx, userServiceRevokeOAuthGrantSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) ListUserCapabilities(ctx context.Context, req *v1.ListUserCapabilitiesRequest) (*v1.ListUserCapabilitiesResponse, error) {
+	var res v1.ListUserCapabilitiesResponse
+	if err := c.client.CallUnary(ctx, userServiceListUserCapabilitiesSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -464,6 +498,18 @@ func (h userServiceHandler) revokeOAuthGrant(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.RevokeOAuthGrant(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) listUserCapabilities(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListUserCapabilitiesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListUserCapabilities(ctx, &req)
 	if err != nil {
 		return err
 	}

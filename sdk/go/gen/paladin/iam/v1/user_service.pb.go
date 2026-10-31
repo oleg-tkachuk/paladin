@@ -84,6 +84,60 @@ func (OAuthGrant_State) EnumDescriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_user_service_proto_rawDescGZIP(), []int{13, 0}
 }
 
+// State is what the capability is now: revoked — itself or an ancestor —
+// over expired over active.
+type UserCapability_State int32
+
+const (
+	UserCapability_STATE_UNSPECIFIED UserCapability_State = 0
+	UserCapability_STATE_ACTIVE      UserCapability_State = 1
+	UserCapability_STATE_EXPIRED     UserCapability_State = 2
+	UserCapability_STATE_REVOKED     UserCapability_State = 3
+)
+
+// Enum value maps for UserCapability_State.
+var (
+	UserCapability_State_name = map[int32]string{
+		0: "STATE_UNSPECIFIED",
+		1: "STATE_ACTIVE",
+		2: "STATE_EXPIRED",
+		3: "STATE_REVOKED",
+	}
+	UserCapability_State_value = map[string]int32{
+		"STATE_UNSPECIFIED": 0,
+		"STATE_ACTIVE":      1,
+		"STATE_EXPIRED":     2,
+		"STATE_REVOKED":     3,
+	}
+)
+
+func (x UserCapability_State) Enum() *UserCapability_State {
+	p := new(UserCapability_State)
+	*p = x
+	return p
+}
+
+func (x UserCapability_State) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (UserCapability_State) Descriptor() protoreflect.EnumDescriptor {
+	return file_paladin_iam_v1_user_service_proto_enumTypes[1].Descriptor()
+}
+
+func (UserCapability_State) Type() protoreflect.EnumType {
+	return &file_paladin_iam_v1_user_service_proto_enumTypes[1]
+}
+
+func (x UserCapability_State) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use UserCapability_State.Descriptor instead.
+func (UserCapability_State) EnumDescriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_user_service_proto_rawDescGZIP(), []int{18, 0}
+}
+
 type CreateUserRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Parent: "tenants/{tenant_id_or_slug}". Empty means the caller's own
@@ -1007,6 +1061,264 @@ func (*RevokeOAuthGrantResponse) Descriptor() ([]byte, []int) {
 	return file_paladin_iam_v1_user_service_proto_rawDescGZIP(), []int{15}
 }
 
+type ListUserCapabilitiesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The user whose capabilities to list.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// states lists the capabilities in any of these; empty, the active ones.
+	States        []UserCapability_State `protobuf:"varint,2,rep,packed,name=states,proto3,enum=paladin.iam.v1.UserCapability_State" json:"states,omitempty"`
+	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUserCapabilitiesRequest) Reset() {
+	*x = ListUserCapabilitiesRequest{}
+	mi := &file_paladin_iam_v1_user_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUserCapabilitiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUserCapabilitiesRequest) ProtoMessage() {}
+
+func (x *ListUserCapabilitiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_user_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUserCapabilitiesRequest.ProtoReflect.Descriptor instead.
+func (*ListUserCapabilitiesRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_user_service_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListUserCapabilitiesRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ListUserCapabilitiesRequest) GetStates() []UserCapability_State {
+	if x != nil {
+		return x.States
+	}
+	return nil
+}
+
+func (x *ListUserCapabilitiesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListUserCapabilitiesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListUserCapabilitiesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// capabilities are newest first.
+	Capabilities  []*UserCapability `protobuf:"bytes,1,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	NextPageToken string            `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListUserCapabilitiesResponse) Reset() {
+	*x = ListUserCapabilitiesResponse{}
+	mi := &file_paladin_iam_v1_user_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListUserCapabilitiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListUserCapabilitiesResponse) ProtoMessage() {}
+
+func (x *ListUserCapabilitiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_user_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListUserCapabilitiesResponse.ProtoReflect.Descriptor instead.
+func (*ListUserCapabilitiesResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_user_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListUserCapabilitiesResponse) GetCapabilities() []*UserCapability {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *ListUserCapabilitiesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// UserCapability is a capability acting on a user's behalf, as the user sees
+// it: which client holds it, under which grant, and what it allows.
+type UserCapability struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// client_id is the OAuth client the capability was granted to.
+	ClientId string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	// grant_id is the OAuth grant it was exchanged under, whose revocation
+	// revokes it. Empty for one issued outside a grant.
+	GrantId string `protobuf:"bytes,3,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
+	// parent_id is the capability it was delegated from; empty for one
+	// exchanged directly.
+	ParentId string `protobuf:"bytes,4,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	// audience is the planes it may be presented to.
+	Audience []string `protobuf:"bytes,5,rep,name=audience,proto3" json:"audience,omitempty"`
+	// operations is what it allows.
+	Operations []string               `protobuf:"bytes,6,rep,name=operations,proto3" json:"operations,omitempty"`
+	IssuedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	ExpiresAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	State      UserCapability_State   `protobuf:"varint,9,opt,name=state,proto3,enum=paladin.iam.v1.UserCapability_State" json:"state,omitempty"`
+	// revoked_at and revocation_reason are those of the entry that revoked
+	// it: its own, or an ancestor's. Unset unless state is REVOKED.
+	RevokedAt        *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	RevocationReason string                 `protobuf:"bytes,11,opt,name=revocation_reason,json=revocationReason,proto3" json:"revocation_reason,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UserCapability) Reset() {
+	*x = UserCapability{}
+	mi := &file_paladin_iam_v1_user_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserCapability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserCapability) ProtoMessage() {}
+
+func (x *UserCapability) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_iam_v1_user_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserCapability.ProtoReflect.Descriptor instead.
+func (*UserCapability) Descriptor() ([]byte, []int) {
+	return file_paladin_iam_v1_user_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *UserCapability) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UserCapability) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *UserCapability) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
+	}
+	return ""
+}
+
+func (x *UserCapability) GetParentId() string {
+	if x != nil {
+		return x.ParentId
+	}
+	return ""
+}
+
+func (x *UserCapability) GetAudience() []string {
+	if x != nil {
+		return x.Audience
+	}
+	return nil
+}
+
+func (x *UserCapability) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *UserCapability) GetIssuedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IssuedAt
+	}
+	return nil
+}
+
+func (x *UserCapability) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *UserCapability) GetState() UserCapability_State {
+	if x != nil {
+		return x.State
+	}
+	return UserCapability_STATE_UNSPECIFIED
+}
+
+func (x *UserCapability) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
+func (x *UserCapability) GetRevocationReason() string {
+	if x != nil {
+		return x.RevocationReason
+	}
+	return ""
+}
+
 var File_paladin_iam_v1_user_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
@@ -1077,7 +1389,38 @@ const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\x17RevokeOAuthGrantRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12#\n" +
 	"\bgrant_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\agrantId\"\x1a\n" +
-	"\x18RevokeOAuthGrantResponse2\xed\x06\n" +
+	"\x18RevokeOAuthGrantResponse\"\xce\x01\n" +
+	"\x1bListUserCapabilitiesRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12M\n" +
+	"\x06states\x18\x02 \x03(\x0e2$.paladin.iam.v1.UserCapability.StateB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12$\n" +
+	"\tpage_size\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"\x8a\x01\n" +
+	"\x1cListUserCapabilitiesResponse\x12B\n" +
+	"\fcapabilities\x18\x01 \x03(\v2\x1e.paladin.iam.v1.UserCapabilityR\fcapabilities\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd8\x04\n" +
+	"\x0eUserCapability\x12\x13\n" +
+	"\x02id\x18\x01 \x01(\tB\x03\xe0A\x03R\x02id\x12 \n" +
+	"\tclient_id\x18\x02 \x01(\tB\x03\xe0A\x03R\bclientId\x12\x1e\n" +
+	"\bgrant_id\x18\x03 \x01(\tB\x03\xe0A\x03R\agrantId\x12 \n" +
+	"\tparent_id\x18\x04 \x01(\tB\x03\xe0A\x03R\bparentId\x12\x1f\n" +
+	"\baudience\x18\x05 \x03(\tB\x03\xe0A\x03R\baudience\x12#\n" +
+	"\n" +
+	"operations\x18\x06 \x03(\tB\x03\xe0A\x03R\n" +
+	"operations\x12<\n" +
+	"\tissued_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\bissuedAt\x12>\n" +
+	"\n" +
+	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\texpiresAt\x12?\n" +
+	"\x05state\x18\t \x01(\x0e2$.paladin.iam.v1.UserCapability.StateB\x03\xe0A\x03R\x05state\x12>\n" +
+	"\n" +
+	"revoked_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\trevokedAt\x120\n" +
+	"\x11revocation_reason\x18\v \x01(\tB\x03\xe0A\x03R\x10revocationReason\"V\n" +
+	"\x05State\x12\x15\n" +
+	"\x11STATE_UNSPECIFIED\x10\x00\x12\x10\n" +
+	"\fSTATE_ACTIVE\x10\x01\x12\x11\n" +
+	"\rSTATE_EXPIRED\x10\x02\x12\x11\n" +
+	"\rSTATE_REVOKED\x10\x032\xe5\a\n" +
 	"\vUserService\x12E\n" +
 	"\n" +
 	"CreateUser\x12!.paladin.iam.v1.CreateUserRequest\x1a\x14.paladin.iam.v1.User\x12D\n" +
@@ -1091,7 +1434,8 @@ const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\fRevokeScopes\x12#.paladin.iam.v1.RevokeScopesRequest\x1a\x14.paladin.iam.v1.User\"\x03\x90\x02\x02\x12a\n" +
 	"\rResetPassword\x12$.paladin.iam.v1.ResetPasswordRequest\x1a%.paladin.iam.v1.ResetPasswordResponse\"\x03\x90\x02\x02\x12g\n" +
 	"\x0fListOAuthGrants\x12&.paladin.iam.v1.ListOAuthGrantsRequest\x1a'.paladin.iam.v1.ListOAuthGrantsResponse\"\x03\x90\x02\x01\x12j\n" +
-	"\x10RevokeOAuthGrant\x12'.paladin.iam.v1.RevokeOAuthGrantRequest\x1a(.paladin.iam.v1.RevokeOAuthGrantResponse\"\x03\x90\x02\x02BHZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3"
+	"\x10RevokeOAuthGrant\x12'.paladin.iam.v1.RevokeOAuthGrantRequest\x1a(.paladin.iam.v1.RevokeOAuthGrantResponse\"\x03\x90\x02\x02\x12v\n" +
+	"\x14ListUserCapabilities\x12+.paladin.iam.v1.ListUserCapabilitiesRequest\x1a,.paladin.iam.v1.ListUserCapabilitiesResponse\"\x03\x90\x02\x01BHZFgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1;paladiniamv1b\x06proto3"
 
 var (
 	file_paladin_iam_v1_user_service_proto_rawDescOnce sync.Once
@@ -1105,71 +1449,83 @@ func file_paladin_iam_v1_user_service_proto_rawDescGZIP() []byte {
 	return file_paladin_iam_v1_user_service_proto_rawDescData
 }
 
-var file_paladin_iam_v1_user_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_iam_v1_user_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_paladin_iam_v1_user_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_paladin_iam_v1_user_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_paladin_iam_v1_user_service_proto_goTypes = []any{
-	(OAuthGrant_State)(0),            // 0: paladin.iam.v1.OAuthGrant.State
-	(*CreateUserRequest)(nil),        // 1: paladin.iam.v1.CreateUserRequest
-	(*GetUserRequest)(nil),           // 2: paladin.iam.v1.GetUserRequest
-	(*UpdateUserRequest)(nil),        // 3: paladin.iam.v1.UpdateUserRequest
-	(*DeleteUserRequest)(nil),        // 4: paladin.iam.v1.DeleteUserRequest
-	(*DeleteUserResponse)(nil),       // 5: paladin.iam.v1.DeleteUserResponse
-	(*ListUsersRequest)(nil),         // 6: paladin.iam.v1.ListUsersRequest
-	(*ListUsersResponse)(nil),        // 7: paladin.iam.v1.ListUsersResponse
-	(*GrantScopesRequest)(nil),       // 8: paladin.iam.v1.GrantScopesRequest
-	(*RevokeScopesRequest)(nil),      // 9: paladin.iam.v1.RevokeScopesRequest
-	(*ResetPasswordRequest)(nil),     // 10: paladin.iam.v1.ResetPasswordRequest
-	(*ResetPasswordResponse)(nil),    // 11: paladin.iam.v1.ResetPasswordResponse
-	(*ListOAuthGrantsRequest)(nil),   // 12: paladin.iam.v1.ListOAuthGrantsRequest
-	(*ListOAuthGrantsResponse)(nil),  // 13: paladin.iam.v1.ListOAuthGrantsResponse
-	(*OAuthGrant)(nil),               // 14: paladin.iam.v1.OAuthGrant
-	(*RevokeOAuthGrantRequest)(nil),  // 15: paladin.iam.v1.RevokeOAuthGrantRequest
-	(*RevokeOAuthGrantResponse)(nil), // 16: paladin.iam.v1.RevokeOAuthGrantResponse
-	(*v1.Scope)(nil),                 // 17: paladin.common.v1.Scope
-	(*fieldmaskpb.FieldMask)(nil),    // 18: google.protobuf.FieldMask
-	(*v1.PageRequest)(nil),           // 19: paladin.common.v1.PageRequest
-	(*User)(nil),                     // 20: paladin.iam.v1.User
-	(*v1.PageResponse)(nil),          // 21: paladin.common.v1.PageResponse
-	(*timestamppb.Timestamp)(nil),    // 22: google.protobuf.Timestamp
+	(OAuthGrant_State)(0),                // 0: paladin.iam.v1.OAuthGrant.State
+	(UserCapability_State)(0),            // 1: paladin.iam.v1.UserCapability.State
+	(*CreateUserRequest)(nil),            // 2: paladin.iam.v1.CreateUserRequest
+	(*GetUserRequest)(nil),               // 3: paladin.iam.v1.GetUserRequest
+	(*UpdateUserRequest)(nil),            // 4: paladin.iam.v1.UpdateUserRequest
+	(*DeleteUserRequest)(nil),            // 5: paladin.iam.v1.DeleteUserRequest
+	(*DeleteUserResponse)(nil),           // 6: paladin.iam.v1.DeleteUserResponse
+	(*ListUsersRequest)(nil),             // 7: paladin.iam.v1.ListUsersRequest
+	(*ListUsersResponse)(nil),            // 8: paladin.iam.v1.ListUsersResponse
+	(*GrantScopesRequest)(nil),           // 9: paladin.iam.v1.GrantScopesRequest
+	(*RevokeScopesRequest)(nil),          // 10: paladin.iam.v1.RevokeScopesRequest
+	(*ResetPasswordRequest)(nil),         // 11: paladin.iam.v1.ResetPasswordRequest
+	(*ResetPasswordResponse)(nil),        // 12: paladin.iam.v1.ResetPasswordResponse
+	(*ListOAuthGrantsRequest)(nil),       // 13: paladin.iam.v1.ListOAuthGrantsRequest
+	(*ListOAuthGrantsResponse)(nil),      // 14: paladin.iam.v1.ListOAuthGrantsResponse
+	(*OAuthGrant)(nil),                   // 15: paladin.iam.v1.OAuthGrant
+	(*RevokeOAuthGrantRequest)(nil),      // 16: paladin.iam.v1.RevokeOAuthGrantRequest
+	(*RevokeOAuthGrantResponse)(nil),     // 17: paladin.iam.v1.RevokeOAuthGrantResponse
+	(*ListUserCapabilitiesRequest)(nil),  // 18: paladin.iam.v1.ListUserCapabilitiesRequest
+	(*ListUserCapabilitiesResponse)(nil), // 19: paladin.iam.v1.ListUserCapabilitiesResponse
+	(*UserCapability)(nil),               // 20: paladin.iam.v1.UserCapability
+	(*v1.Scope)(nil),                     // 21: paladin.common.v1.Scope
+	(*fieldmaskpb.FieldMask)(nil),        // 22: google.protobuf.FieldMask
+	(*v1.PageRequest)(nil),               // 23: paladin.common.v1.PageRequest
+	(*User)(nil),                         // 24: paladin.iam.v1.User
+	(*v1.PageResponse)(nil),              // 25: paladin.common.v1.PageResponse
+	(*timestamppb.Timestamp)(nil),        // 26: google.protobuf.Timestamp
 }
 var file_paladin_iam_v1_user_service_proto_depIdxs = []int32{
-	17, // 0: paladin.iam.v1.CreateUserRequest.scopes:type_name -> paladin.common.v1.Scope
-	18, // 1: paladin.iam.v1.UpdateUserRequest.update_mask:type_name -> google.protobuf.FieldMask
-	19, // 2: paladin.iam.v1.ListUsersRequest.page:type_name -> paladin.common.v1.PageRequest
-	20, // 3: paladin.iam.v1.ListUsersResponse.users:type_name -> paladin.iam.v1.User
-	21, // 4: paladin.iam.v1.ListUsersResponse.page:type_name -> paladin.common.v1.PageResponse
-	17, // 5: paladin.iam.v1.GrantScopesRequest.scopes:type_name -> paladin.common.v1.Scope
-	17, // 6: paladin.iam.v1.RevokeScopesRequest.scopes:type_name -> paladin.common.v1.Scope
-	14, // 7: paladin.iam.v1.ListOAuthGrantsResponse.grants:type_name -> paladin.iam.v1.OAuthGrant
-	22, // 8: paladin.iam.v1.OAuthGrant.granted_at:type_name -> google.protobuf.Timestamp
-	22, // 9: paladin.iam.v1.OAuthGrant.refreshed_at:type_name -> google.protobuf.Timestamp
-	22, // 10: paladin.iam.v1.OAuthGrant.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 0: paladin.iam.v1.CreateUserRequest.scopes:type_name -> paladin.common.v1.Scope
+	22, // 1: paladin.iam.v1.UpdateUserRequest.update_mask:type_name -> google.protobuf.FieldMask
+	23, // 2: paladin.iam.v1.ListUsersRequest.page:type_name -> paladin.common.v1.PageRequest
+	24, // 3: paladin.iam.v1.ListUsersResponse.users:type_name -> paladin.iam.v1.User
+	25, // 4: paladin.iam.v1.ListUsersResponse.page:type_name -> paladin.common.v1.PageResponse
+	21, // 5: paladin.iam.v1.GrantScopesRequest.scopes:type_name -> paladin.common.v1.Scope
+	21, // 6: paladin.iam.v1.RevokeScopesRequest.scopes:type_name -> paladin.common.v1.Scope
+	15, // 7: paladin.iam.v1.ListOAuthGrantsResponse.grants:type_name -> paladin.iam.v1.OAuthGrant
+	26, // 8: paladin.iam.v1.OAuthGrant.granted_at:type_name -> google.protobuf.Timestamp
+	26, // 9: paladin.iam.v1.OAuthGrant.refreshed_at:type_name -> google.protobuf.Timestamp
+	26, // 10: paladin.iam.v1.OAuthGrant.expires_at:type_name -> google.protobuf.Timestamp
 	0,  // 11: paladin.iam.v1.OAuthGrant.state:type_name -> paladin.iam.v1.OAuthGrant.State
-	1,  // 12: paladin.iam.v1.UserService.CreateUser:input_type -> paladin.iam.v1.CreateUserRequest
-	2,  // 13: paladin.iam.v1.UserService.GetUser:input_type -> paladin.iam.v1.GetUserRequest
-	3,  // 14: paladin.iam.v1.UserService.UpdateUser:input_type -> paladin.iam.v1.UpdateUserRequest
-	4,  // 15: paladin.iam.v1.UserService.DeleteUser:input_type -> paladin.iam.v1.DeleteUserRequest
-	6,  // 16: paladin.iam.v1.UserService.ListUsers:input_type -> paladin.iam.v1.ListUsersRequest
-	8,  // 17: paladin.iam.v1.UserService.GrantScopes:input_type -> paladin.iam.v1.GrantScopesRequest
-	9,  // 18: paladin.iam.v1.UserService.RevokeScopes:input_type -> paladin.iam.v1.RevokeScopesRequest
-	10, // 19: paladin.iam.v1.UserService.ResetPassword:input_type -> paladin.iam.v1.ResetPasswordRequest
-	12, // 20: paladin.iam.v1.UserService.ListOAuthGrants:input_type -> paladin.iam.v1.ListOAuthGrantsRequest
-	15, // 21: paladin.iam.v1.UserService.RevokeOAuthGrant:input_type -> paladin.iam.v1.RevokeOAuthGrantRequest
-	20, // 22: paladin.iam.v1.UserService.CreateUser:output_type -> paladin.iam.v1.User
-	20, // 23: paladin.iam.v1.UserService.GetUser:output_type -> paladin.iam.v1.User
-	20, // 24: paladin.iam.v1.UserService.UpdateUser:output_type -> paladin.iam.v1.User
-	5,  // 25: paladin.iam.v1.UserService.DeleteUser:output_type -> paladin.iam.v1.DeleteUserResponse
-	7,  // 26: paladin.iam.v1.UserService.ListUsers:output_type -> paladin.iam.v1.ListUsersResponse
-	20, // 27: paladin.iam.v1.UserService.GrantScopes:output_type -> paladin.iam.v1.User
-	20, // 28: paladin.iam.v1.UserService.RevokeScopes:output_type -> paladin.iam.v1.User
-	11, // 29: paladin.iam.v1.UserService.ResetPassword:output_type -> paladin.iam.v1.ResetPasswordResponse
-	13, // 30: paladin.iam.v1.UserService.ListOAuthGrants:output_type -> paladin.iam.v1.ListOAuthGrantsResponse
-	16, // 31: paladin.iam.v1.UserService.RevokeOAuthGrant:output_type -> paladin.iam.v1.RevokeOAuthGrantResponse
-	22, // [22:32] is the sub-list for method output_type
-	12, // [12:22] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	1,  // 12: paladin.iam.v1.ListUserCapabilitiesRequest.states:type_name -> paladin.iam.v1.UserCapability.State
+	20, // 13: paladin.iam.v1.ListUserCapabilitiesResponse.capabilities:type_name -> paladin.iam.v1.UserCapability
+	26, // 14: paladin.iam.v1.UserCapability.issued_at:type_name -> google.protobuf.Timestamp
+	26, // 15: paladin.iam.v1.UserCapability.expires_at:type_name -> google.protobuf.Timestamp
+	1,  // 16: paladin.iam.v1.UserCapability.state:type_name -> paladin.iam.v1.UserCapability.State
+	26, // 17: paladin.iam.v1.UserCapability.revoked_at:type_name -> google.protobuf.Timestamp
+	2,  // 18: paladin.iam.v1.UserService.CreateUser:input_type -> paladin.iam.v1.CreateUserRequest
+	3,  // 19: paladin.iam.v1.UserService.GetUser:input_type -> paladin.iam.v1.GetUserRequest
+	4,  // 20: paladin.iam.v1.UserService.UpdateUser:input_type -> paladin.iam.v1.UpdateUserRequest
+	5,  // 21: paladin.iam.v1.UserService.DeleteUser:input_type -> paladin.iam.v1.DeleteUserRequest
+	7,  // 22: paladin.iam.v1.UserService.ListUsers:input_type -> paladin.iam.v1.ListUsersRequest
+	9,  // 23: paladin.iam.v1.UserService.GrantScopes:input_type -> paladin.iam.v1.GrantScopesRequest
+	10, // 24: paladin.iam.v1.UserService.RevokeScopes:input_type -> paladin.iam.v1.RevokeScopesRequest
+	11, // 25: paladin.iam.v1.UserService.ResetPassword:input_type -> paladin.iam.v1.ResetPasswordRequest
+	13, // 26: paladin.iam.v1.UserService.ListOAuthGrants:input_type -> paladin.iam.v1.ListOAuthGrantsRequest
+	16, // 27: paladin.iam.v1.UserService.RevokeOAuthGrant:input_type -> paladin.iam.v1.RevokeOAuthGrantRequest
+	18, // 28: paladin.iam.v1.UserService.ListUserCapabilities:input_type -> paladin.iam.v1.ListUserCapabilitiesRequest
+	24, // 29: paladin.iam.v1.UserService.CreateUser:output_type -> paladin.iam.v1.User
+	24, // 30: paladin.iam.v1.UserService.GetUser:output_type -> paladin.iam.v1.User
+	24, // 31: paladin.iam.v1.UserService.UpdateUser:output_type -> paladin.iam.v1.User
+	6,  // 32: paladin.iam.v1.UserService.DeleteUser:output_type -> paladin.iam.v1.DeleteUserResponse
+	8,  // 33: paladin.iam.v1.UserService.ListUsers:output_type -> paladin.iam.v1.ListUsersResponse
+	24, // 34: paladin.iam.v1.UserService.GrantScopes:output_type -> paladin.iam.v1.User
+	24, // 35: paladin.iam.v1.UserService.RevokeScopes:output_type -> paladin.iam.v1.User
+	12, // 36: paladin.iam.v1.UserService.ResetPassword:output_type -> paladin.iam.v1.ResetPasswordResponse
+	14, // 37: paladin.iam.v1.UserService.ListOAuthGrants:output_type -> paladin.iam.v1.ListOAuthGrantsResponse
+	17, // 38: paladin.iam.v1.UserService.RevokeOAuthGrant:output_type -> paladin.iam.v1.RevokeOAuthGrantResponse
+	19, // 39: paladin.iam.v1.UserService.ListUserCapabilities:output_type -> paladin.iam.v1.ListUserCapabilitiesResponse
+	29, // [29:40] is the sub-list for method output_type
+	18, // [18:29] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_paladin_iam_v1_user_service_proto_init() }
@@ -1183,8 +1539,8 @@ func file_paladin_iam_v1_user_service_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_iam_v1_user_service_proto_rawDesc), len(file_paladin_iam_v1_user_service_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   16,
+			NumEnums:      2,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

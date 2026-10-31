@@ -118,7 +118,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
 	if deps.Capability != nil {
-		userH.WithSessionRevoker(deps.Capability.BulkRevocation)
+		userH.WithSessionRevoker(deps.Capability.BulkRevocation).
+			WithCapabilities(deps.Capability.Records)
 	}
 	userSettingsH := usersettingsh.NewHandler(
 		adapters.NewUserSettingsRepo(deps.DB.Queries),

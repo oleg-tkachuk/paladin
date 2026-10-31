@@ -6,6 +6,7 @@ import (
 	"testing"
 	"uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
@@ -87,6 +88,9 @@ func (failingUser) ListOAuthGrants(context.Context, userh.UserRef, bool) ([]auth
 }
 func (failingUser) RevokeOAuthGrant(context.Context, userh.UserRef, uuid.UUID) error {
 	return errBoom
+}
+func (failingUser) ListUserCapabilities(context.Context, userh.UserRef, userh.UserCapabilitiesPage) (limes.Page[limes.RecordListing], error) {
+	return limes.Page[limes.RecordListing]{}, errBoom
 }
 
 type failingUserSettings struct{}
@@ -219,6 +223,10 @@ func TestEveryIAMShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"User.RevokeOAuthGrant", func() error {
 			_, err := userSrv.RevokeOAuthGrant(ctx, &pb.RevokeOAuthGrantRequest{Name: userName, GrantId: uuid.New().String()})
+			return err
+		}},
+		{"User.ListUserCapabilities", func() error {
+			_, err := userSrv.ListUserCapabilities(ctx, &pb.ListUserCapabilitiesRequest{Name: userName})
 			return err
 		}},
 

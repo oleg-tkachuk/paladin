@@ -4,6 +4,7 @@ import (
 	"context"
 	"uuid"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/authh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
@@ -37,6 +38,7 @@ type userHandler interface {
 	UpdateUser(ctx context.Context, in userh.UpdateUserInput) (*authstore.User, error)
 	ListOAuthGrants(ctx context.Context, ref userh.UserRef, includeInactive bool) ([]authstore.UserOAuthGrant, error)
 	RevokeOAuthGrant(ctx context.Context, ref userh.UserRef, grantID uuid.UUID) error
+	ListUserCapabilities(ctx context.Context, ref userh.UserRef, page userh.UserCapabilitiesPage) (limes.Page[limes.RecordListing], error)
 }
 
 var _ userHandler = (*userh.Handler)(nil)

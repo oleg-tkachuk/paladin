@@ -716,7 +716,7 @@ under [`proto/paladin`](../../proto/paladin).
 | --- | --- |
 | `AuthService` | `login`, `refresh_token`, `revoke`, `who_am_i`, `change_password`, `exchange_audience`, `list_my_memberships`, `switch_tenant` |
 | `HealthService` | `get_version`, `get_health` |
-| `UserService` | `create_user`, `get_user`, `update_user`, `delete_user`, `list_users`, `grant_scopes`, `revoke_scopes`, `reset_password`, `list_o_auth_grants`, `revoke_o_auth_grant` |
+| `UserService` | `create_user`, `get_user`, `update_user`, `delete_user`, `list_users`, `grant_scopes`, `revoke_scopes`, `reset_password`, `list_o_auth_grants`, `revoke_o_auth_grant`, `list_user_capabilities` |
 | `UserSettingsService` | `get_mine`, `update_mine`, `get_for_user`, `list_by_tenant`, `delete_for_user` |
 
 `tests/test_readme.py` fails when a generated service or method is missing

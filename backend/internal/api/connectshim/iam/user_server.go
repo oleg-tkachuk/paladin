@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/limes"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -276,6 +277,71 @@ var oauthGrantStateToProto = map[authstore.OAuthGrantState]pb.OAuthGrant_State{
 	authstore.OAuthGrantRevoked: pb.OAuthGrant_STATE_REVOKED,
 	authstore.OAuthGrantExpired: pb.OAuthGrant_STATE_EXPIRED,
 }
+
+func (s *UserServer) ListUserCapabilities(ctx context.Context, req *pb.ListUserCapabilitiesRequest) (*pb.ListUserCapabilitiesResponse, error) {
+	ref, err := s.userRef(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	page := userh.UserCapabilitiesPage{Size: int(req.GetPageSize()), Token: req.GetPageToken()}
+	for _, st := range req.GetStates() {
+		page.Dispositions = append(page.Dispositions, userCapabilityStateFromProto[st])
+	}
+	got, err := s.H.ListUserCapabilities(ctx, ref, page)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListUserCapabilitiesResponse{
+		Capabilities:  make([]*pb.UserCapability, 0, len(got.Items)),
+		NextPageToken: got.Next,
+	}
+	for i := range got.Items {
+		out.Capabilities = append(out.Capabilities, userCapabilityToProto(&got.Items[i]))
+	}
+	return out, nil
+}
+
+func userCapabilityToProto(l *limes.RecordListing) *pb.UserCapability {
+	c := &l.Record.Capability
+	out := &pb.UserCapability{
+		Id:        c.ID.String(),
+		ClientId:  c.ClientID,
+		GrantId:   l.Record.Session,
+		Audience:  c.Audience,
+		IssuedAt:  timestamppb.New(c.IssuedAt),
+		ExpiresAt: timestamppb.New(c.ExpiresAt),
+		State:     userCapabilityStateToProto[l.Disposition],
+	}
+	if c.ParentID != uuid.Nil() {
+		out.ParentId = c.ParentID.String()
+	}
+	for _, op := range c.Caveats.Ops {
+		out.Operations = append(out.Operations, string(op))
+	}
+	if l.StoppedBy != nil {
+		out.RevokedAt = timestamppb.New(l.StoppedBy.Revocation.RevokedAt)
+		out.RevocationReason = l.StoppedBy.Revocation.Note
+	}
+	return out
+}
+
+// userCapabilityStateToProto names each disposition on the wire, and
+// userCapabilityStateFromProto reads it back. A disposition missing here
+// reads as UNSPECIFIED, which a test over every one rules out; the request
+// validator refuses UNSPECIFIED and unknown states before they get here.
+var userCapabilityStateToProto = map[limes.RecordDisposition]pb.UserCapability_State{
+	limes.RecordDispositionActive:  pb.UserCapability_STATE_ACTIVE,
+	limes.RecordDispositionExpired: pb.UserCapability_STATE_EXPIRED,
+	limes.RecordDispositionRevoked: pb.UserCapability_STATE_REVOKED,
+}
+
+var userCapabilityStateFromProto = func() map[pb.UserCapability_State]limes.RecordDisposition {
+	out := make(map[pb.UserCapability_State]limes.RecordDisposition, len(userCapabilityStateToProto))
+	for d, st := range userCapabilityStateToProto {
+		out[st] = d
+	}
+	return out
+}()
 
 var _ paladiniamv1connect.UserServiceHandler = (*UserServer)(nil)
 

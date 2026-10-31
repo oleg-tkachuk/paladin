@@ -24,6 +24,21 @@ type Exception struct {
 // Exceptions are an operation's rows over capabilityCodes, by limes code.
 type Exceptions map[limes.Code]Exception
 
+// Malformed answers each of codes — limes refusing the request as malformed
+// — with the reason every other malformed request carries.
+func Malformed(codes ...limes.Code) Exceptions {
+	e := make(Exceptions, len(codes))
+	for _, c := range codes {
+		e[c] = Exception{Code: connect.CodeInvalidArgument, Reason: commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT}
+	}
+	return e
+}
+
+// ListExceptions answer a listing of capability records: a page token the
+// store cannot read, or one handed out for another listing, is the caller's
+// to fix.
+var ListExceptions = Malformed(limes.CodeInvalidRequest, limes.CodeCursorMismatch)
+
 // Undefined is every code e names that limes does not define, sorted; each
 // operation's test holds its rows to none.
 func (e Exceptions) Undefined() []limes.Code {

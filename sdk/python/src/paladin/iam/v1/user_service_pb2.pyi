@@ -169,3 +169,59 @@ class RevokeOAuthGrantRequest(_message.Message):
 class RevokeOAuthGrantResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class ListUserCapabilitiesRequest(_message.Message):
+    __slots__ = ("name", "states", "page_size", "page_token")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    STATES_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    states: _containers.RepeatedScalarFieldContainer[UserCapability.State]
+    page_size: int
+    page_token: str
+    def __init__(self, name: _Optional[str] = ..., states: _Optional[_Iterable[_Union[UserCapability.State, str]]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+
+class ListUserCapabilitiesResponse(_message.Message):
+    __slots__ = ("capabilities", "next_page_token")
+    CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    capabilities: _containers.RepeatedCompositeFieldContainer[UserCapability]
+    next_page_token: str
+    def __init__(self, capabilities: _Optional[_Iterable[_Union[UserCapability, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+
+class UserCapability(_message.Message):
+    __slots__ = ("id", "client_id", "grant_id", "parent_id", "audience", "operations", "issued_at", "expires_at", "state", "revoked_at", "revocation_reason")
+    class State(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = ()
+        STATE_UNSPECIFIED: _ClassVar[UserCapability.State]
+        STATE_ACTIVE: _ClassVar[UserCapability.State]
+        STATE_EXPIRED: _ClassVar[UserCapability.State]
+        STATE_REVOKED: _ClassVar[UserCapability.State]
+    STATE_UNSPECIFIED: UserCapability.State
+    STATE_ACTIVE: UserCapability.State
+    STATE_EXPIRED: UserCapability.State
+    STATE_REVOKED: UserCapability.State
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
+    PARENT_ID_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    OPERATIONS_FIELD_NUMBER: _ClassVar[int]
+    ISSUED_AT_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    REVOKED_AT_FIELD_NUMBER: _ClassVar[int]
+    REVOCATION_REASON_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    client_id: str
+    grant_id: str
+    parent_id: str
+    audience: _containers.RepeatedScalarFieldContainer[str]
+    operations: _containers.RepeatedScalarFieldContainer[str]
+    issued_at: _timestamp_pb2.Timestamp
+    expires_at: _timestamp_pb2.Timestamp
+    state: UserCapability.State
+    revoked_at: _timestamp_pb2.Timestamp
+    revocation_reason: str
+    def __init__(self, id: _Optional[str] = ..., client_id: _Optional[str] = ..., grant_id: _Optional[str] = ..., parent_id: _Optional[str] = ..., audience: _Optional[_Iterable[str]] = ..., operations: _Optional[_Iterable[str]] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., state: _Optional[_Union[UserCapability.State, str]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revocation_reason: _Optional[str] = ...) -> None: ...
