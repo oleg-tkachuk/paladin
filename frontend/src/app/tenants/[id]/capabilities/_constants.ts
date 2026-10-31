@@ -1,7 +1,10 @@
-import {
-  PrincipalKind,
-  type Capability,
-} from "@/gen/paladin/admin/v1/capability_service_pb";
+import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+
+export {
+  PRINCIPAL_KIND_FILTER_OPTIONS,
+  PRINCIPAL_KIND_OPTIONS,
+  principalKindLabel,
+} from "@/lib/capabilityPrincipal";
 
 // Shared capability vocabularies + formatting helpers. Used by the page (browse
 // filter + Issue dialog) and the details renderer; lifted out of page.tsx so
@@ -35,26 +38,6 @@ export const OP_CHOICES = [
 ];
 
 export const AUDIENCE_CHOICES = ["data", "admin", "iam", "mcp"];
-
-export const PRINCIPAL_KIND_OPTIONS = [
-  { value: String(PrincipalKind.USER), label: "user" },
-  { value: String(PrincipalKind.AGENT), label: "agent" },
-  { value: String(PrincipalKind.SERVICE), label: "service" },
-];
-
-/** A principal kind's name, or its number when it is not one of the three. */
-export function principalKindLabel(kind: PrincipalKind | undefined): string {
-  return (
-    PRINCIPAL_KIND_OPTIONS.find((o) => Number(o.value) === kind)?.label ??
-    `kind:${kind}`
-  );
-}
-
-// The list's kind filter: every kind, then each one.
-export const PRINCIPAL_KIND_FILTER_OPTIONS = [
-  { value: String(PrincipalKind.UNSPECIFIED), label: "any kind" },
-  ...PRINCIPAL_KIND_OPTIONS,
-];
 
 // SPEND_DIGITS is how many decimals spend is shown to, so a sub-cent charge
 // does not read as nothing.
