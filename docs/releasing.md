@@ -106,8 +106,9 @@ follows it. A dev build gets no GitHub release and moves no floating tag;
 [`publish-target.ts`](../.github/ci/publish-target.ts) refuses
 one that derived a release version. Once it is pushed and signed, the same job
 deletes that component's older dev builds — image and chart, with their
-platform manifests, signatures and attestations — from GHCR, keeping only the
-newest ([`ghcr-cleanup.ts`](../.github/ci/ghcr-cleanup.ts),
+platform manifests, signatures and attestations — from GHCR, keeping the
+newest few, so a build the dev cluster is still deploying or running survives
+the next merge ([`ghcr-cleanup.ts`](../.github/ci/ghcr-cleanup.ts),
 run through `dataaxiom/ghcr-cleanup-action`). Only versions carrying the
 `-dev.` mark are matched, so a release is never deleted.
 

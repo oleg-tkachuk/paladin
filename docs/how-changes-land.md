@@ -31,7 +31,8 @@ build** of that commit — both images and both charts at
 `<next patch>-dev.<time>.g<sha>` — and cuts `sdk/go/v*` when a commit touched
 the SDK. The dev cluster follows the dev builds, so it runs every change as it
 lands. Each dev publish then deletes the older dev builds of that component's
-image and chart from GHCR, keeping only the newest
+image and chart from GHCR, keeping the newest few, so a build the cluster is
+still deploying or running is not pulled out from under it
 ([`ghcr-cleanup.ts`](../.github/ci/ghcr-cleanup.ts)); releases
 are never deleted.
 
