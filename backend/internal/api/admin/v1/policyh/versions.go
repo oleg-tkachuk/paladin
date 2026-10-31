@@ -33,9 +33,9 @@ type LayerRef struct {
 	TenantID uuid.UUID
 	// Collection is the collection's name, for LayerCollection.
 	Collection string
-	// BackendID is the storage backend, for LayerStorageBackend and
-	// LayerBucket.
-	BackendID uuid.UUID
+	// Backend is the storage backend's name — its id in the admin API — for
+	// LayerStorageBackend and LayerBucket.
+	Backend string
 	// Bucket is the bucket's name, for LayerBucket.
 	Bucket string
 }
@@ -153,15 +153,12 @@ func parseVersionToken(token string) (int32, error) {
 	return int32(n), nil
 }
 
-// parseLayerName reads storageBackends/{id}, storageBackends/{id}/buckets/{name},
-// tenants/{id} or tenants/{id}/collections/{name}.
+// parseLayerName reads storageBackends/{backend}, storageBackends/{backend}/buckets/{name},
+// tenants/{id} or tenants/{id}/collections/{name}. A backend is named as the
+// admin API names it, by its name; a tenant by its id.
 func parseLayerName(name string) (LayerRef, error) {
 	if b, err := paladin.ParseBucketName(name); err == nil {
-		id, err := uuid.Parse(b.Backend)
-		if err != nil {
-			return LayerRef{}, fmt.Errorf("invalid storage backend id in %q: %w", name, err)
-		}
-		return LayerRef{Layer: LayerBucket, BackendID: id, Bucket: b.Bucket}, nil
+		return LayerRef{Layer: LayerBucket, Backend: b.Backend, Bucket: b.Bucket}, nil
 	}
 	if c, err := paladin.ParseCollectionName(name); err == nil {
 		id, err := uuid.Parse(c.Tenant)
@@ -170,12 +167,8 @@ func parseLayerName(name string) (LayerRef, error) {
 		}
 		return LayerRef{Layer: LayerCollection, TenantID: id, Collection: c.Collection}, nil
 	}
-	if rest, ok := strings.CutPrefix(name, storageBackendsPrefix); ok && !strings.Contains(rest, "/") {
-		id, err := uuid.Parse(rest)
-		if err != nil {
-			return LayerRef{}, fmt.Errorf("invalid storage backend id in %q: %w", name, err)
-		}
-		return LayerRef{Layer: LayerStorageBackend, BackendID: id}, nil
+	if rest, ok := strings.CutPrefix(name, storageBackendsPrefix); ok && rest != "" && !strings.Contains(rest, "/") {
+		return LayerRef{Layer: LayerStorageBackend, Backend: rest}, nil
 	}
 	if rest, ok := strings.CutPrefix(name, tenantsPrefix); ok && !strings.Contains(rest, "/") {
 		id, err := uuid.Parse(rest)
@@ -184,5 +177,5 @@ func parseLayerName(name string) (LayerRef, error) {
 		}
 		return LayerRef{Layer: LayerTenant, TenantID: id}, nil
 	}
-	return LayerRef{}, fmt.Errorf("%q names no policy layer: want storageBackends/{id}, storageBackends/{id}/buckets/{name}, tenants/{id} or tenants/{id}/collections/{name}", name)
+	return LayerRef{}, fmt.Errorf("%q names no policy layer: want storageBackends/{backend}, storageBackends/{backend}/buckets/{name}, tenants/{id} or tenants/{id}/collections/{name}", name)
 }

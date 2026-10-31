@@ -35,9 +35,9 @@ var policyLayers = map[policyh.Layer]sqlc.PolicyLayer{
 }
 
 // ListPolicyVersions resolves ref to the row holding the layer and pages its
-// versions. A bucket or collection that does not exist is ErrLayerNotFound;
-// a backend or tenant id is the owner itself, so an unknown one reads as no
-// history.
+// versions. A backend, bucket or collection that does not exist is
+// ErrLayerNotFound; a tenant id is the owner itself, so an unknown one reads
+// as no history.
 func (r *PolicyVersionRepo) ListPolicyVersions(ctx context.Context, ref policyh.LayerRef, beforeVersion, pageSize int32) ([]policyh.Version, error) {
 	layer, ok := policyLayers[ref.Layer]
 	if !ok {
@@ -72,11 +72,11 @@ func (r *PolicyVersionRepo) owner(ctx context.Context, ref policyh.LayerRef) (pg
 	)
 	switch ref.Layer {
 	case policyh.LayerStorageBackend:
-		return pgUUID(ref.BackendID), nil
+		id, err = r.q.BackendIDForPolicy(ctx, ref.Backend)
 	case policyh.LayerTenant:
 		return pgUUID(ref.TenantID), nil
 	case policyh.LayerBucket:
-		id, err = r.q.BucketIDForPolicy(ctx, pgUUID(ref.BackendID), ref.Bucket)
+		id, err = r.q.BucketIDForPolicy(ctx, ref.Backend, ref.Bucket)
 	case policyh.LayerCollection:
 		id, err = r.q.CollectionIDForPolicy(ctx, pgUUID(ref.TenantID), ref.Collection)
 	}

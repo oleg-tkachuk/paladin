@@ -50,15 +50,18 @@ func history(n int32) []Version {
 }
 
 func TestParseLayerName(t *testing.T) {
-	tenant, backend := uuid.New(), uuid.New()
+	tenant := uuid.New()
+	// A backend is named by its name, as the admin API names it everywhere:
+	// "primary", not the row's uuid.
+	const backend = "primary"
 	cases := []struct {
 		name string
 		want LayerRef
 	}{
 		{"tenants/" + tenant.String(), LayerRef{Layer: LayerTenant, TenantID: tenant}},
 		{"tenants/" + tenant.String() + "/collections/e2e/logs", LayerRef{Layer: LayerCollection, TenantID: tenant, Collection: "e2e/logs"}},
-		{"storageBackends/" + backend.String(), LayerRef{Layer: LayerStorageBackend, BackendID: backend}},
-		{"storageBackends/" + backend.String() + "/buckets/b1", LayerRef{Layer: LayerBucket, BackendID: backend, Bucket: "b1"}},
+		{"storageBackends/" + backend, LayerRef{Layer: LayerStorageBackend, Backend: backend}},
+		{"storageBackends/" + backend + "/buckets/b1", LayerRef{Layer: LayerBucket, Backend: backend, Bucket: "b1"}},
 	}
 	for _, c := range cases {
 		got, err := parseLayerName(c.name)
@@ -68,7 +71,7 @@ func TestParseLayerName(t *testing.T) {
 	}
 	// A bare id names no layer: the collection's and bucket's segments, and
 	// the prefix, say which one.
-	for _, bad := range []string{"", backend.String(), "tenants/acme", "storageBackends/x", "storageBackends/" + backend.String() + "/other/y", "buckets/b1", "tenants/" + tenant.String() + "/objects/x"} {
+	for _, bad := range []string{"", backend, "tenants/acme", "storageBackends/", "storageBackends/" + backend + "/other/y", "buckets/b1", "tenants/" + tenant.String() + "/objects/x"} {
 		if _, err := parseLayerName(bad); err == nil {
 			t.Errorf("parseLayerName(%q) accepted a name that addresses no layer", bad)
 		}

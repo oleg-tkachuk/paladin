@@ -11,13 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const bucketIDForPolicy = `-- name: BucketIDForPolicy :one
-SELECT id FROM buckets WHERE backend_id = $1 AND name = $2
+const backendIDForPolicy = `-- name: BackendIDForPolicy :one
+SELECT id FROM storage_backends WHERE name = $1
 `
 
-// The bucket whose policy layer storageBackends/{backend}/buckets/{name} addresses.
-func (q *Queries) BucketIDForPolicy(ctx context.Context, backendID pgtype.UUID, name string) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, bucketIDForPolicy, backendID, name)
+// The storage backend whose policy layer storageBackends/{backend} addresses,
+// by its name: the admin API's id for it.
+func (q *Queries) BackendIDForPolicy(ctx context.Context, name string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, backendIDForPolicy, name)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const bucketIDForPolicy = `-- name: BucketIDForPolicy :one
+SELECT b.id
+  FROM buckets b
+  JOIN storage_backends s ON s.id = b.backend_id
+ WHERE s.name = $1 AND b.name = $2
+`
+
+// The bucket whose policy layer storageBackends/{backend}/buckets/{name}
+// addresses, its backend by name.
+func (q *Queries) BucketIDForPolicy(ctx context.Context, backend string, bucket string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, bucketIDForPolicy, backend, bucket)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
