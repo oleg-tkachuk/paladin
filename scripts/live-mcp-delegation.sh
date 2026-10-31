@@ -119,6 +119,12 @@ readonly EXCHANGE_AUDIENCE=data
 # The list leaves revoked and expired capabilities out unless asked for them.
 readonly DISPOSITION_REVOKED=CAPABILITY_DISPOSITION_REVOKED
 readonly EVERY_DISPOSITION='["CAPABILITY_DISPOSITION_ACTIVE","CAPABILITY_DISPOSITION_EXPIRED","CAPABILITY_DISPOSITION_REVOKED"]'
+# A capability's state as the IAM plane lists a user's (UserCapability.State).
+readonly USER_STATE_ACTIVE=STATE_ACTIVE
+readonly EVERY_USER_STATE='["STATE_ACTIVE","STATE_EXPIRED","STATE_REVOKED"]'
+# How many of every tenant's capabilities one page of the platform's index
+# reads: enough to hold the ones this run exchanged, which are the newest.
+readonly PLATFORM_PAGE_SIZE=100
 # The database cluster the release's capabilities live in: limes's tables,
 # where the check opens a hold.
 readonly PG_NAMESPACE="${PG_NAMESPACE:-database}"
@@ -459,6 +465,18 @@ session_capabilities() {
     admin_rpc CapabilityService/List "$(jq -cn --arg t "$tenant" --arg s "$1" --argjson d "$EVERY_DISPOSITION" \
         '{tenantId:$t,session:$s,dispositions:$d}')" | jq -c '.capabilities // []'
 }
+# user_capabilities [grant]: the capabilities the IAM plane lists as acting
+# for the admin, in every state — one grant's when it is given.
+user_capabilities() {
+    iam_rpc UserService/ListUserCapabilities "$(jq -cn --arg n "tenants/$tenant/users/$user" --arg g "${1:-}" \
+        --argjson s "$EVERY_USER_STATE" '{name:$n,grantId:$g,states:$s}')" | jq -c '.capabilities // []'
+}
+# platform_capabilities: the newest page of every tenant's capabilities, as
+# the platform's index lists them.
+platform_capabilities() {
+    admin_rpc CapabilityService/List "$(jq -cn --argjson d "$EVERY_DISPOSITION" --argjson n "$PLATFORM_PAGE_SIZE" \
+        '{dispositions:$d,sortOrder:"SORT_ORDER_DESC",pageSize:$n}')" | jq -c '.capabilities // []'
+}
 # disposition_in_session <session> <capability>: the capability's disposition
 # as the list filtered to session reports it; empty if not listed.
 disposition_in_session() {
@@ -552,6 +570,22 @@ if [[ -z "$reader_capability" || "$(jq -r '.[0].disposition' <<<"$listed")" == "
     exit 1
 fi
 ok "the capability list finds the grant's live capability by its OAuth session"
+
+# The user sees what acts for them, without the admin plane: the grant's
+# capability, under its grant, and nothing under a grant they never gave.
+mine=$(user_capabilities | jq -c --arg c "$reader_capability" 'map(select(.id == $c)) | .[0] // empty')
+expect "the user's capabilities list the grant's capability" "listed $mine" \
+    test "$(jq -r '"\(.state) \(.grantId)"' <<<"${mine:-null}")" = "$USER_STATE_ACTIVE $reader_session"
+granted=$(user_capabilities "$reader_session")
+# shellcheck disable=SC2016 # $c and $g are jq variables, not shell ones
+expect "narrowed to the grant, they list its capabilities alone" "listed $granted" \
+    jq -e --arg c "$reader_capability" --arg g "$reader_session" \
+    'any(.id == $c) and all(.grantId == $g)' <<<"$granted"
+other=$(user_capabilities "$(uuidgen | tr '[:upper:]' '[:lower:]')")
+expect "narrowed to a grant never given, they list none" "listed $other" test "$other" = "[]"
+# The platform's index lists it among every tenant's, naming its tenant.
+indexed=$(platform_capabilities | jq -r --arg c "$reader_capability" 'map(select(.id == $c)) | .[0].subject.tenantId // empty')
+expect "every tenant's capabilities list it under its tenant" "tenant '$indexed'" test "$indexed" = "$tenant"
 
 budget_before=$(budget_reserved)
 hold=$(uuidgen | tr '[:upper:]' '[:lower:]')
