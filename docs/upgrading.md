@@ -99,6 +99,14 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## Unreleased — each tenant's spend series in one read
+
+- `BillingService.ListTenantTimeSeries` returns the spend series of up to 50
+  named tenants, in the order named, from one sum of the ledger across them:
+  a trend beside each tenant a list shows. It is the platform admin's, as
+  `GetPlatformTimeSeries` is.
+- The dashboard's budget alerts draw a 30-day spend trend beside each tenant.
+
 ## sdk/go/v0.131.0, sdk/python/v0.132.0 — capabilities across every tenant
 
 - `CapabilityService.List` with no `tenant_id` lists every tenant's
