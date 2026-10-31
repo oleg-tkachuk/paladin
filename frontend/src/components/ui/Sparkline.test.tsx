@@ -37,4 +37,13 @@ describe("Sparkline", () => {
     const { container } = render(<Sparkline data={[5]} />);
     expect(container.innerHTML).not.toContain("NaN");
   });
+
+  // Stretched to its box, a scaled stroke drew thick on slopes and thin on
+  // flats; the line keeps its width in pixels.
+  it("keeps its line's width whatever the box", () => {
+    const { container } = render(<Sparkline data={[1, 3, 2]} />);
+    expect(
+      container.querySelector("path[stroke]")?.getAttribute("vector-effect"),
+    ).toBe("non-scaling-stroke");
+  });
 });

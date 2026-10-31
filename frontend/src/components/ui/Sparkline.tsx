@@ -52,6 +52,10 @@ export const Sparkline = React.memo(({ data, className }: SparklineProps) => {
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
+        // The box stretches to its container (preserveAspectRatio none), and
+        // the stretch scaled the stroke with it: a squat sparkline drew a
+        // ribbon thick on its slopes and thin on its flats. Even pixels.
+        vectorEffect="non-scaling-stroke"
         strokeLinecap="round"
         strokeLinejoin="round"
         className="transition-all duration-1000"
