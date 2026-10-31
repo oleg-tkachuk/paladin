@@ -1,7 +1,10 @@
 // A tenant's workspace as a graph (ADR-0033): from the tenant out, through
 // its collections and the buckets they are bound to, to the backends those
-// live on.
+// live on; and, as a branch off the tenant, its access — the resources that
+// carry a Cedar layer of their own and the principals holding live
+// capabilities.
 
+import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import type {
   Bucket,
   Collection,
@@ -9,6 +12,7 @@ import type {
   Tenant,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { provisionStatus } from "@/lib/bucketProvision";
+import { principalKindLabel } from "@/lib/capabilityPrincipal";
 import { bucketHref, collectionHref, tenantHref } from "@/lib/navigation/hrefs";
 import {
   parseBucketResourceName,
@@ -29,6 +33,12 @@ import {
 } from "./nodes";
 
 const collectionNodeId = (c: string) => `collection:${c}`;
+const policyNodeId = (layer: string) => `policy:${layer}`;
+const principalNodeId = (kind: number, subject: string) =>
+  `principal:${kind}/${subject}`;
+
+/** Whether a layer's text sets a policy: blank is none. */
+const hasPolicy = (text: string | undefined) => (text ?? "").trim() !== "";
 
 export interface TenantTopologyInput {
   tenant: Tenant;
@@ -37,6 +47,8 @@ export interface TenantTopologyInput {
   buckets: readonly Bucket[];
   backends: readonly StorageBackend[];
   backendStatus: BackendStatusOf;
+  /** The tenant's live capabilities; absent while unread, or unreadable. */
+  capabilities?: readonly Capability[];
 }
 
 /**
@@ -50,6 +62,7 @@ export function tenantTopology({
   buckets,
   backends,
   backendStatus,
+  capabilities = [],
 }: TenantTopologyInput): TopologyGraph {
   const handle = tenant.slug || tenant.tenantId;
   const root: TopologyNode = {
@@ -132,9 +145,102 @@ export function tenantTopology({
     nodes.push(backendNode(id, byId.get(id), backendStatus));
   }
 
+  const access = [
+    ...policyNodes(tenant, handle, collections, buckets),
+    ...principalNodes(handle, capabilities),
+  ];
+  for (const n of access) {
+    nodes.push(n);
+    edges.push({ from: root.id, to: n.id });
+  }
+
   return {
     nodes,
     edges,
     columns: ["tenant", "collection", "bucket", "backend"],
   };
+}
+
+/**
+ * A node for each layer that carries a Cedar policy of its own — the
+ * tenant's, a collection's, a bucket the tenant may bind to — each leading to
+ * the page that edits it. A layer with no text of its own draws nothing.
+ */
+function policyNodes(
+  tenant: Tenant,
+  handle: string,
+  collections: readonly Collection[],
+  buckets: readonly Bucket[],
+): TopologyNode[] {
+  const out: TopologyNode[] = [];
+  if (hasPolicy(tenant.inheritedCedarPolicy)) {
+    out.push({
+      id: policyNodeId("tenant"),
+      kind: "policy",
+      label: tenant.displayName || handle,
+      detail: "Tenant policy",
+      href: `${tenantHref(handle)}/policies`,
+    });
+  }
+  for (const c of collections) {
+    if (!hasPolicy(c.cedarPolicy)) continue;
+    out.push({
+      id: policyNodeId(`collection/${c.collection}`),
+      kind: "policy",
+      label: c.collection,
+      detail: "Collection policy",
+      href: `${collectionHref(handle, c.collection)}/policy`,
+    });
+  }
+  for (const b of [...buckets].sort((a, z) =>
+    bucketNodeId(a.backendId, a.bucketId).localeCompare(
+      bucketNodeId(z.backendId, z.bucketId),
+    ),
+  )) {
+    if (!hasPolicy(b.cedarPolicy)) continue;
+    out.push({
+      id: policyNodeId(`bucket/${b.backendId}/${b.bucketId}`),
+      kind: "policy",
+      label: b.bucketId,
+      detail: "Bucket policy",
+      href: bucketHref(b.backendId, b.bucketId, "policy"),
+    });
+  }
+  return out;
+}
+
+/**
+ * A node for each principal holding live capabilities in the tenant, by kind
+ * and subject, saying how many it holds, each leading to the tenant's
+ * capabilities.
+ */
+function principalNodes(
+  handle: string,
+  capabilities: readonly Capability[],
+): TopologyNode[] {
+  const held = new Map<
+    string,
+    { kind: number; subject: string; count: number }
+  >();
+  for (const c of capabilities) {
+    const kind = c.subject?.kind ?? 0;
+    const subject = c.subject?.subject ?? "";
+    if (!subject) continue;
+    const id = principalNodeId(kind, subject);
+    const entry = held.get(id) ?? { kind, subject, count: 0 };
+    entry.count += 1;
+    held.set(id, entry);
+  }
+  return [...held]
+    .sort(([a], [z]) => a.localeCompare(z))
+    .map(([id, p]) => ({
+      id,
+      kind: "principal" as const,
+      label: p.subject,
+      detail: [
+        principalKindLabel(p.kind),
+        `${p.count} live ${p.count === 1 ? "capability" : "capabilities"}`,
+      ].join(DETAIL_SEPARATOR),
+      href: `${tenantHref(handle)}/capabilities`,
+    }));
 }

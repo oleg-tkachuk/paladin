@@ -6,7 +6,15 @@
 import { STATUS_ORDER, type StatusTone } from "@/lib/ui/status";
 
 /** What a node stands for. */
-export type NodeKind = "tenant" | "collection" | "bucket" | "backend";
+export type NodeKind =
+  | "tenant"
+  | "collection"
+  | "bucket"
+  | "backend"
+  // A resource's own Cedar layer, and a principal holding live capabilities:
+  // a tenant's access, drawn as a branch off it.
+  | "policy"
+  | "principal";
 
 /** A node's state: the tone it is drawn in and the words that name it. */
 export interface NodeStatus {
@@ -61,6 +69,8 @@ export const KIND_NOUN: Record<NodeKind, { one: string; many: string }> = {
   collection: { one: "Collection", many: "collections" },
   bucket: { one: "Bucket", many: "buckets" },
   backend: { one: "Storage backend", many: "storage backends" },
+  policy: { one: "Policy", many: "policies" },
+  principal: { one: "Principal", many: "principals" },
 };
 
 /**

@@ -814,20 +814,6 @@ order they are being taken up.
   saved ones too.
 - **Blockers:** the owner's decision.
 
-#### Topology: a tenant's policies and capabilities as a side branch
-
-- **Status:** Deferred.
-- **Reason:** the tenant topology draws tenant → collections → buckets →
-  backends only; a policy layer is read one resource at a time
-  (PolicyService.GetEffectivePolicy) and capabilities are listed one principal
-  at a time (CapabilityService.List), so a branch for them costs a request per
-  collection and per principal on every open.
-- **Definition of Done:** the tenant topology shows which of its resources
-  carry a Cedar layer of their own and the principals holding live
-  capabilities, as a branch off the tenant, each linking to its page, from
-  reads that answer for the whole tenant at once.
-- **Blockers:** a tenant-wide read of policy layers and of capabilities.
-
 #### Topology: collections in the platform view
 
 - **Status:** Deferred.

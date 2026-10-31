@@ -3,6 +3,10 @@ import { timestampNow } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
 import {
+  CapabilitySchema,
+  PrincipalKind,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
+import {
   BucketSchema,
   CollectionSchema,
   StorageBackendSchema,
@@ -143,5 +147,82 @@ describe("tenantTopology", () => {
     expect(node(trashed, `tenant:${ACME}`).status?.tone).toBe(
       StatusTone.Suspended,
     );
+  });
+});
+
+// The tenant's access as a branch off it: each layer with a policy of its
+// own, and each principal holding live capabilities, linked to its page.
+describe("tenantTopology's access branch", () => {
+  const live = (kind: PrincipalKind, subject: string) =>
+    create(CapabilitySchema, { subject: { kind, tenantId: ACME, subject } });
+  const g = tenantTopology({
+    tenant: tenant(ACME, "acme", {
+      inheritedCedarPolicy: "permit (principal, action, resource);",
+    }),
+    collections: [
+      create(CollectionSchema, {
+        tenantId: ACME,
+        collection: "docs",
+        cedarPolicy: "forbid (principal, action, resource);",
+      }),
+      // Whitespace is no policy.
+      create(CollectionSchema, {
+        tenantId: ACME,
+        collection: "media",
+        cedarPolicy: "  \n",
+      }),
+    ],
+    buckets: [
+      bucket("be", "home", {
+        ownerTenantId: ACME,
+        cedarPolicy: "permit (principal, action, resource);",
+      }),
+      bucket("be", "plain", { ownerTenantId: ACME }),
+    ],
+    backends: [backend("be")],
+    backendStatus,
+    capabilities: [
+      live(PrincipalKind.AGENT, "mcp-relay"),
+      live(PrincipalKind.AGENT, "mcp-relay"),
+      live(PrincipalKind.USER, "alice"),
+      // A capability naming no subject names no principal.
+      create(CapabilitySchema, {}),
+    ],
+  });
+  const root = `tenant:${ACME}`;
+
+  it("draws a node for each layer with a policy of its own, and none for one without", () => {
+    const policies = g.nodes.filter((n) => n.kind === "policy");
+    expect(policies.map((n) => [n.detail, n.label, n.href])).toEqual([
+      ["Tenant policy", "acme", "/tenants/acme/policies"],
+      ["Collection policy", "docs", "/tenants/acme/collections/docs/policy"],
+      ["Bucket policy", "home", "/storage-backends/be/buckets/home/policy"],
+    ]);
+    for (const n of policies) expect(edges(g)).toContain(`${root} → ${n.id}`);
+  });
+
+  it("draws each principal once, saying how many live capabilities it holds", () => {
+    const principals = g.nodes.filter((n) => n.kind === "principal");
+    expect(principals.map((n) => [n.label, n.detail])).toEqual([
+      ["alice", "user · 1 live capability"],
+      ["mcp-relay", "agent · 2 live capabilities"],
+    ]);
+    for (const n of principals) {
+      expect(n.href).toBe("/tenants/acme/capabilities");
+      expect(edges(g)).toContain(`${root} → ${n.id}`);
+    }
+  });
+
+  it("draws no principal before the capabilities are read", () => {
+    const unread = tenantTopology({
+      tenant: tenant(ACME, "acme"),
+      collections: [],
+      buckets: [],
+      backends: [],
+      backendStatus,
+    });
+    expect(
+      unread.nodes.some((n) => n.kind === "principal" || n.kind === "policy"),
+    ).toBe(false);
   });
 });
