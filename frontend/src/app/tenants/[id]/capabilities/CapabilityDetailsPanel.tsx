@@ -13,7 +13,14 @@ import {
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { T } from "@/lib/ui/typography";
 
-import { DetailsBody, type RecordEntry, type UsageEntry } from "./_details";
+import { capabilityRun, runCapabilitiesHref } from "@/lib/capabilityRun";
+
+import {
+  DetailsBody,
+  type RecordEntry,
+  type RunActions,
+  type UsageEntry,
+} from "./_details";
 import { isCapabilityRevoked } from "./_disposition";
 
 /**
@@ -30,6 +37,8 @@ export function CapabilityDetailsPanel({
   usageEntry,
   onClose,
   onRevoke,
+  tenant,
+  onRevokeRun,
 }: {
   /** The capability to show; null keeps the panel closed. */
   id: string | null;
@@ -40,6 +49,10 @@ export function CapabilityDetailsPanel({
   onClose: () => void;
   /** Asks to revoke the capability shown; the page confirms it. */
   onRevoke: (cap: Capability) => void;
+  /** The tenant's slug or id, for links into its workspace. */
+  tenant: string;
+  /** Asks to revoke the agent run of the capability shown; the page confirms it. */
+  onRevokeRun: (run: string) => void;
 }) {
   const recordQuery = useQuery({
     ...capabilityDetailQuery(id ?? ""),
@@ -83,7 +96,12 @@ export function CapabilityDetailsPanel({
       }
     >
       {shown ? (
-        <DetailsBody cap={shown} usageEntry={usage} record={record} />
+        <DetailsBody
+          cap={shown}
+          usageEntry={usage}
+          record={record}
+          run={runActions(shown, tenant, onRevokeRun)}
+        />
       ) : (
         <p className={T.hint}>
           {recordQuery.isError
@@ -93,4 +111,19 @@ export function CapabilityDetailsPanel({
       )}
     </DetailPanel>
   );
+}
+
+/** The run actions of an agent run's capability; none for one with no run. */
+function runActions(
+  cap: Capability,
+  tenant: string,
+  onRevokeRun: (run: string) => void,
+): RunActions | undefined {
+  const run = capabilityRun(cap);
+  if (!run) return undefined;
+  return {
+    run,
+    href: runCapabilitiesHref(tenant, run),
+    onRevoke: () => onRevokeRun(run),
+  };
 }

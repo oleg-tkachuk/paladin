@@ -21,7 +21,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse
+from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse, CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -86,6 +86,15 @@ class CapabilityService(Protocol):
         CascadeChildren=true revokes every descendant in the delegation
         tree. Idempotent — re-revoking a revoked capability is a no-op, and the
         response says so, with the entry that stands.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def revoke_run(self, request: CapabilityServiceRevokeRunRequest, ctx: RequestContext[CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse], /) -> CapabilityServiceRevokeRunResponse:
+        """
+        RevokeRun revokes every capability of one agent run in a tenant — the
+        run's own, and through them those delegated from them — and releases
+        their holds at once: an agent gone wrong stopped in one call. Idempotent;
+        a repeat revokes nothing and reports none.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -189,6 +198,17 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.revoke,
+                ),
+                "/paladin.admin.v1.CapabilityService/RevokeRun": Endpoint.unary(
+                    method=MethodInfo(
+                        name="RevokeRun",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceRevokeRunRequest,
+                        output=CapabilityServiceRevokeRunResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.revoke_run,
                 ),
                 "/paladin.admin.v1.CapabilityService/RevokeBiscuit": Endpoint.unary(
                     method=MethodInfo(
@@ -390,6 +410,32 @@ class CapabilityServiceClient(ConnectClient):
                 service_name="paladin.admin.v1.CapabilityService",
                 input=CapabilityServiceRevokeRequest,
                 output=CapabilityServiceRevokeResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    async def revoke_run(
+        self,
+        request: CapabilityServiceRevokeRunRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CapabilityServiceRevokeRunResponse:
+        """
+        RevokeRun revokes every capability of one agent run in a tenant — the
+        run's own, and through them those delegated from them — and releases
+        their holds at once: an agent gone wrong stopped in one call. Idempotent;
+        a repeat revokes nothing and reports none.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeRun",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceRevokeRunRequest,
+                output=CapabilityServiceRevokeRunResponse,
                 idempotency_level=IdempotencyLevel.IDEMPOTENT,
                 stream_type=StreamType.UNARY,
             ),
@@ -615,6 +661,15 @@ class CapabilityServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def revoke_run(self, request: CapabilityServiceRevokeRunRequest, ctx: RequestContext[CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse], /) -> CapabilityServiceRevokeRunResponse:
+        """
+        RevokeRun revokes every capability of one agent run in a tenant — the
+        run's own, and through them those delegated from them — and releases
+        their holds at once: an agent gone wrong stopped in one call. Idempotent;
+        a repeat revokes nothing and reports none.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def revoke_biscuit(self, request: CapabilityServiceRevokeBiscuitRequest, ctx: RequestContext[CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse], /) -> CapabilityServiceRevokeBiscuitResponse:
         """
         RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
@@ -713,6 +768,17 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.revoke,
+                ),
+                "/paladin.admin.v1.CapabilityService/RevokeRun": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="RevokeRun",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceRevokeRunRequest,
+                        output=CapabilityServiceRevokeRunResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.revoke_run,
                 ),
                 "/paladin.admin.v1.CapabilityService/RevokeBiscuit": EndpointSync.unary(
                     method=MethodInfo(
@@ -914,6 +980,32 @@ class CapabilityServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.CapabilityService",
                 input=CapabilityServiceRevokeRequest,
                 output=CapabilityServiceRevokeResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def revoke_run(
+        self,
+        request: CapabilityServiceRevokeRunRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CapabilityServiceRevokeRunResponse:
+        """
+        RevokeRun revokes every capability of one agent run in a tenant — the
+        run's own, and through them those delegated from them — and releases
+        their holds at once: an agent gone wrong stopped in one call. Idempotent;
+        a repeat revokes nothing and reports none.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="RevokeRun",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceRevokeRunRequest,
+                output=CapabilityServiceRevokeRunResponse,
                 idempotency_level=IdempotencyLevel.IDEMPOTENT,
                 stream_type=StreamType.UNARY,
             ),

@@ -38,6 +38,7 @@ import { CapabilityDetailsPanel } from "./CapabilityDetailsPanel";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
+import { RevokeRunDialog } from "./RevokeRunDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
 import {
@@ -61,6 +62,7 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { CAPABILITY_SESSION_PARAM, capabilityGrant } from "@/lib/oauthGrants";
+import { CAPABILITY_RUN_PARAM } from "@/lib/capabilityRun";
 import { textParam, useUrlState } from "@/hooks/useUrlState";
 import { T } from "@/lib/ui/typography";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -80,6 +82,8 @@ const CAPABILITIES_TENANT_INDEX = 1;
 
 /** The OAuth session the list is narrowed to, from a grant's link. */
 const SESSION_FILTER = textParam(CAPABILITY_SESSION_PARAM);
+/** The agent run the list is narrowed to, from a capability's run. */
+const RUN_FILTER = textParam(CAPABILITY_RUN_PARAM);
 
 // Per-capability usage keyed by capability id.
 type UsageMap = Map<string, CapabilityUsage>;
@@ -154,6 +158,9 @@ export default function CapabilitiesPage() {
     useState<readonly CapabilityDisposition[]>(DEFAULT_STATUSES);
   // A grant links here with its session: what revoking it stops.
   const [session, setSession] = useUrlState(SESSION_FILTER, "");
+  // A capability links here with its run: what revoking the run stops.
+  const [run, setRun] = useUrlState(RUN_FILTER, "");
+  const [revokeRunTarget, setRevokeRunTarget] = useState<string | null>(null);
 
   const browseQuery = useInfiniteQuery({
     queryKey: [
@@ -163,6 +170,7 @@ export default function CapabilitiesPage() {
       subjectFilter,
       statuses,
       session,
+      run,
     ],
     enabled: !!tenantId,
     retry: false, // queryFn toasts real failures.
@@ -175,6 +183,7 @@ export default function CapabilitiesPage() {
             principalKind: Number(principalKind),
             subject: subjectFilter,
             session,
+            runId: run,
             dispositions: [...statuses],
             sortOrder: SortOrder.DESC,
             pageSize: CAPABILITIES_PAGE_SIZE,
@@ -411,6 +420,22 @@ export default function CapabilitiesPage() {
             <code className="font-mono text-xs break-all">{session}</code>
             <Button variant="ghost" size="sm" onClick={() => setSession("")}>
               Every session
+            </Button>
+          </div>
+        ) : null}
+        {run ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Agent run</span>
+            <code className="font-mono text-xs break-all">{run}</code>
+            <Button variant="ghost" size="sm" onClick={() => setRun("")}>
+              Every run
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRevokeRunTarget(run)}
+            >
+              Revoke this run
             </Button>
           </div>
         ) : null}
@@ -704,6 +729,16 @@ export default function CapabilitiesPage() {
         usageEntry={linked.openId ? usage.get(linked.openId) : undefined}
         onClose={linked.close}
         onRevoke={setRevokeTarget}
+        tenant={tenant.slug || tenantId}
+        onRevokeRun={setRevokeRunTarget}
+      />
+
+      {/* ─── Revoke a run confirm ──────────────────────────────────── */}
+      <RevokeRunDialog
+        tenantId={tenantId}
+        run={revokeRunTarget}
+        onClose={() => setRevokeRunTarget(null)}
+        onRevoked={() => void fetchList()}
       />
 
       {/* ─── Revoke confirm ────────────────────────────────────────── */}

@@ -31,6 +31,9 @@ const (
 	CapabilityServiceDelegateProcedure = "/paladin.admin.v1.CapabilityService/Delegate"
 	// CapabilityServiceRevokeProcedure is the procedure name of the CapabilityService's Revoke RPC.
 	CapabilityServiceRevokeProcedure = "/paladin.admin.v1.CapabilityService/Revoke"
+	// CapabilityServiceRevokeRunProcedure is the procedure name of the CapabilityService's RevokeRun
+	// RPC.
+	CapabilityServiceRevokeRunProcedure = "/paladin.admin.v1.CapabilityService/RevokeRun"
 	// CapabilityServiceRevokeBiscuitProcedure is the procedure name of the CapabilityService's
 	// RevokeBiscuit RPC.
 	CapabilityServiceRevokeBiscuitProcedure = "/paladin.admin.v1.CapabilityService/RevokeBiscuit"
@@ -68,6 +71,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("Revoke"),
 			Procedure:        CapabilityServiceRevokeProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
+	capabilityServiceRevokeRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("RevokeRun"),
+			Procedure:        CapabilityServiceRevokeRunProcedure,
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
@@ -145,6 +156,11 @@ type CapabilityServiceClient interface {
 	// tree. Idempotent — re-revoking a revoked capability is a no-op, and the
 	// response says so, with the entry that stands.
 	Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error)
+	// RevokeRun revokes every capability of one agent run in a tenant — the
+	// run's own, and through them those delegated from them — and releases
+	// their holds at once: an agent gone wrong stopped in one call. Idempotent;
+	// a repeat revokes nothing and reports none.
+	RevokeRun(context.Context, *v1.CapabilityServiceRevokeRunRequest) (*v1.CapabilityServiceRevokeRunResponse, error)
 	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
 	// `token` is, and every copy attenuated from it. The capability, the copy
 	// it was attenuated from and its other copies keep working; revoke the
@@ -207,6 +223,11 @@ type CapabilityServiceHandler interface {
 	// tree. Idempotent — re-revoking a revoked capability is a no-op, and the
 	// response says so, with the entry that stands.
 	Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error)
+	// RevokeRun revokes every capability of one agent run in a tenant — the
+	// run's own, and through them those delegated from them — and releases
+	// their holds at once: an agent gone wrong stopped in one call. Idempotent;
+	// a repeat revokes nothing and reports none.
+	RevokeRun(context.Context, *v1.CapabilityServiceRevokeRunRequest) (*v1.CapabilityServiceRevokeRunResponse, error)
 	// RevokeBiscuit revokes one copy of a capability's Biscuit: the copy
 	// `token` is, and every copy attenuated from it. The capability, the copy
 	// it was attenuated from and its other copies keep working; revoke the
@@ -247,6 +268,7 @@ func RegisterCapabilityServiceHandler(server *connect.Server, svc CapabilityServ
 		connect.Method{Spec: capabilityServiceIssueSpec(), Handler: adapter.issue},
 		connect.Method{Spec: capabilityServiceDelegateSpec(), Handler: adapter.delegate},
 		connect.Method{Spec: capabilityServiceRevokeSpec(), Handler: adapter.revoke},
+		connect.Method{Spec: capabilityServiceRevokeRunSpec(), Handler: adapter.revokeRun},
 		connect.Method{Spec: capabilityServiceRevokeBiscuitSpec(), Handler: adapter.revokeBiscuit},
 		connect.Method{Spec: capabilityServiceGetBiscuitUsageSpec(), Handler: adapter.getBiscuitUsage},
 		connect.Method{Spec: capabilityServiceGetSpec(), Handler: adapter.get},
@@ -269,6 +291,10 @@ func (UnimplementedCapabilityServiceHandler) Delegate(context.Context, *v1.Capab
 
 func (UnimplementedCapabilityServiceHandler) Revoke(context.Context, *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.Revoke is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) RevokeRun(context.Context, *v1.CapabilityServiceRevokeRunRequest) (*v1.CapabilityServiceRevokeRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.RevokeRun is not implemented")
 }
 
 func (UnimplementedCapabilityServiceHandler) RevokeBiscuit(context.Context, *v1.CapabilityServiceRevokeBiscuitRequest) (*v1.CapabilityServiceRevokeBiscuitResponse, error) {
@@ -318,6 +344,14 @@ func (c *capabilityServiceClient) Delegate(ctx context.Context, req *v1.Capabili
 func (c *capabilityServiceClient) Revoke(ctx context.Context, req *v1.CapabilityServiceRevokeRequest) (*v1.CapabilityServiceRevokeResponse, error) {
 	var res v1.CapabilityServiceRevokeResponse
 	if err := c.client.CallUnary(ctx, capabilityServiceRevokeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) RevokeRun(ctx context.Context, req *v1.CapabilityServiceRevokeRunRequest) (*v1.CapabilityServiceRevokeRunResponse, error) {
+	var res v1.CapabilityServiceRevokeRunResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceRevokeRunSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -403,6 +437,18 @@ func (h capabilityServiceHandler) revoke(ctx context.Context, _ connect.Spec, st
 		return err
 	}
 	res, err := h.svc.Revoke(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) revokeRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceRevokeRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeRun(ctx, &req)
 	if err != nil {
 		return err
 	}

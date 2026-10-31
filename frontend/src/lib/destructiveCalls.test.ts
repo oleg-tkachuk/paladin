@@ -46,6 +46,8 @@ const GUARDED: Record<string, string> = {
     "the call is made from the dialog itself",
   "app/tenants/[id]/capabilities/RevokeBiscuitCopyDialog.tsx::revokeBiscuit":
     "the call is made from the dialog itself",
+  "app/tenants/[id]/capabilities/RevokeRunDialog.tsx::revokeRun":
+    "the call is made from the dialog itself",
   "app/tenants/[id]/collections/[name]/objects/page.tsx::purgeObject":
     "confirm state on the page",
   "app/tenants/[id]/collections/[name]/trash/page.tsx::purgeObject":
@@ -105,6 +107,8 @@ const TYPED: Record<string, string> = {
     "app/tenants/[id]/event-subscriptions/page.tsx",
   "app/tenants/[id]/capabilities/RevokeCapabilityDialog.tsx::revoke":
     "app/tenants/[id]/capabilities/RevokeCapabilityDialog.tsx",
+  "app/tenants/[id]/capabilities/RevokeRunDialog.tsx::revokeRun":
+    "app/tenants/[id]/capabilities/RevokeRunDialog.tsx",
   "app/tenants/[id]/m2m-tokens/RevokeTokenDialog.tsx::revoke":
     "app/tenants/[id]/m2m-tokens/RevokeTokenDialog.tsx",
 };

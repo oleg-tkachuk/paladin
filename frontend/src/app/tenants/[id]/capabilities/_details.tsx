@@ -6,6 +6,7 @@ import type {
   CapabilityServiceGetResponse,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { CapabilityUsage } from "@/lib/queries/details";
@@ -43,14 +44,26 @@ function recordText(record: RecordEntry): string | undefined {
 // DetailsBody renders every field of a Capability in a stacked label/value
 // layout, what it is now first. Its id is the panel's header, with a copy;
 // long free text (prefixes, URIs) `break-all` so the panel does not widen.
+/** What the panel offers on an agent run's capability. */
+export interface RunActions {
+  run: string;
+  /** The run's capabilities, listed. */
+  href: string;
+  /** Asks to revoke the whole run; the page confirms it. */
+  onRevoke: () => void;
+}
+
 export function DetailsBody({
   cap,
   usageEntry,
   record,
+  run,
 }: {
   cap: Capability;
   usageEntry: UsageEntry;
   record: RecordEntry;
+  /** The capability's agent run, and what to do with it; none for no run. */
+  run?: RunActions;
 }) {
   // Capability without a budget unit (metering-only) renders as XXX, not
   // USD — the bare "$" would imply currency where none is pinned.
@@ -107,6 +120,27 @@ export function DetailsBody({
           mono
           breakAll
         />
+        {run ? (
+          <DetailRow
+            label="Run"
+            value={
+              <div className="space-y-1">
+                <CopyableId value={run.run} label="run ID" />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Link
+                    href={run.href}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Capabilities of this run
+                  </Link>
+                  <Button variant="outline" size="sm" onClick={run.onRevoke}>
+                    Revoke this run
+                  </Button>
+                </div>
+              </div>
+            }
+          />
+        ) : null}
       </DetailsSection>
 
       <DetailsSection title="Authorization">

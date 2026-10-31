@@ -37,6 +37,7 @@ var (
 		"/paladin.admin.v1.CapabilityService/Delegate":           true,
 		"/paladin.admin.v1.CapabilityService/Revoke":             true,
 		"/paladin.admin.v1.CapabilityService/RevokeBiscuit":      true,
+		"/paladin.admin.v1.CapabilityService/RevokeRun":          true,
 		"/paladin.admin.v1.OAuthClientService/DeleteOAuthClient": true,
 	}
 	// The caller acts on itself — its session, password or settings — so the

@@ -19,6 +19,7 @@ const (
 	LogKeyCapabilitiesRevoked = "capabilities_revoked"
 	logKeyHoldsReleased       = "holds_released"
 	logKeyCapabilityID        = "capability_id"
+	logKeyRunID               = "run_id"
 )
 
 // msgCapabilityHoldsReleased is the line ReleaseRevoked logs.
@@ -124,6 +125,7 @@ func logRevoked(ctx context.Context, req limes.RevokeMatchingRequest, revoked, r
 	}
 	logger.FromContext(ctx).Log(level, "capabilities revoked in bulk",
 		zap.Bool("all_tenants", req.AllTenants), zap.String("client_id", req.ClientID), zap.String("session", req.Session),
+		zap.String(logKeyRunID, runOf(req)),
 		zap.Int64(LogKeyCapabilitiesRevoked, revoked), zap.Int64(logKeyHoldsReleased, released))
 }
 
@@ -132,5 +134,22 @@ func logRevoked(ctx context.Context, req limes.RevokeMatchingRequest, revoked, r
 func (b *BulkRevocation) RevokeSession(ctx context.Context, tenant, session uuid.UUID, note, actor string) (int64, error) {
 	return b.RevokeMatching(ctx, limes.RevokeMatchingRequest{
 		TenantID: tenant, Session: session.String(), Note: note, Actor: actor,
+	})
+}
+
+// runOf is the run a revocation selects by, empty for none.
+func runOf(req limes.RevokeMatchingRequest) string {
+	if req.RunID == uuid.Nil() {
+		return ""
+	}
+	return req.RunID.String()
+}
+
+// RevokeRun revokes every capability of an agent run in tenant — the run's
+// own and, through them, those delegated from them — and releases their
+// holds, with the note and actor its revocation entries record.
+func (b *BulkRevocation) RevokeRun(ctx context.Context, tenant, run uuid.UUID, note, actor string) (int64, error) {
+	return b.RevokeMatching(ctx, limes.RevokeMatchingRequest{
+		TenantID: tenant, RunID: run, Note: note, Actor: actor,
 	})
 }

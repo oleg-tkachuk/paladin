@@ -387,6 +387,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			WithCopyUsage(deps.Capability.CopyUsage).
 			WithRecords(deps.Capability.Records).
 			WithHoldRelease(deps.Capability.BulkRevocation).
+			WithRunRevocation(deps.Capability.BulkRevocation).
 			WithCurrency(deps.Cfg.Capability.Currency)
 		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)
 	} else {

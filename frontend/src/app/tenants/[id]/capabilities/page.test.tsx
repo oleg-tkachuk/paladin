@@ -162,6 +162,32 @@ describe("CapabilitiesPage", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  // A capability links here with its run: the list is what revoking the run
+  // stops, offered from the bar, until the operator widens it to every run.
+  it("lists one agent run's capabilities from the link, offers to revoke it, then every run's", async () => {
+    window.history.replaceState(null, "", "/tenants/t-1/capabilities?run=r-1");
+    render(<CapabilitiesPage />);
+    await waitFor(() => expect(h.list).toHaveBeenCalled());
+    expect(h.list.mock.calls[0][0]).toMatchObject({ runId: "r-1" });
+    expect(screen.getByText("r-1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this run" }));
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Revoke this agent run?",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Every run" }));
+    await waitFor(() =>
+      expect(h.list.mock.lastCall?.[0]).toMatchObject({ runId: "" }),
+    );
+    window.history.replaceState(null, "", "/");
+  });
+
   // A list superseded by a newer filter is cancelled: that is no failure.
   it("says nothing of a list it cancelled", async () => {
     h.list.mockRejectedValue(new ConnectError("cancelled", Code.Canceled));

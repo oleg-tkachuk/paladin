@@ -111,18 +111,6 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
-### Revoke an agent run's capabilities
-
-- **Status:** Deferred.
-- **Reason:** limes v1.0.0-rc.24 revokes by agent run (`RunID` on
-  `RevokeMatchingRequest`, `ListRecordsRequest` and
-  `meter.ReleaseMatchingRequest`), but Paladin has no operation that ends a
-  run: `run_id` is only a field of an agent principal it records.
-- **Definition of Done:** an admin RPC that revokes the capabilities of a
-  run in a tenant through `auth.BulkRevocation`, releasing their holds, and
-  a console action on a capability that names a run.
-- **Blockers:** a product call; no current ask.
-
 ### Put limes' error codes on the wire
 
 - **Status:** Deferred.
