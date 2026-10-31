@@ -22,6 +22,17 @@ export interface NodeStatus {
   label: string;
 }
 
+/**
+ * Something a node's menu shows or hides on demand — a tenant's collections
+ * — read only once asked for. The page that draws the graph keeps which are
+ * open, by key.
+ */
+export interface NodeToggle {
+  key: string;
+  /** What the menu offers: "Show collections", or "Hide collections". */
+  label: string;
+}
+
 /** A further page about a node, offered in its menu. */
 export interface NodeLink {
   label: string;
@@ -40,6 +51,8 @@ export interface TopologyNode {
   /** The node's one page (ADR-0033); a group has none. */
   href?: string;
   links?: readonly NodeLink[];
+  /** What its menu shows or hides on demand. */
+  toggle?: NodeToggle;
   /** Nothing uses it: a bucket no collection is bound to, a tenant with no bucket. */
   orphan?: boolean;
   /** For a group, the siblings it stands for. */

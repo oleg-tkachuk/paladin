@@ -7,10 +7,17 @@
 // failing backend shows which tenants stand behind it.
 //
 // Reads the lists the Storage Backends, Buckets and Tenants pages already
-// cache; there is no topology RPC to keep in step with them.
+// cache; there is no topology RPC to keep in step with them. A tenant opens
+// down to its collections on demand, reading that tenant's alone.
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import {
+  useQueries,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+
+import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 
 import { backendStatus } from "@/app/storage-backends/backendView";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -20,6 +27,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { errorMessage } from "@/hooks/errorContract";
 import { backendsQuery } from "@/lib/queries/backends";
 import { bucketsQuery } from "@/lib/queries/buckets";
+import { collectionsQuery } from "@/lib/queries/collections";
 import { tenantsQuery } from "@/lib/queries/tenants";
 import { platformTopology } from "@/lib/topology/platform";
 
@@ -27,6 +35,16 @@ export default function PlatformTopologyPage() {
   const backendsRead = useQuery(backendsQuery());
   const bucketsRead = useQuery(bucketsQuery());
   const tenantsRead = useQuery(tenantsQuery());
+  // The tenants opened down to their collections, each read on its own.
+  const [open, setOpen] = useState<readonly string[]>([]);
+  const reads = useQueries({
+    queries: open.map((id) => collectionsQuery(`tenants/${id}`)),
+    combine: openCollections,
+  });
+  const toggle = (id: string) =>
+    setOpen((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
+    );
 
   const graph = useMemo(
     () =>
@@ -36,10 +54,13 @@ export default function PlatformTopologyPage() {
             buckets: bucketsRead.data,
             tenants: tenantsRead.data,
             backendStatus,
+            collections: reads.collections(open),
           })
         : null,
-    [backendsRead.data, bucketsRead.data, tenantsRead.data],
+    [backendsRead.data, bucketsRead.data, tenantsRead.data, reads, open],
   );
+  // A tenant whose collections could not be read stays closed, and says so.
+  const collectionsFailed = reads.failed;
 
   const failed = [
     { what: "Storage backends", read: backendsRead },
@@ -51,7 +72,7 @@ export default function PlatformTopologyPage() {
     <div className="space-y-4">
       <PageHeader
         title="Topology"
-        description="Every storage backend, the buckets on it and the tenants each bucket serves. A dashed node is registered and used by nothing."
+        description="Every storage backend, the buckets on it and the tenants each bucket serves; a tenant's menu shows its collections. A dashed node is registered and used by nothing."
         showDefaultActions={false}
       />
       {failed ? (
@@ -61,10 +82,45 @@ export default function PlatformTopologyPage() {
           onRetry={() => void failed.read.refetch()}
         />
       ) : graph ? (
-        <TopologyGraph graph={graph} label="Platform topology" />
+        <>
+          {collectionsFailed ? (
+            <ListLoadError
+              variant="inline"
+              what="A tenant's collections"
+              reason={errorMessage(collectionsFailed.error, "The read failed")}
+              onRetry={() => void collectionsFailed.refetch()}
+            />
+          ) : null}
+          <TopologyGraph
+            graph={graph}
+            label="Platform topology"
+            onToggle={toggle}
+          />
+        </>
       ) : (
         <Skeleton className="h-96 w-full" />
       )}
     </div>
   );
+}
+
+/**
+ * The open tenants' reads, as the graph takes them: the collections of each
+ * read so far, by tenant, and the first read that failed. A module-level
+ * combine, so its answer holds still while no read changes.
+ */
+function openCollections(results: UseQueryResult<Collection[]>[]): {
+  collections: (open: readonly string[]) => Map<string, Collection[]>;
+  failed: UseQueryResult<Collection[]> | undefined;
+} {
+  return {
+    collections: (open) =>
+      new Map(
+        open.flatMap((id, i) => {
+          const data = results[i]?.data;
+          return data ? [[id, data] as const] : [];
+        }),
+      ),
+    failed: results.find((r) => r.error),
+  };
 }

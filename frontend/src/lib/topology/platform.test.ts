@@ -3,13 +3,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   BucketSchema,
+  CollectionSchema,
   StorageBackendSchema,
   TenantSchema,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { StatusTone } from "@/lib/ui/status";
 
 import type { TopologyGraph } from "./model";
-import { platformTopology } from "./platform";
+import {
+  HIDE_COLLECTIONS,
+  SHOW_COLLECTIONS,
+  platformTopology,
+} from "./platform";
 
 const ACME = "11111111-1111-1111-1111-111111111111";
 const POOL = "22222222-2222-2222-2222-222222222222";
@@ -53,7 +58,7 @@ describe("platformTopology", () => {
   });
 
   it("reads backends → buckets → tenants, owner and grantees", () => {
-    expect(g.columns).toEqual(["backend", "bucket", "tenant"]);
+    expect(g.columns).toEqual(["backend", "bucket", "tenant", "collection"]);
     expect(g.edges.map((e) => `${e.from} → ${e.to}`)).toEqual([
       "backend:be → bucket:be/broken",
       `bucket:be/broken → tenant:${POOL}`,
@@ -103,5 +108,57 @@ describe("platformTopology", () => {
       label: "Topology",
       href: "/tenants/acme/topology",
     });
+  });
+});
+
+// A tenant opens down to its collections on demand: closed, its menu offers
+// them; open, they are drawn beside it, each a link to its page.
+describe("platformTopology's collections on demand", () => {
+  const input = {
+    backends: [backend("be")],
+    buckets: [
+      bucket("be", "home", { ownerTenantId: ACME, grantedTenantIds: [] }),
+    ],
+    tenants: [tenant(ACME, "acme"), tenant(POOL, "pool")],
+    backendStatus,
+  };
+
+  it("draws no collection until a tenant is opened, and offers to open each", () => {
+    const g = platformTopology(input);
+    expect(g.nodes.some((n) => n.kind === "collection")).toBe(false);
+    expect(node(g, `tenant:${ACME}`).toggle).toEqual({
+      key: ACME,
+      label: SHOW_COLLECTIONS,
+    });
+  });
+
+  it("draws an opened tenant's collections beside it, and offers to hide them", () => {
+    const g = platformTopology({
+      ...input,
+      collections: new Map([
+        [
+          ACME,
+          [
+            create(CollectionSchema, { tenantId: ACME, collection: "media" }),
+            create(CollectionSchema, {
+              tenantId: ACME,
+              collection: "docs",
+              displayName: "Documents",
+            }),
+          ],
+        ],
+      ]),
+    });
+    const drawn = g.nodes.filter((n) => n.kind === "collection");
+    expect(drawn.map((n) => [n.label, n.detail, n.href])).toEqual([
+      ["docs", "Documents", "/tenants/acme/collections/docs"],
+      ["media", "Collection", "/tenants/acme/collections/media"],
+    ]);
+    for (const n of drawn) {
+      expect(g.edges).toContainEqual({ from: `tenant:${ACME}`, to: n.id });
+    }
+    expect(node(g, `tenant:${ACME}`).toggle?.label).toBe(HIDE_COLLECTIONS);
+    expect(node(g, `tenant:${POOL}`).toggle?.label).toBe(SHOW_COLLECTIONS);
+    expect(g.columns.at(-1)).toBe("collection");
   });
 });

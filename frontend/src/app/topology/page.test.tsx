@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectError, Code } from "@connectrpc/connect";
+import userEvent from "@testing-library/user-event";
 
 import { render, screen, within } from "@/test/utils";
 
@@ -8,6 +9,7 @@ const POOL = "22222222-2222-2222-2222-222222222222";
 
 const h = vi.hoisted(() => ({
   bucketsError: null as Error | null,
+  listCollections: vi.fn(),
 }));
 
 vi.mock("@/lib/connect/client", () => ({
@@ -51,6 +53,7 @@ vi.mock("@/lib/connect/client", () => ({
       };
     }),
   },
+  collectionClient: { listCollections: h.listCollections },
   tenantClient: {
     listTenants: vi.fn(async () => ({
       tenants: [
@@ -69,6 +72,10 @@ import PlatformTopologyPage from "./page";
 
 beforeEach(() => {
   h.bucketsError = null;
+  h.listCollections.mockReset().mockResolvedValue({
+    collections: [{ tenantId: ACME, collection: "docs", displayName: "" }],
+    page: { nextPageToken: "" },
+  });
 });
 
 describe("PlatformTopologyPage", () => {
@@ -114,5 +121,34 @@ describe("PlatformTopologyPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /Buckets could not be loaded/,
     );
+  });
+
+  // A tenant opens down to its collections from its menu, reading that
+  // tenant's alone, and closes again.
+  it("shows a tenant's collections on demand, read for that tenant alone", async () => {
+    render(<PlatformTopologyPage />);
+    await screen.findByRole("group", { name: "Platform topology" });
+    expect(h.listCollections).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More for Acme" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Show collections" }),
+    );
+    const docs = await screen.findByRole("link", { name: /^docs/ });
+    expect(docs.getAttribute("href")).toBe("/tenants/acme/collections/docs");
+    expect(h.listCollections).toHaveBeenCalledTimes(1);
+    expect(h.listCollections.mock.calls[0][0]).toMatchObject({
+      parent: `tenants/${ACME}`,
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More for Acme" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Hide collections" }),
+    );
+    expect(screen.queryByRole("link", { name: /^docs/ })).toBeNull();
   });
 });
