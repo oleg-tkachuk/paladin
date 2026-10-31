@@ -21,7 +21,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetPlatformTimeSeriesRequest, GetPlatformTimeSeriesResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse, ListTenantSpendRequest, ListTenantSpendResponse
+from .billing_service_pb2 import GetBillingSettingsRequest, GetBillingSettingsResponse, GetPlatformTimeSeriesRequest, GetPlatformTimeSeriesResponse, GetTenantSummaryRequest, GetTenantSummaryResponse, GetTenantTimeSeriesRequest, GetTenantTimeSeriesResponse, ListTenantSpendRequest, ListTenantSpendResponse, ListTenantTimeSeriesRequest, ListTenantTimeSeriesResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -68,6 +68,15 @@ class BillingService(Protocol):
         as GetTenantTimeSeries does for one: what the platform was charged, in
         the unit most of the period's charges are in. It reads every tenant's
         rows, so it is gated as ListTenantSpend is.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_tenant_time_series(self, request: ListTenantTimeSeriesRequest, ctx: RequestContext[ListTenantTimeSeriesRequest, ListTenantTimeSeriesResponse], /) -> ListTenantTimeSeriesResponse:
+        """
+        ListTenantTimeSeries returns each named tenant's spend a bucket at a
+        time, as GetTenantTimeSeries does for one, from one sum of the ledger
+        across them: a trend beside each tenant a list shows. It reads every
+        named tenant's rows, so it is gated as ListTenantSpend is.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -134,6 +143,17 @@ class BillingServiceASGIApplication(ConnectASGIApplication[BillingService]):
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.get_platform_time_series,
+                ),
+                "/paladin.admin.v1.BillingService/ListTenantTimeSeries": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListTenantTimeSeries",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=ListTenantTimeSeriesRequest,
+                        output=ListTenantTimeSeriesResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.list_tenant_time_series,
                 ),
                 "/paladin.admin.v1.BillingService/ListTenantSpend": Endpoint.unary(
                     method=MethodInfo(
@@ -285,6 +305,34 @@ class BillingServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
+    async def list_tenant_time_series(
+        self,
+        request: ListTenantTimeSeriesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListTenantTimeSeriesResponse:
+        """
+        ListTenantTimeSeries returns each named tenant's spend a bucket at a
+        time, as GetTenantTimeSeries does for one, from one sum of the ledger
+        across them: a trend beside each tenant a list shows. It reads every
+        named tenant's rows, so it is gated as ListTenantSpend is.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListTenantTimeSeries",
+                service_name="paladin.admin.v1.BillingService",
+                input=ListTenantTimeSeriesRequest,
+                output=ListTenantTimeSeriesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
     async def list_tenant_spend(
         self,
         request: ListTenantSpendRequest,
@@ -375,6 +423,15 @@ class BillingServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def list_tenant_time_series(self, request: ListTenantTimeSeriesRequest, ctx: RequestContext[ListTenantTimeSeriesRequest, ListTenantTimeSeriesResponse], /) -> ListTenantTimeSeriesResponse:
+        """
+        ListTenantTimeSeries returns each named tenant's spend a bucket at a
+        time, as GetTenantTimeSeries does for one, from one sum of the ledger
+        across them: a trend beside each tenant a list shows. It reads every
+        named tenant's rows, so it is gated as ListTenantSpend is.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def list_tenant_spend(self, request: ListTenantSpendRequest, ctx: RequestContext[ListTenantSpendRequest, ListTenantSpendResponse], /) -> ListTenantSpendResponse:
         """
         ListTenantSpend lists the tenants that spent anything over the period,
@@ -436,6 +493,17 @@ class BillingServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.get_platform_time_series,
+                ),
+                "/paladin.admin.v1.BillingService/ListTenantTimeSeries": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListTenantTimeSeries",
+                        service_name="paladin.admin.v1.BillingService",
+                        input=ListTenantTimeSeriesRequest,
+                        output=ListTenantTimeSeriesResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.list_tenant_time_series,
                 ),
                 "/paladin.admin.v1.BillingService/ListTenantSpend": EndpointSync.unary(
                     method=MethodInfo(
@@ -580,6 +648,34 @@ class BillingServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.BillingService",
                 input=GetPlatformTimeSeriesRequest,
                 output=GetPlatformTimeSeriesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def list_tenant_time_series(
+        self,
+        request: ListTenantTimeSeriesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListTenantTimeSeriesResponse:
+        """
+        ListTenantTimeSeries returns each named tenant's spend a bucket at a
+        time, as GetTenantTimeSeries does for one, from one sum of the ledger
+        across them: a trend beside each tenant a list shows. It reads every
+        named tenant's rows, so it is gated as ListTenantSpend is.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListTenantTimeSeries",
+                service_name="paladin.admin.v1.BillingService",
+                input=ListTenantTimeSeriesRequest,
+                output=ListTenantTimeSeriesResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                 stream_type=StreamType.UNARY,
             ),

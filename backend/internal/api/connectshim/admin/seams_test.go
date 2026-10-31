@@ -100,6 +100,9 @@ func (failingBilling) GetPlatformTimeSeries(context.Context, time.Time, time.Tim
 func (failingBilling) ListTenantSpend(context.Context, time.Time, time.Time, int) ([]billingh.TenantSpend, bool, error) {
 	return nil, false, errBoom
 }
+func (failingBilling) ListTenantTimeSeries(context.Context, []uuid.UUID, time.Time, time.Time, string) ([]billingh.TenantSeries, error) {
+	return nil, errBoom
+}
 func (failingBilling) Currency(context.Context) (string, error) {
 	return "", errBoom
 }
@@ -452,6 +455,10 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 			_, err := billingSrv.GetTenantTimeSeries(ctx, &pb.GetTenantTimeSeriesRequest{
 				TenantId: tenantID.String(),
 			})
+			return err
+		}},
+		{"Billing.ListTenantTimeSeries", func() error {
+			_, err := billingSrv.ListTenantTimeSeries(ctx, &pb.ListTenantTimeSeriesRequest{TenantIds: []string{uuid.New().String()}})
 			return err
 		}},
 		{"Billing.GetPlatformTimeSeries", func() error {

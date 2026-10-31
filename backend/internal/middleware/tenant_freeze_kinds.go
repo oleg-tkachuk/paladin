@@ -100,6 +100,7 @@ var procedureKinds = map[string]Kind{
 	admin.BillingServiceGetBillingSettingsProcedure:    Reads,
 	admin.BillingServiceGetTenantTimeSeriesProcedure:   Reads,
 	admin.BillingServiceGetPlatformTimeSeriesProcedure: Reads,
+	admin.BillingServiceListTenantTimeSeriesProcedure:  Reads,
 
 	admin.BucketServiceCreateBucketProcedure:          Changes,
 	admin.BucketServiceGetBucketProcedure:             Reads,

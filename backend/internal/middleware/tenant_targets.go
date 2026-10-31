@@ -32,6 +32,9 @@ var ignoredTenantFields = map[protoreflect.Name]bool{
 	// Bucket.granted_tenant_ids is output only: a request's value is dropped,
 	// and grants change through GrantBucket, whose tenant_id the walk reads.
 	"granted_tenant_ids": true,
+	// ListTenantTimeSeries.tenant_ids are the tenants a read sums: it changes
+	// none of them.
+	"tenant_ids": true,
 }
 
 // tenantRefs are the tenants a request names: by id, and by slug where a
