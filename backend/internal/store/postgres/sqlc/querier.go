@@ -27,6 +27,9 @@ type Querier interface {
 	// overwrites an existing row — an explicit SetObjectRetention that arrived
 	// first outranks a default.
 	ApplyBucketDefaultLock(ctx context.Context, tenantID pgtype.UUID, versionID pgtype.UUID, mode ObjectLockMode, retentionSeconds int64) error
+	// The storage backend whose policy layer storageBackends/{backend} addresses,
+	// by its name: the admin API's id for it.
+	BackendIDForPolicy(ctx context.Context, name string) (pgtype.UUID, error)
 	// The abort failed. Record why and push the next attempt out; the debt is
 	// never dropped, because nothing else in the system remembers those parts.
 	BackoffMultipartAbortDebt(ctx context.Context, iD pgtype.UUID, lastError *string, backoffMicros int64) error
@@ -36,8 +39,9 @@ type Querier interface {
 	BindCollectionToBucket(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, expectedVersion int64) (int64, error)
 	// Whether the tenant holds a grant on the bucket and has a collection in it.
 	BucketGrantInUse(ctx context.Context, backendName string, bucketName string, tenantID pgtype.UUID) (bool, error)
-	// The bucket whose policy layer storageBackends/{backend}/buckets/{name} addresses.
-	BucketIDForPolicy(ctx context.Context, backendID pgtype.UUID, name string) (pgtype.UUID, error)
+	// The bucket whose policy layer storageBackends/{backend}/buckets/{name}
+	// addresses, its backend by name.
+	BucketIDForPolicy(ctx context.Context, backend string, bucket string) (pgtype.UUID, error)
 	// Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
 	//
 	// Shared across replicas: an in-memory bucket gave each pod its own ceiling,

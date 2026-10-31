@@ -143,15 +143,39 @@ func TestPolicyVersions(t *testing.T) {
 		}
 	})
 
+	// A backend is addressed by its name, as the admin API names it.
+	var backend string
+	if err := admin.QueryRow(ctx,
+		`SELECT s.name FROM buckets b JOIN storage_backends s ON s.id = b.backend_id WHERE b.name = $1`,
+		actingBucketName).Scan(&backend); err != nil {
+		t.Fatalf("bucket's backend: %v", err)
+	}
+
 	t.Run("a bucket's policy, a platform layer", func(t *testing.T) {
-		var backend uuid.UUID
-		if err := admin.QueryRow(ctx, `SELECT backend_id FROM buckets WHERE name = $1`, actingBucketName).Scan(&backend); err != nil {
-			t.Fatalf("bucket: %v", err)
-		}
 		mustExec(t, ctx, admin, `UPDATE buckets SET cedar_policy = $1 WHERE name = $2`, policyV2, actingBucketName)
-		v := history(asOther, policyh.LayerRef{Layer: policyh.LayerBucket, BackendID: backend, Bucket: actingBucketName})
+		v := history(asOther, policyh.LayerRef{Layer: policyh.LayerBucket, Backend: backend, Bucket: actingBucketName})
 		if len(v) == 0 || v[0].CedarPolicy != policyV2 {
 			t.Errorf("bucket history = %+v, want the new text first", v)
+		}
+	})
+
+	t.Run("a backend's policy, by the backend's name", func(t *testing.T) {
+		mustExec(t, ctx, admin, `UPDATE storage_backends SET cedar_policy = $1 WHERE name = $2`, policyV1, backend)
+		v := history(asOther, policyh.LayerRef{Layer: policyh.LayerStorageBackend, Backend: backend})
+		if len(v) == 0 || v[0].CedarPolicy != policyV1 {
+			t.Errorf("backend history = %+v, want the new text first", v)
+		}
+	})
+
+	t.Run("a backend or bucket that does not exist", func(t *testing.T) {
+		for _, ref := range []policyh.LayerRef{
+			{Layer: policyh.LayerStorageBackend, Backend: "nope"},
+			{Layer: policyh.LayerBucket, Backend: "nope", Bucket: actingBucketName},
+			{Layer: policyh.LayerBucket, Backend: backend, Bucket: "nope"},
+		} {
+			if _, err := repo.ListPolicyVersions(asOther, ref, 0, versionsPageSize); !errors.Is(err, policyh.ErrLayerNotFound) {
+				t.Errorf("%+v: err = %v, want ErrLayerNotFound", ref, err)
+			}
 		}
 	})
 
