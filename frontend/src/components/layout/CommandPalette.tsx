@@ -232,6 +232,15 @@ export function CommandPalette() {
           onSelect: () => router.push("/collections"),
         },
         {
+          id: "nav-capabilities",
+          type: "nav",
+          title: "Capabilities (cross-tenant)",
+          subtitle: "Platform-admin index of every tenant's capabilities",
+          icon: ServerStackIcon,
+          href: SECTION.capabilities,
+          onSelect: () => router.push(SECTION.capabilities),
+        },
+        {
           id: "nav-topology",
           type: "nav",
           title: "Topology",

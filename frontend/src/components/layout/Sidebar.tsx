@@ -41,6 +41,7 @@ import {
   FolderIcon,
   QueueListIcon,
   ShareIcon,
+  IdentificationIcon,
 } from "@heroicons/react/24/outline";
 
 import { cn } from "@/lib/utils";
@@ -193,6 +194,13 @@ const navigationGroups: Array<{
       },
       { name: "Users", path: "/users", icon: UserCircleIcon },
       { name: "Policies", path: "/policies", icon: ShieldCheckIcon },
+      {
+        // Capabilities — every tenant's, the platform-admin index; a
+        // tenant's own are under its workspace (Your tenant → Capabilities).
+        name: "Capabilities",
+        path: SECTION.capabilities,
+        icon: IdentificationIcon,
+      },
       { name: "Trash", path: "/trash", icon: TrashIcon },
     ],
   },
