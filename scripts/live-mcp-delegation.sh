@@ -22,8 +22,9 @@
 # released at once and the revocation says so in the IAM plane's log.
 # Deleting the client revokes what is left. No metered request leaves a hold
 # open long enough to revoke under it, so the check opens one by hand in
-# limes's tables, through the database cluster's primary. The client and its
-# grants are removed on exit.
+# limes's tables, through the database cluster's primary, and reads it back
+# through the admin plane: the tenant's budget and its list of holds. The
+# client and its grants are removed on exit.
 #
 #   KUBE_CONTEXT=orbstack ./scripts/live-mcp-delegation.sh
 #
@@ -125,10 +126,13 @@ readonly PG_PRIMARY_LABEL=cnpg.io/instanceRole=primary
 readonly PG_CLUSTER_LABEL=cnpg.io/cluster
 readonly PG_CONTAINER=postgres
 readonly PG_SUPERUSER=postgres
-# The hold: one whole unit in micro-units, as a metered read in flight leaves
-# it, open long enough that only the revocation can release it. limes writes
-# a counter with no budget in its abstract unit.
-readonly HOLD_MICROS=1000000
+# limes keeps amounts in nano-units; the admin plane answers in
+# google.type.Money, whole units and nanos.
+readonly NANOS_PER_UNIT=1000000000
+# The hold: one whole unit, as a metered read in flight leaves it, open long
+# enough that only the revocation can release it. limes writes a counter with
+# no budget in its abstract unit.
+readonly HOLD_NANOS=$NANOS_PER_UNIT
 readonly HOLD_TTL='1 hour'
 readonly HOLD_OP=get
 readonly HOLD_ACTOR=live-mcp-delegation
@@ -458,11 +462,32 @@ logged_revocation() {
     done
     return 1
 }
+# money_nanos is the jq definition turning a google.type.Money into nanos.
+money_nanos="def nanos: ((.units // \"0\") | tonumber) * $NANOS_PER_UNIT + (.nanos // 0);"
+# budget_reserved prints what the tenant's holds keep from its budget, in
+# nanos, as the admin plane reports it: nothing when the tenant has no budget.
 budget_reserved() {
-    sql "tenant=$tenant" <<<"SELECT coalesce((SELECT reserved FROM limes.tenant_budgets WHERE tenant_id = :'tenant'), 0);"
+    local r
+    r=$(admin_rpc TenantBudgetService/Get "$(jq -cn --arg t "$tenant" '{tenantId:$t}')")
+    jq -r "$money_nanos"' if .code == "not_found" then 0 elif .code then error(.message) else (.budget.reserved // {} | nanos) end' <<<"$r" ||
+        echo "$r"
 }
-usage_reserved() {
-    sql "cap=$1" <<<"SELECT coalesce((SELECT reserved FROM limes.usage WHERE capability_id = :'cap'), 0);"
+# holds_on <capability> prints the tenant's holds on the capability as the
+# admin plane lists them, one {id, nanos} per line, through every page.
+holds_on() {
+    local page="" r
+    while :; do
+        r=$(admin_rpc TenantBudgetService/ListReservations \
+            "$(jq -cn --arg t "$tenant" --arg p "$page" '{tenantId:$t, pageToken:$p}')")
+        # An error answers with a code; no holds, with no list at all.
+        if jq -e 'has("code")' <<<"$r" >/dev/null; then
+            echo "$r"
+            return 1
+        fi
+        jq -c --arg c "$1" "$money_nanos"' .reservations // [] | .[] | select(.capabilityId == $c) | {id, nanos: (.amount | nanos)}' <<<"$r"
+        page=$(jq -r '.nextPageToken // empty' <<<"$r")
+        [[ -z "$page" ]] && return 0
+    done
 }
 
 # The bridge exchanged the read grant's token when it relayed the refused
@@ -480,7 +505,7 @@ ok "the capability list finds the grant's live capability by its OAuth session"
 budget_before=$(budget_reserved)
 hold=$(uuidgen | tr '[:upper:]' '[:lower:]')
 fixture_capability=$reader_capability
-sql "cap=$reader_capability" "tenant=$tenant" "hold=$hold" "amount=$HOLD_MICROS" "ttl=$HOLD_TTL" \
+sql "cap=$reader_capability" "tenant=$tenant" "hold=$hold" "amount=$HOLD_NANOS" "ttl=$HOLD_TTL" \
     "op=$HOLD_OP" "actor=$HOLD_ACTOR" "abstract=$ABSTRACT_UNIT" <<'SQL'
 BEGIN;
 SELECT coalesce((SELECT unit_code FROM limes.tenant_budgets WHERE tenant_id = :'tenant'), :'abstract') AS unit \gset
@@ -491,8 +516,12 @@ INSERT INTO limes.reservations (id, capability_id, tenant_id, ancestors, amount,
     VALUES (:'hold', :'cap', :'tenant', '{}', :amount, :'unit', :'op', :'actor', '[]', now() + :'ttl'::interval);
 COMMIT;
 SQL
-got=$(usage_reserved "$reader_capability")
-expect "a hold is open on the capability" "reserved $got" test "$got" = "$HOLD_MICROS"
+got=$(holds_on "$reader_capability")
+want=$(jq -cn --arg h "$hold" --argjson n "$HOLD_NANOS" '{id:$h, nanos:$n}')
+expect "the tenant's holds list the hold on the capability" "listed $got" test "$got" = "$want"
+got=$(budget_reserved)
+expect "the tenant's budget counts the hold" "reserved $got, was $budget_before" \
+    test "$got" = "$((budget_before + HOLD_NANOS))"
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 r=$(iam_rpc UserService/RevokeOAuthGrant \
@@ -500,10 +529,8 @@ r=$(iam_rpc UserService/RevokeOAuthGrant \
 expect "an operator revokes the $SCOPE_READ grant" "$r" test "$(jq -r '.code // "ok"' <<<"$r")" = ok
 d=$(disposition_in_session "$reader_session" "$reader_capability")
 expect "the grant's capability is revoked" "disposition '$d'" test "$d" = "$DISPOSITION_REVOKED"
-left=$(sql "hold=$hold" <<<"SELECT count(*) FROM limes.reservations WHERE id = :'hold';")
-expect "the hold is released at once" "$left left" test "$left" = 0
-got=$(usage_reserved "$reader_capability")
-expect "the capability holds nothing" "reserved $got" test "$got" = 0
+got=$(holds_on "$reader_capability")
+expect "the hold is released at once" "listed $got" test -z "$got"
 got=$(budget_reserved)
 expect "the tenant's budget holds what it did before" "reserved $got, was $budget_before" test "$got" = "$budget_before"
 expect "the IAM plane logs the release" "no '$BULK_REVOKED_MSG' line for session $reader_session" \
