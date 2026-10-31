@@ -28,6 +28,7 @@ export const SECTION = {
   health: "/health",
   profile: "/profile",
   applications: "/applications",
+  myCapabilities: "/my-capabilities",
   config: "/config",
 } as const;
 

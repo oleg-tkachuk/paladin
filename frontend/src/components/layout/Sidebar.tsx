@@ -48,6 +48,7 @@ import { useAuth } from "@/context/AuthContext";
 import { canUseAdminPlane } from "@/constants/roles";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
 import { BuildVersion } from "@/components/layout/BuildVersion";
+import { ACCOUNT_PAGES } from "@/lib/navigation/account";
 import { SECTION, sectionFor } from "@/lib/navigation/sections";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -112,6 +113,9 @@ export function activeNavHref(
 
 /** The group of shortcuts into the session tenant's workspace. */
 export const SESSION_TENANT_GROUP = "Your tenant";
+
+/** The group of the signed-in user's own pages. */
+export const ACCOUNT_GROUP = "Account";
 
 // The line under that group's heading naming the tenant: the heading keeps
 // the short label every group has, and a long name — or the id, when nothing
@@ -246,23 +250,16 @@ const navigationGroups: Array<{
         path: "/health",
         icon: CheckCircleIcon,
       },
+      // The platform's configuration, not the user's: a page of the admin
+      // plane like the rest of System.
+      { name: "Configuration", path: SECTION.config, icon: Cog6ToothIcon },
     ],
   },
   {
-    title: "Settings",
-    items: [
-      {
-        name: "Profile",
-        path: "/profile",
-        icon: UserCircleIcon,
-      },
-      {
-        name: "Connected applications",
-        path: SECTION.applications,
-        icon: KeyIcon,
-      },
-      { name: "Configuration", path: "/config", icon: Cog6ToothIcon },
-    ],
+    // The signed-in user's own pages — the account, and what acts as them —
+    // and nothing of a tenant's or the platform's. Last, as a user menu is.
+    title: ACCOUNT_GROUP,
+    items: ACCOUNT_PAGES.map(({ name, path, icon }) => ({ name, path, icon })),
   },
 ];
 

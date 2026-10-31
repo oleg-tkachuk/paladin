@@ -1,3 +1,6 @@
+import { ACCOUNT_PAGES } from "@/lib/navigation/account";
+import { SECTION } from "@/lib/navigation/sections";
+
 /**
  * The console's routes that read nothing from the admin plane. Everything
  * else needs the paladin-admin audience, which IAM issues only to
@@ -5,11 +8,10 @@
  * guard all take their answer from here.
  */
 export const ROUTES_WITHOUT_ADMIN_PLANE: readonly string[] = [
-  "/",
-  "/health",
-  "/profile",
-  // A user's own OAuth grants, read from IAM.
-  "/applications",
+  SECTION.dashboard,
+  SECTION.health,
+  // A user's own pages, read from IAM.
+  ...ACCOUNT_PAGES.map((p) => p.path),
 ];
 
 const ROOT = "/";

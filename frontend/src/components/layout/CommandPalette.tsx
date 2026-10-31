@@ -40,6 +40,7 @@ import { API_PAGE_SIZE_MAX } from "@/constants";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
 import { routeNeedsAdminPlane } from "@/lib/adminPlaneRoutes";
+import { ACCOUNT_PAGES } from "@/lib/navigation/account";
 import { SECTION } from "@/lib/navigation/sections";
 import { chordFor, tenantBasePath } from "@/lib/navShortcuts";
 import { ACTIVE_ON_POPOVER, ACTIVE_SURFACE } from "@/lib/ui/states";
@@ -288,6 +289,15 @@ export function CommandPalette() {
           href: "/config",
           onSelect: () => router.push("/config"),
         },
+        ...ACCOUNT_PAGES.map((page): SearchResult => ({
+          id: `nav-account-${page.path}`,
+          type: "nav",
+          title: page.name,
+          subtitle: page.description,
+          icon: page.icon,
+          href: page.path,
+          onSelect: () => router.push(page.path),
+        })),
       ]),
     [router, withChord],
   );

@@ -42,6 +42,7 @@ import { errorMessage } from "@/hooks/errorContract";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { OAUTH_GRANTS_TABLE, grantCapabilitiesHref } from "@/lib/oauthGrants";
 import { userTenant } from "@/lib/userPath";
+import { myCapabilitiesHref } from "@/lib/userCapabilities";
 import { useTableView } from "@/hooks/useTableView";
 import { useTableFacets } from "@/hooks/useTableFacets";
 import {
@@ -146,9 +147,15 @@ export function ConnectedApplications({
   // Read from every grant, not the rows the facets leave: a link may name an
   // ended grant the default filter hides.
   const opened = grants.find((g) => g.id === detail.openId) ?? null;
-  // An operator follows a grant to its capabilities; a user's own page has
-  // no capabilities list to follow it to.
-  const tenant = own ? null : userTenant(userName);
+  // A grant leads to its capabilities: an operator's to the tenant's list, a
+  // user's own to theirs, which needs no admin plane.
+  const tenant = userTenant(userName);
+  const capabilitiesOf = (grant: string) =>
+    own
+      ? myCapabilitiesHref(grant)
+      : tenant
+        ? grantCapabilitiesHref(tenant, grant)
+        : null;
 
   const revoke = async () => {
     if (!target) return;
@@ -322,9 +329,7 @@ export function ConnectedApplications({
       <ApplicationPanel
         id={detail.openId}
         grant={opened}
-        capabilitiesHref={
-          tenant && opened ? grantCapabilitiesHref(tenant, opened.id) : null
-        }
+        capabilitiesHref={opened ? capabilitiesOf(opened.id) : null}
         loading={query.isPending}
         failed={query.isError}
         onClose={detail.close}

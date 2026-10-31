@@ -1,6 +1,7 @@
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { PrincipalKind } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { tenantHref } from "@/lib/navigation/hrefs";
+import { SECTION } from "@/lib/navigation/sections";
 import { tableParam, type TableUrl } from "@/lib/table/urlState";
 import { userHref, userResourceName } from "@/lib/userPath";
 
@@ -16,6 +17,14 @@ export function grantHref(tenant: string, user: string, grant: string): string {
     [tableParam("row", OAUTH_GRANTS_TABLE)]: grant,
   });
   return `${userHref(userResourceName(tenant, user))}?${params}`;
+}
+
+/** One of the signed-in user's own grants, opened on their applications page. */
+export function ownGrantHref(grant: string): string {
+  const params = new URLSearchParams({
+    [tableParam("row", OAUTH_GRANTS_TABLE)]: grant,
+  });
+  return `${SECTION.applications}?${params}`;
 }
 
 /**

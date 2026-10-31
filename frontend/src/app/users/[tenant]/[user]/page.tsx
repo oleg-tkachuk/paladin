@@ -27,6 +27,7 @@ import { UserRolesCard } from "@/components/features/users/UserRolesCard";
 import { UserScopesCard } from "@/components/features/users/UserScopesCard";
 import { T } from "@/lib/ui/typography";
 import { ConnectedApplications } from "@/components/features/oauth/ConnectedApplications";
+import { UserCapabilities } from "@/components/features/oauth/UserCapabilities";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
 import { normalizeError } from "@/lib/connect/error";
 import { USERS_INDEX_HREF, userResourceName } from "@/lib/userPath";
@@ -168,6 +169,12 @@ export default function UserDetailPage() {
             <section className="space-y-2">
               <h2 className={T.cardTitleProse}>Connected applications</h2>
               <ConnectedApplications userName={name} own={false} />
+            </section>
+            <section className="space-y-2">
+              <h2 className={T.cardTitleProse}>
+                Capabilities acting for this user
+              </h2>
+              <UserCapabilities userName={name} own={false} />
             </section>
           </>
         ) : null}
