@@ -13,15 +13,17 @@ const h = vi.hoisted(() => ({
   ops: vi.fn(),
   budget: vi.fn(),
   tenants: vi.fn(),
+  series: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
   auditClient: { listAuditLog: h.audit },
   adminOperationClient: { listOperations: h.ops },
   tenantBudgetClient: { summarize: h.budget },
   tenantClient: { listTenants: h.tenants },
+  billingClient: { listTenantTimeSeries: h.series },
 }));
 
-import { DashboardWidgets } from "./DashboardWidgets";
+import { DashboardWidgets, TREND_LABEL } from "./DashboardWidgets";
 
 const EMPTY_STATES = [
   "No recent activity.",
@@ -36,8 +38,59 @@ describe("DashboardWidgets", () => {
     h.budget.mockReset();
     h.tenants.mockReset();
     h.tenants.mockResolvedValue({ tenants: [], page: {} });
+    h.series.mockReset();
+    h.series.mockResolvedValue({ series: [] });
   });
   afterEach(() => onlineManager.setOnline(true));
+
+  // How each tenant near its budget got there: one read for every row's
+  // trend, a line where it spent, none where it did not.
+  it("draws a spend trend beside each budget alert that spent", async () => {
+    h.audit.mockResolvedValue({ entries: [] });
+    h.ops.mockResolvedValue({ operations: [] });
+    const near = (id: string, name: string) => ({
+      tenantId: id,
+      slug: id,
+      displayName: name,
+      utilisationPct: 92,
+      budget: {},
+    });
+    h.budget.mockResolvedValue({
+      summaries: [near("t-busy", "Busy"), near("t-quiet", "Quiet")],
+    });
+    h.series.mockResolvedValue({
+      series: [
+        {
+          tenantId: "t-busy",
+          buckets: [
+            {
+              start: {
+                seconds: BigInt(Math.floor(Date.now() / 1000)) - 86_400n,
+                nanos: 0,
+              },
+              chargeCount: 2n,
+              spent: { currencyCode: "USD", units: 3n, nanos: 0 },
+            },
+          ],
+        },
+        { tenantId: "t-quiet", buckets: [] },
+      ],
+    });
+
+    render(<DashboardWidgets />);
+
+    const lines = await screen.findAllByRole("img", { name: TREND_LABEL });
+    expect(lines).toHaveLength(1);
+    expect(lines[0].closest("a")?.textContent).toContain("Busy");
+    expect(h.series).toHaveBeenCalledTimes(1);
+    expect(h.series).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantIds: ["t-busy", "t-quiet"],
+        granularity: "day",
+      }),
+      expect.anything(),
+    );
+  });
 
   it("shows the empty states when every query answers with nothing", async () => {
     h.audit.mockResolvedValue({ entries: [] });
