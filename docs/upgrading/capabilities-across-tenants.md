@@ -1,4 +1,4 @@
-## sdk/go/v0.131.0, sdk/python/v0.132.0 — capabilities across every tenant
+## v41.4.0, sdk/go/v0.131.0, sdk/python/v0.132.0 — capabilities across every tenant
 
 - `CapabilityService.List` with no `tenant_id` lists every tenant's
   capabilities in one id order, each naming its tenant in

@@ -1,4 +1,4 @@
-## Unreleased — policy history names a backend by its name
+## v41.4.0 — policy history names a backend by its name
 
 - `PolicyService.ListPolicyVersions` reads `storageBackends/{backend}` and
   `storageBackends/{backend}/buckets/{bucket}` with the backend's name, as
