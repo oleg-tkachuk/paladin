@@ -1,4 +1,4 @@
-## Unreleased — each tenant's spend series in one read
+## v41.4.0 — each tenant's spend series in one read
 
 - `BillingService.ListTenantTimeSeries` returns the spend series of up to 50
   named tenants, in the order named, from one sum of the ledger across them:

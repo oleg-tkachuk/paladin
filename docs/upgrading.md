@@ -99,7 +99,7 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
-## Unreleased — each tenant's spend series in one read
+## v41.4.0 — each tenant's spend series in one read
 
 - `BillingService.ListTenantTimeSeries` returns the spend series of up to 50
   named tenants, in the order named, from one sum of the ledger across them:
@@ -107,7 +107,7 @@ here.
   `GetPlatformTimeSeries` is.
 - The dashboard's budget alerts draw a 30-day spend trend beside each tenant.
 
-## sdk/go/v0.131.0, sdk/python/v0.132.0 — capabilities across every tenant
+## v41.4.0, sdk/go/v0.131.0, sdk/python/v0.132.0 — capabilities across every tenant
 
 - `CapabilityService.List` with no `tenant_id` lists every tenant's
   capabilities in one id order, each naming its tenant in
@@ -117,7 +117,7 @@ here.
 - limes v1.0.0-rc.30 with pgstore v0.55.0, exchange v0.15.3, otelmetric
   v0.13.2 and biscuit v0.1.14.
 
-## Unreleased — policy history names a backend by its name
+## v41.4.0 — policy history names a backend by its name
 
 - `PolicyService.ListPolicyVersions` reads `storageBackends/{backend}` and
   `storageBackends/{backend}/buckets/{bucket}` with the backend's name, as
@@ -125,7 +125,7 @@ here.
   and a bucket's history could not be read from the console; a backend's
   row uuid no longer resolves there.
 
-## sdk/go/v0.130.0, sdk/python/v0.131.0 — capabilities acting for a user
+## v41.4.0, sdk/go/v0.130.0, sdk/python/v0.131.0 — capabilities acting for a user
 
 - `UserService.ListUserCapabilities` (IAM) lists the capabilities acting on
   a user's behalf: those an agent exchanged under the user's OAuth grants,
@@ -142,7 +142,7 @@ here.
   `protobuf-py>=0.7,<0.8`; its stubs are regenerated for them. An
   environment that pins connectrpc 0.12 or protobuf-py 0.6 must move with it.
 
-## Unreleased — limes v1.0.0-rc.27
+## v41.4.0 — limes v1.0.0-rc.27
 
 - `CapabilityService.Revoke` releases the revoked capability's open holds,
   and those of the capabilities delegated from it, at once. Before, they
@@ -151,7 +151,7 @@ here.
 - pgx is on 5.12, with pgstore v0.54.1, which implements the interface pgx
   5.12 widened.
 
-## sdk/go/v0.129.0, sdk/python/v0.130.0 — a tenant's holds on its budget
+## v41.4.0, sdk/go/v0.129.0, sdk/python/v0.130.0 — a tenant's holds on its budget
 
 - `TenantBudget.reserved` is what the tenant's open holds keep from the
   budget, counted against the cap as spend is.
@@ -159,7 +159,7 @@ here.
   expire first, a page at a time. It is a read, allowed to whoever may read
   the tenant's budget.
 
-## sdk/go/v0.128.1 — limes v1.0.0-rc.25
+## v41.4.0, sdk/go/v0.128.1 — limes v1.0.0-rc.25
 
 - pgstore v0.53.0 adds migration `031`, applied at startup: it indexes the
   holds by tenant (`CREATE INDEX CONCURRENTLY`).
@@ -171,7 +171,7 @@ here.
   planes, is now told the token was exchanged already, still as
   `invalid_target`.
 
-## sdk/go/v0.128.0, sdk/python/v0.129.0 — the capability list takes an OAuth session
+## v41.4.0, sdk/go/v0.128.0, sdk/python/v0.129.0 — the capability list takes an OAuth session
 
 - `CapabilityService.List` takes `session`: the capabilities exchanged under
   that OAuth session, a grant's id — what revoking the grant revokes. The

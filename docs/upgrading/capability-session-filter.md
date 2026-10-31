@@ -1,4 +1,4 @@
-## sdk/go/v0.128.0, sdk/python/v0.129.0 — the capability list takes an OAuth session
+## v41.4.0, sdk/go/v0.128.0, sdk/python/v0.129.0 — the capability list takes an OAuth session
 
 - `CapabilityService.List` takes `session`: the capabilities exchanged under
   that OAuth session, a grant's id — what revoking the grant revokes. The

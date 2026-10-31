@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.27
+## v41.4.0 — limes v1.0.0-rc.27
 
 - `CapabilityService.Revoke` releases the revoked capability's open holds,
   and those of the capabilities delegated from it, at once. Before, they
