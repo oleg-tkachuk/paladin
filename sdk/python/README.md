@@ -740,7 +740,8 @@ they no longer match the contract.
 | --- | --- | --- |
 | Python | 3.13–3.15 | `requires-python`; each is tested |
 | `protobuf` | `>=6.33.5,<8` | the stubs' gencode version is the floor; 6.x and 7.x are tested |
-| `connectrpc` | `>=0.12.1,<0.13` | pre-1.0: a minor may change the API the generated clients call |
+| `connectrpc` | `>=0.13,<0.14` | pre-1.0: a minor may change the API the generated clients call |
+| `protobuf-py` | `>=0.7,<0.8` | connectrpc's runtime; pre-1.0, so the range stops at the next minor |
 | `googleapis-common-protos` | `>=1.75.5,<2` | the first release that accepts protobuf 7 |
 
 Both protobuf majors are supported so the SDK can share an environment with
