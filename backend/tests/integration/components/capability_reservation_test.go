@@ -188,3 +188,38 @@ func TestTenantReservationsAreListedUnderRowLevelSecurity(t *testing.T) {
 		t.Errorf("another tenant: %v, %v; want no hold", other.GetReservations(), err)
 	}
 }
+
+// Revoking one capability releases its holds at once, on the app role, and
+// only its: a live sibling's hold stays, as its cost may still come.
+func TestRevokingOneCapabilityReleasesItsHolds(t *testing.T) {
+	t.Parallel()
+	ctx, f := newLineageFixture(t)
+	f.usage = rlsUsage(t, ctx, f)
+	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
+	held := limes.MustParseAmount("5")
+	for _, id := range []uuid.UUID{f.child, f.sibling} {
+		if _, err := f.usage.Reserve(ledgerCtx, meter.ReserveRequest{
+			Subject: f.subject(t, ctx, id), Amount: held, Op: "llm", Actor: "agent",
+		}); err != nil {
+			t.Fatalf("reserve on %s: %v", id, err)
+		}
+	}
+	if _, err := f.records.Revoke(ledgerCtx, limes.RevokeRequest{CapabilityID: f.child}); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	// As the admin plane's Revoke calls it, with no tenant in scope yet.
+	bulk := &auth.BulkRevocation{Holds: f.usage}
+	if n, err := bulk.ReleaseRevoked(ctx, f.tenant, f.child); err != nil || n != 1 {
+		t.Fatalf("release: %d, %v; want the child's one hold", n, err)
+	}
+	if u, _ := f.usage.GetUsage(ledgerCtx, f.child); u.ReservedAmount != 0 {
+		t.Errorf("the revoked child still holds %v", u.ReservedAmount)
+	}
+	if u, _ := f.usage.GetUsage(ledgerCtx, f.sibling); u.ReservedAmount != held {
+		t.Errorf("the live sibling holds %v, want %v", u.ReservedAmount, held)
+	}
+	if n, err := bulk.ReleaseRevoked(ctx, f.tenant, f.child); err != nil || n != 0 {
+		t.Errorf("repeat: %d, %v; want nothing left", n, err)
+	}
+}

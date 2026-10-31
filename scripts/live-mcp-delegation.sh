@@ -19,7 +19,9 @@
 #
 # An operator then revokes the agent's read grant from the user's page while
 # a hold is open on its capability: the capability is revoked, the hold is
-# released at once and the revocation says so in the IAM plane's log.
+# released at once and the revocation says so in the IAM plane's log. An
+# operator revoking one capability on the admin plane releases its hold the
+# same way.
 # Deleting the client revokes what is left. No metered request leaves a hold
 # open long enough to revoke under it, so the check opens one by hand in
 # limes's tables, through the database cluster's primary, and reads it back
@@ -141,6 +143,13 @@ readonly ABSTRACT_UNIT=XXX
 # the components whose pods serve the operator's revocations: the IAM plane
 # runs in the api component.
 readonly BULK_REVOKED_MSG="capabilities revoked in bulk"
+# The line the admin plane's Revoke logs (backend/internal/auth:
+# ReleaseRevoked), and the capability it issues to revoke: an agent's, for
+# as long as the check runs.
+readonly CAPABILITY_RELEASED_MSG="holds of a revoked capability released"
+readonly SINGLE_SUBJECT=live-mcp-delegation
+readonly SINGLE_AGENT_TYPE=live-check
+readonly SINGLE_TTL_SECONDS=600
 readonly COMPONENT_LABEL=app.kubernetes.io/component
 readonly IAM_COMPONENT=api
 readonly ADMIN_COMPONENT=admin
@@ -166,7 +175,9 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/live-mcp-delegation.XXXXXX")
 # array it appends to would never reach cleanup.
 refresh_file="$work/refresh_tokens"
 forwards=()
-client_id="" token="" iam_token="" oauth_revoke_url="" fixture_capability=""
+client_id="" token="" iam_token="" oauth_revoke_url=""
+# The capabilities a hold was opened on, whose counters cleanup removes.
+fixture_capabilities=()
 pass=0
 fail=0
 ok() { echo "PASS $1"; pass=$((pass + 1)); }
@@ -178,6 +189,9 @@ expect() {
 }
 admin_rpc() { curl -s "$admin/paladin.admin.v1.$1" -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $token" -d "$2"; }
+# admin_write is admin_rpc for a write the admin plane takes once per key.
+admin_write() { curl -s "$admin/paladin.admin.v1.$1" -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $token" -H "Idempotency-Key: $(uuidgen)" -d "$2"; }
 iam_rpc() { curl -s "$IAM_URL/paladin.iam.v1.$1" -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $iam_token" -d "$2"; }
 pg=(kubectl)
@@ -196,11 +210,11 @@ sql() {
 # cleanup removes the bridge, the agent's grants and client, and the forwards.
 cleanup() {
     docker rm -f "$container" >/dev/null 2>&1
-    # The counter the hold was opened on, once nothing is held or spent on it.
-    if [[ -n "$fixture_capability" ]]; then
-        sql "cap=$fixture_capability" <<<"DELETE FROM limes.usage WHERE capability_id = :'cap' AND reserved = 0 AND spent = 0;" ||
-            echo "!!! remove the hold's counter of $fixture_capability" >&2
-    fi
+    # The counters the holds were opened on, once nothing is held or spent.
+    for cap in "${fixture_capabilities[@]}"; do
+        sql "cap=$cap" <<<"DELETE FROM limes.usage WHERE capability_id = :'cap' AND reserved = 0 AND spent = 0;" ||
+            echo "!!! remove the hold's counter of $cap" >&2
+    done
     while read -r rt; do
         [[ -n "$rt" && -n "$oauth_revoke_url" ]] || continue
         curl -sk -o /dev/null "$oauth_revoke_url" --data-urlencode "client_id=$client_id" --data-urlencode "token=$rt"
@@ -450,14 +464,14 @@ session_capabilities() {
 disposition_in_session() {
     session_capabilities "$1" | jq -r --arg c "$2" 'map(select(.id == $c)) | .[0].disposition // empty'
 }
-# logged_revocation <component> <since> <jq condition>: whether a pod of the
-# component logged a bulk revocation since then that meets the condition.
-logged_revocation() {
+# logged <component> <since> <message> <jq condition>: whether a pod of the
+# component logged the message since then with fields meeting the condition.
+logged() {
     local _
     for _ in $(seq "$AUDIT_POLLS"); do
         "${kube[@]}" logs -l "$COMPONENT_LABEL=$1" --since-time="$2" --tail=-1 2>/dev/null |
             jq -Rc 'fromjson? // empty' |
-            jq -e --arg m "$BULK_REVOKED_MSG" "select(.msg == \$m and ($3))" >/dev/null && return 0
+            jq -e --arg m "$3" "select(.msg == \$m and ($4))" >/dev/null && return 0
         sleep "$POLL_SECONDS"
     done
     return 1
@@ -471,6 +485,43 @@ budget_reserved() {
     r=$(admin_rpc TenantBudgetService/Get "$(jq -cn --arg t "$tenant" '{tenantId:$t}')")
     jq -r "$money_nanos"' if .code == "not_found" then 0 elif .code then error(.message) else (.budget.reserved // {} | nanos) end' <<<"$r" ||
         echo "$r"
+}
+# open_hold <capability> <hold id>: opens a hold of HOLD_NANOS on the
+# capability in limes's tables, as a metered request in flight leaves it.
+open_hold() {
+    fixture_capabilities+=("$1")
+    sql "cap=$1" "tenant=$tenant" "hold=$2" "amount=$HOLD_NANOS" "ttl=$HOLD_TTL" \
+        "op=$HOLD_OP" "actor=$HOLD_ACTOR" "abstract=$ABSTRACT_UNIT" <<'SQL'
+BEGIN;
+SELECT coalesce((SELECT unit_code FROM limes.tenant_budgets WHERE tenant_id = :'tenant'), :'abstract') AS unit \gset
+INSERT INTO limes.usage (capability_id, tenant_id, reserved, unit_code) VALUES (:'cap', :'tenant', :amount, :'unit')
+    ON CONFLICT (capability_id) DO UPDATE SET reserved = limes.usage.reserved + :amount;
+UPDATE limes.tenant_budgets SET reserved = reserved + :amount WHERE tenant_id = :'tenant';
+INSERT INTO limes.reservations (id, capability_id, tenant_id, ancestors, amount, unit_code, op, actor, copies, expires_at)
+    VALUES (:'hold', :'cap', :'tenant', '{}', :amount, :'unit', :'op', :'actor', '[]', now() + :'ttl'::interval);
+COMMIT;
+SQL
+}
+# expect_held <capability> <hold id>: the hold is listed on the capability
+# and counted in the tenant's budget, over budget_before.
+expect_held() {
+    local got want
+    got=$(holds_on "$1")
+    want=$(jq -cn --arg h "$2" --argjson n "$HOLD_NANOS" '{id:$h, nanos:$n}')
+    expect "the tenant's holds list the hold on the capability" "listed $got" test "$got" = "$want"
+    got=$(budget_reserved)
+    expect "the tenant's budget counts the hold" "reserved $got, was $budget_before" \
+        test "$got" = "$((budget_before + HOLD_NANOS))"
+}
+# expect_released <capability>: no hold is listed on the capability and the
+# tenant's budget holds what it did before.
+expect_released() {
+    local got
+    got=$(holds_on "$1")
+    expect "the hold is released at once" "listed $got" test -z "$got"
+    got=$(budget_reserved)
+    expect "the tenant's budget holds what it did before" "reserved $got, was $budget_before" \
+        test "$got" = "$budget_before"
 }
 # holds_on <capability> prints the tenant's holds on the capability as the
 # admin plane lists them, one {id, nanos} per line, through every page.
@@ -504,24 +555,8 @@ ok "the capability list finds the grant's live capability by its OAuth session"
 
 budget_before=$(budget_reserved)
 hold=$(uuidgen | tr '[:upper:]' '[:lower:]')
-fixture_capability=$reader_capability
-sql "cap=$reader_capability" "tenant=$tenant" "hold=$hold" "amount=$HOLD_NANOS" "ttl=$HOLD_TTL" \
-    "op=$HOLD_OP" "actor=$HOLD_ACTOR" "abstract=$ABSTRACT_UNIT" <<'SQL'
-BEGIN;
-SELECT coalesce((SELECT unit_code FROM limes.tenant_budgets WHERE tenant_id = :'tenant'), :'abstract') AS unit \gset
-INSERT INTO limes.usage (capability_id, tenant_id, reserved, unit_code) VALUES (:'cap', :'tenant', :amount, :'unit')
-    ON CONFLICT (capability_id) DO UPDATE SET reserved = limes.usage.reserved + :amount;
-UPDATE limes.tenant_budgets SET reserved = reserved + :amount WHERE tenant_id = :'tenant';
-INSERT INTO limes.reservations (id, capability_id, tenant_id, ancestors, amount, unit_code, op, actor, copies, expires_at)
-    VALUES (:'hold', :'cap', :'tenant', '{}', :amount, :'unit', :'op', :'actor', '[]', now() + :'ttl'::interval);
-COMMIT;
-SQL
-got=$(holds_on "$reader_capability")
-want=$(jq -cn --arg h "$hold" --argjson n "$HOLD_NANOS" '{id:$h, nanos:$n}')
-expect "the tenant's holds list the hold on the capability" "listed $got" test "$got" = "$want"
-got=$(budget_reserved)
-expect "the tenant's budget counts the hold" "reserved $got, was $budget_before" \
-    test "$got" = "$((budget_before + HOLD_NANOS))"
+open_hold "$reader_capability" "$hold"
+expect_held "$reader_capability" "$hold"
 
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 r=$(iam_rpc UserService/RevokeOAuthGrant \
@@ -529,13 +564,29 @@ r=$(iam_rpc UserService/RevokeOAuthGrant \
 expect "an operator revokes the $SCOPE_READ grant" "$r" test "$(jq -r '.code // "ok"' <<<"$r")" = ok
 d=$(disposition_in_session "$reader_session" "$reader_capability")
 expect "the grant's capability is revoked" "disposition '$d'" test "$d" = "$DISPOSITION_REVOKED"
-got=$(holds_on "$reader_capability")
-expect "the hold is released at once" "listed $got" test -z "$got"
-got=$(budget_reserved)
-expect "the tenant's budget holds what it did before" "reserved $got, was $budget_before" test "$got" = "$budget_before"
+expect_released "$reader_capability"
 expect "the IAM plane logs the release" "no '$BULK_REVOKED_MSG' line for session $reader_session" \
-    logged_revocation "$IAM_COMPONENT" "$since" \
+    logged "$IAM_COMPONENT" "$since" "$BULK_REVOKED_MSG" \
     ".session == \"$reader_session\" and .capabilities_revoked >= 1 and .holds_released >= 1"
+
+# ── an operator revokes one capability ──────────────────────────────────────
+r=$(admin_write CapabilityService/Issue "$(jq -cn --arg t "$tenant" --arg s "$SINGLE_SUBJECT" \
+    --arg a "$SINGLE_AGENT_TYPE" --arg aud "$EXCHANGE_AUDIENCE" --arg op "$HOLD_OP" --argjson ttl "$SINGLE_TTL_SECONDS" \
+    '{subject:{kind:"PRINCIPAL_KIND_AGENT",tenantId:$t,subject:$s,agentType:$a},audience:[$aud],
+      caveats:{ops:[$op],unlimitedRequests:true,unlimitedBudget:{}},ttlSeconds:$ttl}')")
+single=$(jq -r '.capability.id // empty' <<<"$r")
+expect "an operator issues a capability" "$r" test -n "$single"
+budget_before=$(budget_reserved)
+hold=$(uuidgen | tr '[:upper:]' '[:lower:]')
+open_hold "$single" "$hold"
+expect_held "$single" "$hold"
+since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+r=$(admin_write CapabilityService/Revoke "$(jq -cn --arg c "$single" '{id:$c, reason:"live check"}')")
+expect "an operator revokes the capability" "$r" test "$(jq -r '.code // "ok"' <<<"$r")" = ok
+expect_released "$single"
+expect "the admin plane logs the release" "no '$CAPABILITY_RELEASED_MSG' line for capability $single" \
+    logged "$ADMIN_COMPONENT" "$since" "$CAPABILITY_RELEASED_MSG" \
+    ".capability_id == \"$single\" and .holds_released == 1"
 
 # ── deleting the client revokes what is left ────────────────────────────────
 leftover_session=$(claim "$leftover" sid)
@@ -555,7 +606,7 @@ fi
 d=$(disposition_in_session "$leftover_session" "$leftover_capability")
 expect "the deleted client's capability is revoked" "disposition '$d'" test "$d" = "$DISPOSITION_REVOKED"
 expect "the admin plane logs the revocation" "no '$BULK_REVOKED_MSG' line for client $deleted_client" \
-    logged_revocation "$ADMIN_COMPONENT" "$since" \
+    logged "$ADMIN_COMPONENT" "$since" "$BULK_REVOKED_MSG" \
     ".client_id == \"$deleted_client\" and .all_tenants == true and .capabilities_revoked >= 1"
 
 echo "== $pass passed, $fail failed"

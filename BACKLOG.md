@@ -146,21 +146,6 @@ the same commit. Treat this file like a runtime invariant.
   a console action on a capability that names a run.
 - **Blockers:** a product call; no current ask.
 
-### Release a capability's holds when it alone is revoked
-
-- **Status:** Blocked.
-- **Reason:** `CapabilityService.Revoke` (`api/admin/v1/capabilityh`)
-  revokes one capability but leaves its open holds counted against the
-  tenant's budget until they expire and `ReleaseExpired` takes them. A bulk
-  revocation releases at once through `meter.ReleaseMatching`, which selects
-  by subject, client, session or run, but not by capability, so it cannot
-  release one capability's holds alone.
-- **Definition of Done:** limes' `meter.ReleaseMatchingRequest` selects by
-  capability id; `Revoke` releases the revoked capability's holds through
-  it, logs how many, and `live-mcp-delegation.sh` checks the release after a
-  single revocation.
-- **Blockers:** the capability selector in limes.
-
 ### Put limes' error codes on the wire
 
 - **Status:** Deferred.

@@ -57,10 +57,26 @@ type Handler struct {
 	copyUsage meter.CopyUsageReader
 	// records serves List and Get; see WithRecords.
 	records limes.RecordReporter
+	// holds releases a revoked capability's holds; see WithHoldRelease.
+	holds HoldReleaser
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
 	currency string
+}
+
+// HoldReleaser releases at once the holds of a revoked capability, which
+// would otherwise count against its tenant's budget until they expire;
+// auth.BulkRevocation implements it.
+type HoldReleaser interface {
+	ReleaseRevoked(ctx context.Context, tenant, capability uuid.UUID) (int64, error)
+}
+
+// WithHoldRelease has Revoke release the revoked capability's holds.
+// Without it, as with metering off, they lapse at their expiry.
+func (h *Handler) WithHoldRelease(holds HoldReleaser) *Handler {
+	h.holds = holds
+	return h
 }
 
 // WithCurrency sets the platform's currency, capability.currency. Without it
@@ -370,12 +386,32 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 		// would turn this endpoint into an id oracle.
 		return nil, auth.AnswerCapabilityError(err, recordExceptions)
 	}
+	if err := h.releaseHolds(ctx, id); err != nil {
+		return nil, err
+	}
 	stashCapabilityInScope(ctx, id)
 	return &adminv1.CapabilityServiceRevokeResponse{
 		AlreadyRevoked: res.AlreadyRevoked,
 		Revocation:     revocationToProto(res.Revocation),
 		Before:         dispositionToProto(res.PriorDisposition),
 	}, nil
+}
+
+// releaseHolds releases the holds of the capability Revoke revoked, in the
+// tenant ctx acts on: the capability's. It runs on a repeat too, so a revoke
+// retried after its release failed finishes the release.
+func (h *Handler) releaseHolds(ctx context.Context, id uuid.UUID) error {
+	if h.holds == nil {
+		return nil
+	}
+	tenant, err := auth.EffectiveTenant(ctx)
+	if err != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("release the holds of capability %s: %w", id, err))
+	}
+	if _, err := h.holds.ReleaseRevoked(ctx, tenant, id); err != nil {
+		return auth.AnswerCapabilityError(fmt.Errorf("release the holds of capability %s: %w", id, err), nil)
+	}
+	return nil
 }
 
 // revocationToProto is a revocation entry as the API carries it.
