@@ -32,17 +32,16 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## SDKs
 
-### The Python SDK holds protobuf-py below its latest release
+### The backend holds pgx below 5.12
 
 - **Status:** Blocked.
-- **Reason:** `protobuf-py` 0.7.0 moved the well-known type modules out of
-  `protobuf.wkt`, and connectrpc 0.12.1 still imports them from there, so
-  `sdk/python/pyproject.toml` requires `protobuf-py>=0.6.0,<0.7` against
-  the rule that dependencies track their latest stable release.
-- **Definition of Done:** a connectrpc release that imports under
-  `protobuf-py` 0.7, taken here with the ceiling lifted to the next minor
-  after the newest `protobuf-py`, and the wheel compatibility cells green.
-- **Blockers:** connectrpc/connect-py#423.
+- **Reason:** pgx 5.12.0 adds `Tx()` to `pgx.BatchResults`, and
+  `limes/pgstore` v0.54.0 returns a `closedBatch` that does not implement
+  it, so the backend does not compile. `backend/go.mod` requires pgx 5.11.0
+  and `renovate.json` allows nothing from 5.12.
+- **Definition of Done:** a pgstore release builds against pgx 5.12; the
+  pin and the Renovate rule are gone and pgx is current.
+- **Blockers:** that pgstore release.
 
 ### The Python SDK still supports Python 3.13
 
@@ -134,21 +133,6 @@ the same commit. Treat this file like a runtime invariant.
   run in a tenant through `auth.BulkRevocation`, releasing their holds, and
   a console action on a capability that names a run.
 - **Blockers:** a product call; no current ask.
-
-### Release a capability's holds when it alone is revoked
-
-- **Status:** Blocked.
-- **Reason:** `CapabilityService.Revoke` (`api/admin/v1/capabilityh`)
-  revokes one capability but leaves its open holds counted against the
-  tenant's budget until they expire and `ReleaseExpired` takes them. A bulk
-  revocation releases at once through `meter.ReleaseMatching`, which selects
-  by subject, client, session or run, but not by capability, so it cannot
-  release one capability's holds alone.
-- **Definition of Done:** limes' `meter.ReleaseMatchingRequest` selects by
-  capability id; `Revoke` releases the revoked capability's holds through
-  it, logs how many, and `live-mcp-delegation.sh` checks the release after a
-  single revocation.
-- **Blockers:** the capability selector in limes.
 
 ### Put limes' error codes on the wire
 

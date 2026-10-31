@@ -26,7 +26,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0
 	github.com/exaring/otelpgx v0.13.0
 	github.com/google/go-cmp v0.7.0
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env/v2 v2.0.2
 	github.com/knadh/koanf/providers/file v1.2.1
@@ -40,11 +40,11 @@ require (
 	github.com/nats-io/nkeys v0.4.16
 	github.com/oasdiff/yaml3 v0.0.16
 	// limes is the capability primitive the auth planes run on.
-	github.com/oleg-tkachuk/limes v1.0.0-rc.25
-	github.com/oleg-tkachuk/limes/biscuit v0.1.12
-	github.com/oleg-tkachuk/limes/exchange v0.15.1
-	github.com/oleg-tkachuk/limes/otelmetric v0.13.0
-	github.com/oleg-tkachuk/limes/pgstore v0.53.0
+	github.com/oleg-tkachuk/limes v1.0.0-rc.27
+	github.com/oleg-tkachuk/limes/biscuit v0.1.13
+	github.com/oleg-tkachuk/limes/exchange v0.15.2
+	github.com/oleg-tkachuk/limes/otelmetric v0.13.1
+	github.com/oleg-tkachuk/limes/pgstore v0.54.0
 	github.com/oleg-tkachuk/paladin/sdk/go v0.129.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0

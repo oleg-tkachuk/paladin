@@ -18,7 +18,11 @@ import (
 const (
 	LogKeyCapabilitiesRevoked = "capabilities_revoked"
 	logKeyHoldsReleased       = "holds_released"
+	logKeyCapabilityID        = "capability_id"
 )
+
+// msgCapabilityHoldsReleased is the line ReleaseRevoked logs.
+const msgCapabilityHoldsReleased = "holds of a revoked capability released"
 
 // BulkRevocation revokes capabilities in bulk and releases at once the holds
 // of those it revoked, which would otherwise count against their ceilings
@@ -59,7 +63,10 @@ func (b *BulkRevocation) RevokeMatching(ctx context.Context, req limes.RevokeMat
 	}
 	var released int64
 	if b.Holds != nil {
-		n, err := b.releaseHolds(scoped, req)
+		n, err := b.releaseHolds(scoped, meter.ReleaseMatchingRequest{
+			TenantID: req.TenantID, AllTenants: req.AllTenants, Subject: req.Subject, OnBehalfOf: req.OnBehalfOf,
+			ClientID: req.ClientID, Session: req.Session, RunID: req.RunID,
+		})
 		released = n
 		if err != nil {
 			return revoked, err
@@ -69,13 +76,31 @@ func (b *BulkRevocation) RevokeMatching(ctx context.Context, req limes.RevokeMat
 	return revoked, nil
 }
 
-// releaseHolds releases, batch after batch, the holds of the revoked
-// capabilities req selects, and reports how many it released.
-func (b *BulkRevocation) releaseHolds(ctx context.Context, req limes.RevokeMatchingRequest) (int64, error) {
-	rel := meter.ReleaseMatchingRequest{
-		TenantID: req.TenantID, AllTenants: req.AllTenants, Subject: req.Subject, OnBehalfOf: req.OnBehalfOf,
-		ClientID: req.ClientID, Session: req.Session, RunID: req.RunID,
+// ReleaseRevoked releases at once the holds of one revoked capability, and
+// of those delegated from it, in tenant, and reports how many it released.
+// It repeats safely: a hold already released is not counted again, and a
+// live capability's holds are left, as their cost may still come.
+func (b *BulkRevocation) ReleaseRevoked(ctx context.Context, tenant, capability uuid.UUID) (int64, error) {
+	if b == nil || b.Holds == nil {
+		return 0, nil
 	}
+	released, err := b.releaseHolds(WithActingTenant(ctx, tenant),
+		meter.ReleaseMatchingRequest{TenantID: tenant, CapabilityID: capability})
+	if err != nil {
+		return released, err
+	}
+	level := zapcore.DebugLevel
+	if released > 0 {
+		level = zapcore.InfoLevel
+	}
+	logger.FromContext(ctx).Log(level, msgCapabilityHoldsReleased,
+		zap.String(logKeyCapabilityID, capability.String()), zap.Int64(logKeyHoldsReleased, released))
+	return released, nil
+}
+
+// releaseHolds releases, batch after batch, the holds of the revoked
+// capabilities rel selects, and reports how many it released.
+func (b *BulkRevocation) releaseHolds(ctx context.Context, rel meter.ReleaseMatchingRequest) (int64, error) {
 	var released int64
 	for {
 		res, err := b.Holds.ReleaseMatching(ctx, rel)

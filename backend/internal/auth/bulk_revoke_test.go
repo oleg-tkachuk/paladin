@@ -205,3 +205,79 @@ func TestBulkRevocationAcrossTenantsReleasesOnARetry(t *testing.T) {
 		t.Errorf("releases = %+v, want one across every tenant", f.releases)
 	}
 }
+
+// One revoked capability's holds are released, batch after batch, by its id
+// alone, acting on its tenant, and the release is logged.
+func TestReleaseRevokedReleasesOneCapabilitysHolds(t *testing.T) {
+	const releaseBatches = 2
+	tenant, capability := uuid.New(), uuid.New()
+	core, logs := observer.New(zapcore.DebugLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+	f := &fakeBulk{releaseBatches: releaseBatches, released: 1}
+
+	n, err := (&BulkRevocation{Revoker: f, Holds: f}).ReleaseRevoked(ctx, tenant, capability)
+	if err != nil || n != releaseBatches {
+		t.Fatalf("released %d, %v; want %d", n, err, releaseBatches)
+	}
+	if len(f.releases) != releaseBatches {
+		t.Fatalf("%d release calls, want %d", len(f.releases), releaseBatches)
+	}
+	for i, r := range f.releases {
+		if r.TenantID != tenant || r.CapabilityID != capability || r.AllTenants || r.Subject != "" || r.ClientID != "" ||
+			r.Session != "" || r.OnBehalfOf != "" || r.RunID != uuid.Nil() || f.releasedIn[i] != tenant {
+			t.Errorf("release %d = %+v acting on %s, want capability %s alone in tenant %s", i, r, f.releasedIn[i], capability, tenant)
+		}
+	}
+	lines := logs.FilterMessage(msgCapabilityHoldsReleased).All()
+	if len(lines) != 1 {
+		t.Fatalf("%d lines, want 1", len(lines))
+	}
+	got := lines[0].ContextMap()
+	if lines[0].Level != zapcore.InfoLevel || got[logKeyCapabilityID] != capability.String() || got[logKeyHoldsReleased] != int64(releaseBatches) {
+		t.Errorf("logged %v %v, want info with capability %s and %d holds released", lines[0].Level, got, capability, releaseBatches)
+	}
+}
+
+// A repeat that finds nothing left to release says so at debug.
+func TestReleaseRevokedLogsARepeatAtDebug(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+	f := &fakeBulk{}
+	if n, err := (&BulkRevocation{Revoker: f, Holds: f}).ReleaseRevoked(ctx, uuid.New(), uuid.New()); err != nil || n != 0 {
+		t.Fatalf("released %d, %v; want none", n, err)
+	}
+	lines := logs.FilterMessage(msgCapabilityHoldsReleased).All()
+	if len(lines) != 1 || lines[0].Level != zapcore.DebugLevel {
+		t.Errorf("logged %v, want one line at debug", lines)
+	}
+}
+
+// A failed release says what failed and logs no outcome: the caller answers
+// it, and a retry releases what is left.
+func TestReleaseRevokedFailure(t *testing.T) {
+	errStore := errors.New("pgstore: connection refused")
+	core, logs := observer.New(zapcore.DebugLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+	f := &fakeBulk{releaseErr: errStore}
+	if _, err := (&BulkRevocation{Revoker: f, Holds: f}).ReleaseRevoked(ctx, uuid.New(), uuid.New()); !errors.Is(err, errStore) {
+		t.Fatalf("err = %v, want the release's", err)
+	}
+	if logs.Len() != 0 {
+		t.Errorf("logged %v, want nothing", logs.All())
+	}
+}
+
+// With metering off, or the capability subsystem off, there is nothing to
+// release.
+func TestReleaseRevokedWithoutItsParts(t *testing.T) {
+	f := &fakeBulk{}
+	var off *BulkRevocation
+	for name, b := range map[string]*BulkRevocation{"no holds": {Revoker: f}, "off": off} {
+		if n, err := b.ReleaseRevoked(context.Background(), uuid.New(), uuid.New()); err != nil || n != 0 {
+			t.Errorf("%s: %d, %v; want nothing", name, n, err)
+		}
+	}
+	if len(f.releases) != 0 {
+		t.Errorf("%d release calls, want none", len(f.releases))
+	}
+}
