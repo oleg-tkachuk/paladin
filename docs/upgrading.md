@@ -99,6 +99,17 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## sdk/go/v0.130.0, sdk/python/v0.131.0 — capabilities acting for a user
+
+- `UserService.ListUserCapabilities` (IAM) lists the capabilities acting on
+  a user's behalf: those an agent exchanged under the user's OAuth grants,
+  and those delegated from them, newest first; `grant_id` narrows them to
+  one grant's. A user may list their own,
+  without the admin audience; a tenant admin those of the tenant's users.
+- The new Cedar action `ReadUserCapabilities` has the same built-in permits
+  as `ReadOAuthGrants`. A tenant policy that forbids `ReadOAuthGrants` should
+  forbid it too.
+
 ## sdk/python/v0.130.1 — Python SDK on connectrpc 0.13
 
 - The Python SDK requires `connectrpc>=0.13,<0.14` and
@@ -111,8 +122,8 @@ here.
   and those of the capabilities delegated from it, at once. Before, they
   counted against the tenant's budget until they expired. A revoke retried
   after a failed release finishes it.
-- pgx stays on 5.11: pgx 5.12 changes an interface pgstore v0.54.0
-  implements, and the backend does not build against it.
+- pgx is on 5.12, with pgstore v0.54.1, which implements the interface pgx
+  5.12 widened.
 
 ## sdk/go/v0.129.0, sdk/python/v0.130.0 — a tenant's holds on its budget
 

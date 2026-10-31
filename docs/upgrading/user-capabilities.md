@@ -1,4 +1,4 @@
-## Unreleased — capabilities acting for a user
+## sdk/go/v0.130.0, sdk/python/v0.131.0 — capabilities acting for a user
 
 - `UserService.ListUserCapabilities` (IAM) lists the capabilities acting on
   a user's behalf: those an agent exchanged under the user's OAuth grants,
