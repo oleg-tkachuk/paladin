@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   listOperationGrants: vi.fn(),
   getToken: vi.fn(),
   revoke: vi.fn(),
+  revokeRun: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
@@ -85,6 +86,8 @@ function open(cap: Capability = CAP) {
       usageEntry="never"
       onClose={vi.fn()}
       onRevoke={h.revoke}
+      tenant="acme"
+      onRevokeRun={h.revokeRun}
     />,
   );
 }
@@ -243,6 +246,8 @@ describe("CapabilityDetailsPanel", () => {
         usageEntry="never"
         onClose={vi.fn()}
         onRevoke={h.revoke}
+        tenant="acme"
+        onRevokeRun={h.revokeRun}
       />,
     );
     await waitFor(() => expect(screen.getAllByText("rag-api")).toHaveLength(2));
@@ -357,6 +362,8 @@ describe("CapabilityDetailsPanel", () => {
           usageEntry="never"
           onClose={vi.fn()}
           onRevoke={h.revoke}
+          tenant="acme"
+          onRevokeRun={h.revokeRun}
         />,
       );
       await waitFor(() =>
@@ -385,6 +392,8 @@ describe("CapabilityDetailsPanel", () => {
           usageEntry={undefined}
           onClose={vi.fn()}
           onRevoke={h.revoke}
+          tenant="acme"
+          onRevokeRun={h.revokeRun}
         />,
       );
 
@@ -416,6 +425,8 @@ describe("CapabilityDetailsPanel", () => {
           usageEntry={undefined}
           onClose={vi.fn()}
           onRevoke={h.revoke}
+          tenant="acme"
+          onRevokeRun={h.revokeRun}
         />,
       );
     const value = (label: string) =>
@@ -463,6 +474,8 @@ describe("CapabilityDetailsPanel", () => {
         usageEntry="never"
         onClose={vi.fn()}
         onRevoke={h.revoke}
+        tenant="acme"
+        onRevokeRun={h.revokeRun}
       />,
     );
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -517,5 +530,39 @@ describe("CapabilityDetailsPanel", () => {
       await screen.findByRole("group", { name: UNLOCKS });
       expect(screen.queryByText("OAuth grant")).not.toBeInTheDocument();
     });
+  });
+
+  // An agent run's capability offers its run: the run's capabilities listed,
+  // and the whole run revoked, which the page confirms.
+  it("offers an agent run's capabilities and its revocation", async () => {
+    h.get.mockResolvedValue({});
+    h.getUsage.mockResolvedValue({});
+    h.listOperationGrants.mockResolvedValue({ grants: [] });
+    const run = "0199-run";
+    open({
+      ...CAP,
+      subject: { ...CAP.subject!, runId: run },
+    } as unknown as Capability);
+    const link = await screen.findByRole("link", {
+      name: "Capabilities of this run",
+    });
+    expect(link.getAttribute("href")).toBe(
+      `/tenants/acme/capabilities?run=${run}`,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Revoke this run" }),
+    );
+    expect(h.revokeRun).toHaveBeenCalledWith(run);
+  });
+
+  it("offers no run for a capability that names none", async () => {
+    h.get.mockResolvedValue({});
+    h.getUsage.mockResolvedValue({});
+    h.listOperationGrants.mockResolvedValue({ grants: [] });
+    open();
+    await screen.findByText("agent:1");
+    expect(
+      screen.queryByRole("button", { name: "Revoke this run" }),
+    ).toBeNull();
   });
 });
