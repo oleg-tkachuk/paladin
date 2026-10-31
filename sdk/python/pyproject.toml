@@ -58,12 +58,12 @@ biscuit = ["biscuit-python>=0.4.0,<0.5"]
 
 [dependency-groups]
 dev = [
-    "opentelemetry-sdk==1.45.1",
+    "opentelemetry-sdk==1.45.2",
     # RPC spans through Client(interceptors=...), which the README documents.
     "connectrpc-otel==0.3.0",
     "cryptography==50.0.2",
     # The testing extra, which FakePaladin needs.
-    "protovalidate==2.0.0",
+    "protovalidate==2.1.0",
     # The tls extra, which the TLS tests exercise.
     "httpcore[http2,asyncio]==1.0.9",
     "google-crc32c==1.9.0",
@@ -76,12 +76,12 @@ dev = [
     # out every protobuf-6 environment.
     "grpcio-tools==1.81.1",
     "protoc-gen-connectrpc==0.13.0",
-    "pytest==9.1.1",
-    "ruff==0.17.0",
+    "pytest==9.2.0",
+    "ruff==0.17.3",
 ]
 
 [build-system]
-requires = ["hatchling==1.32.4", "hatch-vcs==0.5.0"]
+requires = ["hatchling==1.33.0", "hatch-vcs==0.5.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
