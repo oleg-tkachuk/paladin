@@ -119,7 +119,8 @@ class CapabilityService(Protocol):
         """
         List pages through a tenant's capabilities, each with its disposition:
         every one of them, or those of a principal kind, a subject and the
-        dispositions asked for. Cursor-paginated.
+        dispositions asked for. Cursor-paginated. With no tenant_id it pages
+        every tenant's in one order, for a caller spanning tenants.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -487,7 +488,8 @@ class CapabilityServiceClient(ConnectClient):
         """
         List pages through a tenant's capabilities, each with its disposition:
         every one of them, or those of a principal kind, a subject and the
-        dispositions asked for. Cursor-paginated.
+        dispositions asked for. Cursor-paginated. With no tenant_id it pages
+        every tenant's in one order, for a caller spanning tenants.
         """
         return await self.execute_unary(
             request=request,
@@ -643,7 +645,8 @@ class CapabilityServiceSync(Protocol):
         """
         List pages through a tenant's capabilities, each with its disposition:
         every one of them, or those of a principal kind, a subject and the
-        dispositions asked for. Cursor-paginated.
+        dispositions asked for. Cursor-paginated. With no tenant_id it pages
+        every tenant's in one order, for a caller spanning tenants.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -1009,7 +1012,8 @@ class CapabilityServiceClientSync(ConnectClientSync):
         """
         List pages through a tenant's capabilities, each with its disposition:
         every one of them, or those of a principal kind, a subject and the
-        dispositions asked for. Cursor-paginated.
+        dispositions asked for. Cursor-paginated. With no tenant_id it pages
+        every tenant's in one order, for a caller spanning tenants.
         """
         return self.execute_unary(
             request=request,

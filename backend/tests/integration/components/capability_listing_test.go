@@ -75,6 +75,50 @@ func TestCapabilityListingIsTenantScoped(t *testing.T) {
 	}
 }
 
+// CapabilityService.List with no tenant reads every tenant's records in one
+// id order under the platform-wide read the handler sets
+// (auth.WithCrossTenantRead), each naming its tenant; a caller scoped to one
+// tenant asking for every tenant is refused, never narrowed to its own.
+func TestCapabilityListingAcrossTenants(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	platform, _ := mkTenant(t, ctx, admin, "shared")
+	one, _ := mkTenant(t, ctx, admin, "shared")
+	two, _ := mkTenant(t, ctx, admin, "shared")
+
+	seed := newCapStore(t, admin)
+	first := mkCap(one, "user:first", time.Now().Add(time.Hour))
+	second := mkCap(two, "user:second", time.Now().Add(time.Hour))
+	for _, c := range []limes.Capability{first, second} {
+		if err := seed.Insert(ctx, limes.InsertRequest{Capability: c, IssuedBy: seedIssuer}); err != nil {
+			t.Fatalf("seed %s: %v", c.Subject.Subject, err)
+		}
+	}
+	records, err := capstore.NewCensus(rlsPool(t, ctx, admin))
+	if err != nil {
+		t.Fatalf("new census: %v", err)
+	}
+
+	operator := auth.WithCrossTenantRead(auth.WithPrincipal(ctx, &auth.Principal{TenantID: platform}))
+	page, err := records.ListRecords(operator, limes.ListRecordsRequest{AllTenants: true, Order: limes.ListOrderDescending})
+	if err != nil {
+		t.Fatalf("list every tenant: %v", err)
+	}
+	tenantOf := map[uuid.UUID]uuid.UUID{}
+	for _, l := range page.Items {
+		tenantOf[l.Record.Capability.ID] = l.Record.Capability.Subject.TenantID
+	}
+	if tenantOf[first.ID] != one || tenantOf[second.ID] != two {
+		t.Errorf("listed %v, want %s under %s and %s under %s", tenantOf, first.ID, one, second.ID, two)
+	}
+
+	scoped := auth.WithPrincipal(ctx, &auth.Principal{TenantID: one})
+	if _, err := records.ListRecords(scoped, limes.ListRecordsRequest{AllTenants: true}); !errors.Is(err, limes.ErrScopeMismatch) {
+		t.Errorf("every tenant under one tenant's scope: err = %v, want ErrScopeMismatch", err)
+	}
+}
+
 // CapabilityService.Get reads a capability's disposition through IsRevoked,
 // under the operator's scope for the capability's tenant: a child delegated
 // from a revoked parent is revoked, though it holds no revocation of its own.

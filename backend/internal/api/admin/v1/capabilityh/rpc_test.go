@@ -50,9 +50,13 @@ type recordingStore struct {
 	revokeResult limes.RevokeResult
 	revokeCtx    context.Context
 	listArgs     *limes.ListRecordsRequest
-	listOut      []limes.RecordListing
-	listNext     string
-	listErr      error
+	// listCrossTenant is whether ListRecords was called under a platform-wide
+	// read; listActing the tenant it acted for, if any.
+	listCrossTenant bool
+	listActing      uuid.UUID
+	listOut         []limes.RecordListing
+	listNext        string
+	listErr         error
 }
 
 func (s *recordingStore) Revoke(ctx context.Context, args limes.RevokeRequest) (limes.RevokeResult, error) {
@@ -66,8 +70,10 @@ func (s *recordingStore) GetRecordListing(context.Context, uuid.UUID) (limes.Rec
 }
 
 // ListRecords makes recordingStore the handler's record lister too.
-func (s *recordingStore) ListRecords(_ context.Context, args limes.ListRecordsRequest) (limes.Page[limes.RecordListing], error) {
+func (s *recordingStore) ListRecords(ctx context.Context, args limes.ListRecordsRequest) (limes.Page[limes.RecordListing], error) {
 	s.listArgs = &args
+	s.listCrossTenant = auth.CrossTenantRead(ctx)
+	s.listActing, _ = auth.ActingTenant(ctx)
 	if s.listErr != nil {
 		return limes.Page[limes.RecordListing]{}, s.listErr
 	}
@@ -427,6 +433,57 @@ func TestListATenantAlone(t *testing.T) {
 	a := store.listArgs
 	if a.PrincipalType != limes.PrincipalTypeUnspecified || a.Subject != "" || a.Order != limes.ListOrderAscending {
 		t.Errorf("a tenant alone listed %+v", a)
+	}
+}
+
+// No tenant lists every tenant's together, under a platform-wide read, for a
+// caller spanning tenants; the filters apply across them.
+func TestListEveryTenant(t *testing.T) {
+	for _, role := range []string{"platform.admin", "platform.capability-issuer"} {
+		t.Run(role, func(t *testing.T) {
+			store := &recordingStore{}
+			h := mkHandler(t, store, nil, &allowAuthorizer{})
+			ctx := auth.WithPrincipal(context.Background(), &auth.Principal{
+				Subject: "operator", TenantID: uuid.New(), Roles: []string{role},
+			})
+			if _, err := h.List(ctx, &adminv1.CapabilityServiceListRequest{Subject: "agent-1"}); err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			a := store.listArgs
+			if !a.AllTenants || a.TenantID != uuid.Nil() || a.Subject != "agent-1" {
+				t.Errorf("listed %+v, want every tenant's of agent-1", a)
+			}
+			if !store.listCrossTenant {
+				t.Error("every tenant was listed without a platform-wide read")
+			}
+		})
+	}
+}
+
+// A caller confined to its tenant cannot list every tenant's, and is told
+// so rather than shown its own as if they were all.
+func TestListEveryTenantRefusedToATenantAdmin(t *testing.T) {
+	store := &recordingStore{}
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
+	_, err := h.List(tenantCtx(uuid.New()), &adminv1.CapabilityServiceListRequest{})
+	if codeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", codeOf(err))
+	}
+	if store.listArgs != nil {
+		t.Error("the store was asked anyway")
+	}
+}
+
+// One tenant is read as that tenant, never under the platform-wide read.
+func TestListOneTenantActsForIt(t *testing.T) {
+	store := &recordingStore{}
+	h := mkHandler(t, store, nil, &allowAuthorizer{})
+	tenant := uuid.New()
+	if _, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{TenantId: tenant.String()}); err != nil {
+		t.Fatal(err)
+	}
+	if store.listArgs.AllTenants || store.listCrossTenant || store.listActing != tenant {
+		t.Errorf("all %v cross %v acting %s, want tenant %s alone", store.listArgs.AllTenants, store.listCrossTenant, store.listActing, tenant)
 	}
 }
 

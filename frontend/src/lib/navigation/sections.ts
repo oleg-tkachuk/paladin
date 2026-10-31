@@ -16,6 +16,7 @@ export const SECTION = {
   topology: "/topology",
   users: "/users",
   policies: "/policies",
+  capabilities: "/capabilities",
   trash: "/trash",
   billing: "/billing",
   stats: "/stats",

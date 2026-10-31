@@ -161,7 +161,8 @@ type CapabilityServiceClient interface {
 	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
 	// List pages through a tenant's capabilities, each with its disposition:
 	// every one of them, or those of a principal kind, a subject and the
-	// dispositions asked for. Cursor-paginated.
+	// dispositions asked for. Cursor-paginated. With no tenant_id it pages
+	// every tenant's in one order, for a caller spanning tenants.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
 	// request_count (vs Caveats.max_requests) and spent
@@ -222,7 +223,8 @@ type CapabilityServiceHandler interface {
 	Get(context.Context, *v1.CapabilityServiceGetRequest) (*v1.CapabilityServiceGetResponse, error)
 	// List pages through a tenant's capabilities, each with its disposition:
 	// every one of them, or those of a principal kind, a subject and the
-	// dispositions asked for. Cursor-paginated.
+	// dispositions asked for. Cursor-paginated. With no tenant_id it pages
+	// every tenant's in one order, for a caller spanning tenants.
 	List(context.Context, *v1.CapabilityServiceListRequest) (*v1.CapabilityServiceListResponse, error)
 	// GetUsage returns the runtime counters for a capability:
 	// request_count (vs Caveats.max_requests) and spent

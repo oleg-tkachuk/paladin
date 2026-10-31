@@ -1519,8 +1519,12 @@ func (x *CapabilityServiceGetBiscuitUsageResponse) GetCopies() []*CapabilityBisc
 }
 
 type CapabilityServiceListRequest struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	TenantId string                 `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// tenant_id is the tenant whose capabilities to list. Empty lists every
+	// tenant's together, each naming its tenant in subject.tenant_id; only a
+	// caller spanning tenants (platform.admin, platform.capability-issuer)
+	// may ask.
+	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	// principal_kind lists the capabilities of principals of that kind;
 	// unspecified, of every kind.
 	PrincipalKind PrincipalKind `protobuf:"varint,2,opt,name=principal_kind,json=principalKind,proto3,enum=paladin.admin.v1.PrincipalKind" json:"principal_kind,omitempty"`
@@ -2352,9 +2356,9 @@ const file_paladin_admin_v1_capability_service_proto_rawDesc = "" +
 	"\r_max_requestsJ\x04\b\x03\x10\x04J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x11max_budget_microsR\fspent_microsR\x0freserved_micros\"\xa6\x01\n" +
 	"(CapabilityServiceGetBiscuitUsageResponse\x12#\n" +
 	"\rcapability_id\x18\x01 \x01(\tR\fcapabilityId\x12D\n" +
-	"\x06copies\x18\x03 \x03(\v2,.paladin.admin.v1.CapabilityBiscuitCopyUsageR\x06copiesJ\x04\b\x02\x10\x03R\tunit_code\"\x85\x04\n" +
-	"\x1cCapabilityServiceListRequest\x12%\n" +
-	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12P\n" +
+	"\x06copies\x18\x03 \x03(\v2,.paladin.admin.v1.CapabilityBiscuitCopyUsageR\x06copiesJ\x04\b\x02\x10\x03R\tunit_code\"\x88\x04\n" +
+	"\x1cCapabilityServiceListRequest\x12(\n" +
+	"\ttenant_id\x18\x01 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\btenantId\x12P\n" +
 	"\x0eprincipal_kind\x18\x02 \x01(\x0e2\x1f.paladin.admin.v1.PrincipalKindB\b\xbaH\x05\x82\x01\x02\x10\x01R\rprincipalKind\x12\x18\n" +
 	"\asubject\x18\x03 \x01(\tR\asubject\x12+\n" +
 	"\x0finclude_expired\x18\x04 \x01(\bB\x02\x18\x01R\x0eincludeExpired\x12+\n" +
