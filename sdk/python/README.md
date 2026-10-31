@@ -695,7 +695,7 @@ under [`proto/paladin`](../../proto/paladin).
 | `PolicyService` | `validate`, `simulate_authz`, `get_effective_policy`, `list_policy_versions` |
 | `QuotaService` | `get_quota`, `set_quota`, `reset_usage` |
 | `SystemService` | `get_config`, `get_dispatcher_stats`, `get_platform_stats`, `list_platform_stats_tenants` |
-| `TenantBudgetService` | `get`, `set`, `summarize` |
+| `TenantBudgetService` | `get`, `set`, `summarize`, `list_reservations` |
 | `TenantService` | `create_tenant`, `get_tenant`, `update_tenant`, `delete_tenant`, `list_tenants`, `set_inherited_policy`, `restore_tenant`, `purge_tenant`, `preview_purge_tenant`, `rename_tenant_slug`, `migrate_tenant_storage_layout`, `get_tenant_storage_migration`, `resolve_renamed_slug`, `get_tenant_default_binding`, `set_tenant_default_binding`, `clear_tenant_default_binding` |
 
 ### Data plane — `paladin.data.v1`

@@ -28,7 +28,7 @@ browser from reaching tenant administration.
 - **Protocol**: Connect, Connect-Web and gRPC over the same endpoints
 - **Handlers**: `backend/internal/api/{admin,data,iam}/v1/`, adapted to the
   generated Connect interfaces in `backend/internal/api/connectshim/`
-- **Surface**: 159 RPCs across 28 services (inventory below)
+- **Surface**: 160 RPCs across 28 services (inventory below)
 
 ## Two headers you cannot skip
 
@@ -135,7 +135,7 @@ Every service and RPC in `proto/`, by plane.
 | `PolicyService` | 4 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy`, `ListPolicyVersions` |
 | `QuotaService` | 3 | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | 4 | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
-| `TenantBudgetService` | 3 | `Get`, `Set`, `Summarize` |
+| `TenantBudgetService` | 4 | `Get`, `Set`, `Summarize`, `ListReservations` |
 | `TenantService` | 15 | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `RenameTenantSlug`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `ResolveRenamedSlug`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
 
 **data** (`:8080`, `paladin.data.v1`)

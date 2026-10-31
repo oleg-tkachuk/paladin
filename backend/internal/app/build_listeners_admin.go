@@ -306,10 +306,18 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 
 	{
 		var usageStore meter.UsageStore
+		// The budgets with their holds: pgstore's usage store lists them, and
+		// the metrics wrapper forwards the listing.
+		var budgets admin.TenantBudgetStore
 		if deps.Capability != nil {
 			usageStore = deps.Capability.Usage
+			b, ok := usageStore.(admin.TenantBudgetStore)
+			if !ok {
+				return nil, nil, fmt.Errorf("admin: the usage store %T lists no tenant reservations", usageStore)
+			}
+			budgets = b
 		}
-		state.budget = admin.NewTenantBudgetServer(usageStore, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool))
+		state.budget = admin.NewTenantBudgetServer(budgets, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool))
 		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer, state.budget)
 
 		// BillingService — read-only aggregation over the charges

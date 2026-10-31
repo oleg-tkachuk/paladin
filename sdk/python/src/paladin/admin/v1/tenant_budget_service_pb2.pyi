@@ -14,7 +14,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class TenantBudget(_message.Message):
-    __slots__ = ("tenant_id", "resource_version", "period_start", "period_end", "updated_at", "max_budget", "unlimited_budget", "spent")
+    __slots__ = ("tenant_id", "resource_version", "period_start", "period_end", "updated_at", "max_budget", "unlimited_budget", "spent", "reserved")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     PERIOD_START_FIELD_NUMBER: _ClassVar[int]
@@ -23,6 +23,7 @@ class TenantBudget(_message.Message):
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
     UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
     SPENT_FIELD_NUMBER: _ClassVar[int]
+    RESERVED_FIELD_NUMBER: _ClassVar[int]
     tenant_id: str
     resource_version: str
     period_start: _timestamp_pb2.Timestamp
@@ -31,7 +32,8 @@ class TenantBudget(_message.Message):
     max_budget: _money_pb2.Money
     unlimited_budget: _types_pb2.UnlimitedBudget
     spent: _money_pb2.Money
-    def __init__(self, tenant_id: _Optional[str] = ..., resource_version: _Optional[str] = ..., period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
+    reserved: _money_pb2.Money
+    def __init__(self, tenant_id: _Optional[str] = ..., resource_version: _Optional[str] = ..., period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., reserved: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
 
 class TenantBudgetServiceGetRequest(_message.Message):
     __slots__ = ("tenant_id",)
@@ -102,3 +104,37 @@ class TenantBudgetServiceSummarizeResponse(_message.Message):
     summaries: _containers.RepeatedCompositeFieldContainer[TenantBudgetSummary]
     next_page_token: str
     def __init__(self, summaries: _Optional[_Iterable[_Union[TenantBudgetSummary, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+
+class TenantBudgetServiceListReservationsRequest(_message.Message):
+    __slots__ = ("tenant_id", "page_size", "page_token")
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    tenant_id: str
+    page_size: int
+    page_token: str
+    def __init__(self, tenant_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+
+class TenantBudgetServiceListReservationsResponse(_message.Message):
+    __slots__ = ("reservations", "next_page_token")
+    RESERVATIONS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    reservations: _containers.RepeatedCompositeFieldContainer[TenantReservation]
+    next_page_token: str
+    def __init__(self, reservations: _Optional[_Iterable[_Union[TenantReservation, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+
+class TenantReservation(_message.Message):
+    __slots__ = ("id", "capability_id", "amount", "op", "actor", "expires_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    AMOUNT_FIELD_NUMBER: _ClassVar[int]
+    OP_FIELD_NUMBER: _ClassVar[int]
+    ACTOR_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    capability_id: str
+    amount: _money_pb2.Money
+    op: str
+    actor: str
+    expires_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., capability_id: _Optional[str] = ..., amount: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., op: _Optional[str] = ..., actor: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...

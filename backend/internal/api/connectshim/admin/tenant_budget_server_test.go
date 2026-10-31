@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -18,14 +19,23 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// fakeUsageStore is a minimal in-memory meter.TenantBudgets — the
-// only part of the usage store TenantBudgetServer depends on.
+// fakeUsageStore is a minimal in-memory TenantBudgetStore — the only part
+// of the usage store TenantBudgetServer depends on.
 type fakeUsageStore struct {
-	budgets map[uuid.UUID]meter.TenantBudget
-	getErr  error
+	// lastReservations is the last ListTenantReservations' arguments, and
+	// actingOn the tenant its context acted on; reservations, reservationsNext
+	// and reservationsErr are what it answers.
+	lastReservations meter.ListTenantReservationsRequest
+	actingOn         uuid.UUID
+	reservations     []meter.Reservation
+	reservationsNext string
+	reservationsErr  error
+	budgets          map[uuid.UUID]meter.TenantBudget
+	getErr           error
 	// lastSet is the last SetTenantBudget's arguments.
 	lastSet meter.SetTenantBudgetRequest
 	// lastList is the last ListTenantBudgets' arguments; listOut, listNext
@@ -103,6 +113,15 @@ func (f *fakeUsageStore) ListTenantBudgets(_ context.Context, req meter.ListTena
 	return limes.Page[meter.TenantBudget]{Items: f.listOut, Next: f.listNext}, nil
 }
 
+func (f *fakeUsageStore) ListTenantReservations(ctx context.Context, req meter.ListTenantReservationsRequest) (limes.Page[meter.Reservation], error) {
+	f.lastReservations = req
+	f.actingOn, _ = auth.ActingTenant(ctx)
+	if f.reservationsErr != nil {
+		return limes.Page[meter.Reservation]{}, f.reservationsErr
+	}
+	return limes.Page[meter.Reservation]{Items: f.reservations, Next: f.reservationsNext}, nil
+}
+
 // fakeNames is a tenanth.Names over a fixed map; a tenant absent from it
 // does not exist.
 type fakeNames struct {
@@ -126,7 +145,7 @@ func (f *fakeNames) TenantNames(_ context.Context, ids []uuid.UUID) (map[uuid.UU
 }
 
 // newServer is a TenantBudgetServer over store with no tenant named.
-func newServer(store meter.TenantBudgets) *TenantBudgetServer {
+func newServer(store TenantBudgetStore) *TenantBudgetServer {
 	return NewTenantBudgetServer(store, &fakeNames{})
 }
 
@@ -616,5 +635,82 @@ func TestBasisPointsOf(t *testing.T) {
 		if got := basisPointsOf(pct); got != want {
 			t.Errorf("basisPointsOf(%v) = %d, want %d", pct, got, want)
 		}
+	}
+}
+
+// ListReservations lists the tenant's holds as the store reads them, acting
+// as the tenant, and pages through the store's cursor.
+func TestTenantBudgetServer_ListReservations(t *testing.T) {
+	tenant, capID, holdID := uuid.New(), uuid.New(), uuid.New()
+	expires := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	store := &fakeUsageStore{
+		reservations: []meter.Reservation{{
+			ID: holdID, CapabilityID: capID, TenantID: tenant, Amount: limes.NanosPerUnit + 5,
+			UnitCode: "EUR", Op: limes.OpGet, Actor: "agent", ExpiresAt: expires,
+		}},
+		reservationsNext: "next-page",
+	}
+	resp, err := newServer(store).ListReservations(context.Background(), &pb.TenantBudgetServiceListReservationsRequest{
+		TenantId: tenant.String(), PageSize: 7, PageToken: "this-page",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := store.lastReservations; got.TenantID != tenant || got.Limit != 7 || got.Cursor != "this-page" {
+		t.Errorf("store asked %+v, want tenant %s, limit 7, cursor this-page", got, tenant)
+	}
+	if store.actingOn != tenant {
+		t.Errorf("read acting on %s, want the tenant %s, whose rows RLS shows", store.actingOn, tenant)
+	}
+	if resp.GetNextPageToken() != "next-page" || len(resp.GetReservations()) != 1 {
+		t.Fatalf("response = %v, want one hold and the next page", resp)
+	}
+	r := resp.GetReservations()[0]
+	if r.GetId() != holdID.String() || r.GetCapabilityId() != capID.String() || r.GetOp() != string(limes.OpGet) ||
+		r.GetActor() != "agent" || !r.GetExpiresAt().AsTime().Equal(expires) {
+		t.Errorf("hold = %v", r)
+	}
+	if a := r.GetAmount(); a.GetCurrencyCode() != "EUR" || a.GetUnits() != 1 || a.GetNanos() != 5 {
+		t.Errorf("amount = %v, want EUR 1.000000005", a)
+	}
+}
+
+// ListReservations refuses what Get refuses, and answers the store's errors
+// by the table.
+func TestTenantBudgetServer_ListReservations_Refusals(t *testing.T) {
+	cases := map[string]struct {
+		srv  *TenantBudgetServer
+		req  *pb.TenantBudgetServiceListReservationsRequest
+		want connect.Code
+	}{
+		"subsystem off": {NewTenantBudgetServer(nil, nil), &pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String()}, connect.CodeUnavailable},
+		"no tenant id":  {newServer(&fakeUsageStore{}), &pb.TenantBudgetServiceListReservationsRequest{TenantId: "acme"}, connect.CodeInvalidArgument},
+		"bad page token": {
+			newServer(&fakeUsageStore{reservationsErr: fmt.Errorf("%w: cursor", limes.ErrInvalidRequest)}),
+			&pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String(), PageToken: "x"},
+			connect.CodeInvalidArgument,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := tc.srv.ListReservations(context.Background(), tc.req); connect.CodeOf(err) != tc.want {
+				t.Errorf("err = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// Get reports what the tenant's holds keep, in the budget's unit.
+func TestTenantBudgetServer_Get_Reserved(t *testing.T) {
+	tenant := uuid.New()
+	store := &fakeUsageStore{budgets: map[uuid.UUID]meter.TenantBudget{tenant: {
+		TenantID: tenant, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: "EUR"}, ReservedAmount: 2 * limes.NanosPerUnit,
+	}}}
+	resp, err := newServer(store).Get(context.Background(), &pb.TenantBudgetServiceGetRequest{TenantId: tenant.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := resp.GetBudget().GetReserved(); r.GetCurrencyCode() != "EUR" || r.GetUnits() != 2 || r.GetNanos() != 0 {
+		t.Errorf("reserved = %v, want EUR 2", r)
 	}
 }

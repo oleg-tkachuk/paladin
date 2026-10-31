@@ -172,9 +172,10 @@ var procedureKinds = map[string]Kind{
 	admin.SystemServiceGetPlatformStatsProcedure:         Reads,
 	admin.SystemServiceListPlatformStatsTenantsProcedure: Reads,
 
-	admin.TenantBudgetServiceGetProcedure:       Reads,
-	admin.TenantBudgetServiceSetProcedure:       Changes,
-	admin.TenantBudgetServiceSummarizeProcedure: Reads,
+	admin.TenantBudgetServiceGetProcedure:              Reads,
+	admin.TenantBudgetServiceSetProcedure:              Changes,
+	admin.TenantBudgetServiceSummarizeProcedure:        Reads,
+	admin.TenantBudgetServiceListReservationsProcedure: Reads,
 
 	admin.TenantServiceCreateTenantProcedure:               Changes,
 	admin.TenantServiceGetTenantProcedure:                  Lifecycle,
