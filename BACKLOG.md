@@ -32,17 +32,6 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## SDKs
 
-### The backend holds pgx below 5.12
-
-- **Status:** Blocked.
-- **Reason:** pgx 5.12.0 adds `Tx()` to `pgx.BatchResults`, and
-  `limes/pgstore` v0.54.0 returns a `closedBatch` that does not implement
-  it, so the backend does not compile. `backend/go.mod` requires pgx 5.11.0
-  and `renovate.json` allows nothing from 5.12.
-- **Definition of Done:** a pgstore release builds against pgx 5.12; the
-  pin and the Renovate rule are gone and pgx is current.
-- **Blockers:** that pgstore release.
-
 ### The Python SDK still supports Python 3.13
 
 - **Status:** Blocked.
