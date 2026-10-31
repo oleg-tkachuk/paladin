@@ -216,7 +216,13 @@ export default function PlatformCapabilitiesPage() {
                             {principalKindLabel(c.subject?.kind)}
                           </span>
                         </TableCell>
-                        <TableCell className={cn(COL_CLIENT, T.code)}>
+                        <TableCell
+                          className={cn(
+                            COL_CLIENT,
+                            T.code,
+                            "whitespace-normal break-all",
+                          )}
+                        >
                           {c.clientId || "—"}
                         </TableCell>
                         <TableCell>
