@@ -16,21 +16,23 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
-// fakeBulk revokes in batches — More until the last — naming tenants, and
+// fakeBulk revokes, then releases, in batches — More until the last — and
 // records each release with the tenant its context acts on.
 type fakeBulk struct {
 	// everyTenant records whether each revoke, then each release, was
 	// scoped to write every tenant.
 	everyTenant []bool
 	batches     int
-	tenants     []uuid.UUID
 	revokes     int
 	revokeErr   error
-	releases    []meter.ReleaseMatchingRequest
-	releasedIn  []uuid.UUID
-	releaseErr  error
+	// releaseBatches is how many release calls a release takes; one when
+	// zero.
+	releaseBatches int
+	releases       []meter.ReleaseMatchingRequest
+	releasedIn     []uuid.UUID
+	releaseErr     error
 	// released is how many holds each release reports; nothing makes every
-	// call report none, as a repeat finds.
+	// revoke report none, as a repeat finds.
 	released int64
 	nothing  bool
 }
@@ -44,7 +46,7 @@ func (f *fakeBulk) RevokeMatching(ctx context.Context, _ limes.RevokeMatchingReq
 	if f.nothing {
 		return limes.RevokeMatchingResult{}, nil
 	}
-	return limes.RevokeMatchingResult{Revoked: 1, Tenants: f.tenants, More: f.revokes < f.batches}, nil
+	return limes.RevokeMatchingResult{Revoked: 1, More: f.revokes < f.batches}, nil
 }
 
 func (f *fakeBulk) ReleaseMatching(ctx context.Context, req meter.ReleaseMatchingRequest) (meter.ReleaseMatchingResult, error) {
@@ -52,15 +54,15 @@ func (f *fakeBulk) ReleaseMatching(ctx context.Context, req meter.ReleaseMatchin
 	f.releases = append(f.releases, req)
 	t, _ := ActingTenant(ctx)
 	f.releasedIn = append(f.releasedIn, t)
-	return meter.ReleaseMatchingResult{Released: f.released}, f.releaseErr
+	return meter.ReleaseMatchingResult{Released: f.released, More: len(f.releases) < f.releaseBatches}, f.releaseErr
 }
 
-// A revocation runs batch after batch, then releases the holds of what it
-// revoked by the same selectors, in each tenant it wrote in, acting there.
+// A revocation runs batch after batch, then releases, batch after batch,
+// the holds of what it revoked by the same selectors, acting on its tenant.
 func TestBulkRevocationReleasesTheHoldsOfWhatItRevoked(t *testing.T) {
-	const batches = 3
-	tenant, other := uuid.New(), uuid.New()
-	f := &fakeBulk{batches: batches, tenants: []uuid.UUID{tenant, other}}
+	const batches, releaseBatches = 3, 2
+	tenant := uuid.New()
+	f := &fakeBulk{batches: batches, releaseBatches: releaseBatches}
 	b := &BulkRevocation{Revoker: f, Holds: f}
 
 	revoked, err := b.RevokeMatching(context.Background(), limes.RevokeMatchingRequest{TenantID: tenant, Session: "s1"})
@@ -70,11 +72,13 @@ func TestBulkRevocationReleasesTheHoldsOfWhatItRevoked(t *testing.T) {
 	if revoked != batches || f.revokes != batches {
 		t.Errorf("revoked %d in %d calls, want %d in %d", revoked, f.revokes, batches, batches)
 	}
-	if len(f.releases) != 2 || f.releasedIn[0] != tenant || f.releasedIn[1] != other {
-		t.Fatalf("released in %v, want %s then %s", f.releasedIn, tenant, other)
+	if len(f.releases) != releaseBatches {
+		t.Fatalf("%d release calls, want %d", len(f.releases), releaseBatches)
 	}
-	if r := f.releases[0]; r.TenantID != tenant || r.Session != "s1" {
-		t.Errorf("release = %+v, want tenant %s session s1", r, tenant)
+	for i, r := range f.releases {
+		if r.TenantID != tenant || r.AllTenants || r.Session != "s1" || f.releasedIn[i] != tenant {
+			t.Errorf("release %d = %+v acting on %s, want tenant %s session s1", i, r, f.releasedIn[i], tenant)
+		}
 	}
 }
 
@@ -83,14 +87,14 @@ func TestBulkRevocationReleasesTheHoldsOfWhatItRevoked(t *testing.T) {
 // nothing at debug.
 func TestBulkRevocationLogsWhatItStopped(t *testing.T) {
 	const batches = 2
-	tenant, other := uuid.New(), uuid.New()
+	tenant := uuid.New()
 	cases := map[string]struct {
 		bulk         *fakeBulk
 		level        zapcore.Level
 		revoked      int64
 		holdsRelease int64
 	}{
-		"something stopped": {&fakeBulk{batches: batches, tenants: []uuid.UUID{other}, released: 1}, zapcore.InfoLevel, batches, 2},
+		"something stopped": {&fakeBulk{batches: batches, releaseBatches: batches, released: 1}, zapcore.InfoLevel, batches, batches},
 		"a retry releasing": {&fakeBulk{batches: 1, nothing: true, released: 1}, zapcore.InfoLevel, 0, 1},
 		"a repeat":          {&fakeBulk{batches: 1, nothing: true}, zapcore.DebugLevel, 0, 0},
 	}
@@ -168,20 +172,36 @@ func TestBulkRevocationWithoutItsParts(t *testing.T) {
 	}
 }
 
-// A revocation across tenants is scoped to write every tenant for its own
-// calls alone; each tenant's holds are released acting on that tenant.
-func TestBulkRevocationAcrossTenantsScopesOnlyTheRevocation(t *testing.T) {
-	tenant := uuid.New()
-	f := &fakeBulk{batches: 1, tenants: []uuid.UUID{tenant}}
+// A revocation across tenants writes every tenant, and releases in every
+// tenant by its selectors alone.
+func TestBulkRevocationAcrossTenantsReleasesInEveryTenant(t *testing.T) {
+	f := &fakeBulk{batches: 1}
 	b := &BulkRevocation{Revoker: f, Holds: f}
 	ctx := WithActingTenant(context.Background(), uuid.New())
 	if _, err := b.RevokeMatching(ctx, limes.RevokeMatchingRequest{AllTenants: true, ClientID: "agent"}); err != nil {
 		t.Fatal(err)
 	}
-	if want := []bool{true, false}; !slices.Equal(f.everyTenant, want) {
+	if want := []bool{true, true}; !slices.Equal(f.everyTenant, want) {
 		t.Errorf("every-tenant scope per call = %v, want %v", f.everyTenant, want)
 	}
-	if len(f.releasedIn) != 1 || f.releasedIn[0] != tenant {
-		t.Errorf("released in %v, want only %s, where the revocation wrote", f.releasedIn, tenant)
+	if len(f.releases) != 1 {
+		t.Fatalf("%d release calls, want 1", len(f.releases))
+	}
+	if r := f.releases[0]; !r.AllTenants || r.TenantID != uuid.Nil() || r.ClientID != "agent" {
+		t.Errorf("release = %+v, want every tenant's holds of client agent", r)
+	}
+}
+
+// A retry after a release across tenants failed revokes nothing, and still
+// releases in every tenant: the holds of what the first call revoked.
+func TestBulkRevocationAcrossTenantsReleasesOnARetry(t *testing.T) {
+	f := &fakeBulk{batches: 1, nothing: true, released: 1}
+	b := &BulkRevocation{Revoker: f, Holds: f}
+	n, err := b.RevokeMatching(context.Background(), limes.RevokeMatchingRequest{AllTenants: true, ClientID: "agent"})
+	if err != nil || n != 0 {
+		t.Fatalf("retry: %d revoked, %v; want none and no error", n, err)
+	}
+	if len(f.releases) != 1 || !f.releases[0].AllTenants {
+		t.Errorf("releases = %+v, want one across every tenant", f.releases)
 	}
 }

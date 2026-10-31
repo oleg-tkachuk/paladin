@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"slices"
 	"uuid"
 
 	"go.uber.org/zap"
@@ -33,64 +32,56 @@ type BulkRevocation struct {
 }
 
 // RevokeMatching revokes every capability req selects, batch after batch
-// until none is left, then releases the holds of the revoked ones in req's
-// tenant and in each tenant a revocation across tenants wrote in, and
-// reports how many it revoked. It repeats safely: a capability already
-// revoked is not counted again, nor a hold already released.
+// until none is left, then releases the holds of the revoked ones by the
+// same selectors, in req's tenant or, for a revocation across tenants, in
+// every tenant, and reports how many it revoked. It repeats safely: a
+// capability already revoked is not counted again, nor a hold already
+// released, and a release that failed is retried whole though the repeated
+// revocation revokes nothing.
 func (b *BulkRevocation) RevokeMatching(ctx context.Context, req limes.RevokeMatchingRequest) (int64, error) {
 	if b == nil {
 		return 0, nil
 	}
-	var revoked int64
-	tenants := []uuid.UUID{}
-	if !req.AllTenants {
-		tenants = append(tenants, req.TenantID)
-	}
-	revokeCtx := WithActingTenant(ctx, req.TenantID)
+	scoped := WithActingTenant(ctx, req.TenantID)
 	if req.AllTenants {
-		revokeCtx = WithAllTenantsWrite(ctx)
+		scoped = WithAllTenantsWrite(ctx)
 	}
+	var revoked int64
 	for {
-		res, err := b.Revoker.RevokeMatching(revokeCtx, req)
+		res, err := b.Revoker.RevokeMatching(scoped, req)
 		if err != nil {
 			return revoked, fmt.Errorf("revoke matching capabilities: %w", err)
 		}
 		revoked += res.Revoked
-		for _, t := range res.Tenants {
-			if !slices.Contains(tenants, t) {
-				tenants = append(tenants, t)
-			}
-		}
 		if !res.More {
 			break
 		}
 	}
 	var released int64
 	if b.Holds != nil {
-		for _, t := range tenants {
-			n, err := b.releaseHolds(WithActingTenant(ctx, t), t, req)
-			released += n
-			if err != nil {
-				return revoked, err
-			}
+		n, err := b.releaseHolds(scoped, req)
+		released = n
+		if err != nil {
+			return revoked, err
 		}
 	}
 	logRevoked(ctx, req, revoked, released)
 	return revoked, nil
 }
 
-// releaseHolds releases, batch after batch, the holds of tenant's revoked
-// capabilities that req selects, and reports how many it released.
-func (b *BulkRevocation) releaseHolds(ctx context.Context, tenant uuid.UUID, req limes.RevokeMatchingRequest) (int64, error) {
+// releaseHolds releases, batch after batch, the holds of the revoked
+// capabilities req selects, and reports how many it released.
+func (b *BulkRevocation) releaseHolds(ctx context.Context, req limes.RevokeMatchingRequest) (int64, error) {
+	rel := meter.ReleaseMatchingRequest{
+		TenantID: req.TenantID, AllTenants: req.AllTenants, Subject: req.Subject, OnBehalfOf: req.OnBehalfOf,
+		ClientID: req.ClientID, Session: req.Session, RunID: req.RunID,
+	}
 	var released int64
 	for {
-		res, err := b.Holds.ReleaseMatching(ctx, meter.ReleaseMatchingRequest{
-			TenantID: tenant, Subject: req.Subject, OnBehalfOf: req.OnBehalfOf,
-			ClientID: req.ClientID, Session: req.Session, RunID: req.RunID,
-		})
+		res, err := b.Holds.ReleaseMatching(ctx, rel)
 		released += res.Released
 		if err != nil {
-			return released, fmt.Errorf("release the holds of revoked capabilities in tenant %s: %w", tenant, err)
+			return released, fmt.Errorf("release the holds of revoked capabilities: %w", err)
 		}
 		if !res.More {
 			return released, nil
