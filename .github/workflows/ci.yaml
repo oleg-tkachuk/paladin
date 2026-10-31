@@ -36,22 +36,22 @@ env:
   # and sdk/go/go.mod, or it refuses to load the config. Bumping go.mod
   # means checking this.
   # renovate: datasource=github-releases depName=golangci/golangci-lint
-  GOLANGCI_LINT_VERSION: "v2.14.0"
+  GOLANGCI_LINT_VERSION: "v2.15.0"
   # renovate: datasource=github-releases depName=bufbuild/buf
-  BUF_VERSION: "1.73.0"
+  BUF_VERSION: "1.75.0"
   # The codegen gates normalise generated imports with goimports when it is on
   # PATH, and the committed stubs are normalised. Without it the check
   # regenerates with the plugin's own grouping and reports every file stale.
   # renovate: datasource=go depName=golang.org/x/tools
   GOIMPORTS_VERSION: "v0.52.0"
   # renovate: datasource=github-releases depName=helm/helm
-  HELM_VERSION: "v4.3.0"
+  HELM_VERSION: "v4.3.1"
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: "v0.75.0"
+  TRIVY_VERSION: "v0.76.1"
   # renovate: datasource=github-releases depName=hadolint/hadolint
   HADOLINT_VERSION: "v2.15.1"
   # renovate: datasource=github-releases depName=prometheus/prometheus
-  PROMETHEUS_VERSION: "v3.15.0"
+  PROMETHEUS_VERSION: "v3.15.1"
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.54.1"
   # The Python the sdk group's own tests run on, rather than whatever the
@@ -66,9 +66,9 @@ env:
   # renovate: datasource=go depName=github.com/rhysd/actionlint
   ACTIONLINT_VERSION: "v1.7.12"
   # renovate: datasource=github-releases depName=astral-sh/uv
-  UV_VERSION: "0.13.0"
+  UV_VERSION: "0.13.6"
   # renovate: datasource=pypi depName=zizmor
-  ZIZMOR_VERSION: "1.30.1"
+  ZIZMOR_VERSION: "1.31.1"
   # The stack gate mints its dev token with `step` (task backend:auth:mint-token).
   # renovate: datasource=github-releases depName=smallstep/cli
   STEP_VERSION: "0.31.0"
