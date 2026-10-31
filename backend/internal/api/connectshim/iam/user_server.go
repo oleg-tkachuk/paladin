@@ -283,7 +283,7 @@ func (s *UserServer) ListUserCapabilities(ctx context.Context, req *pb.ListUserC
 	if err != nil {
 		return nil, err
 	}
-	page := userh.UserCapabilitiesPage{Size: int(req.GetPageSize()), Token: req.GetPageToken()}
+	page := userh.UserCapabilitiesPage{Size: int(req.GetPageSize()), Token: req.GetPageToken(), Grant: req.GetGrantId()}
 	for _, st := range req.GetStates() {
 		page.Dispositions = append(page.Dispositions, userCapabilityStateFromProto[st])
 	}

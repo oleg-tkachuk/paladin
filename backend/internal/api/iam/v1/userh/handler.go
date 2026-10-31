@@ -571,6 +571,9 @@ type UserCapabilitiesPage struct {
 	Size int
 	// Token is the one the previous page returned; empty for the first.
 	Token string
+	// Grant lists only those exchanged under that OAuth grant — its
+	// session; empty, every grant's.
+	Grant string
 }
 
 // ListUserCapabilities returns a page of the capabilities acting on the
@@ -595,6 +598,7 @@ func (h *Handler) ListUserCapabilities(ctx context.Context, ref UserRef, page Us
 	out, err := h.capabilities.ListRecords(auth.WithActingTenant(ctx, u.TenantID), limes.ListRecordsRequest{
 		TenantID:     u.TenantID,
 		OnBehalfOf:   u.UserID.String(),
+		Session:      page.Grant,
 		Dispositions: dispositions,
 		Order:        limes.ListOrderDescending,
 		Cursor:       page.Token,

@@ -47,7 +47,7 @@ func capabilityFixture(t *testing.T) (authstore.User, *fakeLister, *recordingAut
 func TestListUserCapabilities(t *testing.T) {
 	t.Run("the user's, active, newest first", func(t *testing.T) {
 		u, l, az, h := capabilityFixture(t)
-		got, err := h.ListUserCapabilities(ctxAs(u.TenantID), ref(u), UserCapabilitiesPage{Size: 7, Token: "cursor"})
+		got, err := h.ListUserCapabilities(ctxAs(u.TenantID), ref(u), UserCapabilitiesPage{Size: 7, Token: "cursor", Grant: "grant-1"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -57,11 +57,11 @@ func TestListUserCapabilities(t *testing.T) {
 		want := limes.ListRecordsRequest{
 			TenantID: u.TenantID, OnBehalfOf: u.UserID.String(),
 			Dispositions: []limes.RecordDisposition{limes.RecordDispositionActive},
-			Order:        limes.ListOrderDescending, Cursor: "cursor", Limit: 7,
+			Order:        limes.ListOrderDescending, Cursor: "cursor", Limit: 7, Session: "grant-1",
 		}
 		if l.asked.TenantID != want.TenantID || l.asked.OnBehalfOf != want.OnBehalfOf ||
 			!slices.Equal(l.asked.Dispositions, want.Dispositions) || l.asked.Order != want.Order ||
-			l.asked.Cursor != want.Cursor || l.asked.Limit != want.Limit {
+			l.asked.Cursor != want.Cursor || l.asked.Limit != want.Limit || l.asked.Session != want.Session {
 			t.Errorf("asked %+v, want %+v", l.asked, want)
 		}
 		if l.acting != u.TenantID {

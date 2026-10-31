@@ -171,16 +171,18 @@ class RevokeOAuthGrantResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class ListUserCapabilitiesRequest(_message.Message):
-    __slots__ = ("name", "states", "page_size", "page_token")
+    __slots__ = ("name", "states", "page_size", "page_token", "grant_id")
     NAME_FIELD_NUMBER: _ClassVar[int]
     STATES_FIELD_NUMBER: _ClassVar[int]
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    GRANT_ID_FIELD_NUMBER: _ClassVar[int]
     name: str
     states: _containers.RepeatedScalarFieldContainer[UserCapability.State]
     page_size: int
     page_token: str
-    def __init__(self, name: _Optional[str] = ..., states: _Optional[_Iterable[_Union[UserCapability.State, str]]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+    grant_id: str
+    def __init__(self, name: _Optional[str] = ..., states: _Optional[_Iterable[_Union[UserCapability.State, str]]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., grant_id: _Optional[str] = ...) -> None: ...
 
 class ListUserCapabilitiesResponse(_message.Message):
     __slots__ = ("capabilities", "next_page_token")

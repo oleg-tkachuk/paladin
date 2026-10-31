@@ -1066,9 +1066,12 @@ type ListUserCapabilitiesRequest struct {
 	// The user whose capabilities to list.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// states lists the capabilities in any of these; empty, the active ones.
-	States        []UserCapability_State `protobuf:"varint,2,rep,packed,name=states,proto3,enum=paladin.iam.v1.UserCapability_State" json:"states,omitempty"`
-	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	States    []UserCapability_State `protobuf:"varint,2,rep,packed,name=states,proto3,enum=paladin.iam.v1.UserCapability_State" json:"states,omitempty"`
+	PageSize  int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// grant_id lists only those exchanged under that OAuth grant: what
+	// revoking it revokes. Empty, every grant's.
+	GrantId       string `protobuf:"bytes,5,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1127,6 +1130,13 @@ func (x *ListUserCapabilitiesRequest) GetPageSize() int32 {
 func (x *ListUserCapabilitiesRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListUserCapabilitiesRequest) GetGrantId() string {
+	if x != nil {
+		return x.GrantId
 	}
 	return ""
 }
@@ -1389,13 +1399,14 @@ const file_paladin_iam_v1_user_service_proto_rawDesc = "" +
 	"\x17RevokeOAuthGrantRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12#\n" +
 	"\bgrant_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\agrantId\"\x1a\n" +
-	"\x18RevokeOAuthGrantResponse\"\xce\x01\n" +
+	"\x18RevokeOAuthGrantResponse\"\xf6\x01\n" +
 	"\x1bListUserCapabilitiesRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12M\n" +
 	"\x06states\x18\x02 \x03(\x0e2$.paladin.iam.v1.UserCapability.StateB\x0f\xbaH\f\x92\x01\t\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12$\n" +
 	"\tpage_size\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"\x8a\x01\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x12&\n" +
+	"\bgrant_id\x18\x05 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\agrantId\"\x8a\x01\n" +
 	"\x1cListUserCapabilitiesResponse\x12B\n" +
 	"\fcapabilities\x18\x01 \x03(\v2\x1e.paladin.iam.v1.UserCapabilityR\fcapabilities\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd8\x04\n" +

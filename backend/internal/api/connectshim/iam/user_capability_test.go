@@ -28,7 +28,7 @@ func (r *recordingCapabilities) ListUserCapabilities(_ context.Context, ref user
 }
 
 func TestListUserCapabilities_ForwardsThePageAndAnswersIt(t *testing.T) {
-	tenant, user := uuid.New(), uuid.New()
+	tenant, user, grant := uuid.New(), uuid.New(), uuid.New()
 	h := &recordingCapabilities{page: limes.Page[limes.RecordListing]{
 		Items: []limes.RecordListing{{Disposition: limes.RecordDispositionActive}},
 		Next:  "next",
@@ -39,6 +39,7 @@ func TestListUserCapabilities_ForwardsThePageAndAnswersIt(t *testing.T) {
 		States:    []pb.UserCapability_State{pb.UserCapability_STATE_EXPIRED, pb.UserCapability_STATE_REVOKED},
 		PageSize:  5,
 		PageToken: "cursor",
+		GrantId:   grant.String(),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +48,8 @@ func TestListUserCapabilities_ForwardsThePageAndAnswersIt(t *testing.T) {
 		t.Errorf("listed for %s, want %s", h.ref.UserID, user)
 	}
 	wantDispositions := []limes.RecordDisposition{limes.RecordDispositionExpired, limes.RecordDispositionRevoked}
-	if !slices.Equal(h.asked.Dispositions, wantDispositions) || h.asked.Size != 5 || h.asked.Token != "cursor" {
-		t.Errorf("asked %+v, want dispositions %v, size 5, token cursor", h.asked, wantDispositions)
+	if !slices.Equal(h.asked.Dispositions, wantDispositions) || h.asked.Size != 5 || h.asked.Token != "cursor" || h.asked.Grant != grant.String() {
+		t.Errorf("asked %+v, want dispositions %v, size 5, token cursor, grant %s", h.asked, wantDispositions, grant)
 	}
 	if len(got.GetCapabilities()) != 1 || got.GetNextPageToken() != "next" {
 		t.Errorf("answered %d capabilities, next %q; want 1, next", len(got.GetCapabilities()), got.GetNextPageToken())

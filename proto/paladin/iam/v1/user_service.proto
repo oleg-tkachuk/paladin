@@ -211,6 +211,12 @@ message ListUserCapabilitiesRequest {
   }];
   int32 page_size = 3 [(buf.validate.field).int32.gte = 0];
   string page_token = 4;
+  // grant_id lists only those exchanged under that OAuth grant: what
+  // revoking it revokes. Empty, every grant's.
+  string grant_id = 5 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
 }
 
 message ListUserCapabilitiesResponse {
