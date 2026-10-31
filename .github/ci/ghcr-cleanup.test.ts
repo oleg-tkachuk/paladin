@@ -9,11 +9,17 @@ import { Kind } from "./publish-plan.ts";
 
 const plan = cleanupPlan("paladin-core", "charts/paladin-core");
 
-test("both packages, the newest dev build kept, deleting for real", () => {
+test("both packages, the newest dev builds kept, deleting for real", () => {
   assert.equal(plan[Output.Packages], "paladin-core,charts/paladin-core");
-  assert.equal(plan[Output.Keep], "1");
+  assert.equal(plan[Output.Keep], String(DEV_BUILDS_KEPT));
   assert.equal(plan[Output.DryRun], "false");
   assert.throws(() => cleanupPlan("paladin-core", ""), /both/);
+});
+
+// The build a publish replaces may still be deploying or running on the dev
+// cluster: keeping only the newest deleted the image a sync was pulling.
+test("keeps the build a newer publish replaced", () => {
+  assert.ok(DEV_BUILDS_KEPT > 1, `keeps ${DEV_BUILDS_KEPT}`);
 });
 
 // The action matches tags with shell-style wildcards, any of its

@@ -6,8 +6,8 @@
 // with its platform manifests, signatures and SBOM attestations. Nothing
 // removed them, and GitHub has no retention setting for its container
 // registry. So the publish that adds a dev build deletes the older ones,
-// keeping only the newest — the one the dev cluster runs. Releases are never
-// matched: their versions carry no dev mark.
+// keeping the newest few. Releases are never matched: their versions carry no
+// dev mark.
 //
 // Set as step outputs for dataaxiom/ghcr-cleanup-action, which deletes a
 // version with its children and keeps those of what it keeps.
@@ -17,9 +17,14 @@ import { requireEnv } from "./lib/env.ts";
 import { runMain } from "./lib/main.ts";
 import { DEV_MARKS } from "./lib/versions.ts";
 
-// DEV_BUILDS_KEPT is how many dev builds each package keeps: the newest,
-// which the dev cluster follows.
-export const DEV_BUILDS_KEPT = 1;
+// DEV_BUILDS_KEPT is how many dev builds each package keeps. Not just the
+// newest: the dev cluster deploys a build some minutes after it is published
+// and runs it until the next one lands, so a build replaced in GHCR may still
+// be mid-deploy or running. Keeping only one deleted the image a sync was
+// pulling the moment the next merge published (three merges within ten
+// minutes did it on 2026-10-31), and every pod of that build restarted after
+// it would fail to pull too. Five outlasts such a burst; older ones go.
+export const DEV_BUILDS_KEPT = 5;
 // DRY_RUN is false: the first dry run's list was read against the registry —
 // only dev builds and their children, no release, the newest kept.
 // DELETE_TAGS_SEPARATOR joins the action's delete-tags patterns.
