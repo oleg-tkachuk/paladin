@@ -79,7 +79,8 @@ service CapabilityService {
 
   // List pages through a tenant's capabilities, each with its disposition:
   // every one of them, or those of a principal kind, a subject and the
-  // dispositions asked for. Cursor-paginated.
+  // dispositions asked for. Cursor-paginated. With no tenant_id it pages
+  // every tenant's in one order, for a caller spanning tenants.
   rpc List(CapabilityServiceListRequest) returns (CapabilityServiceListResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -398,7 +399,14 @@ message CapabilityServiceGetBiscuitUsageResponse {
 }
 
 message CapabilityServiceListRequest {
-  string tenant_id = 1 [(buf.validate.field).string.uuid = true];
+  // tenant_id is the tenant whose capabilities to list. Empty lists every
+  // tenant's together, each naming its tenant in subject.tenant_id; only a
+  // caller spanning tenants (platform.admin, platform.capability-issuer)
+  // may ask.
+  string tenant_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
   // principal_kind lists the capabilities of principals of that kind;
   // unspecified, of every kind.
   PrincipalKind principal_kind = 2 [(buf.validate.field).enum.defined_only = true];

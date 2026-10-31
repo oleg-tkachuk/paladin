@@ -32,22 +32,13 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 		return nil, connect.Errorf(connect.CodeUnavailable, "capability record listing not wired")
 	}
 
-	tenantID, err := uuid.Parse(req.GetTenantId())
+	listing, ctx, err := listScope(ctx, caller, req.GetTenantId())
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+		return nil, err
 	}
-	// Same gate as Issue: ReadCapability in a tenant's own policy must not become a
-	// read of every other tenant's capabilities. Cedar above authorised the
-	// ACTION against the caller's own tenant, not against this one.
-	if tenantID != caller.TenantID && !spansTenants(caller) {
-		return nil, connect.NewError(connect.CodePermissionDenied, "listing another tenant's capabilities requires platform.admin or platform.capability-issuer")
-	}
-	// Capability records are RLS-isolated, so reading another tenant's rows
-	// needs the connection scoped to that tenant. Without this the admin
-	// console renders an empty list instead of an error — RLS filters.
-	ctx = auth.WithActingTenant(ctx, tenantID)
 	page, err := h.records.ListRecords(ctx, limes.ListRecordsRequest{
-		TenantID:      tenantID,
+		TenantID:      listing.TenantID,
+		AllTenants:    listing.AllTenants,
 		PrincipalType: protoToPrincipalKind(req.GetPrincipalKind()),
 		Subject:       req.GetSubject(),
 		Session:       req.GetSession(),
@@ -70,6 +61,36 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 		Capabilities:  out,
 		NextPageToken: page.Next,
 	}, nil
+}
+
+// errListAllTenantsDenied answers a listing of every tenant from a caller
+// confined to its own.
+const errListAllTenantsDenied = "listing every tenant's capabilities requires platform.admin or platform.capability-issuer"
+
+// listScope is the tenant a listing reads, or every tenant when tenant is
+// empty, and ctx scoped to read it.
+func listScope(ctx context.Context, caller *auth.Principal, tenant string) (limes.ListRecordsRequest, context.Context, error) {
+	if tenant == "" {
+		if !spansTenants(caller) {
+			return limes.ListRecordsRequest{}, ctx, connect.NewError(connect.CodePermissionDenied, errListAllTenantsDenied)
+		}
+		// A platform-wide read: every tenant's rows, and no write.
+		return limes.ListRecordsRequest{AllTenants: true}, auth.WithCrossTenantRead(ctx), nil
+	}
+	tenantID, err := uuid.Parse(tenant)
+	if err != nil {
+		return limes.ListRecordsRequest{}, ctx, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("tenant_id: %w", err))
+	}
+	// Same gate as Issue: ReadCapability in a tenant's own policy must not become a
+	// read of every other tenant's capabilities. Cedar above authorised the
+	// ACTION against the caller's own tenant, not against this one.
+	if tenantID != caller.TenantID && !spansTenants(caller) {
+		return limes.ListRecordsRequest{}, ctx, connect.NewError(connect.CodePermissionDenied, "listing another tenant's capabilities requires platform.admin or platform.capability-issuer")
+	}
+	// Capability records are RLS-isolated, so reading another tenant's rows
+	// needs the connection scoped to that tenant. Without this the admin
+	// console renders an empty list instead of an error — RLS filters.
+	return limes.ListRecordsRequest{TenantID: tenantID}, auth.WithActingTenant(ctx, tenantID), nil
 }
 
 // listDispositions is what req lists: its dispositions, or, when it names
