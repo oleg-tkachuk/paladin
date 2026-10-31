@@ -13,6 +13,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/limes"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -35,7 +36,17 @@ type Handler struct {
 	// sessions revokes the capabilities exchanged under a grant's session
 	// when the grant ends. Nil while the capability subsystem is off.
 	sessions *auth.BulkRevocation
-	now      func() time.Time
+	// capabilities lists the capabilities acting on users' behalf. Nil
+	// answers ListUserCapabilities Unimplemented.
+	capabilities limes.RecordLister
+	now          func() time.Time
+}
+
+// WithCapabilities lets the handler list the capabilities acting on users'
+// behalf.
+func (h *Handler) WithCapabilities(c limes.RecordLister) *Handler {
+	h.capabilities = c
+	return h
 }
 
 // WithSessionRevoker lets ending a grant end the capabilities exchanged
@@ -512,13 +523,20 @@ func (h *Handler) RevokeOAuthGrant(ctx context.Context, ref UserRef, grantID uui
 	return nil
 }
 
-// grantTarget loads the user whose grants are asked about. Another tenant's
-// user reads as not found to all but a platform admin, as GetUser does; the
-// caller then authorizes its action on the user.
+// grantTarget loads the user whose grants are asked about, as ownedTarget
+// does.
 func (h *Handler) grantTarget(ctx context.Context, ref UserRef) (authstore.User, error) {
 	if h.grants == nil {
 		return authstore.User{}, connect.NewError(connect.CodeUnimplemented, errNoGrantStore.Error())
 	}
+	return h.ownedTarget(ctx, ref)
+}
+
+// ownedTarget loads the user whose own things — grants, capabilities — are
+// asked about. Another tenant's user reads as not found to all but a
+// platform admin, as GetUser does; the caller then authorizes its action on
+// the user.
+func (h *Handler) ownedTarget(ctx context.Context, ref UserRef) (authstore.User, error) {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
 		return authstore.User{}, err
@@ -532,6 +550,67 @@ func (h *Handler) grantTarget(ctx context.Context, ref UserRef) (authstore.User,
 		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound.Error())
 	}
 	return u, nil
+}
+
+// ─── Capabilities acting for a user ─────────────────────────────────────────
+
+// errNoCapabilityLister answers ListUserCapabilities on a handler built
+// without a lister: the capability subsystem is off.
+var errNoCapabilityLister = errors.New("capabilities are not served here")
+
+// logKeyCapabilitiesListed is how many capabilities a listing returned.
+const logKeyCapabilitiesListed = "capabilities_listed"
+
+// UserCapabilitiesPage asks for a page of the capabilities acting on a
+// user's behalf.
+type UserCapabilitiesPage struct {
+	// Dispositions lists the capabilities of any of these; empty, the
+	// active ones.
+	Dispositions []limes.RecordDisposition
+	// Size is the page size; zero, the store's default.
+	Size int
+	// Token is the one the previous page returned; empty for the first.
+	Token string
+	// Grant lists only those exchanged under that OAuth grant — its
+	// session; empty, every grant's.
+	Grant string
+}
+
+// ListUserCapabilities returns a page of the capabilities acting on the
+// user's behalf — exchanged under the user's OAuth grants, or delegated from
+// those — newest first: the user's own, or for a tenant admin a user of the
+// tenant.
+func (h *Handler) ListUserCapabilities(ctx context.Context, ref UserRef, page UserCapabilitiesPage) (limes.Page[limes.RecordListing], error) {
+	if h.capabilities == nil {
+		return limes.Page[limes.RecordListing]{}, connect.NewError(connect.CodeUnimplemented, errNoCapabilityLister.Error())
+	}
+	u, err := h.ownedTarget(ctx, ref)
+	if err != nil {
+		return limes.Page[limes.RecordListing]{}, err
+	}
+	if err := h.authorize(ctx, cedar.ActionReadUserCapabilities, u); err != nil {
+		return limes.Page[limes.RecordListing]{}, err
+	}
+	dispositions := page.Dispositions
+	if len(dispositions) == 0 {
+		dispositions = []limes.RecordDisposition{limes.RecordDispositionActive}
+	}
+	out, err := h.capabilities.ListRecords(auth.WithActingTenant(ctx, u.TenantID), limes.ListRecordsRequest{
+		TenantID:     u.TenantID,
+		OnBehalfOf:   u.UserID.String(),
+		Session:      page.Grant,
+		Dispositions: dispositions,
+		Order:        limes.ListOrderDescending,
+		Cursor:       page.Token,
+		Limit:        page.Size,
+	})
+	if err != nil {
+		return limes.Page[limes.RecordListing]{}, auth.AnswerCapabilityError(err, auth.ListExceptions)
+	}
+	logger.FromContext(ctx).Debug("user capabilities listed",
+		zap.String("user_id", u.UserID.String()), zap.String("tenant_id", u.TenantID.String()),
+		zap.Int(logKeyCapabilitiesListed, len(out.Items)))
+	return out, nil
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────

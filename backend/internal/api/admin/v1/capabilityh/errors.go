@@ -15,19 +15,9 @@ import (
 // its rows below, then the table every capability error is answered by.
 // TestExceptionsNameLimesCodes holds the rows to codes limes defines.
 
-// malformed answers each of codes — limes refusing the request as malformed
-// — with the reason every other malformed admin request carries.
-func malformed(codes ...limes.Code) auth.Exceptions {
-	e := make(auth.Exceptions, len(codes))
-	for _, c := range codes {
-		e[c] = auth.Exception{Code: connect.CodeInvalidArgument, Reason: commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT}
-	}
-	return e
-}
-
 // issuanceExceptions answer Issue.
 var issuanceExceptions = func() auth.Exceptions {
-	e := malformed(limes.CodeInvalidRequest, limes.CodeInvalidCaveats, limes.CodeInvalidAmount, limes.CodeEffectConflict)
+	e := auth.Malformed(limes.CodeInvalidRequest, limes.CodeInvalidCaveats, limes.CodeInvalidAmount, limes.CodeEffectConflict)
 	maps.Copy(e, auth.Exceptions{
 		// NotFound, not FailedPrecondition: the request names a resource that
 		// does not exist. The reason tells it from any other NotFound, so a
@@ -62,7 +52,3 @@ var recordExceptions = auth.Exceptions{
 	limes.CodeNotFound:      {Code: connect.CodeNotFound},
 	meter.CodeUsageNotFound: {Code: connect.CodeNotFound},
 }
-
-// listExceptions answer List: a page token the store cannot read, or one
-// handed out for another listing, is the caller's to fix.
-var listExceptions = malformed(limes.CodeInvalidRequest, limes.CodeCursorMismatch)

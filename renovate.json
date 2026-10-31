@@ -87,12 +87,6 @@
       "description": "limes and its modules release together and move together: a partial bump compiles against two versions of one contract. Each bump also takes limes' new API and deletes the Paladin code it duplicates, which is finished by hand, so it is a PR of its own rather than a line in the monthly Go group."
     },
     {
-      "matchManagers": ["gomod"],
-      "matchPackageNames": ["github.com/jackc/pgx/v5"],
-      "allowedVersions": "<5.12.0",
-      "description": "pgx 5.12 adds Tx to pgx.BatchResults, which limes/pgstore v0.54.0 does not implement, so the backend stops compiling. Lift this once a pgstore release builds against pgx 5.12 (BACKLOG.md)."
-    },
-    {
       "matchManagers": ["npm"],
       "minimumReleaseAge": "1 day",
       "internalChecksFilter": "strict",

@@ -341,6 +341,13 @@ action "RevokeOAuthGrant" appliesTo {
   context: RequestContext
 };
 
+// IAM — the capabilities acting on a user's behalf. Resource is the user.
+action "ReadUserCapabilities" appliesTo {
+  principal: [User],
+  resource: [User],
+  context: RequestContext
+};
+
 action "ManageUserSettings" appliesTo {
   principal: [User],
   resource: [User],

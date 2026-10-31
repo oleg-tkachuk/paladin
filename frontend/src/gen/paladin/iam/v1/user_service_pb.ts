@@ -35,7 +35,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_iam_v1_user_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiFwYWxhZGluL2lhbS92MS91c2VyX3NlcnZpY2UucHJvdG8SDnBhbGFkaW4uaWFtLnYxIrIBChFDcmVhdGVVc2VyUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSGAoHc3ViamVjdBgCIAEoCUIHukgEcgIQARIUCgxkaXNwbGF5X25hbWUYAyABKAkSJAoQaW5pdGlhbF9wYXNzd29yZBgEIAEoCUIKgAEBukgEcgIQDBINCgVyb2xlcxgFIAMoCRIoCgZzY29wZXMYBiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZSInCg5HZXRVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIr0BChFVcGRhdGVVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFAoMZGlzcGxheV9uYW1lGAQgASgJEhAKCGRpc2FibGVkGAUgASgIEg0KBXJvbGVzGAYgAygJIk0KEURlbGV0ZVVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQASIUChJEZWxldGVVc2VyUmVzcG9uc2UiYAoQTGlzdFVzZXJzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSLAoEcGFnZRgCIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgDIAEoCSJnChFMaXN0VXNlcnNSZXNwb25zZRIjCgV1c2VycxgBIAMoCzIULnBhbGFkaW4uaWFtLnYxLlVzZXISLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChJHcmFudFNjb3Blc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIyCgZzY29wZXMYAiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAEiYAoTUmV2b2tlU2NvcGVzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEjIKBnNjb3BlcxgCIAMoCzIYLnBhbGFkaW4uY29tbW9uLnYxLlNjb3BlQgi6SAWSAQIIASJIChRSZXNldFBhc3N3b3JkUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhkKDG5ld19wYXNzd29yZBgCIAEoCUIDgAEBIjgKFVJlc2V0UGFzc3dvcmRSZXNwb25zZRIfChJnZW5lcmF0ZWRfcGFzc3dvcmQYASABKAlCA4ABASJJChZMaXN0T0F1dGhHcmFudHNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQaW5jbHVkZV9pbmFjdGl2ZRgCIAEoCCJFChdMaXN0T0F1dGhHcmFudHNSZXNwb25zZRIqCgZncmFudHMYASADKAsyGi5wYWxhZGluLmlhbS52MS5PQXV0aEdyYW50IpADCgpPQXV0aEdyYW50Eg8KAmlkGAEgASgJQgPgQQMSFgoJY2xpZW50X2lkGAIgASgJQgPgQQMSFQoIYXVkaWVuY2UYAyABKAlCA+BBAxITCgZzY29wZXMYBCADKAlCA+BBAxIzCgpncmFudGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjUKDHJlZnJlc2hlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjQKBXN0YXRlGAggASgOMiAucGFsYWRpbi5pYW0udjEuT0F1dGhHcmFudC5TdGF0ZUID4EEDIlYKBVN0YXRlEhUKEVNUQVRFX1VOU1BFQ0lGSUVEEAASEAoMU1RBVEVfQUNUSVZFEAESEQoNU1RBVEVfUkVWT0tFRBACEhEKDVNUQVRFX0VYUElSRUQQAyJMChdSZXZva2VPQXV0aEdyYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhoKCGdyYW50X2lkGAIgASgJQgi6SAVyA7ABASIaChhSZXZva2VPQXV0aEdyYW50UmVzcG9uc2Uy7QYKC1VzZXJTZXJ2aWNlEkUKCkNyZWF0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5DcmVhdGVVc2VyUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXISRAoHR2V0VXNlchIeLnBhbGFkaW4uaWFtLnYxLkdldFVzZXJSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAIBEkoKClVwZGF0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5VcGRhdGVVc2VyUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXIiA5ACAhJYCgpEZWxldGVVc2VyEiEucGFsYWRpbi5pYW0udjEuRGVsZXRlVXNlclJlcXVlc3QaIi5wYWxhZGluLmlhbS52MS5EZWxldGVVc2VyUmVzcG9uc2UiA5ACAhJVCglMaXN0VXNlcnMSIC5wYWxhZGluLmlhbS52MS5MaXN0VXNlcnNSZXF1ZXN0GiEucGFsYWRpbi5pYW0udjEuTGlzdFVzZXJzUmVzcG9uc2UiA5ACARJMCgtHcmFudFNjb3BlcxIiLnBhbGFkaW4uaWFtLnYxLkdyYW50U2NvcGVzUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXIiA5ACAhJOCgxSZXZva2VTY29wZXMSIy5wYWxhZGluLmlhbS52MS5SZXZva2VTY29wZXNSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAICEmEKDVJlc2V0UGFzc3dvcmQSJC5wYWxhZGluLmlhbS52MS5SZXNldFBhc3N3b3JkUmVxdWVzdBolLnBhbGFkaW4uaWFtLnYxLlJlc2V0UGFzc3dvcmRSZXNwb25zZSIDkAICEmcKD0xpc3RPQXV0aEdyYW50cxImLnBhbGFkaW4uaWFtLnYxLkxpc3RPQXV0aEdyYW50c1JlcXVlc3QaJy5wYWxhZGluLmlhbS52MS5MaXN0T0F1dGhHcmFudHNSZXNwb25zZSIDkAIBEmoKEFJldm9rZU9BdXRoR3JhbnQSJy5wYWxhZGluLmlhbS52MS5SZXZva2VPQXV0aEdyYW50UmVxdWVzdBooLnBhbGFkaW4uaWFtLnYxLlJldm9rZU9BdXRoR3JhbnRSZXNwb25zZSIDkAICQkhaRmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2lhbS92MTtwYWxhZGluaWFtdjFiBnByb3RvMw",
+    "CiFwYWxhZGluL2lhbS92MS91c2VyX3NlcnZpY2UucHJvdG8SDnBhbGFkaW4uaWFtLnYxIrIBChFDcmVhdGVVc2VyUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSGAoHc3ViamVjdBgCIAEoCUIHukgEcgIQARIUCgxkaXNwbGF5X25hbWUYAyABKAkSJAoQaW5pdGlhbF9wYXNzd29yZBgEIAEoCUIKgAEBukgEcgIQDBINCgVyb2xlcxgFIAMoCRIoCgZzY29wZXMYBiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZSInCg5HZXRVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIr0BChFVcGRhdGVVc2VyUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEiEKEHJlc291cmNlX3ZlcnNpb24YAiABKAlCB7pIBHICEAESNwoLdXBkYXRlX21hc2sYAyABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFAoMZGlzcGxheV9uYW1lGAQgASgJEhAKCGRpc2FibGVkGAUgASgIEg0KBXJvbGVzGAYgAygJIk0KEURlbGV0ZVVzZXJSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQASIUChJEZWxldGVVc2VyUmVzcG9uc2UiYAoQTGlzdFVzZXJzUmVxdWVzdBIOCgZwYXJlbnQYASABKAkSLAoEcGFnZRgCIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0Eg4KBmZpbHRlchgDIAEoCSJnChFMaXN0VXNlcnNSZXNwb25zZRIjCgV1c2VycxgBIAMoCzIULnBhbGFkaW4uaWFtLnYxLlVzZXISLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJfChJHcmFudFNjb3Blc1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIyCgZzY29wZXMYAiADKAsyGC5wYWxhZGluLmNvbW1vbi52MS5TY29wZUIIukgFkgECCAEiYAoTUmV2b2tlU2NvcGVzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEjIKBnNjb3BlcxgCIAMoCzIYLnBhbGFkaW4uY29tbW9uLnYxLlNjb3BlQgi6SAWSAQIIASJIChRSZXNldFBhc3N3b3JkUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhkKDG5ld19wYXNzd29yZBgCIAEoCUIDgAEBIjgKFVJlc2V0UGFzc3dvcmRSZXNwb25zZRIfChJnZW5lcmF0ZWRfcGFzc3dvcmQYASABKAlCA4ABASJJChZMaXN0T0F1dGhHcmFudHNSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGAoQaW5jbHVkZV9pbmFjdGl2ZRgCIAEoCCJFChdMaXN0T0F1dGhHcmFudHNSZXNwb25zZRIqCgZncmFudHMYASADKAsyGi5wYWxhZGluLmlhbS52MS5PQXV0aEdyYW50IpADCgpPQXV0aEdyYW50Eg8KAmlkGAEgASgJQgPgQQMSFgoJY2xpZW50X2lkGAIgASgJQgPgQQMSFQoIYXVkaWVuY2UYAyABKAlCA+BBAxITCgZzY29wZXMYBCADKAlCA+BBAxIzCgpncmFudGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjUKDHJlZnJlc2hlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIzCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjQKBXN0YXRlGAggASgOMiAucGFsYWRpbi5pYW0udjEuT0F1dGhHcmFudC5TdGF0ZUID4EEDIlYKBVN0YXRlEhUKEVNUQVRFX1VOU1BFQ0lGSUVEEAASEAoMU1RBVEVfQUNUSVZFEAESEQoNU1RBVEVfUkVWT0tFRBACEhEKDVNUQVRFX0VYUElSRUQQAyJMChdSZXZva2VPQXV0aEdyYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEhoKCGdyYW50X2lkGAIgASgJQgi6SAVyA7ABASIaChhSZXZva2VPQXV0aEdyYW50UmVzcG9uc2UiygEKG0xpc3RVc2VyQ2FwYWJpbGl0aWVzUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABEkUKBnN0YXRlcxgCIAMoDjIkLnBhbGFkaW4uaWFtLnYxLlVzZXJDYXBhYmlsaXR5LlN0YXRlQg+6SAySAQkiB4IBBBABIAASGgoJcGFnZV9zaXplGAMgASgFQge6SAQaAigAEhIKCnBhZ2VfdG9rZW4YBCABKAkSHQoIZ3JhbnRfaWQYBSABKAlCC7pICNgBAXIDsAEBIm0KHExpc3RVc2VyQ2FwYWJpbGl0aWVzUmVzcG9uc2USNAoMY2FwYWJpbGl0aWVzGAEgAygLMh4ucGFsYWRpbi5pYW0udjEuVXNlckNhcGFiaWxpdHkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIugDCg5Vc2VyQ2FwYWJpbGl0eRIPCgJpZBgBIAEoCUID4EEDEhYKCWNsaWVudF9pZBgCIAEoCUID4EEDEhUKCGdyYW50X2lkGAMgASgJQgPgQQMSFgoJcGFyZW50X2lkGAQgASgJQgPgQQMSFQoIYXVkaWVuY2UYBSADKAlCA+BBAxIXCgpvcGVyYXRpb25zGAYgAygJQgPgQQMSMgoJaXNzdWVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEID4EEDEjMKCmV4cGlyZXNfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSOAoFc3RhdGUYCSABKA4yJC5wYWxhZGluLmlhbS52MS5Vc2VyQ2FwYWJpbGl0eS5TdGF0ZUID4EEDEjMKCnJldm9rZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgPgQQMSHgoRcmV2b2NhdGlvbl9yZWFzb24YCyABKAlCA+BBAyJWCgVTdGF0ZRIVChFTVEFURV9VTlNQRUNJRklFRBAAEhAKDFNUQVRFX0FDVElWRRABEhEKDVNUQVRFX0VYUElSRUQQAhIRCg1TVEFURV9SRVZPS0VEEAMy5QcKC1VzZXJTZXJ2aWNlEkUKCkNyZWF0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5DcmVhdGVVc2VyUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXISRAoHR2V0VXNlchIeLnBhbGFkaW4uaWFtLnYxLkdldFVzZXJSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAIBEkoKClVwZGF0ZVVzZXISIS5wYWxhZGluLmlhbS52MS5VcGRhdGVVc2VyUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXIiA5ACAhJYCgpEZWxldGVVc2VyEiEucGFsYWRpbi5pYW0udjEuRGVsZXRlVXNlclJlcXVlc3QaIi5wYWxhZGluLmlhbS52MS5EZWxldGVVc2VyUmVzcG9uc2UiA5ACAhJVCglMaXN0VXNlcnMSIC5wYWxhZGluLmlhbS52MS5MaXN0VXNlcnNSZXF1ZXN0GiEucGFsYWRpbi5pYW0udjEuTGlzdFVzZXJzUmVzcG9uc2UiA5ACARJMCgtHcmFudFNjb3BlcxIiLnBhbGFkaW4uaWFtLnYxLkdyYW50U2NvcGVzUmVxdWVzdBoULnBhbGFkaW4uaWFtLnYxLlVzZXIiA5ACAhJOCgxSZXZva2VTY29wZXMSIy5wYWxhZGluLmlhbS52MS5SZXZva2VTY29wZXNSZXF1ZXN0GhQucGFsYWRpbi5pYW0udjEuVXNlciIDkAICEmEKDVJlc2V0UGFzc3dvcmQSJC5wYWxhZGluLmlhbS52MS5SZXNldFBhc3N3b3JkUmVxdWVzdBolLnBhbGFkaW4uaWFtLnYxLlJlc2V0UGFzc3dvcmRSZXNwb25zZSIDkAICEmcKD0xpc3RPQXV0aEdyYW50cxImLnBhbGFkaW4uaWFtLnYxLkxpc3RPQXV0aEdyYW50c1JlcXVlc3QaJy5wYWxhZGluLmlhbS52MS5MaXN0T0F1dGhHcmFudHNSZXNwb25zZSIDkAIBEmoKEFJldm9rZU9BdXRoR3JhbnQSJy5wYWxhZGluLmlhbS52MS5SZXZva2VPQXV0aEdyYW50UmVxdWVzdBooLnBhbGFkaW4uaWFtLnYxLlJldm9rZU9BdXRoR3JhbnRSZXNwb25zZSIDkAICEnYKFExpc3RVc2VyQ2FwYWJpbGl0aWVzEisucGFsYWRpbi5pYW0udjEuTGlzdFVzZXJDYXBhYmlsaXRpZXNSZXF1ZXN0GiwucGFsYWRpbi5pYW0udjEuTGlzdFVzZXJDYXBhYmlsaXRpZXNSZXNwb25zZSIDkAIBQkhaRmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2lhbS92MTtwYWxhZGluaWFtdjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_api_field_behavior,
@@ -552,6 +552,199 @@ export const RevokeOAuthGrantResponseSchema: GenMessage<RevokeOAuthGrantResponse
   messageDesc(file_paladin_iam_v1_user_service, 15);
 
 /**
+ * @generated from message paladin.iam.v1.ListUserCapabilitiesRequest
+ */
+export type ListUserCapabilitiesRequest =
+  Message<"paladin.iam.v1.ListUserCapabilitiesRequest"> & {
+    /**
+     * The user whose capabilities to list.
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * states lists the capabilities in any of these; empty, the active ones.
+     *
+     * @generated from field: repeated paladin.iam.v1.UserCapability.State states = 2;
+     */
+    states: UserCapability_State[];
+
+    /**
+     * @generated from field: int32 page_size = 3;
+     */
+    pageSize: number;
+
+    /**
+     * @generated from field: string page_token = 4;
+     */
+    pageToken: string;
+
+    /**
+     * grant_id lists only those exchanged under that OAuth grant: what
+     * revoking it revokes. Empty, every grant's.
+     *
+     * @generated from field: string grant_id = 5;
+     */
+    grantId: string;
+  };
+
+/**
+ * Describes the message paladin.iam.v1.ListUserCapabilitiesRequest.
+ * Use `create(ListUserCapabilitiesRequestSchema)` to create a new message.
+ */
+export const ListUserCapabilitiesRequestSchema: GenMessage<ListUserCapabilitiesRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 16);
+
+/**
+ * @generated from message paladin.iam.v1.ListUserCapabilitiesResponse
+ */
+export type ListUserCapabilitiesResponse =
+  Message<"paladin.iam.v1.ListUserCapabilitiesResponse"> & {
+    /**
+     * capabilities are newest first.
+     *
+     * @generated from field: repeated paladin.iam.v1.UserCapability capabilities = 1;
+     */
+    capabilities: UserCapability[];
+
+    /**
+     * @generated from field: string next_page_token = 2;
+     */
+    nextPageToken: string;
+  };
+
+/**
+ * Describes the message paladin.iam.v1.ListUserCapabilitiesResponse.
+ * Use `create(ListUserCapabilitiesResponseSchema)` to create a new message.
+ */
+export const ListUserCapabilitiesResponseSchema: GenMessage<ListUserCapabilitiesResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 17);
+
+/**
+ * UserCapability is a capability acting on a user's behalf, as the user sees
+ * it: which client holds it, under which grant, and what it allows.
+ *
+ * @generated from message paladin.iam.v1.UserCapability
+ */
+export type UserCapability = Message<"paladin.iam.v1.UserCapability"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * client_id is the OAuth client the capability was granted to.
+   *
+   * @generated from field: string client_id = 2;
+   */
+  clientId: string;
+
+  /**
+   * grant_id is the OAuth grant it was exchanged under, whose revocation
+   * revokes it. Empty for one issued outside a grant.
+   *
+   * @generated from field: string grant_id = 3;
+   */
+  grantId: string;
+
+  /**
+   * parent_id is the capability it was delegated from; empty for one
+   * exchanged directly.
+   *
+   * @generated from field: string parent_id = 4;
+   */
+  parentId: string;
+
+  /**
+   * audience is the planes it may be presented to.
+   *
+   * @generated from field: repeated string audience = 5;
+   */
+  audience: string[];
+
+  /**
+   * operations is what it allows.
+   *
+   * @generated from field: repeated string operations = 6;
+   */
+  operations: string[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp issued_at = 7;
+   */
+  issuedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 8;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: paladin.iam.v1.UserCapability.State state = 9;
+   */
+  state: UserCapability_State;
+
+  /**
+   * revoked_at and revocation_reason are those of the entry that revoked
+   * it: its own, or an ancestor's. Unset unless state is REVOKED.
+   *
+   * @generated from field: google.protobuf.Timestamp revoked_at = 10;
+   */
+  revokedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string revocation_reason = 11;
+   */
+  revocationReason: string;
+};
+
+/**
+ * Describes the message paladin.iam.v1.UserCapability.
+ * Use `create(UserCapabilitySchema)` to create a new message.
+ */
+export const UserCapabilitySchema: GenMessage<UserCapability> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_iam_v1_user_service, 18);
+
+/**
+ * State is what the capability is now: revoked — itself or an ancestor —
+ * over expired over active.
+ *
+ * @generated from enum paladin.iam.v1.UserCapability.State
+ */
+export enum UserCapability_State {
+  /**
+   * @generated from enum value: STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: STATE_ACTIVE = 1;
+   */
+  ACTIVE = 1,
+
+  /**
+   * @generated from enum value: STATE_EXPIRED = 2;
+   */
+  EXPIRED = 2,
+
+  /**
+   * @generated from enum value: STATE_REVOKED = 3;
+   */
+  REVOKED = 3,
+}
+
+/**
+ * Describes the enum paladin.iam.v1.UserCapability.State.
+ */
+export const UserCapability_StateSchema: GenEnum<UserCapability_State> =
+  /*@__PURE__*/
+  enumDesc(file_paladin_iam_v1_user_service, 18, 0);
+
+/**
  * UserService is the admin-only side of IAM. CRUD users, grant scopes/roles,
  * reset passwords. Requires role `iam.admin` or `platform.admin`.
  *
@@ -666,5 +859,18 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof RevokeOAuthGrantRequestSchema;
     output: typeof RevokeOAuthGrantResponseSchema;
+  };
+  /**
+   * ListUserCapabilities returns the capabilities that act on the user's
+   * behalf: those an agent exchanged under one of the user's OAuth grants,
+   * and those delegated from them. Any user may list their own; a tenant
+   * admin those of the tenant's users.
+   *
+   * @generated from rpc paladin.iam.v1.UserService.ListUserCapabilities
+   */
+  listUserCapabilities: {
+    methodKind: "unary";
+    input: typeof ListUserCapabilitiesRequestSchema;
+    output: typeof ListUserCapabilitiesResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_iam_v1_user_service, 0);

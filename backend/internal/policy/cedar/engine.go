@@ -175,6 +175,11 @@ var (
 	ActionReadOAuthGrants  = declare("ReadOAuthGrants")
 	ActionRevokeOAuthGrant = declare("RevokeOAuthGrant")
 
+	// The capabilities acting on a user's behalf: those exchanged under the
+	// user's OAuth grants. Resource is the User; built-in permits as for the
+	// grants.
+	ActionReadUserCapabilities = declare("ReadUserCapabilities")
+
 	// Quota-scoped actions. Resource is the Tenant or Bucket entity (no
 	// dedicated Quota entity — quota config attaches 1:1 to the parent).
 	ActionManageQuota     = declare("ManageQuota")
@@ -873,13 +878,14 @@ when {
   principal.tenant_id == resource.tenant_id
 };
 
-// Built-in: a user may list and end the OAuth grants it gave clients, and a
-// tenant admin those of its tenant's users — self-service like the settings
-// above, and built-in so the actions reach tenants whose stored policy was
-// frozen before they existed. A tenant policy can still forbid them.
+// Built-in: a user may list and end the OAuth grants it gave clients, and
+// list the capabilities acting on its behalf under them; a tenant admin those
+// of its tenant's users — self-service like the settings above, and built-in
+// so the actions reach tenants whose stored policy was frozen before they
+// existed. A tenant policy can still forbid them.
 permit (
   principal,
-  action in [Action::"ReadOAuthGrants", Action::"RevokeOAuthGrant"],
+  action in [Action::"ReadOAuthGrants", Action::"RevokeOAuthGrant", Action::"ReadUserCapabilities"],
   resource
 )
 when {

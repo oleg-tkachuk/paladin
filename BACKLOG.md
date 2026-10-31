@@ -32,17 +32,6 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## SDKs
 
-### The backend holds pgx below 5.12
-
-- **Status:** Blocked.
-- **Reason:** pgx 5.12.0 adds `Tx()` to `pgx.BatchResults`, and
-  `limes/pgstore` v0.54.0 returns a `closedBatch` that does not implement
-  it, so the backend does not compile. `backend/go.mod` requires pgx 5.11.0
-  and `renovate.json` allows nothing from 5.12.
-- **Definition of Done:** a pgstore release builds against pgx 5.12; the
-  pin and the Renovate rule are gone and pgx is current.
-- **Blockers:** that pgstore release.
-
 ### The Python SDK still supports Python 3.13
 
 - **Status:** Blocked.
@@ -759,6 +748,22 @@ open deliberately — each notes why._
 - **Blockers:** none — gated on semantic search becoming a committed feature.
 
 ## UI / Admin Console
+
+### Capabilities across every tenant, for a platform admin
+
+- **Status:** Blocked.
+- **Reason:** Management lists buckets and collections across tenants, but
+  capabilities only one tenant at a time: `CapabilityService.List` needs a
+  `tenant_id`, and so does limes' `ListRecordsRequest`, whose records are
+  RLS-isolated per tenant. Walking every tenant from Paladin would cost a
+  request per tenant and give no single order to page in.
+- **Definition of Done:** a Management → Capabilities page for a platform
+  admin lists every tenant's capabilities newest first, with the tenant as a
+  column and the filters of the tenant page, each row linking into its
+  tenant's workspace; `CapabilityService.List` with no `tenant_id` serves it
+  to a caller spanning tenants and refuses anyone else.
+- **Blockers:** `AllTenants` on limes' `ListRecordsRequest`, as
+  `RevokeMatchingRequest` and `ReleaseMatchingRequest` already have it.
 
 ### Console UX programme (2026-10-19)
 

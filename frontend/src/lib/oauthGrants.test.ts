@@ -11,6 +11,7 @@ import {
   capabilityGrant,
   grantCapabilitiesHref,
   grantHref,
+  ownGrantHref,
 } from "./oauthGrants";
 
 const TENANT = "t-1";
@@ -37,6 +38,10 @@ function delegated(
 }
 
 describe("oauthGrants", () => {
+  it("opens a user's own grant on their applications page", () => {
+    expect(ownGrantHref("g-1")).toBe("/applications?apps.id=g-1");
+  });
+
   it("links a grant on its user's page, opened in the grants table", () => {
     expect(grantHref(TENANT, USER, SESSION)).toBe("/users/t-1/u-1?apps.id=s-1");
   });

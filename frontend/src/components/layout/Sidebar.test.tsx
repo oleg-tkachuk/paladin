@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { ROLES } from "@/constants/roles";
 import { cn } from "@/lib/utils";
+import { ACCOUNT_PAGES } from "@/lib/navigation/account";
 import {
+  ACCOUNT_GROUP,
   BRAND_NAME_CLASS,
   GROUP_LABEL_CLASS,
   SESSION_TENANT_GROUP,
@@ -23,9 +25,23 @@ describe("visibleNavigationGroups", () => {
       "Dashboard",
       "Health Status",
       "Profile",
-      // A user's own OAuth grants, read from IAM.
+      // A user's own OAuth grants, and what acts for them, read from IAM.
       "Connected applications",
+      "My capabilities",
     ]);
+  });
+
+  // The account group holds the user's own pages and nothing of a tenant's
+  // or the platform's; the platform's configuration is a page of System.
+  it("groups the user's own pages under Account, the configuration under System", () => {
+    const groups = visibleNavigationGroups([ROLES.platformAdmin]);
+    const account = groups.find((g) => g.title === ACCOUNT_GROUP);
+    expect(account?.items.map((i) => i.path)).toEqual(
+      ACCOUNT_PAGES.map((p) => p.path),
+    );
+    const system = groups.find((g) => g.title === "System");
+    expect(system?.items.map((i) => i.path)).toContain(SECTION.config);
+    expect(groups.map((g) => g.title)).not.toContain("Settings");
   });
 
   it("drops the groups left empty", () => {

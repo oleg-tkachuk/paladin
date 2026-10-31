@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { routeNeedsAdminPlane } from "./adminPlaneRoutes";
 
 describe("routeNeedsAdminPlane", () => {
-  it.each(["/", "/health", "/profile", "/applications"])(
+  it.each(["/", "/health", "/profile", "/applications", "/my-capabilities"])(
     "%s works without it",
     (p) => {
       expect(routeNeedsAdminPlane(p)).toBe(false);

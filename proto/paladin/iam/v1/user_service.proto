@@ -66,6 +66,14 @@ service UserService {
   rpc RevokeOAuthGrant(RevokeOAuthGrantRequest) returns (RevokeOAuthGrantResponse) {
     option idempotency_level = IDEMPOTENT;
   }
+
+  // ListUserCapabilities returns the capabilities that act on the user's
+  // behalf: those an agent exchanged under one of the user's OAuth grants,
+  // and those delegated from them. Any user may list their own; a tenant
+  // admin those of the tenant's users.
+  rpc ListUserCapabilities(ListUserCapabilitiesRequest) returns (ListUserCapabilitiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message CreateUserRequest {
@@ -192,3 +200,61 @@ message RevokeOAuthGrantRequest {
 }
 
 message RevokeOAuthGrantResponse {}
+
+message ListUserCapabilitiesRequest {
+  // The user whose capabilities to list.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // states lists the capabilities in any of these; empty, the active ones.
+  repeated UserCapability.State states = 2 [(buf.validate.field).repeated.items.enum = {
+    defined_only: true,
+    not_in: [0]
+  }];
+  int32 page_size = 3 [(buf.validate.field).int32.gte = 0];
+  string page_token = 4;
+  // grant_id lists only those exchanged under that OAuth grant: what
+  // revoking it revokes. Empty, every grant's.
+  string grant_id = 5 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message ListUserCapabilitiesResponse {
+  // capabilities are newest first.
+  repeated UserCapability capabilities = 1;
+  string next_page_token = 2;
+}
+
+// UserCapability is a capability acting on a user's behalf, as the user sees
+// it: which client holds it, under which grant, and what it allows.
+message UserCapability {
+  string id = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // client_id is the OAuth client the capability was granted to.
+  string client_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // grant_id is the OAuth grant it was exchanged under, whose revocation
+  // revokes it. Empty for one issued outside a grant.
+  string grant_id = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // parent_id is the capability it was delegated from; empty for one
+  // exchanged directly.
+  string parent_id = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // audience is the planes it may be presented to.
+  repeated string audience = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // operations is what it allows.
+  repeated string operations = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp issued_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp expires_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
+  State state = 9 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // revoked_at and revocation_reason are those of the entry that revoked
+  // it: its own, or an ancestor's. Unset unless state is REVOKED.
+  google.protobuf.Timestamp revoked_at = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string revocation_reason = 11 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // State is what the capability is now: revoked — itself or an ancestor —
+  // over expired over active.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_ACTIVE = 1;
+    STATE_EXPIRED = 2;
+    STATE_REVOKED = 3;
+  }
+}

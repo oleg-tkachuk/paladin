@@ -43,7 +43,8 @@ Four layers are concatenated, in this order, and compiled together:
      `ManageUserSettings`) — the target user's `user_id` is the
      principal's `subject` and its `tenant_id` the principal's;
    - a user may list and end the OAuth grants it gave clients
-     (`ReadOAuthGrants`, `RevokeOAuthGrant`), and a `tenant.admin` those of
+     (`ReadOAuthGrants`, `RevokeOAuthGrant`) and list the capabilities acting
+     on its behalf (`ReadUserCapabilities`), and a `tenant.admin` those of
      its tenant's users;
    - a machine principal (`kind` is `api_key`, `service_account` or
      `capability`) may delete and restore objects in its own tenant;
@@ -127,7 +128,7 @@ is checked against the most specific one the request names — for example,
 | `IssueCapability` `DelegateCapability` `RevokeCapability` `ReadCapability` `CreateAPIToken` `RevokeAPIToken` `ReadAPIToken` `InspectMCP` `ManageOAuthClient` | `Tenant` (the caller's own) |
 | `ManageUser` `ResetPassword` `GrantScopes` `ManageUserSettings` | `User` |
 | `ReadUser` `ReadUserSettings` | `User`, `Tenant` |
-| `ReadOAuthGrants` `RevokeOAuthGrant` | `User` |
+| `ReadOAuthGrants` `RevokeOAuthGrant` `ReadUserCapabilities` | `User` |
 
 An object action reaches Cedar on the `Collection` when no key is known at
 authorization time: batch operations (a batch copy checks `PutObject` on the

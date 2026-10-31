@@ -83,6 +83,23 @@ export function activeFacets(selection: FacetSelection): number {
 }
 
 /**
+ * Whether the user narrowed the list from where it opens: some facet's
+ * choices differ from its initial ones, in any order. A list that opens on
+ * its live rows and finds none is empty, not filtered — it says what it is
+ * for rather than "nothing matches your filters".
+ */
+export function narrowedFromInitial<R>(
+  facets: readonly Facet<R>[],
+  selection: FacetSelection,
+): boolean {
+  return facets.some((f) => {
+    const now = new Set(chosen(selection, f.id));
+    const initial = new Set(f.initial ?? NO_CHOICE);
+    return now.size !== initial.size || [...now].some((v) => !initial.has(v));
+  });
+}
+
+/**
  * The rows that pass every facet with a choice made; the input as is when no
  * facet narrows it, so a list that filters nothing keeps its identity.
  */

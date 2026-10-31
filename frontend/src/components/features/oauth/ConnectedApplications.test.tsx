@@ -232,24 +232,23 @@ describe("ConnectedApplications", () => {
     await waitFor(() => expect(h.list).toHaveBeenCalledTimes(2));
   });
 
+  // An operator's link leads to the tenant's list, a user's own to theirs,
+  // which reads IAM alone.
   it.each([
     [false, "/tenants/t1/capabilities?session=0199-grant"],
-    [true, null],
-  ])(
-    "links an operator to the grant's capabilities (own: %s)",
-    async (own, href) => {
-      h.list.mockResolvedValue({ grants: [GRANT] });
-      render(<ConnectedApplications userName={USER} own={own} />);
-      fireEvent.click(await row(GRANT.clientId));
-      const dialog = await screen.findByRole("dialog", {
-        name: "Connected application",
-      });
-      const link = within(dialog).queryByRole("link", {
-        name: "Exchanged under this grant",
-      });
-      expect(link?.getAttribute("href") ?? null).toBe(href);
-    },
-  );
+    [true, "/my-capabilities?grant=0199-grant"],
+  ])("links to the grant's capabilities (own: %s)", async (own, href) => {
+    h.list.mockResolvedValue({ grants: [GRANT] });
+    render(<ConnectedApplications userName={USER} own={own} />);
+    fireEvent.click(await row(GRANT.clientId));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Connected application",
+    });
+    const link = within(dialog).queryByRole("link", {
+      name: "Exchanged under this grant",
+    });
+    expect(link?.getAttribute("href") ?? null).toBe(href);
+  });
 
   it("revokes from the record", async () => {
     h.list.mockResolvedValue({ grants: [GRANT] });

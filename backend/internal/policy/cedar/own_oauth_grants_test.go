@@ -8,7 +8,7 @@ import (
 )
 
 // Over an EMPTY tenant policy — the built-in alone decides — who may list and
-// end a user's OAuth grants.
+// end a user's OAuth grants, and list the capabilities acting for the user.
 func TestBuiltin_OAuthGrants(t *testing.T) {
 	tenant, other := uuid.New(), uuid.New()
 	alice, bob := uuid.New(), uuid.New()
@@ -28,7 +28,7 @@ func TestBuiltin_OAuthGrants(t *testing.T) {
 	}
 	user := []string{"tenant.user"}
 	admin := []string{"tenant.admin"}
-	for _, action := range []Action{ActionReadOAuthGrants, ActionRevokeOAuthGrant} {
+	for _, action := range []Action{ActionReadOAuthGrants, ActionRevokeOAuthGrant, ActionReadUserCapabilities} {
 		t.Run(action.String(), func(t *testing.T) {
 			for _, tc := range []struct {
 				name   string

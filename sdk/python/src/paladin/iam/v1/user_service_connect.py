@@ -22,7 +22,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.iam.v1.types_pb2 import User
 from pyqwest import Client, SyncClient
 
-from .user_service_pb2 import CreateUserRequest, DeleteUserRequest, DeleteUserResponse, GetUserRequest, GrantScopesRequest, ListOAuthGrantsRequest, ListOAuthGrantsResponse, ListUsersRequest, ListUsersResponse, ResetPasswordRequest, ResetPasswordResponse, RevokeOAuthGrantRequest, RevokeOAuthGrantResponse, RevokeScopesRequest, UpdateUserRequest
+from .user_service_pb2 import CreateUserRequest, DeleteUserRequest, DeleteUserResponse, GetUserRequest, GrantScopesRequest, ListOAuthGrantsRequest, ListOAuthGrantsResponse, ListUserCapabilitiesRequest, ListUserCapabilitiesResponse, ListUsersRequest, ListUsersResponse, ResetPasswordRequest, ResetPasswordResponse, RevokeOAuthGrantRequest, RevokeOAuthGrantResponse, RevokeScopesRequest, UpdateUserRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -109,6 +109,15 @@ class UserService(Protocol):
         """
         RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
         at once, and an access token it already holds within its short lifetime.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_user_capabilities(self, request: ListUserCapabilitiesRequest, ctx: RequestContext[ListUserCapabilitiesRequest, ListUserCapabilitiesResponse], /) -> ListUserCapabilitiesResponse:
+        """
+        ListUserCapabilities returns the capabilities that act on the user's
+        behalf: those an agent exchanged under one of the user's OAuth grants,
+        and those delegated from them. Any user may list their own; a tenant
+        admin those of the tenant's users.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -235,6 +244,17 @@ class UserServiceASGIApplication(ConnectASGIApplication[UserService]):
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.revoke_o_auth_grant,
+                ),
+                "/paladin.iam.v1.UserService/ListUserCapabilities": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListUserCapabilities",
+                        service_name="paladin.iam.v1.UserService",
+                        input=ListUserCapabilitiesRequest,
+                        output=ListUserCapabilitiesResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.list_user_capabilities,
                 ),
             },
             interceptors=interceptors,
@@ -523,6 +543,34 @@ class UserServiceClient(ConnectClient):
             headers=headers,
             timeout_ms=timeout_ms,
         )
+    async def list_user_capabilities(
+        self,
+        request: ListUserCapabilitiesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListUserCapabilitiesResponse:
+        """
+        ListUserCapabilities returns the capabilities that act on the user's
+        behalf: those an agent exchanged under one of the user's OAuth grants,
+        and those delegated from them. Any user may list their own; a tenant
+        admin those of the tenant's users.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListUserCapabilities",
+                service_name="paladin.iam.v1.UserService",
+                input=ListUserCapabilitiesRequest,
+                output=ListUserCapabilitiesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
 
 class UserServiceSync(Protocol):
     """
@@ -595,6 +643,15 @@ class UserServiceSync(Protocol):
         """
         RevokeOAuthGrant ends one grant: the client's refresh tokens stop working
         at once, and an access token it already holds within its short lifetime.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_user_capabilities(self, request: ListUserCapabilitiesRequest, ctx: RequestContext[ListUserCapabilitiesRequest, ListUserCapabilitiesResponse], /) -> ListUserCapabilitiesResponse:
+        """
+        ListUserCapabilities returns the capabilities that act on the user's
+        behalf: those an agent exchanged under one of the user's OAuth grants,
+        and those delegated from them. Any user may list their own; a tenant
+        admin those of the tenant's users.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -719,6 +776,17 @@ class UserServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.revoke_o_auth_grant,
+                ),
+                "/paladin.iam.v1.UserService/ListUserCapabilities": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListUserCapabilities",
+                        service_name="paladin.iam.v1.UserService",
+                        input=ListUserCapabilitiesRequest,
+                        output=ListUserCapabilitiesResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.list_user_capabilities,
                 ),
             },
             interceptors=interceptors,
@@ -1006,4 +1074,32 @@ class UserServiceClientSync(ConnectClientSync):
             ),
             headers=headers,
             timeout_ms=timeout_ms,
+        )
+    def list_user_capabilities(
+        self,
+        request: ListUserCapabilitiesRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListUserCapabilitiesResponse:
+        """
+        ListUserCapabilities returns the capabilities that act on the user's
+        behalf: those an agent exchanged under one of the user's OAuth grants,
+        and those delegated from them. Any user may list their own; a tenant
+        admin those of the tenant's users.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListUserCapabilities",
+                service_name="paladin.iam.v1.UserService",
+                input=ListUserCapabilitiesRequest,
+                output=ListUserCapabilitiesResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
         )

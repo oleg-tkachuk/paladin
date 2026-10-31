@@ -188,7 +188,7 @@ func TestDelegateAnswersALineageRefusal(t *testing.T) {
 func TestExceptionsNameLimesCodes(t *testing.T) {
 	for name, e := range map[string]auth.Exceptions{
 		"issuance": issuanceExceptions, "delegation": delegationExceptions,
-		"record": recordExceptions, "list": listExceptions,
+		"record": recordExceptions, "list": auth.ListExceptions,
 	} {
 		if undefined := e.Undefined(); len(undefined) > 0 {
 			t.Errorf("%s exceptions name %v, which limes does not define", name, undefined)
