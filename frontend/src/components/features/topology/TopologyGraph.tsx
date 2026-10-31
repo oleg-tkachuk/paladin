@@ -98,10 +98,13 @@ const LIT_EDGE = "stroke-primary";
 export function TopologyGraph({
   graph,
   label,
+  onToggle,
 }: {
   graph: Graph;
   /** Names the drawing for a screen reader: "Topology of acme". */
   label: string;
+  /** Shows or hides what a node's toggle names; none offers no toggle. */
+  onToggle?: (key: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [grouped, setGrouped] = useState(true);
@@ -300,6 +303,7 @@ export function TopologyGraph({
                   active={active === p.node.id}
                   onActivate={setActive}
                   onExpand={expand}
+                  onToggle={onToggle}
                 />
               ))}
             </div>
@@ -345,6 +349,7 @@ function TopologyNodeBox({
   active,
   onActivate,
   onExpand,
+  onToggle,
 }: {
   placed: PlacedNode;
   dimmed: boolean;
@@ -352,6 +357,7 @@ function TopologyNodeBox({
   /** The node pointed at or focused; null when the pointer or focus leaves. */
   onActivate: (id: string | null) => void;
   onExpand: (id: string) => void;
+  onToggle?: (key: string) => void;
 }) {
   const { node, x, y } = placed;
   const Icon = KIND_ICON[node.kind];
@@ -416,6 +422,8 @@ function TopologyNodeBox({
   }
 
   const links = node.links ?? [];
+  const toggle = onToggle ? node.toggle : undefined;
+  const menu = links.length > 0 || toggle !== undefined;
   return (
     <div
       style={box}
@@ -427,14 +435,14 @@ function TopologyNodeBox({
       {node.href ? (
         <Link
           href={node.href}
-          className={cn(boxClass, "inset-0", links.length > 0 && "pr-10")}
+          className={cn(boxClass, "inset-0", menu && "pr-10")}
         >
           {body}
         </Link>
       ) : (
         <div className={cn(boxClass, "inset-0")}>{body}</div>
       )}
-      {links.length > 0 ? (
+      {menu ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -447,6 +455,11 @@ function TopologyNodeBox({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {toggle && onToggle ? (
+              <DropdownMenuItem onSelect={() => onToggle(toggle.key)}>
+                {toggle.label}
+              </DropdownMenuItem>
+            ) : null}
             {links.map((l) => (
               <DropdownMenuItem key={l.href} asChild>
                 <Link href={l.href}>{l.label}</Link>

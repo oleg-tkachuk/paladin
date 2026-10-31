@@ -3,11 +3,12 @@
 
 import type {
   Bucket,
+  Collection,
   StorageBackend,
   Tenant,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { provisionStatus } from "@/lib/bucketProvision";
-import { bucketHref, tenantHref } from "@/lib/navigation/hrefs";
+import { bucketHref, collectionHref, tenantHref } from "@/lib/navigation/hrefs";
 
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "./model";
 import {
@@ -27,7 +28,17 @@ export interface PlatformTopologyInput {
   buckets: readonly Bucket[];
   tenants: readonly Tenant[];
   backendStatus: BackendStatusOf;
+  /**
+   * The collections of the tenants opened down to them, by tenant id: a
+   * tenant here is drawn open, its collections beside it. Read on demand,
+   * one tenant at a time, rather than every tenant's at once.
+   */
+  collections?: ReadonlyMap<string, readonly Collection[]>;
 }
+
+/** What a tenant's menu offers, closed and open. */
+export const SHOW_COLLECTIONS = "Show collections";
+export const HIDE_COLLECTIONS = "Hide collections";
 
 /**
  * Every backend, the buckets on it, and each bucket's owner and grantees
@@ -39,6 +50,7 @@ export function platformTopology({
   buckets,
   tenants,
   backendStatus,
+  collections = new Map(),
 }: PlatformTopologyInput): TopologyGraph {
   const nodes: TopologyNode[] = [];
   const edges: TopologyEdge[] = [];
@@ -90,6 +102,7 @@ export function platformTopology({
   const name = (t: Tenant) => t.displayName || t.slug || t.tenantId;
   for (const t of [...tenants].sort((a, b) => name(a).localeCompare(name(b)))) {
     const handle = t.slug || t.tenantId;
+    const open = collections.get(t.tenantId);
     nodes.push({
       id: tenantNodeId(t.tenantId),
       kind: "tenant",
@@ -98,9 +111,33 @@ export function platformTopology({
       status: t.deletedAt ? TRASHED : undefined,
       href: tenantHref(handle),
       links: [{ label: "Topology", href: `${tenantHref(handle)}/topology` }],
+      toggle: {
+        key: t.tenantId,
+        label: open ? HIDE_COLLECTIONS : SHOW_COLLECTIONS,
+      },
       orphan: !served.has(t.tenantId),
     });
+    for (const c of [...(open ?? [])].sort((a, b) =>
+      a.collection.localeCompare(b.collection),
+    )) {
+      const id = `collection:${t.tenantId}/${c.collection}`;
+      nodes.push({
+        id,
+        kind: "collection",
+        label: c.collection,
+        detail:
+          c.displayName && c.displayName !== c.collection
+            ? c.displayName
+            : "Collection",
+        href: collectionHref(handle, c.collection),
+      });
+      edges.push({ from: tenantNodeId(t.tenantId), to: id });
+    }
   }
 
-  return { nodes, edges, columns: ["backend", "bucket", "tenant"] };
+  return {
+    nodes,
+    edges,
+    columns: ["backend", "bucket", "tenant", "collection"],
+  };
 }
