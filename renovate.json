@@ -89,9 +89,10 @@
     {
       "matchManagers": ["npm"],
       "minimumReleaseAge": "1 day",
+      "minimumReleaseAgeBehaviour": "timestamp-required",
       "internalChecksFilter": "strict",
       "prCreation": "not-pending",
-      "description": "pnpm refuses a lockfile naming a release younger than its minimumReleaseAge (frontend/pnpm-workspace.yaml); proposing one sooner fails every install in CI. At least as long as pnpm's, which scripts/release-age.test.sh checks. minimumReleaseAge alone does not hold an update back: Renovate still creates the branch, with a pending renovate/stability-days check, and its lockfile update then fails inside pnpm's window (#448). internalChecksFilter=strict and prCreation=not-pending are what keep the branch from being created until the release has aged; internalChecksAsSuccess (top level) lets that check turn the branch green, since CI runs only on pull_request and a bare Renovate branch has no other check."
+      "description": "pnpm refuses a lockfile naming a release younger than its minimumReleaseAge (frontend/pnpm-workspace.yaml); proposing one sooner fails every install in CI. At least as long as pnpm's, which scripts/release-age.test.sh checks. minimumReleaseAge alone does not hold an update back: Renovate still creates the branch, with a pending renovate/stability-days check, and its lockfile update then fails inside pnpm's window (#448). internalChecksFilter=strict and prCreation=not-pending are what keep the branch from being created until the release has aged; internalChecksAsSuccess (top level) lets that check turn the branch green, since CI runs only on pull_request and a bare Renovate branch has no other check. minimumReleaseAgeBehaviour=timestamp-required holds back a release whose publish time Renovate did not read, which timestamp-optional treats as aged (#912: proposed 6.5 hours after publishing)."
     },
     {
       "matchManagers": ["npm"],

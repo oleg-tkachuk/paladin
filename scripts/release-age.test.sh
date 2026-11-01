@@ -14,6 +14,8 @@
 # internalChecksFilter=strict and prCreation=not-pending, and the repository
 # internalChecksAsSuccess=true, since CI runs only on pull_request and a bare
 # Renovate branch has no other check to turn green.
+# minimumReleaseAgeBehaviour=timestamp-required too: a release whose publish
+# time Renovate did not read is otherwise treated as aged (#912).
 
 set -euo pipefail
 
@@ -57,7 +59,7 @@ fi
 echo "ok   renovate waits $renovate_age for npm, pnpm $pnpm_age min"
 
 rule='[.packageRules[] | select(.matchManagers == ["npm"] and .minimumReleaseAge)] | first'
-for want in 'internalChecksFilter=strict' 'prCreation=not-pending'; do
+for want in 'internalChecksFilter=strict' 'prCreation=not-pending' 'minimumReleaseAgeBehaviour=timestamp-required'; do
     key=${want%=*}
     got=$(jq -r "$rule | .$key // \"unset\"" "$RENOVATE_CONFIG")
     if [ "$got" != "${want#*=}" ]; then
