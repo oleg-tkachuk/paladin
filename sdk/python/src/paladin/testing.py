@@ -56,6 +56,7 @@ from connectrpc.request import RequestContext
 from google.protobuf import descriptor_pool, timestamp_pb2
 from google.protobuf.message import Message
 from google.rpc import error_details_pb2
+from google.type import money_pb2
 
 from paladin import _fake_biscuit
 from paladin.admin.v1 import capability_service_pb2
@@ -576,6 +577,36 @@ def _capability_refusal(
     return ConnectError(code, message, error_details([info]))
 
 
+# The server's refusals of a presented capability's lease call, word for word.
+_LEASE_BY_COPY = (
+    "capability: a Biscuit copy cannot lease; present the capability it was attenuated from"
+)
+_LEASE_WITHOUT_SHARE = "capability: leasing for a capability requires OpShare"
+_LEASE_NOT_BELOW = (
+    "capability: a capability leases only for itself or a capability delegated from it"
+)
+
+# The limes codes the lease calls answer with: limes's own, as the server
+# names them in its ErrorInfo.
+_LIMES_NOT_FOUND = "not_found"
+_LIMES_INVALID_REQUEST = "invalid_request"
+_LIMES_LEASE_NESTED = "lease_nested"
+_LIMES_LEASE_NOT_FOUND = "lease_not_found"
+
+
+def _limes_refusal(code: Code, limes: str, message: str) -> ConnectError:
+    """The server's answer to a limes error that names no capability reason:
+    ``code``, ``message``, and an ErrorInfo naming the limes code alone."""
+    info = error_details_pb2.ErrorInfo(domain=ERROR_DOMAIN)
+    info.metadata[LIMES_CODE_KEY] = limes
+    return ConnectError(code, message, error_details([info]))
+
+
+def _nanos(m: money_pb2.Money) -> int:
+    """``m`` in nanos, exactly."""
+    return m.units * _NANOS_PER_UNIT + m.nanos
+
+
 def _unknown_capability() -> ConnectError:
     """The server's refusal of a capability it did not issue: its verifier's
     code and reason."""
@@ -680,6 +711,11 @@ class _Quiet(WSGIRequestHandler):
 DEFAULT_CAPABILITY_TTL = timedelta(minutes=15)
 """How long a capability lives when Issue names no TTL: the server's
 ``capability.default_ttl``."""
+DEFAULT_LEASE_TTL = timedelta(minutes=5)
+"""How long a lease lasts when Lease names no TTL: limes's
+``meter.DefaultLeaseTTL``."""
+_NANOS_PER_UNIT = 1_000_000_000
+"""Nanos in one unit of a ``google.type.Money``."""
 _BISCUIT_PREFIX = "paladintest_biscuit_"
 """Marks the fake's stand-in for a capability's Biscuit, without the biscuit
 extra."""
@@ -974,6 +1010,109 @@ class _CapabilityService(CapabilityServiceSync):
             raise _with_reason(Code.PERMISSION_DENIED, f"{_DELEGATION_TOO_WIDE}: {wider}")
         return fake._mint_capability(c, now, nbf, expires, status, parent.msg.id)
 
+    def lease(
+        self, request: capability_service_pb2.CapabilityServiceLeaseRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceLeaseResponse:
+        """Open a lease on the capability named, or add to the one it holds.
+        The fake counts no budget: a lease's spent amount stays zero, and no
+        ceiling of the chain refuses it."""
+        fake = self._fake
+        with fake._lock:
+            record = fake._lease_target_locked(request.id, ctx)
+            ceiling = record.msg.caveats
+            unit = (
+                ceiling.max_budget.currency_code
+                if ceiling.HasField("max_budget")
+                else ceiling.unlimited_budget.currency_code
+            )
+            if request.HasField("amount") and request.amount.currency_code != unit:
+                raise _with_reason(
+                    Code.INVALID_ARGUMENT,
+                    f'amount: unit "{request.amount.currency_code}", the capability\'s is "{unit}"',
+                )
+            if not request.HasField("amount") and request.requests == 0:
+                raise _limes_refusal(
+                    Code.INVALID_ARGUMENT,
+                    _LIMES_INVALID_REQUEST,
+                    f"lease {request.id}: limes: invalid request: lease of no amount and no requests",
+                )
+            ancestor = fake._capabilities.get(record.msg.parent_id)
+            while ancestor is not None:
+                if ancestor.msg.id in fake._leases:
+                    raise _limes_refusal(
+                        Code.FAILED_PRECONDITION,
+                        _LIMES_LEASE_NESTED,
+                        f"lease {request.id}: limes: an ancestor holds a lease: "
+                        f"{ancestor.msg.id} holds one above it",
+                    )
+                ancestor = fake._capabilities.get(ancestor.msg.parent_id)
+            now = datetime.now(UTC)
+            ttl = (
+                request.ttl.ToTimedelta()
+                if request.HasField("ttl") and request.ttl.ToTimedelta()
+                else DEFAULT_LEASE_TTL
+            )
+            end = min(now + ttl, record.msg.expires_at.ToDatetime(tzinfo=UTC))
+            held = fake._leases.get(request.id)
+            if held is None:
+                held = capability_service_pb2.CapabilityLease(
+                    id=str(uuid.uuid4()),
+                    capability_id=request.id,
+                    tenant_id=record.msg.subject.tenant_id,
+                    amount=money_pb2.Money(currency_code=unit),
+                    spent=money_pb2.Money(currency_code=unit),
+                )
+                fake._leases[request.id] = held
+            nanos = _nanos(held.amount) + (
+                _nanos(request.amount) if request.HasField("amount") else 0
+            )
+            held.amount.CopyFrom(
+                money_pb2.Money(
+                    currency_code=unit,
+                    units=nanos // _NANOS_PER_UNIT,
+                    nanos=nanos % _NANOS_PER_UNIT,
+                )
+            )
+            held.requests += request.requests
+            # A lease topped up lasts until the later of its end and this one.
+            if not held.HasField("expires_at") or end > held.expires_at.ToDatetime(tzinfo=UTC):
+                held.expires_at.CopyFrom(_timestamp(end))
+            out = capability_service_pb2.CapabilityLease()
+            out.CopyFrom(held)
+        return capability_service_pb2.CapabilityServiceLeaseResponse(lease=out)
+
+    def get_lease(
+        self, request: capability_service_pb2.CapabilityServiceGetLeaseRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceGetLeaseResponse:
+        """The lease a capability holds."""
+        fake = self._fake
+        with fake._lock:
+            fake._lease_target_locked(request.id, ctx)
+            held = fake._leases.get(request.id)
+            if held is None:
+                raise _limes_refusal(
+                    Code.NOT_FOUND, _LIMES_LEASE_NOT_FOUND, "limes: lease not found"
+                )
+            out = capability_service_pb2.CapabilityLease()
+            out.CopyFrom(held)
+        return capability_service_pb2.CapabilityServiceGetLeaseResponse(lease=out)
+
+    def settle_lease(
+        self, request: capability_service_pb2.CapabilityServiceSettleLeaseRequest, ctx: Any, /
+    ) -> capability_service_pb2.CapabilityServiceSettleLeaseResponse:
+        """End a capability's lease, and answer it as it ended."""
+        fake = self._fake
+        with fake._lock:
+            fake._lease_target_locked(request.id, ctx)
+            held = fake._leases.pop(request.id, None)
+        if held is None:
+            raise _limes_refusal(
+                Code.NOT_FOUND,
+                _LIMES_LEASE_NOT_FOUND,
+                f"settle lease {request.id}: limes: lease not found",
+            )
+        return capability_service_pb2.CapabilityServiceSettleLeaseResponse(lease=held)
+
     def revoke(
         self, request: capability_service_pb2.CapabilityServiceRevokeRequest, ctx: Any, /
     ) -> capability_service_pb2.CapabilityServiceRevokeResponse:
@@ -1136,6 +1275,8 @@ class FakePaladin(
         self._rpc_faults: dict[str, list[_RPCFault]] = {}
         self._credentials: dict[str, _Credential] = {}
         self._capabilities: dict[str, _CapabilityRecord] = {}
+        # The leases CapabilityService opened, by capability id.
+        self._leases: dict[str, capability_service_pb2.CapabilityLease] = {}
         self._sealer = _fake_biscuit.Sealer() if _fake_biscuit.AVAILABLE else None
         # Responses memoised per (procedure, idempotency key), with the
         # fingerprint of the request each answered — as the server keeps.
@@ -1443,6 +1584,8 @@ class FakePaladin(
         record = self._capabilities[capability]
         for token in record.credentials:
             self._credentials[token].revoked = True
+        # The server settles a revoked capability's lease with its revoke.
+        self._leases.pop(capability, None)
         if entry is not None and record.revocation is None:
             record.revocation = capability_service_pb2.CapabilityRevocation()
             record.revocation.CopyFrom(entry)
@@ -1603,6 +1746,61 @@ class FakePaladin(
         return self._verify(
             token, _BEARER_TOKEN_PREFIX, Code.UNAUTHENTICATED, _JWT_MALFORMED, _JWT_EXPIRED
         )
+
+    def _lease_target_locked(self, capability: str, ctx: Any) -> _CapabilityRecord:
+        """The capability a lease call names, once the caller may reach it: any
+        caller presenting no capability, as the server's operator path admits
+        one its policy allows, or a presented capability holding share, for
+        itself or one delegated from it. The caller holds the lock."""
+        try:
+            uuid.UUID(capability)
+        except ValueError as err:
+            raise _with_reason(Code.INVALID_ARGUMENT, f"id: {err}") from err
+        headers = dict(ctx.request_headers.items())
+        presented = _capability_token(
+            headers.get(HEADER_CAPABILITY.lower(), ""),
+            headers.get(HEADER_AUTHORIZATION.lower(), ""),
+        )
+        holder = self._lease_holder_locked(presented) if presented else None
+        record = self._capabilities.get(capability)
+        if record is None:
+            raise _limes_refusal(
+                Code.NOT_FOUND, _LIMES_NOT_FOUND, f"limes: not found: capability {capability}"
+            )
+        if holder is None or capability == holder.msg.id:
+            return record
+        if self._stopped_by(record) is not None:
+            raise _capability_refusal(
+                Code.PERMISSION_DENIED,
+                error_reason_pb2.ERROR_REASON_CAPABILITY_REVOKED,
+                f"lease {capability}: limes: capability revoked",
+            )
+        ancestor = self._capabilities.get(record.msg.parent_id)
+        while ancestor is not None:
+            if ancestor.msg.id == holder.msg.id:
+                return record
+            ancestor = self._capabilities.get(ancestor.msg.parent_id)
+        raise _with_reason(Code.PERMISSION_DENIED, _LEASE_NOT_BELOW)
+
+    def _lease_holder_locked(self, presented: str) -> _CapabilityRecord:
+        """The capability a caller presented to a lease call: one the fake
+        issued, not revoked, holding share, and no Biscuit — its own or a copy
+        narrowed from it. The caller holds the lock."""
+        credential = self._credentials.get(presented)
+        if credential is None:
+            if self._sealer is not None and self._sealer.capability_of(presented):
+                raise _with_reason(Code.FAILED_PRECONDITION, _LEASE_BY_COPY)
+            raise _unknown_capability()
+        holder = self._capabilities.get(credential.capability)
+        if holder is None:
+            raise _unknown_capability()
+        if credential.revoked:
+            raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_REVOKED)
+        if credential.biscuit:
+            raise _with_reason(Code.FAILED_PRECONDITION, _LEASE_BY_COPY)
+        if Op.SHARE not in holder.msg.caveats.ops:
+            raise _with_reason(Code.PERMISSION_DENIED, _LEASE_WITHOUT_SHARE)
+        return holder
 
     def _biscuit_of_copy_locked(self, token: str) -> _Credential | None:
         """The credential of the Biscuit ``token`` is a copy of — its tenant

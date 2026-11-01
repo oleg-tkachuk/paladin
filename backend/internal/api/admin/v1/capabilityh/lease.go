@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"fmt"
+	"slices"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -41,13 +42,9 @@ var leaseExceptions = auth.Exceptions{
 
 // Lease holds budget and requests of a capability's chain for it, or adds to
 // the lease it holds. It hands out the chain's budget as issuing does, so it
-// is gated as Issue is.
+// is gated as Issue is, or by a presented capability (leaseTarget).
 func (h *Handler) Lease(ctx context.Context, req *adminv1.CapabilityServiceLeaseRequest) (*adminv1.CapabilityServiceLeaseResponse, error) {
-	caller, err := h.authorize(ctx, cedar.ActionIssueCapability)
-	if err != nil {
-		return nil, err
-	}
-	ctx, id, err := h.leaseTarget(ctx, caller, req.GetId())
+	ctx, id, err := h.leaseTarget(ctx, cedar.ActionIssueCapability, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -74,11 +71,7 @@ func (h *Handler) Lease(ctx context.Context, req *adminv1.CapabilityServiceLease
 
 // GetLease returns the lease a capability holds.
 func (h *Handler) GetLease(ctx context.Context, req *adminv1.CapabilityServiceGetLeaseRequest) (*adminv1.CapabilityServiceGetLeaseResponse, error) {
-	caller, err := h.authorize(ctx, cedar.ActionReadCapability)
-	if err != nil {
-		return nil, err
-	}
-	ctx, id, err := h.leaseTarget(ctx, caller, req.GetId())
+	ctx, id, err := h.leaseTarget(ctx, cedar.ActionReadCapability, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +84,7 @@ func (h *Handler) GetLease(ctx context.Context, req *adminv1.CapabilityServiceGe
 
 // SettleLease ends a capability's lease, charging the chain what it spent.
 func (h *Handler) SettleLease(ctx context.Context, req *adminv1.CapabilityServiceSettleLeaseRequest) (*adminv1.CapabilityServiceSettleLeaseResponse, error) {
-	caller, err := h.authorize(ctx, cedar.ActionIssueCapability)
-	if err != nil {
-		return nil, err
-	}
-	ctx, id, err := h.leaseTarget(ctx, caller, req.GetId())
+	ctx, id, err := h.leaseTarget(ctx, cedar.ActionIssueCapability, req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -112,9 +101,19 @@ func (h *Handler) SettleLease(ctx context.Context, req *adminv1.CapabilityServic
 	return &adminv1.CapabilityServiceSettleLeaseResponse{Lease: leaseToProto(lease)}, nil
 }
 
-// leaseTarget parses the capability a lease RPC names and scopes ctx to its
-// tenant, once leasing is wired.
-func (h *Handler) leaseTarget(ctx context.Context, caller *auth.Principal, raw string) (context.Context, uuid.UUID, error) {
+// leaseTarget parses the capability a lease RPC names, gates the call, and
+// scopes ctx to the capability's tenant, once leasing is wired. A caller
+// presenting a capability is gated by it alone, as Delegate is
+// (presentedLeaseTarget); any other caller by Cedar's action.
+func (h *Handler) leaseTarget(ctx context.Context, action cedar.Action, raw string) (context.Context, uuid.UUID, error) {
+	verified, presented := auth.VerifiedCapabilityFromContext(ctx)
+	var caller *auth.Principal
+	if !presented {
+		var err error
+		if caller, err = h.authorize(ctx, action); err != nil {
+			return nil, uuid.Nil(), err
+		}
+	}
 	if h.leases == nil {
 		return nil, uuid.Nil(), connect.NewError(connect.CodeUnavailable, errLeasesNotWired)
 	}
@@ -122,9 +121,53 @@ func (h *Handler) leaseTarget(ctx context.Context, caller *auth.Principal, raw s
 	if err != nil {
 		return nil, uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("id: %w", err))
 	}
+	if presented {
+		return h.presentedLeaseTarget(ctx, verified, id)
+	}
 	ctx, err = h.actOnCapabilitysTenant(ctx, caller, id)
 	if err != nil {
 		return nil, uuid.Nil(), err
+	}
+	return ctx, id, nil
+}
+
+// Refusals of a presented capability's lease call.
+const (
+	errLeaseByCopy       = "capability: a Biscuit copy cannot lease; present the capability it was attenuated from"
+	errLeaseWithoutShare = "capability: leasing for a capability requires OpShare"
+	errLeaseNotBelow     = "capability: a capability leases only for itself or a capability delegated from it"
+	errLeaseNoLineage    = "capability: the store names no ancestors, so no lease can be checked against them"
+)
+
+// presentedLeaseTarget gates a lease call by the capability presented: one
+// that may share leases for itself, or for a capability delegated from it —
+// the orchestrator handing its sub-agents budget it holds. A Biscuit copy
+// cannot: none of its charges go under a lease.
+func (h *Handler) presentedLeaseTarget(ctx context.Context, verified limes.VerifiedCapability, id uuid.UUID) (context.Context, uuid.UUID, error) {
+	if verified.FromBiscuit() {
+		return nil, uuid.Nil(), connect.NewError(connect.CodeFailedPrecondition, errLeaseByCopy)
+	}
+	holder := verified.Capability()
+	if !hasOp(holder.Caveats.Ops, limes.OpShare) {
+		return nil, uuid.Nil(), connect.NewError(connect.CodePermissionDenied, errLeaseWithoutShare)
+	}
+	ctx = auth.WithActingTenant(ctx, holder.Subject.TenantID)
+	if id == holder.ID {
+		return ctx, id, nil
+	}
+	lineage, ok := h.store.(limes.RevocationLineageLookup)
+	if !ok {
+		return nil, uuid.Nil(), connect.NewError(connect.CodeUnavailable, errLeaseNoLineage)
+	}
+	answer, err := lineage.RevocationLineage(ctx, id)
+	if err != nil {
+		return nil, uuid.Nil(), auth.AnswerCapabilityError(err, leaseExceptions)
+	}
+	if answer.Revoked {
+		return nil, uuid.Nil(), auth.AnswerCapabilityError(fmt.Errorf("lease %s: %w", id, limes.ErrRevoked), nil)
+	}
+	if !slices.Contains(answer.Ancestors, holder.ID) {
+		return nil, uuid.Nil(), connect.NewError(connect.CodePermissionDenied, errLeaseNotBelow)
 	}
 	return ctx, id, nil
 }

@@ -214,15 +214,15 @@ type CapabilityServiceClient interface {
 	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
-	// ListOperationGrants returns, for each capability operation, what it
-	// unlocks in the capability's own tenant with no tenant policy (ADR-0038),
-	// and on what basis: the built-in policy's actions, a tenant policy, the
-	// operation it is asserted beside, or the caveats alone. The same for every
-	// caller; it reads no tenant.
 	// Lease holds budget and requests of a capability's chain for it in
 	// advance, so its charges and bumps, and those of the capabilities
 	// delegated from it, lock its own counters rather than every ancestor's
 	// and the tenant's. Asked again while the lease is open, it adds to it.
+	//
+	// Gated as Issue, or, for a caller presenting a capability, by that
+	// capability alone: one holding the share op leases for itself or for a
+	// capability delegated from it, as an orchestrator hands its sub-agents
+	// budget. GetLease and SettleLease are gated the same way.
 	//
 	// Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
 	// FAILED_PRECONDITION with limes code lease_nested under an ancestor that
@@ -235,6 +235,11 @@ type CapabilityServiceClient interface {
 	// SettleLease ends a capability's lease: what it spent is charged to every
 	// ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
 	SettleLease(context.Context, *v1.CapabilityServiceSettleLeaseRequest) (*v1.CapabilityServiceSettleLeaseResponse, error)
+	// ListOperationGrants returns, for each capability operation, what it
+	// unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+	// and on what basis: the built-in policy's actions, a tenant policy, the
+	// operation it is asserted beside, or the caveats alone. The same for every
+	// caller; it reads no tenant.
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
@@ -297,15 +302,15 @@ type CapabilityServiceHandler interface {
 	// (vs Caveats.max_budget). Returns NOT_FOUND when the
 	// capability has never been used (no requests, no charges).
 	GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error)
-	// ListOperationGrants returns, for each capability operation, what it
-	// unlocks in the capability's own tenant with no tenant policy (ADR-0038),
-	// and on what basis: the built-in policy's actions, a tenant policy, the
-	// operation it is asserted beside, or the caveats alone. The same for every
-	// caller; it reads no tenant.
 	// Lease holds budget and requests of a capability's chain for it in
 	// advance, so its charges and bumps, and those of the capabilities
 	// delegated from it, lock its own counters rather than every ancestor's
 	// and the tenant's. Asked again while the lease is open, it adds to it.
+	//
+	// Gated as Issue, or, for a caller presenting a capability, by that
+	// capability alone: one holding the share op leases for itself or for a
+	// capability delegated from it, as an orchestrator hands its sub-agents
+	// budget. GetLease and SettleLease are gated the same way.
 	//
 	// Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
 	// FAILED_PRECONDITION with limes code lease_nested under an ancestor that
@@ -318,6 +323,11 @@ type CapabilityServiceHandler interface {
 	// SettleLease ends a capability's lease: what it spent is charged to every
 	// ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
 	SettleLease(context.Context, *v1.CapabilityServiceSettleLeaseRequest) (*v1.CapabilityServiceSettleLeaseResponse, error)
+	// ListOperationGrants returns, for each capability operation, what it
+	// unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+	// and on what basis: the built-in policy's actions, a tenant policy, the
+	// operation it is asserted beside, or the caveats alone. The same for every
+	// caller; it reads no tenant.
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
