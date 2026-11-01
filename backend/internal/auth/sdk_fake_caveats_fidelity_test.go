@@ -54,9 +54,10 @@ func (h caveatHandlers) EnsureTenantStorage(ctx context.Context, _ *datav1.Ensur
 // answer is what a refusal says to the caller, with the ids of the two sides'
 // capabilities, which differ, named alike.
 type answer struct {
-	code    connect.Code
-	reason  string
-	message string
+	code      connect.Code
+	reason    string
+	limesCode string
+	message   string
 }
 
 func answerOf(err error, ids ...string) answer {
@@ -71,7 +72,7 @@ func answerOf(err error, ids ...string) answer {
 	for _, id := range ids {
 		msg = strings.ReplaceAll(msg, id, "<id>")
 	}
-	return answer{code: ce.Code(), reason: reasonOf(ce), message: msg}
+	return answer{code: ce.Code(), reason: reasonOf(ce), limesCode: limesCodeOf(ce), message: msg}
 }
 
 // reasonOf is the reason the ErrorInfo of e names, "" when it carries none: read
@@ -85,6 +86,21 @@ func reasonOf(e *connect.Error) string {
 		}
 		if info, ok := v.(*errdetails.ErrorInfo); ok {
 			return info.GetReason()
+		}
+	}
+	return ""
+}
+
+// limesCodeOf is the limes code the ErrorInfo of e names, "" when it carries
+// none: read from the wire's details, as reasonOf reads the reason.
+func limesCodeOf(e *connect.Error) string {
+	for _, d := range e.Details() {
+		v, err := connectproto.UnmarshalErrorDetail(d)
+		if err != nil {
+			continue
+		}
+		if info, ok := v.(*errdetails.ErrorInfo); ok {
+			return info.GetMetadata()[paladin.ErrorMetadataLimesCode]
 		}
 	}
 	return ""
@@ -106,10 +122,11 @@ type fidelityCase struct {
 
 // fidelityCall is one call and the answer it gets; none when it succeeds.
 type fidelityCall struct {
-	Call    string `json:"call"`
-	Code    string `json:"code"`
-	Reason  string `json:"reason"`
-	Message string `json:"message"`
+	Call      string `json:"call"`
+	Code      string `json:"code"`
+	Reason    string `json:"reason"`
+	LimesCode string `json:"limes_code"`
+	Message   string `json:"message"`
 }
 
 // The calls a case makes, as the table names them.
@@ -172,7 +189,7 @@ func TestTheSDKFakeRefusesACapabilityAsTheServerDoes(t *testing.T) {
 			serverCalls, _ := serverSide(t, tenant, tc)
 			fakeCalls, _ := fakeSide(t, fake, obj.GetName(), tc)
 			for i, call := range tc.Calls {
-				want := answer{reason: call.Reason, message: fill(call.Message)}
+				want := answer{reason: call.Reason, limesCode: call.LimesCode, message: fill(call.Message)}
 				if call.Code != "" {
 					if err := want.code.UnmarshalText([]byte(call.Code)); err != nil {
 						t.Fatalf("call %d: code %q: %v", i, call.Code, err)

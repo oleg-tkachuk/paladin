@@ -57,22 +57,67 @@ func TestEveryCapabilityReasonHasAnErrorReason(t *testing.T) {
 
 func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 	cases := []struct {
-		name string
-		err  error
-		want string
+		name      string
+		err       error
+		want      string
+		limesCode string
 	}{
-		{"expired", fmt.Errorf("verify: %w", limes.ErrExpired), "ERROR_REASON_CAPABILITY_EXPIRED"},
-		{"budget", limes.ErrBudgetExceeded, "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED"},
-		{"store failure", errors.New("connection reset"), ""},
-		{"programming error", limes.ErrEffectConflict, ""},
+		{"expired", fmt.Errorf("verify: %w", limes.ErrExpired), "ERROR_REASON_CAPABILITY_EXPIRED", string(limes.CodeExpired)},
+		{"budget", limes.ErrBudgetExceeded, "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED", string(limes.CodeBudgetExceeded)},
+		{"store failure", errors.New("connection reset"), "", ""},
+		{"programming error", limes.ErrEffectConflict, "", string(limes.CodeEffectConflict)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := wireReason(t, capabilityError(connect.CodePermissionDenied, tc.err)); got != tc.want {
+			err := capabilityError(connect.CodePermissionDenied, tc.err)
+			if got := wireReason(t, err); got != tc.want {
 				t.Fatalf("reason = %q, want %q", got, tc.want)
+			}
+			if got := wireLimesCode(t, err); got != tc.limesCode {
+				t.Errorf("limes code = %q, want %q", got, tc.limesCode)
 			}
 		})
 	}
+}
+
+// Every code limes and the meter define reaches the wire as itself, under
+// the key both SDKs read it by, with or without a reason beside it.
+func TestEveryLimesCodeReachesTheWire(t *testing.T) {
+	codes := append(limes.Codes(), meter.Codes()...)
+	if len(codes) == 0 {
+		t.Fatal("limes defines no code")
+	}
+	for _, code := range codes {
+		for _, reason := range []commonv1.ErrorReason{commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT} {
+			info := capabilityErrorInfo(reason, code)
+			if info.GetDomain() != paladin.ErrorDomain || info.GetMetadata()[paladin.ErrorMetadataLimesCode] != string(code) {
+				t.Errorf("code %q with %v: ErrorInfo %v", code, reason, info)
+			}
+		}
+	}
+	if info := capabilityErrorInfo(commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED, ""); info != nil {
+		t.Errorf("neither a reason nor a code: ErrorInfo %v, want none", info)
+	}
+}
+
+// wireLimesCode is the limes code an error carries in its ErrorInfo, empty
+// when it carries none.
+func wireLimesCode(t *testing.T, err error) string {
+	t.Helper()
+	ce, ok := errors.AsType[*connect.Error](err)
+	if !ok {
+		t.Fatalf("%v is not a connect error", err)
+	}
+	for _, d := range ce.Details() {
+		v, derr := connectproto.UnmarshalErrorDetail(d)
+		if derr != nil {
+			continue
+		}
+		if info, ok := v.(*errdetails.ErrorInfo); ok && info.GetDomain() == paladin.ErrorDomain {
+			return info.GetMetadata()[paladin.ErrorMetadataLimesCode]
+		}
+	}
+	return ""
 }
 
 // The reason reaches the wire from the paths a handler takes.

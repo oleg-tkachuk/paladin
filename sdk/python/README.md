@@ -322,6 +322,13 @@ Each carries `procedure`, the server's `reason` (a
 which a caller treats as the kind alone. A code with no kind (`INTERNAL`,
 `UNAVAILABLE`, …) stays a plain `ConnectError`.
 
+An error that came from the capability library also carries its
+`limes_code` — `budget_exceeded`, `revoked`, `not_found`,
+`store_unavailable`, … — the library's own name for it, from the same
+`ErrorInfo`'s metadata (`LIMES_CODE_KEY`), whatever code answered it.
+`limes_code(err)` returns it for any exception, `""` for one that did not
+come from the library.
+
 `err.details` are connectrpc's `ErrorDetail`s, a type name and the message's
 bytes. `unpack_detail(detail, error_details_pb2.ErrorInfo)` reads one as a
 `google.protobuf` message, or returns None for another type; a server or fake

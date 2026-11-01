@@ -24,6 +24,11 @@ from paladin.common.v1 import error_reason_pb2
 
 ERROR_DOMAIN = "paladin"
 """The ErrorInfo domain of the reasons the server attaches."""
+LIMES_CODE_KEY = "limes_code"
+"""The ErrorInfo metadata key naming the limes code of an error that came from
+the capability library — ``budget_exceeded``, ``not_found``, … — whatever code
+answered it. ``sdk/testdata/error_info.json`` holds the server and both SDKs
+to it."""
 HEADER_SERVER_VERSION = "X-Paladin-Version"
 """The server's release, on every response."""
 _UNKNOWN_VERSION = "unknown version"
@@ -64,7 +69,9 @@ class PaladinError(ConnectError):
 
     ``procedure`` is the RPC, ``/paladin.data.v1.ObjectService/GetObject``;
     ``reason`` the server's ``ErrorReason`` value, ``ERROR_REASON_UNSPECIFIED``
-    when it sent none or one this SDK predates; ``retry_after`` the seconds
+    when it sent none or one this SDK predates; ``limes_code`` the capability
+    library's code for an error that came from it, ``""`` for any other;
+    ``retry_after`` the seconds
     the server asked to wait, or None; ``server_version`` and ``sdk_version``
     the two releases; ``decoded_details`` the details it could unpack.
     """
@@ -77,6 +84,7 @@ class PaladinError(ConnectError):
         *,
         procedure: str = "",
         reason: int = _UNSPECIFIED,
+        limes_code: str = "",
         retry_after: float | None = None,
         server_version: str = "",
         sdk_version: str = "",
@@ -85,6 +93,7 @@ class PaladinError(ConnectError):
         super().__init__(code, message, details)
         self.procedure = procedure
         self.reason = reason
+        self.limes_code = limes_code
         self.retry_after = retry_after
         self.server_version = server_version
         self.sdk_version = sdk_version
@@ -161,9 +170,17 @@ def reason(err: BaseException) -> int:
     return err.reason if isinstance(err, PaladinError) else _UNSPECIFIED
 
 
-def _decode(details: Any) -> tuple[int, list[Any]]:
-    """The reason in the details' ErrorInfo, and every ErrorInfo decoded."""
+def limes_code(err: BaseException) -> str:
+    """The capability library's code for ``err``; ``""`` when it is not a
+    Paladin error or did not come from the library."""
+    return err.limes_code if isinstance(err, PaladinError) else ""
+
+
+def _decode(details: Any) -> tuple[int, str, list[Any]]:
+    """The reason and the limes code in the details' ErrorInfo, and every
+    ErrorInfo decoded."""
     found = _UNSPECIFIED
+    code = ""
     decoded: list[Any] = []
     for detail in details:
         info = unpack_detail(detail, error_details_pb2.ErrorInfo)
@@ -171,11 +188,12 @@ def _decode(details: Any) -> tuple[int, list[Any]]:
             continue
         decoded.append(info)
         if info.domain == ERROR_DOMAIN:
+            code = info.metadata.get(LIMES_CODE_KEY, "")
             try:
                 found = error_reason_pb2.ErrorReason.Value(info.reason)
             except ValueError:
                 found = _UNSPECIFIED  # a reason newer than this SDK
-    return found, decoded
+    return found, code, decoded
 
 
 def convert(
@@ -191,7 +209,7 @@ def convert(
     if isinstance(err, PaladinError):
         return err
     kind = _KINDS.get(err.code, PaladinError)
-    found, decoded = _decode(err.details)
+    found, code, decoded = _decode(err.details)
     after = headers.get("retry-after")
     return kind(
         err.code,
@@ -199,6 +217,7 @@ def convert(
         err.details,
         procedure=procedure,
         reason=found,
+        limes_code=code,
         retry_after=parse_retry_after(after) if after is not None else None,
         server_version=headers.get(HEADER_SERVER_VERSION.lower()) or "",
         sdk_version=sdk_version,

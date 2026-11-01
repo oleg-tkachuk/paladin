@@ -60,6 +60,10 @@ type Error struct {
 	// Reason is why, from the server's google.rpc.ErrorInfo;
 	// ERROR_REASON_UNSPECIFIED when it sent none, or one this SDK predates.
 	Reason commonv1.ErrorReason
+	// LimesCode is the capability library's code for an error that came
+	// from it (ErrorMetadataLimesCode), such as "budget_exceeded"; empty
+	// for any other.
+	LimesCode string
 	// RetryAfter is how long the server asked to wait, from Retry-After;
 	// zero when it did not.
 	RetryAfter time.Duration
@@ -110,6 +114,16 @@ func Reason(err error) commonv1.ErrorReason {
 	return commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED
 }
 
+// LimesCode returns the capability library's code for err, empty when it is
+// not a Paladin error or did not come from the library.
+func LimesCode(err error) string {
+	var pe *Error
+	if errors.As(err, &pe) {
+		return pe.LimesCode
+	}
+	return ""
+}
+
 // newError wraps a Connect error from procedure, reading what the server sent
 // with it from info; anything else is returned as it is.
 func newError(procedure string, info *connect.CallInfo, err error) error {
@@ -137,6 +151,7 @@ func newError(procedure string, info *connect.CallInfo, err error) error {
 		e.Details = append(e.Details, v)
 		if info, ok := v.(*errdetails.ErrorInfo); ok && info.GetDomain() == ErrorDomain {
 			e.Reason = commonv1.ErrorReason(commonv1.ErrorReason_value[info.GetReason()])
+			e.LimesCode = info.GetMetadata()[ErrorMetadataLimesCode]
 		}
 	}
 	return e

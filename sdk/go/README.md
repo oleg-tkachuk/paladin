@@ -318,6 +318,13 @@ failure with `errors.Is`. Match on these, not on codes or messages:
 when there is none — or one newer than this SDK, which a caller treats as
 the kind alone.
 
+An error that came from the capability library also carries its `LimesCode`
+— `budget_exceeded`, `revoked`, `not_found`, `store_unavailable`, … — the
+library's own name for it, from the same `ErrorInfo`'s metadata
+(`ErrorMetadataLimesCode`), whatever Connect code answered it.
+`LimesCode(err)` returns it for any error, empty for one that did not come
+from the library.
+
 ```go
 _, err := p.Admin.Collection.DeleteCollection(ctx, req)
 switch {

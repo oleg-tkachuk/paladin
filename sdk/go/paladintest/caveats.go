@@ -40,7 +40,7 @@ const capabilityReasonPrefix = "ERROR_REASON_CAPABILITY_"
 
 // capabilityRefusal is the server's answer to a refusal of the capability:
 // code, the message without the library's name, and an ErrorInfo naming the
-// refusal's reason.
+// refusal's reason and, under paladin.ErrorMetadataLimesCode, its limes code.
 func capabilityRefusal(code connect.Code, err error) *connect.Error {
 	e := connect.NewError(code, strings.ReplaceAll(err.Error(), libraryPrefix, "")).WithCause(err)
 	r, ok := limes.ReasonOf(err)
@@ -51,7 +51,11 @@ func capabilityRefusal(code connect.Code, err error) *connect.Error {
 	if !ok {
 		return e
 	}
-	detail, derr := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: commonv1.ErrorReason(value).String(), Domain: paladin.ErrorDomain})
+	info := &errdetails.ErrorInfo{Reason: commonv1.ErrorReason(value).String(), Domain: paladin.ErrorDomain}
+	if code, ok := limes.CodeOf(err); ok {
+		info.Metadata = map[string]string{paladin.ErrorMetadataLimesCode: string(code)}
+	}
+	detail, derr := connectproto.NewErrorDetail(info)
 	if derr != nil {
 		panic(fmt.Sprintf("paladintest: %v", derr)) // an ErrorInfo always marshals
 	}

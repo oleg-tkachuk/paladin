@@ -111,20 +111,6 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
-### Put limes' error codes on the wire
-
-- **Status:** Deferred.
-- **Reason:** limes gives every error a stable code (`limes.Code`,
-  `meter.ProblemOf`). Paladin maps limes' errors onto connect codes by hand
-  (`auth.capabilityCodes` and each admin operation's exceptions), and its
-  choices differ from limes' HTTP statuses on purpose — an exhausted budget
-  is `ResourceExhausted`, not 403's `PermissionDenied` — so the statuses do
-  not replace the mapping. Only refusals carry a reason to clients today.
-- **Definition of Done:** every error that leaves Paladin from limes carries
-  its `limes.Code` in the `google.rpc.ErrorInfo` metadata, documented in the
-  SDKs, with a test that walks `limes.Codes()`.
-- **Blockers:** an SDK contract change; no current ask.
-
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport

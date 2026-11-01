@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
@@ -49,6 +50,10 @@ func TestAnswerCapabilityErrorTakesTheOperationsRowFirst(t *testing.T) {
 			}
 			if !errors.Is(err, tc.err) {
 				t.Errorf("%v lost its cause %v", err, tc.err)
+			}
+			wantCode, _ := meter.CodeOf(tc.err)
+			if got := wireLimesCode(t, err); got != string(wantCode) {
+				t.Errorf("limes code = %q, want %q", got, wantCode)
 			}
 		})
 	}
