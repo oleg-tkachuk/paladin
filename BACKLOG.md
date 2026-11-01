@@ -111,6 +111,27 @@ the same commit. Treat this file like a runtime invariant.
   issuance, plus an audit trail tying each issuance to the operator session.
 - **Blockers:** security review; no current ask.
 
+### Budget leases via MCP — intentionally excluded
+
+- **Status:** Won't-do (by design) unless the issuance decision above is
+  revisited.
+- **Reason:** a lease pays off for an orchestrator whose sub-agents charge
+  one budget in parallel; through the bridge an agent delegates nothing (the
+  entry above), so it could lease only for itself, which a few calls per
+  model step never queue behind. A lease holds the chain's budget until it
+  is settled or expires, so an agent leasing too much starves its siblings
+  in the tenant of budget meanwhile — a new way to hurt them, on the
+  narrowest surface. `CapabilityService.Lease`, `GetLease` and
+  `SettleLease` stay on the admin API, where an operator or an orchestrator
+  presenting a capability with share calls them; `DefaultAlwaysDeny`'s
+  `paladin_capability_*` already keeps them off the bridge.
+- **Definition of Done (only if revisited):** the human-approved profile the
+  entry above calls for, or an MCP client that runs sub-agents in parallel
+  under one capability; then a `paladin_capability_lease` tool scoped to
+  the caller's own capability and its descendants, with a cap on the amount
+  and the TTL it may hold.
+- **Blockers:** a product call; no current ask.
+
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport
