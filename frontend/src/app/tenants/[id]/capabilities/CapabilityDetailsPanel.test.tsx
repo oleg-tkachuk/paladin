@@ -7,6 +7,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 const h = vi.hoisted(() => ({
   get: vi.fn(),
   getUsage: vi.fn(),
+  getLease: vi.fn(),
   listOperationGrants: vi.fn(),
   getToken: vi.fn(),
   revoke: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("@/lib/connect/client", () => ({
   capabilityClient: {
     get: h.get,
     getUsage: h.getUsage,
+    getLease: h.getLease,
     listOperationGrants: h.listOperationGrants,
   },
   apiTokenClient: { get: h.getToken },
@@ -31,6 +33,7 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import {
+  CapabilityDisposition,
   CapabilityGrantBasis,
   PrincipalKind,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
@@ -96,6 +99,9 @@ describe("CapabilityDetailsPanel", () => {
   beforeEach(() => {
     h.get.mockReset();
     h.getUsage.mockReset();
+    h.getLease
+      .mockReset()
+      .mockRejectedValue(new ConnectError("no lease", Code.NotFound));
     h.listOperationGrants.mockReset();
     h.listOperationGrants.mockResolvedValue({ grants: GRANTS });
   });
@@ -564,5 +570,70 @@ describe("CapabilityDetailsPanel", () => {
     expect(
       screen.queryByRole("button", { name: "Revoke this run" }),
     ).toBeNull();
+  });
+});
+
+describe("CapabilityDetailsPanel's budget lease", () => {
+  beforeEach(() => {
+    h.get.mockReset().mockResolvedValue({ capability: CAP });
+    h.listOperationGrants.mockReset().mockResolvedValue({ grants: GRANTS });
+    h.getLease.mockReset();
+  });
+
+  it("says a capability holds none, and offers to lease", async () => {
+    h.getLease.mockRejectedValue(new ConnectError("no lease", Code.NotFound));
+    open();
+    expect(
+      await screen.findByText(/none — charges go through every ancestor/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Lease budget" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Settle lease" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows what a lease holds and has left, and offers to settle it", async () => {
+    h.getLease.mockResolvedValue({
+      lease: {
+        id: "lease-1",
+        amount: { currencyCode: "USD", units: 5n, nanos: 0 },
+        spent: { currencyCode: "USD", units: 2n, nanos: 0 },
+        requests: 10n,
+        requestsSpent: 4n,
+        expiresAt: timestampFromDate(new Date(Date.now() + 60_000)),
+      },
+    });
+    open();
+    expect(await screen.findByText("10 / 4 (6 left)")).toBeInTheDocument();
+    expect(screen.getByText("Ends")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Settle lease" }));
+    expect(
+      await screen.findByRole("alertdialog", { name: "Settle this lease?" }),
+    ).toBeInTheDocument();
+  });
+
+  // A revoked capability's lease is settled with its revoke: none is read,
+  // and none is offered.
+  it("reads and offers no lease of a revoked capability", async () => {
+    open({
+      ...CAP,
+      disposition: CapabilityDisposition.REVOKED,
+    } as unknown as Capability);
+    await screen.findByText("Lifetime");
+    expect(screen.queryByText("Budget lease")).not.toBeInTheDocument();
+    expect(h.getLease).not.toHaveBeenCalled();
+  });
+
+  it("says when the lease cannot be read, and offers nothing", async () => {
+    h.getLease.mockRejectedValue(new ConnectError("down", Code.Unavailable));
+    open();
+    await waitFor(() =>
+      expect(screen.getAllByText("unavailable").length).toBeGreaterThan(0),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Lease budget" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -15,6 +15,7 @@ import {
 } from "@/lib/connect/client";
 import { notFoundIsAnswer } from "@/lib/connect/expected";
 import type { Money } from "@/gen/google/type/money_pb";
+import type { CapabilityLeaseEntry } from "@/lib/capabilityLease";
 
 /** A collection's resource name, as GetCollection takes it. */
 export const collectionResourceName = (tenantId: string, collection: string) =>
@@ -78,6 +79,33 @@ export async function fetchCapabilityUsage(
     }
     throw err;
   }
+}
+
+/** A capability's budget lease, or "none" when it holds none. */
+export async function fetchCapabilityLease(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CapabilityLeaseEntry> {
+  try {
+    const res = await capabilityClient.getLease(
+      { id },
+      notFoundIsAnswer({ signal }),
+    );
+    return res.lease ?? "none";
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.NotFound) {
+      return "none";
+    }
+    throw err;
+  }
+}
+
+export function capabilityLeaseQuery(id: string) {
+  return queryOptions({
+    queryKey: ["capabilityLease", id] as const,
+    retry: false,
+    queryFn: ({ signal }) => fetchCapabilityLease(id, signal),
+  });
 }
 
 export function capabilityUsageQuery(id: string) {
