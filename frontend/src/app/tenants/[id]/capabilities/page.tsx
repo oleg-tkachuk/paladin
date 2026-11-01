@@ -57,15 +57,20 @@ import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import { capabilityClient } from "@/lib/connect/client";
 import {
   type CapabilityUsage,
+  fetchCapabilityLease,
   fetchCapabilityUsage,
 } from "@/lib/queries/details";
+import { leaseSummary } from "@/lib/capabilityLease";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { CAPABILITY_SESSION_PARAM, capabilityGrant } from "@/lib/oauthGrants";
 import { CAPABILITY_RUN_PARAM } from "@/lib/capabilityRun";
 import { textParam, useUrlState } from "@/hooks/useUrlState";
 import { T } from "@/lib/ui/typography";
-import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import type {
+  Capability,
+  CapabilityLease,
+} from "@/gen/paladin/admin/v1/capability_service_pb";
 import {
   CapabilityDisposition,
   PrincipalKind,
@@ -88,6 +93,10 @@ const RUN_FILTER = textParam(CAPABILITY_RUN_PARAM);
 // Per-capability usage keyed by capability id.
 type UsageMap = Map<string, CapabilityUsage>;
 const EMPTY_USAGE: UsageMap = new Map();
+// The leases the page's active capabilities hold, keyed by capability id: a
+// capability holding none has no entry.
+type LeaseMap = Map<string, CapabilityLease>;
+const EMPTY_LEASES: LeaseMap = new Map();
 
 // Optional columns appear by the width of the table's card, not the viewport:
 // the sidebar takes a fixed share of the window, so a viewport breakpoint
@@ -212,7 +221,27 @@ export default function CapabilitiesPage() {
             (e): e is readonly [string, CapabilityUsage] => e !== null,
           ),
         );
-        return { items: capabilities, usage, next: page.nextPageToken };
+        // A lease is held only by a capability still active: a revoke
+        // settles it, and an expired one charges nothing more.
+        const held = await Promise.all(
+          capabilities
+            .filter((c) => c.disposition === CapabilityDisposition.ACTIVE)
+            .map(async (c) => {
+              try {
+                const lease = await fetchCapabilityLease(c.id, signal);
+                return lease === "none" ? null : ([c.id, lease] as const);
+              } catch (err) {
+                if (isAbortError(err)) throw err;
+                return null;
+              }
+            }),
+        );
+        const leases: LeaseMap = new Map(
+          held.filter(
+            (e): e is readonly [string, CapabilityLease] => e !== null,
+          ),
+        );
+        return { items: capabilities, usage, leases, next: page.nextPageToken };
       } catch (err) {
         // A list superseded by a newer filter is cancelled, not failed.
         if (!isAbortError(err)) {
@@ -243,6 +272,13 @@ export default function CapabilitiesPage() {
       browseQuery.data
         ? new Map(browseQuery.data.pages.flatMap((p) => [...p.usage]))
         : EMPTY_USAGE,
+    [browseQuery.data],
+  );
+  const leases = useMemo(
+    () =>
+      browseQuery.data
+        ? new Map(browseQuery.data.pages.flatMap((p) => [...p.leases]))
+        : EMPTY_LEASES,
     [browseQuery.data],
   );
   const loading = browseQuery.isFetching;
@@ -603,11 +639,20 @@ export default function CapabilitiesPage() {
                           return (
                             <span className="text-muted-foreground">…</span>
                           );
+                        const lease = leases.get(c.id);
+                        const leaseLine = lease && (
+                          <div className="text-muted-foreground">
+                            {leaseSummary(lease, new Date(), SPEND_DIGITS)}
+                          </div>
+                        );
                         if (u === "never")
                           return (
-                            <span className="text-muted-foreground">
-                              never used
-                            </span>
+                            <div className="space-y-0.5">
+                              <span className="text-muted-foreground">
+                                never used
+                              </span>
+                              {leaseLine}
+                            </div>
                           );
                         const reqCap = requestLimit(c.caveats);
                         const budgetCap = budgetLimit(c.caveats?.budgetCeiling);
@@ -647,6 +692,7 @@ export default function CapabilitiesPage() {
                                 </span>
                               )}
                             </div>
+                            {leaseLine}
                           </div>
                         );
                       })()}
