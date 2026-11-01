@@ -18,6 +18,9 @@ var capabilityCodes = map[limes.Code]connect.Code{
 	meter.CodeCopyLimitExceeded:    connect.CodeResourceExhausted,
 	limes.CodeRequestLimitExceeded: connect.CodeResourceExhausted,
 	limes.CodeTenantBudgetExceeded: connect.CodeResourceExhausted,
+	// A lease spent: the caller leases more, or waits.
+	meter.CodeLeaseExhausted:         connect.CodeResourceExhausted,
+	meter.CodeLeaseRequestsExhausted: connect.CodeResourceExhausted,
 
 	// The capability, or the credential presenting it, does not allow the
 	// call: told so with its reason, as a verifier's refusal is. No retry
@@ -68,6 +71,12 @@ var capabilityCodes = map[limes.Code]connect.Code{
 	limes.CodeUnitCodeMismatch:     connect.CodeFailedPrecondition,
 	limes.CodeUnknownTenant:        connect.CodeFailedPrecondition,
 	meter.CodeUsageNotFound:        connect.CodeFailedPrecondition,
+
+	// A lease that is not there, one under an ancestor's, or leasing the
+	// store has not turned on: no retry of the same call mends it.
+	meter.CodeLeaseNested:     connect.CodeFailedPrecondition,
+	meter.CodeLeaseNotFound:   connect.CodeFailedPrecondition,
+	meter.CodeLeasingDisabled: connect.CodeFailedPrecondition,
 
 	// A record the request would create is there already.
 	limes.CodeAlreadyExists: connect.CodeAlreadyExists,
