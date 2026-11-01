@@ -1,4 +1,4 @@
-## Unreleased — the limes code of every capability error
+## sdk/python/v0.135.0 — the limes code of every capability error
 
 - Every error that comes from the capability library carries its limes code
   — `budget_exceeded`, `revoked`, `not_found`, `store_unavailable`, … — in
