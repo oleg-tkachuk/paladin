@@ -50,6 +50,10 @@ readonly CAPABILITY_MAX_REQUESTS=50
 # one a delegated child gets.
 readonly CEILING_REQUESTS=3
 readonly CHILD_MAX_REQUESTS=2
+# The requests a lease holds for the delegated child, and how many of them
+# the check spends.
+readonly LEASE_REQUESTS=2
+readonly LEASE_SPENT=1
 readonly CHILD_TTL_SECONDS=600
 # The data port of an api pod, and the first local port the pods are forwarded
 # to, one each, so a check can reach every replica rather than one the
@@ -385,6 +389,34 @@ r=$(list_with "$child")
 expect "the child of a revoked parent is refused" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
 r=$(list_with "$parent_biscuit")
 expect "the Biscuit of a revoked capability is refused" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
+
+# ── a budget lease holds a chain's requests and settles what it spent ───────
+r=$(issue_for live-smoke-lessor '["list","share"]' "$CAPABILITY_MAX_REQUESTS")
+lessor=$(printf %s "$r" | jq -r '.token // empty')
+lessor_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+capabilities+=("$lessor_id")
+r=$(delegate "$lessor" "$lessor_id")
+lessee=$(printf %s "$r" | jq -r '.token // empty')
+lessee_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+capabilities+=("$lessee_id")
+r=$(admin_rpc CapabilityService/Lease "{\"id\":\"$lessee_id\",\"requests\":$LEASE_REQUESTS}")
+expect "an operator leases requests to a delegated capability" "$r" \
+    test "$(printf %s "$r" | jq -r '.lease.requests // "0"')" = "$LEASE_REQUESTS"
+for _ in $(seq "$LEASE_SPENT"); do list_with "$lessee" >/dev/null; done
+r=$(admin_rpc CapabilityService/GetLease "{\"id\":\"$lessee_id\"}")
+expect "a request under the lease is counted on it" "$r" \
+    test "$(printf %s "$r" | jq -r '.lease.requestsSpent // "0"')" = "$LEASE_SPENT"
+# The parent's own requests so far, Delegate among them: settling adds the
+# lease's to them.
+before=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$lessor_id\"}" | jq -r '.requestCount // "0"')
+r=$(admin_rpc CapabilityService/SettleLease "{\"id\":\"$lessee_id\"}")
+expect "settling answers what the lease spent" "$r" \
+    test "$(printf %s "$r" | jq -r '.lease.requestsSpent // "0"')" = "$LEASE_SPENT"
+r=$(admin_rpc CapabilityService/GetLease "{\"id\":\"$lessee_id\"}")
+expect "a settled lease is gone" "$r" test "$(code_of "$r")" = "$CODE_NOT_FOUND"
+r=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$lessor_id\"}")
+expect "what the lease spent reaches its parent" "$r" \
+    test "$(printf %s "$r" | jq -r '.requestCount // "0"')" = "$((before + LEASE_SPENT))"
 
 # ── the platform-wide budget summary, with each filter ──────────────────────
 for body in '{}' '{"unlimitedOnly":true}' "{\"thresholdPct\":$SUMMARY_THRESHOLD_PCT}"; do
