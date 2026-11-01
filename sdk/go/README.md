@@ -671,7 +671,7 @@ what each field means, are documented in the `.proto` files under
 | `BackendService` | `CreateBackend`, `GetBackend`, `UpdateBackend`, `DeleteBackend`, `ListBackends`, `RotateCredentials`, `TestBackend`, `SetBackendEnabled`, `SetBackendReadOnly`, `SetBackendMaintenance` |
 | `BillingService` | `GetTenantSummary`, `GetTenantTimeSeries`, `GetPlatformTimeSeries`, `ListTenantTimeSeries`, `ListTenantSpend`, `GetBillingSettings` |
 | `BucketService` | `CreateBucket`, `GetBucket`, `UpdateBucket`, `DeleteBucket`, `ListBuckets`, `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`, `SetReplication`, `GrantBucket`, `RevokeBucketGrant`, `ListBucketGrants`, `ListAccessibleBuckets` |
-| `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeRun`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage`, `ListOperationGrants` |
+| `CapabilityService` | `Issue`, `Delegate`, `Revoke`, `RevokeRun`, `RevokeBiscuit`, `GetBiscuitUsage`, `Get`, `List`, `GetUsage`, `Lease`, `GetLease`, `SettleLease`, `ListOperationGrants` |
 | `CELService` | `Validate` |
 | `CollectionService` | `CreateCollection`, `GetCollection`, `UpdateCollection`, `DeleteCollection`, `ListCollections`, `SetCollectionPolicy`, `BindCollectionToBucket` |
 | `EventSubscriptionService` | `CreateSubscription`, `GetSubscription`, `UpdateSubscription`, `DeleteSubscription`, `ListSubscriptions`, `TestSubscription`, `RedriveFailedDeliveries` |

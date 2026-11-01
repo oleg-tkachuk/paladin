@@ -21,7 +21,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse, CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse
+from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetLeaseRequest, CapabilityServiceGetLeaseResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceLeaseRequest, CapabilityServiceLeaseResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse, CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse, CapabilityServiceSettleLeaseRequest, CapabilityServiceSettleLeaseResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -142,14 +142,40 @@ class CapabilityService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
-    async def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
+    async def lease(self, request: CapabilityServiceLeaseRequest, ctx: RequestContext[CapabilityServiceLeaseRequest, CapabilityServiceLeaseResponse], /) -> CapabilityServiceLeaseResponse:
         """
         ListOperationGrants returns, for each capability operation, what it
         unlocks in the capability's own tenant with no tenant policy (ADR-0038),
         and on what basis: the built-in policy's actions, a tenant policy, the
         operation it is asserted beside, or the caveats alone. The same for every
         caller; it reads no tenant.
+        Lease holds budget and requests of a capability's chain for it in
+        advance, so its charges and bumps, and those of the capabilities
+        delegated from it, lock its own counters rather than every ancestor's
+        and the tenant's. Asked again while the lease is open, it adds to it.
+
+        Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+        FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+        holds a lease, or leasing_disabled while the deployment has leasing off;
+        INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
         """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def get_lease(self, request: CapabilityServiceGetLeaseRequest, ctx: RequestContext[CapabilityServiceGetLeaseRequest, CapabilityServiceGetLeaseResponse], /) -> CapabilityServiceGetLeaseResponse:
+        """
+        GetLease returns the lease a capability holds, open or expired and not
+        yet settled. NOT_FOUND when it holds none.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def settle_lease(self, request: CapabilityServiceSettleLeaseRequest, ctx: RequestContext[CapabilityServiceSettleLeaseRequest, CapabilityServiceSettleLeaseResponse], /) -> CapabilityServiceSettleLeaseResponse:
+        """
+        SettleLease ends a capability's lease: what it spent is charged to every
+        ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
 
@@ -264,6 +290,39 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.get_usage,
+                ),
+                "/paladin.admin.v1.CapabilityService/Lease": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Lease",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceLeaseRequest,
+                        output=CapabilityServiceLeaseResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.lease,
+                ),
+                "/paladin.admin.v1.CapabilityService/GetLease": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GetLease",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceGetLeaseRequest,
+                        output=CapabilityServiceGetLeaseResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.get_lease,
+                ),
+                "/paladin.admin.v1.CapabilityService/SettleLease": Endpoint.unary(
+                    method=MethodInfo(
+                        name="SettleLease",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceSettleLeaseRequest,
+                        output=CapabilityServiceSettleLeaseResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.settle_lease,
                 ),
                 "/paladin.admin.v1.CapabilityService/ListOperationGrants": Endpoint.unary(
                     method=MethodInfo(
@@ -579,6 +638,92 @@ class CapabilityServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
+    async def lease(
+        self,
+        request: CapabilityServiceLeaseRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CapabilityServiceLeaseResponse:
+        """
+        ListOperationGrants returns, for each capability operation, what it
+        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+        and on what basis: the built-in policy's actions, a tenant policy, the
+        operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
+        Lease holds budget and requests of a capability's chain for it in
+        advance, so its charges and bumps, and those of the capabilities
+        delegated from it, lock its own counters rather than every ancestor's
+        and the tenant's. Asked again while the lease is open, it adds to it.
+
+        Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+        FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+        holds a lease, or leasing_disabled while the deployment has leasing off;
+        INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Lease",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceLeaseRequest,
+                output=CapabilityServiceLeaseResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    async def get_lease(
+        self,
+        request: CapabilityServiceGetLeaseRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceGetLeaseResponse:
+        """
+        GetLease returns the lease a capability holds, open or expired and not
+        yet settled. NOT_FOUND when it holds none.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetLease",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceGetLeaseRequest,
+                output=CapabilityServiceGetLeaseResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    async def settle_lease(
+        self,
+        request: CapabilityServiceSettleLeaseRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CapabilityServiceSettleLeaseResponse:
+        """
+        SettleLease ends a capability's lease: what it spent is charged to every
+        ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="SettleLease",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceSettleLeaseRequest,
+                output=CapabilityServiceSettleLeaseResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
     async def list_operation_grants(
         self,
         request: CapabilityServiceListOperationGrantsRequest,
@@ -587,13 +732,6 @@ class CapabilityServiceClient(ConnectClient):
         timeout_ms: int | None = None,
         use_get: bool = False,
     ) -> CapabilityServiceListOperationGrantsResponse:
-        """
-        ListOperationGrants returns, for each capability operation, what it
-        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
-        and on what basis: the built-in policy's actions, a tenant policy, the
-        operation it is asserted beside, or the caveats alone. The same for every
-        caller; it reads no tenant.
-        """
         return await self.execute_unary(
             request=request,
             method=MethodInfo(
@@ -714,14 +852,40 @@ class CapabilityServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
-    def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
+    def lease(self, request: CapabilityServiceLeaseRequest, ctx: RequestContext[CapabilityServiceLeaseRequest, CapabilityServiceLeaseResponse], /) -> CapabilityServiceLeaseResponse:
         """
         ListOperationGrants returns, for each capability operation, what it
         unlocks in the capability's own tenant with no tenant policy (ADR-0038),
         and on what basis: the built-in policy's actions, a tenant policy, the
         operation it is asserted beside, or the caveats alone. The same for every
         caller; it reads no tenant.
+        Lease holds budget and requests of a capability's chain for it in
+        advance, so its charges and bumps, and those of the capabilities
+        delegated from it, lock its own counters rather than every ancestor's
+        and the tenant's. Asked again while the lease is open, it adds to it.
+
+        Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+        FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+        holds a lease, or leasing_disabled while the deployment has leasing off;
+        INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
         """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def get_lease(self, request: CapabilityServiceGetLeaseRequest, ctx: RequestContext[CapabilityServiceGetLeaseRequest, CapabilityServiceGetLeaseResponse], /) -> CapabilityServiceGetLeaseResponse:
+        """
+        GetLease returns the lease a capability holds, open or expired and not
+        yet settled. NOT_FOUND when it holds none.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def settle_lease(self, request: CapabilityServiceSettleLeaseRequest, ctx: RequestContext[CapabilityServiceSettleLeaseRequest, CapabilityServiceSettleLeaseResponse], /) -> CapabilityServiceSettleLeaseResponse:
+        """
+        SettleLease ends a capability's lease: what it spent is charged to every
+        ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_operation_grants(self, request: CapabilityServiceListOperationGrantsRequest, ctx: RequestContext[CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse], /) -> CapabilityServiceListOperationGrantsResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
 
@@ -834,6 +998,39 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.get_usage,
+                ),
+                "/paladin.admin.v1.CapabilityService/Lease": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Lease",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceLeaseRequest,
+                        output=CapabilityServiceLeaseResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.lease,
+                ),
+                "/paladin.admin.v1.CapabilityService/GetLease": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GetLease",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceGetLeaseRequest,
+                        output=CapabilityServiceGetLeaseResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.get_lease,
+                ),
+                "/paladin.admin.v1.CapabilityService/SettleLease": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="SettleLease",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceSettleLeaseRequest,
+                        output=CapabilityServiceSettleLeaseResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.settle_lease,
                 ),
                 "/paladin.admin.v1.CapabilityService/ListOperationGrants": EndpointSync.unary(
                     method=MethodInfo(
@@ -1149,6 +1346,92 @@ class CapabilityServiceClientSync(ConnectClientSync):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
+    def lease(
+        self,
+        request: CapabilityServiceLeaseRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CapabilityServiceLeaseResponse:
+        """
+        ListOperationGrants returns, for each capability operation, what it
+        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
+        and on what basis: the built-in policy's actions, a tenant policy, the
+        operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
+        Lease holds budget and requests of a capability's chain for it in
+        advance, so its charges and bumps, and those of the capabilities
+        delegated from it, lock its own counters rather than every ancestor's
+        and the tenant's. Asked again while the lease is open, it adds to it.
+
+        Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+        FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+        holds a lease, or leasing_disabled while the deployment has leasing off;
+        INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Lease",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceLeaseRequest,
+                output=CapabilityServiceLeaseResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def get_lease(
+        self,
+        request: CapabilityServiceGetLeaseRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceGetLeaseResponse:
+        """
+        GetLease returns the lease a capability holds, open or expired and not
+        yet settled. NOT_FOUND when it holds none.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetLease",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceGetLeaseRequest,
+                output=CapabilityServiceGetLeaseResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def settle_lease(
+        self,
+        request: CapabilityServiceSettleLeaseRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CapabilityServiceSettleLeaseResponse:
+        """
+        SettleLease ends a capability's lease: what it spent is charged to every
+        ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="SettleLease",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceSettleLeaseRequest,
+                output=CapabilityServiceSettleLeaseResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
     def list_operation_grants(
         self,
         request: CapabilityServiceListOperationGrantsRequest,
@@ -1157,13 +1440,6 @@ class CapabilityServiceClientSync(ConnectClientSync):
         timeout_ms: int | None = None,
         use_get: bool = False,
     ) -> CapabilityServiceListOperationGrantsResponse:
-        """
-        ListOperationGrants returns, for each capability operation, what it
-        unlocks in the capability's own tenant with no tenant policy (ADR-0038),
-        and on what basis: the built-in policy's actions, a tenant policy, the
-        operation it is asserted beside, or the caveats alone. The same for every
-        caller; it reads no tenant.
-        """
         return self.execute_unary(
             request=request,
             method=MethodInfo(

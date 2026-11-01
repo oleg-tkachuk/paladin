@@ -27,6 +27,15 @@ type Option func(*options)
 type options struct {
 	now         func() time.Time
 	defaultUnit string
+	leases      bool
+}
+
+// WithLeases has the usage store open budget leases (meter.Leaser). Every
+// instance writing the database must run pgstore v0.58.0 or later first;
+// without it a Lease is refused with meter.ErrLeasingDisabled, and leases
+// already open are still charged under and settled.
+func WithLeases(on bool) Option {
+	return func(o *options) { o.leases = on }
 }
 
 // WithClock runs the stores on now instead of the wall clock. For tests that
@@ -51,6 +60,7 @@ func config(pool *pgxpool.Pool, opts []Option) (pgstore.Config, options, error) 
 	}
 	return pgstore.Config{
 		DB: pool, Now: o.now, Scope: Scope, CheckScope: pgstore.CheckSchemaScope, CheckTenant: checkTenant,
+		Leases: o.leases,
 	}, o, nil
 }
 
@@ -94,6 +104,7 @@ type UsageStore struct {
 var (
 	_ meter.UsageStore      = (*UsageStore)(nil)
 	_ meter.CopyUsageReader = (*UsageStore)(nil)
+	_ meter.Leaser          = (*UsageStore)(nil)
 )
 
 // NewUsageStore is the meter: the counters, holds and charges of every

@@ -12,3 +12,12 @@
   answer is logged at WARN and counted by `limes.revocation_cache.stale`.
   A revocation made during the outage goes unseen for as long; set `0` to
   fail closed as before.
+- **Budget leases.** `CapabilityService.Lease` holds budget and requests
+  of a capability's chain for it in advance, so its charges stop queueing
+  on every ancestor and the tenant; `GetLease` reads it and `SettleLease`
+  ends it, charging what was spent. Lease and SettleLease are gated as
+  `Issue`, GetLease as reading a capability. An expired lease is settled
+  by the capability purger, a revoked capability's by the revoke.
+- **`capability.budget_leases`** (default `true`) lets `Lease` open
+  leases. Turn it off while any replica still runs a release before this
+  one; `Lease` is then refused with limes code `leasing_disabled`.

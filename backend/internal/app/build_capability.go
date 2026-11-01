@@ -34,6 +34,8 @@ type CapabilityBundle struct {
 	// CopyUsage reads the counters of Biscuit copies with limits of their own.
 	CopyUsage meter.CopyUsageReader
 	Usage     meter.UsageStore
+	// Leases opens, reads and settles the budget leases of capabilities.
+	Leases meter.Leaser
 	// Ledger reads the charges ledger for billing, and removes its old
 	// charges for the capability purger when asked to.
 	Ledger *pgstore.Ledger
@@ -238,7 +240,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
 	// Labelled by tenant, as every Paladin meter of tenant activity is.
-	usageStore, err := capabilitypg.NewUsageStore(deps.Pool, capabilitypg.WithDefaultUnit(cfg.Currency))
+	usageStore, err := capabilitypg.NewUsageStore(deps.Pool, capabilitypg.WithDefaultUnit(cfg.Currency), capabilitypg.WithLeases(cfg.BudgetLeases))
 	if err != nil {
 		return nil, fmt.Errorf("app: capability usage store: %w", err)
 	}
@@ -254,6 +256,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if !ok {
 		return nil, errors.New("app: the capability usage store releases no holds of a bulk revocation")
 	}
+	leases, ok := usage.(meter.Leaser)
+	if !ok {
+		return nil, errors.New("app: the capability usage store leases no budget")
+	}
 	ledger, err := capabilitypg.NewLedger(deps.Pool)
 	if err != nil {
 		return nil, fmt.Errorf("app: charges ledger: %w", err)
@@ -268,6 +274,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Exchanges:      pgstore.ScopedExchanges(store),
 		BulkRevocation: &auth.BulkRevocation{Revoker: store, Holds: holds},
 		Usage:          usage,
+		Leases:         leases,
 		Ledger:         ledger,
 		Issuer:         issuers.issuer,
 		Delegation:     issuers.delegation,

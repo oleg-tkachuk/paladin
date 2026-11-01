@@ -46,6 +46,13 @@ const (
 	CapabilityServiceListProcedure = "/paladin.admin.v1.CapabilityService/List"
 	// CapabilityServiceGetUsageProcedure is the procedure name of the CapabilityService's GetUsage RPC.
 	CapabilityServiceGetUsageProcedure = "/paladin.admin.v1.CapabilityService/GetUsage"
+	// CapabilityServiceLeaseProcedure is the procedure name of the CapabilityService's Lease RPC.
+	CapabilityServiceLeaseProcedure = "/paladin.admin.v1.CapabilityService/Lease"
+	// CapabilityServiceGetLeaseProcedure is the procedure name of the CapabilityService's GetLease RPC.
+	CapabilityServiceGetLeaseProcedure = "/paladin.admin.v1.CapabilityService/GetLease"
+	// CapabilityServiceSettleLeaseProcedure is the procedure name of the CapabilityService's
+	// SettleLease RPC.
+	CapabilityServiceSettleLeaseProcedure = "/paladin.admin.v1.CapabilityService/SettleLease"
 	// CapabilityServiceListOperationGrantsProcedure is the procedure name of the CapabilityService's
 	// ListOperationGrants RPC.
 	CapabilityServiceListOperationGrantsProcedure = "/paladin.admin.v1.CapabilityService/ListOperationGrants"
@@ -122,6 +129,28 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	capabilityServiceLeaseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("Lease"),
+			Procedure:  CapabilityServiceLeaseProcedure,
+		}
+	})
+	capabilityServiceGetLeaseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("GetLease"),
+			Procedure:        CapabilityServiceGetLeaseProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	capabilityServiceSettleLeaseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("SettleLease"),
+			Procedure:  CapabilityServiceSettleLeaseProcedure,
+		}
+	})
 	capabilityServiceListOperationGrantsSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -190,6 +219,22 @@ type CapabilityServiceClient interface {
 	// and on what basis: the built-in policy's actions, a tenant policy, the
 	// operation it is asserted beside, or the caveats alone. The same for every
 	// caller; it reads no tenant.
+	// Lease holds budget and requests of a capability's chain for it in
+	// advance, so its charges and bumps, and those of the capabilities
+	// delegated from it, lock its own counters rather than every ancestor's
+	// and the tenant's. Asked again while the lease is open, it adds to it.
+	//
+	// Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+	// FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+	// holds a lease, or leasing_disabled while the deployment has leasing off;
+	// INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
+	Lease(context.Context, *v1.CapabilityServiceLeaseRequest) (*v1.CapabilityServiceLeaseResponse, error)
+	// GetLease returns the lease a capability holds, open or expired and not
+	// yet settled. NOT_FOUND when it holds none.
+	GetLease(context.Context, *v1.CapabilityServiceGetLeaseRequest) (*v1.CapabilityServiceGetLeaseResponse, error)
+	// SettleLease ends a capability's lease: what it spent is charged to every
+	// ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+	SettleLease(context.Context, *v1.CapabilityServiceSettleLeaseRequest) (*v1.CapabilityServiceSettleLeaseResponse, error)
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
@@ -257,6 +302,22 @@ type CapabilityServiceHandler interface {
 	// and on what basis: the built-in policy's actions, a tenant policy, the
 	// operation it is asserted beside, or the caveats alone. The same for every
 	// caller; it reads no tenant.
+	// Lease holds budget and requests of a capability's chain for it in
+	// advance, so its charges and bumps, and those of the capabilities
+	// delegated from it, lock its own counters rather than every ancestor's
+	// and the tenant's. Asked again while the lease is open, it adds to it.
+	//
+	// Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+	// FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+	// holds a lease, or leasing_disabled while the deployment has leasing off;
+	// INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
+	Lease(context.Context, *v1.CapabilityServiceLeaseRequest) (*v1.CapabilityServiceLeaseResponse, error)
+	// GetLease returns the lease a capability holds, open or expired and not
+	// yet settled. NOT_FOUND when it holds none.
+	GetLease(context.Context, *v1.CapabilityServiceGetLeaseRequest) (*v1.CapabilityServiceGetLeaseResponse, error)
+	// SettleLease ends a capability's lease: what it spent is charged to every
+	// ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+	SettleLease(context.Context, *v1.CapabilityServiceSettleLeaseRequest) (*v1.CapabilityServiceSettleLeaseResponse, error)
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
 }
 
@@ -274,6 +335,9 @@ func RegisterCapabilityServiceHandler(server *connect.Server, svc CapabilityServ
 		connect.Method{Spec: capabilityServiceGetSpec(), Handler: adapter.get},
 		connect.Method{Spec: capabilityServiceListSpec(), Handler: adapter.list},
 		connect.Method{Spec: capabilityServiceGetUsageSpec(), Handler: adapter.getUsage},
+		connect.Method{Spec: capabilityServiceLeaseSpec(), Handler: adapter.lease},
+		connect.Method{Spec: capabilityServiceGetLeaseSpec(), Handler: adapter.getLease},
+		connect.Method{Spec: capabilityServiceSettleLeaseSpec(), Handler: adapter.settleLease},
 		connect.Method{Spec: capabilityServiceListOperationGrantsSpec(), Handler: adapter.listOperationGrants},
 	)
 }
@@ -315,6 +379,18 @@ func (UnimplementedCapabilityServiceHandler) List(context.Context, *v1.Capabilit
 
 func (UnimplementedCapabilityServiceHandler) GetUsage(context.Context, *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetUsage is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) Lease(context.Context, *v1.CapabilityServiceLeaseRequest) (*v1.CapabilityServiceLeaseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.Lease is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) GetLease(context.Context, *v1.CapabilityServiceGetLeaseRequest) (*v1.CapabilityServiceGetLeaseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetLease is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) SettleLease(context.Context, *v1.CapabilityServiceSettleLeaseRequest) (*v1.CapabilityServiceSettleLeaseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.SettleLease is not implemented")
 }
 
 func (UnimplementedCapabilityServiceHandler) ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error) {
@@ -392,6 +468,30 @@ func (c *capabilityServiceClient) List(ctx context.Context, req *v1.CapabilitySe
 func (c *capabilityServiceClient) GetUsage(ctx context.Context, req *v1.CapabilityServiceGetUsageRequest) (*v1.CapabilityServiceGetUsageResponse, error) {
 	var res v1.CapabilityServiceGetUsageResponse
 	if err := c.client.CallUnary(ctx, capabilityServiceGetUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) Lease(ctx context.Context, req *v1.CapabilityServiceLeaseRequest) (*v1.CapabilityServiceLeaseResponse, error) {
+	var res v1.CapabilityServiceLeaseResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceLeaseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) GetLease(ctx context.Context, req *v1.CapabilityServiceGetLeaseRequest) (*v1.CapabilityServiceGetLeaseResponse, error) {
+	var res v1.CapabilityServiceGetLeaseResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceGetLeaseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) SettleLease(ctx context.Context, req *v1.CapabilityServiceSettleLeaseRequest) (*v1.CapabilityServiceSettleLeaseResponse, error) {
+	var res v1.CapabilityServiceSettleLeaseResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceSettleLeaseSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -509,6 +609,42 @@ func (h capabilityServiceHandler) getUsage(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.GetUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) lease(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceLeaseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Lease(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) getLease(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceGetLeaseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetLease(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) settleLease(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceSettleLeaseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SettleLease(ctx, &req)
 	if err != nil {
 		return err
 	}

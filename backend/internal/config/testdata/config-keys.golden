@@ -116,6 +116,7 @@ bootstrap.admin.subject
 bootstrap.admin.tenant_display_name
 bootstrap.admin.tenant_slug
 capability
+capability.budget_leases
 capability.charge_per_request_amount
 capability.currency
 capability.default_ttl
