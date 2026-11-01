@@ -99,6 +99,18 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## Unreleased — an agent leases budget for what it delegated
+
+- `CapabilityService.Lease`, `GetLease` and `SettleLease` accept a
+  presented capability holding the `share` op, as `Delegate` does: it
+  leases for itself or for any capability delegated from it, in its own
+  tenant, with no Cedar check. A Biscuit copy is refused
+  (`FAILED_PRECONDITION`); a capability not below it, or revoked, is
+  `PERMISSION_DENIED`.
+- Both SDKs' fakes (`paladintest`, `paladin.testing`) serve the three lease
+  calls with the server's rule of who may lease; a lease's spent amount
+  stays zero there, as the fakes count no budget.
+
 ## sdk/go/v0.135.0 — limes v1.0.0-rc.31
 
 - The limes schema moves to version 36. pgstore v0.60.0 migrates it on
