@@ -469,6 +469,7 @@ capability:
   currency: XXX                      # platform ISO 4217 unit for budgets and capabilities that name none; XXX = no currency
   revocation_cache_ttl: 2s           # revocation answers cached while the watcher is down; keep it short
   revocation_cache_synced_ttl: 30s   # cached while the watcher listens and clears them on revoke; never below revocation_cache_ttl
+  revocation_cache_max_stale: 30s    # a cached answer stands in this long past its TTL while the store fails; 0 fails closed; at most 1h
   dpop_nonce:                        # DPoP server nonces (RFC 9449 §8)
     enabled: false
     lifetime: 5m                     # how long a nonce is accepted

@@ -96,6 +96,33 @@ func TestValidateRevocationCacheTTLBounds(t *testing.T) {
 	}
 }
 
+// A stale revocation answer is held to 0..limes.MaxRevocationCacheStale,
+// which limes refuses outside of; Validate stops the boot first and names
+// the key.
+func TestValidateRevocationCacheMaxStaleBounds(t *testing.T) {
+	for name, tc := range map[string]struct {
+		stale time.Duration
+		ok    bool
+	}{
+		"zero, failing closed": {0, true},
+		"at the ceiling":       {limes.MaxRevocationCacheStale, true},
+		"past the ceiling":     {limes.MaxRevocationCacheStale + time.Nanosecond, false},
+		"negative":             {-time.Nanosecond, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := minimalValidConfig()
+			c.Capability.RevocationCacheMaxStale = tc.stale
+			if tc.ok {
+				if err := c.Validate(); err != nil {
+					t.Fatalf("max stale %s refused: %v", tc.stale, err)
+				}
+				return
+			}
+			mustReject(t, c, revocationCacheMaxStaleKey)
+		})
+	}
+}
+
 // Removing the ledger's old charges keeps at least meter.MinChargeRetention
 // of them: a leap year of billing and the disputes after it. Off, any value
 // stands, as nothing reads it.

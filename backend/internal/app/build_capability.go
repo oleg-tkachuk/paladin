@@ -166,6 +166,11 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		TTL:            cfg.RevocationCacheTTL,
 		SyncedTTL:      max(cfg.RevocationCacheSyncedTTL, cfg.RevocationCacheTTL),
 		RequireLineage: true,
+		// A short outage of the store is answered from the cache, each
+		// stale answer logged at WARN and counted, rather than refusing
+		// every capability; a revocation goes unseen for as long.
+		MaxStale: cfg.RevocationCacheMaxStale,
+		Logger:   slog.New(zapslog.NewHandler(deps.Logger.Named("capability-revocation-cache").Core())),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability revocation cache: %w", err)

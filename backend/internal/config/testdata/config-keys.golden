@@ -129,6 +129,7 @@ capability.dpop_nonce.key_secret.namespace
 capability.dpop_nonce.lifetime
 capability.enabled
 capability.issuer_name
+capability.revocation_cache_max_stale
 capability.revocation_cache_synced_ttl
 capability.revocation_cache_ttl
 capability.signing_key_kid

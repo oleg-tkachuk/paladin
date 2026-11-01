@@ -1124,6 +1124,7 @@ config:
     currency: XXX                       # platform ISO 4217 unit for budgets and capabilities that name none; XXX = no currency
     revocation_cache_ttl: 2s            # revocation answers cached while the watcher is down; keep it short
     revocation_cache_synced_ttl: 30s    # cached while the watcher listens and clears them on revoke; never below revocation_cache_ttl
+    revocation_cache_max_stale: 30s     # a cached answer stands in this long past its TTL while the store fails; 0 fails closed; at most 1h
     # DPoP server nonces (RFC 9449 §8): a key-bound capability's proof must
     # carry a nonce the server issued, so a captured proof is usable for
     # `lifetime` at most. Every replica shares the key — give it as
