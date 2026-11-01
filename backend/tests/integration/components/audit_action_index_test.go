@@ -38,20 +38,23 @@ const (
 	idxTestPrefix      = "admin.Bucket%"
 )
 
-// seedRecentAudit inserts rows whose `at` lands within the current month so
-// they route into a real partition (the schema baseline (001_initial_schema.sql) created the current month),
-// not the DEFAULT catch-all — keeping the EXPLAIN representative of hot data.
+// idxTestSpread is how far back from now the seeded rows reach, hour by hour:
+// inside the 30 days the queries below read, and wide enough that the rows'
+// `at` values differ. Spread from the start of the month instead, a run in a
+// month's first hour gave every row the same `at`, the at-ordered index could
+// serve nothing, and the planner rightly chose a Seq Scan (2026-11-01).
+const idxTestSpread = 7 * 24 * time.Hour
+
+// seedRecentAudit inserts n rows over the last idxTestSpread, one hour apart
+// in turn. The test database is migrations alone, with no month partition
+// the maintainer would create, so they land in the DEFAULT partition, which
+// carries the parent's indexes as any partition does.
 func seedRecentAudit(t *testing.T, ctx context.Context, pool interface {
 	CopyFrom(context.Context, pgx.Identifier, []string, pgx.CopyFromSource) (int64, error)
 }, n int) {
 	t.Helper()
 	now := time.Now().UTC()
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	// Spread across however many hours we are into the month (>=1).
-	spanHours := int(now.Sub(monthStart).Hours())
-	if spanHours < 1 {
-		spanHours = 1
-	}
+	spanHours := int(idxTestSpread / time.Hour)
 	i := 0
 	src := pgx.CopyFromFunc(func() ([]any, error) {
 		if i >= n {
@@ -61,7 +64,7 @@ func seedRecentAudit(t *testing.T, ctx context.Context, pool interface {
 		if i%idxTestMatchEveryN == 0 {
 			action = idxTestExactAction
 		}
-		at := monthStart.Add(time.Duration(i%spanHours) * time.Hour)
+		at := now.Add(-time.Duration(i%spanHours) * time.Hour)
 		row := []any{uuid.NewV7(), at, "svc", nil, "admin", action, "r"}
 		i++
 		return row, nil
