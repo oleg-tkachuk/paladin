@@ -17,8 +17,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// CapabilityService, as the fake serves it: Issue, Delegate, Revoke, Get and
-// List.
+// CapabilityService, as the fake serves it: Issue, Delegate, Revoke, Get,
+// List, and the lease calls (lease.go).
 //
 // It holds a capability to the server's rules where a consumer's tests meet
 // them: an operation the server refuses — a bare "presign" — is
@@ -322,6 +322,8 @@ func (s *Server) revokeCapability(id string, cascade bool, entry *adminv1.Capabi
 	for _, token := range rec.credentials {
 		s.credentials[token].revoked = true
 	}
+	// The server settles a revoked capability's lease with its revoke.
+	delete(s.leases, id)
 	if entry != nil && rec.revocation == nil {
 		rec.revocation = proto.CloneOf(entry)
 	}

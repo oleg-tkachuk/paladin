@@ -64,6 +64,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -225,6 +226,8 @@ type Server struct {
 	credentials map[string]*credential
 	// capabilities are the ones CapabilityService issued, by id.
 	capabilities map[string]*capabilityRecord
+	// leases are the leases CapabilityService opened, by capability id.
+	leases map[string]*adminv1.CapabilityLease
 	// seal seals a capability's Biscuit and opens a copy of it.
 	seal *sealer
 	// replays are the responses memoised per procedure and idempotency key,
@@ -490,6 +493,7 @@ func Start(opts ...Option) (*Server, func()) {
 
 		credentials:  map[string]*credential{},
 		capabilities: map[string]*capabilityRecord{},
+		leases:       map[string]*adminv1.CapabilityLease{},
 		replays:      map[string]replay{},
 	}
 	for _, opt := range opts {
