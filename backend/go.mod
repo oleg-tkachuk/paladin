@@ -41,10 +41,10 @@ require (
 	github.com/oasdiff/yaml3 v0.0.16
 	// limes is the capability primitive the auth planes run on.
 	github.com/oleg-tkachuk/limes v1.0.0-rc.31
-	github.com/oleg-tkachuk/limes/biscuit v0.1.18
-	github.com/oleg-tkachuk/limes/exchange v0.15.7
-	github.com/oleg-tkachuk/limes/otelmetric v0.15.2
-	github.com/oleg-tkachuk/limes/pgstore v0.61.0
+	github.com/oleg-tkachuk/limes/biscuit v0.1.19
+	github.com/oleg-tkachuk/limes/exchange v0.15.8
+	github.com/oleg-tkachuk/limes/otelmetric v0.15.3
+	github.com/oleg-tkachuk/limes/pgstore v0.61.1
 	github.com/oleg-tkachuk/paladin/sdk/go v0.134.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
