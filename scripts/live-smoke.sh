@@ -418,6 +418,16 @@ r=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$lessor_id\"}")
 expect "what the lease spent reaches its parent" "$r" \
     test "$(printf %s "$r" | jq -r '.requestCount // "0"')" = "$((before + LEASE_SPENT))"
 
+# The orchestrator presenting its own capability leases for the child it
+# delegated, with no operator; one without share cannot lease at all.
+r=$(admin_cap_rpc "$lessor" CapabilityService/Lease "{\"id\":\"$lessee_id\",\"requests\":$LEASE_SPENT}")
+expect "an orchestrator leases for the capability it delegated" "$r" \
+    test "$(printf %s "$r" | jq -r '.lease.requests // "0"')" = "$LEASE_SPENT"
+r=$(admin_cap_rpc "$lessor" CapabilityService/SettleLease "{\"id\":\"$lessee_id\"}")
+expect "the orchestrator settles that lease" "$r" test "$(code_of "$r")" = ok
+r=$(admin_cap_rpc "$noshare" CapabilityService/Lease "{\"id\":\"$noshare_id\",\"requests\":$LEASE_SPENT}")
+expect "a capability without share cannot lease" "$r" test "$(code_of "$r")" = "$CODE_PERMISSION_DENIED"
+
 # ── the platform-wide budget summary, with each filter ──────────────────────
 for body in '{}' '{"unlimitedOnly":true}' "{\"thresholdPct\":$SUMMARY_THRESHOLD_PCT}"; do
     r=$(admin_rpc TenantBudgetService/Summarize "$body")
