@@ -75,12 +75,12 @@ func AnswerCapabilityError(err error, except Exceptions) error {
 			if row.Reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
 				return capabilityError(row.Code, err)
 			}
-			return withErrorReason(connect.NewError(row.Code, err.Error()).WithCause(err), row.Reason)
+			return withCapabilityInfo(connect.NewError(row.Code, err.Error()).WithCause(err), err, row.Reason)
 		}
 	}
 	status := capabilityStatus(capabilityCodes, err)
 	if _, refused := limes.ReasonOf(err); status == connect.CodeUnavailable && !refused {
-		return connect.NewError(status, capabilityUnanswered).WithCause(err)
+		return withCapabilityInfo(connect.NewError(status, capabilityUnanswered).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	}
 	return capabilityError(status, err)
 }

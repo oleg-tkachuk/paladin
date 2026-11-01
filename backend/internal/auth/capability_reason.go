@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -65,7 +66,7 @@ func capabilityFailure(ctx context.Context, stage string, err error) error {
 	switch {
 	case errors.Is(err, limes.ErrProofUnsupported):
 		logger.FromContext(ctx).Error("capability: a key-bound capability reached a verifier with no DPoP check", zap.String("stage", stage), zap.Error(err))
-		return connect.NewError(status, proofUnchecked).WithCause(err)
+		return withCapabilityInfo(connect.NewError(status, proofUnchecked).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	case status == connect.CodeInternal, status == connect.CodeUnavailable:
 		logger.FromContext(ctx).Error("capability: failed on the server's side", zap.String("stage", stage), zap.Error(err))
 		if !refused {
@@ -73,34 +74,56 @@ func capabilityFailure(ctx context.Context, stage string, err error) error {
 			if status == connect.CodeInternal {
 				told = capabilityServerFault
 			}
-			return connect.NewError(status, told).WithCause(err)
+			return withCapabilityInfo(connect.NewError(status, told).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 		}
 	}
 	return capabilityError(status, err)
 }
 
-// capabilityError is connect.NewError carrying, when err is a refusal of the
-// capability, a google.rpc.ErrorInfo naming its reason — so a client tells a
-// spent or revoked capability, which it should stop using, from a request it
-// can fix, without reading the message.
+// capabilityError is connect.NewError carrying the ErrorInfo of err: when it
+// is a refusal of the capability, its reason — so a client tells a spent or
+// revoked capability, which it should stop using, from a request it can fix,
+// without reading the message — and the limes code of any error of the
+// library's.
 func capabilityError(code connect.Code, err error) *connect.Error {
-	e := connect.NewError(code, err.Error()).WithCause(err)
-	r, ok := limes.ReasonOf(err)
-	if !ok {
-		return e
+	reason := commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED
+	if r, ok := limes.ReasonOf(err); ok {
+		reason = capabilityErrorReason(r)
 	}
-	return withErrorReason(e, capabilityErrorReason(r))
+	return withCapabilityInfo(connect.NewError(code, err.Error()).WithCause(err), err, reason)
 }
 
-// withErrorReason is e carrying reason in its ErrorInfo; e as it is when the
-// reason is unspecified.
-func withErrorReason(e *connect.Error, reason commonv1.ErrorReason) *connect.Error {
-	if reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
+// withCapabilityInfo is e carrying the ErrorInfo an error of the capability
+// library answers with: reason, when it is one, and err's limes code under
+// paladin.ErrorMetadataLimesCode — which of the library's errors it was,
+// whatever Connect code it was answered with. e as it is when err is no
+// error of the library's and reason is unspecified.
+func withCapabilityInfo(e *connect.Error, err error, reason commonv1.ErrorReason) *connect.Error {
+	code, _ := meter.CodeOf(err)
+	info := capabilityErrorInfo(reason, code)
+	if info == nil {
 		return e
 	}
-	detail, dErr := connectproto.NewErrorDetail(&errdetails.ErrorInfo{Reason: reason.String(), Domain: paladin.ErrorDomain})
+	detail, dErr := connectproto.NewErrorDetail(info)
 	if dErr != nil { // only a message that cannot be marshalled fails, and this one can
 		return e
 	}
 	return e.WithDetail(detail)
+}
+
+// capabilityErrorInfo is the ErrorInfo of a reason and a limes code, either
+// of which may be absent; nil when both are. An unspecified reason is left
+// empty rather than spelled out, which both SDKs read as no reason.
+func capabilityErrorInfo(reason commonv1.ErrorReason, code limes.Code) *errdetails.ErrorInfo {
+	if reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED && code == "" {
+		return nil
+	}
+	info := &errdetails.ErrorInfo{Domain: paladin.ErrorDomain}
+	if reason != commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
+		info.Reason = reason.String()
+	}
+	if code != "" {
+		info.Metadata = map[string]string{paladin.ErrorMetadataLimesCode: string(code)}
+	}
+	return info
 }

@@ -114,7 +114,7 @@ func TestTheSDKFakeHoldsABiscuitCopyAsTheServerDoes(t *testing.T) {
 			serverCalls := serverCopySide(t, tenant, tc, fill)
 			fakeCalls := fakeCopySide(t, fake, obj.GetName(), tc, fill)
 			for i, call := range tc.Calls {
-				want := answer{reason: call.Reason, message: fill(call.Message)}
+				want := answer{reason: call.Reason, limesCode: call.LimesCode, message: fill(call.Message)}
 				if call.Code != "" {
 					if err := want.code.UnmarshalText([]byte(call.Code)); err != nil {
 						t.Fatalf("call %d: code %q: %v", i, call.Code, err)

@@ -1,0 +1,5 @@
+{
+  "_comment": "The google.rpc.ErrorInfo the server attaches, which the server and both SDKs are held to: its domain, and the metadata key naming the limes code of an error that came from the capability library \u2014 every one of limes's and the meter's codes, a stable lower_snake word such as budget_exceeded or not_found.",
+  "domain": "paladin",
+  "limes_code_key": "limes_code"
+}

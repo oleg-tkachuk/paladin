@@ -2,9 +2,11 @@ package paladin_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -155,6 +157,61 @@ func TestContractSkewNamesTheProcedureAndBothVersions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// errorInfoContract is sdk/testdata/error_info.json: the ErrorInfo the server
+// attaches, which this SDK and Python's are held to alike.
+type errorInfoContract struct {
+	Domain       string `json:"domain"`
+	LimesCodeKey string `json:"limes_code_key"`
+}
+
+func TestErrorInfoMatchesTheSharedContract(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/error_info.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c errorInfoContract
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Domain != paladin.ErrorDomain || c.LimesCodeKey != paladin.ErrorMetadataLimesCode {
+		t.Errorf("contract %+v, SDK %q / %q", c, paladin.ErrorDomain, paladin.ErrorMetadataLimesCode)
+	}
+}
+
+// An error the capability library raised carries its code beside the
+// reason; one from elsewhere, or another domain's, carries none.
+func TestErrorsCarryTheLimesCode(t *testing.T) {
+	withCode := func(domain, reason, code string) *connect.Error {
+		e := connect.NewError(connect.CodeResourceExhausted, "refused")
+		d, _ := connectproto.NewErrorDetail(&errdetails.ErrorInfo{
+			Domain: domain, Reason: reason, Metadata: map[string]string{paladin.ErrorMetadataLimesCode: code},
+		})
+		return e.WithDetail(d)
+	}
+	budget := commonv1.ErrorReason_ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED.String()
+	cases := []struct {
+		name string
+		err  *connect.Error
+		want string
+	}{
+		{"a refusal, with its reason", withCode(paladin.ErrorDomain, budget, "budget_exceeded"), "budget_exceeded"},
+		{"no reason, a code alone", withCode(paladin.ErrorDomain, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED.String(), "store_unavailable"), "store_unavailable"},
+		{"another domain's", withCode("elsewhere", budget, "budget_exceeded"), ""},
+		{"not from the library", withInfo(connect.CodeNotFound, paladin.ErrorDomain, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND.String()), ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := callFailing(t, serveFailing(failing{err: tc.err}))
+			if got := paladin.LimesCode(err); got != tc.want {
+				t.Errorf("LimesCode = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if got := paladin.LimesCode(errors.New("plain")); got != "" {
+		t.Errorf("a plain error's code = %q, want none", got)
 	}
 }
 

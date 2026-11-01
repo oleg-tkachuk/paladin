@@ -1,33 +1,33 @@
 {
-  "_comment": "How the data plane refuses a capability, which the server and both SDKs' fakes are held to: each case is one capability, issued to the fake's tenant with the caveats named (audience [\"data\"] and ops [\"get\", \"manage\"] when none are), presented to the calls in order, each with the answer it gets — none when it succeeds. get_object reads the fake's object at key in its default collection; ensure_tenant_storage asks for a bucket. In a message, {object} is that object's resource URI and {elsewhere} the prefix of another collection of the tenant, object://<tenant>/elsewhere/. Codes are Connect's, reasons the ErrorInfo's.",
+  "_comment": "How the data plane refuses a capability, which the server and both SDKs' fakes are held to: each case is one capability, issued to the fake's tenant with the caveats named (audience [\"data\"] and ops [\"get\", \"manage\"] when none are), presented to the calls in order, each with the answer it gets — none when it succeeds. get_object reads the fake's object at key in its default collection; ensure_tenant_storage asks for a bucket. In a message, {object} is that object's resource URI and {elsewhere} the prefix of another collection of the tenant, object://<tenant>/elsewhere/. Codes are Connect's, reasons the ErrorInfo's, and limes_code the ErrorInfo metadata naming the capability library's code (sdk/testdata/error_info.json).",
   "key": "k",
   "cases": [
     {
       "name": "the bearer audience",
       "audience": ["paladin-data"],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "message": "audience mismatch: token audience [paladin-data] lacks \"data\""}
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [paladin-data] lacks \"data\""}
       ]
     },
     {
       "name": "another plane",
       "audience": ["admin"],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "message": "audience mismatch: token audience [admin] lacks \"data\""}
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [admin] lacks \"data\""}
       ]
     },
     {
       "name": "an operation it lacks",
       "ops": ["list"],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED", "message": "operation not allowed: \"get\" not in [list]"}
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED", "limes_code": "op_not_allowed", "message": "operation not allowed: \"get\" not in [list]"}
       ]
     },
     {
       "name": "a resource outside its prefixes",
       "prefixes": ["{elsewhere}"],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED", "message": "resource not allowed: \"{object}\""}
+        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED", "limes_code": "resource_not_allowed", "message": "resource not allowed: \"{object}\""}
       ]
     },
     {
@@ -35,7 +35,7 @@
       "ops": ["manage"],
       "prefixes": ["{elsewhere}"],
       "calls": [
-        {"call": "ensure_tenant_storage", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED", "message": "resource not allowed: operation \"manage\" is not bound to a resource, and the capability is resource-restricted"}
+        {"call": "ensure_tenant_storage", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED", "limes_code": "resource_not_allowed", "message": "resource not allowed: operation \"manage\" is not bound to a resource, and the capability is resource-restricted"}
       ]
     },
     {
@@ -43,7 +43,7 @@
       "max_requests": 1,
       "calls": [
         {"call": "get_object"},
-        {"call": "get_object", "code": "resource_exhausted", "reason": "ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED", "message": "request limit exceeded"}
+        {"call": "get_object", "code": "resource_exhausted", "reason": "ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED", "limes_code": "request_limit_exceeded", "message": "request limit exceeded"}
       ]
     },
     {
