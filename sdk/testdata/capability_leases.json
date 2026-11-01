@@ -1,0 +1,231 @@
+{
+  "_comment": "Who may lease budget for a capability, which the server and both SDKs' fakes are held to. Each case seeds, in one tenant, holder (ops get and share), child and sibling delegated from it (get and share), grandchild from child (get), revoked delegated from holder (get) and revoked, and stranger issued on its own (get); biscuit is holder's own Biscuit, and copy a copy of it narrowed to get and share. The steps run in order as the caller named by as: an operator for none, else presenting that capability. Each step names its call \u2014 revoke revokes the capability as an operator, and answers nothing \u2014 the capability it is of (unknown: an id never issued), the requests it leases, and either the refusal \u2014 Connect's code and the ErrorInfo's limes_code (sdk/testdata/error_info.json) \u2014 or, when it succeeds, held: the requests the lease holds.",
+  "cases": [
+    {
+      "name": "an operator leases, reads and settles",
+      "as": "",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "child",
+          "requests": 2,
+          "held": 2
+        },
+        {
+          "call": "lease",
+          "of": "child",
+          "requests": 3,
+          "held": 5
+        },
+        {
+          "call": "get_lease",
+          "of": "child",
+          "held": 5
+        },
+        {
+          "call": "settle_lease",
+          "of": "child",
+          "held": 5
+        },
+        {
+          "call": "get_lease",
+          "of": "child",
+          "code": "not_found",
+          "limes_code": "lease_not_found"
+        },
+        {
+          "call": "settle_lease",
+          "of": "child",
+          "code": "not_found",
+          "limes_code": "lease_not_found"
+        }
+      ]
+    },
+    {
+      "name": "a revoke settles the lease",
+      "as": "",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "grandchild",
+          "requests": 1,
+          "held": 1
+        },
+        {
+          "call": "revoke",
+          "of": "grandchild"
+        },
+        {
+          "call": "get_lease",
+          "of": "grandchild",
+          "code": "not_found",
+          "limes_code": "lease_not_found"
+        }
+      ]
+    },
+    {
+      "name": "the holder leases for itself",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "holder",
+          "requests": 1,
+          "held": 1
+        }
+      ]
+    },
+    {
+      "name": "the holder leases for its grandchild",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "grandchild",
+          "requests": 1,
+          "held": 1
+        },
+        {
+          "call": "get_lease",
+          "of": "grandchild",
+          "held": 1
+        },
+        {
+          "call": "settle_lease",
+          "of": "grandchild",
+          "held": 1
+        }
+      ]
+    },
+    {
+      "name": "a lease under an ancestor's",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "holder",
+          "requests": 1,
+          "held": 1
+        },
+        {
+          "call": "lease",
+          "of": "child",
+          "requests": 1,
+          "code": "failed_precondition",
+          "limes_code": "lease_nested"
+        }
+      ]
+    },
+    {
+      "name": "nothing to lease",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "child",
+          "requests": 0,
+          "code": "invalid_argument",
+          "limes_code": "invalid_request"
+        }
+      ]
+    },
+    {
+      "name": "a child leases for its parent",
+      "as": "child",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "holder",
+          "requests": 1,
+          "code": "permission_denied"
+        }
+      ]
+    },
+    {
+      "name": "a sibling leases for another's grandchild",
+      "as": "sibling",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "grandchild",
+          "requests": 1,
+          "code": "permission_denied"
+        }
+      ]
+    },
+    {
+      "name": "the holder leases for a stranger",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "stranger",
+          "requests": 1,
+          "code": "permission_denied"
+        }
+      ]
+    },
+    {
+      "name": "a capability without share",
+      "as": "stranger",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "stranger",
+          "requests": 1,
+          "code": "permission_denied"
+        }
+      ]
+    },
+    {
+      "name": "a revoked child",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "revoked",
+          "requests": 1,
+          "code": "permission_denied",
+          "limes_code": "revoked"
+        }
+      ]
+    },
+    {
+      "name": "no such capability",
+      "as": "holder",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "unknown",
+          "requests": 1,
+          "code": "not_found",
+          "limes_code": "not_found"
+        }
+      ]
+    },
+    {
+      "name": "a Biscuit copy",
+      "as": "copy",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "holder",
+          "requests": 1,
+          "code": "failed_precondition"
+        }
+      ]
+    },
+    {
+      "name": "the holder's own Biscuit",
+      "as": "biscuit",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "holder",
+          "requests": 1,
+          "code": "failed_precondition"
+        }
+      ]
+    }
+  ]
+}

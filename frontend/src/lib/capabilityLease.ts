@@ -7,6 +7,7 @@ import type {
   CapabilityServiceLeaseRequestSchema,
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 import {
+  formatMoney,
   moneyFromDecimal,
   moneyFromNanos,
   moneyToNanos,
@@ -117,4 +118,25 @@ export function leaseRequestsRemaining(lease: CapabilityLease): bigint {
 export function leaseExpired(lease: CapabilityLease, now: Date): boolean {
   if (!lease.expiresAt) return false;
   return timestampDate(lease.expiresAt).getTime() <= now.getTime();
+}
+
+/**
+ * What a list row says of a capability's lease: what it has left of the
+ * budget and of the requests it holds — only what it holds any of — or that
+ * it has run out and waits to be settled.
+ */
+export function leaseSummary(
+  lease: CapabilityLease,
+  now: Date,
+  fractionDigits?: number,
+): string {
+  if (leaseExpired(lease, now)) return "lease ended";
+  const parts: string[] = [];
+  if (moneyToNanos(lease.amount) > 0n) {
+    parts.push(formatMoney(leaseRemaining(lease), { fractionDigits }));
+  }
+  if (lease.requests > 0n) {
+    parts.push(`${leaseRequestsRemaining(lease)} req`);
+  }
+  return `leased · ${parts.join(" · ")} left`;
 }

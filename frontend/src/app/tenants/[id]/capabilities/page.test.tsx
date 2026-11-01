@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   tenantId: "t-1",
   list: vi.fn(),
   getUsage: vi.fn(),
+  getLease: vi.fn(),
   listOperationGrants: vi.fn(),
   issue: vi.fn(),
   revoke: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/connect/client", () => ({
   capabilityClient: {
     list: h.list,
     getUsage: h.getUsage,
+    getLease: h.getLease,
     issue: h.issue,
     revoke: h.revoke,
     revokeBiscuit: h.revokeBiscuit,
@@ -112,9 +114,66 @@ beforeEach(() => {
     requestCount: 0n,
     spent: { currencyCode: "XXX", units: 0n, nanos: 0 },
   });
+  h.getLease
+    .mockReset()
+    .mockRejectedValue(new ConnectError("no lease", Code.NotFound));
   h.issue.mockReset();
   h.revoke.mockReset();
   h.showNotification.mockReset();
+});
+
+describe("CapabilitiesPage's leases", () => {
+  const active = (id: string) => ({
+    ...makeCap(id),
+    disposition: CapabilityDisposition.ACTIVE,
+  });
+  // Ends an hour from now, so it is still open whenever the test runs.
+  const lease = {
+    lease: {
+      id: "lease-1",
+      amount: { currencyCode: "XXX", units: 0n, nanos: 0 },
+      spent: { currencyCode: "XXX", units: 0n, nanos: 0 },
+      requests: 10n,
+      requestsSpent: 4n,
+      expiresAt: {
+        seconds: BigInt(Math.floor(Date.now() / 1000) + 3600),
+        nanos: 0,
+      },
+    },
+  };
+
+  // A capability's row says what its lease has left, used or not: a lease is
+  // most often opened before anything is spent.
+  it("says what each held lease has left", async () => {
+    h.list.mockResolvedValue({
+      capabilities: [active("cap-used"), active("cap-new")],
+    });
+    h.getUsage.mockImplementation(({ id }: { id: string }) =>
+      id === "cap-new"
+        ? Promise.reject(new ConnectError("never", Code.NotFound))
+        : Promise.resolve({
+            requestCount: 1n,
+            spent: { currencyCode: "XXX", units: 0n, nanos: 0 },
+          }),
+    );
+    h.getLease.mockResolvedValue(lease);
+    render(<CapabilitiesPage />);
+    expect(await screen.findAllByText("leased · 6 req left")).toHaveLength(2);
+    expect(screen.getByText("never used")).toBeInTheDocument();
+  });
+
+  it("reads no lease of a capability no longer active", async () => {
+    h.list.mockResolvedValue({
+      capabilities: [
+        { ...makeCap("cap-gone"), disposition: CapabilityDisposition.REVOKED },
+        active("cap-live"),
+      ],
+    });
+    render(<CapabilitiesPage />);
+    await waitFor(() => expect(h.getLease).toHaveBeenCalledTimes(1));
+    expect(h.getLease.mock.calls[0][0]).toEqual({ id: "cap-live" });
+    expect(screen.queryByText(/leased ·/)).not.toBeInTheDocument();
+  });
 });
 
 describe("CapabilitiesPage", () => {
