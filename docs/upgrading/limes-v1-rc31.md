@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.31
+## sdk/go/v0.135.0 — limes v1.0.0-rc.31
 
 - The limes schema moves to version 36. pgstore v0.60.0 migrates it on
   start, and keeps a token exchange's record until its subject token
