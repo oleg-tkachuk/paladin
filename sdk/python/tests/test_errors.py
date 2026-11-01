@@ -10,6 +10,7 @@ import threading
 import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from wsgiref.simple_server import WSGIRequestHandler, make_server
 
 import pytest
@@ -23,6 +24,7 @@ from paladin import (
     ERROR_DOMAIN,
     HEADER_RETRY_AFTER,
     HEADER_SERVER_VERSION,
+    LIMES_CODE_KEY,
     AlreadyExistsError,
     Client,
     ContractSkewError,
@@ -40,6 +42,7 @@ from paladin import (
     connect_async,
     error_detail,
     error_details,
+    limes_code,
     reason,
     unpack_detail,
 )
@@ -189,6 +192,49 @@ def test_errors_are_typed_and_carry_the_reason(  # type: ignore[no-untyped-def]
     assert (e.procedure, e.server_version) == (PROCEDURE, SERVER_VERSION)
     assert e.sdk_version
     assert len(e.decoded_details) == len(details)
+
+
+ERROR_INFO_CONTRACT = Path(__file__).resolve().parents[2] / "testdata" / "error_info.json"
+
+
+def test_error_info_matches_the_shared_contract() -> None:
+    """sdk/testdata/error_info.json holds this SDK, Go's and the server alike."""
+    contract = json.loads(ERROR_INFO_CONTRACT.read_text())
+    assert (contract["domain"], contract["limes_code_key"]) == (ERROR_DOMAIN, LIMES_CODE_KEY)
+
+
+def _with_code(domain: str, why: str, code: str) -> error_details_pb2.ErrorInfo:
+    found = info(domain, why)
+    found.metadata[LIMES_CODE_KEY] = code
+    return found
+
+
+@pytest.mark.parametrize(
+    ("details", "want"),
+    [
+        (
+            [
+                _with_code(
+                    ERROR_DOMAIN, "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED", "budget_exceeded"
+                )
+            ],
+            "budget_exceeded",
+        ),
+        ([_with_code(ERROR_DOMAIN, "", "store_unavailable")], "store_unavailable"),
+        (
+            [_with_code("elsewhere", "ERROR_REASON_CAPABILITY_BUDGET_EXCEEDED", "budget_exceeded")],
+            "",
+        ),
+        ([info(ERROR_DOMAIN, error_reason_pb2.ErrorReason.Name(_BUCKET))], ""),
+    ],
+    ids=["a refusal, with its reason", "a code alone", "another domain's", "not from the library"],
+)
+def test_errors_carry_the_limes_code(serve, details, want) -> None:  # type: ignore[no-untyped-def]
+    url = serve(Failing(ConnectError(Code.RESOURCE_EXHAUSTED, "refused", error_details(details))))
+    with pytest.raises(PaladinError) as err:
+        _call(url)
+    assert limes_code(err.value) == want
+    assert limes_code(ValueError("plain")) == ""
 
 
 def test_resource_exhausted_carries_retry_after(serve) -> None:  # type: ignore[no-untyped-def]

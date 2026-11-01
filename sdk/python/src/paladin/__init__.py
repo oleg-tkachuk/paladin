@@ -70,6 +70,7 @@ from paladin.ensure import aensure, ensure
 from paladin.errors import (
     ERROR_DOMAIN,
     HEADER_SERVER_VERSION,
+    LIMES_CODE_KEY,
     AlreadyExistsError,
     ContractSkewError,
     FailedPreconditionError,
@@ -82,6 +83,7 @@ from paladin.errors import (
     VersionConflictError,
     error_detail,
     error_details,
+    limes_code,
     reason,
     unpack_detail,
 )
@@ -211,6 +213,7 @@ __all__ = [
     "HEADER_SERVER_VERSION",
     "HEADER_USER_AGENT",
     "HEADER_WEBHOOK_SIGNATURE",
+    "LIMES_CODE_KEY",
     "LOGGER_NAME",
     "OBJECT_RESOURCE_SCHEME",
     "OP_DELETE",
@@ -320,6 +323,7 @@ __all__ = [
     "error_details",
     "expired",
     "idempotency_key",
+    "limes_code",
     "lookup_object",
     "mask",
     "no_idempotency_key",

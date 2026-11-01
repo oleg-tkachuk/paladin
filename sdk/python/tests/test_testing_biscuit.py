@@ -20,7 +20,7 @@ from paladin.admin.v1 import capability_service_pb2 as pb
 from paladin.admin.v1 import types_pb2 as admin_types
 from paladin.common.v1 import error_reason_pb2
 from paladin.data.v1 import object_service_pb2, storage_bootstrap_service_pb2
-from paladin.errors import reason
+from paladin.errors import limes_code, reason
 from paladin.testing import FakePaladin
 
 TABLE = Path(__file__).resolve().parents[2] / "testdata" / "biscuit_attenuations.json"
@@ -77,13 +77,19 @@ def _issue(
     )
 
 
-def _answer(call: Any) -> tuple[str, str, str]:
-    """What a call's refusal says — code, reason, message — or nothing."""
+def _answer(call: Any) -> tuple[str, str, str, str]:
+    """What a call's refusal says — code, reason, limes code, message — or
+    nothing."""
     try:
         call()
     except ConnectError as err:
-        return err.code.value, error_reason_pb2.ErrorReason.Name(reason(err)), err.message
-    return "", "", ""
+        return (
+            err.code.value,
+            error_reason_pb2.ErrorReason.Name(reason(err)),
+            limes_code(err),
+            err.message,
+        )
+    return "", "", "", ""
 
 
 def _narrow(token: str, blocks: list[dict[str, Any]], filled: Any) -> str:
@@ -142,7 +148,12 @@ def test_a_copy_is_held_as_the_table_says(strict: FakePaladin, case: dict[str, A
         ),
     }
     for i, call in enumerate(case["calls"]):
-        want = (call.get("code", ""), call.get("reason", ""), filled(call.get("message", "")))
+        want = (
+            call.get("code", ""),
+            call.get("reason", ""),
+            call.get("limes_code", ""),
+            filled(call.get("message", "")),
+        )
         assert _answer(calls[call["call"]]) == want, f"call {i} ({call['call']})"
 
 
@@ -186,4 +197,4 @@ def test_a_copy_cannot_delegate(strict: FakePaladin) -> None:
 def test_without_the_extra_the_biscuit_is_a_stand_in(strict: FakePaladin) -> None:
     obj = strict.put(strict.collection(), "k", "text/plain", b"x")
     resp = _issue(strict, ops=[str(Op.GET)])
-    assert _answer(_get(strict.connect(capability=biscuit_of(resp)), obj.name)) == ("", "", "")
+    assert _answer(_get(strict.connect(capability=biscuit_of(resp)), obj.name)) == ("", "", "", "")

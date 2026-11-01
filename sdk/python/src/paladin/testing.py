@@ -93,7 +93,7 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceSync,
     StorageBootstrapServiceWSGIApplication,
 )
-from paladin.errors import ERROR_DOMAIN, HEADER_SERVER_VERSION, error_details
+from paladin.errors import ERROR_DOMAIN, HEADER_SERVER_VERSION, LIMES_CODE_KEY, error_details
 from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, ObjectName
 from paladin.transfer import CHECKSUM_SHA256
 
@@ -558,14 +558,21 @@ def _allows_resource(caveats: capability_service_pb2.CapabilityCaveats, uri: str
     )
 
 
+_CAPABILITY_REASON_PREFIX = "ERROR_REASON_CAPABILITY_"
+"""Starts every capability refusal's ErrorReason; the rest, in lower case, is
+its limes code, as the server derives one from the other."""
+
+
 def _capability_refusal(
     code: Code, reason: error_reason_pb2.ErrorReason.ValueType, message: str
 ) -> ConnectError:
     """The server's refusal of a capability: ``code``, ``message``, and an
-    ErrorInfo naming ``reason``."""
-    info = error_details_pb2.ErrorInfo(
-        reason=error_reason_pb2.ErrorReason.Name(reason), domain=ERROR_DOMAIN
-    )
+    ErrorInfo naming ``reason`` and, for a refusal of the capability library's,
+    its limes code."""
+    name = error_reason_pb2.ErrorReason.Name(reason)
+    info = error_details_pb2.ErrorInfo(reason=name, domain=ERROR_DOMAIN)
+    if name.startswith(_CAPABILITY_REASON_PREFIX):
+        info.metadata[LIMES_CODE_KEY] = name.removeprefix(_CAPABILITY_REASON_PREFIX).lower()
     return ConnectError(code, message, error_details([info]))
 
 
