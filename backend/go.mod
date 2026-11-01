@@ -45,7 +45,7 @@ require (
 	github.com/oleg-tkachuk/limes/exchange v0.15.3
 	github.com/oleg-tkachuk/limes/otelmetric v0.13.2
 	github.com/oleg-tkachuk/limes/pgstore v0.56.0
-	github.com/oleg-tkachuk/paladin/sdk/go v0.133.0
+	github.com/oleg-tkachuk/paladin/sdk/go v0.134.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.16.0
