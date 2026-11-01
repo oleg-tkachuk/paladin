@@ -29,11 +29,12 @@ func TestDefaultsAreWhatLoadFillsIn(t *testing.T) {
 	// Blocks the minimal configuration leaves to the schema entirely: what
 	// Load gives them is the defaults, all of it.
 	for name, pair := range map[string][2]any{
-		"logger.level":                    {d.Logger.Level, loaded.Logger.Level},
-		"logger.sampling":                 {d.Logger.Sampling, loaded.Logger.Sampling},
-		"datastores.postgres.pool":        {d.Datastores.Postgres.Pool, loaded.Datastores.Postgres.Pool},
-		"worker.jobs.capability":          {d.Worker.Jobs.Capability, loaded.Worker.Jobs.Capability},
-		"capability.revocation_cache_ttl": {d.Capability.RevocationCacheTTL, loaded.Capability.RevocationCacheTTL},
+		"logger.level":                          {d.Logger.Level, loaded.Logger.Level},
+		"logger.sampling":                       {d.Logger.Sampling, loaded.Logger.Sampling},
+		"datastores.postgres.pool":              {d.Datastores.Postgres.Pool, loaded.Datastores.Postgres.Pool},
+		"worker.jobs.capability":                {d.Worker.Jobs.Capability, loaded.Worker.Jobs.Capability},
+		"capability.revocation_cache_ttl":       {d.Capability.RevocationCacheTTL, loaded.Capability.RevocationCacheTTL},
+		"capability.revocation_cache_max_stale": {d.Capability.RevocationCacheMaxStale, loaded.Capability.RevocationCacheMaxStale},
 	} {
 		if !reflect.DeepEqual(pair[0], pair[1]) {
 			t.Errorf("%s: defaults %+v, Load fills in %+v", name, pair[0], pair[1])

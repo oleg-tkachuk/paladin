@@ -79,6 +79,18 @@ func (disabledCapabilityServiceHandler) Revoke(ctx context.Context, _ *adminv1.C
 	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }
 
+func (disabledCapabilityServiceHandler) Lease(ctx context.Context, _ *adminv1.CapabilityServiceLeaseRequest) (*adminv1.CapabilityServiceLeaseResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
+}
+
+func (disabledCapabilityServiceHandler) GetLease(ctx context.Context, _ *adminv1.CapabilityServiceGetLeaseRequest) (*adminv1.CapabilityServiceGetLeaseResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
+}
+
+func (disabledCapabilityServiceHandler) SettleLease(ctx context.Context, _ *adminv1.CapabilityServiceSettleLeaseRequest) (*adminv1.CapabilityServiceSettleLeaseResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
+}
+
 func (disabledCapabilityServiceHandler) RevokeRun(ctx context.Context, _ *adminv1.CapabilityServiceRevokeRunRequest) (*adminv1.CapabilityServiceRevokeRunResponse, error) {
 	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
 }

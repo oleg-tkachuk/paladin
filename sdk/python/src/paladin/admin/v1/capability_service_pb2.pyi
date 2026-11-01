@@ -1,6 +1,7 @@
 import datetime
 
 from buf.validate import validate_pb2 as _validate_pb2
+from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.api import field_behavior_pb2 as _field_behavior_pb2
 from google.type import money_pb2 as _money_pb2
@@ -368,6 +369,68 @@ class CapabilityServiceGetUsageResponse(_message.Message):
     updated_at: _timestamp_pb2.Timestamp
     spent: _money_pb2.Money
     def __init__(self, capability_id: _Optional[str] = ..., request_count: _Optional[int] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
+
+class CapabilityServiceLeaseRequest(_message.Message):
+    __slots__ = ("id", "amount", "requests", "ttl")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    AMOUNT_FIELD_NUMBER: _ClassVar[int]
+    REQUESTS_FIELD_NUMBER: _ClassVar[int]
+    TTL_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    amount: _money_pb2.Money
+    requests: int
+    ttl: _duration_pb2.Duration
+    def __init__(self, id: _Optional[str] = ..., amount: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., requests: _Optional[int] = ..., ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
+
+class CapabilityServiceLeaseResponse(_message.Message):
+    __slots__ = ("lease",)
+    LEASE_FIELD_NUMBER: _ClassVar[int]
+    lease: CapabilityLease
+    def __init__(self, lease: _Optional[_Union[CapabilityLease, _Mapping]] = ...) -> None: ...
+
+class CapabilityServiceGetLeaseRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class CapabilityServiceGetLeaseResponse(_message.Message):
+    __slots__ = ("lease",)
+    LEASE_FIELD_NUMBER: _ClassVar[int]
+    lease: CapabilityLease
+    def __init__(self, lease: _Optional[_Union[CapabilityLease, _Mapping]] = ...) -> None: ...
+
+class CapabilityServiceSettleLeaseRequest(_message.Message):
+    __slots__ = ("id",)
+    ID_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    def __init__(self, id: _Optional[str] = ...) -> None: ...
+
+class CapabilityServiceSettleLeaseResponse(_message.Message):
+    __slots__ = ("lease",)
+    LEASE_FIELD_NUMBER: _ClassVar[int]
+    lease: CapabilityLease
+    def __init__(self, lease: _Optional[_Union[CapabilityLease, _Mapping]] = ...) -> None: ...
+
+class CapabilityLease(_message.Message):
+    __slots__ = ("id", "capability_id", "tenant_id", "amount", "spent", "requests", "requests_spent", "expires_at")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    CAPABILITY_ID_FIELD_NUMBER: _ClassVar[int]
+    TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    AMOUNT_FIELD_NUMBER: _ClassVar[int]
+    SPENT_FIELD_NUMBER: _ClassVar[int]
+    REQUESTS_FIELD_NUMBER: _ClassVar[int]
+    REQUESTS_SPENT_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    capability_id: str
+    tenant_id: str
+    amount: _money_pb2.Money
+    spent: _money_pb2.Money
+    requests: int
+    requests_spent: int
+    expires_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., capability_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., amount: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., requests: _Optional[int] = ..., requests_spent: _Optional[int] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class CapabilityServiceListOperationGrantsRequest(_message.Message):
     __slots__ = ()

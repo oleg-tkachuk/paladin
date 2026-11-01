@@ -1,6 +1,7 @@
 "use client";
 
 import { TrashIcon } from "@heroicons/react/24/outline";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { DetailPanel } from "@/components/ui/DetailPanel";
@@ -8,20 +9,28 @@ import { Button } from "@/components/ui/button";
 import {
   type CapabilityUsage,
   capabilityDetailQuery,
+  capabilityLeaseQuery,
   capabilityUsageQuery,
 } from "@/lib/queries/details";
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
 import { T } from "@/lib/ui/typography";
+import { ABSTRACT_UNIT_CODE } from "@/lib/format/money";
+import { budgetUnit } from "@/lib/format/budgetCeiling";
 
 import { capabilityRun, runCapabilitiesHref } from "@/lib/capabilityRun";
 
 import {
   DetailsBody,
+  type LeaseActions,
   type RecordEntry,
   type RunActions,
   type UsageEntry,
 } from "./_details";
 import { isCapabilityRevoked } from "./_disposition";
+import {
+  LeaseCapabilityDialog,
+  SettleLeaseDialog,
+} from "./LeaseCapabilityDialog";
 
 /**
  * A capability's details, in a panel beside the list. Renders the row data
@@ -69,6 +78,24 @@ export function CapabilityDetailsPanel({
   const record: RecordEntry = recordQuery.isError
     ? "unavailable"
     : recordQuery.data;
+  const revoked =
+    !!shown &&
+    isCapabilityRevoked(shown, recordQuery.data?.revocation !== undefined);
+  // A revoked capability's lease is settled with its revoke; it leases none.
+  const leaseQuery = useQuery({
+    ...capabilityLeaseQuery(id ?? ""),
+    enabled: !!id && !!shown && !revoked,
+  });
+  const [leasing, setLeasing] = useState<string | null>(null);
+  const [settling, setSettling] = useState<string | null>(null);
+  const lease: LeaseActions | undefined =
+    id && shown && !revoked
+      ? {
+          entry: leaseQuery.isError ? "unavailable" : leaseQuery.data,
+          onLease: () => setLeasing(id),
+          onSettle: () => setSettling(id),
+        }
+      : undefined;
 
   return (
     <DetailPanel
@@ -79,11 +106,7 @@ export function CapabilityDetailsPanel({
       identifier={id ?? undefined}
       footer={
         // A revoked capability has nothing left to revoke.
-        shown &&
-        !isCapabilityRevoked(
-          shown,
-          recordQuery.data?.revocation !== undefined,
-        ) ? (
+        shown && !revoked ? (
           <Button
             variant="destructive"
             size="sm"
@@ -101,6 +124,7 @@ export function CapabilityDetailsPanel({
           usageEntry={usage}
           record={record}
           run={runActions(shown, tenant, onRevokeRun)}
+          lease={lease}
         />
       ) : (
         <p className={T.hint}>
@@ -109,6 +133,12 @@ export function CapabilityDetailsPanel({
             : "Reading the capability…"}
         </p>
       )}
+      <LeaseCapabilityDialog
+        id={leasing}
+        unit={budgetUnit(shown?.caveats?.budgetCeiling) ?? ABSTRACT_UNIT_CODE}
+        onClose={() => setLeasing(null)}
+      />
+      <SettleLeaseDialog id={settling} onClose={() => setSettling(null)} />
     </DetailPanel>
   );
 }

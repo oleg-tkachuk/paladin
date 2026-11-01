@@ -21,6 +21,12 @@ import { ActorName } from "@/components/features/audit/ActorName";
 import { Duration } from "@/components/Duration";
 import { CapabilityOpGrants } from "@/components/features/capabilities/CapabilityOpGrants";
 import { capabilityGrant, type CapabilityGrant } from "@/lib/oauthGrants";
+import {
+  type CapabilityLeaseEntry,
+  leaseExpired,
+  leaseRemaining,
+  leaseRequestsRemaining,
+} from "@/lib/capabilityLease";
 
 // UsageEntry is the capability's usage: undefined while loading,
 // "unavailable" when the read failed.
@@ -53,17 +59,30 @@ export interface RunActions {
   onRevoke: () => void;
 }
 
+/** The capability's budget lease, and what to do with it. */
+export interface LeaseActions {
+  /** The lease: undefined while loading, "unavailable" when the read failed. */
+  entry: CapabilityLeaseEntry | "unavailable" | undefined;
+  /** Asks to lease budget or requests; the page takes the amounts. */
+  onLease: () => void;
+  /** Asks to settle the lease; the page confirms it. */
+  onSettle: () => void;
+}
+
 export function DetailsBody({
   cap,
   usageEntry,
   record,
   run,
+  lease,
 }: {
   cap: Capability;
   usageEntry: UsageEntry;
   record: RecordEntry;
   /** The capability's agent run, and what to do with it; none for no run. */
   run?: RunActions;
+  /** Its budget lease; none for a capability that can hold none. */
+  lease?: LeaseActions;
 }) {
   // Capability without a budget unit (metering-only) renders as XXX, not
   // USD — the bare "$" would imply currency where none is pinned.
@@ -294,6 +313,8 @@ export function DetailsBody({
         />
       </DetailsSection>
 
+      {lease ? <LeaseSection lease={lease} unit={unit} /> : null}
+
       <DetailsSection title="Issuance & revocation">
         <IssuanceRows record={record} tenantId={cap.subject?.tenantId ?? ""} />
       </DetailsSection>
@@ -498,5 +519,69 @@ function DetailRow({
         {value}
       </dd>
     </>
+  );
+}
+
+// LeaseSection shows the budget a capability holds of its chain in advance,
+// with what is left of it, and offers to lease more or settle it.
+function LeaseSection({ lease, unit }: { lease: LeaseActions; unit: string }) {
+  const { entry } = lease;
+  const held = typeof entry === "object" ? entry : null;
+  const money = (m: Parameters<typeof formatMoney>[0]) =>
+    formatMoney(m, { fallbackUnit: unit, fractionDigits: SPEND_DIGITS });
+  return (
+    <DetailsSection title="Budget lease">
+      {held ? (
+        <>
+          <DetailRow
+            label="Lease"
+            value={<CopyableId value={held.id} label="lease ID" />}
+          />
+          <DetailRow
+            label="Budget held / spent"
+            value={`${money(held.amount)} / ${money(held.spent)}`}
+            mono
+          />
+          <DetailRow
+            label="Budget left"
+            value={money(leaseRemaining(held))}
+            mono
+          />
+          <DetailRow
+            label="Requests held / spent"
+            value={`${held.requests} / ${held.requestsSpent} (${leaseRequestsRemaining(held)} left)`}
+            mono
+          />
+          <DetailRow
+            label={leaseExpired(held, new Date()) ? "Ended" : "Ends"}
+            value={<Timestamp ts={held.expiresAt} />}
+            mono
+          />
+        </>
+      ) : (
+        <DetailRow
+          label="Lease"
+          value={
+            entry === undefined
+              ? "loading…"
+              : entry === "unavailable"
+                ? "unavailable"
+                : "none — charges go through every ancestor and the tenant"
+          }
+        />
+      )}
+      {entry !== undefined && entry !== "unavailable" ? (
+        <div className="col-span-2 flex flex-wrap gap-2 pt-1">
+          <Button variant="outline" size="sm" onClick={lease.onLease}>
+            {held ? "Lease more" : "Lease budget"}
+          </Button>
+          {held ? (
+            <Button variant="outline" size="sm" onClick={lease.onSettle}>
+              Settle lease
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </DetailsSection>
   );
 }

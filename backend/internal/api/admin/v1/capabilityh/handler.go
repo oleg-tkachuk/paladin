@@ -61,6 +61,8 @@ type Handler struct {
 	holds HoldReleaser
 	// runs revokes an agent run's capabilities; see WithRunRevocation.
 	runs RunRevoker
+	// leases serves Lease, GetLease and SettleLease; see WithLeases.
+	leases meter.Leaser
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.

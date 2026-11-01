@@ -5,6 +5,7 @@ package paladin.admin.v1;
 option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1";
 
 import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/api/field_behavior.proto";
 import "google/type/money.proto";
@@ -105,6 +106,27 @@ service CapabilityService {
   // and on what basis: the built-in policy's actions, a tenant policy, the
   // operation it is asserted beside, or the caveats alone. The same for every
   // caller; it reads no tenant.
+  // Lease holds budget and requests of a capability's chain for it in
+  // advance, so its charges and bumps, and those of the capabilities
+  // delegated from it, lock its own counters rather than every ancestor's
+  // and the tenant's. Asked again while the lease is open, it adds to it.
+  //
+  // Errors: RESOURCE_EXHAUSTED when a ceiling of the chain cannot hold it;
+  // FAILED_PRECONDITION with limes code lease_nested under an ancestor that
+  // holds a lease, or leasing_disabled while the deployment has leasing off;
+  // INVALID_ARGUMENT for a Biscuit copy, nothing to lease, or another unit.
+  rpc Lease(CapabilityServiceLeaseRequest) returns (CapabilityServiceLeaseResponse);
+
+  // GetLease returns the lease a capability holds, open or expired and not
+  // yet settled. NOT_FOUND when it holds none.
+  rpc GetLease(CapabilityServiceGetLeaseRequest) returns (CapabilityServiceGetLeaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // SettleLease ends a capability's lease: what it spent is charged to every
+  // ancestor and the tenant, the rest released. NOT_FOUND when it holds none.
+  rpc SettleLease(CapabilityServiceSettleLeaseRequest) returns (CapabilityServiceSettleLeaseResponse);
+
   rpc ListOperationGrants(CapabilityServiceListOperationGrantsRequest) returns (CapabilityServiceListOperationGrantsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -516,6 +538,59 @@ message CapabilityServiceGetUsageResponse {
   reserved "unit_code", "spent_micros";
   // spent is the accumulated spend, in the capability's currency.
   google.type.Money spent = 7;
+}
+
+message CapabilityServiceLeaseRequest {
+  // id is the capability the lease is for.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // amount is the budget to lease, in the capability's unit; absent leases
+  // none, and the lease covers no charge.
+  google.type.Money amount = 2;
+  // requests is how many requests to lease; zero leases none, and the lease
+  // covers no request.
+  int64 requests = 3 [(buf.validate.field).int64.gte = 0];
+  // ttl is how long the lease lasts unless settled, at most until the
+  // capability expires; absent is the store's default.
+  google.protobuf.Duration ttl = 4;
+}
+
+message CapabilityServiceLeaseResponse {
+  CapabilityLease lease = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message CapabilityServiceGetLeaseRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message CapabilityServiceGetLeaseResponse {
+  CapabilityLease lease = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message CapabilityServiceSettleLeaseRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message CapabilityServiceSettleLeaseResponse {
+  // lease is the lease as it ended.
+  CapabilityLease lease = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// CapabilityLease is budget and requests a capability holds of its chain.
+message CapabilityLease {
+  // id is the lease's, from its first Lease until it is settled.
+  string id = 1;
+  string capability_id = 2;
+  string tenant_id = 3;
+  // amount is what the lease holds, every top-up added; spent is what its
+  // capability and those delegated from it charged under it.
+  google.type.Money amount = 4;
+  google.type.Money spent = 5;
+  // requests is how many requests the lease holds; requests_spent how many
+  // were made under it.
+  int64 requests = 6;
+  int64 requests_spent = 7;
+  // expires_at is when the lease ends unless settled first.
+  google.protobuf.Timestamp expires_at = 8;
 }
 
 message CapabilityServiceListOperationGrantsRequest {}

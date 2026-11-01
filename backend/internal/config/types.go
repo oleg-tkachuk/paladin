@@ -1293,6 +1293,18 @@ type Capability struct {
 	// RevocationCacheTTL at once. Default 30s; one shorter than
 	// RevocationCacheTTL, zero among them, is raised to it.
 	RevocationCacheSyncedTTL time.Duration `yaml:"revocation_cache_synced_ttl" json:"revocation_cache_synced_ttl"`
+
+	// RevocationCacheMaxStale is how long past its TTL a cached answer
+	// stands in for a revocation store that fails, so a short database
+	// outage does not refuse every capability. A revocation made in that
+	// window goes unseen for as long. Default 30s; zero fails closed; past
+	// limes.MaxRevocationCacheStale is refused at startup.
+	RevocationCacheMaxStale time.Duration `yaml:"revocation_cache_max_stale" json:"revocation_cache_max_stale"`
+
+	// BudgetLeases lets CapabilityService.Lease open budget leases. Turn it
+	// on only once every replica runs a release that knows leases; off, a
+	// Lease is refused with limes code leasing_disabled. Default true.
+	BudgetLeases bool `yaml:"budget_leases" json:"budget_leases"`
 }
 
 // APIToken configures the hashed-bearer M2M token subsystem. Distinct

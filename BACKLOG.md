@@ -389,6 +389,20 @@ open deliberately — each notes why._
 
 ## Features
 
+### An agent leases budget for the capabilities it delegated
+
+- **Status:** Deferred.
+- **Reason:** `CapabilityService.Lease` is gated by Cedar for operators
+  (`IssueCapability`); an orchestrator presenting its own capability cannot
+  yet lease for the children it delegated, which is the case limes' budget
+  leases are for (limes ADR-0017).
+- **Definition of Done:** `Lease` and `SettleLease` accept a presented
+  capability with `OpShare` acting on itself or a capability delegated
+  from it, gated as `Delegate` is, with tests for a non-descendant and a
+  Biscuit copy refused; the Go and Python SDK fakes serve all three lease
+  RPCs, held to the server by a fidelity test.
+- **Blockers:** none.
+
 ### Public collections on a store without bucket policies
 
 - **Status:** Aspirational

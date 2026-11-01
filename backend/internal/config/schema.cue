@@ -674,6 +674,11 @@ capability: {
   // How long a revocation answer is cached while the revocation watcher
   // listens; the TTL above bounds it while the watcher is down.
   revocation_cache_synced_ttl: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  // How long past its TTL a cached answer stands in for a failing
+  // revocation store; 0 fails closed.
+  revocation_cache_max_stale: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  // Whether CapabilityService.Lease opens budget leases.
+  budget_leases: bool | *true
   // DPoP server nonces (RFC 9449 §8). The key is shared by every replica;
   // inline for dev, key_secret otherwise.
   dpop_nonce: {

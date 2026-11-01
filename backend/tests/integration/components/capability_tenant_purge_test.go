@@ -90,6 +90,8 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	}
 	if _, _, err := records.ClaimExchange(acting, limes.ExchangeKey{
 		TenantID: tenant, Issuer: seedExchangeIssuer, TokenID: seedExchangeTokenID,
+		// The subject token lives as long as the capability exchanged for it.
+		TokenExpiresAt: c.ExpiresAt,
 	}, c.ID); err != nil {
 		t.Fatalf("claim exchange: %v", err)
 	}

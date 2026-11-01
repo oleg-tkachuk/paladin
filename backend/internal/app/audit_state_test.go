@@ -30,6 +30,8 @@ var noStateReader = map[string]string{
 	adminconnect.CapabilityServiceRevokeProcedure:                         "the answer says what the capability was before and what stopped it",
 	adminconnect.CapabilityServiceRevokeBiscuitProcedure:                  "a copy of a Biscuit has no record of its own to read",
 	adminconnect.CapabilityServiceRevokeRunProcedure:                      "a run has no record of its own; the answer counts what it revoked",
+	adminconnect.CapabilityServiceLeaseProcedure:                          "a lease has no Get on the record it changes; the answer is the lease as it stands",
+	adminconnect.CapabilityServiceSettleLeaseProcedure:                    "the answer is the lease as it ended",
 	adminconnect.EventSubscriptionServiceRedriveFailedDeliveriesProcedure: "acts on deliveries, not on the subscription",
 	adminconnect.EventSubscriptionServiceTestSubscriptionProcedure:        "sends a test event; the subscription is unchanged",
 	adminconnect.OAuthClientServiceDeleteOAuthClientProcedure:             "a client has no Get to read it by; the request names the client removed",

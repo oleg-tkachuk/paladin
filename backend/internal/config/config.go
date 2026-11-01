@@ -334,6 +334,7 @@ func (c *Config) Validate() error {
 const (
 	revocationCacheTTLKey       = "revocation_cache_ttl"
 	revocationCacheSyncedTTLKey = "revocation_cache_synced_ttl"
+	revocationCacheMaxStaleKey  = "revocation_cache_max_stale"
 	chargesOlderThanKey         = "charges_older_than"
 )
 
@@ -342,7 +343,8 @@ const (
 // every verifier construction or every purge tick: a verifier leeway past
 // limes.MaxLeeway, and a purge retention shorter than limes.MinPurgeRetention,
 // which would drop a revocation while a verifier still honours its token, and
-// a revocation cache TTL past limes.MaxRevocationCacheSyncedTTL.
+// a revocation cache TTL past limes.MaxRevocationCacheSyncedTTL, and a
+// stale answer kept past limes.MaxRevocationCacheStale.
 func (c *Config) validateCapabilityBounds() error {
 	if l := c.Capability.VerifierLeeway; l < 0 || l > limes.MaxLeeway {
 		return fmt.Errorf("capability: verifier_leeway %s is outside 0..%s", l, limes.MaxLeeway)
@@ -355,6 +357,9 @@ func (c *Config) validateCapabilityBounds() error {
 		if ttl > limes.MaxRevocationCacheSyncedTTL {
 			return fmt.Errorf("capability: %s %s is longer than %s", key, ttl, limes.MaxRevocationCacheSyncedTTL)
 		}
+	}
+	if s := c.Capability.RevocationCacheMaxStale; s < 0 || s > limes.MaxRevocationCacheStale {
+		return fmt.Errorf("capability: %s %s is outside 0..%s", revocationCacheMaxStaleKey, s, limes.MaxRevocationCacheStale)
 	}
 	if r := c.Worker.Jobs.Capability.ExpiredFor; r != 0 && r < limes.MinPurgeRetention {
 		return fmt.Errorf("worker.jobs.capability: expired_for %s is shorter than %s", r, limes.MinPurgeRetention)
