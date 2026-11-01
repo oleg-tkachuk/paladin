@@ -6,3 +6,6 @@
   tenant, with no Cedar check. A Biscuit copy is refused
   (`FAILED_PRECONDITION`); a capability not below it, or revoked, is
   `PERMISSION_DENIED`.
+- Both SDKs' fakes (`paladintest`, `paladin.testing`) serve the three lease
+  calls with the server's rule of who may lease; a lease's spent amount
+  stays zero there, as the fakes count no budget.

@@ -602,7 +602,11 @@ handler, the Go SDK's fake and this one all run in every CI run, each
 required to give the row's code, Biscuit status and Biscuit. Every
 narrowing of a copy is a row of `sdk/testdata/biscuit_attenuations.json`,
 which the server's interceptor chain, the Go SDK's fake and this one run
-alike, each required to give the row's code, reason and message. The shared
+alike, each required to give the row's code, reason and message. Who may
+lease for a capability (`lease`, `get_lease`, `settle_lease`) is a row of
+`sdk/testdata/capability_leases.json`, which the server's handler, the Go
+SDK's fake and this one run alike; the fake counts no budget, so a lease's
+spent amount stays zero. The shared
 data-plane scenarios (`sdk/testdata/scenarios.json`) run against this fake
 in every CI run, as they run against the server in the stack gate, so a
 scenario the fake answers differently is red where it changed. Every

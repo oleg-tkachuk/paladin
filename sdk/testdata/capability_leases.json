@@ -1,5 +1,5 @@
 {
-  "_comment": "Who may lease budget for a capability, which the server and both SDKs' fakes are held to. Each case seeds, in one tenant, holder (ops get and share), child delegated from it (get and share), grandchild from child (get), revoked delegated from holder (get) and revoked, and stranger issued on its own (get); biscuit is holder's own Biscuit, and copy a copy of it narrowed to get and share. The steps run in order as the caller named by as: an operator for none, else presenting that capability. Each step names its call, the capability it is of (unknown: an id never issued), the requests it leases, and either the refusal \u2014 Connect's code and the ErrorInfo's limes_code (sdk/testdata/error_info.json) \u2014 or, when it succeeds, held: the requests the lease holds.",
+  "_comment": "Who may lease budget for a capability, which the server and both SDKs' fakes are held to. Each case seeds, in one tenant, holder (ops get and share), child and sibling delegated from it (get and share), grandchild from child (get), revoked delegated from holder (get) and revoked, and stranger issued on its own (get); biscuit is holder's own Biscuit, and copy a copy of it narrowed to get and share. The steps run in order as the caller named by as: an operator for none, else presenting that capability. Each step names its call \u2014 revoke revokes the capability as an operator, and answers nothing \u2014 the capability it is of (unknown: an id never issued), the requests it leases, and either the refusal \u2014 Connect's code and the ErrorInfo's limes_code (sdk/testdata/error_info.json) \u2014 or, when it succeeds, held: the requests the lease holds.",
   "cases": [
     {
       "name": "an operator leases, reads and settles",
@@ -36,6 +36,28 @@
         {
           "call": "settle_lease",
           "of": "child",
+          "code": "not_found",
+          "limes_code": "lease_not_found"
+        }
+      ]
+    },
+    {
+      "name": "a revoke settles the lease",
+      "as": "",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "grandchild",
+          "requests": 1,
+          "held": 1
+        },
+        {
+          "call": "revoke",
+          "of": "grandchild"
+        },
+        {
+          "call": "get_lease",
+          "of": "grandchild",
           "code": "not_found",
           "limes_code": "lease_not_found"
         }
@@ -114,6 +136,18 @@
         {
           "call": "lease",
           "of": "holder",
+          "requests": 1,
+          "code": "permission_denied"
+        }
+      ]
+    },
+    {
+      "name": "a sibling leases for another's grandchild",
+      "as": "sibling",
+      "steps": [
+        {
+          "call": "lease",
+          "of": "grandchild",
           "requests": 1,
           "code": "permission_denied"
         }

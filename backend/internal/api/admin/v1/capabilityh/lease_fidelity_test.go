@@ -29,6 +29,7 @@ const leaseTable = "../../../../../../sdk/testdata/capability_leases.json"
 const (
 	roleHolder     = "holder"
 	roleChild      = "child"
+	roleSibling    = "sibling"
 	roleGrandchild = "grandchild"
 	roleRevoked    = "revoked"
 	roleStranger   = "stranger"
@@ -42,6 +43,7 @@ const (
 	callLease       = "lease"
 	callGetLease    = "get_lease"
 	callSettleLease = "settle_lease"
+	callRevoke      = "revoke"
 )
 
 type leaseStep struct {
@@ -121,15 +123,23 @@ func answerOfLease(l *adminv1.CapabilityLease, err error) leaseAnswer {
 	return leaseAnswer{Held: l.GetRequests()}
 }
 
-// leaseCalls runs a step's call as a caller, on capability id.
+// leaseCalls runs a step's call as a caller, on capability id; revoke runs
+// as an operator.
 type leaseCalls interface {
+	Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevokeRequest) (*adminv1.CapabilityServiceRevokeResponse, error)
 	Lease(ctx context.Context, req *adminv1.CapabilityServiceLeaseRequest) (*adminv1.CapabilityServiceLeaseResponse, error)
 	GetLease(ctx context.Context, req *adminv1.CapabilityServiceGetLeaseRequest) (*adminv1.CapabilityServiceGetLeaseResponse, error)
 	SettleLease(ctx context.Context, req *adminv1.CapabilityServiceSettleLeaseRequest) (*adminv1.CapabilityServiceSettleLeaseResponse, error)
 }
 
-func runLeaseStep(ctx context.Context, c leaseCalls, s leaseStep, id string) leaseAnswer {
+func runLeaseStep(ctx context.Context, c, operator leaseCalls, operatorCtx context.Context, s leaseStep, id string) leaseAnswer {
 	switch s.Call {
+	case callRevoke:
+		_, err := operator.Revoke(operatorCtx, &adminv1.CapabilityServiceRevokeRequest{Id: id})
+		if err != nil {
+			return leaseAnswer{Code: connect.CodeOf(err).String()}
+		}
+		return leaseAnswer{}
 	case callLease:
 		res, err := c.Lease(ctx, &adminv1.CapabilityServiceLeaseRequest{Id: id, Requests: s.Requests})
 		return answerOfLease(res.GetLease(), err)
@@ -151,7 +161,10 @@ func serverLeaseChain(t *testing.T) (*Handler, map[string]limes.VerifiedCapabili
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, &allowAuthorizer{}).WithLeases(usage)
+	// Revoke settles a revoked capability's lease as the server's does: by
+	// releasing what it holds.
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, &allowAuthorizer{}).WithLeases(usage).
+		WithHoldRelease(&auth.BulkRevocation{Revoker: m.Store, Holds: usage})
 	tenant := uuid.New()
 	root := func(ops ...limes.Op) limes.VerifiedCapability {
 		v, _ := m.Mint(t, limes.Capability{
@@ -163,6 +176,7 @@ func serverLeaseChain(t *testing.T) (*Handler, map[string]limes.VerifiedCapabili
 	}
 	holder := root(limes.OpGet, limes.OpShare)
 	child, _ := m.Delegate(t, holder, narrowed(holder, limes.OpGet, limes.OpShare))
+	sibling, _ := m.Delegate(t, holder, narrowed(holder, limes.OpGet, limes.OpShare))
 	grandchild, _ := m.Delegate(t, child, narrowed(child, limes.OpGet))
 	revoked, _ := m.Delegate(t, holder, narrowed(holder, limes.OpGet))
 	if _, err := m.Store.Revoke(context.Background(), limes.RevokeRequest{CapabilityID: revoked.Capability().ID}); err != nil {
@@ -174,7 +188,7 @@ func serverLeaseChain(t *testing.T) (*Handler, map[string]limes.VerifiedCapabili
 		t.Fatal(err)
 	}
 	return h, map[string]limes.VerifiedCapability{
-		roleHolder: holder, roleChild: child, roleGrandchild: grandchild,
+		roleHolder: holder, roleChild: child, roleSibling: sibling, roleGrandchild: grandchild,
 		roleRevoked: revoked, roleStranger: root(limes.OpGet), roleCopy: copied,
 		roleBiscuit: m.Verify(t, sealed.Token, string(paladin.PlaneAdmin)),
 	}
@@ -208,6 +222,7 @@ func fakeLeaseChain(t *testing.T, srv *paladintest.Server) (ids, tokens map[stri
 	}
 	holder := root(limes.OpGet, limes.OpShare)
 	child := delegate(holder, limes.OpGet, limes.OpShare)
+	sibling := delegate(holder, limes.OpGet, limes.OpShare)
 	grandchild := delegate(child, limes.OpGet)
 	revoked := delegate(holder, limes.OpGet)
 	if _, err := admin.Revoke(ctx, &adminv1.CapabilityServiceRevokeRequest{Id: revoked.GetCapability().GetId()}); err != nil {
@@ -220,7 +235,7 @@ func fakeLeaseChain(t *testing.T, srv *paladintest.Server) (ids, tokens map[stri
 	}
 	ids, tokens = map[string]string{}, map[string]string{roleCopy: copied, roleBiscuit: holder.GetBiscuit()}
 	for role, r := range map[string]*adminv1.CapabilityServiceIssueResponse{
-		roleHolder: holder, roleChild: child, roleGrandchild: grandchild, roleRevoked: revoked, roleStranger: stranger,
+		roleHolder: holder, roleChild: child, roleSibling: sibling, roleGrandchild: grandchild, roleRevoked: revoked, roleStranger: stranger,
 	} {
 		ids[role], tokens[role] = r.GetCapability().GetId(), r.GetToken()
 	}
@@ -243,7 +258,7 @@ func TestTheSDKFakeLeasesAsTheServerDoes(t *testing.T) {
 				if s.Of != roleUnknown {
 					id = roles[s.Of].Capability().ID.String()
 				}
-				if got := runLeaseStep(ctx, h, s, id); got != s.want() {
+				if got := runLeaseStep(ctx, h, h, adminCtx(), s, id); got != s.want() {
 					t.Errorf("server step %d (%s of %s) answers %+v, the table %+v", i, s.Call, s.Of, got, s.want())
 				}
 			}
@@ -259,7 +274,7 @@ func TestTheSDKFakeLeasesAsTheServerDoes(t *testing.T) {
 				if s.Of != roleUnknown {
 					id = ids[s.Of]
 				}
-				if got := runLeaseStep(context.Background(), client, s, id); got != s.want() {
+				if got := runLeaseStep(context.Background(), client, srv.Connect().Admin.Capability, context.Background(), s, id); got != s.want() {
 					t.Errorf("fake step %d (%s of %s) answers %+v, the table %+v", i, s.Call, s.Of, got, s.want())
 				}
 			}
