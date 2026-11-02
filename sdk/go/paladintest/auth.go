@@ -198,7 +198,7 @@ func (s *Server) principalTenant(header http.Header) (string, error) {
 		return s.verify(token, kindAPIToken, connect.CodeUnauthenticated, errAPITokenNotFound, errAPITokenRevoked)
 	}
 	if token := capabilityToken(header.Get(paladin.HeaderCapability), authz); token != "" {
-		return s.verify(token, kindCapability, connect.CodePermissionDenied, errCapabilityInvalid, errCapabilityRevoked)
+		return s.verify(token, kindCapability, connect.CodeUnauthenticated, errCapabilityInvalid, errCapabilityRevoked)
 	}
 	switch {
 	case authz == "":

@@ -14,11 +14,12 @@ import (
 // holds the codes Paladin answers otherwise. Unavailable is kept for what a
 // retry can mend.
 var capabilityCategoryCodes = map[limes.Category]connect.Code{
-	// The capability, or the credential presenting it, does not allow the
-	// call: told so with its reason, as a verifier's refusal is, whether the
-	// credential is bad or merely short of the call. No retry mends it.
-	limes.CategoryUnauthenticated: connect.CodePermissionDenied,
-	limes.CategoryDenied:          connect.CodePermissionDenied,
+	// The credential presented is missing, malformed, unproven or no longer
+	// good — expired, revoked, past its delegation depth: present another.
+	limes.CategoryUnauthenticated: connect.CodeUnauthenticated,
+	// The credential is good and does not allow the call: told so with its
+	// reason. No retry mends it.
+	limes.CategoryDenied: connect.CodePermissionDenied,
 	// A spent request, budget, copy or lease limit: the caller waits or stops.
 	limes.CategoryExhausted: connect.CodeResourceExhausted,
 	// A malformed request.

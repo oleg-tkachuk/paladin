@@ -214,7 +214,7 @@ def test_revoke_and_get(strict: FakePaladin) -> None:
     admin.revoke(pb.CapabilityServiceRevokeRequest(id=parent.capability.id, cascade_children=True))
     for token in (parent.token, parent.biscuit, child.token):
         assert (
-            _code(lambda t=token: _get(strict.connect(capability=t), obj)) == Code.PERMISSION_DENIED
+            _code(lambda t=token: _get(strict.connect(capability=t), obj)) == Code.UNAUTHENTICATED
         )
     unknown = str(uuid.uuid4())
     assert (

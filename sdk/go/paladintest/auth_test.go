@@ -51,9 +51,9 @@ var (
 	apiTokenRevoked      = refusal{code: connect.CodeUnauthenticated, message: "api_token: token revoked"}
 	// A capability the fake did not issue goes to the verifier, as on the
 	// server, which cannot read "not-issued" as a Biscuit.
-	capabilityNotIssued = refusal{connect.CodePermissionDenied, "invalid token: biscuit encoding: illegal base64 data at input byte 8",
+	capabilityNotIssued = refusal{connect.CodeUnauthenticated, "invalid token: biscuit encoding: illegal base64 data at input byte 8",
 		commonv1.ErrorReason_ERROR_REASON_CAPABILITY_INVALID_TOKEN}
-	capabilityRevoked    = refusal{code: connect.CodePermissionDenied, message: "capability: revoked"}
+	capabilityRevoked    = refusal{code: connect.CodeUnauthenticated, message: "capability: revoked"}
 	tenantMismatch       = refusal{code: connect.CodePermissionDenied, message: "URL tenant does not match token tenant"}
 	uploadTenantMismatch = refusal{code: connect.CodePermissionDenied, message: "tenant mismatch"}
 )

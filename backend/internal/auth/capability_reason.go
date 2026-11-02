@@ -53,8 +53,9 @@ func verifyError(ctx context.Context, err error) error {
 
 // capabilityFailure answers an error verifying or metering a presented
 // capability — stage names which — through capabilityStatus, so both answer one
-// caller alike: a spent limit is ResourceExhausted, a refusal of the
-// capability PermissionDenied with its reason, the server's own fault
+// caller alike: a spent limit is ResourceExhausted, a credential missing,
+// malformed or no longer good Unauthenticated and one that does not allow the
+// call PermissionDenied, each with its reason, the server's own fault
 // Internal, and only a failing dependency Unavailable. A key-bound capability
 // on a plane with no proof check is FailedPrecondition, the deployment's
 // fault. Those last three are logged with their cause, and unless the error

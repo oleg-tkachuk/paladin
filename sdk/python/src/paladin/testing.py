@@ -626,7 +626,7 @@ def _unknown_capability() -> ConnectError:
     """The server's refusal of a capability it did not issue: its verifier's
     code and reason."""
     return _capability_refusal(
-        Code.PERMISSION_DENIED,
+        Code.UNAUTHENTICATED,
         error_reason_pb2.ERROR_REASON_CAPABILITY_INVALID_TOKEN,
         _CAPABILITY_UNKNOWN,
     )
@@ -639,7 +639,7 @@ def _audience_refusal(audience: Iterable[str], plane: str) -> ConnectError | Non
     if plane in names:
         return None
     return _capability_refusal(
-        Code.PERMISSION_DENIED,
+        Code.UNAUTHENTICATED,
         error_reason_pb2.ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH,
         f"{_AUDIENCE_MISMATCH}: token audience {_go_list(names)} lacks {_go_quote(plane)}",
     )
@@ -985,7 +985,7 @@ class _CapabilityService(CapabilityServiceSync):
         if credential is None or parent is None:
             raise _unknown_capability()
         if credential.revoked:
-            raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_REVOKED)
+            raise ConnectError(Code.UNAUTHENTICATED, _CAPABILITY_REVOKED)
         parent_ops = list(copy.caveats.ops if copy is not None else parent.msg.caveats.ops)
         if Op.SHARE not in parent_ops:
             raise _with_reason(Code.PERMISSION_DENIED, _LACKS_SHARE)
@@ -1677,7 +1677,7 @@ class FakePaladin(
                 if err.attenuation
                 else error_reason_pb2.ERROR_REASON_CAPABILITY_EXPIRED
             )
-            raise _capability_refusal(Code.PERMISSION_DENIED, reason, err.message) from None
+            raise _capability_refusal(Code.UNAUTHENTICATED, reason, err.message) from None
         return _Presented(rec, narrowed)
 
     def _bump_requests_locked(self, rec: _CapabilityRecord) -> None:
@@ -1748,7 +1748,7 @@ class FakePaladin(
             return self._verify(
                 token,
                 _CAPABILITY_PREFIX,
-                Code.PERMISSION_DENIED,
+                Code.UNAUTHENTICATED,
                 _CAPABILITY_UNKNOWN,
                 _CAPABILITY_REVOKED,
             )
@@ -1811,7 +1811,7 @@ class FakePaladin(
         if holder is None:
             raise _unknown_capability()
         if credential.revoked:
-            raise ConnectError(Code.PERMISSION_DENIED, _CAPABILITY_REVOKED)
+            raise ConnectError(Code.UNAUTHENTICATED, _CAPABILITY_REVOKED)
         if credential.biscuit:
             raise _with_reason(Code.FAILED_PRECONDITION, _LEASE_BY_COPY)
         if Op.SHARE not in holder.msg.caveats.ops:

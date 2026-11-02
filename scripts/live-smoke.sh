@@ -89,6 +89,7 @@ readonly OP_BARE_PRESIGN=presign
 readonly BISCUIT_STATUS_ISSUED=BISCUIT_STATUS_ISSUED
 readonly CODE_INVALID_ARGUMENT=invalid_argument
 readonly CODE_PERMISSION_DENIED=permission_denied
+readonly CODE_UNAUTHENTICATED=unauthenticated
 readonly CODE_NOT_FOUND=not_found
 readonly CODE_RESOURCE_EXHAUSTED=resource_exhausted
 readonly CODE_FAILED_PRECONDITION=failed_precondition
@@ -403,6 +404,7 @@ r=$(admin_rpc CapabilityService/Revoke "{\"id\":\"$parent_id\",\"reason\":\"live
 expect "revoke the parent" "$r" test "$(code_of "$r")" = ok
 r=$(list_with "$child")
 expect "the child of a revoked parent is refused" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
+expect "a revoked credential is unauthenticated" "$r" test "$(code_of "$r")" = "$CODE_UNAUTHENTICATED"
 r=$(list_with "$parent_biscuit")
 expect "the Biscuit of a revoked capability is refused" "$r" test "$(reason_of "$r")" = "$REASON_CAPABILITY_REVOKED"
 

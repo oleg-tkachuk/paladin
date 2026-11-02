@@ -7,8 +7,26 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
+
+// limesRefusal is a Connect error as the planes answer the capability
+// library's refusal: its limes code in the Paladin ErrorInfo.
+func limesRefusal(t *testing.T, code connect.Code, message, limesCode string) error {
+	t.Helper()
+	detail, err := connectproto.NewErrorDetail(&errdetails.ErrorInfo{
+		Domain:   paladin.ErrorDomain,
+		Metadata: map[string]string{paladin.ErrorMetadataLimesCode: limesCode},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return connect.NewError(code, message).WithDetail(detail)
+}
 
 func TestToolError(t *testing.T) {
 	cases := []struct {
@@ -36,6 +54,12 @@ func TestToolError(t *testing.T) {
 			tool: "paladin_get_tenant",
 			err:  connect.NewError(connect.CodeNotFound, "tenant not found"),
 			want: []string{"not_found", "tenant not found"},
+		},
+		{
+			name: "a capability refused names why, as a token's refusal does not",
+			tool: "paladin_get_tenant",
+			err:  limesRefusal(t, connect.CodeUnauthenticated, "capability: revoked", "revoked"),
+			want: []string{"capability", "revoked"},
 		},
 		{
 			name: "an expired token says so",

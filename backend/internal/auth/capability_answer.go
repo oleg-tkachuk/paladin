@@ -61,7 +61,8 @@ const capabilityUnanswered = "the capability store could not answer; retry"
 
 // AnswerCapabilityError answers err, which an operation on capabilities met,
 // by its limes code: the operation's row in except, else capabilityStatus,
-// else capabilityUnknownCode. An error already answered — a *connect.Error —
+// else capabilityUnknownCode — with Unauthenticated answered PermissionDenied,
+// since the error is about a record, not the caller's credential. An error already answered — a *connect.Error —
 // is returned as it is.
 func AnswerCapabilityError(err error, except Exceptions) error {
 	if err == nil {
@@ -79,6 +80,12 @@ func AnswerCapabilityError(err error, except Exceptions) error {
 		}
 	}
 	status := capabilityStatus(err)
+	// A handler answers about the record its request names: the caller's own
+	// credential the interceptor has already verified. A record revoked or
+	// expired is the caller's to be refused, not a credential to replace.
+	if status == connect.CodeUnauthenticated {
+		status = connect.CodePermissionDenied
+	}
 	if _, refused := limes.ReasonOf(err); status == connect.CodeUnavailable && !refused {
 		return withCapabilityInfo(connect.NewError(status, capabilityUnanswered).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	}

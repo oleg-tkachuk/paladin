@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
 // audienceMismatch is how the planes' JWT verifier words a token issued for
@@ -45,6 +48,12 @@ func toolError(tool string, err error) error {
 	}
 	switch ce.Code() {
 	case connect.CodeUnauthenticated:
+		// The capability library's refusal names what to do — a revoked or
+		// expired capability is replaced, not retried — and none of the
+		// server's internals.
+		if code := limesCodeOf(ce); code != "" {
+			return fmt.Errorf("the capability was refused (%s): %s", code, ce.Message())
+		}
 		if strings.Contains(ce.Message(), audienceMismatch) && plane != "" {
 			return fmt.Errorf("%s calls the %s plane, and this session's token is not issued for %s%s; "+
 				"use a token whose audience includes it, such as an API token covering that plane",
@@ -54,4 +63,19 @@ func toolError(tool string, err error) error {
 	default:
 		return fmt.Errorf("%s: %s", ce.Code(), ce.Message())
 	}
+}
+
+// limesCodeOf is the capability library's code a plane's error carries in
+// its Paladin ErrorInfo, empty when it carries none.
+func limesCodeOf(ce *connect.Error) string {
+	for _, d := range ce.Details() {
+		v, err := connectproto.UnmarshalErrorDetail(d)
+		if err != nil {
+			continue
+		}
+		if info, ok := v.(*errdetails.ErrorInfo); ok && info.GetDomain() == paladin.ErrorDomain {
+			return info.GetMetadata()[paladin.ErrorMetadataLimesCode]
+		}
+	}
+	return ""
 }

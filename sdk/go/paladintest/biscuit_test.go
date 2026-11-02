@@ -61,6 +61,9 @@ func TestACopyOfTheBiscuitIsHeldToItsNarrowing(t *testing.T) {
 	cases := map[string]struct {
 		narrow paladin.Attenuation
 		call   func(*paladin.Paladin) error
+		// code is the copy's refusal: PermissionDenied for a call it does
+		// not allow, Unauthenticated for a copy no longer good here.
+		code   connect.Code
 		reason commonv1.ErrorReason
 		// fullServes is whether the Biscuit the copy came from makes the
 		// call: it does what the narrowing took away, but not what the
@@ -70,24 +73,28 @@ func TestACopyOfTheBiscuitIsHeldToItsNarrowing(t *testing.T) {
 		"an operation it dropped": {
 			narrow:     paladin.Attenuation{Ops: []paladin.Op{paladin.OpGet}},
 			call:       ensureStorage,
+			code:       connect.CodePermissionDenied,
 			reason:     commonv1.ErrorReason_ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED,
 			fullServes: true,
 		},
 		"a resource outside its prefix": {
 			narrow:     paladin.Attenuation{ResourcePrefixes: []string{paladin.ObjectResource(srv.Tenant(), paladintest.DefaultCollection, "")}},
 			call:       func(p *paladin.Paladin) error { return getObject(p, other) },
+			code:       connect.CodePermissionDenied,
 			reason:     commonv1.ErrorReason_ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED,
 			fullServes: true,
 		},
 		"a plane it dropped": {
 			narrow:     paladin.Attenuation{Planes: []paladin.Plane{paladin.PlaneAdmin}},
 			call:       func(p *paladin.Paladin) error { return getObject(p, obj) },
+			code:       connect.CodeUnauthenticated,
 			reason:     commonv1.ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH,
 			fullServes: true,
 		},
 		"an expiry it passed": {
 			narrow:     paladin.Attenuation{ExpiresAt: time.Now().Add(-time.Minute)},
 			call:       func(p *paladin.Paladin) error { return getObject(p, obj) },
+			code:       connect.CodeUnauthenticated,
 			reason:     commonv1.ErrorReason_ERROR_REASON_CAPABILITY_EXPIRED,
 			fullServes: true,
 		},
@@ -96,8 +103,8 @@ func TestACopyOfTheBiscuitIsHeldToItsNarrowing(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			narrowed := srv.Connect(paladin.WithCapability(attenuated(t, resp.GetBiscuit(), tc.narrow)))
 			err := tc.call(narrowed)
-			if connect.CodeOf(err) != connect.CodePermissionDenied || paladin.Reason(err) != tc.reason {
-				t.Errorf("the copy: err = %v (reason %s), want PermissionDenied %s", err, paladin.Reason(err), tc.reason)
+			if connect.CodeOf(err) != tc.code || paladin.Reason(err) != tc.reason {
+				t.Errorf("the copy: err = %v (reason %s), want %v %s", err, paladin.Reason(err), tc.code, tc.reason)
 			}
 			if err := tc.call(full); tc.fullServes && err != nil {
 				t.Errorf("the Biscuit it came from: %v, want the call served", err)
@@ -119,8 +126,8 @@ func TestACopyThatWidensIsRefused(t *testing.T) {
 	resp := sealed(t, srv, nil, paladin.OpGet)
 	wider := srv.Connect(paladin.WithCapability(attenuated(t, resp.GetBiscuit(), paladin.Attenuation{Ops: []paladin.Op{paladin.OpGet, paladin.OpDelete}})))
 	err := getObject(wider, obj)
-	if connect.CodeOf(err) != connect.CodePermissionDenied || paladin.Reason(err) != commonv1.ErrorReason_ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION {
-		t.Errorf("err = %v (reason %s), want PermissionDenied BISCUIT_ATTENUATION", err, paladin.Reason(err))
+	if connect.CodeOf(err) != connect.CodeUnauthenticated || paladin.Reason(err) != commonv1.ErrorReason_ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION {
+		t.Errorf("err = %v (reason %s), want Unauthenticated BISCUIT_ATTENUATION", err, paladin.Reason(err))
 	}
 }
 

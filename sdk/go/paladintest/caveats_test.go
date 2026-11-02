@@ -54,7 +54,7 @@ func TestStrictAuthHoldsACapabilityToItsPlanes(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			p, _ := strictCapability(t, srv, func(r *adminv1.CapabilityServiceIssueRequest) { r.Audience = tc.audience })
-			refused(t, getObject(p, obj), connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH, tc.message)
+			refused(t, getObject(p, obj), connect.CodeUnauthenticated, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH, tc.message)
 		})
 	}
 }
