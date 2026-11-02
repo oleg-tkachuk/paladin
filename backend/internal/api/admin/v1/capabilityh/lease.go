@@ -3,7 +3,6 @@ package capabilityh
 import (
 	"context"
 	"fmt"
-	"slices"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -166,7 +165,7 @@ func (h *Handler) presentedLeaseTarget(ctx context.Context, verified limes.Verif
 	if answer.Revoked {
 		return nil, uuid.Nil(), auth.AnswerCapabilityError(fmt.Errorf("lease %s: %w", id, limes.ErrRevoked), nil)
 	}
-	if !slices.Contains(answer.Ancestors, holder.ID) {
+	if !answer.Below(holder.ID) {
 		return nil, uuid.Nil(), connect.NewError(connect.CodePermissionDenied, errLeaseNotBelow)
 	}
 	return ctx, id, nil
