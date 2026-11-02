@@ -178,24 +178,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Presign and capability panels wait for those paths to run here
-
-- **Status:** Deferred (no data to chart, deliberately).
-- **Reason:** The Paladin dashboard and the five alert rules landed, and the
-  collector is healthy again — `up{namespace="paladin"}` returns a series per
-  pod and Grafana evaluates every rule with health=ok. Two of the signals the
-  original entry named are still uncharted: `paladin_presign_total` and
-  `limes_charge_decisions_total` exist in the binary but no presign or
-  capability charge has run in this cluster, so a panel would show a flat zero
-  that reads as "broken" rather than "unused". The alert on capability charges
-  is written anyway, because a rule costs nothing while idle and a panel costs
-  a wrong first impression.
-- **Definition of Done:** Once either path runs here, chart it: presign by
-  op and outcome with its p95, and capability charges by outcome. Read the
-  label values off the live series first — that discipline is what the
-  dashboard header records, and it has already caught a mistyped regex.
-- **Blockers:** none. Needs traffic, not work.
-
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational
@@ -374,23 +356,6 @@ open deliberately — each notes why._
 
 ## Performance / Scale
 
-### Folder listings read every key under the prefix
-
-- **Status:** Deferred (correct at current scale; measure before changing).
-- **Reason:** `list_object_prefixes` (migration 089) folds every key under the
-  requested prefix to its first segment with a DISTINCT, so the folders at a
-  collection's root cost a read of the whole collection. A skip-scan — jump
-  from one folder to the next — needs an index that orders keys bytewise,
-  and the only B-tree on `objects.path` is `UNIQUE (collection_id, path)` in
-  the database's collation, while keys sort under `COLLATE "C"` everywhere
-  else (085), so it cannot serve that walk.
-- **Definition of Done:** measured at 1M and 10M objects in one collection
-  (root folders, a deep prefix); if the root listing is too slow, an index on
-  `(collection_id, path COLLATE "C")` and a recursive skip-scan in
-  `list_object_prefixes`, with the same tenant gate and results, and the
-  index's cost to writes measured too.
-- **Blockers:** none — gated on a collection large enough to feel it.
-
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked
@@ -398,13 +363,23 @@ open deliberately — each notes why._
   set fillfactor on hot-update tables but didn't touch
   `autovacuum_vacuum_scale_factor` / `autovacuum_analyze_scale_factor`
   per table — needs live bloat metrics to choose values that aren't
-  guesses.
+  guesses. A snapshot of `pg_stat_user_tables` on the local cluster
+  (2026-11-02, ~17 h of uptime) shows why the local cluster cannot supply
+  them: the only table with real churn is `worker_leases` (132k updates,
+  all but three HOT, autovacuumed 729 times on 22 live rows — healthy at
+  the defaults); every other table, `limes.usage` included, saw hundreds
+  of writes. `pgstattuple` is available on the CNPG image but not
+  installed.
 - **Definition of Done:**
   - 30 days of `pgstattuple` / `pg_stat_user_tables` data.
   - Per-table override for the 5 hottest tables landing in a follow-up
     migration with measured before/after bloat.
-- **Blockers:** observability instrumentation + a representative
-  workload.
+- **Blockers:**
+  - A representative workload: the local cluster runs smoke tests, not
+    traffic.
+  - A store for the 30 days: the local cluster runs the VictoriaMetrics and
+    Grafana operators with no VMSingle and no Grafana instance, and Alloy
+    forwards traces only, so no Postgres metric is kept anywhere.
 
 ---
 
