@@ -248,18 +248,13 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
-	copyUsage, ok := usage.(meter.CopyUsageReader)
-	if !ok {
-		return nil, errors.New("app: the capability usage store reads no Biscuit copy counters")
+	if err := requireUsageFeatures(usage); err != nil {
+		return nil, err
 	}
-	holds, ok := usage.(meter.MatchingReleaser)
-	if !ok {
-		return nil, errors.New("app: the capability usage store releases no holds of a bulk revocation")
-	}
-	leases, ok := usage.(meter.Leaser)
-	if !ok {
-		return nil, errors.New("app: the capability usage store leases no budget")
-	}
+	// Each holds after requireUsageFeatures.
+	copyUsage := usage.(meter.CopyUsageReader)
+	holds := usage.(meter.MatchingReleaser)
+	leases := usage.(meter.Leaser)
 	ledger, err := capabilitypg.NewLedger(deps.Pool)
 	if err != nil {
 		return nil, fmt.Errorf("app: charges ledger: %w", err)
@@ -332,6 +327,23 @@ func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (dpop.Nonces,
 		return nil, fmt.Errorf("app: DPoP nonces: %w", err)
 	}
 	return nonces, nil
+}
+
+// capabilityUsageFeatures are the usage store's optional features the server
+// calls: a Biscuit copy's counters, the holds a bulk revocation releases, the
+// budget leases, and the tenant budgets' open holds (TenantBudgetService).
+var capabilityUsageFeatures = []meter.Feature{
+	meter.FeatureCopyUsage, meter.FeatureMatchingRelease, meter.FeatureLeases, meter.FeatureTenantReservations,
+}
+
+// requireUsageFeatures refuses a usage store, or a decorator over one, that
+// lacks a feature the server calls, naming each missing one: at startup,
+// rather than on the first call that needs it.
+func requireUsageFeatures(usage meter.UsageStore) error {
+	if err := meter.Require(usage, capabilityUsageFeatures...); err != nil {
+		return fmt.Errorf("app: capability usage store: %w", err)
+	}
+	return nil
 }
 
 // meteredUsage is store counted by limes's own instruments, by tenant: each
