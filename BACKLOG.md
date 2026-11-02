@@ -178,24 +178,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none functional, but it's a compliance-driver feature;
   needs a customer ask before the KMS adapter implementations land.
 
-### Presign and capability panels wait for those paths to run here
-
-- **Status:** Deferred (no data to chart, deliberately).
-- **Reason:** The Paladin dashboard and the five alert rules landed, and the
-  collector is healthy again — `up{namespace="paladin"}` returns a series per
-  pod and Grafana evaluates every rule with health=ok. Two of the signals the
-  original entry named are still uncharted: `paladin_presign_total` and
-  `limes_charge_decisions_total` exist in the binary but no presign or
-  capability charge has run in this cluster, so a panel would show a flat zero
-  that reads as "broken" rather than "unused". The alert on capability charges
-  is written anyway, because a rule costs nothing while idle and a panel costs
-  a wrong first impression.
-- **Definition of Done:** Once either path runs here, chart it: presign by
-  op and outcome with its p95, and capability charges by outcome. Read the
-  label values off the live series first — that discipline is what the
-  dashboard header records, and it has already caught a mistyped regex.
-- **Blockers:** none. Needs traffic, not work.
-
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational

@@ -407,18 +407,18 @@
     {
       "type": "timeseries",
       "title": "Refused capability charges by tenant",
-      "description": "Every outcome except allowed, per tenant. Empty is the normal state.",
+      "description": "Charges refused by a ceiling, per tenant: budget_exceeded (a capability's, an ancestor's, a copy's or a lease's budget) and tenant_budget_exceeded — the outcomes PaladinCapabilityChargesRefused counts. Empty is the normal state.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 36
       },
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "sum by (limes_tenant_id, limes_outcome) (rate(limes_charge_decisions_total{limes_outcome!=\"allowed\"}[$__rate_interval]))",
+          "expr": "sum by (limes_tenant_id, limes_outcome) (rate(limes_charge_decisions_total{limes_outcome=~\"budget_exceeded|tenant_budget_exceeded\"}[$__rate_interval]))",
           "legendFormat": "{{limes_tenant_id}} {{limes_outcome}}"
         }
       ],
@@ -428,6 +428,31 @@
         }
       },
       "id": 13
+    },
+    {
+      "type": "timeseries",
+      "title": "Capability request bumps by outcome",
+      "description": "Request-count bumps made under a capability, as limes counts them. limes_outcome is allowed, request_limit_exceeded (a request limit, a Biscuit copy's quota or a lease's requests) or error.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "sum by (limes_outcome) (rate(limes_request_bumps_total[$__rate_interval]))",
+          "legendFormat": "{{limes_outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        }
+      },
+      "id": 15
     },
     {
       "type": "timeseries",

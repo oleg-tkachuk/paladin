@@ -87,8 +87,17 @@ The work that does not show up in RPC metrics.
 | Rate limiting failing open, Per-tenant rate-limit decisions | `paladin_tenant_ratelimit_*`, `paladin_api_token_ratelimit_fail_open_total` | `internal/middleware/tenant_ratelimit.go`, `internal/auth/api_token_metrics.go` |
 | Presigns, Presign latency | `paladin_presign_total`, `paladin_presign_duration_seconds` (labels `op`, `outcome`) | `internal/metrics/domain.go` |
 | Capability charges | `limes_charge_decisions_total` (labels `limes_outcome`, `limes_tenant_id`) | limes otelmetric, wired in `internal/app/build_capability.go` |
+| Capability request bumps | `limes_request_bumps_total` (labels `limes_outcome`, `limes_tenant_id`) | limes otelmetric, wired in `internal/app/build_capability.go` |
 | Overdue uploads | `paladin_objects_pending_overdue`, `paladin_objects_pending_overdue_age_seconds` | `internal/worker/metrics.go`, sampled by the reconciler |
 
 `tenant_id` appears on the rate-limit series only, `limes_tenant_id` on the
 capability-charge series; the
 outbox gauge carries the deepest tenant's depth, not a per-tenant series.
+
+"Refused capability charges" counts the outcomes the chart's
+`PaladinCapabilityChargesRefused` alert does (`refusedOutcomes` in the chart's
+values), and `grafana-dashboards.test.sh` fails when the two differ. `overrun`
+committed and `error` is no ceiling, so neither is a refusal there.
+
+The presign and capability panels' label values were read off the live series
+(each core pod's `/metrics`) on 2026-11-02, before any panel was trusted.

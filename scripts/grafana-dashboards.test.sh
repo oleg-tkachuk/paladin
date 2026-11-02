@@ -43,3 +43,29 @@ json.dump({"groups": [{"name": "dashboard-queries", "rules": rules}]}, open(out,
 PY
 
 promtool check rules "$queries"
+
+# The refused-charges panel and the PaladinCapabilityChargesRefused alert must
+# call the same outcomes refusals. A panel that also counts overrun (a charge
+# that committed) or error disagrees with the alert without failing anywhere.
+readonly ALERT_VALUES="$root/backend/deploy/chart/values.yaml"
+readonly REFUSED_PANEL="Refused capability charges by tenant"
+readonly REFUSED_SELECTOR_PATTERN='limes_outcome=~"([^"]*)"'
+
+alert_outcomes=$(yq -r '.metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes | join("|")' "$ALERT_VALUES")
+panel_expr=$(python3 - "$REFUSED_PANEL" ./paladin-operations.json <<'PY'
+import json, sys
+title, path = sys.argv[1], sys.argv[2]
+exprs = [t["expr"] for p in json.load(open(path))["panels"] if p["title"] == title for t in p["targets"]]
+if len(exprs) != 1:
+    sys.exit(f"!!! {path}: expected one query on panel {title!r}, found {len(exprs)}")
+print(exprs[0])
+PY
+)
+if [[ ! $panel_expr =~ $REFUSED_SELECTOR_PATTERN ]]; then
+    echo "!!! panel \"$REFUSED_PANEL\" selects no limes_outcome=~ set: $panel_expr" >&2
+    exit 1
+fi
+if [[ ${BASH_REMATCH[1]} != "$alert_outcomes" ]]; then
+    echo "!!! panel \"$REFUSED_PANEL\" counts ${BASH_REMATCH[1]}; the alert's refusedOutcomes are $alert_outcomes" >&2
+    exit 1
+fi
