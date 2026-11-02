@@ -48,7 +48,7 @@ func newLeaseFixture(t *testing.T) leaseFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, &allowAuthorizer{}).WithLeases(usage)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, &allowAuthorizer{}).WithLeases(usage).WithLineage(m.Store)
 	res, err := h.Issue(adminCtx(), &adminv1.CapabilityServiceIssueRequest{
 		Subject:  &adminv1.CapabilityPrincipal{Kind: adminv1.PrincipalKind_PRINCIPAL_KIND_AGENT, TenantId: uuid.New().String(), Subject: "agent:lessee"},
 		Audience: []string{"paladin-data"},
@@ -134,7 +134,7 @@ func TestLeaseActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	authz := &actionAuthorizer{}
-	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, authz).WithLeases(usage)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, authz).WithLeases(usage).WithLineage(m.Store)
 	id := uuid.New().String()
 	_, _ = h.Lease(adminCtx(), &adminv1.CapabilityServiceLeaseRequest{Id: id, Requests: 1})
 	_, _ = h.GetLease(adminCtx(), &adminv1.CapabilityServiceGetLeaseRequest{Id: id})
@@ -170,7 +170,7 @@ func TestLeaseRefusals(t *testing.T) {
 		want connect.Code
 	}{
 		"denied by policy":   {mkHandler(t, &fakeStore{}, nil, &denyAuthorizer{}), &adminv1.CapabilityServiceLeaseRequest{Id: f.id, Requests: 1}, connect.CodePermissionDenied},
-		"not wired":          {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}), &adminv1.CapabilityServiceLeaseRequest{Id: f.id, Requests: 1}, connect.CodeUnavailable},
+		"leasing off":        {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}), &adminv1.CapabilityServiceLeaseRequest{Id: f.id, Requests: 1}, connect.CodeFailedPrecondition},
 		"a bad id":           {f.h, &adminv1.CapabilityServiceLeaseRequest{Id: "nope", Requests: 1}, connect.CodeInvalidArgument},
 		"no such capability": {f.h, &adminv1.CapabilityServiceLeaseRequest{Id: unknown, Requests: 1}, connect.CodeNotFound},
 		"another unit":       {f.h, &adminv1.CapabilityServiceLeaseRequest{Id: f.id, Amount: units("EUR", leaseUnits)}, connect.CodeInvalidArgument},
@@ -206,7 +206,7 @@ func TestLeaseReadAndSettleRefusals(t *testing.T) {
 				want connect.Code
 			}{
 				"denied by policy": {mkHandler(t, &fakeStore{}, nil, &denyAuthorizer{}), f.id, connect.CodePermissionDenied},
-				"not wired":        {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}), f.id, connect.CodeUnavailable},
+				"leasing off":      {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}), f.id, connect.CodeFailedPrecondition},
 				"a bad id":         {f.h, "nope", connect.CodeInvalidArgument},
 				"no lease":         {f.h, f.id, connect.CodeNotFound},
 				"no capability":    {f.h, uuid.New().String(), connect.CodeNotFound},
@@ -242,7 +242,7 @@ func presentedLeases(t *testing.T) (*captest.Minter, *Handler, *denyAuthorizer, 
 	}
 	deny := &denyAuthorizer{}
 	leaser := &actingLeaser{UsageStore: usage}
-	return m, NewHandler(m.Issuer, m.Verifier, m.Store, usage, deny).WithLeases(leaser), deny, leaser
+	return m, NewHandler(m.Issuer, m.Verifier, m.Store, usage, deny).WithLeases(leaser).WithLineage(m.Store), deny, leaser
 }
 
 // narrowed is parent's caveats with only ops.

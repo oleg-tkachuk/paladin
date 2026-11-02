@@ -25,9 +25,13 @@ func (h *Handler) WithLeases(leases meter.Leaser) *Handler {
 	return h
 }
 
-// errLeasesNotWired answers a lease RPC on a deployment whose meter leases
-// nothing.
-const errLeasesNotWired = "capability budget leases not wired"
+// WithLineage has a capability presented to a lease call lease for the
+// capabilities delegated from it: lineage names each one's ancestors. Without
+// it such a call is refused as unavailable.
+func (h *Handler) WithLineage(lineage limes.RevocationLineageLookup) *Handler {
+	h.lineage = lineage
+	return h
+}
 
 // leaseAmountField is the request field Lease reads its amount from.
 const leaseAmountField = "amount"
@@ -113,8 +117,10 @@ func (h *Handler) leaseTarget(ctx context.Context, action cedar.Action, raw stri
 			return nil, uuid.Nil(), err
 		}
 	}
+	// No leaser is wired when the deployment turned leasing off
+	// (capability.budget_leases): answered as the meter answers it.
 	if h.leases == nil {
-		return nil, uuid.Nil(), connect.NewError(connect.CodeUnavailable, errLeasesNotWired)
+		return nil, uuid.Nil(), auth.AnswerCapabilityError(meter.ErrLeasingDisabled, leaseExceptions)
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
@@ -154,11 +160,10 @@ func (h *Handler) presentedLeaseTarget(ctx context.Context, verified limes.Verif
 	if id == holder.ID {
 		return ctx, id, nil
 	}
-	lineage, ok := h.store.(limes.RevocationLineageLookup)
-	if !ok {
+	if h.lineage == nil {
 		return nil, uuid.Nil(), connect.NewError(connect.CodeUnavailable, errLeaseNoLineage)
 	}
-	answer, err := lineage.RevocationLineage(ctx, id)
+	answer, err := h.lineage.RevocationLineage(ctx, id)
 	if err != nil {
 		return nil, uuid.Nil(), auth.AnswerCapabilityError(err, leaseExceptions)
 	}
