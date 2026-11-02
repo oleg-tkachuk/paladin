@@ -515,7 +515,7 @@ It refuses as the server does, with the server's code and message and no
 | --- | --- |
 | No credential, or an `Authorization` that is not a bearer token | `Unauthenticated` |
 | A bearer or API token the fake did not issue, or revoked | `Unauthenticated` |
-| A capability the fake did not issue, or revoked | `PermissionDenied` — the server's answer to any capability it cannot verify |
+| A capability the fake did not issue, or revoked | `Unauthenticated` — the server's answer to any capability it cannot verify |
 | A `name` or `parent` in another tenant, or another tenant's multipart upload | `PermissionDenied` |
 
 A capability its `CapabilityService` issued or delegated is held to its
@@ -524,7 +524,7 @@ reason and message:
 
 | Call | Answer |
 | --- | --- |
-| To a plane its audience does not name — a bearer audience such as `paladin-data` instead of the label `data` included | `PermissionDenied`, `CAPABILITY_AUDIENCE_MISMATCH` |
+| To a plane its audience does not name — a bearer audience such as `paladin-data` instead of the label `data` included | `Unauthenticated`, `CAPABILITY_AUDIENCE_MISMATCH` |
 | Past its request ceiling, or an ancestor's | `ResourceExhausted`, `CAPABILITY_REQUEST_LIMIT_EXCEEDED` |
 | An operation its caveats do not name | `PermissionDenied`, `CAPABILITY_OP_NOT_ALLOWED` |
 | A resource outside its prefixes and URIs, or none under a resource-restricted one | `PermissionDenied`, `CAPABILITY_RESOURCE_NOT_ALLOWED` |

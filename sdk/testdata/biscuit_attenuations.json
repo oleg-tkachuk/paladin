@@ -22,14 +22,14 @@
       "audience": ["data", "admin"],
       "attenuations": [{"planes": ["admin"]}],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [admin] lacks \"data\""}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [admin] lacks \"data\""}
       ]
     },
     {
       "name": "an expiry the copy passed",
       "attenuations": [{"expires_in_seconds": -60}],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_EXPIRED", "limes_code": "expired", "message": "expired"}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_EXPIRED", "limes_code": "expired", "message": "expired"}
       ]
     },
     {
@@ -46,7 +46,7 @@
       "ops": ["get"],
       "attenuations": [{"ops": ["get", "delete"]}],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 1: child wider than parent: child op \"delete\" not in parent ops [get]"}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 1: child wider than parent: child op \"delete\" not in parent ops [get]"}
       ]
     },
     {
@@ -54,14 +54,14 @@
       "prefixes": ["{collection}"],
       "attenuations": [{"resource_prefixes": ["{elsewhere}"]}],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 1: child wider than parent: child prefix \"{elsewhere}\" not under any parent prefix [{collection}]"}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 1: child wider than parent: child prefix \"{elsewhere}\" not under any parent prefix [{collection}]"}
       ]
     },
     {
       "name": "a plane the capability lacks",
       "attenuations": [{"planes": ["data", "admin"]}],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 1: child wider than parent: audience [data admin] widens parent [data]"}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 1: child wider than parent: audience [data admin] widens parent [data]"}
       ]
     },
     {
@@ -69,7 +69,7 @@
       "ops": ["get", "manage"],
       "attenuations": [{"ops": ["get"]}, {"ops": ["get", "manage"]}],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 2: child wider than parent: child op \"manage\" not in parent ops [get]"}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_BISCUIT_ATTENUATION", "limes_code": "biscuit_attenuation", "message": "invalid Biscuit attenuation: block 2: child wider than parent: child op \"manage\" not in parent ops [get]"}
       ]
     }
   ]

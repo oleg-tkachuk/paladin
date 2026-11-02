@@ -150,8 +150,8 @@ func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 		logged   bool
 		withheld bool
 	}{
-		"a revoked capability": {err: limes.ErrRevoked, code: connect.CodePermissionDenied},
-		"a bad proof":          {err: dpop.ErrReplayed, code: connect.CodePermissionDenied},
+		"a revoked capability": {err: limes.ErrRevoked, code: connect.CodeUnauthenticated},
+		"a bad proof":          {err: dpop.ErrReplayed, code: connect.CodeUnauthenticated},
 		"keys not fetched":     {err: fmt.Errorf("%w: %s", jwks.ErrUnavailable, internals), code: connect.CodeUnavailable, logged: true},
 		"a revocation store down": {
 			err: fmt.Errorf("limes: revocation lookup: %s", internals), code: connect.CodeUnavailable, logged: true, withheld: true,
@@ -189,9 +189,9 @@ func TestMeterErrorAnswersEachFamily(t *testing.T) {
 		meter.ErrCopyLimitExceeded:                  connect.CodeResourceExhausted,
 		limes.ErrBudgetExceeded:                     connect.CodeResourceExhausted,
 		limes.ErrTenantBudgetExceeded:               connect.CodeResourceExhausted,
-		limes.ErrRevoked:                            connect.CodePermissionDenied,
-		limes.ErrTenantErased:                       connect.CodePermissionDenied,
-		limes.ErrExpired:                            connect.CodePermissionDenied,
+		limes.ErrRevoked:                            connect.CodeUnauthenticated,
+		limes.ErrTenantErased:                       connect.CodeUnauthenticated,
+		limes.ErrExpired:                            connect.CodeUnauthenticated,
 		limes.ErrInvalidAmount:                      connect.CodeInvalidArgument,
 		limes.ErrUnitCodeMismatch:                   connect.CodeFailedPrecondition,
 		meter.ErrCounterOverflow:                    connect.CodeFailedPrecondition,
@@ -199,7 +199,7 @@ func TestMeterErrorAnswersEachFamily(t *testing.T) {
 		meter.ErrSettleConflict:                     connect.CodeAborted,
 		meter.ErrExternalRefConflict:                connect.CodeAborted,
 		errors.New("store down"):                    connect.CodeUnavailable,
-		fmt.Errorf("wrapped: %w", limes.ErrRevoked): connect.CodePermissionDenied,
+		fmt.Errorf("wrapped: %w", limes.ErrRevoked): connect.CodeUnauthenticated,
 	}
 	for err, want := range cases {
 		if got := connect.CodeOf(meterError(context.Background(), err)); got != want {

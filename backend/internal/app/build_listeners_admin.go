@@ -142,6 +142,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			// Additive for a capability of its own, which names no role; a
 			// capability the MCP server exchanged acts for its user (ADR-0041).
 			delegationOption(deps.Capability, repos.IAMUser),
+			// Managing capabilities — delegating, leasing, settling — spends
+			// no request of the capability presented to do it.
+			auth.WithUncountedServices(paladinadminv1connect.CapabilityServiceName),
 		)
 	} else {
 		capAdmin = auth.CapabilityInterceptor(nil, "", nil, 0)

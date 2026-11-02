@@ -217,6 +217,22 @@ func WithTaintLookup(lookup TaintLookup) CapabilityOption {
 	return func(i *capabilityInterceptor) { i.taintLookup = lookup }
 }
 
+// WithUncountedServices names the services whose calls do not spend the
+// presented capability's request limit: managing capabilities — delegating,
+// leasing, settling — rather than working under them, so a capability at its
+// limit can still settle its lease or hand work on. Every other caveat is
+// still checked. A service is named as its connect ServiceName constant.
+func WithUncountedServices(services ...string) CapabilityOption {
+	return func(i *capabilityInterceptor) {
+		if i.uncounted == nil {
+			i.uncounted = make(map[string]bool, len(services))
+		}
+		for _, s := range services {
+			i.uncounted[s] = true
+		}
+	}
+}
+
 type capabilityInterceptor struct {
 	verifier *limes.Verifier
 	audience string
@@ -241,6 +257,16 @@ type capabilityInterceptor struct {
 	// delegation recognises a capability the MCP server issued for a user;
 	// nil when none is accepted.
 	delegation *delegation
+	// uncounted are the services whose calls skip the request-count bump
+	// (WithUncountedServices).
+	uncounted map[string]bool
+}
+
+// counts reports whether a call of procedure, "/<service>/<method>", spends
+// the request limit.
+func (i *capabilityInterceptor) counts(procedure string) bool {
+	service, _, _ := strings.Cut(strings.TrimPrefix(procedure, "/"), "/")
+	return !i.uncounted[service]
 }
 
 // interceptor verifies the capability a call carries. A unary call's
@@ -309,7 +335,7 @@ func (i *capabilityInterceptor) establish(ctx context.Context, spec connect.Spec
 	if cap.ConfirmationJKT != "" {
 		i.sendNonce(ctx)
 	}
-	if err := i.enforceCaveats(ctx, verified); err != nil {
+	if err := i.enforceCaveats(ctx, spec.Procedure, verified); err != nil {
 		return ctx, err
 	}
 	ctx, err = i.withPrincipal(ctx, cap)
@@ -416,7 +442,8 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 //  1. CIDR check first (cheap; pure in-memory match) — rejects
 //     before we hit the DB.
 //  2. Request-count bump for the capability and its ancestors (one
-//     transaction; concurrency-safe via UPSERT-and-check). When the
+//     transaction; concurrency-safe via UPSERT-and-check), unless
+//     procedure's service is uncounted (WithUncountedServices). When the
 //     usage store is nil, the request ceiling is a no-op even if the
 //     caveat sets one — the operator opted out.
 //
@@ -428,6 +455,7 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 // auth.ChargeCapability for handlers to invoke.
 func (i *capabilityInterceptor) enforceCaveats(
 	ctx context.Context,
+	procedure string,
 	verified limes.VerifiedCapability,
 ) error {
 	cap := verified.Capability()
@@ -445,6 +473,11 @@ func (i *capabilityInterceptor) enforceCaveats(
 	// the whole subtree, and the store reads it from the ancestor's record.
 	// A Biscuit copy with limits of its own is counted the same way.
 	subject := verified.MeterSubject()
+	if !i.counts(procedure) {
+		logger.FromContext(ctx).Debug("capability: request not counted for a capability-management call",
+			zap.String("procedure", procedure))
+		return nil
+	}
 	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil() || len(subject.Copies()) > 0) {
 		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), meter.BumpRequest{Subject: subject}); err != nil {
 			// A store failure fails closed, as Unavailable: a capability

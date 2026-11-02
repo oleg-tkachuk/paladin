@@ -151,7 +151,7 @@ func (s *sealer) open(token string, plane paladin.Plane) (string, limes.Capabili
 			return s.records[c.ID], c, nil
 		}
 	}
-	return "", limes.Capability{}, capabilityRefusal(connect.CodePermissionDenied, err)
+	return "", limes.Capability{}, capabilityRefusal(connect.CodeUnauthenticated, err)
 }
 
 // biscuitOfLocked is the credential of capability id's Biscuit, which a copy

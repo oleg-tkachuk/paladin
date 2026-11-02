@@ -45,8 +45,8 @@ func TestCapabilityStatusFallsBackToUnavailable(t *testing.T) {
 	if got := capabilityStatus(errors.New("store down")); got != capabilityUnknownCode {
 		t.Errorf("an error with no limes code = %v, want %v", got, capabilityUnknownCode)
 	}
-	if got := capabilityStatus(fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodePermissionDenied {
-		t.Errorf("a wrapped revocation = %v, want its category's %v", got, connect.CodePermissionDenied)
+	if got := capabilityStatus(fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodeUnauthenticated {
+		t.Errorf("a wrapped revocation = %v, want its category's %v", got, connect.CodeUnauthenticated)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 		logged bool
 	}{
 		"an operation the capability does not allow": {limes.ErrOpNotAllowed, connect.CodePermissionDenied, false},
-		"a replayed proof":                           {dpop.ErrReplayed, connect.CodePermissionDenied, false},
+		"a replayed proof":                           {dpop.ErrReplayed, connect.CodeUnauthenticated, false},
 		"a caveat violated":                          {limes.ErrCaveatViolation, connect.CodePermissionDenied, false},
 		"a key-bound capability with no proof check": {limes.ErrProofUnsupported, connect.CodeFailedPrecondition, true},
 		"a record already there":                     {limes.ErrAlreadyExists, connect.CodeAlreadyExists, false},

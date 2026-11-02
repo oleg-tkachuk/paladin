@@ -192,8 +192,8 @@ func TestCapabilityDPoP_TheDPoPScheme(t *testing.T) {
 	bearer := f.mint(t, "")
 	err := callUnder(client, limes.AuthSchemeDPoP, bearer, f.proof(t, base+dpopProcedure, bearer))
 	// Over HTTP the cause stays on the server; the message carries it.
-	if connect.CodeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), limes.ErrAuthSchemeMismatch.Error()) {
-		t.Fatalf("a bearer capability under DPoP: err = %v, want PermissionDenied for %v", err, limes.ErrAuthSchemeMismatch)
+	if connect.CodeOf(err) != connect.CodeUnauthenticated || !strings.Contains(err.Error(), limes.ErrAuthSchemeMismatch.Error()) {
+		t.Fatalf("a bearer capability under DPoP: err = %v, want Unauthenticated for %v", err, limes.ErrAuthSchemeMismatch)
 	}
 }
 
@@ -234,8 +234,8 @@ func TestCapabilityDPoP_Unary(t *testing.T) {
 	for name, proof := range refused {
 		t.Run(name, func(t *testing.T) {
 			err := call(client, bound, proof)
-			if connect.CodeOf(err) != connect.CodePermissionDenied {
-				t.Fatalf("err = %v, want PermissionDenied", err)
+			if connect.CodeOf(err) != connect.CodeUnauthenticated {
+				t.Fatalf("err = %v, want Unauthenticated", err)
 			}
 		})
 	}
@@ -287,8 +287,8 @@ func TestCapabilityDPoP_Streaming(t *testing.T) {
 		t.Error("the verified capability did not reach the stream handler")
 	}
 	_, err = run("")
-	if connect.CodeOf(err) != connect.CodePermissionDenied || !errors.Is(err, dpop.ErrRequired) {
-		t.Fatalf("missing proof: err = %v, want PermissionDenied wrapping dpop.ErrRequired", err)
+	if connect.CodeOf(err) != connect.CodeUnauthenticated || !errors.Is(err, dpop.ErrRequired) {
+		t.Fatalf("missing proof: err = %v, want Unauthenticated wrapping dpop.ErrRequired", err)
 	}
 }
 
@@ -319,8 +319,8 @@ func TestCapabilityDPoP_GoSDKInteroperates(t *testing.T) {
 		t.Fatal(err)
 	}
 	client = paladiniamv1connect.NewHealthServiceClient(bare.Connect())
-	if _, err := client.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("bound capability without WithDPoP: err = %v, want PermissionDenied", err)
+	if _, err := client.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("bound capability without WithDPoP: err = %v, want Unauthenticated", err)
 	}
 }
 

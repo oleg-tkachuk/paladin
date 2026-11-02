@@ -54,7 +54,7 @@ func TestStrictAuthHoldsACapabilityToItsPlanes(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			p, _ := strictCapability(t, srv, func(r *adminv1.CapabilityServiceIssueRequest) { r.Audience = tc.audience })
-			refused(t, getObject(p, obj), connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH, tc.message)
+			refused(t, getObject(p, obj), connect.CodeUnauthenticated, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH, tc.message)
 		})
 	}
 }
@@ -121,7 +121,9 @@ func TestStrictAuthCountsTheRequestCeiling(t *testing.T) {
 	refused(t, getObject(p, obj), connect.CodeResourceExhausted, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
 		"request limit exceeded")
 
-	// A parent with room for its Delegate and one request of its child.
+	// A parent whose limit its Delegate does not spend: managing
+	// capabilities is not counted, so its child has the parent's whole
+	// limit.
 	parent, parentCap := strictCapability(t, srv, func(r *adminv1.CapabilityServiceIssueRequest) {
 		r.Caveats.Ops = append(r.Caveats.Ops, string(paladin.OpShare))
 		r.Caveats.RequestCeiling = &adminv1.CapabilityCaveats_MaxRequests{MaxRequests: limit}
@@ -134,8 +136,10 @@ func TestStrictAuthCountsTheRequestCeiling(t *testing.T) {
 		t.Fatalf("delegate: %v", err)
 	}
 	asChild := srv.Connect(paladin.WithCapability(child.GetToken()))
-	if err := getObject(asChild, obj); err != nil {
-		t.Fatalf("the child's first request: %v", err)
+	for n := range limit {
+		if err := getObject(asChild, obj); err != nil {
+			t.Fatalf("the child's request %d of the parent's %d: %v", n+1, limit, err)
+		}
 	}
 	refused(t, getObject(asChild, obj), connect.CodeResourceExhausted, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
 		"request limit exceeded: ancestor "+parentCap.GetId())

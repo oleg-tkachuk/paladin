@@ -166,7 +166,7 @@ def test_a_copy_stops_with_its_capability(strict: FakePaladin) -> None:
     admin.revoke(pb.CapabilityServiceRevokeRequest(id=resp.capability.id))
     with pytest.raises(ConnectError) as err:
         _get(copy, obj.name)()
-    assert err.value.code == Code.PERMISSION_DENIED
+    assert err.value.code == Code.UNAUTHENTICATED
 
 
 @needs_biscuit

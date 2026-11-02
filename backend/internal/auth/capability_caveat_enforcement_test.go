@@ -60,7 +60,7 @@ func TestEnforceCaveats_SourceIPAllowList(t *testing.T) {
 	t.Run("no allow-list means no IP check", func(t *testing.T) {
 		// Nothing configured: the caveat must not run at all, so a request
 		// with no IP header whatsoever still passes.
-		if err := i.enforceCaveats(context.Background(), capWithCaveats(t, limes.Caveats{})); err != nil {
+		if err := i.enforceCaveats(context.Background(), countedProcedure, capWithCaveats(t, limes.Caveats{})); err != nil {
 			t.Fatalf("unrestricted capability refused: %v", err)
 		}
 	})
@@ -69,7 +69,7 @@ func TestEnforceCaveats_SourceIPAllowList(t *testing.T) {
 
 	t.Run("an address inside the list passes", func(t *testing.T) {
 		for _, ip := range []string{"10.1.2.3", "192.168.1.7"} {
-			if err := i.enforceCaveats(from(ip), restricted); err != nil {
+			if err := i.enforceCaveats(from(ip), countedProcedure, restricted); err != nil {
 				t.Errorf("%s is inside the allow-list but was refused: %v", ip, err)
 			}
 		}
@@ -77,7 +77,7 @@ func TestEnforceCaveats_SourceIPAllowList(t *testing.T) {
 
 	t.Run("an address outside the list is refused", func(t *testing.T) {
 		for _, ip := range []string{"11.0.0.1", "192.168.2.7", "203.0.113.9"} {
-			err := i.enforceCaveats(from(ip), restricted)
+			err := i.enforceCaveats(from(ip), countedProcedure, restricted)
 			if err == nil {
 				t.Errorf("%s is outside the allow-list and was allowed", ip)
 				continue
@@ -92,7 +92,7 @@ func TestEnforceCaveats_SourceIPAllowList(t *testing.T) {
 		// The comment is explicit: SourceIPCIDR set but the IP unknown must
 		// reject. Failing open here would make the caveat depend on whether a
 		// proxy happened to set a header.
-		err := i.enforceCaveats(context.Background(), restricted)
+		err := i.enforceCaveats(context.Background(), countedProcedure, restricted)
 		if err == nil {
 			t.Fatal("an IP-restricted capability was allowed with no client address")
 		}
@@ -110,7 +110,7 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		i := &capabilityInterceptor{}
 		c := capWithCaveats(t, limes.Caveats{Requests: limes.RequestCeiling{Max: 1}})
 		for n := range ceiling + 1 {
-			if err := i.enforceCaveats(context.Background(), c); err != nil {
+			if err := i.enforceCaveats(context.Background(), countedProcedure, c); err != nil {
 				t.Fatalf("call %d refused with no usage store: %v", n, err)
 			}
 		}
@@ -121,7 +121,7 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		i := &capabilityInterceptor{usage: usage}
 		c, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Requests: limes.RequestCeiling{Unlimited: true}}})
 		for n := range ceiling + 1 {
-			if err := i.enforceCaveats(context.Background(), c); err != nil {
+			if err := i.enforceCaveats(context.Background(), countedProcedure, c); err != nil {
 				t.Fatalf("call %d refused under an unlimited ceiling: %v", n, err)
 			}
 		}
@@ -155,11 +155,11 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		c, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Requests: limes.RequestCeiling{Max: ceiling}}})
 
 		for n := range ceiling {
-			if err := i.enforceCaveats(context.Background(), c); err != nil {
+			if err := i.enforceCaveats(context.Background(), countedProcedure, c); err != nil {
 				t.Fatalf("call %d within the cap was refused: %v", n+1, err)
 			}
 		}
-		err := i.enforceCaveats(context.Background(), c)
+		err := i.enforceCaveats(context.Background(), countedProcedure, c)
 		if err == nil {
 			t.Fatal("the third call passed a cap of two")
 		}
@@ -178,7 +178,7 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		m, usage := newMeteredMinter(t)
 		i := &capabilityInterceptor{usage: erroringUsage{usageStore: usage, err: boom}}
 		c, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Requests: limes.RequestCeiling{Max: ceiling}}})
-		err := i.enforceCaveats(context.Background(), c)
+		err := i.enforceCaveats(context.Background(), countedProcedure, c)
 		if err == nil {
 			t.Fatal("a capped capability was allowed when its counter could not be bumped")
 		}
@@ -186,4 +186,45 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 			t.Errorf("code = %v, want Unavailable — a store failure is not the caller's limit", got)
 		}
 	})
+}
+
+// The procedures the tests call: one of a service whose calls are counted,
+// and the service the interceptor is told not to count.
+const (
+	countedProcedure = "/paladin.test.v1.WorkService/Do"
+	uncountedService = "paladin.test.v1.ControlService"
+)
+
+// A service named uncounted — managing capabilities, not working under them
+// — does not spend the presented capability's request limit, so one at its
+// limit can still settle its lease or delegate; every other call still
+// does, and is refused at the limit.
+func TestEnforceCaveats_UncountedServices(t *testing.T) {
+	ctx := context.Background()
+	m, usage := newMeteredMinter(t)
+	i := &capabilityInterceptor{usage: usage}
+	WithUncountedServices(uncountedService)(i)
+	c, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Requests: limes.RequestCeiling{Max: 1}}})
+
+	if err := i.enforceCaveats(ctx, countedProcedure, c); err != nil {
+		t.Fatalf("the one request the limit allows was refused: %v", err)
+	}
+	for _, method := range []string{"Delegate", "Lease", "SettleLease"} {
+		if err := i.enforceCaveats(ctx, "/"+uncountedService+"/"+method, c); err != nil {
+			t.Errorf("%s at the limit was refused: %v", method, err)
+		}
+	}
+	u, err := usage.GetUsage(ctx, c.Capability().ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.RequestCount != 1 {
+		t.Errorf("request count = %d, want 1: an uncounted call was counted", u.RequestCount)
+	}
+	// A service whose name begins with the uncounted one is another service.
+	for _, p := range []string{countedProcedure, "/" + uncountedService + "Extra/Do"} {
+		if got := connect.CodeOf(i.enforceCaveats(ctx, p, c)); got != connect.CodeResourceExhausted {
+			t.Errorf("%s past the limit: code = %v, want ResourceExhausted", p, got)
+		}
+	}
 }

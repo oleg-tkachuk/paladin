@@ -168,7 +168,7 @@ JWT_MALFORMED = (Code.UNAUTHENTICATED, "jwt: malformed token")
 JWT_EXPIRED = (Code.UNAUTHENTICATED, "jwt: token expired")
 API_TOKEN_NOT_FOUND = (Code.UNAUTHENTICATED, "api_token: token not found")
 API_TOKEN_REVOKED = (Code.UNAUTHENTICATED, "api_token: token revoked")
-CAPABILITY_REVOKED = (Code.PERMISSION_DENIED, "capability: revoked")
+CAPABILITY_REVOKED = (Code.UNAUTHENTICATED, "capability: revoked")
 TENANT_MISMATCH = (Code.PERMISSION_DENIED, "URL tenant does not match token tenant")
 UPLOAD_TENANT_MISMATCH = (Code.PERMISSION_DENIED, "tenant mismatch")
 

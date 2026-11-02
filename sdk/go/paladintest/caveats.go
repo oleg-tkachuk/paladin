@@ -86,7 +86,7 @@ func audienceRefusal(audience []string, plane paladin.Plane) error {
 	if slices.Contains(audience, string(plane)) {
 		return nil
 	}
-	return capabilityRefusal(connect.CodePermissionDenied, fmt.Errorf("%w: token audience %v lacks %q", limes.ErrAudienceMismatch, audience, string(plane)))
+	return capabilityRefusal(connect.CodeUnauthenticated, fmt.Errorf("%w: token audience %v lacks %q", limes.ErrAudienceMismatch, audience, string(plane)))
 }
 
 // requestLimitAdmits reports whether a capability with caveats admits its

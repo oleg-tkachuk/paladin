@@ -170,14 +170,14 @@ func (s capabilityService) presentedHolderLocked(presented string) (*capabilityR
 		if _, _, err := s.seal.open(presented, paladin.PlaneAdmin); err == nil {
 			return nil, withReason(connect.NewError(connect.CodeFailedPrecondition, msgLeaseByCopy))
 		}
-		return nil, connect.NewError(connect.CodePermissionDenied, errCapabilityInvalid.Error()).WithCause(errCapabilityInvalid)
+		return nil, connect.NewError(connect.CodeUnauthenticated, errCapabilityInvalid.Error()).WithCause(errCapabilityInvalid)
 	}
 	holder := s.capabilities[cred.capability]
 	switch {
 	case holder == nil:
-		return nil, connect.NewError(connect.CodePermissionDenied, errCapabilityInvalid.Error()).WithCause(errCapabilityInvalid)
+		return nil, connect.NewError(connect.CodeUnauthenticated, errCapabilityInvalid.Error()).WithCause(errCapabilityInvalid)
 	case cred.revoked:
-		return nil, connect.NewError(connect.CodePermissionDenied, errCapabilityRevoked.Error()).WithCause(errCapabilityRevoked)
+		return nil, connect.NewError(connect.CodeUnauthenticated, errCapabilityRevoked.Error()).WithCause(errCapabilityRevoked)
 	case cred.biscuit:
 		return nil, withReason(connect.NewError(connect.CodeFailedPrecondition, msgLeaseByCopy))
 	case !slices.Contains(holder.msg.GetCaveats().GetOps(), string(paladin.OpShare)):

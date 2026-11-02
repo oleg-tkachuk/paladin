@@ -32,7 +32,7 @@ func TestAnswerCapabilityErrorTakesTheOperationsRowFirst(t *testing.T) {
 		{"a row with its reason", fmt.Errorf("%w: t1", limes.ErrUnknownTenant), except, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
 		{"a row keeping the refusal's reason", limes.ErrRevoked, except, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REVOKED},
 		{"no row: the table's", fmt.Errorf("%w: t1", limes.ErrUnknownTenant), nil, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
-		{"no row: a refusal as verified", limes.ErrRevoked, nil, connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REVOKED},
+		{"no row: a record revoked, not the caller's credential", limes.ErrRevoked, nil, connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REVOKED},
 		{"no code: the store failing", errStore, except, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 	}
 	for _, tc := range cases {

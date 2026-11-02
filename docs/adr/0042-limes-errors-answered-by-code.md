@@ -22,7 +22,9 @@
      no row, or an error with no code, answers `UNAVAILABLE`.
   3. `UNAVAILABLE` is kept for a failing dependency; the server's own fault
      is `INTERNAL`; a refusal of the capability is `PERMISSION_DENIED` with
-     its reason, and a spent limit `RESOURCE_EXHAUSTED`. Server-side
+     its reason — `UNAUTHENTICATED` when the credential itself is missing,
+     malformed or no longer good (amended below) — and a spent limit
+     `RESOURCE_EXHAUSTED`. Server-side
      failures are logged with their cause, and the caller is told a fixed
      sentence unless the error is a refusal.
   4. The text of a limes error is not mapped on: the code is the contract.
@@ -39,3 +41,13 @@
     request names is `NOT_FOUND`). A test holds every exception row to
     codes limes defines. A store failing there is `UNAVAILABLE`, told only
     to retry; its text is logged as the failure's cause.
+
+## Amendment, 2026-11-02
+
+limes files every code under a category. A code of its `unauthenticated`
+category — an invalid, expired or revoked capability, a bad proof, a plane its
+audience does not name — is answered `UNAUTHENTICATED` on the verify and
+metering paths, where it is about the credential presented. A handler that
+meets one of those codes about a record its request names answers
+`PERMISSION_DENIED`, as before: the caller's own credential has already been
+verified.

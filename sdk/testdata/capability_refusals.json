@@ -6,14 +6,14 @@
       "name": "the bearer audience",
       "audience": ["paladin-data"],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [paladin-data] lacks \"data\""}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [paladin-data] lacks \"data\""}
       ]
     },
     {
       "name": "another plane",
       "audience": ["admin"],
       "calls": [
-        {"call": "get_object", "code": "permission_denied", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [admin] lacks \"data\""}
+        {"call": "get_object", "code": "unauthenticated", "reason": "ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH", "limes_code": "audience_mismatch", "message": "audience mismatch: token audience [admin] lacks \"data\""}
       ]
     },
     {
