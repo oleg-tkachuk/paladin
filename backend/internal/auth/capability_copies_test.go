@@ -59,7 +59,7 @@ func TestCopiesReachTheMeter(t *testing.T) {
 	usage := &copiesUsage{usageStore: store}
 
 	i := &capabilityInterceptor{usage: usage}
-	if err := i.enforceCaveats(context.Background(), v); err != nil {
+	if err := i.enforceCaveats(context.Background(), countedProcedure, v); err != nil {
 		t.Fatalf("enforceCaveats: %v", err)
 	}
 	if usage.bumps != 1 || !reflect.DeepEqual(usage.bumped, copies) {

@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
@@ -148,7 +149,8 @@ func (s *Server) Revoke(token string) {
 // WithStrictAuth, nil when it lets the call through. A capability
 // CapabilityService issued is held, as the server's verifier holds it, to
 // the plane its audience names before its revocation, and its request
-// ceilings are counted once it is verified.
+// ceilings are counted once it is verified, on every call but one of
+// CapabilityService (countsRequest).
 func (s *Server) authenticate(procedure string, header http.Header, msg proto.Message) error {
 	plane, _ := planeOf(procedure)
 	s.mu.Lock()
@@ -167,7 +169,7 @@ func (s *Server) authenticate(procedure string, header http.Header, msg proto.Me
 	if err != nil {
 		return err
 	}
-	if p != nil {
+	if p != nil && countsRequest(procedure) {
 		s.mu.Lock()
 		err := s.bumpRequestsLocked(p.rec)
 		s.mu.Unlock()
@@ -176,6 +178,15 @@ func (s *Server) authenticate(procedure string, header http.Header, msg proto.Me
 		}
 	}
 	return s.authorizeTenant(tenant, msg)
+}
+
+// countsRequest reports whether a call of procedure spends the presented
+// capability's request limit, as the server counts it: every call but one of
+// CapabilityService, which manages capabilities rather than working under
+// them.
+func countsRequest(procedure string) bool {
+	service, _, _ := strings.Cut(strings.TrimPrefix(procedure, "/"), "/")
+	return service != paladinadminv1connect.CapabilityServiceName
 }
 
 // principalTenant is the tenant of the call's credential, found as the

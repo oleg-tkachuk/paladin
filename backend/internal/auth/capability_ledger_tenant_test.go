@@ -76,7 +76,7 @@ func TestCapabilityLedgerWritesRunOnTheCapabilitysTenant(t *testing.T) {
 			})
 			i := &capabilityInterceptor{usage: usage}
 
-			if err := i.enforceCaveats(base, c); err != nil {
+			if err := i.enforceCaveats(base, countedProcedure, c); err != nil {
 				t.Fatalf("enforceCaveats: %v", err)
 			}
 			ctx := withLastOpHolder(WithChargeStore(WithCapability(base, c), usage))

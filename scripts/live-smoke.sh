@@ -54,6 +54,9 @@ readonly CHILD_MAX_REQUESTS=2
 # the check spends.
 readonly LEASE_REQUESTS=2
 readonly LEASE_SPENT=1
+# The request limit of a capability that spends it on data and then still
+# manages capabilities: managing them is not counted.
+readonly SPENT_LIMIT_REQUESTS=1
 readonly CHILD_TTL_SECONDS=600
 # The data port of an api pod, and the first local port the pods are forwarded
 # to, one each, so a check can reach every replica rather than one the
@@ -357,6 +360,19 @@ expect "the request past the ceiling is refused" "$r" test "$(code_of "$r")" = "
 r=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$capped_id\"}")
 expect "usage counts the admitted requests" "$r" test "$(printf %s "$r" | jq -r '.requestCount // "0"')" = "$CEILING_REQUESTS"
 
+# Managing capabilities spends no request: one at its limit still delegates.
+r=$(issue_for live-smoke-spent '["list","share"]' "$SPENT_LIMIT_REQUESTS")
+spent=$(printf %s "$r" | jq -r '.token // empty')
+spent_id=$(printf %s "$r" | jq -r '.capability.id // empty')
+capabilities+=("$spent_id")
+for _ in $(seq "$SPENT_LIMIT_REQUESTS"); do list_with "$spent" >/dev/null; done
+r=$(list_with "$spent")
+expect "a capability at its limit is refused data" "$r" test "$(code_of "$r")" = "$CODE_RESOURCE_EXHAUSTED"
+r=$(delegate "$spent" "$spent_id")
+expect "a capability at its limit still delegates" "$r" test -n "$(printf %s "$r" | jq -r '.token // empty')"
+r=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$spent_id\"}")
+expect "delegating spent no request" "$r" test "$(printf %s "$r" | jq -r '.requestCount // "0"')" = "$SPENT_LIMIT_REQUESTS"
+
 r=$(issue_for live-smoke-parent '["get","list","share"]' "$CAPABILITY_MAX_REQUESTS")
 parent=$(printf %s "$r" | jq -r '.token // empty')
 parent_id=$(printf %s "$r" | jq -r '.capability.id // empty')
@@ -406,8 +422,8 @@ for _ in $(seq "$LEASE_SPENT"); do list_with "$lessee" >/dev/null; done
 r=$(admin_rpc CapabilityService/GetLease "{\"id\":\"$lessee_id\"}")
 expect "a request under the lease is counted on it" "$r" \
     test "$(printf %s "$r" | jq -r '.lease.requestsSpent // "0"')" = "$LEASE_SPENT"
-# The parent's own requests so far, Delegate among them: settling adds the
-# lease's to them.
+# The parent's own requests so far — Delegate is not one of them: settling
+# adds the lease's to them.
 before=$(admin_rpc CapabilityService/GetUsage "{\"id\":\"$lessor_id\"}" | jq -r '.requestCount // "0"')
 r=$(admin_rpc CapabilityService/SettleLease "{\"id\":\"$lessee_id\"}")
 expect "settling answers what the lease spent" "$r" \

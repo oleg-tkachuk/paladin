@@ -276,12 +276,18 @@ class _Multipart:
     bindings: dict[int, _Binding] = field(default_factory=dict)
 
 
+_CAPABILITY_SERVICE = capability_service_pb2.DESCRIPTOR.services_by_name[
+    "CapabilityService"
+].full_name
+"""CapabilityService's full name, as the server's generated code names it."""
+
+
 _SERVED_SERVICES = (
     "paladin.data.v1.ObjectService",
     "paladin.data.v1.MultipartUploadService",
     "paladin.data.v1.PresignService",
     "paladin.data.v1.StorageBootstrapService",
-    "paladin.admin.v1.CapabilityService",
+    _CAPABILITY_SERVICE,
 )
 """The services the fake mounts; ``fail_rpc`` takes a procedure of any of them,
 one the fake answers UNIMPLEMENTED included."""
@@ -498,6 +504,15 @@ def _plane_of(procedure: str) -> str | None:
     if procedure.startswith(_ADMIN_PROCEDURES):
         return str(Plane.ADMIN)
     return None
+
+
+def _counts_request(procedure: str) -> bool:
+    """Whether a call of ``procedure`` spends the presented capability's
+    request limit, as the server counts it: every call but one of
+    CapabilityService, which manages capabilities rather than working under
+    them."""
+    service, _, _ = procedure.removeprefix("/").partition("/")
+    return service != _CAPABILITY_SERVICE
 
 
 def _percent_decode(s: str) -> str:
@@ -1621,7 +1636,8 @@ class FakePaladin(
         """Raise the server's answer to a call's credentials; return when it
         lets the call through. A capability CapabilityService issued is held to
         the plane its audience names before its revocation, and its request
-        ceilings are counted once it is verified."""
+        ceilings are counted once it is verified, on every call but one of
+        CapabilityService (``_counts_request``)."""
         with self._lock:
             presented = self._presented_locked(headers)
         plane = _plane_of(procedure)
@@ -1630,7 +1646,7 @@ class FakePaladin(
             if refusal is not None:
                 raise refusal
         tenant = self._principal_tenant(headers)
-        if presented is not None:
+        if presented is not None and _counts_request(procedure):
             with self._lock:
                 self._bump_requests_locked(presented.rec)
         self._authorize_tenant(tenant, message)

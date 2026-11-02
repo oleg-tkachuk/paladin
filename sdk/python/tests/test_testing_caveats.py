@@ -138,6 +138,8 @@ def test_a_capability_is_refused_as_the_table_says(
 
 
 def test_an_ancestors_request_ceiling_counts(strict: FakePaladin) -> None:
+    """The parent's Delegate does not spend its limit: managing capabilities
+    is not counted, so its child has the parent's whole limit."""
     obj = strict.put(strict.collection(), "k", "text/plain", b"x")
     parent = _issue(
         strict,
@@ -154,6 +156,7 @@ def test_an_ancestors_request_ceiling_counts(strict: FakePaladin) -> None:
     get = lambda: as_child.data.object.get_object(
         object_service_pb2.GetObjectRequest(name=obj.name)
     )
+    assert _answer(get) == ("", "", "", "")
     assert _answer(get) == ("", "", "", "")
     assert _answer(get) == (
         Code.RESOURCE_EXHAUSTED.value,
