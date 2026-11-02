@@ -19,7 +19,7 @@ import (
 func TestLeaseLifecycleUnderRowLevelSecurity(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
-	usage := newUsageStore(t, rlsPool(t, ctx, f.pool), capstore.WithLeases(true))
+	usage := newUsageStore(t, rlsPool(t, ctx, f.pool))
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	child := f.subject(t, ctx, f.child)
 
@@ -54,8 +54,9 @@ func TestLeaseLifecycleUnderRowLevelSecurity(t *testing.T) {
 func TestLeaseRefusedWithLeasingOff(t *testing.T) {
 	t.Parallel()
 	ctx, f := newLineageFixture(t)
+	usage := newUsageStore(t, f.pool, capstore.WithLeases(false))
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
-	_, err := f.usage.Lease(ledgerCtx, meter.LeaseRequest{Subject: f.subject(t, ctx, f.child), Amount: limes.MustParseAmount("1")})
+	_, err := usage.Lease(ledgerCtx, meter.LeaseRequest{Subject: f.subject(t, ctx, f.child), Amount: limes.MustParseAmount("1")})
 	if !errors.Is(err, meter.ErrLeasingDisabled) {
 		t.Fatalf("lease with leasing off: err = %v, want ErrLeasingDisabled", err)
 	}

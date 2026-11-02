@@ -57,7 +57,7 @@ func TestMeterContract(t *testing.T) {
 		return metertest.Env{
 			Ctx: auth.WithActingTenant(ctx, tenant),
 			// Leasing on, as the server runs it, so the lease contract holds.
-			Usage:  newUsageStore(t, pool, capstore.WithClock(clock.Now), capstore.WithLeases(true)),
+			Usage:  newUsageStore(t, pool, capstore.WithClock(clock.Now)),
 			Tenant: tenant,
 			// Each tenant's rows are written as that tenant, and the list
 			// across tenants is a platform-wide read, as the admin plane does.
