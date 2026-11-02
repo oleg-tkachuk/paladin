@@ -46,8 +46,11 @@ outcomes only add to the total. limes counts a charge in another currency as
 1. **Which budget.** Split the tenant's refusals by outcome:
 
    ```
-   sum by (__name__, limes_outcome) (rate({__name__=~"limes_charge_decisions_total|limes_request_bumps_total", limes_tenant_id="<tenant>"}[15m]))
+   sum by (__name__, limes_outcome, limes_scope) (rate({__name__=~"limes_charge_decisions_total|limes_request_bumps_total", limes_tenant_id="<tenant>"}[15m]))
    ```
+
+   A refusal carries `limes_scope`, the ceiling that refused it:
+   `capability` (its own or an ancestor's), `lease`, `copy` or `tenant`.
 
 2. **`tenant_budget_exceeded`: the tenant's budget is spent.** This is the tenant
    budget (`TenantBudgetService`), not storage quotas (`QuotaService`).

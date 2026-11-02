@@ -407,7 +407,7 @@
     {
       "type": "timeseries",
       "title": "Refused capability calls by tenant",
-      "description": "Metered calls refused per tenant, as the PaladinCapabilityChargesRefused alert counts them: budget_exceeded (a capability's, an ancestor's, a copy's or a lease's budget) and tenant_budget_exceeded on a charge, request_limit_exceeded (a request limit, a copy's quota or a lease's requests) on a charge or a request bump. Empty is the normal state.",
+      "description": "Metered calls refused per tenant, as the PaladinCapabilityChargesRefused alert counts them: budget_exceeded (a capability's, an ancestor's, a copy's or a lease's budget) and tenant_budget_exceeded on a charge, request_limit_exceeded (a request limit, a copy's quota or a lease's requests) on a charge or a request bump. limes_scope names the ceiling that refused: capability (its own or an ancestor's), lease, copy or tenant. Empty is the normal state.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,
@@ -418,8 +418,8 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "sum by (limes_tenant_id, limes_outcome) (rate({__name__=~\"limes_charge_decisions_total|limes_request_bumps_total\", limes_outcome=~\"budget_exceeded|tenant_budget_exceeded|request_limit_exceeded\"}[$__rate_interval]))",
-          "legendFormat": "{{limes_tenant_id}} {{limes_outcome}}"
+          "expr": "sum by (limes_tenant_id, limes_outcome, limes_scope) (rate({__name__=~\"limes_charge_decisions_total|limes_request_bumps_total\", limes_outcome=~\"budget_exceeded|tenant_budget_exceeded|request_limit_exceeded\"}[$__rate_interval]))",
+          "legendFormat": "{{limes_tenant_id}} {{limes_outcome}} ({{limes_scope}})"
         }
       ],
       "fieldConfig": {

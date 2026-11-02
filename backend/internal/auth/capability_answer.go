@@ -12,7 +12,7 @@ import (
 )
 
 // An Exception is how one operation answers a limes code otherwise than
-// capabilityCodes does: a parent's revocation is the caller's precondition
+// capabilityStatus does: a parent's revocation is the caller's precondition
 // while delegating, and a record the request names is NotFound to the admin
 // API. Reason is the one a client tells the answer by; unspecified keeps a
 // refusal's own.
@@ -21,7 +21,7 @@ type Exception struct {
 	Reason commonv1.ErrorReason
 }
 
-// Exceptions are an operation's rows over capabilityCodes, by limes code.
+// Exceptions are an operation's rows over capabilityStatus, by limes code.
 type Exceptions map[limes.Code]Exception
 
 // Malformed answers each of codes — limes refusing the request as malformed
@@ -60,7 +60,7 @@ func (e Exceptions) Undefined() []limes.Code {
 const capabilityUnanswered = "the capability store could not answer; retry"
 
 // AnswerCapabilityError answers err, which an operation on capabilities met,
-// by its limes code: the operation's row in except, else capabilityCodes',
+// by its limes code: the operation's row in except, else capabilityStatus,
 // else capabilityUnknownCode. An error already answered — a *connect.Error —
 // is returned as it is.
 func AnswerCapabilityError(err error, except Exceptions) error {
@@ -78,7 +78,7 @@ func AnswerCapabilityError(err error, except Exceptions) error {
 			return withCapabilityInfo(connect.NewError(row.Code, err.Error()).WithCause(err), err, row.Reason)
 		}
 	}
-	status := capabilityStatus(capabilityCodes, err)
+	status := capabilityStatus(err)
 	if _, refused := limes.ReasonOf(err); status == connect.CodeUnavailable && !refused {
 		return withCapabilityInfo(connect.NewError(status, capabilityUnanswered).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	}

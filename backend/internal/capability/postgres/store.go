@@ -27,15 +27,15 @@ type Option func(*options)
 type options struct {
 	now         func() time.Time
 	defaultUnit string
-	leases      bool
+	noLeases    bool
 }
 
-// WithLeases has the usage store open budget leases (meter.Leaser). Every
-// instance writing the database must run pgstore v0.58.0 or later first;
-// without it a Lease is refused with meter.ErrLeasingDisabled, and leases
-// already open are still charged under and settled.
+// WithLeases decides whether the usage store opens budget leases
+// (meter.Leaser); it does unless told otherwise, as pgstore does. Off, a
+// Lease is refused with meter.ErrLeasingDisabled, and leases already open
+// are still charged under and settled.
 func WithLeases(on bool) Option {
-	return func(o *options) { o.leases = on }
+	return func(o *options) { o.noLeases = !on }
 }
 
 // WithClock runs the stores on now instead of the wall clock. For tests that
@@ -60,7 +60,7 @@ func config(pool *pgxpool.Pool, opts []Option) (pgstore.Config, options, error) 
 	}
 	return pgstore.Config{
 		DB: pool, Now: o.now, Scope: Scope, CheckScope: pgstore.CheckSchemaScope, CheckTenant: checkTenant,
-		Leases: o.leases,
+		DisableLeases: o.noLeases,
 	}, o, nil
 }
 

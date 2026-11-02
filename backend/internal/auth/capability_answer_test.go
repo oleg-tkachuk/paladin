@@ -14,7 +14,7 @@ import (
 )
 
 // An operation answers a limes error by its own row first, then by
-// capabilityCodes, then as a dependency failing; a row with a reason names
+// capabilityStatus, then as a dependency failing; a row with a reason names
 // it, a row without keeps the refusal's own.
 func TestAnswerCapabilityErrorTakesTheOperationsRowFirst(t *testing.T) {
 	errStore := errors.New(`pgstore: insert: ERROR: violates foreign key constraint "capability_records_fkey" (SQLSTATE 23503)`)

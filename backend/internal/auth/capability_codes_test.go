@@ -19,35 +19,34 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
-// Every code limes and its meter define has a row in capabilityCodes, so a code a
-// release adds fails here rather than answering as the store failing; and
-// every row names a code they define, so a renamed one cannot linger.
-func TestCapabilityCodesCoverEveryLimesCode(t *testing.T) {
+// Every category limes files a code under has a row, so a code a release
+// adds is answered by its category rather than as the store failing; and
+// every override names a code limes defines, so a renamed one cannot linger.
+func TestCapabilityCodesCoverEveryLimesCategory(t *testing.T) {
+	for _, c := range limes.Categories() {
+		if _, ok := capabilityCategoryCodes[c]; !ok {
+			t.Errorf("limes category %q has no row in capabilityCategoryCodes", c)
+		}
+	}
 	defined := map[limes.Code]bool{}
 	for _, c := range append(limes.Codes(), meter.Codes()...) {
 		defined[c] = true
-		if _, ok := capabilityCodes[c]; !ok {
-			t.Errorf("limes code %q has no row in capabilityCodes", c)
-		}
 	}
-	for c := range capabilityCodes {
+	for c := range capabilityCodeOverrides {
 		if !defined[c] {
-			t.Errorf("capabilityCodes names %q, which limes does not define", c)
+			t.Errorf("capabilityCodeOverrides names %q, which limes does not define", c)
 		}
 	}
 }
 
-// A metering error answers by its code's row; one that carries no limes
-// code, or a code with no row, is the store failing.
+// A metering error answers by its code's override or its category's row;
+// one that carries no limes code is the store failing.
 func TestCapabilityStatusFallsBackToUnavailable(t *testing.T) {
-	if got := capabilityStatus(capabilityCodes, errors.New("store down")); got != capabilityUnknownCode {
+	if got := capabilityStatus(errors.New("store down")); got != capabilityUnknownCode {
 		t.Errorf("an error with no limes code = %v, want %v", got, capabilityUnknownCode)
 	}
-	if got := capabilityStatus(map[limes.Code]connect.Code{}, limes.ErrRevoked); got != capabilityUnknownCode {
-		t.Errorf("a code with no row = %v, want %v", got, capabilityUnknownCode)
-	}
-	if got := capabilityStatus(capabilityCodes, fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodePermissionDenied {
-		t.Errorf("a wrapped revocation = %v, want its row's %v", got, connect.CodePermissionDenied)
+	if got := capabilityStatus(fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodePermissionDenied {
+		t.Errorf("a wrapped revocation = %v, want its category's %v", got, connect.CodePermissionDenied)
 	}
 }
 

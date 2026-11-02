@@ -88,11 +88,10 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	if _, err := usage.Reserve(acting, meter.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
+	// The subject token lives as long as the capability exchanged for it.
 	if _, _, err := records.ClaimExchange(acting, limes.ExchangeKey{
 		TenantID: tenant, Issuer: seedExchangeIssuer, TokenID: seedExchangeTokenID,
-		// The subject token lives as long as the capability exchanged for it.
-		TokenExpiresAt: c.ExpiresAt,
-	}, c.ID); err != nil {
+	}, c.ExpiresAt, c.ID); err != nil {
 		t.Fatalf("claim exchange: %v", err)
 	}
 	if _, err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {

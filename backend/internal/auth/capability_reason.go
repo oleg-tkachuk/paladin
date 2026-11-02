@@ -52,7 +52,7 @@ func verifyError(ctx context.Context, err error) error {
 }
 
 // capabilityFailure answers an error verifying or metering a presented
-// capability — stage names which — through capabilityCodes, so both answer one
+// capability — stage names which — through capabilityStatus, so both answer one
 // caller alike: a spent limit is ResourceExhausted, a refusal of the
 // capability PermissionDenied with its reason, the server's own fault
 // Internal, and only a failing dependency Unavailable. A key-bound capability
@@ -61,7 +61,7 @@ func verifyError(ctx context.Context, err error) error {
 // is a refusal, whose reason the caller acts on, the caller is told a fixed
 // sentence rather than the server's internals.
 func capabilityFailure(ctx context.Context, stage string, err error) error {
-	status := capabilityStatus(capabilityCodes, err)
+	status := capabilityStatus(err)
 	_, refused := limes.ReasonOf(err)
 	switch {
 	case errors.Is(err, limes.ErrProofUnsupported):
