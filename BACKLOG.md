@@ -380,13 +380,23 @@ open deliberately — each notes why._
   set fillfactor on hot-update tables but didn't touch
   `autovacuum_vacuum_scale_factor` / `autovacuum_analyze_scale_factor`
   per table — needs live bloat metrics to choose values that aren't
-  guesses.
+  guesses. A snapshot of `pg_stat_user_tables` on the local cluster
+  (2026-11-02, ~17 h of uptime) shows why the local cluster cannot supply
+  them: the only table with real churn is `worker_leases` (132k updates,
+  all but three HOT, autovacuumed 729 times on 22 live rows — healthy at
+  the defaults); every other table, `limes.usage` included, saw hundreds
+  of writes. `pgstattuple` is available on the CNPG image but not
+  installed.
 - **Definition of Done:**
   - 30 days of `pgstattuple` / `pg_stat_user_tables` data.
   - Per-table override for the 5 hottest tables landing in a follow-up
     migration with measured before/after bloat.
-- **Blockers:** observability instrumentation + a representative
-  workload.
+- **Blockers:**
+  - A representative workload: the local cluster runs smoke tests, not
+    traffic.
+  - A store for the 30 days: the local cluster runs the VictoriaMetrics and
+    Grafana operators with no VMSingle and no Grafana instance, and Alloy
+    forwards traces only, so no Postgres metric is kept anywhere.
 
 ---
 
