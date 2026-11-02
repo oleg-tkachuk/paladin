@@ -1,4 +1,4 @@
-## Unreleased — managing capabilities spends no request
+## sdk/go/v0.137.0, sdk/python/v0.138.0 — managing capabilities spends no request
 
 - A call of `CapabilityService` presented with a capability — `Delegate`,
   `Lease`, `GetLease`, `SettleLease`, `Get`, `List` and the rest — no longer
