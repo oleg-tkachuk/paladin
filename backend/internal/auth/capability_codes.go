@@ -65,15 +65,23 @@ var capabilityCodeOverrides = map[limes.Code]connect.Code{
 // the caller retries.
 const capabilityUnknownCode = connect.CodeUnavailable
 
-// capabilityStatus is err's transport code: its code's override, else its
-// category's, else capabilityUnknownCode when err carries no limes code.
+// capabilityStatus is err's transport code: its limes code's, or
+// capabilityUnknownCode when err carries none.
 func capabilityStatus(err error) connect.Code {
-	if code, ok := meter.CodeOf(err); ok {
-		if status, ok := capabilityCodeOverrides[code]; ok {
-			return status
-		}
+	code, ok := meter.CodeOf(err)
+	if !ok {
+		return capabilityUnknownCode
 	}
-	if category, ok := meter.CategoryOf(err); ok {
+	return codeStatus(code)
+}
+
+// codeStatus is code's override, else its category's row, else
+// capabilityUnknownCode.
+func codeStatus(code limes.Code) connect.Code {
+	if status, ok := capabilityCodeOverrides[code]; ok {
+		return status
+	}
+	if category, ok := meter.CategoryOfCode(code); ok {
 		if status, ok := capabilityCategoryCodes[category]; ok {
 			return status
 		}

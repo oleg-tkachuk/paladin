@@ -6,98 +6,105 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/limes/dpop"
-	"github.com/oleg-tkachuk/limes/jwks"
 	"github.com/oleg-tkachuk/limes/meter"
 )
 
-// What reaches the wire for every error limes and its meter name a code for:
-// one sentinel per code, so a code a release adds fails here until it is
-// answered on purpose, and a change to how codes are answered shows here as
-// a changed row.
+// What reaches the wire for every code limes and its meter define: a code a
+// release adds fails here until it is answered on purpose, and a change to
+// how codes are answered shows here as a changed row.
 func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 	cases := []struct {
-		err  error
+		code limes.Code
 		want connect.Code
 	}{
-		{limes.ErrMalformedAuthorization, connect.CodeInvalidArgument},
-		{limes.ErrNoCredentials, connect.CodePermissionDenied},
-		{jwks.ErrUnavailable, connect.CodeUnavailable},
-		{dpop.ErrNonceRequired, connect.CodePermissionDenied},
-		{dpop.ErrRequired, connect.CodePermissionDenied},
-		{dpop.ErrInvalid, connect.CodePermissionDenied},
-		{dpop.ErrReplayed, connect.CodePermissionDenied},
-		{limes.ErrAuthSchemeMismatch, connect.CodePermissionDenied},
-		{limes.ErrProofOfPossession, connect.CodePermissionDenied},
-		{limes.ErrBiscuitAttenuation, connect.CodePermissionDenied},
-		{limes.ErrInvalidToken, connect.CodePermissionDenied},
-		{limes.ErrExpired, connect.CodePermissionDenied},
-		{limes.ErrNotYetValid, connect.CodePermissionDenied},
-		{limes.ErrTenantErased, connect.CodePermissionDenied},
-		{limes.ErrDelegationTooDeep, connect.CodePermissionDenied},
-		{limes.ErrRevoked, connect.CodePermissionDenied},
-		{limes.ErrAudienceMismatch, connect.CodePermissionDenied},
-		{limes.ErrUnauthenticated, connect.CodePermissionDenied},
-		{limes.ErrOpNotAllowed, connect.CodePermissionDenied},
-		{limes.ErrResourceNotAllowed, connect.CodePermissionDenied},
-		{limes.ErrSourceIPNotAllowed, connect.CodePermissionDenied},
-		{limes.ErrIdempotencyKeyRequired, connect.CodePermissionDenied},
-		{limes.ErrTaintedReadNotAllowed, connect.CodePermissionDenied},
-		{limes.ErrCaveatViolation, connect.CodePermissionDenied},
-		{limes.ErrRequestLimitExceeded, connect.CodeResourceExhausted},
-		{limes.ErrBudgetExceeded, connect.CodeResourceExhausted},
-		{limes.ErrTenantBudgetExceeded, connect.CodeResourceExhausted},
-		{limes.ErrUnitCodeMismatch, connect.CodeFailedPrecondition},
-		{limes.ErrAlreadyExists, connect.CodeAlreadyExists},
-		{limes.ErrConflict, connect.CodeAborted},
-		{limes.ErrInvalidCaveats, connect.CodeInvalidArgument},
-		{limes.ErrInvalidAmount, connect.CodeInvalidArgument},
-		{limes.ErrEffectConflict, connect.CodeInvalidArgument},
-		{limes.ErrCursorMismatch, connect.CodeInvalidArgument},
-		{limes.ErrInvalidRequest, connect.CodeInvalidArgument},
-		{limes.ErrDelegationTooWide, connect.CodePermissionDenied},
-		{jwks.ErrUnknownKID, connect.CodePermissionDenied},
-		{limes.ErrNotFound, connect.CodeFailedPrecondition},
-		{limes.ErrUnknownTenant, connect.CodeFailedPrecondition},
-		{limes.ErrTenantDeleted, connect.CodeFailedPrecondition},
-		{limes.ErrScopeMismatch, connect.CodeInternal},
-		{limes.ErrProofUnsupported, connect.CodeFailedPrecondition},
-		{limes.ErrNoRevocationLineage, connect.CodeUnavailable},
-		{limes.ErrCopyCountersNotMetered, connect.CodeInternal},
-		{limes.ErrCursorRepeated, connect.CodeUnavailable},
-		{limes.ErrInvalidConfig, connect.CodeInternal},
-		{limes.ErrInternal, connect.CodeInternal},
-		{meter.ErrCopyLimitExceeded, connect.CodeResourceExhausted},
-		{meter.ErrCounterOverflow, connect.CodeFailedPrecondition},
-		{meter.ErrChargeNotFound, connect.CodeFailedPrecondition},
-		{meter.ErrRefundExceedsCharge, connect.CodeAborted},
-		{meter.ErrReservationNotFound, connect.CodeFailedPrecondition},
-		{meter.ErrUsageNotFound, connect.CodeFailedPrecondition},
-		{meter.ErrTenantBudgetNotFound, connect.CodeFailedPrecondition},
-		{meter.ErrTenantBudgetVersionMismatch, connect.CodeAborted},
-		{meter.ErrExternalRefConflict, connect.CodeAborted},
-		{meter.ErrSettleConflict, connect.CodeAborted},
-		{meter.ErrLeaseExhausted, connect.CodeResourceExhausted},
-		{meter.ErrLeaseRequestsExhausted, connect.CodeResourceExhausted},
-		{meter.ErrLeaseNotFound, connect.CodeFailedPrecondition},
-		{meter.ErrLeaseNested, connect.CodeFailedPrecondition},
-		{meter.ErrLeasingDisabled, connect.CodeFailedPrecondition},
+		{limes.CodeMalformedAuthorization, connect.CodeInvalidArgument},
+		{limes.CodeNoCredentials, connect.CodePermissionDenied},
+		{limes.CodeKeysUnavailable, connect.CodeUnavailable},
+		{limes.CodeNonceRequired, connect.CodePermissionDenied},
+		{limes.CodeProofRequired, connect.CodePermissionDenied},
+		{limes.CodeProofInvalid, connect.CodePermissionDenied},
+		{limes.CodeProofReplayed, connect.CodePermissionDenied},
+		{limes.CodeAuthSchemeMismatch, connect.CodePermissionDenied},
+		{limes.CodeProofOfPossession, connect.CodePermissionDenied},
+		{limes.CodeBiscuitAttenuation, connect.CodePermissionDenied},
+		{limes.CodeInvalidToken, connect.CodePermissionDenied},
+		{limes.CodeExpired, connect.CodePermissionDenied},
+		{limes.CodeNotYetValid, connect.CodePermissionDenied},
+		{limes.CodeTenantErased, connect.CodePermissionDenied},
+		{limes.CodeDelegationTooDeep, connect.CodePermissionDenied},
+		{limes.CodeRevoked, connect.CodePermissionDenied},
+		{limes.CodeAudienceMismatch, connect.CodePermissionDenied},
+		{limes.CodeUnauthenticated, connect.CodePermissionDenied},
+		{limes.CodeOpNotAllowed, connect.CodePermissionDenied},
+		{limes.CodeResourceNotAllowed, connect.CodePermissionDenied},
+		{limes.CodeSourceIPNotAllowed, connect.CodePermissionDenied},
+		{limes.CodeIdempotencyKeyRequired, connect.CodePermissionDenied},
+		{limes.CodeTaintedReadNotAllowed, connect.CodePermissionDenied},
+		{limes.CodeCaveatViolation, connect.CodePermissionDenied},
+		{limes.CodeRequestLimitExceeded, connect.CodeResourceExhausted},
+		{limes.CodeBudgetExceeded, connect.CodeResourceExhausted},
+		{limes.CodeTenantBudgetExceeded, connect.CodeResourceExhausted},
+		{limes.CodeUnitCodeMismatch, connect.CodeFailedPrecondition},
+		{limes.CodeAlreadyExists, connect.CodeAlreadyExists},
+		{limes.CodeConflict, connect.CodeAborted},
+		{limes.CodeInvalidCaveats, connect.CodeInvalidArgument},
+		{limes.CodeInvalidAmount, connect.CodeInvalidArgument},
+		{limes.CodeEffectConflict, connect.CodeInvalidArgument},
+		{limes.CodeCursorMismatch, connect.CodeInvalidArgument},
+		{limes.CodeInvalidRequest, connect.CodeInvalidArgument},
+		{limes.CodeDelegationTooWide, connect.CodePermissionDenied},
+		{limes.CodeUnknownKID, connect.CodePermissionDenied},
+		{limes.CodeNotFound, connect.CodeFailedPrecondition},
+		{limes.CodeUnknownTenant, connect.CodeFailedPrecondition},
+		{limes.CodeTenantDeleted, connect.CodeFailedPrecondition},
+		{limes.CodeScopeMismatch, connect.CodeInternal},
+		{limes.CodeProofUnsupported, connect.CodeFailedPrecondition},
+		{limes.CodeNoRevocationLineage, connect.CodeUnavailable},
+		{limes.CodeCopyCountersNotMetered, connect.CodeInternal},
+		{limes.CodeCursorRepeated, connect.CodeUnavailable},
+		{limes.CodeInvalidConfig, connect.CodeInternal},
+		{limes.CodeInternal, connect.CodeInternal},
+		{meter.CodeCopyLimitExceeded, connect.CodeResourceExhausted},
+		{meter.CodeCounterOverflow, connect.CodeFailedPrecondition},
+		{meter.CodeChargeNotFound, connect.CodeFailedPrecondition},
+		{meter.CodeRefundExceedsCharge, connect.CodeAborted},
+		{meter.CodeReservationNotFound, connect.CodeFailedPrecondition},
+		{meter.CodeUsageNotFound, connect.CodeFailedPrecondition},
+		{meter.CodeTenantBudgetNotFound, connect.CodeFailedPrecondition},
+		{meter.CodeTenantBudgetVersionMismatch, connect.CodeAborted},
+		{meter.CodeExternalRefConflict, connect.CodeAborted},
+		{meter.CodeSettleConflict, connect.CodeAborted},
+		{meter.CodeLeaseExhausted, connect.CodeResourceExhausted},
+		{meter.CodeLeaseRequestsExhausted, connect.CodeResourceExhausted},
+		{meter.CodeLeaseNotFound, connect.CodeFailedPrecondition},
+		{meter.CodeLeaseNested, connect.CodeFailedPrecondition},
+		{meter.CodeLeasingDisabled, connect.CodeFailedPrecondition},
 	}
 	covered := map[limes.Code]bool{}
 	for _, tc := range cases {
-		code, ok := meter.CodeOf(tc.err)
-		if !ok {
-			t.Errorf("%v carries no limes code", tc.err)
-			continue
-		}
-		covered[code] = true
-		if got := capabilityStatus(tc.err); got != tc.want {
-			t.Errorf("%s answers %v, want %v", code, got, tc.want)
+		covered[tc.code] = true
+		if got := codeStatus(tc.code); got != tc.want {
+			t.Errorf("%s answers %v, want %v", tc.code, got, tc.want)
 		}
 	}
 	for _, c := range append(limes.Codes(), meter.Codes()...) {
 		if !covered[c] {
 			t.Errorf("limes code %q has no case here", c)
+		}
+	}
+}
+
+// An override answers its code otherwise than the code's category does;
+// one that agrees with it is dead weight that hides a category's change.
+func TestCapabilityCodeOverridesDifferFromTheirCategory(t *testing.T) {
+	for code, status := range capabilityCodeOverrides {
+		category, ok := meter.CategoryOfCode(code)
+		if !ok {
+			t.Errorf("override %q is no limes code", code)
+			continue
+		}
+		if capabilityCategoryCodes[category] == status {
+			t.Errorf("override %q answers %v, as its category %q does", code, status, category)
 		}
 	}
 }
