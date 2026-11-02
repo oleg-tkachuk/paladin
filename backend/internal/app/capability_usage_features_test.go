@@ -27,24 +27,29 @@ func memUsage(t *testing.T) meter.UsageStore {
 	return usage
 }
 
-// The usage store the server runs on, metered as it runs, has every feature
-// the server calls; one that dropped any is refused at startup, naming it.
-func TestCapabilityUsageFeatures(t *testing.T) {
+// The usage store the server runs on, metered as it runs, has every
+// optional interface the server calls; one that dropped any is refused at
+// startup, naming each.
+func TestCapabilityUsageParts(t *testing.T) {
 	metered, err := meteredUsage(memUsage(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := requireUsageFeatures(metered); err != nil {
+	parts, err := usagePartsOf(metered)
+	if err != nil {
 		t.Fatalf("the metered usage store: %v", err)
 	}
-
-	err = requireUsageFeatures(bareUsage{metered})
-	if !errors.Is(err, limes.ErrInvalidConfig) {
-		t.Fatalf("a store with no optional feature: err = %v, want ErrInvalidConfig", err)
+	if parts.copies == nil || parts.holds == nil || parts.leases == nil || parts.budgets == nil {
+		t.Fatalf("parts of the metered usage store left unset: %+v", parts)
 	}
-	for _, f := range capabilityUsageFeatures {
-		if !strings.Contains(err.Error(), string(f)) {
-			t.Errorf("the refusal %q does not name %q", err, f)
+
+	_, err = usagePartsOf(bareUsage{metered})
+	if !errors.Is(err, limes.ErrInvalidConfig) {
+		t.Fatalf("a store with no optional interface: err = %v, want ErrInvalidConfig", err)
+	}
+	for _, name := range []string{"CopyUsageReader", "MatchingReleaser", "Leaser", "TenantBudgetStore"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("the refusal %q does not name %s", err, name)
 		}
 	}
 }

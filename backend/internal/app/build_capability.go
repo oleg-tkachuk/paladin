@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/otelmetric"
 	"github.com/oleg-tkachuk/limes/pgstore"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
@@ -36,6 +37,8 @@ type CapabilityBundle struct {
 	Usage     meter.UsageStore
 	// Leases opens, reads and settles the budget leases of capabilities.
 	Leases meter.Leaser
+	// Budgets serves TenantBudgetService: the tenant budgets and their holds.
+	Budgets admin.TenantBudgetStore
 	// Ledger reads the charges ledger for billing, and removes its old
 	// charges for the capability purger when asked to.
 	Ledger *pgstore.Ledger
@@ -248,13 +251,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
-	if err := requireUsageFeatures(usage); err != nil {
+	parts, err := usagePartsOf(usage)
+	if err != nil {
 		return nil, err
 	}
-	// Each holds after requireUsageFeatures.
-	copyUsage := usage.(meter.CopyUsageReader)
-	holds := usage.(meter.MatchingReleaser)
-	leases := usage.(meter.Leaser)
 	ledger, err := capabilitypg.NewLedger(deps.Pool)
 	if err != nil {
 		return nil, fmt.Errorf("app: charges ledger: %w", err)
@@ -264,12 +264,13 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Store:          store,
 		Revocations:    cache,
 		Copies:         store,
-		CopyUsage:      copyUsage,
+		CopyUsage:      parts.copies,
 		Records:        records,
 		Exchanges:      pgstore.ScopedExchanges(store),
-		BulkRevocation: &auth.BulkRevocation{Revoker: store, Holds: holds},
+		BulkRevocation: &auth.BulkRevocation{Revoker: store, Holds: parts.holds},
 		Usage:          usage,
-		Leases:         leases,
+		Leases:         parts.leases,
+		Budgets:        parts.budgets,
 		Ledger:         ledger,
 		Issuer:         issuers.issuer,
 		Delegation:     issuers.delegation,
@@ -329,21 +330,28 @@ func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (dpop.Nonces,
 	return nonces, nil
 }
 
-// capabilityUsageFeatures are the usage store's optional features the server
-// calls: a Biscuit copy's counters, the holds a bulk revocation releases, the
-// budget leases, and the tenant budgets' open holds (TenantBudgetService).
-var capabilityUsageFeatures = []meter.Feature{
-	meter.FeatureCopyUsage, meter.FeatureMatchingRelease, meter.FeatureLeases, meter.FeatureTenantReservations,
+// usageParts are the usage store's optional interfaces the server calls.
+type usageParts struct {
+	copies  meter.CopyUsageReader   // a Biscuit copy's own counters
+	holds   meter.MatchingReleaser  // the holds a bulk revocation releases
+	leases  meter.Leaser            // the budget leases
+	budgets admin.TenantBudgetStore // the tenant budgets with their holds
 }
 
-// requireUsageFeatures refuses a usage store, or a decorator over one, that
-// lacks a feature the server calls, naming each missing one: at startup,
-// rather than on the first call that needs it.
-func requireUsageFeatures(usage meter.UsageStore) error {
-	if err := meter.Require(usage, capabilityUsageFeatures...); err != nil {
-		return fmt.Errorf("app: capability usage store: %w", err)
+// usagePartsOf takes each of usageParts from usage, or refuses a usage store,
+// or a decorator over one, that lacks any, naming each missing one: at
+// startup, rather than on the first call that needs it.
+func usagePartsOf(usage meter.UsageStore) (usageParts, error) {
+	var p usageParts
+	var errCopies, errHolds, errLeases, errBudgets error
+	p.copies, errCopies = meter.As[meter.CopyUsageReader](usage)
+	p.holds, errHolds = meter.As[meter.MatchingReleaser](usage)
+	p.leases, errLeases = meter.As[meter.Leaser](usage)
+	p.budgets, errBudgets = meter.As[admin.TenantBudgetStore](usage)
+	if err := errors.Join(errCopies, errHolds, errLeases, errBudgets); err != nil {
+		return usageParts{}, fmt.Errorf("app: capability usage store: %w", err)
 	}
-	return nil
+	return p, nil
 }
 
 // meteredUsage is store counted by limes's own instruments, by tenant: each
