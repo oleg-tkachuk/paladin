@@ -1,4 +1,4 @@
-## Unreleased — a capability that is no longer good is UNAUTHENTICATED
+## sdk/go/v0.137.0, sdk/python/v0.138.0 — a capability that is no longer good is UNAUTHENTICATED
 
 - A capability the server cannot accept as a credential — not issued by it,
   malformed, expired or not yet valid, revoked, past its delegation depth,
