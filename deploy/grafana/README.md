@@ -94,10 +94,11 @@ The work that does not show up in RPC metrics.
 capability-charge series; the
 outbox gauge carries the deepest tenant's depth, not a per-tenant series.
 
-"Refused capability charges" counts the outcomes the chart's
+"Refused capability calls" counts the outcomes the chart's
 `PaladinCapabilityChargesRefused` alert does (`refusedOutcomes` in the chart's
-values), and `grafana-dashboards.test.sh` fails when the two differ. `overrun`
-committed and `error` is no ceiling, so neither is a refusal there.
+values), over charges and request bumps alike, and `grafana-dashboards.test.sh`
+fails when the two differ. `overrun` committed and `error` is no ceiling, so
+neither is a refusal there.
 
 The presign and capability panels' label values were read off the live series
 (each core pod's `/metrics`) on 2026-11-02, before any panel was trusted.

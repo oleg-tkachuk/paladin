@@ -325,9 +325,12 @@ tests:
         exp_alerts: []
 
   # t1: every charge refused by the tenant's budget → fires. t3: by the
-  # capability's → fires. t2: charges succeed → silent.
+  # capability's → fires. t4: every request bump refused by its request
+  # limit → fires. t2: charges succeed → silent.
   - interval: 1m
     input_series:
+      - series: 'limes_request_bumps_total{limes_tenant_id="t4", limes_outcome="request_limit_exceeded"}'
+        values: "0+10x60"
       - series: 'limes_charge_decisions_total{limes_tenant_id="t1", limes_outcome="tenant_budget_exceeded"}'
         values: "0+10x60"
       - series: 'limes_charge_decisions_total{limes_tenant_id="t3", limes_outcome="budget_exceeded"}'
@@ -344,19 +347,28 @@ tests:
               severity: warning
               limes_tenant_id: t1
             exp_annotations:
-              summary: "Tenant t1 has nearly every capability charge refused"
+              summary: "Tenant t1 has nearly every capability call refused"
               description: >-
-                Over 90% of charge attempts were refused for 15m. Check the
-                tenant's budget and the issuing capability's budget.
+                Over 90% of metered calls were refused for 15m. Check the
+                tenant's budget and the issuing capability's budget and request limit.
               runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
           - exp_labels:
               severity: warning
               limes_tenant_id: t3
             exp_annotations:
-              summary: "Tenant t3 has nearly every capability charge refused"
+              summary: "Tenant t3 has nearly every capability call refused"
               description: >-
-                Over 90% of charge attempts were refused for 15m. Check the
-                tenant's budget and the issuing capability's budget.
+                Over 90% of metered calls were refused for 15m. Check the
+                tenant's budget and the issuing capability's budget and request limit.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
+          - exp_labels:
+              severity: warning
+              limes_tenant_id: t4
+            exp_annotations:
+              summary: "Tenant t4 has nearly every capability call refused"
+              description: >-
+                Over 90% of metered calls were refused for 15m. Check the
+                tenant's budget and the issuing capability's budget and request limit.
               runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/capability-charges-refused.md"
 
   # t1 refused at 2 req/s → fires. t2 refused at 0.5 req/s → silent.

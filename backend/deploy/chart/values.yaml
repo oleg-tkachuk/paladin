@@ -572,15 +572,19 @@ metrics:
       capabilityChargesRefused:
         enabled: true
         severity: warning
-        # A tenant's share of charges refused with one of refusedOutcomes.
+        # A tenant's share of metered calls — charges and request bumps —
+        # refused with one of refusedOutcomes.
         refusedFraction: 0.9
-        # limes_outcome values of limes_charge_decisions_total, limes's
-        # Reason names: a capability's (or an ancestor's) budget, the tenant's.
+        # limes_outcome values of limes_charge_decisions_total and
+        # limes_request_bumps_total, limes's Reason names: a capability's (or
+        # an ancestor's, a copy's or a lease's) budget, the tenant's, and a
+        # request limit or copy quota.
         refusedOutcomes:
           - budget_exceeded
           - tenant_budget_exceeded
-        # Floor under the charge rate, so a tenant with no charges divides
-        # by it instead of by zero.
+          - request_limit_exceeded
+        # Floor under the call rate, so a tenant with no metered calls
+        # divides by it instead of by zero.
         minRate: 0.001
         window: 15m
         for: 15m
