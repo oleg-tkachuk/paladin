@@ -54,21 +54,23 @@ on absence.
 {{- $charges := $rules.capabilityChargesRefused }}
 {{- /* Occasional refusals are a cap working; a tenant refused nearly every
        time cannot work, and from outside looks like an idle tenant. The
-       counter is limes's own (otelmetric), labelled limes_*. */}}
+       counters are limes's own (otelmetric), labelled limes_*: a budget
+       refuses a charge, a request limit refuses a bump. */}}
+{{- $metered := "limes_charge_decisions_total|limes_request_bumps_total" }}
 - alert: PaladinCapabilityChargesRefused
   expr: |
-    sum by (limes_tenant_id) (rate(limes_charge_decisions_total{limes_outcome=~"{{ join "|" $charges.refusedOutcomes }}"}[{{ $charges.window }}]))
+    sum by (limes_tenant_id) (rate({__name__=~"{{ $metered }}", limes_outcome=~"{{ join "|" $charges.refusedOutcomes }}"}[{{ $charges.window }}]))
       /
-    clamp_min(sum by (limes_tenant_id) (rate(limes_charge_decisions_total[{{ $charges.window }}])), {{ $charges.minRate }})
+    clamp_min(sum by (limes_tenant_id) (rate({__name__=~"{{ $metered }}"}[{{ $charges.window }}])), {{ $charges.minRate }})
       > {{ $charges.refusedFraction }}
   for: {{ $charges.for }}
   labels:
     severity: {{ $charges.severity }}
   annotations:
-    summary: "Tenant {{ "{{ $labels.limes_tenant_id }}" }} has nearly every capability charge refused"
+    summary: "Tenant {{ "{{ $labels.limes_tenant_id }}" }} has nearly every capability call refused"
     description: >-
-      Over {{ $charges.refusedFraction | mulf 100.0 }}% of charge attempts were refused for {{ $charges.for }}. Check the
-      tenant's budget and the issuing capability's budget.
+      Over {{ $charges.refusedFraction | mulf 100.0 }}% of metered calls were refused for {{ $charges.for }}. Check the
+      tenant's budget and the issuing capability's budget and request limit.
     {{- include "chart.alerts.runbook" (dict "ctx" . "rule" $charges) | nindent 4 }}
 {{- end }}
 {{- if $rules.tenantThrottled.enabled }}

@@ -7,31 +7,35 @@ PrometheusRule
 
 | Fires when | Meaning |
 |-----------|---------|
-| over 90% of a tenant's capability charges are refused for budget, over 15m, for 15m | A tenant's calls under capabilities fail with `ResourceExhausted` nearly every time. |
+| over 90% of a tenant's metered calls under capabilities are refused by a budget or a request limit, over 15m, for 15m | A tenant's calls under capabilities fail with `ResourceExhausted` nearly every time. |
 
 With `capability.charge_per_request_amount` above zero, every billable data
 call made under a capability (presigns, object reads and writes, batches) is
 charged against two budgets: the capability's own, signed into it, and the
-tenant's. An occasional refusal is a cap working. A tenant refused nearly
+tenant's. A capability with a request limit is also counted per call, as a
+request bump. An occasional refusal is a cap working. A tenant refused nearly
 every time cannot work, and from outside it looks like a tenant that went
 quiet.
 
 ## Signal source
 
-`limes_charge_decisions_total{limes_tenant_id, limes_outcome}`, limes's own
-counter of every charge attempt (its otelmetric package, wired around the
-usage store in `internal/app/build_capability.go`):
+`limes_charge_decisions_total{limes_tenant_id, limes_outcome}` and
+`limes_request_bumps_total{limes_tenant_id, limes_outcome}`, limes's own
+counters of every charge and every request bump (its otelmetric package,
+wired around the usage store in `internal/app/build_capability.go`). A
+bump's outcome is `allowed`, `request_limit_exceeded` or `error`:
 
 | `limes_outcome` | Refused by | Code to the client |
 |-----------------|-----------|--------------------|
 | `allowed` | — | — |
 | `overrun` | — (committed past a ceiling under a record-overrun policy) | — |
-| `budget_exceeded` | the capability's budget, a delegating ancestor's or a Biscuit copy's | `ResourceExhausted` |
+| `budget_exceeded` | the capability's budget, a delegating ancestor's, a Biscuit copy's or a lease's | `ResourceExhausted` |
 | `tenant_budget_exceeded` | the tenant's budget | `ResourceExhausted` |
-| `request_limit_exceeded` | a request limit or a copy quota | `ResourceExhausted` |
+| `request_limit_exceeded` | a request limit, a copy quota or a lease's requests | `ResourceExhausted` |
 | `error` | anything else: a charge in another currency, a failed charge | `FailedPrecondition` for another currency, a capability no longer on record or a counter overflow; `Unavailable` or `InvalidArgument` otherwise |
 
-The rule counts `budget_exceeded` and `tenant_budget_exceeded`, which are
+The rule counts `budget_exceeded`, `tenant_budget_exceeded` and
+`request_limit_exceeded` over both counters, which are
 `metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes`. The other
 outcomes only add to the total. limes counts a charge in another currency as
 `error`, so the rule no longer fires on it; the client's
@@ -42,7 +46,7 @@ outcomes only add to the total. limes counts a charge in another currency as
 1. **Which budget.** Split the tenant's refusals by outcome:
 
    ```
-   sum by (limes_outcome) (rate(limes_charge_decisions_total{limes_tenant_id="<tenant>"}[15m]))
+   sum by (__name__, limes_outcome) (rate({__name__=~"limes_charge_decisions_total|limes_request_bumps_total", limes_tenant_id="<tenant>"}[15m]))
    ```
 
 2. **`tenant_budget_exceeded`: the tenant's budget is spent.** This is the tenant
@@ -65,6 +69,11 @@ outcomes only add to the total. limes counts a charge in another currency as
    refusing budget may be an ancestor's; `GetUsage` on each in the chain
    shows which.
 
+5. **`request_limit_exceeded`: a request limit is spent.** The capability's
+   `max_requests`, an ancestor's, a Biscuit copy's quota or a lease's
+   requests. `CapabilityService.GetUsage` shows the requests counted against
+   each capability in the chain; `GetLease` a lease's.
+
 ## Mitigation
 
 - **Tenant budget.** If the spend is legitimate, raise it with
@@ -74,6 +83,9 @@ outcomes only add to the total. limes counts a charge in another currency as
 - **Capability budget.** A capability's budget is signed into it and cannot
   be raised in place: issue a new capability with a larger
   `max_budget` and have the client switch to it.
+- **Request limit.** Signed in like the budget: issue a new capability with
+  a larger `max_requests`. A lease's requests are topped up with
+  `CapabilityService.Lease`.
 
 ## Escalation / notes
 

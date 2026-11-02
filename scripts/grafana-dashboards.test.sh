@@ -44,11 +44,11 @@ PY
 
 promtool check rules "$queries"
 
-# The refused-charges panel and the PaladinCapabilityChargesRefused alert must
+# The refused-calls panel and the PaladinCapabilityChargesRefused alert must
 # call the same outcomes refusals. A panel that also counts overrun (a charge
 # that committed) or error disagrees with the alert without failing anywhere.
 readonly ALERT_VALUES="$root/backend/deploy/chart/values.yaml"
-readonly REFUSED_PANEL="Refused capability charges by tenant"
+readonly REFUSED_PANEL="Refused capability calls by tenant"
 readonly REFUSED_SELECTOR_PATTERN='limes_outcome=~"([^"]*)"'
 
 alert_outcomes=$(yq -r '.metrics.alerts.rules.capabilityChargesRefused.refusedOutcomes | join("|")' "$ALERT_VALUES")
