@@ -163,7 +163,7 @@ func serverLeaseChain(t *testing.T) (*Handler, map[string]limes.VerifiedCapabili
 	}
 	// Revoke settles a revoked capability's lease as the server's does: by
 	// releasing what it holds.
-	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, &allowAuthorizer{}).WithLeases(usage).
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, usage, &allowAuthorizer{}).WithLeases(usage).WithLineage(m.Store).
 		WithHoldRelease(&auth.BulkRevocation{Revoker: m.Store, Holds: usage})
 	tenant := uuid.New()
 	root := func(ops ...limes.Op) limes.VerifiedCapability {

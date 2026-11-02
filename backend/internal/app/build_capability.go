@@ -39,6 +39,9 @@ type CapabilityBundle struct {
 	Leases meter.Leaser
 	// Budgets serves TenantBudgetService: the tenant budgets and their holds.
 	Budgets admin.TenantBudgetStore
+	// Lineage names a capability's ancestors, for a presented capability's
+	// lease call.
+	Lineage limes.RevocationLineageLookup
 	// Ledger reads the charges ledger for billing, and removes its old
 	// charges for the capability purger when asked to.
 	Ledger *pgstore.Ledger
@@ -141,6 +144,10 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}
 
 	store, err := capabilitypg.New(deps.Pool)
+	if err != nil {
+		return nil, fmt.Errorf("app: capability store: %w", err)
+	}
+	lineage, err := limes.As[limes.RevocationLineageLookup](store)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability store: %w", err)
 	}
@@ -251,7 +258,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
-	parts, err := usagePartsOf(usage)
+	parts, err := usagePartsOf(usage, cfg.BudgetLeases)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +278,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		Usage:          usage,
 		Leases:         parts.leases,
 		Budgets:        parts.budgets,
+		Lineage:        lineage,
 		Ledger:         ledger,
 		Issuer:         issuers.issuer,
 		Delegation:     issuers.delegation,
@@ -340,15 +348,16 @@ type usageParts struct {
 
 // usagePartsOf takes each of usageParts from usage, or refuses a usage store,
 // or a decorator over one, that lacks any, naming each missing one: at
-// startup, rather than on the first call that needs it.
-func usagePartsOf(usage meter.UsageStore) (usageParts, error) {
+// startup, rather than on the first call that needs it. The leaser is taken
+// only when the deployment leases (capability.budget_leases); otherwise none
+// is wired, and a lease call is answered as leasing turned off.
+func usagePartsOf(usage meter.UsageStore, leases bool) (usageParts, error) {
 	var p usageParts
-	var errCopies, errHolds, errLeases, errBudgets error
-	p.copies, errCopies = meter.As[meter.CopyUsageReader](usage)
-	p.holds, errHolds = meter.As[meter.MatchingReleaser](usage)
-	p.leases, errLeases = meter.As[meter.Leaser](usage)
-	p.budgets, errBudgets = meter.As[admin.TenantBudgetStore](usage)
-	if err := errors.Join(errCopies, errHolds, errLeases, errBudgets); err != nil {
+	targets := []any{&p.copies, &p.holds, &p.budgets}
+	if leases {
+		targets = append(targets, &p.leases)
+	}
+	if err := meter.AsAll(usage, targets...); err != nil {
 		return usageParts{}, fmt.Errorf("app: capability usage store: %w", err)
 	}
 	return p, nil

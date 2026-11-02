@@ -63,6 +63,9 @@ type Handler struct {
 	runs RunRevoker
 	// leases serves Lease, GetLease and SettleLease; see WithLeases.
 	leases meter.Leaser
+	// lineage names a capability's ancestors for a presented capability's
+	// lease call; see WithLineage.
+	lineage limes.RevocationLineageLookup
 
 	// currency is the platform's (capability.currency): what a root
 	// capability's budget is in when it names none. See WithCurrency.
