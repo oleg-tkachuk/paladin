@@ -4,12 +4,11 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/limes/meter"
 )
 
 // capabilityCategoryCodes is the transport code of an error verifying or
 // metering a presented capability, by the category limes files its code
-// under (limes.CategoryOf, meter.CategoryOf). Every code belongs to one, so a
+// under (limes.CategoryOf). Every code belongs to one, so a
 // code a release adds is answered by its category. Unavailable is kept for
 // what a retry can mend.
 var capabilityCategoryCodes = map[limes.Category]connect.Code{
@@ -48,7 +47,7 @@ const capabilityUnknownCode = connect.CodeUnavailable
 // capabilityStatus is err's transport code: its limes code's, or
 // capabilityUnknownCode when err carries none.
 func capabilityStatus(err error) connect.Code {
-	code, ok := meter.CodeOf(err)
+	code, ok := limes.CodeOf(err)
 	if !ok {
 		return capabilityUnknownCode
 	}
@@ -57,7 +56,7 @@ func capabilityStatus(err error) connect.Code {
 
 // codeStatus is code's category's row, else capabilityUnknownCode.
 func codeStatus(code limes.Code) connect.Code {
-	if category, ok := meter.CategoryOfCode(code); ok {
+	if category, ok := limes.CategoryOfCode(code); ok {
 		if status, ok := capabilityCategoryCodes[category]; ok {
 			return status
 		}
