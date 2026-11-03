@@ -308,6 +308,22 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+### Refund and reservation helpers no handler calls
+
+- **Status:** Deferred
+- **Reason:** `auth.RefundLastCharge`, `ReserveCapability`,
+  `SettleReservation` and `ReleaseReservation`
+  (`internal/auth/capability_interceptor.go`) are tested but have no
+  production caller: handlers only charge (`auth.ChargeRequest`), so a
+  refund or a hold never reaches the ledger and how their errors are
+  answered is checked by unit tests alone.
+- **Definition of Done:** either a handler that rolls back a charge or
+  prices work after the fact (an LLM call, a failed write after presign)
+  calls them, with an integration test through the interceptor; or they
+  are deleted with their tests.
+- **Blockers:** an operation whose cost is known only after it runs, or
+  that can fail after charging.
+
 ## Production-readiness audit (2026-06-12)
 
 _Full security / data-integrity / ops sweep. The 7 BLOCKER findings and
