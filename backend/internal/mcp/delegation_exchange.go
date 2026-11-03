@@ -16,6 +16,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
@@ -33,10 +34,10 @@ const delegationErrorBodyLimit = 1 << 12
 
 // The RFC 6749 §5.2 and RFC 8707 errors the exchange answers with, as far as
 // they are the caller's to hear.
-var delegationRefusals = map[string]error{
-	"invalid_grant":  exchange.ErrInvalidGrant,
-	"invalid_target": exchange.ErrInvalidTarget,
-	"invalid_scope":  exchange.ErrInvalidScope,
+var delegationRefusals = map[limes.Code]error{
+	limes.CodeInvalidGrant:  exchange.ErrInvalidGrant,
+	limes.CodeInvalidTarget: exchange.ErrInvalidTarget,
+	limes.CodeInvalidScope:  exchange.ErrInvalidScope,
 }
 
 // DelegationClient exchanges a caller's paladin-mcp token for the capability
@@ -139,7 +140,7 @@ func (d *DelegationClient) exchange(ctx context.Context, subject string) (delega
 			Description string `json:"error_description"`
 		}
 		_ = json.NewDecoder(io.LimitReader(resp.Body, delegationErrorBodyLimit)).Decode(&refusal)
-		if sentinel, ok := delegationRefusals[refusal.Error]; ok {
+		if sentinel, ok := delegationRefusals[limes.Code(refusal.Error)]; ok {
 			return delegated{}, fmt.Errorf("%w: %s", sentinel, refusal.Description)
 		}
 		return delegated{}, fmt.Errorf("mcp: token exchange: %d %s: %s", resp.StatusCode, refusal.Error, refusal.Description)

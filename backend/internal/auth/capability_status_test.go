@@ -9,7 +9,8 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 )
 
-// What reaches the wire for every code limes and its meter define: a code a
+// What reaches the wire for every code limes, its meter and its exchange
+// define: a code a
 // release adds fails here until it is answered on purpose, and a change to
 // how codes are answered shows here as a changed row.
 func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
@@ -64,6 +65,14 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		{limes.CodeCursorRepeated, connect.CodeUnavailable},
 		{limes.CodeInvalidConfig, connect.CodeInternal},
 		{limes.CodeInternal, connect.CodeInternal},
+		{limes.CodeInvalidClient, connect.CodeUnauthenticated},
+		{limes.CodeUnauthorizedClient, connect.CodePermissionDenied},
+		{limes.CodeUnsupportedGrantType, connect.CodeInvalidArgument},
+		{limes.CodeInvalidGrant, connect.CodeUnauthenticated},
+		{limes.CodeInvalidTarget, connect.CodePermissionDenied},
+		{limes.CodeInvalidScope, connect.CodePermissionDenied},
+		{limes.CodeInvalidAuthorizationDetails, connect.CodePermissionDenied},
+		{limes.CodeServerError, connect.CodeInternal},
 		{meter.CodeCopyLimitExceeded, connect.CodeResourceExhausted},
 		{meter.CodeCounterOverflow, connect.CodeFailedPrecondition},
 		{meter.CodeChargeNotFound, connect.CodeFailedPrecondition},
