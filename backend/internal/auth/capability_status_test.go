@@ -79,7 +79,7 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		{meter.CodeLeaseNotFound, connect.CodeFailedPrecondition},
 		{meter.CodeLeaseNested, connect.CodeFailedPrecondition},
 		{meter.CodeLeasingDisabled, connect.CodeFailedPrecondition},
-		{meter.CodeFeatureDisabled, connect.CodeInternal},
+		{meter.CodeFeatureDisabled, connect.CodeFailedPrecondition},
 	}
 	covered := map[limes.Code]bool{}
 	for _, tc := range cases {
