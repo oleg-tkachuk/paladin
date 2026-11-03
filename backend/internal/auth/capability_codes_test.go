@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
+	"github.com/oleg-tkachuk/limes/limestest"
 	"github.com/oleg-tkachuk/limes/meter"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -22,11 +23,10 @@ import (
 // Every category limes files a code under has a row, so a code a release
 // adds is answered by its category rather than as the store failing.
 func TestCapabilityCodesCoverEveryLimesCategory(t *testing.T) {
-	for _, c := range limes.Categories() {
-		if _, ok := capabilityCategoryCodes[c]; !ok {
-			t.Errorf("limes category %q has no row in capabilityCategoryCodes", c)
-		}
-	}
+	limestest.CheckCategories(t, func(c limes.Category) bool {
+		_, ok := capabilityCategoryCodes[c]
+		return ok
+	})
 }
 
 // A metering error answers by its code's category's row;
