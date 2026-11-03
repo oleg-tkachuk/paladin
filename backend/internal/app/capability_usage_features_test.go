@@ -35,13 +35,14 @@ func (leasesOff) FeatureEnabled(f meter.Feature) bool { return f != meter.Featur
 
 // The usage store the server runs on, metered as it runs, has every
 // optional interface the server calls; one that dropped any is refused at
-// startup, naming each. Leases are required only when the deployment leases.
+// startup, naming each. A store whose configuration turned leasing off
+// wires no leaser, and is not refused for it.
 func TestCapabilityUsageParts(t *testing.T) {
 	metered, err := meteredUsage(memUsage(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	parts, err := usagePartsOf(metered, true)
+	parts, err := usagePartsOf(metered)
 	if err != nil {
 		t.Fatalf("the metered usage store: %v", err)
 	}
@@ -49,7 +50,7 @@ func TestCapabilityUsageParts(t *testing.T) {
 		t.Fatalf("parts of the metered usage store left unset: %+v", parts)
 	}
 
-	_, err = usagePartsOf(bareUsage{metered}, true)
+	_, err = usagePartsOf(bareUsage{metered})
 	if !errors.Is(err, limes.ErrInvalidConfig) {
 		t.Fatalf("a store with no optional interface: err = %v, want ErrInvalidConfig", err)
 	}
@@ -59,15 +60,16 @@ func TestCapabilityUsageParts(t *testing.T) {
 		}
 	}
 
-	// Leasing turned off: the store need not lease, and is not asked to.
-	off, err := usagePartsOf(leasesOff{memUsage(t)}, false)
+	// Leasing turned off by the store's configuration: no leaser is wired,
+	// and the store is not refused for it.
+	off, err := usagePartsOf(leasesOff{memUsage(t)})
 	if err != nil {
 		t.Fatalf("leasing off: %v", err)
 	}
 	if off.leases != nil {
 		t.Errorf("leasing off wired a leaser")
 	}
-	if _, err := usagePartsOf(leasesOff{memUsage(t)}, true); !errors.Is(err, limes.ErrInvalidConfig) {
-		t.Errorf("leasing on over a store that turned it off: err = %v, want ErrInvalidConfig", err)
+	if off.copies == nil || off.holds == nil || off.budgets == nil {
+		t.Errorf("leasing off left other parts unset: %+v", off)
 	}
 }

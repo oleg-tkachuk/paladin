@@ -55,9 +55,6 @@ var capabilityCodeOverrides = map[limes.Code]connect.Code{
 	meter.CodeLeaseNested: connect.CodeFailedPrecondition,
 	// A record the request would create is there already.
 	limes.CodeAlreadyExists: connect.CodeAlreadyExists,
-	// An upstream naming no lineage: a dependency that a retry may find
-	// recovered.
-	limes.CodeNoRevocationLineage: connect.CodeUnavailable,
 }
 
 // capabilityUnknownCode answers an error that carries no limes code, or a
