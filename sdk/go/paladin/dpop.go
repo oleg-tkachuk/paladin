@@ -44,10 +44,6 @@ func DPoPThumbprint(pub crypto.PublicKey) (string, error) {
 	return jkt, nil
 }
 
-// dpopNonceChallenge is the error a DPoP challenge names when the proof
-// lacked the nonce the server asks for (RFC 9449 §8).
-const dpopNonceChallenge = "use_dpop_nonce"
-
 // dpopProof signs one proof through limes, with the server's nonce when
 // there is one. The server compares htu by path, so the base URL's scheme
 // and host need not be the ones it sees behind a proxy.
@@ -128,7 +124,7 @@ func nonceChallenged(info *connect.CallInfo, err error) bool {
 	}
 	for _, h := range []*connect.Header{info.ResponseHeader(), info.ResponseTrailer()} {
 		for _, challenge := range h.Values(HeaderWWWAuthenticate) {
-			if strings.Contains(challenge, dpopNonceChallenge) {
+			if strings.Contains(challenge, dpop.ErrorCodeUseNonce) {
 				return true
 			}
 		}
