@@ -7,54 +7,62 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 )
 
 // SeaweedFS source adapter.
 //
-// Wire format: SeaweedFS' webhook publisher serialises filer events as
-// JSON. The exact shape is the gocdk-shaped envelope its webhook code
-// emits for filer notifications (see SeaweedFS source/weed/notification/
-// webhook). For ingest we care about three fields:
+// Wire format: SeaweedFS' [notification.webhook] publisher posts each filer
+// event as the JSON of its filer_pb.EventNotification, beside the path and
+// the event type (testdata/seaweedfs-webhook-*.json are bodies SeaweedFS
+// 4.51 posted):
 //
-//   key            — full path inside the filer
-//   event_type     — "create" | "update" | "delete" | …
-//   timestamp_ns   — nanosecond unix timestamp
+//	key         — the full filer path: /buckets/<bucket>/<tenant>/<collection>/<key>
+//	event_type  — "create" | "update" | "delete" | …
+//	message     — old_entry and/or new_entry, each with its attributes
+//	              (file_size, md5) and the commit_ts_ns of its write
 //
-// Since SeaweedFS is configured to publish via S3 path-style buckets
-// the Paladin backend creates, the path follows the Paladin composeKey
-// pattern: "<bucket>/<tenant_uuid>/<collection>/<key>". The adapter
-// strips the leading bucket segment (operators set it; not part of
-// the Paladin resource ref) and parses the rest into SubjectFields.
+// The path is parsed into SubjectFields by parseSeaweedFSPath. Directories
+// the filer creates for a key's prefixes are events too, and are ignored.
 //
-// id derivation: webhook payloads carry no broker-assigned id, so we
-// hash (key + event_type + timestamp_ns). Same logical event from a
-// retry produces the same id → dedup table catches it.
+// id derivation: the body carries no broker-assigned id, so we hash the
+// path, the event type and the entry's commit time. A retry of one event
+// produces the same id and the dedup table catches it; a second put of the
+// same key is a new entry with its own commit time, so it is not dropped as
+// a replay of the first.
 
-// SeaweedFSSource parses SeaweedFS webhook bodies. BucketName is
-// stripped from the path prefix; URI is the source label
-// stamped onto every emitted CloudEvent.
+// SeaweedFSSource parses SeaweedFS webhook bodies. BucketName, when set,
+// limits the source to that bucket; empty accepts every bucket. URI is the
+// source label stamped onto every emitted CloudEvent.
 type SeaweedFSSource struct {
-	BucketName string // "paladin-primary" — the SeaweedFS bucket this source publishes for
+	BucketName string
 	URI        string // e.g. "seaweedfs://primary"
 }
 
 func (s *SeaweedFSSource) Name() string { return "seaweedfs" }
 
-// seaweedFSWebhookPayload mirrors the fields the SeaweedFS webhook
-// notifier publishes. Extra fields are tolerated (json.Decode is
-// non-strict) so a SeaweedFS upgrade that adds new fields doesn't
-// break ingest.
+// seaweedFSWebhookPayload is the part of a webhook body ingest reads.
+// Extra fields are tolerated (json.Decode is non-strict) so a SeaweedFS
+// upgrade that adds new fields doesn't break ingest.
 type seaweedFSWebhookPayload struct {
-	Key         string `json:"key"`
-	EventType   string `json:"event_type"`
-	TimestampNs int64  `json:"timestamp_ns"`
+	Key       string `json:"key"`
+	EventType string `json:"event_type"`
+	Message   struct {
+		OldEntry *seaweedFSEntry `json:"old_entry"`
+		NewEntry *seaweedFSEntry `json:"new_entry"`
+	} `json:"message"`
+}
 
-	// Optional fields the gocdk webhook envelope may include.
-	// Etag is best-effort — SeaweedFS reports it on create/update.
-	Etag       string `json:"etag,omitempty"`
-	Size       int64  `json:"size,omitempty"`
-	Sequencer  string `json:"sequencer,omitempty"`
-	Collection string `json:"collection,omitempty"`
+// seaweedFSEntry is a filer_pb.Entry as the webhook serialises it.
+type seaweedFSEntry struct {
+	IsDirectory bool  `json:"is_directory"`
+	CommitTsNs  int64 `json:"commit_ts_ns"`
+	Attributes  struct {
+		FileSize int64 `json:"file_size"`
+		// MD5 is the object's digest, base64 in the JSON; absent for an
+		// object written in parts.
+		MD5 []byte `json:"md5"`
+	} `json:"attributes"`
 }
 
 // Parse is the one event of a message: the format carries one.
@@ -75,6 +83,17 @@ func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 	if !ok {
 		return CloudEvent{}, ErrIgnoredEvent
 	}
+	// The entry the event is about: what was written, or what was removed.
+	entry := p.Message.NewEntry
+	if evType == EventTypeDeleted {
+		entry = p.Message.OldEntry
+	}
+	if entry == nil {
+		return CloudEvent{}, fmt.Errorf("%w: seaweedfs %s event without its entry", ErrUnrecognisedEvent, p.EventType)
+	}
+	if entry.IsDirectory {
+		return CloudEvent{}, ErrIgnoredEvent
+	}
 
 	subjFields, ok := parseSeaweedFSPath(p.Key, s.BucketName)
 	if !ok {
@@ -83,12 +102,13 @@ func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		// don't fill the dedup table with junk.
 		return CloudEvent{}, ErrIgnoredEvent
 	}
-	subjFields.Etag = p.Etag
-	subjFields.SizeBytes = p.Size
-	subjFields.Sequencer = p.Sequencer
+	if evType == EventTypeUploaded {
+		subjFields.SizeBytes = entry.Attributes.FileSize
+		subjFields.Etag = hex.EncodeToString(entry.Attributes.MD5)
+	}
 
-	t := time.Unix(0, p.TimestampNs)
-	if p.TimestampNs == 0 {
+	t := time.Unix(0, entry.CommitTsNs)
+	if entry.CommitTsNs == 0 {
 		t = time.Now()
 	}
 
@@ -96,7 +116,7 @@ func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		SpecVersion:     "1.0",
 		Type:            evType,
 		Source:          s.URI,
-		ID:              seaweedFSID(p.Key, p.EventType, p.TimestampNs),
+		ID:              seaweedFSID(p.Key, p.EventType, entry.CommitTsNs),
 		Time:            t,
 		DataContentType: "application/json",
 		Subject: fmt.Sprintf(
@@ -123,44 +143,41 @@ func seaweedFSEventType(srcType string) (EventType, bool) {
 	}
 }
 
-// parseSeaweedFSPath extracts (tenant_id, collection, key) from the
-// full filer path. Layout (matches s3adapter.composeKey):
-//
-//	/<bucket>/<tenant_uuid>/<collection>/<key...>
-//
-// The leading "/" is optional (depends on SeaweedFS publisher
-// configuration). Anything else returns ok=false.
-func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
-	trimmed := strings.TrimPrefix(path, "/")
-	// SF's S3 gateway materialises bucket-rooted paths under
-	// `/buckets/<bucket>/...` in the filer namespace. The webhook
-	// notification driver emits the bare `<bucket>/...` shape, but
-	// the gocdk_pub_sub-over-NATS path observes the full filer
-	// namespace and includes the `buckets/` prefix. Strip it
-	// upfront so the bucket-prefix check below works for both
-	// publishers.
-	trimmed = strings.TrimPrefix(trimmed, "buckets/")
-	if bucket != "" {
-		bp := strings.TrimPrefix(trimmed, bucket+"/")
-		if bp == trimmed {
-			// bucket prefix not present — wrong source or wrong
-			// configuration. Treat as ignored.
-			return SubjectFields{}, false
-		}
-		trimmed = bp
-	}
+// seaweedFSBucketsDir is the filer directory the S3 gateway keeps its
+// buckets under.
+const seaweedFSBucketsDir = "buckets/"
 
-	// trimmed is now: <tenant_uuid>/<collection>/<key...>
-	// Split into 3 parts max — key may contain / and we want it whole.
-	parts := strings.SplitN(trimmed, "/", 3)
-	if len(parts) < 3 {
+// parseSeaweedFSPath extracts (tenant_id, collection, key) from the
+// full filer path. Layout (s3adapter.composeKey under the bucket):
+//
+//	/buckets/<bucket>/<tenant_uuid>/<collection>/<key...>
+//
+// The leading "/" and "buckets/" are optional: the webhook and the
+// gocdk_pub_sub-over-NATS publishers both observe the full filer namespace,
+// but a test or another publisher may send the bucket-rooted path. bucket,
+// when set, is the only bucket accepted; empty accepts any. A tenant segment
+// that is no UUID — the gateway's own .system records — is no Paladin
+// object. Anything else returns ok=false.
+func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
+	trimmed := strings.TrimPrefix(strings.TrimPrefix(path, "/"), seaweedFSBucketsDir)
+
+	// trimmed is now: <bucket>/<tenant_uuid>/<collection>/<key...>
+	// Split into 4 parts max — key may contain / and we want it whole.
+	parts := strings.SplitN(trimmed, "/", 4)
+	if len(parts) < 4 || parts[2] == "" || parts[3] == "" {
+		return SubjectFields{}, false
+	}
+	if bucket != "" && parts[0] != bucket {
+		return SubjectFields{}, false
+	}
+	if _, err := uuid.Parse(parts[1]); err != nil {
 		return SubjectFields{}, false
 	}
 
 	return SubjectFields{
-		TenantID:   parts[0],
-		Collection: parts[1],
-		Key:        parts[2],
+		TenantID:   parts[1],
+		Collection: parts[2],
+		Key:        parts[3],
 	}, true
 }
 

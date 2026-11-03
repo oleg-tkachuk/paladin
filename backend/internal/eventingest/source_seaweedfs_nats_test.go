@@ -100,7 +100,7 @@ func TestSeaweedFSNATSSource_Parse_Update(t *testing.T) {
 	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, true, true) // update: both entries
 	raw := natsEnvelope(t,
-		map[string]string{"key": "/paladin-primary/t/k/o.txt"},
+		map[string]string{"key": "/paladin-primary/00000000-0000-0000-0000-000000000abc/k/o.txt"},
 		body,
 	)
 	ev, err := parseOne(src, raw, "")
@@ -121,7 +121,7 @@ func TestSeaweedFSNATSSource_Parse_Delete(t *testing.T) {
 	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, true, false) // delete: only old_entry
 	raw := natsEnvelope(t,
-		map[string]string{"key": "/paladin-primary/t/k/gone.txt"},
+		map[string]string{"key": "/paladin-primary/00000000-0000-0000-0000-000000000abc/k/gone.txt"},
 		body,
 	)
 	ev, err := parseOne(src, raw, "")
@@ -137,7 +137,7 @@ func TestSeaweedFSNATSSource_Parse_BothEntriesAbsent_Ignored(t *testing.T) {
 	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
 	body := fakeFilerEvent(t, false, false) // neither old nor new
 	raw := natsEnvelope(t,
-		map[string]string{"key": "/paladin-primary/t/k/whatever.txt"},
+		map[string]string{"key": "/paladin-primary/00000000-0000-0000-0000-000000000abc/k/whatever.txt"},
 		body,
 	)
 	_, err := parseOne(src, raw, "")

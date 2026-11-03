@@ -136,32 +136,34 @@ Paladin overlay (`ingest.nats`): `subject: seaweedfs.filer`,
 
 ### `seaweedfs` — webhook JSON
 
-Source: `source_seaweedfs.go`. Fields: `key`, `event_type`
-(`create`/`update` → uploaded, `delete` → deleted), `timestamp_ns`, optional
-`etag`/`size`/`sequencer`. Point SF's `[notification.webhook]` at
-`https://…/webhook/seaweedfs`. No broker id → the adapter hashes
-`(key, event_type, timestamp_ns)` for dedup.
+Source: `source_seaweedfs.go`. The body is the JSON of the filer's
+`EventNotification` beside `key` (the full filer path) and `event_type`
+(`create`/`update` → uploaded, `delete` → deleted): the entry written is
+`message.new_entry`, the one removed `message.old_entry`. The size is the
+entry's `attributes.file_size` and the etag its `attributes.md5` in hex;
+directory entries the filer creates for a key's prefixes are ignored. Point
+SF's `[notification.webhook]` at `https://…/webhook/seaweedfs`. No broker id
+→ the adapter hashes `(key, event_type, entry commit_ts_ns)` for dedup, so a
+second put of one key is a new event. `backend/internal/eventingest/testdata/
+seaweedfs-webhook-*.json` are bodies SeaweedFS 4.51 posted.
 
-### The `buckets/` prefix — why it's stripped
+### The filer path
 
-Two publishers disagree on the leading path:
+Both publishers send the full filer namespace, where the S3 gateway keeps a
+bucket's objects under `/buckets/<bucket>/…`:
 
-| Publisher | Emitted path |
-|---|---|
-| SF S3-gateway **webhook** | `<bucket>/<tenant>/<collection>/<key>` |
-| **gocdk_pubsub-over-NATS** | `buckets/<bucket>/<tenant>/<collection>/<key>` |
+```
+/buckets/<bucket>/<tenant>/<collection>/<key>
+```
 
-The NATS path observes the **full filer namespace**, where the S3 gateway
-materialises bucket-rooted objects under `/buckets/<bucket>/…`. So
-`parseSeaweedFSPath` strips a leading `buckets/` *before* the bucket-prefix
-check, making both shapes parse identically. A path missing the bucket
-prefix is **ignored** (wrong source / misconfig), not an error.
+`parseSeaweedFSPath` strips the leading `/` and `buckets/` (both optional),
+takes the next segment as the bucket and the one after it as the tenant. A
+tenant segment that is no UUID — the gateway's own `/buckets/.system/…`
+records — is ignored, not an error.
 
-The bucket is not configurable today: `pickSource` hard-codes
-`paladin-primary` for the `seaweedfs` / `seaweedfs_nats` sources on the
-`nats` / `rabbitmq` / `sqs` drivers, and the webhook driver registers
-`/webhook/seaweedfs` with **no** bucket, so that route expects a bare
-`<tenant>/<collection>/<key>` path.
+The NATS sources (`seaweedfs_nats`, and `seaweedfs` on the `nats` /
+`rabbitmq` / `sqs` drivers) accept only `paladin-primary`, which `pickSource`
+hard-codes; the webhook route `/webhook/seaweedfs` accepts every bucket.
 
 > ⚠️ **Drift risk.** The `buckets/` strip was inferred from observed live
 > paths on the current SeaweedFS version. A future SF release that drops the
