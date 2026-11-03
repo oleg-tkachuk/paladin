@@ -357,12 +357,10 @@ type usageParts struct {
 func usagePartsOf(usage meter.UsageStore) (usageParts, error) {
 	var p usageParts
 	errParts := meter.AsAll(usage, &p.copies, &p.holds, &p.budgets)
-	leases, errLeases := meter.As[meter.Leaser](usage)
-	switch {
-	case errLeases == nil:
+	// A leaser only when the store's configuration leases; none otherwise.
+	leases, leasing, errLeases := meter.AsOptional[meter.Leaser](usage)
+	if leasing {
 		p.leases = leases
-	case errors.Is(errLeases, meter.ErrFeatureDisabled):
-		errLeases = nil
 	}
 	if err := errors.Join(errParts, errLeases); err != nil {
 		return usageParts{}, fmt.Errorf("app: capability usage store: %w", err)

@@ -29,6 +29,10 @@ var capabilityCategoryCodes = map[limes.Category]connect.Code{
 	limes.CategoryNotFound: connect.CodeFailedPrecondition,
 	// A request that disagrees with what is on record: read it again.
 	limes.CategoryConflict: connect.CodeAborted,
+	// A sound request the state it needs is not there for — the store's
+	// configuration, the ledger, another capability's lease: no retry of
+	// the same call mends it.
+	limes.CategoryPrecondition: connect.CodeFailedPrecondition,
 	// A dependency failing, which a retry may find recovered.
 	limes.CategoryUnavailable: connect.CodeUnavailable,
 	// The server's own fault, which no retry mends.
@@ -40,19 +44,8 @@ var capabilityCategoryCodes = map[limes.Category]connect.Code{
 var capabilityCodeOverrides = map[limes.Code]connect.Code{
 	// A credential the request could not even read: the request is malformed.
 	limes.CodeMalformedAuthorization: connect.CodeInvalidArgument,
-	// A counter with no room, a unit other than the counters': the state, not
-	// a limit the caller can wait out, refuses it.
-	meter.CodeCounterOverflow:  connect.CodeFailedPrecondition,
-	limes.CodeUnitCodeMismatch: connect.CodeFailedPrecondition,
 	// A refund beyond its charge disagrees with the charge on record.
 	meter.CodeRefundExceedsCharge: connect.CodeAborted,
-	// A key-bound capability on a plane that checks no proof, and leasing the
-	// store has not turned on: the deployment's state, as the verify path
-	// answers it.
-	limes.CodeProofUnsupported: connect.CodeFailedPrecondition,
-	meter.CodeLeasingDisabled:  connect.CodeFailedPrecondition,
-	// A lease under an ancestor's: no retry of the same call mends it.
-	meter.CodeLeaseNested: connect.CodeFailedPrecondition,
 	// A record the request would create is there already.
 	limes.CodeAlreadyExists: connect.CodeAlreadyExists,
 }
