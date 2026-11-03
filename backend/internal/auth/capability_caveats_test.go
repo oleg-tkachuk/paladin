@@ -264,8 +264,8 @@ func TestRefundLastCharge_CannotExceedTheCharge(t *testing.T) {
 	ctx := chargedContext(t, v, usage, tenthOfUnit)
 
 	err := RefundLastCharge(ctx, oneUnit)
-	if connect.CodeOf(err) != connect.CodeInvalidArgument || !errors.Is(err, meter.ErrRefundExceedsCharge) {
-		t.Fatalf("over-refund err = %v, want InvalidArgument wrapping ErrRefundExceedsCharge", err)
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !errors.Is(err, meter.ErrRefundExceedsCharge) {
+		t.Fatalf("over-refund err = %v, want FailedPrecondition wrapping ErrRefundExceedsCharge", err)
 	}
 	if err := RefundLastCharge(ctx, 0); err != nil {
 		t.Fatalf("full refund: %v", err)

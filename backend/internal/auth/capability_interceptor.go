@@ -767,9 +767,6 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 		req = meter.RefundRequest{ChargeID: chargeID, Remaining: true}
 	}
 	if _, err := store.Refund(ledgerContext(ctx, cap), req); err != nil {
-		if errors.Is(err, meter.ErrRefundExceedsCharge) {
-			return capabilityError(connect.CodeInvalidArgument, err)
-		}
 		return meterError(ctx, err)
 	}
 	return nil
