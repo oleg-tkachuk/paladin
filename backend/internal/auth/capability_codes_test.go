@@ -20,26 +20,16 @@ import (
 )
 
 // Every category limes files a code under has a row, so a code a release
-// adds is answered by its category rather than as the store failing; and
-// every override names a code limes defines, so a renamed one cannot linger.
+// adds is answered by its category rather than as the store failing.
 func TestCapabilityCodesCoverEveryLimesCategory(t *testing.T) {
 	for _, c := range limes.Categories() {
 		if _, ok := capabilityCategoryCodes[c]; !ok {
 			t.Errorf("limes category %q has no row in capabilityCategoryCodes", c)
 		}
 	}
-	defined := map[limes.Code]bool{}
-	for _, c := range append(limes.Codes(), meter.Codes()...) {
-		defined[c] = true
-	}
-	for c := range capabilityCodeOverrides {
-		if !defined[c] {
-			t.Errorf("capabilityCodeOverrides names %q, which limes does not define", c)
-		}
-	}
 }
 
-// A metering error answers by its code's override or its category's row;
+// A metering error answers by its code's category's row;
 // one that carries no limes code is the store failing.
 func TestCapabilityStatusFallsBackToUnavailable(t *testing.T) {
 	if got := capabilityStatus(errors.New("store down")); got != capabilityUnknownCode {
@@ -65,7 +55,7 @@ func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 		"a caveat violated":                          {limes.ErrCaveatViolation, connect.CodePermissionDenied, false},
 		"a key-bound capability with no proof check": {limes.ErrProofUnsupported, connect.CodeFailedPrecondition, true},
 		"a record already there":                     {limes.ErrAlreadyExists, connect.CodeAlreadyExists, false},
-		"a refund beyond its charge":                 {meter.ErrRefundExceedsCharge, connect.CodeAborted, false},
+		"a refund beyond its charge":                 {meter.ErrRefundExceedsCharge, connect.CodeFailedPrecondition, false},
 		"a deleted tenant":                           {limes.ErrTenantDeleted, connect.CodeFailedPrecondition, false},
 		"a misconfigured server":                     {limes.ErrInvalidConfig, connect.CodeInternal, true},
 		"a call scoped to another tenant":            {limes.ErrScopeMismatch, connect.CodeInternal, true},

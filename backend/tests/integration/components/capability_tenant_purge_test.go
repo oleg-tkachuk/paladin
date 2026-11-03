@@ -89,9 +89,11 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 		t.Fatalf("reserve: %v", err)
 	}
 	// The subject token lives as long as the capability exchanged for it.
-	if _, _, err := records.ClaimExchange(acting, limes.ExchangeKey{
-		TenantID: tenant, Issuer: seedExchangeIssuer, TokenID: seedExchangeTokenID,
-	}, c.ExpiresAt, c.ID); err != nil {
+	if _, _, err := records.ClaimExchange(acting, limes.ClaimExchangeRequest{
+		Key:            limes.ExchangeKey{TenantID: tenant, Issuer: seedExchangeIssuer, TokenID: seedExchangeTokenID},
+		TokenExpiresAt: c.ExpiresAt,
+		CapabilityID:   c.ID,
+	}); err != nil {
 		t.Fatalf("claim exchange: %v", err)
 	}
 	if _, err := records.RevokeBiscuit(acting, limes.RevokeBiscuitRequest{Copy: f.copyOf(t, copyToken)}); err != nil {

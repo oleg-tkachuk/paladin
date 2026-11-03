@@ -10,9 +10,8 @@ import (
 // capabilityCategoryCodes is the transport code of an error verifying or
 // metering a presented capability, by the category limes files its code
 // under (limes.CategoryOf, meter.CategoryOf). Every code belongs to one, so a
-// code a release adds is answered by its category; capabilityCodeOverrides
-// holds the codes Paladin answers otherwise. Unavailable is kept for what a
-// retry can mend.
+// code a release adds is answered by its category. Unavailable is kept for
+// what a retry can mend.
 var capabilityCategoryCodes = map[limes.Category]connect.Code{
 	// The credential presented is missing, malformed, unproven or no longer
 	// good — expired, revoked, past its delegation depth: present another.
@@ -29,6 +28,8 @@ var capabilityCategoryCodes = map[limes.Category]connect.Code{
 	limes.CategoryNotFound: connect.CodeFailedPrecondition,
 	// A request that disagrees with what is on record: read it again.
 	limes.CategoryConflict: connect.CodeAborted,
+	// A record the request would create is there already.
+	limes.CategoryAlreadyExists: connect.CodeAlreadyExists,
 	// A sound request the state it needs is not there for — the store's
 	// configuration, the ledger, another capability's lease: no retry of
 	// the same call mends it.
@@ -37,17 +38,6 @@ var capabilityCategoryCodes = map[limes.Category]connect.Code{
 	limes.CategoryUnavailable: connect.CodeUnavailable,
 	// The server's own fault, which no retry mends.
 	limes.CategoryInternal: connect.CodeInternal,
-}
-
-// capabilityCodeOverrides are the codes Paladin answers apart from their
-// category.
-var capabilityCodeOverrides = map[limes.Code]connect.Code{
-	// A credential the request could not even read: the request is malformed.
-	limes.CodeMalformedAuthorization: connect.CodeInvalidArgument,
-	// A refund beyond its charge disagrees with the charge on record.
-	meter.CodeRefundExceedsCharge: connect.CodeAborted,
-	// A record the request would create is there already.
-	limes.CodeAlreadyExists: connect.CodeAlreadyExists,
 }
 
 // capabilityUnknownCode answers an error that carries no limes code, or a
@@ -65,12 +55,8 @@ func capabilityStatus(err error) connect.Code {
 	return codeStatus(code)
 }
 
-// codeStatus is code's override, else its category's row, else
-// capabilityUnknownCode.
+// codeStatus is code's category's row, else capabilityUnknownCode.
 func codeStatus(code limes.Code) connect.Code {
-	if status, ok := capabilityCodeOverrides[code]; ok {
-		return status
-	}
 	if category, ok := meter.CategoryOfCode(code); ok {
 		if status, ok := capabilityCategoryCodes[category]; ok {
 			return status
