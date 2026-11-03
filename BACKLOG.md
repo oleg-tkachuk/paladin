@@ -413,23 +413,20 @@ open deliberately — each notes why._
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### The compose stack's named SeaweedFS identity is unconfirmed end to end
+### The SeaweedFS webhook route reads the bucket as the tenant
 
 - **Status:** Deferred
-- **Reason:** `backend/deploy/seaweedfs-s3.json` now declares a named identity
-  (`paladin-dev`, the same `dummy` keys `configs/compose.yaml` and
-  `configs/local.yaml` sign with) and no `anonymous` one, so unsigned requests
-  are refused unless a bucket policy opens them. Against that file on
-  SeaweedFS 4.47 the feature probe reports every feature supported, including
-  `ANONYMOUS_READ_POLICY`; with the old file it reported that one unsupported.
-  Nothing in the dev stack reads the store unsigned: Paladin, the console,
-  `frontend/scripts/dev-bootstrap.sh` and `scripts/live-smoke.sh` all go
-  through signed or presigned requests. What has not run is the whole stack
-  (`task stack:up`) on the pinned 4.48 image, as Docker Hub refused the pulls.
-- **Definition of Done:** `task stack:up` comes up on this file, an upload and
-  a download through the console or `scripts/live-smoke.sh` succeed, and the
-  backend's probe reports `ANONYMOUS_READ_POLICY` supported; then delete this
-  entry.
+- **Reason:** `buildWebhookDriver` (`backend/cmd/server/serve_ingest.go`)
+  registers `/webhook/seaweedfs` with no bucket, on the assumption that the
+  filer posts a bare `<tenant>/<collection>/<key>`. SeaweedFS 4.51 posts
+  `/buckets/<bucket>/<tenant>/<collection>/<key>`: in the compose stack every
+  upload's event is skipped with "invalid tenant uuid in subject" naming the
+  bucket, and only the Reconciler promotes the object.
+- **Definition of Done:** the webhook route strips the bucket of the backend
+  it serves, read from `cfg.Storage` rather than hard-coded (as `pickSource`
+  also hard-codes `paladin-primary`); a test feeds a body captured from
+  SeaweedFS; in the compose stack an upload's event promotes the object;
+  `docs/storage-ingest.md` says so.
 - **Blockers:** none.
 
 ### Replication: real `StorageReplicator` implementation

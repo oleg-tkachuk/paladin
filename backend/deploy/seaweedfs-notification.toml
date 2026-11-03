@@ -1,8 +1,8 @@
 # SeaweedFS filer notification config — drives the webhook publish for
 # Paladin's ingest plane.
 #
-# In compose `seaweedfs` mounts this at /etc/seaweedfs/notification.toml
-# and runs with `-filer.notification=/etc/seaweedfs/notification.toml`.
+# In compose `seaweedfs` mounts this at /etc/seaweedfs/notification.toml,
+# where the filer finds it on its config search path.
 #
 # Webhook flow: each filer event (create / update / delete on a path
 # under SeaweedFS) becomes a JSON POST to the configured endpoint.
