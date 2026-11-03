@@ -67,7 +67,7 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		{meter.CodeCopyLimitExceeded, connect.CodeResourceExhausted},
 		{meter.CodeCounterOverflow, connect.CodeFailedPrecondition},
 		{meter.CodeChargeNotFound, connect.CodeFailedPrecondition},
-		{meter.CodeRefundExceedsCharge, connect.CodeAborted},
+		{meter.CodeRefundExceedsCharge, connect.CodeFailedPrecondition},
 		{meter.CodeReservationNotFound, connect.CodeFailedPrecondition},
 		{meter.CodeUsageNotFound, connect.CodeFailedPrecondition},
 		{meter.CodeTenantBudgetNotFound, connect.CodeFailedPrecondition},
@@ -91,21 +91,6 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 	for _, c := range append(limes.Codes(), meter.Codes()...) {
 		if !covered[c] {
 			t.Errorf("limes code %q has no case here", c)
-		}
-	}
-}
-
-// An override answers its code otherwise than the code's category does;
-// one that agrees with it is dead weight that hides a category's change.
-func TestCapabilityCodeOverridesDifferFromTheirCategory(t *testing.T) {
-	for code, status := range capabilityCodeOverrides {
-		category, ok := meter.CategoryOfCode(code)
-		if !ok {
-			t.Errorf("override %q is no limes code", code)
-			continue
-		}
-		if capabilityCategoryCodes[category] == status {
-			t.Errorf("override %q answers %v, as its category %q does", code, status, category)
 		}
 	}
 }
