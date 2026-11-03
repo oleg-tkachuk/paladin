@@ -27,6 +27,8 @@ import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
 // event type SeaweedFS names a new file with.
 const SEAWEEDFS_ROUTE = "/webhook/seaweedfs";
 const SEAWEEDFS_CREATE = "create";
+// The filer directory the S3 gateway keeps its buckets under.
+const SEAWEEDFS_BUCKETS_DIR = "/buckets";
 // What an ingested transition is recorded as (internal/eventingest/audit.go).
 const INGEST_UPLOAD_ACTION = "ingest.ObjectUploaded";
 const INGEST_ACTOR = "system:event-ingest";
@@ -54,10 +56,8 @@ test.describe("Event ingest", () => {
       .toBe(200);
 
     const tenantId = await seedAdminTenantID();
-    const collection = await makeCollection({
-      tenantId,
-      bucket: await seedPhysicalBucket(),
-    });
+    const bucket = await seedPhysicalBucket();
+    const collection = await makeCollection({ tenantId, bucket });
     const obj = await seedPendingObject({
       tenantId,
       collection: collection.collection,
@@ -65,15 +65,19 @@ test.describe("Event ingest", () => {
     });
     expect(await objectState(obj.name)).toBe(ObjectState.PENDING);
 
-    // The shape SeaweedFS's webhook notification posts: the filer path,
-    // tenant/collection/key, and the bytes' size, which must match the
-    // registration. A fresh timestamp keeps the event's dedup id its own.
+    // The shape SeaweedFS's filer posts: the full filer path, and the new
+    // entry with the bytes' size, which must match the registration. A fresh
+    // commit time keeps the event's dedup id its own.
     const posted = await request.post(`${INGEST_URL}${SEAWEEDFS_ROUTE}`, {
       data: {
-        key: `${tenantId}/${obj.collection}/${obj.key}`,
+        key: `${SEAWEEDFS_BUCKETS_DIR}/${bucket.bucketId}/${tenantId}/${obj.collection}/${obj.key}`,
         event_type: SEAWEEDFS_CREATE,
-        timestamp_ns: Date.now() * NANOS_PER_MILLI,
-        size: Buffer.byteLength(BODY),
+        message: {
+          new_entry: {
+            commit_ts_ns: Date.now() * NANOS_PER_MILLI,
+            attributes: { file_size: Buffer.byteLength(BODY) },
+          },
+        },
       },
     });
     expect(posted.ok(), await posted.text()).toBe(true);

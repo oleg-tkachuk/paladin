@@ -465,12 +465,9 @@ func newSQSReceiveClient(ctx context.Context, sc config.IngestSQS) (eventingest.
 // `ErrUnrecognisedEvent` on every message and the dedup table fills
 // with junk.
 //
-// BucketName for the SeaweedFS sources is hard-coded to "paladin-primary"
-// to match cfg.Storage.DefaultBackend in the local overlay. When
-// the operator's bucket name diverges this should be read from
-// cfg.Storage.Backends; threading that through is BACKLOG'd under
-// "Storage event ingest pipeline" since the producer adapter and
-// the storage config are wired by separate teams.
+// BucketName for the SeaweedFS sources is hard-coded to "paladin-primary",
+// the bucket of the cluster's primary backend; BACKLOG.md ("Storage events
+// are not checked against the collection's bucket") tracks deriving it.
 func pickSource(format string) (eventingest.Source, error) {
 	switch format {
 	case "seaweedfs":
@@ -518,18 +515,9 @@ func pickSource(format string) (eventingest.Source, error) {
 func buildWebhookDriver(cfg config.Ingest, l *zap.Logger) (eventingest.Driver, error) {
 	sources := map[string]eventingest.Source{}
 
-	// SeaweedFS adapter — operator gives us a bucket name implicitly
-	// via cfg.Storage.DefaultBackend.bucket. We can't reach that here
-	// without threading config.Storage in; the simpler path is to
-	// require the operator to set the bucket explicitly for the
-	// adapter via the webhook URL prefix in their notification.toml,
-	// which we tolerate (no bucket = no bucket prefix to strip).
-	//
-	// For day-1 we register the adapter with empty BucketName; the
-	// path parser still works as long as the publisher sends a
-	// 3-component path "<tenant>/<collection>/<key>" without a
-	// bucket prefix — the natural shape if SeaweedFS is configured
-	// with `notification.webhook.endpoint = .../webhook/seaweedfs`.
+	// SeaweedFS adapter. The filer posts the full path,
+	// /buckets/<bucket>/<tenant>/<collection>/<key>; with no BucketName the
+	// adapter takes the bucket from the path and accepts every one.
 	sources["/webhook/seaweedfs"] = &eventingest.SeaweedFSSource{
 		BucketName: "",
 		URI:        "seaweedfs://primary",
