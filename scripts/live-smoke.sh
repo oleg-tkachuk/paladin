@@ -55,8 +55,9 @@ readonly CHILD_MAX_REQUESTS=2
 readonly LEASE_REQUESTS=2
 readonly LEASE_SPENT=1
 # The request limit of a capability that spends it on data and then still
-# manages capabilities: managing them is not counted.
-readonly SPENT_LIMIT_REQUESTS=1
+# manages capabilities: managing them is not counted. No lower than the
+# child's, which a delegation may not widen.
+readonly SPENT_LIMIT_REQUESTS=$CHILD_MAX_REQUESTS
 readonly CHILD_TTL_SECONDS=600
 # The data port of an api pod, and the first local port the pods are forwarded
 # to, one each, so a check can reach every replica rather than one the
