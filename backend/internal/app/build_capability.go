@@ -258,9 +258,12 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
 	}
-	parts, err := usagePartsOf(usage, cfg.BudgetLeases)
+	parts, err := usagePartsOf(usage)
 	if err != nil {
 		return nil, err
+	}
+	if parts.leases == nil {
+		deps.Logger.Info("capability: budget leases are off; a lease call is answered leasing_disabled")
 	}
 	ledger, err := capabilitypg.NewLedger(deps.Pool)
 	if err != nil {
@@ -348,16 +351,20 @@ type usageParts struct {
 
 // usagePartsOf takes each of usageParts from usage, or refuses a usage store,
 // or a decorator over one, that lacks any, naming each missing one: at
-// startup, rather than on the first call that needs it. The leaser is taken
-// only when the deployment leases (capability.budget_leases); otherwise none
-// is wired, and a lease call is answered as leasing turned off.
-func usagePartsOf(usage meter.UsageStore, leases bool) (usageParts, error) {
+// startup, rather than on the first call that needs it. A store whose
+// configuration turned leasing off (capability.budget_leases) wires no
+// leaser, and a lease call is answered as leasing turned off.
+func usagePartsOf(usage meter.UsageStore) (usageParts, error) {
 	var p usageParts
-	targets := []any{&p.copies, &p.holds, &p.budgets}
-	if leases {
-		targets = append(targets, &p.leases)
+	errParts := meter.AsAll(usage, &p.copies, &p.holds, &p.budgets)
+	leases, errLeases := meter.As[meter.Leaser](usage)
+	switch {
+	case errLeases == nil:
+		p.leases = leases
+	case errors.Is(errLeases, meter.ErrFeatureDisabled):
+		errLeases = nil
 	}
-	if err := meter.AsAll(usage, targets...); err != nil {
+	if err := errors.Join(errParts, errLeases); err != nil {
 		return usageParts{}, fmt.Errorf("app: capability usage store: %w", err)
 	}
 	return p, nil
