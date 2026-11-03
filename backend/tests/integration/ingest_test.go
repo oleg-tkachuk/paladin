@@ -58,16 +58,10 @@ func TestIngest_SeaweedFSWebhookPromotesPending(t *testing.T) {
 	}
 
 	source := &eventingest.SeaweedFSSource{
-		BucketName: "paladin-test",
+		BucketName: ingestTestBucket,
 		URI:        "seaweedfs://primary",
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"key":          fmt.Sprintf("/paladin-test/%s/docs/report.pdf", tenantID),
-		"event_type":   "create",
-		"timestamp_ns": time.Now().UnixNano(),
-		"etag":         "abc123",
-		"size":         1024,
-	})
+	payload := seaweedFSWebhook(tenantID, "create")
 
 	evs, err := source.Parse(payload, "application/json")
 	if err != nil || len(evs) != 1 {
@@ -147,6 +141,34 @@ func mustCountIngested(t *testing.T, pool *pgxpool.Pool) int {
 }
 
 // bytesProbe answers a HEAD with a fixed presence.
+// ingestTestBucket is the bucket the ingest tests' events name, and
+// ingestTestSize the object size they report.
+const (
+	ingestTestBucket = "paladin-test"
+	ingestTestSize   = 1024
+)
+
+// seaweedFSWebhook is a webhook body as the SeaweedFS filer posts it for
+// docs/report.pdf of tenantID: the full filer path, and the entry the event
+// is about — the new one, or for a delete the old one. A fresh commit time
+// keeps each event's dedup id its own.
+func seaweedFSWebhook(tenantID uuid.UUID, kind string) []byte {
+	entry := map[string]any{
+		"commit_ts_ns": time.Now().UnixNano(),
+		"attributes":   map[string]any{"file_size": ingestTestSize},
+	}
+	side := "new_entry"
+	if kind == "delete" {
+		side = "old_entry"
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"key":        fmt.Sprintf("/buckets/%s/%s/docs/report.pdf", ingestTestBucket, tenantID),
+		"event_type": kind,
+		"message":    map[string]any{side: entry},
+	})
+	return payload
+}
+
 type bytesProbe struct{ found bool }
 
 func (p bytesProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, bool, error) {
@@ -175,15 +197,9 @@ func TestIngest_DeleteEventTrashesAnObjectWhoseBytesAreGone(t *testing.T) {
 			Dedup: &eventingest.PgxDedupStore{Q: q},
 		}
 	}
-	source := &eventingest.SeaweedFSSource{BucketName: "paladin-test", URI: "seaweedfs://primary"}
+	source := &eventingest.SeaweedFSSource{BucketName: ingestTestBucket, URI: "seaweedfs://primary"}
 	event := func(kind string) eventingest.CloudEvent {
-		payload, _ := json.Marshal(map[string]any{
-			"key":          fmt.Sprintf("/paladin-test/%s/docs/report.pdf", tenantID),
-			"event_type":   kind,
-			"timestamp_ns": time.Now().UnixNano(),
-			"etag":         "abc123",
-			"size":         1024,
-		})
+		payload := seaweedFSWebhook(tenantID, kind)
 		evs, err := source.Parse(payload, "application/json")
 		if err != nil || len(evs) != 1 {
 			t.Fatalf("source parse: %d events, %v", len(evs), err)
