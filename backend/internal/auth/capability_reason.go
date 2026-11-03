@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -100,7 +99,7 @@ func capabilityError(code connect.Code, err error) *connect.Error {
 // whatever Connect code it was answered with. e as it is when err is no
 // error of the library's and reason is unspecified.
 func withCapabilityInfo(e *connect.Error, err error, reason commonv1.ErrorReason) *connect.Error {
-	code, _ := meter.CodeOf(err)
+	code, _ := limes.CodeOf(err)
 	info := capabilityErrorInfo(reason, code)
 	if info == nil {
 		return e

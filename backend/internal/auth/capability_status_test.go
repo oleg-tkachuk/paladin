@@ -88,7 +88,7 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 			t.Errorf("%s answers %v, want %v", tc.code, got, tc.want)
 		}
 	}
-	for _, c := range append(limes.Codes(), meter.Codes()...) {
+	for _, c := range limes.Codes() {
 		if !covered[c] {
 			t.Errorf("limes code %q has no case here", c)
 		}

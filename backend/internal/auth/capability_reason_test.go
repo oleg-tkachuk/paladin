@@ -83,7 +83,7 @@ func TestCapabilityErrorCarriesTheReason(t *testing.T) {
 // Every code limes and the meter define reaches the wire as itself, under
 // the key both SDKs read it by, with or without a reason beside it.
 func TestEveryLimesCodeReachesTheWire(t *testing.T) {
-	codes := append(limes.Codes(), meter.Codes()...)
+	codes := limes.Codes()
 	if len(codes) == 0 {
 		t.Fatal("limes defines no code")
 	}

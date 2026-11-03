@@ -7,7 +7,6 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/limes/meter"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
@@ -42,7 +41,7 @@ var ListExceptions = Malformed(limes.CodeInvalidRequest, limes.CodeCursorMismatc
 // Undefined is every code e names that limes does not define, sorted; each
 // operation's test holds its rows to none.
 func (e Exceptions) Undefined() []limes.Code {
-	defined := append(limes.Codes(), meter.Codes()...)
+	defined := limes.Codes()
 	var out []limes.Code
 	for c := range e {
 		if !slices.Contains(defined, c) {
@@ -71,7 +70,7 @@ func AnswerCapabilityError(err error, except Exceptions) error {
 	if _, ok := errors.AsType[*connect.Error](err); ok {
 		return err
 	}
-	if code, ok := meter.CodeOf(err); ok {
+	if code, ok := limes.CodeOf(err); ok {
 		if row, ok := except[code]; ok {
 			if row.Reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
 				return capabilityError(row.Code, err)

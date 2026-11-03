@@ -196,7 +196,7 @@ func leaseRefusal(code connect.Code, err error) *connect.Error {
 			info.Reason = commonv1.ErrorReason(v).String()
 		}
 	}
-	if c, ok := meter.CodeOf(err); ok {
+	if c, ok := limes.CodeOf(err); ok {
 		info.Metadata = map[string]string{paladin.ErrorMetadataLimesCode: string(c)}
 	}
 	detail, derr := connectproto.NewErrorDetail(info)
