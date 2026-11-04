@@ -1,4 +1,4 @@
-## Unreleased — an agent leases budget for what it delegated
+## v42.0.0 — an agent leases budget for what it delegated
 
 - `CapabilityService.Lease`, `GetLease` and `SettleLease` accept a
   presented capability holding the `share` op, as `Delegate` does: it
