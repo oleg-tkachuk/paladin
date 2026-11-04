@@ -75,7 +75,7 @@ env:
   # renovate: datasource=github-releases depName=sigstore/cosign
   COSIGN_VERSION: "v3.1.4"
   # renovate: datasource=github-releases depName=anchore/syft
-  SYFT_VERSION: "v1.55.0"
+  SYFT_VERSION: "v1.56.0"
   # renovate: datasource=github-releases depName=google/go-containerregistry
   CRANE_VERSION: "v0.22.1"
   # Who issues the OIDC token keyless signing is bound to; verification pins it.
