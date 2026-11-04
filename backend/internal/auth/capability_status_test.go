@@ -16,8 +16,7 @@ import (
 // a changed row. The exchange's codes are left out: its errors are answered
 // by its own token endpoint, never by a Connect plane.
 func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
-	codes := limes.CodesOf(limes.OriginLimes(), limes.OriginMeter())
-	limestest.CheckMapping(t, codes, map[limes.Code]connect.Code{
+	limestest.CheckMapping(t, map[limes.Code]connect.Code{
 		limes.CodeMalformedAuthorization:      connect.CodeInvalidArgument,
 		limes.CodeNoCredentials:               connect.CodeUnauthenticated,
 		limes.CodeKeysUnavailable:             connect.CodeUnavailable,
@@ -81,5 +80,5 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		meter.CodeLeaseNested:                 connect.CodeFailedPrecondition,
 		meter.CodeLeasingDisabled:             connect.CodeFailedPrecondition,
 		meter.CodeFeatureDisabled:             connect.CodeFailedPrecondition,
-	}, codeStatus)
+	}, codeStatus, limestest.WithoutExchange())
 }
