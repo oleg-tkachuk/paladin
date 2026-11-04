@@ -16,7 +16,7 @@ import (
 // a changed row. The exchange's codes are left out: its errors are answered
 // by its own token endpoint, never by a Connect plane.
 func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
-	codes := limes.CodesOf(limes.OriginLimes, limes.OriginMeter)
+	codes := limes.CodesOf(limes.OriginLimes(), limes.OriginMeter())
 	limestest.CheckMapping(t, codes, map[limes.Code]connect.Code{
 		limes.CodeMalformedAuthorization:      connect.CodeInvalidArgument,
 		limes.CodeNoCredentials:               connect.CodeUnauthenticated,
