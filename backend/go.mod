@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.8
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.6
-	github.com/aws/smithy-go v1.28.7
+	github.com/aws/smithy-go v1.28.8
 	github.com/cedar-policy/cedar-go v1.9.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/dustin/go-humanize v1.1.0
@@ -45,7 +45,7 @@ require (
 	github.com/oleg-tkachuk/limes/exchange v0.16.1
 	github.com/oleg-tkachuk/limes/otelmetric v0.17.4
 	github.com/oleg-tkachuk/limes/pgstore v0.65.2
-	github.com/oleg-tkachuk/paladin/sdk/go v0.136.3
+	github.com/oleg-tkachuk/paladin/sdk/go v0.137.8
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.16.0
