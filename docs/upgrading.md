@@ -99,7 +99,7 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
-## sdk/go/v0.137.0, sdk/python/v0.138.0 — a capability that is no longer good is UNAUTHENTICATED
+## v42.0.0, sdk/go/v0.137.0, sdk/python/v0.138.0 — a capability that is no longer good is UNAUTHENTICATED
 
 - A capability the server cannot accept as a credential — not issued by it,
   malformed, expired or not yet valid, revoked, past its delegation depth,
@@ -115,7 +115,7 @@ here.
 - The SDK fakes (`paladintest`, `paladin.testing`) answer the same, and the MCP
   bridge tells a model why a capability was refused.
 
-## sdk/go/v0.137.0, sdk/python/v0.138.0 — managing capabilities spends no request
+## v42.0.0, sdk/go/v0.137.0, sdk/python/v0.138.0 — managing capabilities spends no request
 
 - A call of `CapabilityService` presented with a capability — `Delegate`,
   `Lease`, `GetLease`, `SettleLease`, `Get`, `List` and the rest — no longer
@@ -126,7 +126,7 @@ here.
 - The SDK fakes (`paladintest`, `paladin.testing`) count requests the same
   way.
 
-## Unreleased — folder listings walk an index
+## v42.0.0 — folder listings walk an index
 
 - Migration `105` builds `idx_objects_collection_path_c` on `objects
   (collection_id, path COLLATE "C")` concurrently. Uploads keep working
@@ -137,7 +137,7 @@ here.
   probe per folder: the root of a 10M-object collection no longer reads
   every key. The folders returned are unchanged.
 
-## Unreleased — an agent leases budget for what it delegated
+## v42.0.0 — an agent leases budget for what it delegated
 
 - `CapabilityService.Lease`, `GetLease` and `SettleLease` accept a
   presented capability holding the `share` op, as `Delegate` does: it
@@ -149,7 +149,7 @@ here.
   calls with the server's rule of who may lease; a lease's spent amount
   stays zero there, as the fakes count no budget.
 
-## sdk/go/v0.135.0 — limes v1.0.0-rc.31
+## v42.0.0, sdk/go/v0.135.0 — limes v1.0.0-rc.31
 
 - The limes schema moves to version 36. pgstore v0.60.0 migrates it on
   start, and keeps a token exchange's record until its subject token
@@ -184,7 +184,7 @@ here.
   Python SDK as `PaladinError.limes_code` and `paladin.limes_code(err)`.
   Both SDKs' fakes send it as the server does.
 
-## Unreleased — revoke an agent run's capabilities
+## v42.0.0 — revoke an agent run's capabilities
 
 - `CapabilityService.RevokeRun` revokes every capability of one agent run in
   a tenant — the run's `subject.run_id` — and releases their holds at once.
