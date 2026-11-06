@@ -48,6 +48,86 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
+### The Go SDK requires OpenTelemetry for one test (ADR-0043, step 1)
+
+- **Status:** In-Progress.
+- **Reason:** `TestOpenTelemetryThroughTheExtensionPoints` imports otel,
+  otelconnect and otelhttp, so `sdk/go/go.mod` requires them and raises every
+  consumer's OpenTelemetry floor.
+- **Definition of Done:** the test runs from a module of its own, wired into
+  the Taskfile and CI; `sdk/go/go.mod` requires no OpenTelemetry module; a
+  test in `sdk/go` fails when it does or when `paladin` links one.
+- **Blockers:** none.
+
+### The Go SDK links its heavy features for every caller (ADR-0043, step 2)
+
+- **Status:** Blocked.
+- **Reason:** `sdk/go/paladin` links biscuit-go, go-spiffe and twelve limes
+  packages though only Biscuit attenuation, SPIFFE TLS and DPoP use them;
+  moving them out breaks the API, so it waits for numbers that justify it.
+- **Definition of Done:** binary size and package count of a minimal
+  `StaticToken` client measured with and without them; if it pays, the three
+  live in sub-packages plugging into a core seam, a dependency test bounds
+  what `paladin` links, and the break is noted in `docs/upgrading/`; if it
+  does not, the numbers are recorded in ADR-0043 and this entry is deleted.
+- **Blockers:** the measurement.
+
+### Nothing in CI resolves the published Go SDK (ADR-0043, step 3)
+
+- **Status:** Deferred.
+- **Reason:** the backend builds the SDK through `replace => ../sdk/go`, so
+  its `require` of `sdk/go` is never resolved, and a requirement only a
+  consumer sees (a limes release-candidate floor, a test-only module) passes.
+- **Definition of Done:** a CI check builds a minimal consumer against
+  `sdk/go` as a dependency, without `replace`, and fails on a module graph a
+  consumer could not resolve.
+- **Blockers:** none.
+
+### The SDK version streams are undecided (ADR-0043, step 4)
+
+- **Status:** Blocked.
+- **Reason:** each SDK is tagged on its own when a commit touches it, while
+  ADR-0018 versions them with the contract; the two already differ
+  (`sdk/go/v0.137.11`, `sdk/python/v0.138.1`).
+- **Definition of Done:** one stream for both SDKs, or independent streams
+  each stating the contract version it targets, recorded in ADR-0043 and
+  enforced by `release.yaml`.
+- **Blockers:** the owner's decision.
+
+### The Python SDK is not type-checked (ADR-0043, step 5)
+
+- **Status:** Deferred.
+- **Reason:** it ships `py.typed`, but no type checker runs in CI, and
+  `token_source`, `dpop_key`, `capability_source` and `connect`'s
+  `**client_options` are `Any`, so a mistyped option fails only at runtime.
+- **Definition of Done:** a strict type checker runs over `sdk/python/src`
+  in CI, and those parameters carry their real types.
+- **Blockers:** none.
+
+### The Python `biscuit` extra does not say where it installs (ADR-0043, step 6)
+
+- **Status:** Deferred.
+- **Reason:** `compat.json` declares Python 3.14 and 3.15, while
+  `biscuit-python` has wheels only up to 3.13 and its source build needs
+  Rust; on 3.14+ the extra fails to install and its tests skip silently.
+- **Definition of Done:** the `biscuit` extra carries
+  `python_version < '3.14'`, and the README's compatibility table states it.
+  Superseded when "The Python SDK still supports Python 3.13" closes.
+- **Blockers:** none.
+
+### The SDKs are pre-1.0 and the Python SDK is not published (ADR-0043, step 7)
+
+- **Status:** Blocked.
+- **Reason:** limes is still at release candidates, so any SDK release can
+  move consumers onto a breaking limes; there are no users outside the
+  owner yet, so the Python SDK is installed from the repository. The
+  distribution name `paladin-sdk` is provisional.
+- **Definition of Done:** both SDKs cut 1.0 under semver; a publish step in
+  `.github/workflows/release.yaml` sends the Python SDK to PyPI (trusted
+  publishing, a `pypi` environment), its version coming from the
+  `sdk/python/v*` tag through hatch-vcs.
+- **Blockers:** limes 1.0; the decision to publish.
+
 ---
 
 ## Deploy cutover: rename to `paladin`
@@ -526,17 +606,6 @@ open deliberately — each notes why._
   envelope table in `docs/event-delivery-dedup.md` updated.
 - **Blockers:** a second Paladin deployment publishing into the same broker
   or webhook, where consumers need to know which one an event came from.
-
-### The Python SDK is not published
-
-- **Status:** Deferred (owner decision, 2026-09-30).
-- **Reason:** there are no users outside the owner, so the SDK is installed
-  from the repository. The distribution name `paladin-sdk` is provisional and
-  follows the product name if that changes.
-- **Definition of Done:** a publish step in `.github/workflows/release.yaml`
-  after the SDK tag is cut (PyPI trusted publishing, a `pypi` environment);
-  the version already comes from the `sdk/go/v*` tag through hatch-vcs.
-- **Blockers:** the decision to publish.
 
 ### Terminal tenant events are observed by query, not by subscription
 
