@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   PROVISION_STATE,
+  PROVISION_STATES,
   isProvisionInFlight,
   provisionStatus,
+  provisionView,
 } from "./bucketProvision";
 
 describe("isProvisionInFlight", () => {
@@ -31,5 +33,26 @@ describe("provisionStatus", () => {
     ["mystery", "mystery", "unknown"],
   ])("%j → %s", (state, label, tone) => {
     expect(provisionStatus(state)).toEqual({ label, tone });
+  });
+});
+
+describe("provisionView", () => {
+  it("names, tones and explains every state the server sends", () => {
+    expect([...PROVISION_STATES].sort()).toEqual(
+      Object.values(PROVISION_STATE).sort(),
+    );
+    for (const state of PROVISION_STATES) {
+      const v = provisionView(state);
+      expect(v.tone).not.toBe("unknown");
+      expect(v.label).not.toBe(state);
+      expect(v.detail).not.toBe("");
+    }
+  });
+
+  it("shows a state it does not know as the server spells it", () => {
+    expect(provisionView("mystery")).toMatchObject({
+      label: "mystery",
+      tone: "unknown",
+    });
   });
 });

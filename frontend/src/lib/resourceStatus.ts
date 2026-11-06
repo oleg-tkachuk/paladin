@@ -11,7 +11,7 @@ import type {
   StorageBackend,
 } from "@/gen/paladin/admin/v1/types_pb";
 import { capPercent } from "@/app/tenants/[id]/quotas/_caps";
-import { PROVISION_STATE } from "@/lib/bucketProvision";
+import { provisionView } from "@/lib/bucketProvision";
 import { budgetLimit, budgetUnit } from "@/lib/format/budgetCeiling";
 import {
   formatMoney,
@@ -176,44 +176,8 @@ export function policyStanding(layers: readonly PolicyLayer[]): StatusFact {
 
 /** Where the bucket is in being created on, or removed from, its backend. */
 export function provisionStatus(state: string): StatusFact {
-  switch (state || PROVISION_STATE.ready) {
-    case PROVISION_STATE.ready:
-      return {
-        tone: StatusTone.Success,
-        value: "Ready",
-        detail: "It exists on its backend and takes collections and uploads.",
-      };
-    case PROVISION_STATE.pending:
-      return {
-        tone: StatusTone.Progress,
-        value: "Provisioning",
-        detail: "Being created on its backend; nothing binds to it yet.",
-      };
-    case PROVISION_STATE.deleting:
-      return {
-        tone: StatusTone.Progress,
-        value: "Deleting",
-        detail: "Being removed from its backend.",
-      };
-    case PROVISION_STATE.failed:
-      return {
-        tone: StatusTone.Danger,
-        value: "Failed",
-        detail: "Creating it on its backend failed and will not be retried.",
-      };
-    case PROVISION_STATE.deletionFailed:
-      return {
-        tone: StatusTone.Danger,
-        value: "Delete failed",
-        detail: "Removing it from its backend failed and will not be retried.",
-      };
-    default:
-      return {
-        tone: StatusTone.Unknown,
-        value: state,
-        detail: "A state this console does not know.",
-      };
-  }
+  const { tone, label, detail } = provisionView(state);
+  return { tone, value: label, detail };
 }
 
 /**

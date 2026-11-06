@@ -289,10 +289,3 @@ export default function BucketsPage() {
     </TableScope>
   );
 }
-
-// ProvisionStateBadge mirrors the backend's outbox state machine. Empty
-// or "ready" → muted "ready" pill; "pending" / "deleting" → animated
-// info pill so the operator sees there's work in flight; "failed" /
-// "deletion_failed" → destructive pill so a stuck row stands out at a
-// glance. Old rows from before the migration default to "ready" — same
-// affordance.
