@@ -137,9 +137,9 @@ func TestParseSeaweedFSPath(t *testing.T) {
 		want         SubjectFields
 		ok           bool
 	}{
-		"any bucket":            {"/buckets/b/" + tenant + "/c/k/l", "", SubjectFields{TenantID: tenant, Collection: "c", Key: "k/l"}, true},
-		"no buckets/ namespace": {"b/" + tenant + "/c/k", "", SubjectFields{TenantID: tenant, Collection: "c", Key: "k"}, true},
-		"its own bucket":        {"/buckets/b/" + tenant + "/c/k", "b", SubjectFields{TenantID: tenant, Collection: "c", Key: "k"}, true},
+		"any bucket":            {"/buckets/b/" + tenant + "/c/k/l", "", SubjectFields{Bucket: "b", TenantID: tenant, Collection: "c", Key: "k/l"}, true},
+		"no buckets/ namespace": {"b/" + tenant + "/c/k", "", SubjectFields{Bucket: "b", TenantID: tenant, Collection: "c", Key: "k"}, true},
+		"its own bucket":        {"/buckets/b/" + tenant + "/c/k", "b", SubjectFields{Bucket: "b", TenantID: tenant, Collection: "c", Key: "k"}, true},
 		"another bucket":        {"/buckets/x/" + tenant + "/c/k", "b", SubjectFields{}, false},
 		"tenant not a uuid":     {"/buckets/.system/owners/paladin-dev/b", "", SubjectFields{}, false},
 		"no key":                {"/buckets/b/" + tenant + "/c", "", SubjectFields{}, false},

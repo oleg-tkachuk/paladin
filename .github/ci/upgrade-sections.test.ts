@@ -6,7 +6,7 @@ import { describe, test } from "node:test";
 
 import { fakeData, fakeGitHub } from "./lib/fake-github.ts";
 import { git } from "./lib/git.ts";
-import { streamOf, streams } from "./lib/release-config.ts";
+import { streamOf, streams, withGoModuleTags } from "./lib/release-config.ts";
 import { tempRepo } from "./lib/temp-repo.ts";
 import {
   BRANCH_PREFIX,
@@ -33,30 +33,35 @@ const all = streams();
 const PRODUCT_TAG = "v27.0.0";
 const SDK_TAG = "sdk/go/v0.60.0";
 const PYTHON_TAG = "sdk/python/v0.60.0";
-const BOTH = [SDK_TAG, PRODUCT_TAG];
 const EVERY = [PYTHON_TAG, SDK_TAG, PRODUCT_TAG];
+// How a section both SDKs shipped is named: the release under both its tags.
+const SDK_HEADING = `${PYTHON_TAG}, ${SDK_TAG}`.replaceAll("/", "\\/");
 const BACKEND = "backend/internal/api/handler.go";
 const GO_SDK = "sdk/go/paladin/client.go";
 const PYTHON_SDK = "sdk/python/pyproject.toml";
 
 describe("tagsFor", () => {
+  // Both SDKs release at one version, under both tags.
   const cases: [string, string[], string[]][] = [
-    ["the Python SDK and its notes, in a run without its tag", [PYTHON_SDK, UPGRADING], []],
     ["the backend and its notes", [BACKEND, UPGRADING], [PRODUCT_TAG]],
-    ["the Go SDK, which the product compiles in", [GO_SDK, UPGRADING], [PRODUCT_TAG, SDK_TAG]],
+    ["the Go SDK, which the product compiles in", [GO_SDK, UPGRADING], [PRODUCT_TAG, PYTHON_TAG, SDK_TAG]],
+    ["the Python SDK is both SDKs' release", [PYTHON_SDK, UPGRADING], [PYTHON_TAG, SDK_TAG]],
+    ["the contract is every stream's, product first", ["proto/paladin/x.proto", UPGRADING], [PRODUCT_TAG, PYTHON_TAG, SDK_TAG]],
     ["the notes alone read as the product's", [UPGRADING], [PRODUCT_TAG]],
   ];
-  for (const [name, files, want] of cases) test(name, () => assert.deepEqual(tagsFor(files, BOTH, all), want));
-  test("the Python SDK is its own stream's", () => assert.deepEqual(tagsFor([PYTHON_SDK, UPGRADING], EVERY, all), [PYTHON_TAG]));
-  test("the contract is every stream's, product first", () =>
-    assert.deepEqual(tagsFor(["proto/paladin/x.proto", UPGRADING], EVERY, all), [PRODUCT_TAG, SDK_TAG, PYTHON_TAG]));
+  for (const [name, files, want] of cases) test(name, () => assert.deepEqual(tagsFor(files, EVERY, all), want));
   test("a run that cut no SDK tag", () => assert.deepEqual(tagsFor([PYTHON_SDK, UPGRADING], [PRODUCT_TAG], all), []));
   test("not a release tag", () => assert.deepEqual(tagsFor([BACKEND], ["api/v1.2.0"], all), []));
   test("each tag's stream", () => {
     assert.equal(streamOf(PRODUCT_TAG, all), "product");
-    assert.equal(streamOf(SDK_TAG, all), "go-sdk");
-    assert.equal(streamOf(PYTHON_TAG, all), "python-sdk");
+    assert.equal(streamOf(SDK_TAG, all), "sdk");
+    assert.equal(streamOf(PYTHON_TAG, all), "sdk");
     assert.equal(streamOf("sdk/go/vnext", all), undefined);
+  });
+  // What the name step names sections with: the SDK release by both its tags.
+  test("an SDK release goes by its Go module's tag too", () => {
+    assert.deepEqual(withGoModuleTags([PRODUCT_TAG, PYTHON_TAG], all), [PRODUCT_TAG, PYTHON_TAG, SDK_TAG]);
+    assert.deepEqual(withGoModuleTags([SDK_TAG, "api/v1.2.0"], all), [SDK_TAG, "api/v1.2.0"]);
   });
 });
 
@@ -106,7 +111,7 @@ test("nameGuide reads each section's stream from the commit that wrote it", asyn
     await repo.commit("feat(api): server");
     assert.equal(await nameGuide(repo.dir, EVERY), true);
     assert.equal(await repo.run("diff", "--name-only"), `${UPGRADING}\n`);
-    assert.match(await repo.run("diff"), new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${PYTHON_TAG.replaceAll("/", "\\/")} — python`));
+    assert.match(await repo.run("diff"), new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${SDK_HEADING} — python`));
     assert.equal(await nameGuide(repo.dir, EVERY), false, "a named guide is left as it is");
   } finally {
     repo.cleanup();
@@ -185,12 +190,12 @@ describe("section files", () => {
       await repo.commit("feat(api): server");
 
       assert.equal(await nameGuide(repo.dir, EVERY), true);
-      assert.match(await repo.run("diff", "--", PYTHON_FILE), new RegExp(`^\\+## ${PYTHON_TAG.replaceAll("/", "\\/")} — python$`, "m"));
+      assert.match(await repo.run("diff", "--", PYTHON_FILE), new RegExp(`^\\+## ${SDK_HEADING} — python$`, "m"));
       assert.match(await repo.run("diff", "--", SERVER_FILE), new RegExp(`^\\+## ${PRODUCT_TAG} — server$`, "m"));
       const guide = await repo.run("diff", "--", UPGRADING);
       // The newest file first, then the older, between the markers; the
       // section the guide holds is named where it is.
-      assert.match(guide, new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${PYTHON_TAG.replaceAll("/", "\\/")} — python[\\s\\S]*\\+Body\\.`));
+      assert.match(guide, new RegExp(`\\+## ${PRODUCT_TAG} — server[\\s\\S]*\\+## ${SDK_HEADING} — python[\\s\\S]*\\+Body\\.`));
       assert.match(guide, new RegExp(`^\\+## ${PRODUCT_TAG} — in the guide$`, "m"));
 
       await repo.commit("docs(upgrading): name the sections");

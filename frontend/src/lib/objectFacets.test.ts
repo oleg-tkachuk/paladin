@@ -2,17 +2,22 @@ import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
 import { FacetCountSchema } from "@/gen/paladin/common/v1/facet_pb";
-import { ObjectContentCategory } from "@/gen/paladin/data/v1/object_service_pb";
+import {
+  ObjectContentCategory,
+  ObjectTagCountSchema,
+} from "@/gen/paladin/data/v1/object_service_pb";
 import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
-import { parseFacets } from "@/lib/table/facets";
+import { FACET_COUNTING, parseFacets } from "@/lib/table/facets";
 import { PAGE_TABLE } from "@/lib/table/urlState";
 
 import {
   OBJECT_FACETS,
   OBJECT_FACET_STATUS,
+  OBJECT_FACET_TAG,
   OBJECT_FACET_TYPE,
   objectFacetCounts,
   objectFacetsRequest,
+  tagOptionLabel,
   viewFacetSelection,
 } from "./objectFacets";
 
@@ -88,7 +93,7 @@ describe("viewFacetSelection", () => {
 
 describe("objectFacetsRequest", () => {
   it.each([
-    ["no choice", {}, { states: [], contentCategories: [] }],
+    ["no choice", {}, { states: [], contentCategories: [], tags: [] }],
     [
       "several of each",
       { status: ["AVAILABLE", "PENDING"], type: ["pdf", "other"] },
@@ -98,15 +103,57 @@ describe("objectFacetsRequest", () => {
           ObjectContentCategory.PDF,
           ObjectContentCategory.OTHER,
         ],
+        tags: [],
       },
     ],
     [
       "values no enum names, nor the unspecified",
       { status: ["UNSPECIFIED", "FAILED"], type: ["unspecified", "docs"] },
-      { states: [], contentCategories: [] },
+      { states: [], contentCategories: [], tags: [] },
     ],
   ])("sends %s", (_, selection, want) => {
     expect(objectFacetsRequest(selection)).toEqual(want);
+  });
+
+  it("sends the tag choice as a facet, split on its first =", () => {
+    expect(objectFacetsRequest({}, "q=a=b").tags).toEqual([
+      { key: "q", value: "a=b" },
+    ]);
+    expect(objectFacetsRequest({}, "novalue").tags).toEqual([]);
+  });
+});
+
+describe("tag counts", () => {
+  const tagCount = (key: string, value: string, n: bigint) =>
+    create(ObjectTagCountSchema, { key, value, count: n });
+  const counts = objectFacetCounts(
+    [count("state", "OBJECT_STATE_AVAILABLE", 1n)],
+    [tagCount("env", "prod", 3n), tagCount("a=b", "c", 1n)],
+  );
+
+  it("are the tag facet's, by the key=value the filter offers", () => {
+    expect(counts.get(OBJECT_FACET_TAG)).toEqual(
+      new Map([
+        ["env=prod", 3],
+        ["a=b=c", 1],
+      ]),
+    );
+  });
+
+  it.each([
+    ["exact", FACET_COUNTING.exact, false, "env=prod", "env: prod · 3"],
+    [
+      "a lower bound",
+      FACET_COUNTING.lowerBound,
+      false,
+      "env=prod",
+      "env: prod · 3+",
+    ],
+    ["withheld", FACET_COUNTING.withheld, false, "env=prod", "env: prod"],
+    ["carried by none", FACET_COUNTING.exact, false, "env=dev", "env: dev · 0"],
+    ["past the key's cap", FACET_COUNTING.exact, true, "env=dev", "env: dev"],
+  ])("label a choice when %s", (_, counting, truncated, option, want) => {
+    expect(tagOptionLabel(option, counts, counting, truncated)).toBe(want);
   });
 });
 

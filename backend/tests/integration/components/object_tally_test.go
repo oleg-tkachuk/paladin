@@ -39,6 +39,11 @@ func TestTallyObjects(t *testing.T) {
 	insert(tenant, "a/5.pdf", "DELETED", "application/pdf")
 	insert(tenant, "b/6.png", "AVAILABLE", "image/png")
 	insert(other, "a/7.png", "AVAILABLE", "image/png")
+	tag := func(path, tags string) {
+		mustExec(t, ctx, admin, `UPDATE objects SET tags = $2::jsonb WHERE tenant_id = $1 AND path = $3`, tenant, tags, path)
+	}
+	tag("b/6.png", `{"env": "prod"}`)
+	tag("a/1.png", `{"env": "dev", "team": "a"}`)
 
 	pool := rlsPool(t, ctx, admin)
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
@@ -73,6 +78,15 @@ func TestTallyObjects(t *testing.T) {
 			key(statemachine.StateAvailable, "image/png"): 2,
 			key(statemachine.StatePending, "image/png"):   1,
 		}},
+		// A chosen tag marks the objects that carry it rather than narrowing.
+		{"tagged by the chosen tags", objecth.TallyObjectsArgs{
+			Filter: `key.endsWith(".png")`,
+			Tags:   []objecth.Tag{{Key: "env", Value: "prod"}},
+		}, map[objecth.ObjectTallyKey]int64{
+			{State: statemachine.StateAvailable, ContentType: "image/png", Tagged: true}: 1,
+			key(statemachine.StateAvailable, "image/png"):                                1,
+			key(statemachine.StatePending, "image/png"):                                  1,
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			args := tc.args
@@ -97,4 +111,27 @@ func TestTallyObjects(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("each tag of the objects tallied", func(t *testing.T) {
+		got, err := repo.TallyObjects(asTenant, objecth.TallyObjectsArgs{TenantID: tenant, Collection: "docs"})
+		if err != nil {
+			t.Fatalf("TallyObjects: %v", err)
+		}
+		tagKey := func(ct, k, v string) objecth.ObjectTagTallyKey {
+			return objecth.ObjectTagTallyKey{State: statemachine.StateAvailable, ContentType: ct, Tag: objecth.Tag{Key: k, Value: v}}
+		}
+		want := map[objecth.ObjectTagTallyKey]int64{
+			tagKey("image/png", "env", "prod"): 1,
+			tagKey("image/png", "env", "dev"):  1,
+			tagKey("image/png", "team", "a"):   1,
+		}
+		if len(got.TagCounts) != len(want) {
+			t.Errorf("tag tally = %v, want %v", got.TagCounts, want)
+		}
+		for k, n := range want {
+			if got.TagCounts[k] != n {
+				t.Errorf("%v = %d, want %d", k, got.TagCounts[k], n)
+			}
+		}
+	})
 }

@@ -1,19 +1,18 @@
 # Releasing
 
-Three release streams and one baseline. Each stream tracks what its
+Two release streams and one baseline. Each stream tracks what its
 consumers actually depend on, and each is versioned from the commits
 that touch it ([`release.config.cjs`](../.github/release/release.config.cjs)).
-The SDK's tag is cut automatically; the product's when a maintainer runs the
+The SDKs' tags are cut automatically; the product's when a maintainer runs the
 release workflow.
 
 | Tag | Cut by | Publishes | Versioned by |
 | --- | --- | --- | --- |
 | `vX.Y.Z` | semantic-release, when `release.yaml` is run by hand | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
-| `sdk/go/vX.Y.Z` | semantic-release, after a green push to `main` | the tag, which the Go proxy resolves, and a GitHub release | the commits that touch `sdk/go/`, `proto/` or `sdk/testdata/` |
-| `sdk/python/vX.Y.Z` | semantic-release, after a green push to `main` | the tag, which a git install of the package resolves, and a GitHub release | the commits that touch `sdk/python/`, `proto/` or `sdk/testdata/` |
+| `sdk/python/vX.Y.Z` and `sdk/go/vX.Y.Z` | semantic-release cuts the first after a green push to `main`, and the workflow the second beside it | both tags, which a git install of the package and the Go proxy resolve, and one GitHub release | the commits that touch `sdk/go/`, `sdk/python/`, `proto/` or `sdk/testdata/` |
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
-The SDK release's notes list only their own `feat`, `fix`, `perf`,
+The SDK release's notes list only the SDKs' own `feat`, `fix`, `perf`,
 `security` and `revert` commits ([`sdk-release.ts`](../.github/ci/sdk-release.ts)), and
 none is marked latest: that stays the product's release.
 
@@ -172,27 +171,33 @@ cosign verify-attestation "${image%:*}@${digest}" --type spdxjson \
   jq -r '.payload | @base64d | fromjson | .predicate.packages | length'
 ```
 
-## The SDKs: `sdk/go/vX.Y.Z` and `sdk/python/vX.Y.Z`
+## The SDKs: `sdk/python/vX.Y.Z` and `sdk/go/vX.Y.Z`
 
-Each SDK versions on its own, from the commits that touch its directory,
-`proto/` or `sdk/testdata/` — a contract change regenerates both SDKs' stubs,
-whatever its commit's scope, and the shared tables hold both to the server.
-A change to one SDK alone releases that one: a release of the other would be
-one its consumers read to find nothing in it. Neither carries a version to
-edit: the Go module resolves `sdk/go/vX.Y.Z`, and the Python package reads
-`sdk/python/vX.Y.Z` at build time through hatch-vcs (and from
-`.git_archival.txt` in a source archive). A release is the tag; nothing else
-is published, and the Python package is not on PyPI. The release workflow
-asks the Go module proxy for each new Go SDK tag
-([`.github/ci/sdk-release.ts`](../.github/ci/sdk-release.ts)), so `go get
-…@latest` and the README's SDK badge see it at once rather than when the
-proxy next refreshes.
+Both SDKs release at one version
+([ADR-0043](adr/0043-sdk-delivery-stabilization.md)), from the commits that
+touch either SDK's directory, `proto/` or `sdk/testdata/` — a contract change
+regenerates both SDKs' stubs, whatever its commit's scope, and the shared
+tables hold both to the server. A consumer of the two reads one number; the
+cost is that a change to one SDK releases the other unchanged, and the notes
+say which changed. Neither carries a version to edit: the Python package
+reads `sdk/python/vX.Y.Z` at build time through hatch-vcs (and from
+`.git_archival.txt` in a source archive), and the Go module resolves
+`sdk/go/vX.Y.Z`. semantic-release cuts the first; the workflow tags the Go
+module at the same version on the same commit
+([`.github/ci/mirror-tag.ts`](../.github/ci/mirror-tag.ts)), and refuses when
+that Go tag already names another commit. A release is the two tags and one
+GitHub release on the first; nothing else is published, and the Python
+package is not on PyPI. The release workflow asks the Go module proxy for the
+new Go tag ([`.github/ci/sdk-release.ts`](../.github/ci/sdk-release.ts)), so
+`go get …@latest` and the README's SDK badge see it at once rather than when
+the proxy next refreshes.
 
-The two shared one version until `sdk/go/v0.102.0`; the Python stream's first
-tag, `sdk/python/v0.102.0`, was cut by hand on the same commit, and it
-versions from there. semantic-release starts a stream that has no tag at
-1.0.0, and the release-tag ruleset forbids deleting a tag, so the workflow
-releases a stream only once it has one
+The two shared one version until `sdk/go/v0.102.0`, released apart from
+there, and share one again since 2026-11-06. semantic-release versions them
+from the Python tags, the stream that was ahead, so every version it cuts is
+new to both. semantic-release starts a stream that has no tag at 1.0.0, and the
+release-tag ruleset forbids deleting a tag, so the workflow releases a stream
+only once it has one
 ([`.github/ci/stream-seeded.ts`](../.github/ci/stream-seeded.ts)): a new
 stream's first tag is cut by hand, at the version it continues from.
 

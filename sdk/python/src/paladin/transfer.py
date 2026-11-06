@@ -13,7 +13,16 @@ import hashlib
 import io
 import threading
 import time
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator, Mapping
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterable,
+    AsyncIterator,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    Mapping,
+)
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -243,7 +252,7 @@ class Transfer:
         signed: Any,
         headers: dict[str, str] | None = None,
         content: bytes | Iterable[bytes] | None = None,
-    ) -> Iterator[Any]:
+    ) -> Generator[Any]:
         """Send one presigned request and yield storage's 2xx response,
         unread; any other status is a ``TransferError``.
 
@@ -273,7 +282,7 @@ class Transfer:
         signed: Any,
         headers: dict[str, str] | None = None,
         content: bytes | AsyncIterable[bytes] | None = None,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncGenerator[Any]:
         """``stream`` for the async workflows."""
         method = signed.method or method
         url, host = self._target(signed.url)
@@ -281,7 +290,10 @@ class Transfer:
         started = time.monotonic()
         target = urlsplit(url).netloc
         try:
-            async with self._async_client.stream(method, url, sent, content) as resp:
+            # pyqwest's stub names an iterator for a streamed body; a caller
+            # may give any async iterable, which pyqwest reads as well.
+            body = content if content is None or isinstance(content, bytes) else aiter(content)
+            async with self._async_client.stream(method, url, sent, body) as resp:
                 if not _STATUS_OK <= resp.status < _STATUS_REDIRECT:
                     raise TransferError(method, target, resp.status, await _aexcerpt(resp))
                 yield resp
@@ -424,8 +436,9 @@ class _Check:
         if obj.size_bytes > 0:
             self._want_size = obj.size_bytes
         new = _DIGESTS.get(obj.checksum.algorithm)
-        digest = new() if new else None
-        if digest is None:
+        # Unknown, or known but not computable here (CRC32C without its extra).
+        digest = new() if new is not None else None
+        if new is None or digest is None:
             return
         size = len(digest.digest())
         if obj.checksum.part_size_bytes > 0:
@@ -433,7 +446,7 @@ class _Check:
             # the server recorded beside it.
             parsed = _parse_composite(obj.checksum.value, size)
             if parsed is not None:
-                self._composite = _Composite(new, obj.checksum.part_size_bytes)  # type: ignore[arg-type]
+                self._composite = _Composite(new, obj.checksum.part_size_bytes)
                 self._want_digest, self._want_parts = parsed
                 self._algorithm = obj.checksum.algorithm
             return

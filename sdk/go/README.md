@@ -339,7 +339,7 @@ case errors.Is(err, paladin.ErrNotFound):
 ### Observability
 
 Nothing is observed unless asked, and the SDK depends on no OpenTelemetry
-package.
+package — its `go.mod` requires none, so it never raises yours.
 
 | Name | Does |
 | --- | --- |
@@ -362,6 +362,8 @@ p, err := paladin.Connect(endpoints,
 	paladin.WithInterceptors(otelInterceptor),
 	paladin.WithTransfer(transfer))
 ```
+
+The snippet is tested in `internal/oteltest`, a module of its own.
 
 ### Resource names and object URIs
 
@@ -717,7 +719,8 @@ from the tables above.
 
 ## Versioning
 
-The SDK has its own version, `sdk/go/vX.Y.Z`, cut automatically from the
-commits that touch `sdk/` or `proto/` ([docs/releasing.md](../../docs/releasing.md)).
+The SDK's version is its tag, `sdk/go/vX.Y.Z`, cut automatically from the
+commits that touch `sdk/` or `proto/`, at the same version as the Python SDK's
+([docs/releasing.md](../../docs/releasing.md)).
 Pre-1.0, a minor version may break the contract or this package's own API; see
 [`docs/upgrading.md`](../../docs/upgrading.md).

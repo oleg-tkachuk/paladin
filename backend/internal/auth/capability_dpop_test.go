@@ -248,14 +248,14 @@ func TestCapabilityDPoP_Unary(t *testing.T) {
 // A plane wired without a DPoP verifier cannot check a binding, and must not
 // quietly treat a bound capability as a bearer token. limes counts that the
 // deployment's fault (ErrProofUnsupported), not a refusal of the capability:
-// FailedPrecondition, which no retry mends, rather than Unavailable.
+// Internal, since every plane the server wires checks proofs.
 func TestCapabilityDPoP_BoundRefusedWithoutAVerifier(t *testing.T) {
 	f := newDPoPFixture(t)
 	client, base := serve(t, CapabilityInterceptor(f.bare, TokenPlaneData, nil, 0))
 	bound := f.mint(t, f.jkt)
 	err := call(client, bound, f.proof(t, base+dpopProcedure, bound))
-	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), proofUnchecked) {
-		t.Fatalf("err = %v, want FailedPrecondition: %q", err, proofUnchecked)
+	if connect.CodeOf(err) != connect.CodeInternal || !strings.Contains(err.Error(), proofUnchecked) {
+		t.Fatalf("err = %v, want Internal: %q", err, proofUnchecked)
 	}
 	if err := call(client, f.mint(t, ""), ""); err != nil {
 		t.Fatalf("unbound capability: %v", err)

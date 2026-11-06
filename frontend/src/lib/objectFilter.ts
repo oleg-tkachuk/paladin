@@ -7,9 +7,9 @@
 // pushable clauses is one indexed query, which is what keeps a selective
 // filter from scanning the collection page by page.
 //
-// The object page's state and content-type choices are not here: they go to
-// the server as ListObjectsRequest.facets (objectFacets.ts), which owns the
-// content-type categories and counts by them.
+// The object page's state, content-type and tag choices are not here: they go
+// to the server as ListObjectsRequest.facets (objectFacets.ts), which counts
+// each facet without its own choices.
 import { celString } from "@/lib/cel";
 
 /**
@@ -32,8 +32,6 @@ export interface ObjectFilterInput {
   /** Search text; only applied from three characters, as the server's
    *  trigram index needs. */
   search?: string;
-  /** Tag facet, "key=value". */
-  tag?: string;
   /** Metadata facet, "key=value". */
   meta?: string;
 }
@@ -44,8 +42,6 @@ export function buildObjectFilter(f: ObjectFilterInput): string {
   if (f.status) parts.push(`state == ${celString(f.status)}`);
   if (f.search && f.search.length > 2)
     parts.push(`key.contains(${celString(f.search)})`);
-  const tag = parseKeyValue(f.tag);
-  if (tag) parts.push(`tags[${celString(tag.key)}] == ${celString(tag.value)}`);
   const meta = parseKeyValue(f.meta);
   if (meta)
     parts.push(`metadata[${celString(meta.key)}] == ${celString(meta.value)}`);

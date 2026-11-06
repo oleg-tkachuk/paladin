@@ -371,28 +371,52 @@ class ListObjectsRequest(_message.Message):
     def __init__(self, parent: _Optional[str] = ..., page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ..., filter: _Optional[str] = ..., order_by: _Optional[str] = ..., sort_order: _Optional[_Union[_pagination_pb2.SortOrder, str]] = ..., prefix: _Optional[str] = ..., delimiter: _Optional[str] = ..., facets: _Optional[_Union[ObjectFacets, _Mapping]] = ..., count_facets: _Optional[bool] = ...) -> None: ...
 
 class ListObjectsResponse(_message.Message):
-    __slots__ = ("objects", "page", "common_prefixes", "common_prefixes_truncated", "facet_counts", "facet_counts_exact")
+    __slots__ = ("objects", "page", "common_prefixes", "common_prefixes_truncated", "facet_counts", "facet_counts_exact", "tag_counts", "tag_counts_truncated")
     OBJECTS_FIELD_NUMBER: _ClassVar[int]
     PAGE_FIELD_NUMBER: _ClassVar[int]
     COMMON_PREFIXES_FIELD_NUMBER: _ClassVar[int]
     COMMON_PREFIXES_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
     FACET_COUNTS_FIELD_NUMBER: _ClassVar[int]
     FACET_COUNTS_EXACT_FIELD_NUMBER: _ClassVar[int]
+    TAG_COUNTS_FIELD_NUMBER: _ClassVar[int]
+    TAG_COUNTS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
     objects: _containers.RepeatedCompositeFieldContainer[_types_pb2.Object]
     page: _pagination_pb2.PageResponse
     common_prefixes: _containers.RepeatedScalarFieldContainer[str]
     common_prefixes_truncated: bool
     facet_counts: _containers.RepeatedCompositeFieldContainer[_facet_pb2.FacetCount]
     facet_counts_exact: bool
-    def __init__(self, objects: _Optional[_Iterable[_Union[_types_pb2.Object, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., common_prefixes: _Optional[_Iterable[str]] = ..., common_prefixes_truncated: _Optional[bool] = ..., facet_counts: _Optional[_Iterable[_Union[_facet_pb2.FacetCount, _Mapping]]] = ..., facet_counts_exact: _Optional[bool] = ...) -> None: ...
+    tag_counts: _containers.RepeatedCompositeFieldContainer[ObjectTagCount]
+    tag_counts_truncated: bool
+    def __init__(self, objects: _Optional[_Iterable[_Union[_types_pb2.Object, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., common_prefixes: _Optional[_Iterable[str]] = ..., common_prefixes_truncated: _Optional[bool] = ..., facet_counts: _Optional[_Iterable[_Union[_facet_pb2.FacetCount, _Mapping]]] = ..., facet_counts_exact: _Optional[bool] = ..., tag_counts: _Optional[_Iterable[_Union[ObjectTagCount, _Mapping]]] = ..., tag_counts_truncated: _Optional[bool] = ...) -> None: ...
 
 class ObjectFacets(_message.Message):
-    __slots__ = ("states", "content_categories")
+    __slots__ = ("states", "content_categories", "tags")
     STATES_FIELD_NUMBER: _ClassVar[int]
     CONTENT_CATEGORIES_FIELD_NUMBER: _ClassVar[int]
+    TAGS_FIELD_NUMBER: _ClassVar[int]
     states: _containers.RepeatedScalarFieldContainer[_types_pb2.ObjectState]
     content_categories: _containers.RepeatedScalarFieldContainer[ObjectContentCategory]
-    def __init__(self, states: _Optional[_Iterable[_Union[_types_pb2.ObjectState, str]]] = ..., content_categories: _Optional[_Iterable[_Union[ObjectContentCategory, str]]] = ...) -> None: ...
+    tags: _containers.RepeatedCompositeFieldContainer[ObjectTag]
+    def __init__(self, states: _Optional[_Iterable[_Union[_types_pb2.ObjectState, str]]] = ..., content_categories: _Optional[_Iterable[_Union[ObjectContentCategory, str]]] = ..., tags: _Optional[_Iterable[_Union[ObjectTag, _Mapping]]] = ...) -> None: ...
+
+class ObjectTag(_message.Message):
+    __slots__ = ("key", "value")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    value: str
+    def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+class ObjectTagCount(_message.Message):
+    __slots__ = ("key", "value", "count")
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
+    key: str
+    value: str
+    count: int
+    def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ..., count: _Optional[int] = ...) -> None: ...
 
 class CountObjectsRequest(_message.Message):
     __slots__ = ("parent", "filter")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 
@@ -25,6 +26,7 @@ from paladin import (
     parse_retry_after,
     user_agent,
 )
+from paladin.client import ClientOptions
 from paladin.iam.v1 import auth_service_pb2, health_service_pb2
 from paladin.iam.v1.auth_service_connect import AuthServiceClientSync
 from paladin.iam.v1.health_service_connect import HealthServiceClient, HealthServiceClientSync
@@ -323,3 +325,13 @@ def test_default_retryable() -> None:
     assert default_retryable(ConnectError(Code.UNAVAILABLE, "x"))
     assert default_retryable(ConnectError(Code.RESOURCE_EXHAUSTED, "x"))
     assert not default_retryable(ConnectError(Code.INTERNAL, "x"))
+
+
+def test_connect_takes_every_option_of_client_but_the_audience() -> None:
+    # connect(**options) passes ClientOptions on to every plane's Client and
+    # sets each plane's audience itself; an option added to one and not the
+    # other is a type error at callers, or one connect cannot pass.
+    params = inspect.signature(Client.__init__).parameters.values()
+    keyword = {p.name for p in params if p.kind is inspect.Parameter.KEYWORD_ONLY}
+    assert ClientOptions.__optional_keys__ == keyword - {"audience"}
+    assert not ClientOptions.__required_keys__

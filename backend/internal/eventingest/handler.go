@@ -163,6 +163,10 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return fmt.Errorf("resolve collection prefix: %w", perr)
 	}
 
+	if skip, err := h.fromAnotherBucket(ctx, logger, tenantPg, collection, ev.SubjectFields.Bucket); skip || err != nil {
+		return err
+	}
+
 	row, err := h.Lookup.LookupObjectByKey(ctx, tenantPg, collection, key)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -348,6 +352,34 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 		},
 	})
 	return err
+}
+
+// fromAnotherBucket reports whether the event's bucket is not the one the
+// collection is bound to: the same path in another bucket is another
+// object. An event that names no bucket is taken as the collection's. An
+// unknown collection is skipped too, as an unknown object is; a failed read
+// is returned, so the event is retried.
+func (h *PromoteHandler) fromAnotherBucket(ctx context.Context, logger *zap.Logger, tenant pgtype.UUID, collection, bucket string) (bool, error) {
+	if bucket == "" {
+		return false, nil
+	}
+	binding, err := h.Lookup.GetCollection(ctx, tenant, collection)
+	if errors.Is(err, pgx.ErrNoRows) {
+		logger.Debug("no such collection for event; skipping", zap.String("collection", collection))
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("collection binding: %w", err)
+	}
+	if binding.BucketName != bucket {
+		logger.Warn("event is from a bucket the collection is not bound to; skipping",
+			zap.String("collection", collection),
+			zap.String("event_bucket", bucket),
+			zap.String("collection_bucket", binding.BucketName),
+		)
+		return true, nil
+	}
+	return false, nil
 }
 
 // objectResourceName builds the canonical (A-shape) object resource name

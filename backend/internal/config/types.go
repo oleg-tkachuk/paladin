@@ -1224,8 +1224,11 @@ type Capability struct {
 	IssuerName string `yaml:"issuer_name" json:"issuer_name"`
 
 	// TrustedIssuers is the set of `iss` values the verifier accepts.
-	// Always include IssuerName; add others when federating across
-	// Paladin instances.
+	// Always include IssuerName. A capability is accepted only when its
+	// signing key is in this deployment's key set and it is on record in
+	// this deployment's capability store — limes refuses one it holds no
+	// record of (unrecorded) — so a capability another Paladin instance
+	// issued is refused whatever this list says.
 	TrustedIssuers []string `yaml:"trusted_issuers" json:"trusted_issuers"`
 
 	// SigningKeyPath is a filesystem path to the Ed25519 private key

@@ -82,8 +82,13 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	if _, err := usage.Bump(acting, meter.BumpRequest{Subject: subject}); err != nil {
 		t.Fatalf("bump: %v", err)
 	}
-	if _, err := usage.Charge(acting, meter.ChargeRequest{Subject: subject, Amount: limes.NanosPerUnit}, nil); err != nil {
+	charged, err := usage.Charge(acting, meter.ChargeRequest{Subject: subject, Amount: limes.NanosPerUnit}, nil)
+	if err != nil {
 		t.Fatalf("charge: %v", err)
+	}
+	// A refund that names itself is kept by its id, so a resend returns it.
+	if _, err := usage.Refund(acting, meter.RefundRequest{ChargeID: charged.ChargeID, Amount: limes.NanosPerUnit / 2, RefundID: uuid.New()}); err != nil {
+		t.Fatalf("refund: %v", err)
 	}
 	if _, err := usage.Reserve(acting, meter.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {
 		t.Fatalf("reserve: %v", err)

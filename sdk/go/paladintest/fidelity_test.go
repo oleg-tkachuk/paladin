@@ -86,6 +86,9 @@ func TestListObjectsRefusesWhatItDoesNotApply(t *testing.T) {
 		"facets": {Parent: parent, Facets: &datav1.ObjectFacets{
 			States: []datav1.ObjectState{datav1.ObjectState_OBJECT_STATE_AVAILABLE},
 		}},
+		"facets.tags": {Parent: parent, Facets: &datav1.ObjectFacets{
+			Tags: []*datav1.ObjectTag{{Key: "env", Value: "prod"}},
+		}},
 		"count_facets": {Parent: parent, CountFacets: true},
 	} {
 		t.Run(name, func(t *testing.T) {

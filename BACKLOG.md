@@ -41,12 +41,27 @@ the same commit. Treat this file like a runtime invariant.
   newer. Without 3.13 the extra installs nowhere and its tests run nowhere.
 - **Definition of Done:** `requires-python = ">=3.14"`; 3.13 is gone from
   `sdk/python/compat.json`, `PY_SDK_PYTHON` in `.github/workflows/ci.yaml`
-  (or the variable itself, the SDK job then following the runner), the dev
-  group's `python_version < '3.14'` marker on `biscuit-python`, and the
+  (or the variable itself, the SDK job then following the runner), the
+  `python_version < '3.14'` marker on `biscuit-python` in the `biscuit`
+  extra and the dev group with `paladin.biscuit.WHEEL_PYTHON_BELOW`, and the
   README's compatibility table; `docs/upgrading.md` names the break; the
   attenuation tests run in CI on 3.14.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
+
+
+### The SDKs are pre-1.0 and the Python SDK is not published (ADR-0043, step 7)
+
+- **Status:** Blocked.
+- **Reason:** limes is still at release candidates, so any SDK release can
+  move consumers onto a breaking limes; there are no users outside the
+  owner yet, so the Python SDK is installed from the repository. The
+  distribution name `paladin-sdk` is provisional.
+- **Definition of Done:** both SDKs cut 1.0 under semver; a publish step in
+  `.github/workflows/release.yaml` sends the Python SDK to PyPI (trusted
+  publishing, a `pypi` environment), its version coming from the
+  `sdk/python/v*` tag through hatch-vcs.
+- **Blockers:** limes 1.0; the decision to publish.
 
 ---
 
@@ -308,33 +323,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### Refund and reservation helpers no handler calls
-
-- **Status:** Deferred
-- **Reason:** `auth.RefundLastCharge`, `ReserveCapability`,
-  `SettleReservation` and `ReleaseReservation`
-  (`internal/auth/capability_interceptor.go`) are tested but have no
-  production caller: handlers only charge (`auth.ChargeRequest`), so a
-  refund or a hold never reaches the ledger and how their errors are
-  answered is checked by unit tests alone.
-- **Definition of Done:** either a handler that rolls back a charge or
-  prices work after the fact (an LLM call, a failed write after presign)
-  calls them, with an integration test through the interceptor; or they
-  are deleted with their tests.
-- **Blockers:** an operation whose cost is known only after it runs, or
-  that can fail after charging.
-
-## Production-readiness audit (2026-06-12)
-
-_Full security / data-integrity / ops sweep. The 7 BLOCKER findings and
-most HIGH/MEDIUM items were fixed in this work stream — see git history
-(login rate-limiter, bounded CEL+JWKS caches, presign TTL clamp, IAM
-audit interceptor, idempotency purger + ON CONFLICT, multipart reaper,
-ListObjects pagination, frontend CSP/HSTS/CSRF + liveness, MCP PDB,
-sticky sessions, ingest dedup pool, tenant-delete precheck, AsyncWriter
-shutdown, composeKey guard). The entries that remain below were kept
-open deliberately — each notes why._
-
 ### Federated IdP via JWKS
 
 - **Status:** Won't-do (for now) — not on the roadmap (2026-06-30).
@@ -413,22 +401,6 @@ open deliberately — each notes why._
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### Storage events are not checked against the collection's bucket
-
-- **Status:** Deferred
-- **Reason:** A storage event names its bucket, but `PromoteHandler` finds
-  the object by tenant, collection and key alone. A source that accepts
-  every bucket — the SeaweedFS webhook route, the `s3` and `minio` routes —
-  would let an event from another bucket at the same path promote or delete
-  the object, so the NATS sources keep a filter instead, `paladin-primary`,
-  hard-coded in `pickSource` (`backend/cmd/server/serve_ingest.go`).
-- **Definition of Done:** `SubjectFields` carries the event's bucket, the
-  handler skips an event whose bucket is not the collection's binding (as
-  `objectResourceName` already reads it), and `pickSource` drops the
-  hard-coded bucket; a test covers an event from another bucket at the same
-  path.
-- **Blockers:** none.
-
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational
@@ -503,6 +475,21 @@ open deliberately — each notes why._
       validate the cardinality assumption holds for their
       tenant.
 
+### A refunded charge emits no event
+
+- **Status:** Blocked
+- **Reason:** `ChargeCapability` enqueues `paladin.capability.charged` on the
+  charge's own transaction, but `RefundLastCharge` emits nothing: limes'
+  `meter.UsageStore.Refund` takes no callback on its transaction, as `Charge`
+  does. Since the interceptor refunds every call that fails after charging, a
+  subscriber summing `charged` events (`dispatcher.charge_events_enabled`)
+  counts spend the ledger has returned.
+- **Definition of Done:** a refund enqueues `paladin.capability.refunded`,
+  naming the charge it returns, on the refund's transaction, and the event
+  catalogue documents it.
+- **Blockers:** a limes release whose `UsageStore.Refund` runs a callback on
+  its transaction.
+
 ### Event dispatcher: per-tenant Kafka topic prefix
 
 - **Status:** Deferred — the Kafka sink, its SASL/SCRAM and mTLS auth, secret
@@ -526,17 +513,6 @@ open deliberately — each notes why._
   envelope table in `docs/event-delivery-dedup.md` updated.
 - **Blockers:** a second Paladin deployment publishing into the same broker
   or webhook, where consumers need to know which one an event came from.
-
-### The Python SDK is not published
-
-- **Status:** Deferred (owner decision, 2026-09-30).
-- **Reason:** there are no users outside the owner, so the SDK is installed
-  from the repository. The distribution name `paladin-sdk` is provisional and
-  follows the product name if that changes.
-- **Definition of Done:** a publish step in `.github/workflows/release.yaml`
-  after the SDK tag is cut (PyPI trusted publishing, a `pypi` environment);
-  the version already comes from the `sdk/go/v*` tag through hatch-vcs.
-- **Blockers:** the decision to publish.
 
 ### Terminal tenant events are observed by query, not by subscription
 
@@ -757,17 +733,6 @@ order they are being taken up.
 - **Definition of Done:** CSV export of what a list shows, in its order and
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
-
-#### Tag facet counts on the object listing
-
-- **Status:** Deferred.
-- **Reason:** a folder's objects count by state and content category beside
-  their choices, but not by tag: tag values are unbounded per key,
-  ListDistinctTags already serves the values (capped at 100 per key) for the
-  tag filter, and a count per key=value would need its own cap and paging.
-- **Definition of Done:** the object listing's tag filter shows a count
-  beside each tag value; or this entry says why not.
-- **Blockers:** none.
 
 #### Facet choices remembered between visits
 

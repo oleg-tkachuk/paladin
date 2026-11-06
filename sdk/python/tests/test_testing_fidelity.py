@@ -87,6 +87,14 @@ def test_the_fake_validates_every_request(fake: FakePaladin, case: str) -> None:
             "facets",
             {"facets": object_service_pb2.ObjectFacets(states=[types_pb2.OBJECT_STATE_AVAILABLE])},
         ),
+        (
+            "facets.tags",
+            {
+                "facets": object_service_pb2.ObjectFacets(
+                    tags=[object_service_pb2.ObjectTag(key="env", value="prod")]
+                )
+            },
+        ),
         ("count_facets", {"count_facets": True}),
     ],
 )

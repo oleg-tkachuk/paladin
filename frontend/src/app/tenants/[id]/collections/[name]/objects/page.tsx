@@ -160,6 +160,8 @@ function CollectionObjectsContent() {
     foldersTruncated,
     facetCounts,
     facetCountsExact,
+    tagCounts,
+    tagCountsTruncated,
     loading,
     error,
     refresh,
@@ -176,8 +178,8 @@ function CollectionObjectsContent() {
   } = useObjects({
     collection,
     filter,
-    // Status and content type narrow on the server, which counts them with
-    // the first page.
+    // Status, content type and tag narrow on the server, which counts them
+    // with the first page.
     facets,
     countFacets: true,
     orderBy: sort.column || undefined,
@@ -189,13 +191,14 @@ function CollectionObjectsContent() {
 
   // Counted over the whole listing; lower bounds past the server's scan cap,
   // and none where the collection's policies decide object by object.
+  const counts = useMemo(
+    () => objectFacetCounts(facetCounts, tagCounts),
+    [facetCounts, tagCounts],
+  );
+  const counting = serverCounting(facetCounts, facetCountsExact);
   const facetControls = useMemo(
-    () =>
-      controlsFor(
-        objectFacetCounts(facetCounts),
-        serverCounting(facetCounts, facetCountsExact),
-      ),
-    [controlsFor, facetCounts, facetCountsExact],
+    () => controlsFor(counts, counting),
+    [controlsFor, counts, counting],
   );
 
   // Authoritative tag-facet options from the server (whole-Collection scope via
@@ -813,6 +816,7 @@ function CollectionObjectsContent() {
               if ("recursive" in patch) handleRecursiveChange(patch.recursive!);
             }}
             tagOptions={mergedTagOptions}
+            tagCounts={{ counts, counting, truncated: tagCountsTruncated }}
             visibleColumns={visibleColumns}
             onToggleColumn={toggleColumn}
             savedViews={savedViews}

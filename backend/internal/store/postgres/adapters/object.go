@@ -369,12 +369,13 @@ func (r *ObjectRepo) CountObjects(ctx context.Context, args objecth.CountObjects
 	}
 }
 
-// TallyObjects counts the listing's objects by state and content type: the
+// TallyObjects counts the listing's objects by state and content type, and
+// their tags: the
 // candidates ListObjects would fetch, at the same prefix and folder level,
 // each kept only if the compiled filter accepts it. It scans at most
 // countScanCap rows, as CountObjects does, and says when it stopped there.
 func (r *ObjectRepo) TallyObjects(ctx context.Context, args objecth.TallyObjectsArgs) (objecth.ObjectTally, error) {
-	tally := objecth.ObjectTally{Counts: map[objecth.ObjectTallyKey]int64{}}
+	tally := objecth.NewObjectTally()
 	branches := withLevel(narrowToPrefix(objectBranchHints(args.Filter), args.Prefix), args.Prefix, args.Delimiter)
 	liveOnly := liveObjectsOnly(args.Filter) && !args.IncludeDeleted
 	order := keyset.Order{Field: objectOrderByID}
@@ -392,7 +393,7 @@ func (r *ObjectRepo) TallyObjects(ctx context.Context, args objecth.TallyObjects
 			scanned++
 			if atLevel(o.Key, args.Prefix, args.Delimiter) &&
 				(args.CompiledCEL == nil || rowMatches(args.CompiledCEL, o)) {
-				tally.Counts[objecth.ObjectTallyKey{State: o.State, ContentType: o.ContentType}]++
+				tally.Tally(o.State, o.ContentType, o.Tags, args.Tags)
 			}
 			if scanned >= countScanCap {
 				return tally, nil

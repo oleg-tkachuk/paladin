@@ -175,6 +175,7 @@ func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
 	}
 
 	return SubjectFields{
+		Bucket:     parts[0],
 		TenantID:   parts[1],
 		Collection: parts[2],
 		Key:        parts[3],

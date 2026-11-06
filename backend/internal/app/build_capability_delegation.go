@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"time"
 	"uuid"
@@ -13,12 +12,14 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/jwks"
-	"go.uber.org/zap/exp/zapslog"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
 // capabilityIssuers are the capability issuer and the delegation issuer the
@@ -44,15 +45,15 @@ func delegationKeyID(kid string) string { return kid + auth.DelegationIssuerSuff
 // behind names none (pgstore.ScopedIssuance). extraTrusted are the
 // issuers the operator also trusts (capability.trusted_issuers), kept as
 // configured; with none, the capability issuer alone.
-func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceStore, issuerName string, extraTrusted []string, ttl time.Duration) (*capabilityIssuers, error) {
+func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceStore, issuerName string, extraTrusted []string, ttl time.Duration, log *zap.Logger) (*capabilityIssuers, error) {
 	delegationName := auth.DelegationIssuerName(issuerName)
 	delegationKID := delegationKeyID(key.KeyID)
 
-	issuer, err := newCapabilityIssuer(key.KeyID, key, store, issuerName, ttl)
+	issuer, err := newCapabilityIssuer(key.KeyID, key, store, issuerName, ttl, log)
 	if err != nil {
 		return nil, err
 	}
-	delegation, err := newCapabilityIssuer(delegationKID, key, delegated, delegationName, ttl)
+	delegation, err := newCapabilityIssuer(delegationKID, key, delegated, delegationName, ttl, log)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +74,18 @@ func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceS
 	}, nil
 }
 
-func newCapabilityIssuer(kid string, key limes.SigningKey, store limes.IssuanceStore, name string, ttl time.Duration) (*limes.Issuer, error) {
+// Each issuer logs every token it mints, refuses or fails to (limes
+// IssuerConfig.Logger), under its own name.
+func newCapabilityIssuer(kid string, key limes.SigningKey, store limes.IssuanceStore, name string, ttl time.Duration, log *zap.Logger) (*limes.Issuer, error) {
 	signer, err := limes.NewSigner(limes.SignerConfig{KeyID: kid, Key: key.Private})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability signer %s: %w", kid, err)
 	}
-	issuer, err := limes.NewIssuer(limes.IssuerConfig{Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: name, DefaultTTL: ttl})
+	issuer, err := limes.NewIssuer(limes.IssuerConfig{
+		Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: name, DefaultTTL: ttl,
+		Logger: logger.Slog(log, "capability-issuer"),
+		Events: issuerEvents(metrics.RecordCapabilityCall),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability issuer %s: %w", name, err)
 	}
@@ -129,7 +136,7 @@ func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *Shared
 		return nil, fmt.Errorf("oauth token exchange verifier: %w", err)
 	}
 	ex, err := delegation.NewExchanger(deps.Capability.Delegation, delegation.NewSubjectVerifier(tokens, cfg.Issuer),
-		deps.Capability.Exchanges, users, deps.Cfg.Capability.Currency, slog.New(zapslog.NewHandler(deps.Logger.Named("delegation").Core())))
+		deps.Capability.Exchanges, users, deps.Cfg.Capability.Currency, logger.Slog(deps.Logger, "delegation"))
 	if err != nil {
 		return nil, err
 	}

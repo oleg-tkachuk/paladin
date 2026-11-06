@@ -1,4 +1,4 @@
-## Unreleased — folder listings walk an index
+## v42.0.0 — folder listings walk an index
 
 - Migration `105` builds `idx_objects_collection_path_c` on `objects
   (collection_id, path COLLATE "C")` concurrently. Uploads keep working

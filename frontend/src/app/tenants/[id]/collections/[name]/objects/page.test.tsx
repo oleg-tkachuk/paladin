@@ -50,7 +50,11 @@ const h = vi.hoisted(() => ({
   lastOpts: undefined as
     | {
         filter: string;
-        facets?: { states: number[]; contentCategories: number[] };
+        facets?: {
+          states: number[];
+          contentCategories: number[];
+          tags: { key: string; value: string }[];
+        };
         countFacets?: boolean;
         orderBy?: string;
         sortDirection: unknown;
@@ -433,6 +437,7 @@ describe("CollectionObjectsPage", () => {
       expect(h.lastOpts?.facets).toEqual({
         states: [ObjectState.AVAILABLE, ObjectState.PENDING],
         contentCategories: [],
+        tags: [],
       }),
     );
     expect(h.lastOpts?.filter).toBe("");
@@ -496,7 +501,11 @@ describe("CollectionObjectsPage", () => {
   it("ignores a link's DELETED status: the trash lists deleted objects", () => {
     window.history.replaceState(null, "", `${PAGE_PATH}?status=DELETED`);
     render(<CollectionObjectsPage />);
-    expect(h.lastOpts?.facets).toEqual({ states: [], contentCategories: [] });
+    expect(h.lastOpts?.facets).toEqual({
+      states: [],
+      contentCategories: [],
+      tags: [],
+    });
   });
 
   it("opens a link the single-choice filters wrote on the same choice", () => {
@@ -509,6 +518,7 @@ describe("CollectionObjectsPage", () => {
     expect(h.lastOpts?.facets).toEqual({
       states: [ObjectState.PENDING],
       contentCategories: [ObjectContentCategory.PDF],
+      tags: [],
     });
     expect(h.lastOpts?.filter).toBe("");
   });
@@ -526,16 +536,18 @@ describe("CollectionObjectsPage", () => {
       expect(h.lastOpts?.facets).toEqual({
         states: [ObjectState.AVAILABLE],
         contentCategories: [ObjectContentCategory.PDF],
+        tags: [],
       }),
     );
   });
 
-  it("applies a tag facet to the CEL filter", async () => {
+  it("sends a tag choice as a facet the server counts, not in the filter", async () => {
     render(<CollectionObjectsPage />);
     await userEvent.click(screen.getByText("set tag"));
     await waitFor(() =>
-      expect(h.lastOpts?.filter).toContain('tags["env"] == "prod"'),
+      expect(h.lastOpts?.facets?.tags).toEqual([{ key: "env", value: "prod" }]),
     );
+    expect(h.lastOpts?.filter ?? "").not.toContain("tags[");
   });
 
   it("applies metadata to the CEL filter, URL-synced", async () => {

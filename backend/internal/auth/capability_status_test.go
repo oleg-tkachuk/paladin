@@ -16,11 +16,16 @@ import (
 // a changed row. The exchange's codes are left out: its errors are answered
 // by its own token endpoint, never by a Connect plane.
 func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
-	codes := limes.CodesOf(limes.OriginLimes, limes.OriginMeter)
-	limestest.CheckMapping(t, codes, map[limes.Code]connect.Code{
+	limestest.CheckMapping(t, map[limes.Code]connect.Code{
 		limes.CodeMalformedAuthorization:      connect.CodeInvalidArgument,
 		limes.CodeNoCredentials:               connect.CodeUnauthenticated,
 		limes.CodeKeysUnavailable:             connect.CodeUnavailable,
+		limes.CodeRevocationUnavailable:       connect.CodeUnavailable,
+		limes.CodeUnrecorded:                  connect.CodeUnauthenticated,
+		limes.CodeProofQuotaExceeded:          connect.CodeResourceExhausted,
+		limes.CodeOutcomeUnknown:              connect.CodeUnavailable,
+		limes.CodeReserveConflict:             connect.CodeAborted,
+		limes.CodeRefundConflict:              connect.CodeAborted,
 		limes.CodeNonceRequired:               connect.CodeUnauthenticated,
 		limes.CodeProofRequired:               connect.CodeUnauthenticated,
 		limes.CodeProofInvalid:                connect.CodeUnauthenticated,
@@ -59,7 +64,7 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		limes.CodeUnknownTenant:               connect.CodeFailedPrecondition,
 		limes.CodeTenantDeleted:               connect.CodeFailedPrecondition,
 		limes.CodeScopeMismatch:               connect.CodeInternal,
-		limes.CodeProofUnsupported:            connect.CodeFailedPrecondition,
+		limes.CodeProofUnsupported:            connect.CodeInternal,
 		limes.CodeNoRevocationLineage:         connect.CodeUnavailable,
 		limes.CodeCopyCountersNotMetered:      connect.CodeInternal,
 		limes.CodeCursorRepeated:              connect.CodeUnavailable,
@@ -79,7 +84,7 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		meter.CodeLeaseRequestsExhausted:      connect.CodeResourceExhausted,
 		meter.CodeLeaseNotFound:               connect.CodeFailedPrecondition,
 		meter.CodeLeaseNested:                 connect.CodeFailedPrecondition,
-		meter.CodeLeasingDisabled:             connect.CodeFailedPrecondition,
-		meter.CodeFeatureDisabled:             connect.CodeFailedPrecondition,
-	}, codeStatus)
+		meter.CodeLeasingDisabled:             connect.CodeInternal,
+		meter.CodeFeatureDisabled:             connect.CodeInternal,
+	}, codeStatus, limestest.WithoutExchange())
 }

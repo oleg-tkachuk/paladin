@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/biscuit"
@@ -14,8 +13,8 @@ import (
 // copiesUsage records the copies each metering call was handed.
 type copiesUsage struct {
 	*usageStore
-	bumped, charged, reserved []limes.CopyCeiling
-	bumps                     int
+	bumped, charged []limes.CopyCeiling
+	bumps           int
 }
 
 func (u *copiesUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
@@ -29,20 +28,14 @@ func (u *copiesUsage) Charge(ctx context.Context, req meter.ChargeRequest, on fu
 	return u.usageStore.Charge(ctx, req, on)
 }
 
-func (u *copiesUsage) Reserve(ctx context.Context, req meter.ReserveRequest) (meter.Reservation, error) {
-	u.reserved = req.Subject.Copies()
-	return u.usageStore.Reserve(ctx, req)
-}
-
 // A Biscuit copy's own limits reach the usage store on every metering call,
 // and a copy with limits is counted even when its capability sets none.
 func TestCopiesReachTheMeter(t *testing.T) {
 	const (
-		copyRequests       = 2
-		copyBudget         = limes.NanosPerUnit
-		holdTTL            = time.Minute
-		wantCopies         = 2
-		chargeAndHoldNanos = limes.NanosPerUnit / 4
+		copyRequests = 2
+		copyBudget   = limes.NanosPerUnit
+		wantCopies   = 2
+		chargeNanos  = limes.NanosPerUnit / 4
 	)
 	m, store := newMeteredMinter(t)
 	root, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Ops: []limes.Op{limes.OpGet, limes.OpShare}}})
@@ -67,45 +60,10 @@ func TestCopiesReachTheMeter(t *testing.T) {
 	}
 
 	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), v), usage))
-	if err := ChargeCapability(ctx, chargeAndHoldNanos); err != nil {
+	if err := ChargeCapability(ctx, chargeNanos); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 	if !reflect.DeepEqual(usage.charged, copies) {
 		t.Errorf("charge copies = %+v", usage.charged)
-	}
-	if _, err := ReserveCapability(ctx, chargeAndHoldNanos, holdTTL); err != nil {
-		t.Fatalf("reserve: %v", err)
-	}
-	if !reflect.DeepEqual(usage.reserved, copies) {
-		t.Errorf("reserve copies = %+v", usage.reserved)
-	}
-}
-
-// A hold is released by the capability that made it. The store releases only
-// for the subject that reserved, so a release naming none left the hold in
-// place until it lapsed.
-func TestReleaseReservationFreesTheCapabilitysHold(t *testing.T) {
-	const (
-		holdNanos = limes.NanosPerUnit / 4
-		holdTTL   = time.Minute
-	)
-	m, store := newMeteredMinter(t)
-	root, token := m.Mint(t, limes.Capability{})
-	v := m.Verify(t, token, root.Capability().Audience[0])
-	ctx := withLastOpHolder(WithChargeStore(WithCapability(context.Background(), v), store))
-
-	id, err := ReserveCapability(ctx, holdNanos, holdTTL)
-	if err != nil {
-		t.Fatalf("reserve: %v", err)
-	}
-	if err := ReleaseReservation(ctx, id); err != nil {
-		t.Fatalf("release: %v", err)
-	}
-	u, err := store.GetUsage(ctx, v.Capability().ID)
-	if err != nil {
-		t.Fatalf("usage: %v", err)
-	}
-	if u.ReservedAmount != 0 {
-		t.Errorf("held after release = %v, want 0", u.ReservedAmount)
 	}
 }

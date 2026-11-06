@@ -53,7 +53,7 @@ func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 		"an operation the capability does not allow": {limes.ErrOpNotAllowed, connect.CodePermissionDenied, false},
 		"a replayed proof":                           {dpop.ErrReplayed, connect.CodeUnauthenticated, false},
 		"a caveat violated":                          {limes.ErrCaveatViolation, connect.CodePermissionDenied, false},
-		"a key-bound capability with no proof check": {limes.ErrProofUnsupported, connect.CodeFailedPrecondition, true},
+		"a key-bound capability with no proof check": {limes.ErrProofUnsupported, connect.CodeInternal, true},
 		"a record already there":                     {limes.ErrAlreadyExists, connect.CodeAlreadyExists, false},
 		"a refund beyond its charge":                 {meter.ErrRefundExceedsCharge, connect.CodeFailedPrecondition, false},
 		"a deleted tenant":                           {limes.ErrTenantDeleted, connect.CodeFailedPrecondition, false},

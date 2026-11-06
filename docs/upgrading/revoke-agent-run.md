@@ -1,4 +1,4 @@
-## Unreleased — revoke an agent run's capabilities
+## v42.0.0 — revoke an agent run's capabilities
 
 - `CapabilityService.RevokeRun` revokes every capability of one agent run in
   a tenant — the run's `subject.run_id` — and releases their holds at once.

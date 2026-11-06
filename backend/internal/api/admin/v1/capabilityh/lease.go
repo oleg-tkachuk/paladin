@@ -37,10 +37,13 @@ func (h *Handler) WithLineage(lineage limes.RevocationLineageLookup) *Handler {
 const leaseAmountField = "amount"
 
 // leaseExceptions answer a lease operation: a capability or a lease not
-// there is NotFound, whether no such id or another tenant's.
+// there is NotFound, whether no such id or another tenant's. Leasing turned
+// off is the deployment's choice (capability.budget_leases), not a failure:
+// limes answers it as a misconfigured server, but here no retry mends it.
 var leaseExceptions = auth.Exceptions{
-	limes.CodeNotFound:      {Code: connect.CodeNotFound},
-	meter.CodeLeaseNotFound: {Code: connect.CodeNotFound},
+	limes.CodeNotFound:        {Code: connect.CodeNotFound},
+	meter.CodeLeaseNotFound:   {Code: connect.CodeNotFound},
+	meter.CodeLeasingDisabled: {Code: connect.CodeFailedPrecondition},
 }
 
 // Lease holds budget and requests of a capability's chain for it, or adds to

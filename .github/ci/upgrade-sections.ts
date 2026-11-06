@@ -44,7 +44,7 @@ import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { git, lines } from "./lib/git.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
-import { streamOf, streams, type Stream } from "./lib/release-config.ts";
+import { streamOf, streams, withGoModuleTags, type Stream } from "./lib/release-config.ts";
 import { productTag, readBefore, streamTags } from "./release-tags.ts";
 
 // The heading shape, which sdk-release.ts finds a section by.
@@ -318,7 +318,10 @@ async function main(): Promise<void> {
       const github = gitHubFor(requireEnv("GH_TOKEN"), repository);
       const before = readBefore(file);
       const product = await productTag(github, before, root);
-      const tags = [...(product === undefined ? [] : [product]), ...(await streamTags(github, before, root))];
+      // The SDK release goes by its Go module's tag too, which a Go consumer
+      // looks the section up by.
+      const sdk = withGoModuleTags(await streamTags(github, before, root), streams());
+      const tags = [...(product === undefined ? [] : [product]), ...sdk];
       if (tags.length === 0) {
         info("no tag from this run");
         return;

@@ -2,6 +2,7 @@ package objecth
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"uuid"
 
@@ -35,8 +36,8 @@ func TestCategoryOf(t *testing.T) {
 func TestWithFacets_AcceptsWhatTheFacetsName(t *testing.T) {
 	ev := cel.NewEvaluator()
 	objects := []Object{
-		{Key: "a.png", State: statemachine.StateAvailable, ContentType: "image/png"},
-		{Key: "b.pdf", State: statemachine.StatePending, ContentType: "application/pdf"},
+		{Key: "a.png", State: statemachine.StateAvailable, ContentType: "image/png", Tags: map[string]string{"env": "prod"}},
+		{Key: "b.pdf", State: statemachine.StatePending, ContentType: "application/pdf", Tags: map[string]string{"env": "dev", "a\"b": "c\\d"}},
 		{Key: "c.bin", State: statemachine.StateAvailable, ContentType: "application/octet-stream"},
 		{Key: "d.txt", State: statemachine.StateAvailable, ContentType: "text/plain"},
 	}
@@ -55,6 +56,13 @@ func TestWithFacets_AcceptsWhatTheFacetsName(t *testing.T) {
 			Categories: []ContentCategory{CategoryPDF, CategoryImage},
 		}, []string{"a.png"}},
 		{"with a filter", `key.startsWith("a") || key.startsWith("c")`, ObjectFacets{Categories: []ContentCategory{CategoryOther}}, []string{"c.bin"}},
+		{"one tag", "", ObjectFacets{Tags: []Tag{{Key: "env", Value: "prod"}}}, []string{"a.png"}},
+		{"either of two tags", "", ObjectFacets{Tags: []Tag{{Key: "env", Value: "prod"}, {Key: "env", Value: "dev"}}}, []string{"a.png", "b.pdf"}},
+		{"a tag quoted as it is written", "", ObjectFacets{Tags: []Tag{{Key: "a\"b", Value: "c\\d"}}}, []string{"b.pdf"}},
+		{"a tag and a state", "", ObjectFacets{
+			States: []statemachine.State{statemachine.StateAvailable},
+			Tags:   []Tag{{Key: "env", Value: "dev"}},
+		}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -138,6 +146,55 @@ func TestFacetCountsOf_CountsEachFacetWithoutItsOwnChoices(t *testing.T) {
 	})
 }
 
+// A tag is counted over the objects the chosen states and categories admit,
+// and the chosen tags narrow the states and categories, not the tags.
+func TestFacetCountsOf_CountsTagsWithoutTheirOwnChoices(t *testing.T) {
+	env := func(v string) Tag { return Tag{Key: "env", Value: v} }
+	tally := NewObjectTally()
+	chosen := []Tag{env("prod")}
+	tally.Tally(statemachine.StateAvailable, "image/png", map[string]string{"env": "prod"}, chosen)
+	tally.Tally(statemachine.StateAvailable, "image/png", map[string]string{"env": "dev"}, chosen)
+	tally.Tally(statemachine.StatePending, "application/pdf", map[string]string{"env": "dev", "team": "a"}, chosen)
+	tally.Tally(statemachine.StateAvailable, "text/plain", nil, chosen)
+
+	t.Run("a tag chosen narrows the states and categories, not the tags", func(t *testing.T) {
+		got := facetCountsOf(tally, ObjectFacets{Tags: chosen})
+		assertCounts(t, got,
+			map[statemachine.State]int64{statemachine.StateAvailable: 1},
+			map[ContentCategory]int64{CategoryImage: 1})
+		want := []TagCount{{env("dev"), 2}, {env("prod"), 1}, {Tag{"team", "a"}, 1}}
+		if !slices.Equal(got.Tags, want) || got.TagsTruncated {
+			t.Errorf("tags = %v (truncated %v), want %v", got.Tags, got.TagsTruncated, want)
+		}
+	})
+	t.Run("a state chosen narrows the tags", func(t *testing.T) {
+		got := facetCountsOf(tally, ObjectFacets{States: []statemachine.State{statemachine.StateAvailable}})
+		want := []TagCount{{env("dev"), 1}, {env("prod"), 1}}
+		if !slices.Equal(got.Tags, want) {
+			t.Errorf("tags = %v, want %v", got.Tags, want)
+		}
+		assertCounts(t, got,
+			map[statemachine.State]int64{statemachine.StateAvailable: 3, statemachine.StatePending: 1},
+			map[ContentCategory]int64{CategoryImage: 2, CategoryText: 1})
+	})
+}
+
+// A key keeps its most frequent values up to the limit, and says it had more.
+func TestTopTagCounts(t *testing.T) {
+	counts := map[Tag]int64{
+		{"k", "rare"}: 1, {"k", "common"}: 5, {"k", "also"}: 1, {"j", "x"}: 2,
+	}
+	const limit = 2
+	got, truncated := topTagCounts(counts, limit)
+	want := []TagCount{{Tag{"j", "x"}, 2}, {Tag{"k", "common"}, 5}, {Tag{"k", "also"}, 1}}
+	if !slices.Equal(got, want) || !truncated {
+		t.Errorf("topTagCounts = %v, %v; want %v, true", got, truncated, want)
+	}
+	if _, truncated := topTagCounts(counts, len(counts)); truncated {
+		t.Error("a limit every key fits in reported truncation")
+	}
+}
+
 // tallyRepo records the tally it was asked for and answers a fixed one.
 type tallyRepo struct {
 	listRepo
@@ -175,6 +232,17 @@ func TestCountObjectFacets(t *testing.T) {
 		}
 		if repo.got.IncludeDeleted {
 			t.Error("a listing that chose no trashed state tallied trashed objects")
+		}
+	})
+	t.Run("the tag choices are tallied by, not narrowed by", func(t *testing.T) {
+		h, repo := newHandler(false)
+		tags := []Tag{{Key: "env", Value: "prod"}}
+		in := ListObjectsInput{Collection: "docs", Filter: `key.contains("x")`, Facets: ObjectFacets{Tags: tags}}
+		if _, err := h.CountObjectFacets(ctx, in); err != nil {
+			t.Fatalf("CountObjectFacets: %v", err)
+		}
+		if !slices.Equal(repo.got.Tags, tags) || repo.got.Filter != in.Filter {
+			t.Errorf("tallied %+v, want the tag choices beside the request's own filter", repo.got)
 		}
 	})
 	t.Run("a chosen trashed state tallies trashed objects", func(t *testing.T) {
@@ -219,12 +287,10 @@ func assertCounts(t *testing.T, got *ObjectFacetCounts, states map[statemachine.
 	}
 }
 
-// matchesObject evaluates prog against o as the store does.
+// matchesObject is whether the listing keeps o, as the store decides it
+// (rowMatches): an evaluation error, such as a tag key o lacks, keeps it out.
 func matchesObject(t *testing.T, prog cel.Program, o Object) bool {
 	t.Helper()
-	ok, err := cel.Match(prog, cel.ObjectVars(cel.ObjectRow{Key: o.Key, State: string(o.State), ContentType: o.ContentType}))
-	if err != nil {
-		t.Fatalf("match %s: %v", o.Key, err)
-	}
-	return ok
+	ok, err := cel.Match(prog, cel.ObjectVars(cel.ObjectRow{Key: o.Key, State: string(o.State), ContentType: o.ContentType, Tags: o.Tags}))
+	return err == nil && ok
 }

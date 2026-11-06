@@ -6,7 +6,10 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { objectClient, batchClient, presignClient } from "@/lib/connect/client";
 import { selectorBatches, type BatchItem } from "@/lib/batchSelector";
 import type { Object$, ObjectState } from "@/gen/paladin/data/v1/types_pb";
-import type { ObjectContentCategory } from "@/gen/paladin/data/v1/object_service_pb";
+import type {
+  ObjectContentCategory,
+  ObjectTagCount,
+} from "@/gen/paladin/data/v1/object_service_pb";
 import type { FacetCount } from "@/gen/paladin/common/v1/facet_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { toSortOrder } from "@/lib/table/sortOrder";
@@ -55,16 +58,18 @@ export interface UseObjectsOptions {
   prefix?: string;
   /** Set, one level under `prefix`, with the folders below it. */
   delimiter?: string;
-  /** The states and content categories the server narrows by, beside `filter`. */
+  /** The states, content categories and tags the server narrows by, beside `filter`. */
   facets?: {
     states: readonly ObjectState[];
     contentCategories: readonly ObjectContentCategory[];
+    tags: readonly { key: string; value: string }[];
   };
   /** Ask the server to count the facets with the first page. */
   countFacets?: boolean;
 }
 
 const NO_FACET_COUNTS: readonly FacetCount[] = [];
+const NO_TAG_COUNTS: readonly ObjectTagCount[] = [];
 
 const DEFAULT_OBJECT_KEY = "default";
 
@@ -117,6 +122,7 @@ export function useObjects(options: UseObjectsOptions = {}) {
           facets: options.facets && {
             states: [...options.facets.states],
             contentCategories: [...options.facets.contentCategories],
+            tags: options.facets.tags.map((t) => ({ ...t })),
           },
           // Counted once, with the first page: a later one is the same
           // listing, and the server answers it without counts.
@@ -139,6 +145,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
   const foldersTruncated = firstPage?.commonPrefixesTruncated ?? false;
   const facetCounts = firstPage?.facetCounts ?? NO_FACET_COUNTS;
   const facetCountsExact = firstPage?.facetCountsExact ?? false;
+  const tagCounts = firstPage?.tagCounts ?? NO_TAG_COUNTS;
+  const tagCountsTruncated = firstPage?.tagCountsTruncated ?? false;
   const nextCursor = query.hasNextPage
     ? (query.data?.pages.at(-1)?.page?.nextPageToken ?? undefined)
     : undefined;
@@ -320,6 +328,8 @@ export function useObjects(options: UseObjectsOptions = {}) {
     foldersTruncated,
     facetCounts,
     facetCountsExact,
+    tagCounts,
+    tagCountsTruncated,
     loading: query.isFetching,
     error: (query.error as Error | null) ?? null,
     nextCursor,

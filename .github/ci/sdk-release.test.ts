@@ -18,44 +18,46 @@ describe("streamNotes: only what the stream released", () => {
   before(async () => {
     repo = await tempRepo();
     await change("sdk/go/client.go", "feat(sdk): the first helper");
-    await repo.run("tag", "sdk/go/v0.1.0");
+    await repo.run("tag", "sdk/python/v0.1.0");
     await change("sdk/go/client.go", "feat(sdk): a second helper");
     await change("proto/api.proto", "feat(events): a new RPC");
     await change("backend/main.go", "feat(api): a server feature");
     await change("sdk/python/client.py", "fix(sdk): a python fix");
     await change("sdk/go/README.md", "docs(sdk): explain it");
     await change("backend/go.mod", "fix(auth): take a limes fix");
-    await repo.run("tag", "sdk/go/v0.2.0");
+    await repo.run("tag", "sdk/python/v0.2.0");
     await repo.run("tag", "v1.0.0");
   });
   after(() => repo.cleanup());
 
   test("the first tag", async () => {
-    const notes = await streamNotes("sdk/go/v0.1.0", repo.dir, REPO);
-    assert.equal(notes.title, "Go SDK 0.1.0");
+    const notes = await streamNotes("sdk/python/v0.1.0", repo.dir, REPO);
+    assert.equal(notes.title, "SDKs 0.1.0");
     assert.match(notes.body, /first release/);
   });
 
   test("the stream's own commits since its previous tag", async () => {
-    const { title, body } = await streamNotes("sdk/go/v0.2.0", repo.dir, REPO);
-    assert.equal(title, "Go SDK 0.2.0");
-    for (const want of ["feat(sdk): a second helper", "feat(events): a new RPC", "compare/sdk/go/v0.1.0...sdk/go/v0.2.0"]) {
+    const { title, body } = await streamNotes("sdk/python/v0.2.0", repo.dir, REPO);
+    assert.equal(title, "SDKs 0.2.0");
+    // Both SDKs release together: a change to either is in the notes.
+    for (const want of ["feat(sdk): a second helper", "feat(events): a new RPC", "fix(sdk): a python fix", "compare/sdk/python/v0.1.0...sdk/python/v0.2.0"]) {
       assert.ok(body.includes(want), want);
     }
-    for (const unwanted of ["a server feature", "explain it", "a limes fix", "the first helper", "a python fix", "Behaviour changes"]) {
+    assert.ok(body.startsWith("Tags: `sdk/python/v0.2.0`, and `sdk/go/v0.2.0` for the Go module."), body);
+    for (const unwanted of ["a server feature", "explain it", "a limes fix", "the first helper", "Behaviour changes"]) {
       assert.ok(!body.includes(unwanted), unwanted);
     }
   });
 
   test("a breaking release lists its breaks first, linked to the guide", async () => {
-    repo.write("docs/upgrading.md", "# Upgrading\n\n## v0.3.0 — a product release\n\nText.\n\n## v1.0.0, sdk/go/v0.3.0 — the SDK's calls change\n\nText.\n");
+    repo.write("docs/upgrading.md", "# Upgrading\n\n## v0.3.0 — a product release\n\nText.\n\n## v1.0.0, sdk/python/v0.3.0, sdk/go/v0.3.0 — the SDK's calls change\n\nText.\n");
     await change("sdk/go/client.go", "feat(sdk)!: rename a helper");
     await change("sdk/go/other.go", "fix(sdk): stop retrying a call", "BREAKING CHANGE: the call is no longer retried.");
     await change("sdk/go/client.go", "feat(sdk): an ordinary helper");
-    await repo.run("tag", "sdk/go/v0.3.0");
-    const { body } = await streamNotes("sdk/go/v0.3.0", repo.dir, REPO);
+    await repo.run("tag", "sdk/python/v0.3.0");
+    const { body } = await streamNotes("sdk/python/v0.3.0", repo.dir, REPO);
     const [behaviour = "", features = ""] = body.split("## Features");
-    for (const want of ["## Behaviour changes", "feat(sdk)!: rename a helper", "fix(sdk): stop retrying a call", "blob/main/docs/upgrading.md#v100-sdkgov030--the-sdks-calls-change"]) {
+    for (const want of ["## Behaviour changes", "feat(sdk)!: rename a helper", "fix(sdk): stop retrying a call", "blob/main/docs/upgrading.md#v100-sdkpythonv030-sdkgov030--the-sdks-calls-change"]) {
       assert.ok(behaviour.includes(want), want);
     }
     assert.ok(features.includes("an ordinary helper"));
@@ -116,57 +118,29 @@ describe("the Go proxy", () => {
     try {
       repo.write("sdk/go/a.go", "a");
       await repo.commit("feat(sdk): a");
-      await repo.run("tag", "sdk/go/v0.1.0");
+      await repo.run("tag", "sdk/python/v0.1.0");
       asked.length = 0;
       misses = 99;
-      await publishStream(fakeGitHub(data), "sdk/go/v0.1.0", repo.dir, REPO, base, 0);
+      await publishStream(fakeGitHub(data), "sdk/python/v0.1.0", repo.dir, REPO, base, 0);
       misses = 0;
       assert.deepEqual(
         data.published.map((r) => [r.tag, r.title, r.latest]),
-        [["sdk/go/v0.1.0", "Go SDK 0.1.0", false]],
+        [["sdk/python/v0.1.0", "SDKs 0.1.0", false]],
       );
+      // The proxy is asked for the Go module's tag of the release.
       assert.ok(asked.length > 0 && asked.every((u) => u === "/github.com/o/r/sdk/go/@v/v0.1.0.info"));
-    } finally {
-      repo.cleanup();
-    }
-  });
-
-  // A Python SDK tag is no Go module version: its release asks the proxy
-  // nothing, and its notes are the Python SDK's commits alone.
-  test("a Python SDK release is its own, and no Go module", async () => {
-    const data = fakeData();
-    const repo = await tempRepo();
-    try {
-      repo.write("sdk/python/a.py", "a");
-      await repo.commit("feat(sdk): a");
-      await repo.run("tag", "sdk/python/v0.1.0");
-      repo.write("sdk/go/a.go", "a");
-      await repo.commit("feat(sdk): a Go helper");
-      repo.write("sdk/python/a.py", "b");
-      await repo.commit("fix(sdk): a Python fix");
-      await repo.run("tag", "sdk/python/v0.1.1");
-      asked.length = 0;
-      await publishStream(fakeGitHub(data), "sdk/python/v0.1.1", repo.dir, REPO, base, 0);
-      assert.deepEqual(
-        data.published.map((r) => [r.tag, r.title, r.latest]),
-        [["sdk/python/v0.1.1", "Python SDK 0.1.1", false]],
-      );
-      assert.deepEqual(asked, []);
-      const { body } = await streamNotes("sdk/python/v0.1.1", repo.dir, REPO);
-      assert.ok(body.includes("a Python fix") && !body.includes("a Go helper"), body);
     } finally {
       repo.cleanup();
     }
   });
 });
 
-// The summary names every SDK, released or not, so a run that released one
-// says so of the other too.
-test("releaseSummary has a row per SDK", () => {
+// The summary says what the run released of the SDKs, or that it released
+// none.
+test("releaseSummary has a row for the SDKs", () => {
   const summary = releaseSummary(["sdk/python/v0.103.0", "v39.3.0"], REPO);
-  assert.ok(summary.includes("| Go SDK | no release |"), summary);
-  assert.ok(summary.includes("| Python SDK | [sdk/python/v0.103.0](https://github.com/o/r/releases/tag/sdk/python/v0.103.0) |"), summary);
+  assert.ok(summary.includes("| SDKs | [sdk/python/v0.103.0](https://github.com/o/r/releases/tag/sdk/python/v0.103.0) |"), summary);
   assert.equal(summary.includes("v39.3.0"), false, "the product's tag is not an SDK's");
   const none = releaseSummary([], REPO);
-  assert.equal(none.split(NO_RELEASE).length - 1, 2, none);
+  assert.equal(none.split(NO_RELEASE).length - 1, 1, none);
 });

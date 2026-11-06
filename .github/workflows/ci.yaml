@@ -66,9 +66,9 @@ env:
   # renovate: datasource=go depName=github.com/rhysd/actionlint
   ACTIONLINT_VERSION: "v1.7.12"
   # renovate: datasource=github-releases depName=astral-sh/uv
-  UV_VERSION: "0.13.6"
+  UV_VERSION: "0.13.7"
   # renovate: datasource=pypi depName=zizmor
-  ZIZMOR_VERSION: "1.31.1"
+  ZIZMOR_VERSION: "1.32.0"
   # The stack gate mints its dev token with `step` (task backend:auth:mint-token).
   # renovate: datasource=github-releases depName=smallstep/cli
   STEP_VERSION: "0.31.0"
@@ -168,9 +168,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-
             go-${{ runner.os }}-verify-${{ matrix.group }}-
 
       - name: Set up goimports
@@ -190,7 +190,7 @@ jobs:
 
       - name: Set up buf
         if: matrix.group == 'sdk' || matrix.group == 'frontend' || matrix.group == 'repo'
-        uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
+        uses: bufbuild/buf-action@37ac33d8960807670a6e9719080e885197b09cc6 # v1.7.0
         with:
           setup_only: true
           version: ${{ env.BUF_VERSION }}
@@ -234,7 +234,7 @@ jobs:
       # Version comes from frontend/package.json "packageManager".
       - name: Set up pnpm
         if: matrix.group == 'frontend'
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: frontend/package.json
 
@@ -415,7 +415,7 @@ jobs:
 
       # Version comes from frontend/package.json "packageManager".
       - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: frontend/package.json
 
@@ -590,9 +590,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-
             go-${{ runner.os }}-deep-${{ matrix.half }}-
 
       - name: Set up Task

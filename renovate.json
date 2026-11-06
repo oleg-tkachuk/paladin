@@ -87,6 +87,13 @@
       "description": "limes and its modules release together and move together: a partial bump compiles against two versions of one contract. Each bump also takes limes' new API and deletes the Paladin code it duplicates, which is finished by hand, so it is a PR of its own rather than a line in the monthly Go group."
     },
     {
+      "matchManagers": ["gomod"],
+      "matchFileNames": ["sdk/go/internal/oteltest/go.mod"],
+      "matchPackageNames": ["github.com/oleg-tkachuk/paladin/sdk/go"],
+      "enabled": false,
+      "description": "The OpenTelemetry test module builds the SDK in this tree through replace; the version it requires is never resolved, so bumping it to each SDK tag is noise."
+    },
+    {
       "matchManagers": ["npm"],
       "minimumReleaseAge": "1 day",
       "internalChecksFilter": "strict",

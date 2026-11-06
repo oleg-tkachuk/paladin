@@ -20,9 +20,15 @@ type BiscuitCopier interface {
 	BiscuitCopy(ctx context.Context, token string) (limes.BiscuitCopy, error)
 }
 
+// BiscuitRevoker revokes one copy of a capability's Biscuit.
+// limes.BiscuitRevocationStore and limes.Revoker implement it.
+type BiscuitRevoker interface {
+	RevokeBiscuit(ctx context.Context, req limes.RevokeBiscuitRequest) (limes.RevokeBiscuitResult, error)
+}
+
 // WithBiscuitCopies wires RevokeBiscuit. Without it the RPC answers
 // Unavailable, as GetUsage does without a usage store.
-func (h *Handler) WithBiscuitCopies(copier BiscuitCopier, copies limes.BiscuitRevocationStore) *Handler {
+func (h *Handler) WithBiscuitCopies(copier BiscuitCopier, copies BiscuitRevoker) *Handler {
 	h.copier, h.copies = copier, copies
 	return h
 }

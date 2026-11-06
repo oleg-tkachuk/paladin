@@ -84,7 +84,10 @@ type CloudEvent struct {
 // to act; if any is missing the event is logged and dropped (with a
 // dedup row written so we don't reprocess the same garbage).
 type SubjectFields struct {
-	TenantID   string // UUID; "" if the source key didn't include one
+	TenantID string // UUID; "" if the source key didn't include one
+	// Bucket is the bucket the event came from; "" when the source does not
+	// say. PromoteHandler acts only on the collection's own bucket.
+	Bucket     string
 	Collection string // logical namespace
 	Key        string // intra-namespace key
 	Etag       string // S3 etag, when source provides it

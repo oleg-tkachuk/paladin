@@ -140,21 +140,21 @@ func TestCapabilityRefusalsCarryTheirReason(t *testing.T) {
 
 // A failed verification is the caller's only when it refuses the capability.
 // Keys the verifier cannot fetch, and a failure that refuses nothing, are the
-// server's: Unavailable, so the caller retries, with the cause logged and
-// kept from the caller.
+// server's: Unavailable, so the caller retries, with the cause kept from the
+// caller. The verifier logs it (VerifierConfig.Logger), so it is not logged
+// here a second time.
 func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 	const internals = "dial tcp 10.0.0.7:5432: connection refused"
 	cases := map[string]struct {
 		err      error
 		code     connect.Code
-		logged   bool
 		withheld bool
 	}{
 		"a revoked capability": {err: limes.ErrRevoked, code: connect.CodeUnauthenticated},
 		"a bad proof":          {err: dpop.ErrReplayed, code: connect.CodeUnauthenticated},
-		"keys not fetched":     {err: fmt.Errorf("%w: %s", jwks.ErrUnavailable, internals), code: connect.CodeUnavailable, logged: true},
+		"keys not fetched":     {err: fmt.Errorf("%w: %s", jwks.ErrUnavailable, internals), code: connect.CodeUnavailable},
 		"a revocation store down": {
-			err: fmt.Errorf("limes: revocation lookup: %s", internals), code: connect.CodeUnavailable, logged: true, withheld: true,
+			err: fmt.Errorf("limes: revocation lookup: %s", internals), code: connect.CodeUnavailable, withheld: true,
 		},
 	}
 	for name, tc := range cases {
@@ -172,9 +172,8 @@ func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 			if errors.As(err, &ce) && tc.withheld && strings.Contains(ce.Message(), internals) {
 				t.Errorf("the caller is told the server's internals: %q", ce.Message())
 			}
-			got := logs.FilterLevelExact(zapcore.ErrorLevel).Len()
-			if tc.logged && got != 1 || !tc.logged && got != 0 {
-				t.Errorf("%d error lines logged, want logged = %v", got, tc.logged)
+			if got := logs.Len(); got != 0 {
+				t.Errorf("%d lines logged, want none: the verifier logs its own", got)
 			}
 		})
 	}

@@ -150,8 +150,8 @@ requires one on `Create*` and `Issue*` calls.
 same capability as a Biscuit v3 token, which whoever holds it can narrow with
 no key and no call to the server — to hand a sub-agent less than it was given.
 Install the `biscuit` extra (`uv add "paladin-sdk[biscuit] @ git+…"`);
-`biscuit-python` ships a wheel for CPython 3.13, and elsewhere builds
-from source with Rust.
+it installs on Python 3.13 only, the last CPython `biscuit-python` ships a
+wheel for, and installs nothing on 3.14 and later.
 
 ```python
 from datetime import datetime, timedelta, timezone
@@ -750,6 +750,7 @@ they no longer match the contract.
 | | Supported | Why the bound |
 | --- | --- | --- |
 | Python | 3.13–3.15 | `requires-python`; each is tested |
+| `biscuit` extra | Python 3.13 | `biscuit-python` ships no wheel for 3.14 or later; the extra's marker installs nothing there |
 | `protobuf` | `>=6.33.5,<8` | the stubs' gencode version is the floor; 6.x and 7.x are tested |
 | `connectrpc` | `>=0.13,<0.14` | pre-1.0: a minor may change the API the generated clients call |
 | `protobuf-py` | `>=0.7,<0.8` | connectrpc's runtime; pre-1.0, so the range stops at the next minor |
@@ -770,8 +771,9 @@ the stubs, the declared floor and the matrix disagree.
 ## Versioning
 
 The package version is its tag, `sdk/python/vX.Y.Z`, cut automatically from
-the commits that touch `sdk/python/`, `proto/` or `sdk/testdata/`, and
-apart from the Go SDK's; hatch-vcs reads it at build time
+the commits that touch either SDK, `proto/` or `sdk/testdata/`, at the same
+version as the Go SDK's ([docs/releasing.md](../../docs/releasing.md));
+hatch-vcs reads it at build time
 (a source archive of a tag reads it from `.git_archival.txt`; a tree with
 neither builds as `0.0.0+unknown`). An install from the git tag whose build
 had no git — Poetry fetches through Dulwich — records `0.0.0+unknown`, and

@@ -31,10 +31,10 @@ import contextlib
 import ssl
 import threading
 import zlib
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Generator, Iterator, Mapping
 from dataclasses import dataclass
 from time import monotonic
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import httpcore
@@ -43,6 +43,8 @@ import pyqwest
 from paladin._http_settings import Settings, call_deadline
 
 # How the HTTP stack names the protocol a response came over.
+# The response extension httpcore names the negotiated protocol in.
+_HTTP_VERSION = "http_version"
 _HTTP2 = b"HTTP/2"
 # Header names this module reads or writes.
 _HOST = "host"
@@ -157,7 +159,10 @@ class _AsyncVerifyingStream(httpcore.AsyncNetworkStream):
 
 class _AsyncVerifyingBackend(httpcore.AsyncNetworkBackend):
     def __init__(self, verify: Any) -> None:
-        self._inner, self._verify = httpcore.AnyIOBackend(), verify
+        # httpcore declares AnyIOBackend twice, the second a stand-in for when
+        # anyio is missing; the network backend is what it is when installed.
+        self._inner = cast(httpcore.AsyncNetworkBackend, httpcore.AnyIOBackend())
+        self._verify = verify
 
     async def connect_tcp(
         self,
@@ -194,7 +199,16 @@ def _timeouts(settings: Settings) -> dict[str, float | None]:
     return {"connect": connect, "read": read, "write": read, "pool": connect}
 
 
-def _request(request: Any, settings: Settings, content: Any) -> httpcore.Request:
+def _extensions(resp: httpcore.Response) -> Mapping[str, Any]:
+    """The response's extensions, which httpcore types loosely."""
+    return cast(Mapping[str, Any], resp.extensions)  # pyright: ignore[reportUnknownMemberType]
+
+
+def _request(
+    request: pyqwest.Request | pyqwest.SyncRequest,
+    settings: Settings,
+    content: bytes | Iterator[bytes] | AsyncIterator[bytes],
+) -> httpcore.Request:
     headers = [(k, v) for k, v in request.headers.items()]
     names = {k.lower() for k, _ in headers}
     if _HOST not in names:
@@ -207,7 +221,7 @@ def _request(request: Any, settings: Settings, content: Any) -> httpcore.Request
         if isinstance(content, (bytes, bytearray, memoryview)):
             if content or request.method not in _BODILESS:
                 headers.append((_CONTENT_LENGTH, str(len(content))))
-        elif content is not None:
+        else:
             headers.append((_TRANSFER_ENCODING, _CHUNKED))
     return httpcore.Request(
         request.method,
@@ -268,7 +282,7 @@ def _response_parts(resp: httpcore.Response) -> tuple[Any, pyqwest.Headers, Any]
         headers.pop(_CONTENT_LENGTH, None)
     version = (
         pyqwest.HTTPVersion.HTTP2
-        if resp.extensions.get("http_version") == _HTTP2
+        if _extensions(resp).get(_HTTP_VERSION) == _HTTP2
         else pyqwest.HTTPVersion.HTTP1
     )
     return version, headers, decode
@@ -290,7 +304,7 @@ _ERRORS: tuple[tuple[type[Exception], type[Exception]], ...] = (
 
 
 @contextlib.contextmanager
-def _pyqwest_errors() -> Iterator[None]:
+def _pyqwest_errors() -> Generator[None]:
     try:
         yield
     except httpcore.NetworkError as err:
@@ -310,7 +324,7 @@ def _translated(err: Exception) -> Exception:
 
 
 @contextlib.contextmanager
-def _span(settings: Settings, request: Any) -> Iterator[Any]:
+def _span(settings: Settings, request: pyqwest.Request | pyqwest.SyncRequest) -> Generator[Any]:
     if not settings.enable_otel:
         yield None
         return
@@ -407,7 +421,7 @@ class SyncTLSTransport:
             network_backend=_VerifyingBackend(self._files.verify),
         )
 
-    def execute_sync(self, request: Any) -> pyqwest.SyncResponse:
+    def execute_sync(self, request: pyqwest.SyncRequest) -> pyqwest.SyncResponse:
         key, context = self._files.current()
         g, idle = self._gens.acquire(key, lambda: self._pool(context))
         if idle is not None:
@@ -470,7 +484,7 @@ class AsyncTLSTransport:
             network_backend=_AsyncVerifyingBackend(self._files.verify),
         )
 
-    async def execute(self, request: Any) -> pyqwest.Response:
+    async def execute(self, request: pyqwest.Request) -> pyqwest.Response:
         key, context = self._files.current()
         g, idle = self._gens.acquire(key, lambda: self._pool(context))
         if idle is not None:

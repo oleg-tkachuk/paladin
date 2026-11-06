@@ -18,6 +18,19 @@ import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { FacetFilter } from "@/components/ui/FacetFilter";
 import type { FacetControl } from "@/hooks/useTableFacets";
+import { tagOptionLabel } from "@/lib/objectFacets";
+import {
+  FACET_COUNTING,
+  type FacetCounting,
+  type FacetCounts,
+} from "@/lib/table/facets";
+
+/** No counts: the tags are offered by name alone. */
+const NO_TAG_COUNTS = {
+  counts: new Map(),
+  counting: FACET_COUNTING.withheld,
+  truncated: false,
+} as const;
 
 interface SavedView {
   name: string;
@@ -52,6 +65,12 @@ interface ObjectsFilterBarProps {
   facets: readonly FacetControl[];
   /** Distinct "key=value" pairs seen across loaded objects. */
   tagOptions: string[];
+  /** How many objects of the listing carry each tag, as the server counted. */
+  tagCounts?: {
+    counts: FacetCounts;
+    counting: FacetCounting;
+    truncated: boolean;
+  };
   visibleColumns: Set<string>;
   onToggleColumn: (col: string) => void;
   savedViews: SavedView[];
@@ -67,6 +86,7 @@ export function ObjectsFilterBar({
   onFilterChange,
   facets,
   tagOptions,
+  tagCounts = NO_TAG_COUNTS,
   visibleColumns,
   onToggleColumn,
   savedViews,
@@ -142,7 +162,12 @@ export function ObjectsFilterBar({
               { value: "all", label: "All Tags" },
               ...tagOptions.map((t) => ({
                 value: t,
-                label: t.replace("=", ": "),
+                label: tagOptionLabel(
+                  t,
+                  tagCounts.counts,
+                  tagCounts.counting,
+                  tagCounts.truncated,
+                ),
               })),
             ]}
             value={tag || "all"}

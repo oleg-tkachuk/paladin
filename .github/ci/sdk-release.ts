@@ -1,7 +1,11 @@
-// The GitHub release beside each SDK tag this run cut, and the Go proxy told
-// of a Go SDK's.
+// The GitHub release of each SDK version this run cut, and the Go proxy told
+// of its Go module tag.
 //
 // Usage: GH_TOKEN=… GITHUB_REPOSITORY=… node sdk-release.ts <tags-before file>
+//
+// Both SDKs release at one version (ADR-0043): sdk/python/vX.Y.Z, which
+// semantic-release cuts, and sdk/go/vX.Y.Z beside it (mirror-tag.ts). The
+// release is one, on the stream's own tag, and names the Go module's tag.
 //
 // The notes list the feat, fix, perf, security and revert commits since the
 // stream's previous tag that touch the stream's own files, and a compare
@@ -28,16 +32,13 @@ import { git, lines } from "./lib/git.ts";
 import { gitHubFor, type GitHub } from "./lib/github.ts";
 import { runMain } from "./lib/main.ts";
 import { retry } from "./lib/retry.ts";
-import { GO_SDK, PYTHON_SDK, sdkStreams, streamOf, streams, tagPrefix, type Stream } from "./lib/release-config.ts";
+import { goModuleTag, SDK, sdkStreams, streamOf, streams, tagPrefix, type Stream } from "./lib/release-config.ts";
 import { readBefore, streamTags } from "./release-tags.ts";
 import { HEADING, UPGRADING } from "./upgrade-sections.ts";
 
 // TITLES are the streams that get notes of their own, by the name a release
 // is titled with.
-const TITLES: Readonly<Record<string, string>> = { [GO_SDK]: "Go SDK", [PYTHON_SDK]: "Python SDK" };
-// GO_MODULE_STREAMS are the streams whose tags are Go module versions, which
-// the Go proxy is told of.
-const GO_MODULE_STREAMS: ReadonlySet<string> = new Set([GO_SDK]);
+const TITLES: Readonly<Record<string, string>> = { [SDK]: "SDKs" };
 // The released commit types, as the stream's bump counts them; the rest
 // (docs, ci, chore, …) release nothing and are left out.
 const FEATURES = /^feat(\([^)]*\))?!?: /;
@@ -108,8 +109,10 @@ export async function streamNotes(tag: string, root: string, repository: string)
     previous = undefined;
   }
   const heading = `${title} ${tag.slice(prefix.length)}`;
+  const module = goModuleTag(tag, stream);
+  const tags = module === undefined ? "" : `Tags: \`${tag}\`, and \`${module}\` for the Go module.\n\n`;
   if (previous === undefined) {
-    return { title: heading, body: "The first release of this stream.\n" };
+    return { title: heading, body: `${tags}The first release of this stream.\n` };
   }
 
   const breaking: string[] = [];
@@ -141,7 +144,7 @@ export async function streamNotes(tag: string, root: string, repository: string)
   if (fixes.length > 0) sections.push(`## Fixes\n\n${bullets(fixes)}`);
   if (sections.length === 0) sections.push(`No feature or fix commits touched ${include.join(" ")} in this release.`);
   sections.push(`**Full changes:** https://github.com/${repository}/compare/${previous}...${tag}`);
-  return { title: heading, body: `${sections.join("\n\n")}\n` };
+  return { title: heading, body: `${tags}${sections.join("\n\n")}\n` };
 }
 
 // moduleInfoUrl is the proxy URL whose answer makes it fetch the module tag
@@ -175,20 +178,23 @@ export async function warmGoProxy(url: string, pauseMs: number = PROXY_PAUSE_MS)
   );
 }
 
-// publishStream publishes the release of one stream tag and, for a Go
-// module's, tells the proxy.
+// publishStream publishes the release of one stream tag and, when the stream
+// tags a Go module beside it, tells the proxy of that tag.
 export async function publishStream(github: GitHub, tag: string, root: string, repository: string, proxy: string = GO_PROXY, pauseMs?: number): Promise<void> {
   const notes = await streamNotes(tag, root, repository);
   await github.publishRelease({ tag, title: notes.title, notes: { text: notes.body }, latest: false, assets: [] });
   info(`released ${tag}`);
-  const stream = streamOf(tag, streams());
-  if (stream === undefined || !GO_MODULE_STREAMS.has(stream)) {
+  const all = streams();
+  const name = streamOf(tag, all);
+  const stream = name === undefined ? undefined : all[name];
+  const module = stream === undefined ? undefined : goModuleTag(tag, stream);
+  if (module === undefined) {
     return;
   }
   try {
-    info(await warmGoProxy(moduleInfoUrl(tag, repository, proxy), pauseMs));
+    info(await warmGoProxy(moduleInfoUrl(module, repository, proxy), pauseMs));
   } catch (err) {
-    warning(`the Go proxy did not take ${tag} yet; it will on its own: ${err instanceof Error ? err.message : String(err)}`);
+    warning(`the Go proxy did not take ${module} yet; it will on its own: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

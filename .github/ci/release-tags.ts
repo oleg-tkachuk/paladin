@@ -17,8 +17,9 @@
 // with its release is a finished release and stays out, so a second dispatch
 // to the same commit still publishes nothing.
 //
-// The SDKs' tags are the stream tags (sdk/go/v*, sdk/python/v*), read the
-// same way by streamTags. The api/vX.Y.Z proto baselines can point at the same
+// The SDKs' release is the stream's own tag (sdk/python/v*), read the same
+// way by streamTags; the Go module tag beside it (sdk/go/v*) is the same
+// release, not another. The api/vX.Y.Z proto baselines can point at the same
 // commit and are not releases; nor are the capability/v* tags of a module
 // that moved to its own repository.
 
