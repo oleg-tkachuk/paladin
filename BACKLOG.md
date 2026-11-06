@@ -48,19 +48,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
-### The Go SDK links its heavy features for every caller (ADR-0043, step 2)
-
-- **Status:** Blocked.
-- **Reason:** `sdk/go/paladin` links biscuit-go, go-spiffe and twelve limes
-  packages though only Biscuit attenuation, SPIFFE TLS and DPoP use them;
-  moving them out breaks the API, so it waits for numbers that justify it.
-- **Definition of Done:** binary size and package count of a minimal
-  `StaticToken` client measured with and without them; if it pays, the three
-  live in sub-packages plugging into a core seam, a dependency test bounds
-  what `paladin` links, and the break is noted in `docs/upgrading/`; if it
-  does not, the numbers are recorded in ADR-0043 and this entry is deleted.
-- **Blockers:** the measurement.
-
 ### Nothing in CI resolves the published Go SDK (ADR-0043, step 3)
 
 - **Status:** Deferred.

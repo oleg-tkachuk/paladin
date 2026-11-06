@@ -33,12 +33,17 @@
      dependency consumers do not need lives in a module of its own. A test in
      `sdk/go` fails when the module requires, or `paladin` links,
      OpenTelemetry.
-  2. **The heavy features become optional imports** — Biscuit attenuation,
-     SPIFFE TLS and DPoP in sub-packages a caller imports only to use them —
-     if measurement shows it pays: the binary size and package count of a
-     minimal client with and without them decide. The core then offers the
-     seam they plug into (a `*tls.Config`, an `*http.Client`, an
-     interceptor), and a dependency test fixes the boundary.
+  2. **The heavy features stay in `paladin`.** Splitting Biscuit
+     attenuation, SPIFFE TLS and DPoP into sub-packages was measured on a
+     minimal client (bearer token, one `Health.GetVersion` call) on
+     2026-11-06 and does not pay:
+     - Biscuit, SPIFFE and limes code is about 70 KB of an 11.4 MB stripped
+       binary (about 0.6%); the linker drops what the client does not call.
+     - Their `init` costs about 0.1 ms of 1.1 ms.
+     - They are 21 of the 99 third-party packages linked.
+     - Sub-packages of the same module leave a consumer's module graph
+       unchanged; only separate modules would shrink it, at the cost of more
+       release streams, the churn this ADR set out to reduce.
   3. **CI resolves the published module.** A consumer check builds against
      `sdk/go` as a dependency, without `replace`, so a requirement the backend
      never sees fails there.
@@ -61,8 +66,7 @@
   most code, but those are what consumers came for and what parity is tested
   through.
 
-- **Consequences.** Step 2 breaks the Go API: options move to sub-packages,
-  noted in `docs/upgrading/`. After 1.0 a breaking contract change costs a
+- **Consequences.** After 1.0 a breaking contract change costs a
   major version, which slows changes the dev cluster otherwise takes freely;
   tying 1.0 to limes 1.0 rather than a date keeps that cost until the base
   under it stops moving. Each step is tracked in `BACKLOG.md` until it lands.
