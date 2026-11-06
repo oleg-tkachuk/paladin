@@ -771,8 +771,9 @@ the stubs, the declared floor and the matrix disagree.
 ## Versioning
 
 The package version is its tag, `sdk/python/vX.Y.Z`, cut automatically from
-the commits that touch `sdk/python/`, `proto/` or `sdk/testdata/`, and
-apart from the Go SDK's; hatch-vcs reads it at build time
+the commits that touch either SDK, `proto/` or `sdk/testdata/`, at the same
+version as the Go SDK's ([docs/releasing.md](../../docs/releasing.md));
+hatch-vcs reads it at build time
 (a source archive of a tag reads it from `.git_archival.txt`; a tree with
 neither builds as `0.0.0+unknown`). An install from the git tag whose build
 had no git — Poetry fetches through Dulwich — records `0.0.0+unknown`, and

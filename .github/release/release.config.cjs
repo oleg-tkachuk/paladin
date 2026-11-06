@@ -2,19 +2,25 @@
 // nothing else. Run by .github/workflows/release.yaml, which ci.yaml dispatches
 // once every check on a push to main has passed.
 //
-// Three release streams, one tag format each, chosen by RELEASE_STREAM:
+// Two release streams, chosen by RELEASE_STREAM:
 //
-//   product     v<version>                backend and frontend images and charts
-//   go-sdk      sdk/go/v<version>         the Go SDK (the Go proxy needs the prefix)
-//   python-sdk  sdk/python/v<version>     the Python SDK, which hatch-vcs reads
+//   product  v<version>              backend and frontend images and charts
+//   sdk      sdk/python/v<version>   both SDKs, at one version (ADR-0043):
+//            sdk/go/v<version>       the same version for the Go module, which
+//                                    the Go proxy needs under its directory
 //
 // Each releases from the commits that touch its own files, read by
-// paths-analyzer.mjs: an SDK for a change under its own directory, proto/ or
-// the tables both SDKs are tested against (sdk/testdata/), the product
+// paths-analyzer.mjs: the SDKs for a change under either SDK's directory,
+// proto/ or the tables both are tested against (sdk/testdata/), the product
 // for any commit that changes what its images are built from — which is all
 // of it but the Python SDK: the backend compiles sdk/go/ through `replace`,
 // and its Dockerfile copies it. A commit that touches both streams releases
-// each. The capability primitive is github.com/oleg-tkachuk/limes, which
+// each.
+//
+// semantic-release cuts the sdk stream's tag, sdk/python/v<version>: that
+// stream was ahead of the Go one when they were joined, so every version it
+// cuts is new to both. .github/ci/mirror-tag.ts then tags the Go module at the
+// same version on the same commit. The capability primitive is github.com/oleg-tkachuk/limes, which
 // releases from its own repository.
 //
 // The tag IS the release. The GitHub release beside the product's is notes for
@@ -35,13 +41,12 @@ const BREAKING_IS_A_MINOR_BEFORE_1_0 = { breaking: true, release: "minor" };
 
 // What both SDKs are generated from and held to.
 const SHARED_SDK_PATHS = ["proto/", "sdk/testdata/"];
-const GO_SDK_PATHS = ["sdk/go/", ...SHARED_SDK_PATHS];
 // The Python SDK's own files: its directory, and the version git archive
 // writes into .git_archival.txt for a build from a source archive. The file
 // sits at the root because git archive fills it in there; only hatch-vcs
 // reads it.
 const PYTHON_SDK_OWN = ["sdk/python/", ".git_archival.txt"];
-const PYTHON_SDK_PATHS = [...PYTHON_SDK_OWN, ...SHARED_SDK_PATHS];
+const SDK_PATHS = ["sdk/go/", ...PYTHON_SDK_OWN, ...SHARED_SDK_PATHS];
 // The Go module the backend compiles in: its API is its own, not the product's.
 const MODULE_PATHS = ["sdk/go/"];
 // Files that do not decide which stream a commit belongs to, when it changed
@@ -62,21 +67,16 @@ const streams = {
       documentation: DOCUMENTATION,
     },
   },
-  "go-sdk": {
-    tagFormat: "sdk/go/v${version}",
-    analyzer: {
-      releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
-      include: GO_SDK_PATHS,
-      documentation: DOCUMENTATION,
-    },
-  },
-  // Its first tag was cut by hand at the Go SDK's last shared version
-  // (docs/releasing.md): with no tag of its own, semantic-release starts at 1.0.0.
-  "python-sdk": {
+  // Both SDKs. A change to either releases both, at one version: a consumer
+  // of the two reads one number, and the notes list what changed in each.
+  sdk: {
     tagFormat: "sdk/python/v${version}",
+    // The Go module's tag of the same release, which semantic-release does
+    // not cut: .github/ci/mirror-tag.ts does.
+    goModuleTagFormat: "sdk/go/v${version}",
     analyzer: {
       releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
-      include: PYTHON_SDK_PATHS,
+      include: SDK_PATHS,
       documentation: DOCUMENTATION,
     },
   },

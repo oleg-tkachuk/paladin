@@ -43,15 +43,15 @@ test("each run reports the tags it pushed, or the ones left unpublished", async 
     await repo.run("tag", "vnext");
     await repo.run("tag", "sdk/go/vlatest");
     assert.equal(await product(), "v4.2.1", "a module tag is not the product's");
-    assert.deepEqual(await sdk(), ["sdk/go/v0.3.0", "sdk/python/v0.3.0"], "every new SDK tag, and no product tag");
+    // One release of both SDKs, on the stream's tag; the Go module's tag
+    // beside it is the same release.
+    assert.deepEqual(await sdk(), ["sdk/python/v0.3.0"], "the new SDK release, and no product tag");
 
     before = await tagsOnHead(repo.dir);
-    assert.deepEqual(await sdk(), ["sdk/go/v0.3.0", "sdk/python/v0.3.0"], "SDK tags an earlier run pushed and never published");
+    assert.deepEqual(await sdk(), ["sdk/python/v0.3.0"], "an SDK release an earlier run pushed and never published");
 
-    data.released.add("sdk/go/v0.3.0");
-    assert.deepEqual(await sdk(), ["sdk/python/v0.3.0"], "one SDK published, the other not");
     data.released.add("sdk/python/v0.3.0");
-    assert.deepEqual(await sdk(), [], "module tags an earlier run pushed and published");
+    assert.deepEqual(await sdk(), [], "an SDK release an earlier run pushed and published");
   } finally {
     repo.cleanup();
   }
