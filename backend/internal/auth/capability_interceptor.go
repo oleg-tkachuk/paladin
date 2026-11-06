@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -281,7 +280,9 @@ func (i *capabilityInterceptor) interceptor() connect.ServerInterceptor {
 				if err != nil {
 					return nil, err
 				}
-				return next(ctx, spec, req)
+				resp, err := next(ctx, spec, req)
+				refundFailedCall(ctx, spec.Procedure, err)
+				return resp, err
 			}
 		},
 		func(next connect.ServerFunc) connect.ServerFunc {
@@ -291,7 +292,9 @@ func (i *capabilityInterceptor) interceptor() connect.ServerInterceptor {
 				if err != nil {
 					return err
 				}
-				return next(ctx, spec, stream)
+				err = next(ctx, spec, stream)
+				refundFailedCall(ctx, spec.Procedure, err)
+				return err
 			}
 		},
 	)
@@ -653,8 +656,8 @@ func WithChargeAmount(ctx context.Context, amount limes.Nanos) context.Context {
 //     nothing is mutated, so the handler can decide to refund / log / retry.
 //   - UsageStore not wired → no-op (operator opted out).
 //
-// Refunds are exposed via auth.RefundLastCharge for handlers that
-// detect a partial failure after the charge.
+// A call that fails after charging is refunded by the interceptor
+// (refundFailedCall); RefundLastCharge refunds part of a charge.
 func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 	verified, ok := VerifiedCapabilityFromContext(ctx)
 	if !ok {
@@ -772,85 +775,21 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	return nil
 }
 
-// ReserveCapability holds amount against the request's capability, its
-// ancestors and its tenant before a cost is known — an LLM call priced by
-// the tokens it ends up using. Settle the hold with SettleReservation once
-// the actual cost is known, or ReleaseReservation if the work is abandoned;
-// a hold never settled lapses on its own after ttl (0 = the module default).
-//
-// Returns uuid.Nil and no error when there is nothing to hold against: no
-// capability on the context, or no store wired.
-func ReserveCapability(ctx context.Context, amount limes.Nanos, ttl time.Duration) (uuid.UUID, error) {
-	verified, ok := VerifiedCapabilityFromContext(ctx)
-	if !ok {
-		return uuid.Nil(), nil
+// refundFailedCall returns what a call charged when it failed: a handler
+// charges after its work, but a step after the charge can still fail — a
+// presigned URL not issued, an operation not submitted — and a failed call
+// produced nothing to pay for. One place, so no handler has to remember it. A
+// call that charged nothing, or succeeded, is left as it is.
+func refundFailedCall(ctx context.Context, procedure string, callErr error) {
+	if callErr == nil || readLastCharge(ctx) == uuid.Nil() {
+		return
 	}
-	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
-	if !ok || store == nil {
-		return uuid.Nil(), nil
+	log := logger.FromContext(ctx).With(zap.String("procedure", procedure))
+	if err := RefundLastCharge(ctx, 0); err != nil {
+		log.Warn("capability: the charge of a failed call was not refunded", zap.Error(err))
+		return
 	}
-	r, err := store.Reserve(ledgerContext(ctx, cap), meter.ReserveRequest{
-		Subject: verified.MeterSubject(),
-		Amount:  amount,
-		TTL:     ttl,
-		Op:      readLastOp(ctx),
-		Actor:   cap.Subject.Subject,
-	})
-	if err != nil {
-		return uuid.Nil(), meterError(ctx, err)
-	}
-	return r.ID, nil
-}
-
-// SettleReservation charges the actual cost in place of a hold made by
-// ReserveCapability. A cost above the hold must fit the ceilings; if it
-// does not, the hold stays and the call returns ResourceExhausted.
-func SettleReservation(ctx context.Context, reservationID uuid.UUID, amount limes.Nanos) error {
-	verified, ok := VerifiedCapabilityFromContext(ctx)
-	if !ok || reservationID == uuid.Nil() {
-		return nil
-	}
-	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
-	if !ok || store == nil {
-		return nil
-	}
-	receipt, err := store.Settle(ledgerContext(ctx, cap), meter.SettleRequest{
-		Subject:       verified.MeterSubject(),
-		ReservationID: reservationID,
-		Amount:        amount,
-	}, nil)
-	if err != nil {
-		if errors.Is(err, meter.ErrReservationNotFound) {
-			return capabilityError(connect.CodeFailedPrecondition, err)
-		}
-		return meterError(ctx, err)
-	}
-	stampLastCharge(ctx, receipt.ChargeID)
-	return nil
-}
-
-// ReleaseReservation drops a hold made by ReserveCapability without
-// charging. Idempotent. It names the capability releasing, as Settle does: the
-// store releases a hold only for the subject that made it.
-func ReleaseReservation(ctx context.Context, reservationID uuid.UUID) error {
-	verified, ok := VerifiedCapabilityFromContext(ctx)
-	if !ok || reservationID == uuid.Nil() {
-		return nil
-	}
-	cap, _ := CapabilityFromContext(ctx)
-	store, ok := ctx.Value(chargeKey{}).(meter.UsageStore)
-	if !ok || store == nil {
-		return nil
-	}
-	if err := store.Release(ledgerContext(ctx, cap), meter.ReleaseRequest{
-		Subject:       verified.MeterSubject(),
-		ReservationID: reservationID,
-	}); err != nil {
-		return meterError(ctx, err)
-	}
-	return nil
+	log.Info("capability: refunded the charge of a failed call", zap.NamedError("call_error", callErr))
 }
 
 // meterError maps a metering error to its transport status, as

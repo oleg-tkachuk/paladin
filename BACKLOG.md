@@ -323,33 +323,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### Refund and reservation helpers no handler calls
-
-- **Status:** Deferred
-- **Reason:** `auth.RefundLastCharge`, `ReserveCapability`,
-  `SettleReservation` and `ReleaseReservation`
-  (`internal/auth/capability_interceptor.go`) are tested but have no
-  production caller: handlers only charge (`auth.ChargeRequest`), so a
-  refund or a hold never reaches the ledger and how their errors are
-  answered is checked by unit tests alone.
-- **Definition of Done:** either a handler that rolls back a charge or
-  prices work after the fact (an LLM call, a failed write after presign)
-  calls them, with an integration test through the interceptor; or they
-  are deleted with their tests.
-- **Blockers:** an operation whose cost is known only after it runs, or
-  that can fail after charging.
-
-## Production-readiness audit (2026-06-12)
-
-_Full security / data-integrity / ops sweep. The 7 BLOCKER findings and
-most HIGH/MEDIUM items were fixed in this work stream — see git history
-(login rate-limiter, bounded CEL+JWKS caches, presign TTL clamp, IAM
-audit interceptor, idempotency purger + ON CONFLICT, multipart reaper,
-ListObjects pagination, frontend CSP/HSTS/CSRF + liveness, MCP PDB,
-sticky sessions, ingest dedup pool, tenant-delete precheck, AsyncWriter
-shutdown, composeKey guard). The entries that remain below were kept
-open deliberately — each notes why._
-
 ### Federated IdP via JWKS
 
 - **Status:** Won't-do (for now) — not on the roadmap (2026-06-30).
@@ -501,6 +474,21 @@ open deliberately — each notes why._
     - First customer that flips charge / audit events on —
       validate the cardinality assumption holds for their
       tenant.
+
+### A refunded charge emits no event
+
+- **Status:** Blocked
+- **Reason:** `ChargeCapability` enqueues `paladin.capability.charged` on the
+  charge's own transaction, but `RefundLastCharge` emits nothing: limes'
+  `meter.UsageStore.Refund` takes no callback on its transaction, as `Charge`
+  does. Since the interceptor refunds every call that fails after charging, a
+  subscriber summing `charged` events (`dispatcher.charge_events_enabled`)
+  counts spend the ledger has returned.
+- **Definition of Done:** a refund enqueues `paladin.capability.refunded`,
+  naming the charge it returns, on the refund's transaction, and the event
+  catalogue documents it.
+- **Blockers:** a limes release whose `UsageStore.Refund` runs a callback on
+  its transaction.
 
 ### Event dispatcher: per-tenant Kafka topic prefix
 
