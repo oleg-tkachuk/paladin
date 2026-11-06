@@ -47,13 +47,13 @@ env:
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: "v4.3.1"
   # renovate: datasource=github-releases depName=aquasecurity/trivy
-  TRIVY_VERSION: "v0.76.1"
+  TRIVY_VERSION: "v0.76.2"
   # renovate: datasource=github-releases depName=hadolint/hadolint
   HADOLINT_VERSION: "v2.15.1"
   # renovate: datasource=github-releases depName=prometheus/prometheus
-  PROMETHEUS_VERSION: "v3.15.1"
+  PROMETHEUS_VERSION: "v3.16.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
-  YQ_VERSION: "v4.54.1"
+  YQ_VERSION: "v4.54.2"
   # The Python the sdk group's own tests run on, rather than whatever the
   # runner ships (3.14 on ubuntu-26.04). The newest one biscuit-python has a
   # wheel for, so the attenuation tests run here instead of skipping; the
