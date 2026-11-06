@@ -136,6 +136,12 @@
       "description": "pnpm is pinned twice: \"packageManager\" in frontend/package.json, which CI installs, and PNPM_VERSION in the console's Dockerfile. One PR moves both, as `task pnpm:pin` requires."
     },
     {
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@cedar-policy/cedar-wasm"],
+      "allowedVersions": "!/^4\\.14\\.1$/",
+      "description": "4.14.1 was published without its wasm, js and type files and is deprecated upstream in favour of 4.14.0; installing it breaks the console's Cedar editor and its type check."
+    },
+    {
       "matchManagers": ["gomod", "npm", "nodenv", "pep621", "custom.regex"],
       "matchUpdateTypes": ["major"],
       "enabled": false,
