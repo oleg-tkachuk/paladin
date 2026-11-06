@@ -476,7 +476,7 @@ func Validate(schema *Schema, expr string) error {
 
 // Match runs a compiled program against a row represented as a map.
 func Match(prog cel.Program, row map[string]any) (bool, error) {
-	out, _, err := prog.Eval(row)
+	out, _, err := prog.Eval(rowActivation(row))
 	if err != nil {
 		return false, fmt.Errorf("cel: eval: %w", err)
 	}

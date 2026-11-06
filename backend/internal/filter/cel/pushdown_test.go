@@ -516,6 +516,7 @@ func TestPushdownMapEntries(t *testing.T) {
 func TestPushdownMapEntriesLeftToCEL(t *testing.T) {
 	for name, expr := range map[string]string{
 		"inequality":         `labels["env"] != "prod"`,
+		"the empty value":    `labels["env"] == ""`,
 		"disjunction":        `labels["env"] == "prod" || labels["env"] == "dev"`,
 		"across a column":    `labels["env"] == "prod" || slug == "acme"`,
 		"key presence":       `"env" in labels`,
@@ -569,6 +570,8 @@ func TestLabelPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
 		`labels.env == "prod" && labels["team"] == "core"`,
 		`"prod" == labels["env"] || slug == "acme"`,
 		`slug.startsWith("s") && labels["env"] == "prod"`,
+		`labels["env"] == ""`,
+		`labels.env == "" && labels["team"] == "core"`,
 	}
 	ev := NewEvaluator()
 	at := mustTime(t, "2026-03-01T12:00:00Z")
@@ -584,11 +587,12 @@ func TestLabelPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
 					"storage_layout": "shared", "labels": labels,
 					"created_at": at, "updated_at": at,
 				}}
-				// A row without the key is an evaluation error, which accepts
-				// nothing, so it is the same as a rejection here.
 				kept, err := FilterPage(ev, TenantSchema, expr, page,
 					func(r map[string]any) map[string]any { return r })
-				accepted := err == nil && len(kept) == 1
+				if err != nil {
+					t.Fatalf("FilterPage: %v", err)
+				}
+				accepted := len(kept) == 1
 				fetched := true
 				for k, v := range pd.MapEq["labels"] {
 					if labels[k] != v {
