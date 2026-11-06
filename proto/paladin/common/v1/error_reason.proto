@@ -136,4 +136,14 @@ enum ErrorReason {
   ERROR_REASON_BUCKET_NOT_GRANTED = 59;
   // The grant is not revoked: the tenant still has collections in the bucket.
   ERROR_REASON_BUCKET_GRANT_IN_USE = 60;
+  // Whether the capability was revoked could not be read. Not permanent: the
+  // revocation store is unreachable; retry.
+  ERROR_REASON_CAPABILITY_REVOCATION_UNAVAILABLE = 61;
+  // The capability is signed but the issuer holds no record of it — deleted
+  // with its tenant, or never recorded. Obtain a new one.
+  ERROR_REASON_CAPABILITY_UNRECORDED = 62;
+  // The holder of the capability's key presented more DPoP proofs than its
+  // share of the replay cache holds. Not permanent: the share frees as proofs
+  // age out.
+  ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED = 63;
 }
