@@ -21,7 +21,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"go.uber.org/zap"
-	"go.uber.org/zap/exp/zapslog"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -266,7 +265,7 @@ func SDKLogger(l *zap.Logger) *slog.Logger {
 	if l == nil {
 		return nil
 	}
-	return slog.New(zapslog.NewHandler(l.Named("mcp-sdk").Core()))
+	return logger.Slog(l, "mcp-sdk")
 }
 
 // logToolFailure logs a tool call the server failed before toolError

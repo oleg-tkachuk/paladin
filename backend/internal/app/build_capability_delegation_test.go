@@ -11,6 +11,9 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/biscuit"
 	"github.com/oleg-tkachuk/limes/memstore"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
@@ -32,7 +35,7 @@ func delegationFixture(t *testing.T) (*capabilityIssuers, limes.SigningKey, *mem
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuers, err := newCapabilityIssuers(key, store, store, testIssuerName, nil, testCapTTL)
+	issuers, err := newCapabilityIssuers(key, store, store, testIssuerName, nil, testCapTTL, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +92,7 @@ func TestCapabilityIssuersAreTold(t *testing.T) {
 // issuer's kid is refused: nothing but the delegation issuer writes its iss.
 func TestDelegationIssuerIsBoundToItsKid(t *testing.T) {
 	issuers, key, store, verifier := delegationFixture(t)
-	forger, err := newCapabilityIssuer(key.KeyID, key, store, auth.DelegationIssuerName(testIssuerName), testCapTTL)
+	forger, err := newCapabilityIssuer(key.KeyID, key, store, auth.DelegationIssuerName(testIssuerName), testCapTTL, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,5 +176,23 @@ func TestCapabilityBiscuitsVerifyUnderKeyBinding(t *testing.T) {
 	}
 	if _, err := verifier.Verify(t.Context(), limes.VerifyRequest{Token: b.Token, Audience: testCapAudience}); err != nil {
 		t.Errorf("the Biscuit copy is refused: %v", err)
+	}
+}
+
+// An issuer logs every token it mints through the service's own logger,
+// named after the issuer, rather than limes' default text log on stderr.
+func TestCapabilityIssuerLogsThroughTheServiceLogger(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	_, key, store, _ := delegationFixture(t)
+	issuer, err := newCapabilityIssuer(key.KeyID, key, store, testIssuerName, testCapTTL, zap.New(core))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := issueWith(t, issuer); err != nil {
+		t.Fatal(err)
+	}
+	minted := logs.FilterLoggerName("capability-issuer").FilterField(zap.String("issuer", testIssuerName))
+	if minted.Len() == 0 {
+		t.Fatalf("no line from the issuer named %q in %v", testIssuerName, logs.All())
 	}
 }

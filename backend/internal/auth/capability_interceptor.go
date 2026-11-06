@@ -795,7 +795,7 @@ func refundFailedCall(ctx context.Context, procedure string, callErr error) {
 // meterError maps a metering error to its transport status, as
 // capabilityFailure answers every error about a presented capability.
 func meterError(ctx context.Context, err error) error {
-	return capabilityFailure(ctx, "metering", err)
+	return capabilityFailure(ctx, "metering", err, logFailure)
 }
 
 // AssertCapabilityOp is the handler-side gate. Call early in any

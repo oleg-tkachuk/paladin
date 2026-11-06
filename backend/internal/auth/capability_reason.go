@@ -45,10 +45,18 @@ const capabilityServerFault = "the capability could not be checked: the server i
 const proofUnchecked = "this plane checks no proof of possession; a key-bound capability cannot be used here"
 
 // verifyError maps a failed verification to its transport status, as
-// capabilityFailure answers every error about a presented capability.
+// capabilityFailure answers every error about a presented capability. The
+// verifier has logged it already (limes VerifierConfig.Logger).
 func verifyError(ctx context.Context, err error) error {
-	return capabilityFailure(ctx, "verification", err)
+	return capabilityFailure(ctx, "verification", err, alreadyLogged)
 }
+
+// Whether capabilityFailure logs the server's own failures: the verifier
+// logs its own, the meter none.
+const (
+	alreadyLogged = false
+	logFailure    = true
+)
 
 // capabilityFailure answers an error verifying or metering a presented
 // capability — stage names which — through capabilityStatus, so both answer one
@@ -56,19 +64,23 @@ func verifyError(ctx context.Context, err error) error {
 // malformed or no longer good Unauthenticated and one that does not allow the
 // call PermissionDenied, each with its reason, the server's own fault
 // Internal, and only a failing dependency Unavailable. A key-bound capability
-// on a plane with no proof check is FailedPrecondition, the deployment's
-// fault. Those last three are logged with their cause, and unless the error
+// on a plane with no proof check is Internal, the deployment's fault. Those
+// are logged with their cause when log is set, and unless the error
 // is a refusal, whose reason the caller acts on, the caller is told a fixed
 // sentence rather than the server's internals.
-func capabilityFailure(ctx context.Context, stage string, err error) error {
+func capabilityFailure(ctx context.Context, stage string, err error, log bool) error {
 	status := capabilityStatus(err)
 	_, refused := limes.ReasonOf(err)
 	switch {
 	case errors.Is(err, limes.ErrProofUnsupported):
-		logger.FromContext(ctx).Error("capability: a key-bound capability reached a verifier with no DPoP check", zap.String("stage", stage), zap.Error(err))
+		if log {
+			logger.FromContext(ctx).Error("capability: a key-bound capability reached a verifier with no DPoP check", zap.String("stage", stage), zap.Error(err))
+		}
 		return withCapabilityInfo(connect.NewError(status, proofUnchecked).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
 	case status == connect.CodeInternal, status == connect.CodeUnavailable:
-		logger.FromContext(ctx).Error("capability: failed on the server's side", zap.String("stage", stage), zap.Error(err))
+		if log {
+			logger.FromContext(ctx).Error("capability: failed on the server's side", zap.String("stage", stage), zap.Error(err))
+		}
 		if !refused {
 			told := capabilityUnchecked
 			if status == connect.CodeInternal {

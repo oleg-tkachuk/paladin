@@ -6,10 +6,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/exp/zapslog"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/biscuit"
@@ -22,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // CapabilityBundle bundles the ready-to-use issuer / verifier / store
@@ -158,7 +157,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 
 	// The capability issuer, and the delegation issuer the MCP server
 	// exchanges callers' tokens through (ADR-0041).
-	issuers, err := newCapabilityIssuers(key, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL)
+	issuers, err := newCapabilityIssuers(key, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL, deps.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +181,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// stale answer logged at WARN and counted, rather than refusing
 		// every capability; a revocation goes unseen for as long.
 		MaxStale: cfg.RevocationCacheMaxStale,
-		Logger:   slog.New(zapslog.NewHandler(deps.Logger.Named("capability-revocation-cache").Core())),
+		Logger:   logger.Slog(deps.Logger, "capability-revocation-cache"),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability revocation cache: %w", err)
@@ -209,7 +208,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
 	replay, err := pgstore.NewReplayCache(pgstore.ReplayConfig{
-		DB: deps.Pool, Logger: slog.New(zapslog.NewHandler(deps.Logger.Named("dpop-replay").Core())),
+		DB: deps.Pool, Logger: logger.Slog(deps.Logger, "dpop-replay"),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
@@ -240,6 +239,9 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// store, which counts them (limes.copy_usage).
 		Biscuit: &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: cache, MeterCopies: true},
 		DPoP:    proofs,
+		// Every refusal at WARN and every failure on the server's side at
+		// ERROR, so the interceptor logs none of them again.
+		Logger: logger.Slog(deps.Logger, "capability-verifier"),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
