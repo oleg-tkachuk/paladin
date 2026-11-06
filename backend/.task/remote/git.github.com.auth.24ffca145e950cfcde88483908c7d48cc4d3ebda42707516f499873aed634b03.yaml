@@ -7,7 +7,7 @@ version: "3"
 #     auth:
 #       taskfile: '{{printf .TASKLIB "auth"}}'
 #       dir: .
-#       vars: { JWT_ISS: acme-dev, JWT_AUD: billing-api }
+#       vars: { JWT_ISS: acme-dev, JWT_AUD: orders-api }
 #
 # ── Inputs ───────────────────────────────────────────────────────────────────
 # Pass these at the include's own `vars:`, not the consumer's top-level
