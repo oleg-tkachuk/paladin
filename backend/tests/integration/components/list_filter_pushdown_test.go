@@ -147,6 +147,48 @@ func TestPushdown_Tenants(t *testing.T) {
 	}
 }
 
+// A label entry selects from the table: the labelled tenant is found on the
+// first page however many unlabelled ones sort ahead of it, and tenants with
+// the key at another value, or without it, are not fetched.
+func TestPushdown_TenantLabels(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
+
+	env := "pd" + uuid.New().String()[:8]
+	for slug, labels := range map[string]string{
+		env + "-none":  `{}`,
+		env + "-dev":   `{"env": "dev"}`,
+		env + "-other": `{"team": "core"}`,
+	} {
+		mustExec(t, ctx, pool,
+			`INSERT INTO tenants (id, slug, display_name, storage_layout, labels)
+			 VALUES ($1, $2, $2, 'shared', $3::jsonb)`, uuid.New(), slug, labels)
+	}
+	// The page runs in id order: the labelled tenant takes the highest id, so
+	// a query that ignored the labels would fill the page with another.
+	mustExec(t, ctx, pool,
+		`INSERT INTO tenants (id, slug, display_name, storage_layout, labels)
+		 VALUES (('ffffffff-ffff-4fff-bfff-' || substr(md5($1), 1, 12))::uuid, $1, $1, 'shared',
+		         '{"env": "prod", "team": "core"}'::jsonb)`, env+"-prod")
+
+	got, _, err := repo.List(ctx, tenanth.ListTenantsArgs{
+		PageSize: 1,
+		Filter:   fmt.Sprintf(`slug.startsWith(%q) && labels["env"] == "prod" && labels.team == "core"`, env),
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 || got[0].Slug != env+"-prod" {
+		var slugs []string
+		for _, tn := range got {
+			slugs = append(slugs, tn.Slug)
+		}
+		t.Errorf("page %v, want only %s-prod", slugs, env)
+	}
+}
+
 func TestPushdown_Operations(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

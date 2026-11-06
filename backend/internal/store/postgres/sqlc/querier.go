@@ -435,7 +435,7 @@ type Querier interface {
 	// handler allows only a platform admin reading across tenants. Rows and the
 	// cursor run in (tenant_id, name) order, so a page boundary between two
 	// tenants loses nothing; within one tenant that is the name order.
-	ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, afterTenant pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
+	ListCollections(ctx context.Context, tenantID pgtype.UUID, onBackend *string, onBucket *string, afterID *string, afterTenant pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error)
 	// ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
 	// concurrent worker replicas divide the backlog instead of colliding on it —
 	// the same claim discipline the event-delivery outbox uses.
@@ -577,7 +577,7 @@ type Querier interface {
 	// The boolean gating is inline-CASE so sqlc emits a single prepared
 	// statement; planner uses the partial idx_tenants_active index on
 	// the common path.
-	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, purgeEligible *bool, trashRetentionSeconds *float64, asOf pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
+	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, labelsContain []byte, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, purgeEligible *bool, trashRetentionSeconds *float64, asOf pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]ListUserSettingsByTenantRow, error)

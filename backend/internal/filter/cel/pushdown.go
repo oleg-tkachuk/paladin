@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -47,6 +48,12 @@ type Pushdown struct {
 	// query rounds differently.
 	TimeGTE map[string]time.Time
 	TimeLTE map[string]time.Time
+
+	// MapEq holds `field["k"] == "v"` (or `field.k == "v"`) over string maps,
+	// by field and then key. The query turns each field's entries into one
+	// jsonb containment: the maps are string to string, so containing the
+	// pair is exactly the equality, and a row lacking the key fails both.
+	MapEq map[string]map[string]string
 }
 
 // ExtractPushdown parses expr against schema and walks the top-level `&&`
@@ -104,6 +111,9 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) {
 		// `"X" == state` are different ASTs for the same predicate.
 		args := c.Args()
 		if len(args) != 2 {
+			return
+		}
+		if p.recogniseMapEntry(args[0], args[1], schema) || p.recogniseMapEntry(args[1], args[0], schema) {
 			return
 		}
 		field, lit, ok := identAndLiteral(args[0], args[1])
@@ -199,6 +209,26 @@ func (p *Pushdown) recognise(c celast.CallExpr, schema *Schema) {
 		}
 		p.setOnce(&p.Contains, field, lit)
 	}
+}
+
+// recogniseMapEntry records `field["k"] == "v"` when entry is an entry of a
+// string map and literal is a string literal, reporting whether it did.
+func (p *Pushdown) recogniseMapEntry(entry, literal celast.Expr, schema *Schema) bool {
+	field, key, ok := mapEntry(entry)
+	if !ok || fieldType(schema, field) != typeStringMap {
+		return false
+	}
+	value, ok := stringLiteral(literal)
+	if !ok {
+		return false
+	}
+	if p.MapEq == nil {
+		p.MapEq = map[string]map[string]string{}
+	}
+	entries := p.MapEq[field]
+	setFirst(&entries, key, value)
+	p.MapEq[field] = entries
+	return true
 }
 
 // A bare identifier is a predicate too: `enabled` means `enabled == true`.
@@ -403,6 +433,21 @@ func (p Pushdown) BoolHint(field string) *bool {
 	return nil
 }
 
+// MapContainsHint returns the JSON object a string map's column must contain,
+// holding every entry pushed for it; nil when none was.
+func (p Pushdown) MapContainsHint(field string) []byte {
+	entries := p.MapEq[field]
+	if len(entries) == 0 {
+		return nil
+	}
+	// A map of strings always marshals; the error is unreachable.
+	out, err := json.Marshal(entries)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
 func likeSafe(s string) bool {
 	return s != "" && !strings.ContainsAny(s, `%_\`)
 }
@@ -414,7 +459,11 @@ const (
 	typeString
 	typeBool
 	typeTimestamp
+	typeStringMap
 )
+
+// stringMapType is the CEL type of a map field a jsonb column answers.
+var stringMapType = cel.MapType(cel.StringType, cel.StringType)
 
 func fieldType(schema *Schema, field string) celFieldType {
 	t, ok := schema.vars[field]
@@ -429,6 +478,9 @@ func fieldType(schema *Schema, field string) celFieldType {
 	case cel.TimestampType:
 		return typeTimestamp
 	default:
+		if t.IsExactType(stringMapType) {
+			return typeStringMap
+		}
 		return typeOther
 	}
 }

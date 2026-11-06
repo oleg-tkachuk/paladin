@@ -195,34 +195,38 @@ JOIN buckets b           ON b.id = collections.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE ($1::uuid IS NULL
        OR collections.tenant_id = $1::uuid)
-  AND ($2::text IS NULL
+  -- The storage-first browser lists the collections bound to one
+  -- (backend, bucket) pair; both NULL lists every bucket's.
+  AND ($2::text IS NULL OR sb.name = $2::text)
+  AND ($3::text IS NULL OR b.name = $3::text)
+  AND ($4::text IS NULL
        OR (collections.tenant_id, collections.name)
-          > ($3::uuid, $2::text))
+          > ($5::uuid, $4::text))
   -- Pushdown hints from the caller's CEL filter (cel.ExtractPushdown).
   -- The full CEL program still runs over the fetched page, so a hint that is
   -- absent only widens the scan; see ListObjects for the contract.
-  AND ($4::text[] IS NULL OR collections.name = ANY($4::text[]))
-  AND ($5::text IS NULL OR collections.name LIKE $5::text)
-  AND ($6::text[] IS NULL OR collections.display_name = ANY($6::text[]))
-  AND ($7::text IS NULL OR collections.display_name LIKE $7::text)
+  AND ($6::text[] IS NULL OR collections.name = ANY($6::text[]))
+  AND ($7::text IS NULL OR collections.name LIKE $7::text)
+  AND ($8::text[] IS NULL OR collections.display_name = ANY($8::text[]))
+  AND ($9::text IS NULL OR collections.display_name LIKE $9::text)
   -- The derived ` + "`" + `search` + "`" + ` field, spelled to match cel.SearchText EXACTLY.
   -- ASCII-only folding via COLLATE "C" on both columns: Go's strings.ToLower
   -- and Postgres lower() are two Unicode implementations and may disagree, and
   -- a disagreement here drops a row the authoritative CEL pass accepts. See
   -- internal/filter/cel/searchtext.go.
-  AND ($8::text IS NULL
+  AND ($10::text IS NULL
        OR lower(collections.name COLLATE "C") || chr(10) || lower(coalesce(collections.display_name, '') COLLATE "C")
-          LIKE $8::text)
-  AND ($9::text[] IS NULL OR sb.name = ANY($9::text[]))
+          LIKE $10::text)
+  AND ($11::text[] IS NULL OR sb.name = ANY($11::text[]))
   -- Timestamp bounds. Strict ` + "`" + `>` + "`" + ` / ` + "`" + `<` + "`" + ` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.
-  AND ($10::timestamptz IS NULL
-       OR collections.created_at >= $10::timestamptz)
-  AND ($11::timestamptz IS NULL
-       OR collections.created_at <= $11::timestamptz)
+  AND ($12::timestamptz IS NULL
+       OR collections.created_at >= $12::timestamptz)
+  AND ($13::timestamptz IS NULL
+       OR collections.created_at <= $13::timestamptz)
 ORDER BY collections.tenant_id, collections.name
-LIMIT $12
+LIMIT $14
 `
 
 type ListCollectionsRow struct {
@@ -235,9 +239,11 @@ type ListCollectionsRow struct {
 // handler allows only a platform admin reading across tenants. Rows and the
 // cursor run in (tenant_id, name) order, so a page boundary between two
 // tenants loses nothing; within one tenant that is the name order.
-func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, afterID *string, afterTenant pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
+func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, onBackend *string, onBucket *string, afterID *string, afterTenant pgtype.UUID, nameIn []string, nameLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, backendIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListCollectionsRow, error) {
 	rows, err := q.db.Query(ctx, listCollections,
 		tenantID,
+		onBackend,
+		onBucket,
 		afterID,
 		afterTenant,
 		nameIn,

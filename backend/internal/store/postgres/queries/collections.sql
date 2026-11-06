@@ -72,6 +72,10 @@ JOIN storage_backends sb ON sb.id = b.backend_id
 -- tenants loses nothing; within one tenant that is the name order.
 WHERE (sqlc.narg('tenant_id')::uuid IS NULL
        OR collections.tenant_id = sqlc.narg('tenant_id')::uuid)
+  -- The storage-first browser lists the collections bound to one
+  -- (backend, bucket) pair; both NULL lists every bucket's.
+  AND (sqlc.narg('on_backend')::text IS NULL OR sb.name = sqlc.narg('on_backend')::text)
+  AND (sqlc.narg('on_bucket')::text IS NULL OR b.name = sqlc.narg('on_bucket')::text)
   AND (sqlc.narg('after_id')::text IS NULL
        OR (collections.tenant_id, collections.name)
           > (sqlc.narg('after_tenant')::uuid, sqlc.narg('after_id')::text))

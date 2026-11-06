@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -214,13 +215,13 @@ func TestExtractPushdown(t *testing.T) {
 			},
 		},
 		{
-			name:   "timestamps and maps stay in the authoritative pass",
+			name:   "a label entry is pushed beside a column",
 			schema: TenantSchema,
 			expr:   `slug.startsWith("acme") && labels["tier"] == "gold"`,
 			check: func(t *testing.T, p Pushdown) {
 				t.Helper()
-				if predicates(p) != 1 {
-					t.Errorf("recognised %d, want only the slug prefix", predicates(p))
+				if predicates(p) != 2 || p.MapEq["labels"]["tier"] != "gold" {
+					t.Errorf("recognised %d (%v), want the slug prefix and the label", predicates(p), p.MapEq)
 				}
 			},
 		},
@@ -428,7 +429,7 @@ func TestPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
 // predicate or a bound for.
 func predicates(p Pushdown) int {
 	return len(p.In) + len(p.Neq) + len(p.BoolEq) + len(p.Prefix) +
-		len(p.Contains) + len(p.TimeGTE) + len(p.TimeLTE)
+		len(p.Contains) + len(p.TimeGTE) + len(p.TimeLTE) + len(p.MapEq)
 }
 
 // The same invariant for value sets: whatever `in` or a one-field disjunction
@@ -476,6 +477,126 @@ func TestPushdownValueSetsNeverExcludeARowTheFilterAccepts(t *testing.T) {
 				}
 				if len(kept) == 1 && !fetched {
 					t.Errorf("row %v is accepted by the filter but excluded by the pushed sets %v", row, pd.In)
+				}
+			}
+		})
+	}
+}
+
+// An entry of a string map compared to a literal is a containment the query
+// can answer: `labels["env"] == "prod"` selects the rows whose labels hold
+// that pair, whichever of the two spellings and operand orders is used.
+func TestPushdownMapEntries(t *testing.T) {
+	for name, tc := range map[string]struct {
+		expr string
+		want map[string]string
+	}{
+		"index":                {`labels["env"] == "prod"`, map[string]string{"env": "prod"}},
+		"select":               {`labels.env == "prod"`, map[string]string{"env": "prod"}},
+		"literal first":        {`"prod" == labels["env"]`, map[string]string{"env": "prod"}},
+		"two keys":             {`labels["env"] == "prod" && labels["team"] == "core"`, map[string]string{"env": "prod", "team": "core"}},
+		"first value of a key": {`labels["env"] == "prod" && labels["env"] == "dev"`, map[string]string{"env": "prod"}},
+		"beside a column":      {`slug == "acme" && labels["env"] == "prod"`, map[string]string{"env": "prod"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			pd, err := ExtractPushdown(TenantSchema, tc.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := pd.MapEq["labels"]; !maps.Equal(got, tc.want) {
+				t.Errorf("labels %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// Anything but a conjunct comparing one entry to a string literal stays with
+// the CEL pass: inequality and disjunction would narrow wrongly, and a map
+// field another schema does not declare is no column at all.
+func TestPushdownMapEntriesLeftToCEL(t *testing.T) {
+	for name, expr := range map[string]string{
+		"inequality":         `labels["env"] != "prod"`,
+		"disjunction":        `labels["env"] == "prod" || labels["env"] == "dev"`,
+		"across a column":    `labels["env"] == "prod" || slug == "acme"`,
+		"key presence":       `"env" in labels`,
+		"entry to entry":     `labels["env"] == labels["stage"]`,
+		"non-string literal": `labels["env"] == 1`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			pd, err := ExtractPushdown(TenantSchema, expr)
+			if err != nil {
+				return // a parse failure pushes nothing either
+			}
+			if len(pd.MapEq) != 0 {
+				t.Errorf("%s pushed %v", expr, pd.MapEq)
+			}
+		})
+	}
+	pd, err := ExtractPushdown(CollectionSchema, `labels["env"] == "prod"`)
+	if err == nil && len(pd.MapEq) != 0 {
+		t.Errorf("a schema without labels pushed %v", pd.MapEq)
+	}
+}
+
+// The containment the query runs is one JSON object holding every pushed
+// entry; nothing pushed is no predicate.
+func TestMapContainsHint(t *testing.T) {
+	pd, err := ExtractPushdown(TenantSchema, `labels["env"] == "prod" && labels["team"] == "core"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(pd.MapContainsHint("labels")); got != `{"env":"prod","team":"core"}` {
+		t.Errorf("hint %s", got)
+	}
+	if got := (Pushdown{}).MapContainsHint("labels"); got != nil {
+		t.Errorf("empty pushdown hint %s, want nil", got)
+	}
+}
+
+// The label containment may only narrow: no row the authoritative pass
+// accepts lacks a pushed entry. Rows cover an exact match, extra keys, the
+// key with another value, the key missing and no labels at all.
+func TestLabelPushdownNeverExcludesARowTheFilterAccepts(t *testing.T) {
+	rows := []map[string]string{
+		{"env": "prod"},
+		{"env": "prod", "team": "core"},
+		{"env": "dev"},
+		{"team": "core"},
+		{},
+	}
+	filters := []string{
+		`labels["env"] == "prod"`,
+		`labels.env == "prod" && labels["team"] == "core"`,
+		`"prod" == labels["env"] || slug == "acme"`,
+		`slug.startsWith("s") && labels["env"] == "prod"`,
+	}
+	ev := NewEvaluator()
+	at := mustTime(t, "2026-03-01T12:00:00Z")
+	for _, expr := range filters {
+		t.Run(expr, func(t *testing.T) {
+			pd, err := ExtractPushdown(TenantSchema, expr)
+			if err != nil {
+				t.Fatalf("ExtractPushdown: %v", err)
+			}
+			for _, labels := range rows {
+				page := []map[string]any{{
+					"tenant_id": "t", "slug": "s", "display_name": "s",
+					"storage_layout": "shared", "labels": labels,
+					"created_at": at, "updated_at": at,
+				}}
+				// A row without the key is an evaluation error, which accepts
+				// nothing, so it is the same as a rejection here.
+				kept, err := FilterPage(ev, TenantSchema, expr, page,
+					func(r map[string]any) map[string]any { return r })
+				accepted := err == nil && len(kept) == 1
+				fetched := true
+				for k, v := range pd.MapEq["labels"] {
+					if labels[k] != v {
+						fetched = false
+					}
+				}
+				if accepted && !fetched {
+					t.Errorf("labels %v are accepted by the filter but excluded by the pushed %v", labels, pd.MapEq)
 				}
 			}
 		})

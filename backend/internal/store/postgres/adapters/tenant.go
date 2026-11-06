@@ -532,6 +532,9 @@ func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID 
 // purgeEligibleField is the derived TenantSchema field ListTenants pushes down.
 const purgeEligibleField = "purge_eligible"
 
+// tenantLabelsField is the TenantSchema map field the labels column answers.
+const tenantLabelsField = "labels"
+
 func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]tenanth.Tenant, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
@@ -540,6 +543,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 	slugIn, slugLike := pd.StringHint("slug")
 	displayIn, displayLike := pd.StringHint("display_name")
 	layoutIn, _ := pd.StringHint("storage_layout")
+	labelsContain := pd.MapContainsHint(tenantLabelsField)
 	// Only the `like` half — the derived field exists for a search box, which
 	// emits `contains`. See admin_bucket.go.
 	_, searchLike := pd.StringHint("search")
@@ -559,7 +563,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 		pgUUID(args.AfterID),
 		args.OnlyTrashed,
 		args.IncludeTrashed,
-		slugIn, slugLike, displayIn, displayLike, searchLike, layoutIn,
+		slugIn, slugLike, displayIn, displayLike, searchLike, layoutIn, labelsContain,
 		createdGTE, createdLTE,
 		purgeEligible, retentionSeconds, asOf,
 		pageSize,

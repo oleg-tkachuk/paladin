@@ -78,3 +78,50 @@ func TestCollectionListPagesAcrossTenants(t *testing.T) {
 		}
 	}
 }
+
+// The bucket browser's list narrows on the filter in SQL as the tenant-wide
+// list does. It used to take only the derived search field from it, so a
+// filter on any other field read the bucket one page at a time.
+func TestCollectionListOnOneBucketPushesTheFilterDown(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
+	readAll := auth.WithCrossTenantRead(ctx)
+
+	seedBucketRow(t, ctx, pool)
+	tenant, _ := mkTenant(t, ctx, pool, "shared")
+	for _, name := range []string{"a-media", "n-photos", "z-logs"} {
+		seedCollectionFor(t, ctx, pool, tenant, name)
+	}
+
+	for name, tc := range map[string]struct {
+		args objectkey.ListCollectionsArgs
+		want []string
+	}{
+		"filter on the bucket": {
+			args: objectkey.ListCollectionsArgs{
+				BackendID: actingBackendName, BucketName: actingBucketName,
+				Filter: `collection == "n-photos"`,
+			},
+			want: []string{"n-photos"},
+		},
+		"backend without a bucket": {
+			args: objectkey.ListCollectionsArgs{BackendID: actingBackendName},
+			want: nil,
+		},
+	} {
+		tc.args.PageSize = onePerPage
+		page, _, err := repo.List(readAll, tc.args)
+		if err != nil {
+			t.Fatalf("%s: list: %v", name, err)
+		}
+		var got []string
+		for _, c := range page {
+			got = append(got, c.Collection)
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%s: page %v, want %v", name, got, tc.want)
+		}
+	}
+}
