@@ -23,8 +23,9 @@ type ObjectPushdown struct {
 	// TagsEq and MetadataEq hold `tags["k"] == "v"` (or `tags.k == "v"`)
 	// conjuncts. The query turns each map into one jsonb containment
 	// (`tags @> {"k":"v"}`), which the GIN index answers. Both maps are
-	// string→string on the wire, so containment of a string value is exactly
-	// CEL equality: a row whose map lacks the key fails both.
+	// string→string on the wire, so containment of a non-empty string value
+	// is exactly CEL equality: a row whose map lacks the key fails both. An
+	// empty value is not pushed, since a lacking key reads as "".
 	TagsEq     map[string]string
 	MetadataEq map[string]string
 }
@@ -105,7 +106,9 @@ func recogniseObjectEq(lhs, rhs celast.Expr, out *ObjectPushdown) {
 		return
 	}
 	mapName, key, ok := mapEntry(lhs)
-	if !ok {
+	// An absent key reads as "" (see stringMap), so `tags["k"] == ""` holds
+	// for a row lacking the key, which containment of {"k": ""} would drop.
+	if !ok || lit == "" {
 		return
 	}
 	switch mapName {

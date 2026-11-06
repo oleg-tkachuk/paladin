@@ -128,8 +128,8 @@ describe("provisionStatus", () => {
     ["ready", "success", "Ready"],
     ["pending", "progress", "Provisioning"],
     ["deleting", "progress", "Deleting"],
-    ["failed", "danger", "Failed"],
-    ["deletion_failed", "danger", "Delete failed"],
+    ["failed", "danger", "Provisioning failed"],
+    ["deletion_failed", "danger", "Deletion failed"],
     ["mystery", "unknown", "mystery"],
   ])("%s → %s %s", (state, tone, value) => {
     expect(provisionStatus(state)).toMatchObject({ tone, value });

@@ -23,7 +23,11 @@ import type { Bucket } from "@/gen/paladin/admin/v1/types_pb";
 import type { SortState } from "@/hooks/useTableSort";
 import { backendHref, bucketHref, tenantHref } from "@/lib/navigation/hrefs";
 import type { Facet } from "@/lib/table/facets";
-import { StatusTone } from "@/lib/ui/status";
+import {
+  PROVISION_STATE,
+  PROVISION_STATES,
+  provisionStatus,
+} from "@/lib/bucketProvision";
 import { noticeFromLabels } from "@/lib/notice";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
@@ -87,14 +91,11 @@ export function tenantLabelMap(
   );
 }
 
-/** The provisioning state a bucket from before the state was kept reads as. */
-const READY = "ready";
-
 /**
  * The facets a list of buckets filters by: the backend it lives on (the ones
  * the loaded buckets name), whether it is shared (ADR-0032 made who it is
  * shared with the fact its settings reach), and where its provisioning
- * stands, toned as ProvisionStateBadge names it.
+ * stands, named and toned as lib/bucketProvision has it.
  */
 export const BUCKET_FACETS: readonly Facet<Bucket>[] = [
   { id: "backend", label: "Backend", values: (b) => [b.backendId] },
@@ -110,18 +111,11 @@ export const BUCKET_FACETS: readonly Facet<Bucket>[] = [
   {
     id: "state",
     label: "State",
-    values: (b) => [b.provisionState || READY],
-    options: [
-      { value: READY, label: "Ready", tone: StatusTone.Success },
-      { value: "pending", label: "Provisioning", tone: StatusTone.Progress },
-      { value: "deleting", label: "Deleting", tone: StatusTone.Progress },
-      { value: "failed", label: "Failed", tone: StatusTone.Danger },
-      {
-        value: "deletion_failed",
-        label: "Delete failed",
-        tone: StatusTone.Danger,
-      },
-    ],
+    values: (b) => [b.provisionState || PROVISION_STATE.ready],
+    options: PROVISION_STATES.map((state) => ({
+      value: state,
+      ...provisionStatus(state),
+    })),
   },
 ];
 

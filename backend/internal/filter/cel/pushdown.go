@@ -50,9 +50,10 @@ type Pushdown struct {
 	TimeLTE map[string]time.Time
 
 	// MapEq holds `field["k"] == "v"` (or `field.k == "v"`) over string maps,
-	// by field and then key. The query turns each field's entries into one
-	// jsonb containment: the maps are string to string, so containing the
-	// pair is exactly the equality, and a row lacking the key fails both.
+	// by field and then key, for a non-empty v. The query turns each field's
+	// entries into one jsonb containment: the maps are string to string, so
+	// containing the pair is exactly the equality, and a row lacking the key
+	// fails both. An empty v is left out: a lacking key reads as "".
 	MapEq map[string]map[string]string
 }
 
@@ -219,8 +220,11 @@ func (p *Pushdown) recogniseMapEntry(entry, literal celast.Expr, schema *Schema)
 		return false
 	}
 	value, ok := stringLiteral(literal)
-	if !ok {
-		return false
+	// An absent key reads as "" (see stringMap), so `m["k"] == ""` holds for
+	// a row lacking the key, which containment of {"k": ""} would drop. The
+	// entry is still recognised, so the equality is not tried as a column.
+	if !ok || value == "" {
+		return ok
 	}
 	if p.MapEq == nil {
 		p.MapEq = map[string]map[string]string{}

@@ -56,6 +56,9 @@ func TestExtractObjectPushdown_MapsAndContentType(t *testing.T) {
 		// Nothing pushed for shapes the query cannot express.
 		{expr: `tags['a'] == 'x' || tags['b'] == 'y'`},
 		{expr: `tags['a'] != 'x'`},
+		// A row without the key reads it as "", so containment would lose it.
+		{expr: `tags['a'] == ''`},
+		{expr: `metadata['a'] == '' && tags['b'] == 'y'`, tags: map[string]string{"b": "y"}},
 		{expr: `'a' in tags`},
 		{expr: `tags[key] == 'x'`},
 		{expr: `metadata['a'].startsWith('x')`},
