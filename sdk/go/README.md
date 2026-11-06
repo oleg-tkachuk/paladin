@@ -339,7 +339,7 @@ case errors.Is(err, paladin.ErrNotFound):
 ### Observability
 
 Nothing is observed unless asked, and the SDK depends on no OpenTelemetry
-package.
+package — its `go.mod` requires none, so it never raises yours.
 
 | Name | Does |
 | --- | --- |
@@ -362,6 +362,8 @@ p, err := paladin.Connect(endpoints,
 	paladin.WithInterceptors(otelInterceptor),
 	paladin.WithTransfer(transfer))
 ```
+
+The snippet is tested in `internal/oteltest`, a module of its own.
 
 ### Resource names and object URIs
 

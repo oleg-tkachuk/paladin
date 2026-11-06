@@ -168,9 +168,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-
             go-${{ runner.os }}-verify-${{ matrix.group }}-
 
       - name: Set up goimports
@@ -590,9 +590,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum') }}-
+            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-
             go-${{ runner.os }}-deep-${{ matrix.half }}-
 
       - name: Set up Task

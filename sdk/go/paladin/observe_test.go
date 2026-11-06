@@ -3,7 +3,6 @@ package paladin_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -11,11 +10,6 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
-	"connectrpc.com/otelconnect"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
@@ -131,49 +125,5 @@ func TestTransfersAreReportedToHooksAndTheLogger(t *testing.T) {
 	want := []slog.Level{slog.LevelDebug, slog.LevelDebug, slog.LevelWarn, slog.LevelWarn}
 	if got := logs.levels(); len(got) != len(want) || got[2] != slog.LevelWarn || got[0] != slog.LevelDebug {
 		t.Errorf("logged %v, want %v", got, want)
-	}
-}
-
-// OpenTelemetry needs nothing from the SDK: connect's own otelconnect
-// interceptor and otelhttp's transport plug into the options there are, and
-// carry the W3C trace context to the server and to storage.
-func TestOpenTelemetryThroughTheExtensionPoints(t *testing.T) {
-	spans := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
-	propagator := propagation.TraceContext{}
-	otelInterceptor, err := otelconnect.NewClientInterceptor(
-		otelconnect.WithTracerProvider(provider), otelconnect.WithPropagator(propagator))
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr := mustTransfer(t, paladin.WithTransferHTTPClient(&http.Client{
-		Transport: otelhttp.NewTransport(http.DefaultTransport,
-			otelhttp.WithTracerProvider(provider), otelhttp.WithPropagators(propagator)),
-	}))
-
-	// The RPC leg.
-	rec := &recorder{}
-	health, _ := clients(t, serve(t, rec), paladin.WithInterceptors(otelInterceptor))
-	if _, err := health.GetVersion(context.Background(), &iamv1.GetVersionRequest{}); err != nil {
-		t.Fatal(err)
-	}
-	if rec.last().Get("Traceparent") == "" {
-		t.Error("the RPC carried no traceparent")
-	}
-
-	// The presigned leg.
-	data, _, st := newTransfer(t, 0, paladin.WithTransfer(tr))
-	obj := upload(t, data, "k", []byte("traced"))
-	r, err := paladin.Download(context.Background(), data, obj.GetName(), paladin.DownloadOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = io.Copy(io.Discard, r)
-	_ = r.Close()
-	if st.traceparents() < 2 {
-		t.Errorf("storage saw %d traceparents, want the PUT's and the GET's", st.traceparents())
-	}
-	if got := len(spans.Ended()); got < 3 {
-		t.Errorf("%d spans ended, want the RPC's and both transfers'", got)
 	}
 }
