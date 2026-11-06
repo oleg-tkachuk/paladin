@@ -176,12 +176,6 @@ func setFirst(m *map[string]string, k, v string) {
 	(*m)[k] = v
 }
 
-// maxObjectBranches caps how many disjuncts a filter is split into. Each
-// branch is one indexed query, so a filter that expands past this is
-// cheaper to scan than to fan out; it then pushes nothing down, which is
-// always correct.
-const maxObjectBranches = 8
-
 // ExtractObjectBranches is ExtractObjectPushdown for filters with `||`.
 //
 // It rewrites the SQL-expressible part of expr in disjunctive normal form:
@@ -193,7 +187,7 @@ const maxObjectBranches = 8
 //
 // A single empty branch means nothing can be pushed down: either nothing was
 // recognised, or some disjunct is unconstrained (which makes the whole OR
-// unconstrained), or the expansion passed maxObjectBranches. Callers query
+// unconstrained), or the expansion passed maxPushdownBranches. Callers query
 // once per branch and merge; the compiled program stays authoritative.
 func ExtractObjectBranches(expr string) ([]ObjectPushdown, error) {
 	if expr == "" {
@@ -230,7 +224,7 @@ func objectDNF(e celast.Expr) []ObjectPushdown {
 					next = append(next, mergePushdown(x, y))
 				}
 			}
-			if len(next) > maxObjectBranches {
+			if len(next) > maxPushdownBranches {
 				return unconstrained()
 			}
 			out = next
@@ -247,7 +241,7 @@ func objectDNF(e celast.Expr) []ObjectPushdown {
 				out = append(out, b)
 			}
 		}
-		if len(out) == 0 || len(out) > maxObjectBranches {
+		if len(out) == 0 || len(out) > maxPushdownBranches {
 			return unconstrained()
 		}
 		return out
@@ -257,7 +251,7 @@ func objectDNF(e celast.Expr) []ObjectPushdown {
 			return unconstrained()
 		}
 		elems := args[1].AsList().Elements()
-		if len(elems) == 0 || len(elems) > maxObjectBranches {
+		if len(elems) == 0 || len(elems) > maxPushdownBranches {
 			return unconstrained()
 		}
 		out := make([]ObjectPushdown, 0, len(elems))

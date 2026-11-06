@@ -159,30 +159,28 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 		afterID = id
 	}
 	// Pushdown: see admin_bucket.go — userh still evaluates the whole CEL
-	// expression over the page, these only narrow the scan.
-	pd := hints(cel.UserSchema, args.Filter)
-	subjectIn, subjectLike := pd.StringHint("subject")
-	displayIn, displayLike := pd.StringHint("display_name")
-	disabled := pd.BoolHint("disabled")
-	createdGTE, createdLTE := createdBounds(pd)
-
-	var rows []sqlc.User
-	if args.TenantID == uuid.Nil() {
-		got, err := r.q.ListUsersAll(ctx, pgUUID(afterID),
-			subjectIn, subjectLike, displayIn, displayLike, disabled,
-			createdGTE, createdLTE, limit)
-		if err != nil {
-			return nil, "", err
-		}
-		rows = got
-	} else {
-		got, err := r.q.ListUsersByTenant(ctx, pgUUID(args.TenantID), pgUUID(afterID),
-			subjectIn, subjectLike, displayIn, displayLike, disabled,
-			createdGTE, createdLTE, limit)
-		if err != nil {
-			return nil, "", err
-		}
-		rows = got
+	// expression over the page, these only narrow the scan. One query per
+	// disjunct of the filter, merged in id order (fanOut).
+	rows, err := fanOut(branchHints(cel.UserSchema, args.Filter), limit,
+		func(pd cel.Pushdown) ([]sqlc.User, error) {
+			subjectIn, subjectLike := pd.StringHint("subject")
+			displayIn, displayLike := pd.StringHint("display_name")
+			disabled := pd.BoolHint("disabled")
+			createdGTE, createdLTE := createdBounds(pd)
+			if args.TenantID == uuid.Nil() {
+				return r.q.ListUsersAll(ctx, pgUUID(afterID),
+					subjectIn, subjectLike, displayIn, displayLike, disabled,
+					createdGTE, createdLTE, limit)
+			}
+			return r.q.ListUsersByTenant(ctx, pgUUID(args.TenantID), pgUUID(afterID),
+				subjectIn, subjectLike, displayIn, displayLike, disabled,
+				createdGTE, createdLTE, limit)
+		},
+		func(a, b sqlc.User) bool { return uuidBefore(a.ID, b.ID) },
+		func(u sqlc.User) [16]byte { return u.ID.Bytes },
+	)
+	if err != nil {
+		return nil, "", err
 	}
 	out := make([]authstore.User, 0, len(rows))
 	for _, row := range rows {

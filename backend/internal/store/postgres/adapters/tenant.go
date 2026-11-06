@@ -538,8 +538,33 @@ const tenantLabelsField = "labels"
 func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]tenanth.Tenant, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the page
-	// stays authoritative, these only narrow the scan.
-	pd := hints(cel.TenantSchema, args.Filter)
+	// stays authoritative, these only narrow the scan. One query per
+	// disjunct of the filter, merged in id order (fanOut).
+	rows, err := fanOut(branchHints(cel.TenantSchema, args.Filter), pageSize,
+		func(pd cel.Pushdown) ([]sqlc.ListTenantsRow, error) {
+			return r.listBranch(ctx, args, pd, pageSize)
+		},
+		func(a, b sqlc.ListTenantsRow) bool { return uuidBefore(a.Tenant.ID, b.Tenant.ID) },
+		func(row sqlc.ListTenantsRow) [16]byte { return row.Tenant.ID.Bytes },
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("list tenants: %w", err)
+	}
+	out := make([]tenanth.Tenant, 0, len(rows))
+	for _, row := range rows {
+		t := tenantFromSQLC(row.Tenant)
+		t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
+		out = append(out, t)
+	}
+	var next string
+	if len(out) == int(pageSize) && len(out) > 0 {
+		next = out[len(out)-1].TenantID.String()
+	}
+	return out, next, nil
+}
+
+// listBranch is one page of ListTenants narrowed by one pushdown branch.
+func (r *TenantRepo) listBranch(ctx context.Context, args tenanth.ListTenantsArgs, pd cel.Pushdown, pageSize int32) ([]sqlc.ListTenantsRow, error) {
 	slugIn, slugLike := pd.StringHint("slug")
 	displayIn, displayLike := pd.StringHint("display_name")
 	layoutIn, _ := pd.StringHint("storage_layout")
@@ -558,8 +583,7 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 		purgeEligible, retentionSeconds = &want, &secs
 		asOf = pgtype.Timestamptz{Time: args.AsOf, Valid: true}
 	}
-
-	rows, err := r.q.ListTenants(ctx,
+	return r.q.ListTenants(ctx,
 		pgUUID(args.AfterID),
 		args.OnlyTrashed,
 		args.IncludeTrashed,
@@ -568,20 +592,6 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 		purgeEligible, retentionSeconds, asOf,
 		pageSize,
 	)
-	if err != nil {
-		return nil, "", fmt.Errorf("list tenants: %w", err)
-	}
-	out := make([]tenanth.Tenant, 0, len(rows))
-	for _, row := range rows {
-		t := tenantFromSQLC(row.Tenant)
-		t.DefaultBucket = defaultBucketName(row.BackendName, row.BucketName)
-		out = append(out, t)
-	}
-	var next string
-	if len(out) == int(pageSize) && len(out) > 0 {
-		next = out[len(out)-1].TenantID.String()
-	}
-	return out, next, nil
 }
 
 // Rename atomically rotates the tenant slug AND rewrites every

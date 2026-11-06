@@ -204,7 +204,12 @@ type operationPredicates struct {
 // filter's `state` is compared as text in the query, so a literal the enum
 // does not hold matches nothing rather than failing the cast.
 func predicatesOf(args operationh.ListArgs) operationPredicates {
-	pd := hints(cel.OperationSchema, args.Filter)
+	return predicatesFrom(args, hints(cel.OperationSchema, args.Filter))
+}
+
+// predicatesFrom is args' predicates with the filter's hints taken from pd,
+// one pushdown branch of it.
+func predicatesFrom(args operationh.ListArgs, pd cel.Pushdown) operationPredicates {
 	var p operationPredicates
 	p.typeIn, p.typeLike = pd.StringHint("type")
 	p.errorCodeIn, _ = pd.StringHint("error_code")
@@ -265,31 +270,43 @@ func (r *OperationRepo) List(ctx context.Context, args operationh.ListArgs) ([]o
 		v := sqlc.OperationState(string(*state))
 		ns = &v
 	}
-	p := predicatesOf(args)
-
 	// Two queries rather than one with a flipped comparison: the cursor test
-	// has to move with the sort, and sqlc parameterises neither.
-	out := make([]operationh.Operation, 0, pageSize)
+	// has to move with the sort, and sqlc parameterises neither. One query
+	// per disjunct of the filter, merged in id order either way (fanOut).
+	before := func(a, b sqlc.Operation) bool { return uuidBefore(a.ID, b.ID) }
 	if newestFirst {
-		rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
-			p.typeIn, p.typeLike, p.errorCodeIn, p.stateIn, p.done, p.hasFailures, p.errorMessageNeq,
-			p.createdGTE, p.createdLTE, pageSize)
-		if err != nil {
-			return nil, "", fmt.Errorf("list operations: %w", err)
-		}
-		for _, row := range rows {
-			out = append(out, operationFromSQLC(row.Operation))
-		}
-	} else {
-		rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
-			p.typeIn, p.typeLike, p.errorCodeIn, p.stateIn, p.done, p.hasFailures, p.errorMessageNeq,
-			p.createdGTE, p.createdLTE, pageSize)
-		if err != nil {
-			return nil, "", fmt.Errorf("list operations: %w", err)
-		}
-		for _, row := range rows {
-			out = append(out, operationFromSQLC(row.Operation))
-		}
+		before = func(a, b sqlc.Operation) bool { return uuidBefore(b.ID, a.ID) }
+	}
+	rows, err := fanOut(branchHints(cel.OperationSchema, args.Filter), pageSize,
+		func(pd cel.Pushdown) ([]sqlc.Operation, error) {
+			p := predicatesFrom(args, pd)
+			var ops []sqlc.Operation
+			if newestFirst {
+				rows, err := r.q.ListOperationsDesc(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
+					p.typeIn, p.typeLike, p.errorCodeIn, p.stateIn, p.done, p.hasFailures, p.errorMessageNeq,
+					p.createdGTE, p.createdLTE, pageSize)
+				for _, row := range rows {
+					ops = append(ops, row.Operation)
+				}
+				return ops, err
+			}
+			rows, err := r.q.ListOperations(ctx, pgUUID(tenantID), ns, pgUUID(afterID), strPtrNonEmpty(initiator), args.HideDismissed,
+				p.typeIn, p.typeLike, p.errorCodeIn, p.stateIn, p.done, p.hasFailures, p.errorMessageNeq,
+				p.createdGTE, p.createdLTE, pageSize)
+			for _, row := range rows {
+				ops = append(ops, row.Operation)
+			}
+			return ops, err
+		},
+		before,
+		func(o sqlc.Operation) [16]byte { return o.ID.Bytes },
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("list operations: %w", err)
+	}
+	out := make([]operationh.Operation, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, operationFromSQLC(row))
 	}
 	var next string
 	if len(out) == int(pageSize) && len(out) > 0 {

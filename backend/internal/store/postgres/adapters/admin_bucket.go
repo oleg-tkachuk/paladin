@@ -306,32 +306,40 @@ func (r *BucketRepoV2) List(ctx context.Context, args admindomain.ListBucketsArg
 	// narrow the scan. The handler still evaluates the whole expression over
 	// the returned page, so a hint that is absent costs a wider read and
 	// never a wrong row.
-	pd := hints(cel.PhysicalBucketSchema, args.Filter)
-	if backendFilter == nil {
-		// `backend_id == "x"` in the filter narrows the same way the typed
-		// field does; the typed field wins when both are set. The typed field
-		// is one backend, so a set of several is left to the CEL pass.
-		if in, _ := pd.StringHint("backend_id"); len(in) == 1 {
-			backendFilter = &in[0]
-		}
-	}
-	nameIn, nameLike := pd.StringHint("bucket_id")
-	displayIn, displayLike := pd.StringHint("display_name")
-
-	createdGTE, createdLTE := createdBounds(pd)
-
-	// Only the `like` half: the derived `search` field exists for a search
-	// box, which emits `contains`. An `==` over a newline-joined concatenation
-	// is not something anyone types, so it falls through to the CEL pass —
-	// wider read, same answer.
-	_, searchLike := pd.StringHint("search")
-
-	rows, err := r.q.ListBucketsV2(ctx, backendFilter, ownerFilter, usedByFilter,
-		nameIn, nameLike, displayIn, displayLike, searchLike,
-		pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
-		pd.BoolHint("replication_enabled"),
-		createdGTE, createdLTE,
-		args.AfterBackend, args.AfterName, pageSize)
+	// One query per disjunct of the filter, merged in (backend, name) order
+	// (fanOut).
+	rows, err := fanOut(branchHints(cel.PhysicalBucketSchema, args.Filter), pageSize,
+		func(pd cel.Pushdown) ([]sqlc.ListBucketsV2Row, error) {
+			onBackend := backendFilter
+			if onBackend == nil {
+				// `backend_id == "x"` in the filter narrows the same way the
+				// typed field does; the typed field wins when both are set.
+				// The typed field is one backend, so a set of several is left
+				// to the CEL pass.
+				if in, _ := pd.StringHint("backend_id"); len(in) == 1 {
+					onBackend = &in[0]
+				}
+			}
+			nameIn, nameLike := pd.StringHint("bucket_id")
+			displayIn, displayLike := pd.StringHint("display_name")
+			createdGTE, createdLTE := createdBounds(pd)
+			// Only the `like` half: the derived `search` field exists for a
+			// search box, which emits `contains`. An `==` over a
+			// newline-joined concatenation is not something anyone types, so
+			// it falls through to the CEL pass — wider read, same answer.
+			_, searchLike := pd.StringHint("search")
+			return r.q.ListBucketsV2(ctx, onBackend, ownerFilter, usedByFilter,
+				nameIn, nameLike, displayIn, displayLike, searchLike,
+				pd.BoolHint("versioning_enabled"), pd.BoolHint("object_lock_enabled"),
+				pd.BoolHint("replication_enabled"),
+				createdGTE, createdLTE,
+				args.AfterBackend, args.AfterName, pageSize)
+		},
+		func(a, b sqlc.ListBucketsV2Row) bool {
+			return a.BackendName < b.BackendName || (a.BackendName == b.BackendName && a.Name < b.Name)
+		},
+		func(row sqlc.ListBucketsV2Row) [2]string { return [2]string{row.BackendName, row.Name} },
+	)
 	if err != nil {
 		return nil, "", err
 	}
