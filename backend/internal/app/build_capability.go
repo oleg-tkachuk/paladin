@@ -29,8 +29,10 @@ import (
 // admin handler) pull the pieces they need.
 type CapabilityBundle struct {
 	Store limes.Store
-	// Copies records revoked copies of a capability's Biscuit.
-	Copies limes.BiscuitRevocationStore
+	// Revoker revokes a capability, the capabilities a selector matches or
+	// a Biscuit copy, logging each and clearing this process's cache of it.
+	Revoker *limes.Revoker
+
 	// CopyUsage reads the counters of Biscuit copies with limits of their own.
 	CopyUsage meter.CopyUsageReader
 	Usage     meter.UsageStore
@@ -272,14 +274,25 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: charges ledger: %w", err)
 	}
 
+	// Every revocation the admin plane makes, logged and reported, and
+	// cleared from this process's cache at once; other replicas hear of it
+	// through the revocation watcher.
+	revoker, err := limes.NewRevoker(limes.RevokerConfig{
+		Store: store, Bulk: store, Biscuits: store, Cache: cache,
+		Logger: logger.Slog(deps.Logger, "capability-revoker"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app: capability revoker: %w", err)
+	}
+
 	return &CapabilityBundle{
 		Store:          store,
+		Revoker:        revoker,
 		Revocations:    cache,
-		Copies:         store,
 		CopyUsage:      parts.copies,
 		Records:        records,
 		Exchanges:      pgstore.ScopedExchanges(store),
-		BulkRevocation: &auth.BulkRevocation{Revoker: store, Holds: parts.holds},
+		BulkRevocation: &auth.BulkRevocation{Revoker: revoker, Holds: parts.holds},
 		Usage:          usage,
 		Leases:         parts.leases,
 		Budgets:        parts.budgets,

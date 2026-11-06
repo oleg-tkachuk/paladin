@@ -77,3 +77,27 @@ func TestRevokeHoldReleaseFailures(t *testing.T) {
 		}
 	}
 }
+
+// fakeRevoker records the revocations it is handed.
+type fakeRevoker struct{ revoked []uuid.UUID }
+
+func (f *fakeRevoker) Revoke(_ context.Context, req limes.RevokeRequest) (limes.RevokeResult, error) {
+	f.revoked = append(f.revoked, req.CapabilityID)
+	return limes.RevokeResult{}, nil
+}
+
+// With a revoker wired — limes.Revoker, which logs each revocation and clears
+// this process's cache — Revoke goes through it, not straight to the store.
+func TestRevokeGoesThroughTheRevoker(t *testing.T) {
+	owner := uuid.New()
+	target := mkParent(owner, limes.OpGet)
+	store := &lookupStore{recordingStore: recordingStore{fakeStore: fakeStore{cap: &target}}}
+	revoker := &fakeRevoker{}
+	h := mkHandler(t, store, nil, &allowAuthorizer{}).WithRevoker(revoker)
+	if _, err := h.Revoke(withSlot(callerCtx(owner)), &adminv1.CapabilityServiceRevokeRequest{Id: target.ID.String()}); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if len(revoker.revoked) != 1 || revoker.revoked[0] != target.ID {
+		t.Errorf("revoker revoked %v, want %s", revoker.revoked, target.ID)
+	}
+}

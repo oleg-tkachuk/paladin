@@ -49,10 +49,13 @@ type Handler struct {
 	store    limes.Store
 	usage    meter.UsageStore
 	policy   cedar.Authorizer
+	// revoker carries out Revoke: the store, or a limes.Revoker that logs
+	// each revocation and clears this process's cache of it (WithRevoker).
+	revoker CapabilityRevoker
 
 	// copier and copies serve RevokeBiscuit; see WithBiscuitCopies.
 	copier BiscuitCopier
-	copies limes.BiscuitRevocationStore
+	copies BiscuitRevoker
 	// copyUsage serves GetBiscuitUsage; see WithCopyUsage.
 	copyUsage meter.CopyUsageReader
 	// records serves List and Get; see WithRecords.
@@ -107,7 +110,21 @@ func NewHandler(
 	if issuer == nil || verifier == nil || store == nil || policy == nil {
 		panic("capabilityh: issuer / verifier / store / policy are required")
 	}
-	return &Handler{issuer: issuer, verifier: verifier, store: store, usage: usage, policy: policy, currency: apiutil.NoUnit}
+	return &Handler{issuer: issuer, verifier: verifier, store: store, revoker: store, usage: usage, policy: policy, currency: apiutil.NoUnit}
+}
+
+// CapabilityRevoker revokes one capability. limes.Store and limes.Revoker
+// implement it.
+type CapabilityRevoker interface {
+	Revoke(ctx context.Context, req limes.RevokeRequest) (limes.RevokeResult, error)
+}
+
+// WithRevoker has Revoke carried out by r — a limes.Revoker, which logs and
+// reports each revocation and clears this process's revocation cache of it at
+// once, rather than when the revocation watcher next hears of it.
+func (h *Handler) WithRevoker(r CapabilityRevoker) *Handler {
+	h.revoker = r
+	return h
 }
 
 // hasOp reports whether the caveat op-set includes the requested op.
@@ -380,7 +397,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 	if err != nil {
 		return nil, err
 	}
-	res, err := h.store.Revoke(ctx, limes.RevokeRequest{
+	res, err := h.revoker.Revoke(ctx, limes.RevokeRequest{
 		CapabilityID:    id,
 		Note:            req.GetReason(),
 		Actor:           caller.Subject,
