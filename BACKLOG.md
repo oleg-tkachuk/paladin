@@ -650,7 +650,8 @@ the same commit. Treat this file like a runtime invariant.
 ### List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 (timestamps), 2026-10-05
-  (operation `state` and `done`) and 2026-10-06 (value sets).
+  (operation `state` and `done`), 2026-10-06 (value sets) and 2026-11-06
+  (the bucket browser's collection list).
 - **Reason:** The filterable list RPCs extract the SQL-expressible subset of
   the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
   `filter` selects from the table rather than from whichever page the cursor
@@ -670,8 +671,6 @@ the same commit. Treat this file like a runtime invariant.
   touched, would have accepted. A filter made entirely of those reads the
   whole table one page at a time: correct (paging continues, no row is
   dropped) and slow.
-  One path is narrower still: `ListCollections` has a hand-written branch for
-  the (backend, bucket) browser that takes only the `search` hint.
 - **Definition of Done:** Either the walk covers the rest of the CEL surface
   each schema exposes, or the schemas stop exposing what no query can answer.
   Whatever is added must hold the invariant

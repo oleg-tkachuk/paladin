@@ -223,109 +223,45 @@ func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collect
 func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollectionsArgs) ([]objectkey.Collection, string, error) {
 	pageSize := pageSizeOrDefault(args.PageSize)
 
-	// Fast path: the sqlc-generated query handles (tenant_id, after,
-	// page_size) — used when no (backend, bucket) filter is set. The
-	// filter is rare enough (only the storage-first browser hits it)
-	// that hand-writing a parameterised query here keeps the sqlc
-	// surface lean. When the filter is present we go through the
-	// raw pool with a parameterised UPDATE-safe statement.
-	if args.BackendID == "" && args.BucketName == "" {
-		var after *string
-		var afterTenant pgtype.UUID
-		if args.PageToken != "" {
-			tenant, name := decodeCollectionCursor(args.PageToken, args.TenantID)
-			after, afterTenant = &name, pgUUID(tenant)
-		}
-		// Pushdown: see admin_bucket.go — the handler's CEL pass over the
-		// page stays authoritative, these only narrow the scan.
-		pd := hints(cel.CollectionSchema, args.Filter)
-		nameIn, nameLike := pd.StringHint("collection")
-		displayIn, displayLike := pd.StringHint("display_name")
-		backendIn, _ := pd.StringHint("storage_backend")
-
-		createdGTE, createdLTE := createdBounds(pd)
-		// Only the `like` half — see admin_bucket.go.
-		_, searchLike := pd.StringHint("search")
-		rows, err := r.q.ListCollections(ctx, pgUUIDOptional(args.TenantID), after, afterTenant,
-			nameIn, nameLike, displayIn, displayLike, searchLike, backendIn,
-			createdGTE, createdLTE, pageSize)
-		if err != nil {
-			return nil, "", fmt.Errorf("list collections: %w", err)
-		}
-		out := make([]objectkey.Collection, 0, len(rows))
-		for _, row := range rows {
-			out = append(out, collectionFromSQLC(row.Collection, row.BackendName, row.BucketName))
-		}
-		return out, nextCollectionCursor(out, pageSize), nil
-	}
-
-	// Filtered path: (backend, bucket) narrow. Tenant filter is
-	// optional here — the storage-first browser passes uuid.Nil to
-	// get cross-tenant results on a specific bucket. Cursor is on
-	// (tenant_id, collection) so pagination stays deterministic
-	// across tenants.
-	const filteredQ = `
-		SELECT c.tenant_id, c.name, c.display_name, c.bucket_id,
-		       c.cedar_policy, c.lifecycle_rules, c.public_read, c.cache_control,
-		       c.resource_version, c.created_at, c.updated_at,
-		       sb.name AS backend_name, b.name AS bucket_name
-		  FROM collections c
-		  JOIN buckets b           ON b.id = c.bucket_id
-		  JOIN storage_backends sb ON sb.id = b.backend_id
-		 WHERE sb.name = $1
-		   AND b.name  = $2
-		   AND ($3::uuid IS NULL OR c.tenant_id = $3)
-		   AND ($4::text IS NULL OR (c.tenant_id, c.name) > ($7::uuid, $4))
-		   -- The derived search field, spelled to match cel.SearchText.
-		   -- (no backticks in this comment: the Go literal around it is one.)
-		   -- This path narrowed on nothing from the filter before, so the same
-		   -- search pushed down on the tenant-wide list and not here — one
-		   -- query fast, its sibling reading every page, for reasons invisible
-		   -- from the caller.
-		   AND ($6::text IS NULL
-		        OR lower(c.name COLLATE "C") || chr(10) || lower(coalesce(c.display_name, '') COLLATE "C")
-		           LIKE $6)
-		 ORDER BY c.tenant_id, c.name
-		 LIMIT $5
-	`
-	var tenantFilter any
-	if args.TenantID != uuid.Nil() {
-		tenantFilter = pgUUID(args.TenantID)
-	}
-	var afterTok, afterTenantTok any
+	var after *string
+	var afterTenant pgtype.UUID
 	if args.PageToken != "" {
 		tenant, name := decodeCollectionCursor(args.PageToken, args.TenantID)
-		afterTok, afterTenantTok = name, pgUUID(tenant)
+		after, afterTenant = &name, pgUUID(tenant)
 	}
-	var searchTok any
-	if _, like := hints(cel.CollectionSchema, args.Filter).StringHint("search"); like != nil {
-		searchTok = *like
-	}
-	rows, err := r.pool.Query(ctx, filteredQ,
-		args.BackendID, args.BucketName, tenantFilter, afterTok, pageSize, searchTok, afterTenantTok)
+	onBackend, onBucket := bucketScope(args.BackendID, args.BucketName)
+	// Pushdown: see admin_bucket.go — the handler's CEL pass over the
+	// page stays authoritative, these only narrow the scan.
+	pd := hints(cel.CollectionSchema, args.Filter)
+	nameIn, nameLike := pd.StringHint("collection")
+	displayIn, displayLike := pd.StringHint("display_name")
+	backendIn, _ := pd.StringHint("storage_backend")
+
+	createdGTE, createdLTE := createdBounds(pd)
+	// Only the `like` half — see admin_bucket.go.
+	_, searchLike := pd.StringHint("search")
+	rows, err := r.q.ListCollections(ctx, pgUUIDOptional(args.TenantID), onBackend, onBucket, after, afterTenant,
+		nameIn, nameLike, displayIn, displayLike, searchLike, backendIn,
+		createdGTE, createdLTE, pageSize)
 	if err != nil {
-		return nil, "", fmt.Errorf("list collections (filtered): %w", err)
+		return nil, "", fmt.Errorf("list collections: %w", err)
 	}
-	defer rows.Close()
-	out := make([]objectkey.Collection, 0)
-	for rows.Next() {
-		var row sqlc.Collection
-		var backendName, bucketName string
-		if err := rows.Scan(
-			&row.TenantID, &row.Name, &row.DisplayName,
-			&row.BucketID,
-			&row.CedarPolicy, &row.LifecycleRules, &row.PublicRead, &row.CacheControl,
-			&row.ResourceVersion, &row.CreatedAt, &row.UpdatedAt,
-			&backendName, &bucketName,
-		); err != nil {
-			return nil, "", fmt.Errorf("list collections: scan: %w", err)
-		}
-		out = append(out, collectionFromSQLC(row, backendName, bucketName))
-	}
-	if err := rows.Err(); err != nil {
-		return nil, "", fmt.Errorf("list collections: rows err: %w", err)
+	out := make([]objectkey.Collection, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, collectionFromSQLC(row.Collection, row.BackendName, row.BucketName))
 	}
 	return out, nextCollectionCursor(out, pageSize), nil
+}
+
+// bucketScope is the (backend, bucket) pair the storage-first browser lists,
+// as the query's two optional arguments. Setting either scopes the list to
+// the exact pair, so one left empty names a bucket that does not exist and
+// matches nothing, rather than widening to every bucket on the backend.
+func bucketScope(backendID, bucketName string) (onBackend, onBucket *string) {
+	if backendID == "" && bucketName == "" {
+		return nil, nil
+	}
+	return &backendID, &bucketName
 }
 
 // A collection list's page token is "<tenant id>:<collection>": the rows run
