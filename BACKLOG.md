@@ -49,16 +49,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
-### The SDK version streams are undecided (ADR-0043, step 4)
-
-- **Status:** Blocked.
-- **Reason:** each SDK is tagged on its own when a commit touches it, while
-  ADR-0018 versions them with the contract; the two already differ
-  (`sdk/go/v0.137.11`, `sdk/python/v0.138.1`).
-- **Definition of Done:** one stream for both SDKs, or independent streams
-  each stating the contract version it targets, recorded in ADR-0043 and
-  enforced by `release.yaml`.
-- **Blockers:** the owner's decision.
 
 ### The SDKs are pre-1.0 and the Python SDK is not published (ADR-0043, step 7)
 

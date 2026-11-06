@@ -1,6 +1,6 @@
 # ADR-0043: Stabilize how the SDKs are delivered
 
-- **Status:** Proposed 2026-11-06.
+- **Status:** Accepted 2026-11-06 (steps 1–6 implemented; step 7 waits for limes 1.0).
 - **Related:** [ADR-0018](0018-sdk-layers.md) (the layers),
   [ADR-0020](0020-sdk-integration-grade.md) (integration grade).
 
@@ -47,11 +47,15 @@
   3. **CI resolves the published module.** A consumer check builds against
      `sdk/go` as a dependency, without `replace`, so a requirement the backend
      never sees fails there.
-  4. **The version streams are an owner decision.** Today each SDK is tagged
-     when a commit touches it (`sdk/go/v0.137.11`, `sdk/python/v0.138.1`);
-     ADR-0018 said the SDKs are versioned with the contract. Either one stream
-     for both, or independent streams with the contract version each targets
-     stated — decided before 1.0, not drifted into.
+  4. **Both SDKs release at one version.** Decided 2026-11-06: one stream
+     for both, cut from the commits that touch either SDK, `proto/` or
+     `sdk/testdata/`, tagged `sdk/python/vX.Y.Z` by semantic-release and
+     `sdk/go/vX.Y.Z` beside it on the same commit, with one GitHub release.
+     A consumer of both reads one number; the cost is that a change to one
+     SDK releases the other unchanged, which the release notes make plain.
+     The Python tags are the stream's, being ahead when the two were joined
+     (`sdk/python/v0.138.3` against `sdk/go/v0.137.13`), so no version it cuts
+     already exists on either side.
   5. **Python is type-checked.** A strict type checker runs in CI over `src`,
      and the public parameters typed `Any` get their real types.
   6. **The `biscuit` extra states where it installs.** It carries a

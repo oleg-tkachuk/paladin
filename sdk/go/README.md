@@ -719,7 +719,8 @@ from the tables above.
 
 ## Versioning
 
-The SDK has its own version, `sdk/go/vX.Y.Z`, cut automatically from the
-commits that touch `sdk/` or `proto/` ([docs/releasing.md](../../docs/releasing.md)).
+The SDK's version is its tag, `sdk/go/vX.Y.Z`, cut automatically from the
+commits that touch `sdk/` or `proto/`, at the same version as the Python SDK's
+([docs/releasing.md](../../docs/releasing.md)).
 Pre-1.0, a minor version may break the contract or this package's own API; see
 [`docs/upgrading.md`](../../docs/upgrading.md).

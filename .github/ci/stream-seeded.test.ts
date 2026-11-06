@@ -11,12 +11,12 @@ test("a stream is seeded by a release tag of its own", async () => {
   try {
     repo.write("a", "a");
     await repo.commit("feat: a");
-    await repo.run("tag", "sdk/go/v0.102.0");
+    await repo.run("tag", "v40.0.0");
     await repo.run("tag", "sdk/python/vnext");
-    assert.equal(await seeded("python-sdk", repo.dir), false);
-    assert.equal(await seeded("go-sdk", repo.dir), true);
+    assert.equal(await seeded("sdk", repo.dir), false);
+    assert.equal(await seeded("product", repo.dir), true);
     await repo.run("tag", "sdk/python/v0.102.0");
-    assert.equal(await seeded("python-sdk", repo.dir), true);
+    assert.equal(await seeded("sdk", repo.dir), true);
     await assert.rejects(seeded("ruby-sdk", repo.dir), /no ruby-sdk stream/);
   } finally {
     repo.cleanup();

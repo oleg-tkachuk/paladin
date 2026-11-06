@@ -52,7 +52,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0040](0040-policy-history-kept-by-triggers.md) | A policy's history is kept by triggers, with the writer the pool names | Accepted |
 | [0041](0041-the-mcp-server-exchanges-for-a-capability.md) | The MCP server exchanges the caller's token for a capability that acts for the user | Accepted |
 | [0042](0042-limes-errors-answered-by-code.md) | An error about a presented capability is answered by its limes code | Accepted |
-| [0043](0043-sdk-delivery-stabilization.md) | Stabilize how the SDKs are delivered | Proposed |
+| [0043](0043-sdk-delivery-stabilization.md) | Stabilize how the SDKs are delivered | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
