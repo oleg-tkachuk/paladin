@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
 	collectionpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	tenantpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	objectpkg "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -105,6 +106,32 @@ func TestBucketHandler_CreateAndDeleteOnBackendDispatch(t *testing.T) {
 		t.Fatalf("DeleteBucket: %v", err)
 	}
 	probe.expect(t, f, tenant.String(), "paladin.bucket.deleting")
+}
+
+// Trashing a tenant and restoring it each reach a subscriber. The trash
+// freezes the tenant's other events, but not the one saying it was trashed.
+func TestTenantHandler_TrashAndRestoreDispatch(t *testing.T) {
+	t.Parallel()
+	f := setupDispatcher(t)
+	url := runEmbeddedNATSForIntegration(t)
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "tenant-trash-events")
+	_ = f.seedNATSSubscription(t, tenant, url, "paladin.events")
+
+	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
+	repo := adapters.NewTenantRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
+	handler := tenantpkg.NewHandler(repo, allowAuth{})
+	handler.SetEventProducer(probe.d)
+	ctx := ctxAdmin(t, tenant)
+
+	if err := handler.DeleteTenant(ctx, tenant, firstResourceVersion); err != nil {
+		t.Fatalf("DeleteTenant: %v", err)
+	}
+	probe.expect(t, f, tenant.String(), "paladin.tenant.trashed")
+
+	if _, err := handler.RestoreTenant(ctx, tenant); err != nil {
+		t.Fatalf("RestoreTenant: %v", err)
+	}
+	probe.expect(t, f, tenant.String(), "paladin.tenant.restored")
 }
 
 // presentStorage answers the one storage call a restore makes: the object's

@@ -15,6 +15,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
+
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect/v2"
@@ -1004,7 +1006,7 @@ func (h *Handler) DeleteTenant(ctx context.Context, tenantID uuid.UUID, expected
 		if e := h.repo.SoftDeleteTx(ctx, tx, tenantID, expectedVersion); e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.trashed",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.TenantTrashed,
 			fmt.Sprintf("tenants/%s", tenantID),
 			map[string]any{
 				"tenant_id":        tenantID.String(),
