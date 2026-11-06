@@ -490,7 +490,7 @@ dependencies = [
 
 [package.optional-dependencies]
 biscuit = [
-    { name = "biscuit-python" },
+    { name = "biscuit-python", marker = "python_full_version < '3.14'" },
 ]
 crc32c = [
     { name = "google-crc32c" },
@@ -523,7 +523,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "biscuit-python", marker = "extra == 'biscuit'", specifier = ">=0.4.0,<0.5" },
+    { name = "biscuit-python", marker = "python_full_version < '3.14' and extra == 'biscuit'", specifier = ">=0.4.0,<0.5" },
     { name = "connectrpc", specifier = ">=0.13,<0.14" },
     { name = "cryptography", marker = "extra == 'dpop'", specifier = ">=41" },
     { name = "cryptography", marker = "extra == 'tls'", specifier = ">=41" },
