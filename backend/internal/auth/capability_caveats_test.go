@@ -10,6 +10,7 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/memstore"
 	"github.com/oleg-tkachuk/limes/meter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 )
 
@@ -288,5 +289,72 @@ func TestRefundLastCharge_NoCapNoStoreNoCharge_NoOp(t *testing.T) {
 	ctx = withLastOpHolder(WithChargeStore(ctx, usage))
 	if err := RefundLastCharge(ctx, oneUnit); err != nil {
 		t.Errorf("no charge yet: %v", err)
+	}
+}
+
+// A call charges after its work, but a step after the charge can still
+// fail; the interceptor then returns the charge, since a failed call
+// produced nothing to pay for. A call that succeeded keeps it.
+func TestRefundFailedCall(t *testing.T) {
+	const procedure = "/paladin.data.v1.PresignService/PresignUpload"
+	cases := map[string]struct {
+		callErr   error
+		wantSpent bool
+	}{
+		"a failed call is refunded":              {callErr: connect.NewError(connect.CodeInternal, "presign failed")},
+		"a call that succeeded keeps its charge": {wantSpent: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			m, usage := newMeteredMinter(t)
+			v, _ := m.Mint(t, limes.Capability{})
+			ctx := chargedContext(t, v, usage, tenthOfUnit)
+
+			refundFailedCall(ctx, procedure, tc.callErr)
+
+			want := limes.Nanos(0)
+			if tc.wantSpent {
+				want = tenthOfUnit
+			}
+			if got := spentOf(t, usage, v); got != want {
+				t.Errorf("spent = %v, want %v", got, want)
+			}
+		})
+	}
+	t.Run("a failed call that charged nothing is left alone", func(t *testing.T) {
+		refundFailedCall(context.Background(), procedure, errors.New("refused"))
+	})
+}
+
+// Through the interceptor: a handler that charges and then fails leaves the
+// capability's spend where it was.
+func TestCapabilityInterceptor_RefundsAFailedCallsCharge(t *testing.T) {
+	m, usage := newMeteredMinter(t)
+	v, token := m.Mint(t, limes.Capability{})
+	interceptor := CapabilityInterceptor(m.Verifier, captest.Audience, usage, tenthOfUnit)
+	for name, fail := range map[string]bool{"failed": true, "succeeded": false} {
+		t.Run(name, func(t *testing.T) {
+			before := spentOf(t, usage, v)
+			probe := &unarytest.Probe{OnCall: func(ctx context.Context) error {
+				if err := ChargeRequest(ctx); err != nil {
+					return err
+				}
+				if fail {
+					return connect.NewError(connect.CodeInternal, "the work after the charge failed")
+				}
+				return nil
+			}}
+			_, err := unarytest.CallProbe(context.Background(), probe, []connect.ServerInterceptor{interceptor}, HeaderCapability, token)
+			if (err != nil) != fail {
+				t.Fatalf("call err = %v, want failure %v", err, fail)
+			}
+			want := before + tenthOfUnit
+			if fail {
+				want = before
+			}
+			if got := spentOf(t, usage, v); got != want {
+				t.Errorf("spent = %v, want %v", got, want)
+			}
+		})
 	}
 }
