@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Unpack
 
 import pyqwest
 
 from paladin.auth import AUDIENCE_ADMIN, AUDIENCE_DATA, AUDIENCE_IAM
-from paladin.client import Client
+from paladin.client import Client, ClientOptions
 from paladin.facade import (
     AdminPlane,
     AsyncAdminPlane,
@@ -55,7 +56,9 @@ _HTTP_CLIENT = "http_client"
 
 
 def _transport_options(
-    transport: dict[str, Any] | None, tls: TLS | None, client: Any
+    transport: dict[str, Any] | None,
+    tls: TLS | None,
+    client: Callable[[TLS | None], pyqwest.SyncClient | pyqwest.Client],
 ) -> dict[str, Any]:
     """The options for every generated client: the caller's, with an
     ``http_client`` that relays response headers unless the caller gave one —
@@ -71,7 +74,7 @@ def _transport_options(
     return extra
 
 
-def _client(url: str, audience: str, client_options: dict[str, Any]) -> Client:
+def _client(url: str, audience: str, client_options: ClientOptions) -> Client:
     token_source = client_options.get("token_source")
     return Client(url, **client_options, audience=audience if token_source is not None else None)
 
@@ -82,7 +85,7 @@ def connect(
     transport: dict[str, Any] | None = None,
     transfer: Transfer | None = None,
     tls: TLS | None = None,
-    **client_options: Any,
+    **client_options: Unpack[ClientOptions],
 ) -> Paladin:
     """Synchronous clients for the planes in ``endpoints``.
 
@@ -121,7 +124,7 @@ def connect_async(
     transport: dict[str, Any] | None = None,
     transfer: Transfer | None = None,
     tls: TLS | None = None,
-    **client_options: Any,
+    **client_options: Unpack[ClientOptions],
 ) -> AsyncPaladin:
     """``connect`` for asyncio: the generated async clients, and an
     ``AsyncSession`` as the token source."""

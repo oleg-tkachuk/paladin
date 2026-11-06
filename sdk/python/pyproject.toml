@@ -78,6 +78,7 @@ dev = [
     # out every protobuf-6 environment.
     "grpcio-tools==1.81.1",
     "protoc-gen-connectrpc==0.13.0",
+    "pyright==1.1.414",
     "pytest==9.2.0",
     "ruff==0.17.3",
 ]
@@ -124,6 +125,27 @@ extend-exclude = [
 # name these rules; left unselected, the suppressions are dead and ruff
 # reports them as unused (RUF100).
 extend-select = ["DTZ", "BLE"]
+
+[tool.pyright]
+# py.typed promises callers types they can check against, so the package is
+# checked strictly. The generated stubs are excluded: protoc writes them.
+include = ["src/paladin"]
+exclude = [
+    "src/paladin/admin",
+    "src/paladin/common",
+    "src/paladin/data",
+    "src/paladin/iam",
+    # Not yet strict; BACKLOG.md, "paladin.testing is not type-checked".
+    "src/paladin/testing.py",
+]
+typeCheckingMode = "strict"
+pythonVersion = "3.13"
+# The package's modules share underscore helpers among themselves; what a
+# caller may use is what paladin/__init__.py exports.
+reportPrivateUsage = false
+# Public functions check their arguments at run time as well, for callers
+# that are not type-checked.
+reportUnnecessaryIsInstance = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

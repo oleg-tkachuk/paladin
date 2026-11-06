@@ -19,7 +19,9 @@ from typing import IO, Any
 from connectrpc.code import Code
 from google.protobuf import field_mask_pb2
 from google.protobuf.message import Message
-from google.rpc import code_pb2
+
+# googleapis-common-protos ships its messages without stubs.
+from google.rpc import code_pb2  # pyright: ignore[reportMissingTypeStubs]
 
 from paladin._retry import already_stored, awith_retries, with_retries
 from paladin.client import _own_keys, current_idempotency_key, idempotency_key
@@ -203,7 +205,7 @@ def mask(message: type[Message], *paths: str) -> field_mask_pb2.FieldMask:
     return field_mask_pb2.FieldMask(paths=list(paths))
 
 
-def _transfer(data: DataPlane) -> Transfer:
+def _transfer(data: DataPlane | AsyncDataPlane) -> Transfer:
     """The data plane's Transfer (``connect(transfer=…)``), else the default."""
     return getattr(data, "transfer", None) or default_transfer()
 

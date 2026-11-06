@@ -103,21 +103,20 @@ def _extra() -> Any:
     ``cryptography`` to read the server's certificate."""
     try:
         from cryptography import x509
-        from cryptography.x509.oid import ExtensionOID
 
         from paladin import _tls_http
     except ImportError as err:
         raise ImportError(EXTRA_HINT) from err
-    return _tls_http, x509, ExtensionOID
+    return _tls_http, x509
 
 
 def _verify_svid(leaf: x509.Certificate, server_id: str) -> None:
     """The X.509-SVID rules for a leaf, then its ID against ``server_id``.
     The chain was verified against the trust bundle by OpenSSL already."""
-    _, x509, ExtensionOID = _extra()
+    _, x509 = _extra()
     try:
-        sans = leaf.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
-        uris = sans.value.get_values_for_type(x509.UniformResourceIdentifier)
+        sans = leaf.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        uris: list[str] = sans.value.get_values_for_type(x509.UniformResourceIdentifier)
     except x509.ExtensionNotFound:
         uris = []
     if len(uris) != 1:
@@ -125,13 +124,13 @@ def _verify_svid(leaf: x509.Certificate, server_id: str) -> None:
             f"paladin: an X.509-SVID has exactly one URI SAN; the server's has {len(uris)}"
         )
     try:
-        constraints = leaf.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS)
+        constraints = leaf.extensions.get_extension_for_class(x509.BasicConstraints)
         if constraints.value.ca:
             raise ssl.SSLCertVerificationError("paladin: the server's SVID is a CA certificate")
     except x509.ExtensionNotFound:
         pass
     try:
-        usage = leaf.extensions.get_extension_for_oid(ExtensionOID.KEY_USAGE).value
+        usage = leaf.extensions.get_extension_for_class(x509.KeyUsage).value
     except x509.ExtensionNotFound as err:
         raise ssl.SSLCertVerificationError("paladin: the server's SVID has no key usage") from err
     if not usage.digital_signature or usage.key_cert_sign or usage.crl_sign:
@@ -268,7 +267,7 @@ class _Files:
 
     def _load(self) -> tuple[tuple[int, ...], ssl.SSLContext]:
         tls = self._tls
-        _, x509, _ = _extra()
+        _, x509 = _extra()
         mtimes = tuple(p.stat().st_mtime_ns for p in tls._paths())
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # verifies chain and host
         context.minimum_version = tls.min_version

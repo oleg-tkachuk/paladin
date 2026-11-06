@@ -18,6 +18,7 @@ from connectrpc.errors import ConnectError
 from paladin import Op, Plane, attenuate, biscuit_of
 from paladin.admin.v1 import capability_service_pb2 as pb
 from paladin.admin.v1 import types_pb2 as admin_types
+from paladin.biscuit import FACT_OP
 from paladin.common.v1 import error_reason_pb2
 from paladin.data.v1 import object_service_pb2, storage_bootstrap_service_pb2
 from paladin.errors import limes_code, reason
@@ -198,3 +199,20 @@ def test_without_the_extra_the_biscuit_is_a_stand_in(strict: FakePaladin) -> Non
     obj = strict.put(strict.collection(), "k", "text/plain", b"x")
     resp = _issue(strict, ops=[str(Op.GET)])
     assert _answer(_get(strict.connect(capability=biscuit_of(resp)), obj.name)) == ("", "", "", "")
+
+
+@needs_biscuit
+def test_a_fact_of_two_terms_is_refused_as_limes_refuses_it(strict: FakePaladin) -> None:
+    import biscuit_auth as ba  # the extra, which needs_biscuit guarantees
+
+    from paladin.biscuit import _PADDING, _root_key
+
+    obj = strict.put(strict.collection(), "k", "text/plain", b"x")
+    token = biscuit_of(_issue(strict))
+    block = ba.BlockBuilder("")
+    block.add_fact(ba.Fact(f'{FACT_OP}("{Op.GET}", "{Op.MANAGE}")'))
+    narrowed = ba.Biscuit.from_base64(token, _root_key(ba, token)).append(block)
+    p = strict.connect(capability=narrowed.to_base64().rstrip(_PADDING))
+    code, _, _, message = _answer(_get(p, obj.name))
+    assert code == Code.UNAUTHENTICATED.value
+    assert message.endswith(f"block 1: fact {FACT_OP} takes one term")
