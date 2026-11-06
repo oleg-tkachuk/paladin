@@ -165,8 +165,11 @@ def _fold(ba: Any, source: str, current: Grant) -> Grant:
             fact = ba.Fact(statement)
         except ba.DataLogError:
             raise _Wide(_NOT_SUPPORTED) from None
-        term = fact.terms[0] if len(fact.terms) == 1 else None
         name = fact.name
+        if len(fact.terms) != 1:
+            # limes decodes every fact as one term before reading its name.
+            raise _Wide(f"fact {name} takes one term")
+        term = fact.terms[0]
         if name == FACT_OP:
             ops.append(term)
         elif name in (FACT_RESOURCE_PREFIX, FACT_RESOURCE_URI):
