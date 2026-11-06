@@ -109,7 +109,7 @@ includes:
       # declares it; sdk/go does not, because a published module's requirements
       # become its consumers' and gosec would add some thirty to them, so
       # sdk/go uses the gosec on PATH (see the Brewfile for how to install it).
-      GO_MODULES: ["backend", "sdk/go"]
+      GO_MODULES: ["backend", "sdk/go", "sdk/go/internal/oteltest"]
   # Policy scanning over the YAML a cluster applies — the charts, the
   # Dockerfiles and these workflows. Separate from `sec:` because it asks a
   # different question of a different tree: `sec:` scans the Go modules and
@@ -139,6 +139,12 @@ includes:
     taskfile: '{{printf .TASKLIB "go"}}'
     dir: sdk/go
     vars: { PROJECT_NAME: go-sdk }
+  # The Go SDK's OpenTelemetry test, a module of its own so that sdk/go/go.mod
+  # requires no OpenTelemetry module and never raises a consumer's (ADR-0043).
+  go-sdk-otel:
+    taskfile: '{{printf .TASKLIB "go"}}'
+    dir: sdk/go/internal/oteltest
+    vars: { PROJECT_NAME: go-sdk-otel }
   go-sdk-gen:
     taskfile: '{{printf .TASKLIB "codegen"}}'
     dir: sdk/go
@@ -284,6 +290,8 @@ tasks:
       - task: go-sdk:fmt:check
       - task: go-sdk:lint
       - task: go-sdk:test
+      - task: go-sdk-otel:lint
+      - task: go-sdk-otel:test
       - task: go-sdk-gen:proto:check
 
   verify-py-sdk:
@@ -726,6 +734,7 @@ tasks:
       - task: frontend:node:deps:update
       # The Go SDK is a module of its own, so the backend's bump leaves it.
       - task: go-sdk:deps:update
+      - task: go-sdk-otel:deps:update
       # Within pyproject's constraints, so the floors the SDK declares to its
       # users stay where they are; only sdk/python/uv.lock moves.
       - task: py-sdk:deps:update

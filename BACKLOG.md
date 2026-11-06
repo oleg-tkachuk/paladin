@@ -48,17 +48,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
-### The Go SDK requires OpenTelemetry for one test (ADR-0043, step 1)
-
-- **Status:** In-Progress.
-- **Reason:** `TestOpenTelemetryThroughTheExtensionPoints` imports otel,
-  otelconnect and otelhttp, so `sdk/go/go.mod` requires them and raises every
-  consumer's OpenTelemetry floor.
-- **Definition of Done:** the test runs from a module of its own, wired into
-  the Taskfile and CI; `sdk/go/go.mod` requires no OpenTelemetry module; a
-  test in `sdk/go` fails when it does or when `paladin` links one.
-- **Blockers:** none.
-
 ### The Go SDK links its heavy features for every caller (ADR-0043, step 2)
 
 - **Status:** Blocked.
