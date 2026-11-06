@@ -1,4 +1,5 @@
 import type { Capability } from "@/gen/paladin/admin/v1/capability_service_pb";
+import { formatDuration } from "@/lib/format/duration";
 
 export {
   PRINCIPAL_KIND_FILTER_OPTIONS,
@@ -10,6 +11,9 @@ export {
 // filter + Issue dialog) and the details renderer; lifted out of page.tsx so
 // they live in one place.
 
+/** The Issue dialog's choice that sends no TTL. */
+const SERVER_DEFAULT_LABEL = "Server default";
+
 export const TTL_OPTIONS: {
   label: string;
   value: string;
@@ -19,8 +23,27 @@ export const TTL_OPTIONS: {
   { label: "1 hour", value: "1h", seconds: 60 * 60 },
   { label: "8 hours", value: "8h", seconds: 8 * 60 * 60 },
   { label: "1 day", value: "1d", seconds: 24 * 60 * 60 },
-  { label: "Server default", value: "default", seconds: null },
+  { label: SERVER_DEFAULT_LABEL, value: "default", seconds: null },
 ];
+
+/**
+ * The lifetimes the Issue dialog offers, the server's default labelled with
+ * what it is once known: "Server default (15 min)". It still sends no TTL,
+ * so the server applies its own whatever the label says.
+ */
+export function ttlOptions(
+  defaultTtlMs: number | undefined,
+): typeof TTL_OPTIONS {
+  if (defaultTtlMs === undefined) return TTL_OPTIONS;
+  return TTL_OPTIONS.map((o) =>
+    o.seconds === null
+      ? {
+          ...o,
+          label: `${SERVER_DEFAULT_LABEL} (${formatDuration(defaultTtlMs)})`,
+        }
+      : o,
+  );
+}
 
 // Capability ops: the ones limes defines, then the data plane's own, as
 // sdk/testdata/capability_ops.json names them for both SDKs and the server

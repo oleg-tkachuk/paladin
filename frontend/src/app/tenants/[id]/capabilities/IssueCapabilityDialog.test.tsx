@@ -4,12 +4,14 @@ import { fireEvent, render, screen, within } from "@/test/utils";
 const h = vi.hoisted(() => ({
   issue: vi.fn(),
   listOperationGrants: vi.fn(),
+  getDefaults: vi.fn(),
   showNotification: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
   capabilityClient: {
     issue: h.issue,
     listOperationGrants: h.listOperationGrants,
+    getDefaults: h.getDefaults,
   },
 }));
 vi.mock("@/components/ui/Notification", () => ({
@@ -58,6 +60,8 @@ const GRANTS = [
   },
 ];
 const UNLOCKS = "What these ops unlock";
+// GetDefaults' answer: a quarter of an hour.
+const SERVER_DEFAULT_TTL = { seconds: BigInt(15 * 60), nanos: 0 };
 const MANAGE_WARNING = /unlocks nothing on its own:/;
 const PRESIGN_LINE = /adds a check beside/;
 const SHARE_LINE = /is decided by the caveats alone/;
@@ -79,6 +83,17 @@ describe("IssueCapabilityDialog", () => {
     h.showNotification.mockReset();
     h.listOperationGrants.mockReset();
     h.listOperationGrants.mockResolvedValue({ grants: GRANTS });
+    h.getDefaults.mockReset();
+    h.getDefaults.mockResolvedValue({ defaultTtl: SERVER_DEFAULT_TTL });
+  });
+
+  // "Server default" sends no TTL; the label says what the server gives one.
+  it("labels the server's default lifetime with its length", async () => {
+    open();
+    fireEvent.click(screen.getByLabelText("Expires after"));
+    expect(
+      await screen.findByRole("option", { name: "Server default (15 min)" }),
+    ).toBeInTheDocument();
   });
 
   it("shows what the chosen ops unlock, as they are toggled", async () => {
