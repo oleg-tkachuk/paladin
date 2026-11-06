@@ -8,11 +8,13 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 from paladin import biscuit, dpop, testing, tls
 
 PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 DISTRIBUTION = "paladin-sdk"
+BISCUIT_DISTRIBUTION = "biscuit-python"
 
 HINTS = {
     "tls": tls.EXTRA_HINT,
@@ -45,3 +47,28 @@ def test_without_the_extra_the_hint_is_raised(
     with pytest.raises(ImportError) as err:
         load()  # type: ignore[operator]
     assert str(err.value) == hint
+
+
+def _biscuit_requirements() -> dict[str, Requirement]:
+    project = tomllib.loads(PYPROJECT.read_text())
+    sources = {
+        "extra": project["project"]["optional-dependencies"]["biscuit"],
+        "dev": project["dependency-groups"]["dev"],
+    }
+    found = {}
+    for source, specs in sources.items():
+        for spec in specs:
+            req = Requirement(spec)
+            if req.name == BISCUIT_DISTRIBUTION:
+                found[source] = req
+    return found
+
+
+def test_the_biscuit_extra_installs_only_where_biscuit_python_has_a_wheel() -> None:
+    # Beyond the last wheel the extra would build from source with Rust, or
+    # fail; the marker makes it install nothing there, and the hint says why.
+    found = _biscuit_requirements()
+    assert found.keys() == {"extra", "dev"}
+    for source, req in found.items():
+        assert str(req.marker) == f'python_version < "{biscuit.WHEEL_PYTHON_BELOW}"', source
+    assert f"Python < {biscuit.WHEEL_PYTHON_BELOW}" in biscuit.EXTRA_HINT

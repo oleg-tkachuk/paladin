@@ -52,8 +52,11 @@ dpop = ["cryptography>=41"]
 # library that only tests need.
 testing = ["protovalidate>=2.0.0,<3"]
 # Narrows a capability's Biscuit form offline (paladin.attenuate). Pre-1.0: a
-# minor may change the API, so the range stops at the next one.
-biscuit = ["biscuit-python>=0.4.0,<0.5"]
+# minor may change the API, so the range stops at the next one. Only where it
+# ships a wheel (paladin.biscuit.WHEEL_PYTHON_BELOW): beyond, its source build
+# needs Rust and a pyo3 that refuses newer Pythons, so the extra installs
+# nothing there rather than failing.
+biscuit = ["biscuit-python>=0.4.0,<0.5; python_version < '3.14'"]
 
 [dependency-groups]
 dev = [

@@ -41,8 +41,9 @@ the same commit. Treat this file like a runtime invariant.
   newer. Without 3.13 the extra installs nowhere and its tests run nowhere.
 - **Definition of Done:** `requires-python = ">=3.14"`; 3.13 is gone from
   `sdk/python/compat.json`, `PY_SDK_PYTHON` in `.github/workflows/ci.yaml`
-  (or the variable itself, the SDK job then following the runner), the dev
-  group's `python_version < '3.14'` marker on `biscuit-python`, and the
+  (or the variable itself, the SDK job then following the runner), the
+  `python_version < '3.14'` marker on `biscuit-python` in the `biscuit`
+  extra and the dev group with `paladin.biscuit.WHEEL_PYTHON_BELOW`, and the
   README's compatibility table; `docs/upgrading.md` names the break; the
   attenuation tests run in CI on 3.14.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
@@ -78,17 +79,6 @@ the same commit. Treat this file like a runtime invariant.
   `**client_options` are `Any`, so a mistyped option fails only at runtime.
 - **Definition of Done:** a strict type checker runs over `sdk/python/src`
   in CI, and those parameters carry their real types.
-- **Blockers:** none.
-
-### The Python `biscuit` extra does not say where it installs (ADR-0043, step 6)
-
-- **Status:** Deferred.
-- **Reason:** `compat.json` declares Python 3.14 and 3.15, while
-  `biscuit-python` has wheels only up to 3.13 and its source build needs
-  Rust; on 3.14+ the extra fails to install and its tests skip silently.
-- **Definition of Done:** the `biscuit` extra carries
-  `python_version < '3.14'`, and the README's compatibility table states it.
-  Superseded when "The Python SDK still supports Python 3.13" closes.
 - **Blockers:** none.
 
 ### The SDKs are pre-1.0 and the Python SDK is not published (ADR-0043, step 7)

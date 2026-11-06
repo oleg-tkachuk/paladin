@@ -28,7 +28,14 @@ from typing import Any
 from paladin.admin.v1 import capability_service_pb2
 from paladin.auth import Op, Plane
 
-EXTRA_HINT = "Biscuit attenuation needs the 'biscuit' extra: uv add 'paladin-sdk[biscuit]'"
+WHEEL_PYTHON_BELOW = "3.14"
+"""The first Python ``biscuit-python`` ships no wheel for; the ``biscuit``
+extra's marker in pyproject.toml stops there, so it installs nothing beyond."""
+
+EXTRA_HINT = (
+    f"Biscuit attenuation needs the 'biscuit' extra, which installs on "
+    f"Python < {WHEEL_PYTHON_BELOW}: uv add 'paladin-sdk[biscuit]'"
+)
 """What attenuating raises, as an ``ImportError``, without the extra."""
 
 # The attenuation vocabulary; tests/test_biscuit.py checks each name against
