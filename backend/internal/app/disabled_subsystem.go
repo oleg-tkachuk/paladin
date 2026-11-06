@@ -156,3 +156,7 @@ var (
 	_ paladinadminv1connect.CapabilityServiceHandler = disabledCapabilityServiceHandler{}
 	_ paladinadminv1connect.APITokenServiceHandler   = disabledAPITokenServiceHandler{}
 )
+
+func (disabledCapabilityServiceHandler) GetDefaults(ctx context.Context, _ *adminv1.CapabilityServiceGetDefaultsRequest) (*adminv1.CapabilityServiceGetDefaultsResponse, error) {
+	return nil, subsystemDisabledError(ctx, "capability", "config.capability.enabled")
+}

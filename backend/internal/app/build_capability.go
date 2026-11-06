@@ -212,6 +212,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	deps.RegisterWatcherStop(stopWatch)
 	replay, err := pgstore.NewReplayCache(pgstore.ReplayConfig{
 		DB: deps.Pool, Logger: logger.Slog(deps.Logger, "dpop-replay"),
+		EntriesPerHolder: cfg.DPoPReplay.EntriesPerHolder,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)

@@ -22,6 +22,8 @@ const ERROR_FIELDS = new Set(["error", "isError"]);
 
 // "<file under src>#<variable>" → what a failure renders, and why it is honest.
 const ALLOWED: Record<string, string> = {
+  "hooks/useCapabilityDefaults.ts#query":
+    "labels the Issue dialog's server-default lifetime; a failed read leaves it 'Server default', unlabelled, and the server applies its own either way",
   "components/DashboardWidgets.tsx#trends":
     "draws a trend beside each budget alert; a failed read leaves the rows as they were, without one",
   "app/capabilities/page.tsx#tenants":

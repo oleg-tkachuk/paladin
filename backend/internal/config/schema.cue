@@ -681,6 +681,12 @@ capability: {
   budget_leases: bool | *true
   // DPoP server nonces (RFC 9449 §8). The key is shared by every replica;
   // inline for dev, key_secret otherwise.
+  // The DPoP replay cache's share of one key holder; the default is limes'
+  // dpop.DefaultReplayEntriesPerHolder (config/defaults_test.go holds them
+  // equal).
+  dpop_replay: {
+    entries_per_holder: int & >0 | *1000
+  }
   dpop_nonce: {
     enabled:     bool | *false
     lifetime:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"

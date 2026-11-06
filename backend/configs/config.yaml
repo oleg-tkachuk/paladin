@@ -471,6 +471,8 @@ capability:
   revocation_cache_synced_ttl: 30s   # cached while the watcher listens and clears them on revoke; never below revocation_cache_ttl
   revocation_cache_max_stale: 30s    # a cached answer stands in this long past its TTL while the store fails; 0 fails closed; at most 1h
   budget_leases: true                # CapabilityService.Lease opens budget leases; off while any replica predates them
+  dpop_replay:                       # the DPoP replay cache every replica shares
+    entries_per_holder: 1000         # live proof ids one key holder may have; past it, proof_quota_exceeded
   dpop_nonce:                        # DPoP server nonces (RFC 9449 §8)
     enabled: false
     lifetime: 5m                     # how long a nonce is accepted

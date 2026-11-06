@@ -21,7 +21,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetLeaseRequest, CapabilityServiceGetLeaseResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceLeaseRequest, CapabilityServiceLeaseResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse, CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse, CapabilityServiceSettleLeaseRequest, CapabilityServiceSettleLeaseResponse
+from .capability_service_pb2 import CapabilityServiceDelegateRequest, CapabilityServiceGetBiscuitUsageRequest, CapabilityServiceGetBiscuitUsageResponse, CapabilityServiceGetDefaultsRequest, CapabilityServiceGetDefaultsResponse, CapabilityServiceGetLeaseRequest, CapabilityServiceGetLeaseResponse, CapabilityServiceGetRequest, CapabilityServiceGetResponse, CapabilityServiceGetUsageRequest, CapabilityServiceGetUsageResponse, CapabilityServiceIssueRequest, CapabilityServiceIssueResponse, CapabilityServiceLeaseRequest, CapabilityServiceLeaseResponse, CapabilityServiceListOperationGrantsRequest, CapabilityServiceListOperationGrantsResponse, CapabilityServiceListRequest, CapabilityServiceListResponse, CapabilityServiceRevokeBiscuitRequest, CapabilityServiceRevokeBiscuitResponse, CapabilityServiceRevokeRequest, CapabilityServiceRevokeResponse, CapabilityServiceRevokeRunRequest, CapabilityServiceRevokeRunResponse, CapabilityServiceSettleLeaseRequest, CapabilityServiceSettleLeaseResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -185,6 +185,14 @@ class CapabilityService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def get_defaults(self, request: CapabilityServiceGetDefaultsRequest, ctx: RequestContext[CapabilityServiceGetDefaultsRequest, CapabilityServiceGetDefaultsResponse], /) -> CapabilityServiceGetDefaultsResponse:
+        """
+        GetDefaults returns what Issue gives a request that leaves a setting
+        out: the lifetime of one naming no ttl_seconds. The same for every
+        caller; it reads no tenant.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]):
     def __init__(
@@ -341,6 +349,17 @@ class CapabilityServiceASGIApplication(ConnectASGIApplication[CapabilityService]
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.list_operation_grants,
+                ),
+                "/paladin.admin.v1.CapabilityService/GetDefaults": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GetDefaults",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceGetDefaultsRequest,
+                        output=CapabilityServiceGetDefaultsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.get_defaults,
                 ),
             },
             interceptors=interceptors,
@@ -760,6 +779,33 @@ class CapabilityServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
+    async def get_defaults(
+        self,
+        request: CapabilityServiceGetDefaultsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceGetDefaultsResponse:
+        """
+        GetDefaults returns what Issue gives a request that leaves a setting
+        out: the lifetime of one naming no ttl_seconds. The same for every
+        caller; it reads no tenant.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetDefaults",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceGetDefaultsRequest,
+                output=CapabilityServiceGetDefaultsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
 
 class CapabilityServiceSync(Protocol):
     """
@@ -905,6 +951,14 @@ class CapabilityServiceSync(Protocol):
         unlocks in the capability's own tenant with no tenant policy (ADR-0038),
         and on what basis: the built-in policy's actions, a tenant policy, the
         operation it is asserted beside, or the caveats alone. The same for every
+        caller; it reads no tenant.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def get_defaults(self, request: CapabilityServiceGetDefaultsRequest, ctx: RequestContext[CapabilityServiceGetDefaultsRequest, CapabilityServiceGetDefaultsResponse], /) -> CapabilityServiceGetDefaultsResponse:
+        """
+        GetDefaults returns what Issue gives a request that leaves a setting
+        out: the lifetime of one naming no ttl_seconds. The same for every
         caller; it reads no tenant.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
@@ -1063,6 +1117,17 @@ class CapabilityServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.list_operation_grants,
+                ),
+                "/paladin.admin.v1.CapabilityService/GetDefaults": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GetDefaults",
+                        service_name="paladin.admin.v1.CapabilityService",
+                        input=CapabilityServiceGetDefaultsRequest,
+                        output=CapabilityServiceGetDefaultsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.get_defaults,
                 ),
             },
             interceptors=interceptors,
@@ -1475,6 +1540,33 @@ class CapabilityServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.CapabilityService",
                 input=CapabilityServiceListOperationGrantsRequest,
                 output=CapabilityServiceListOperationGrantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def get_defaults(
+        self,
+        request: CapabilityServiceGetDefaultsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> CapabilityServiceGetDefaultsResponse:
+        """
+        GetDefaults returns what Issue gives a request that leaves a setting
+        out: the lifetime of one naming no ttl_seconds. The same for every
+        caller; it reads no tenant.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetDefaults",
+                service_name="paladin.admin.v1.CapabilityService",
+                input=CapabilityServiceGetDefaultsRequest,
+                output=CapabilityServiceGetDefaultsResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                 stream_type=StreamType.UNARY,
             ),

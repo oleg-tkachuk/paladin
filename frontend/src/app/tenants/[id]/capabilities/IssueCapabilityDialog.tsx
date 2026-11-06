@@ -1,5 +1,6 @@
 "use client";
 
+import { useCapabilityDefaults } from "@/hooks/useCapabilityDefaults";
 import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import React, { useCallback, useState } from "react";
 import {
@@ -58,6 +59,7 @@ import {
 import { budgetCeiling } from "@/lib/format/budgetCeiling";
 import {
   TTL_OPTIONS,
+  ttlOptions,
   OP_CHOICES,
   AUDIENCE_CHOICES,
   PRINCIPAL_KIND_OPTIONS,
@@ -122,6 +124,7 @@ export function IssueCapabilityDialog({
   const platformCurrency = usePlatformCurrency();
   const sentUnit = issueUnitCode ?? "";
   const [issueTtl, setIssueTtl] = useState("1h");
+  const { defaultTtlMs } = useCapabilityDefaults();
   const [issuing, setIssuing] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -463,7 +466,7 @@ export function IssueCapabilityDialog({
             {(control) => (
               <Select
                 id={control.id}
-                options={TTL_OPTIONS.map((o) => ({
+                options={ttlOptions(defaultTtlMs).map((o) => ({
                   value: o.value,
                   label: o.label,
                 }))}

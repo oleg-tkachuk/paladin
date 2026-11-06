@@ -56,6 +56,9 @@ const (
 	// CapabilityServiceListOperationGrantsProcedure is the procedure name of the CapabilityService's
 	// ListOperationGrants RPC.
 	CapabilityServiceListOperationGrantsProcedure = "/paladin.admin.v1.CapabilityService/ListOperationGrants"
+	// CapabilityServiceGetDefaultsProcedure is the procedure name of the CapabilityService's
+	// GetDefaults RPC.
+	CapabilityServiceGetDefaultsProcedure = "/paladin.admin.v1.CapabilityService/GetDefaults"
 )
 
 var (
@@ -159,6 +162,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	capabilityServiceGetDefaultsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_capability_service_proto.Services().ByName("CapabilityService").Methods().ByName("GetDefaults"),
+			Procedure:        CapabilityServiceGetDefaultsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CapabilityServiceClient is a client for the paladin.admin.v1.CapabilityService service.
@@ -241,6 +252,10 @@ type CapabilityServiceClient interface {
 	// operation it is asserted beside, or the caveats alone. The same for every
 	// caller; it reads no tenant.
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
+	// GetDefaults returns what Issue gives a request that leaves a setting
+	// out: the lifetime of one naming no ttl_seconds. The same for every
+	// caller; it reads no tenant.
+	GetDefaults(context.Context, *v1.CapabilityServiceGetDefaultsRequest) (*v1.CapabilityServiceGetDefaultsResponse, error)
 }
 
 // NewCapabilityServiceClient constructs a client for the paladin.admin.v1.CapabilityService
@@ -329,6 +344,10 @@ type CapabilityServiceHandler interface {
 	// operation it is asserted beside, or the caveats alone. The same for every
 	// caller; it reads no tenant.
 	ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error)
+	// GetDefaults returns what Issue gives a request that leaves a setting
+	// out: the lifetime of one naming no ttl_seconds. The same for every
+	// caller; it reads no tenant.
+	GetDefaults(context.Context, *v1.CapabilityServiceGetDefaultsRequest) (*v1.CapabilityServiceGetDefaultsResponse, error)
 }
 
 // RegisterCapabilityServiceHandler registers svc as the paladin.admin.v1.CapabilityService
@@ -349,6 +368,7 @@ func RegisterCapabilityServiceHandler(server *connect.Server, svc CapabilityServ
 		connect.Method{Spec: capabilityServiceGetLeaseSpec(), Handler: adapter.getLease},
 		connect.Method{Spec: capabilityServiceSettleLeaseSpec(), Handler: adapter.settleLease},
 		connect.Method{Spec: capabilityServiceListOperationGrantsSpec(), Handler: adapter.listOperationGrants},
+		connect.Method{Spec: capabilityServiceGetDefaultsSpec(), Handler: adapter.getDefaults},
 	)
 }
 
@@ -405,6 +425,10 @@ func (UnimplementedCapabilityServiceHandler) SettleLease(context.Context, *v1.Ca
 
 func (UnimplementedCapabilityServiceHandler) ListOperationGrants(context.Context, *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.ListOperationGrants is not implemented")
+}
+
+func (UnimplementedCapabilityServiceHandler) GetDefaults(context.Context, *v1.CapabilityServiceGetDefaultsRequest) (*v1.CapabilityServiceGetDefaultsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.CapabilityService.GetDefaults is not implemented")
 }
 
 type capabilityServiceClient struct {
@@ -510,6 +534,14 @@ func (c *capabilityServiceClient) SettleLease(ctx context.Context, req *v1.Capab
 func (c *capabilityServiceClient) ListOperationGrants(ctx context.Context, req *v1.CapabilityServiceListOperationGrantsRequest) (*v1.CapabilityServiceListOperationGrantsResponse, error) {
 	var res v1.CapabilityServiceListOperationGrantsResponse
 	if err := c.client.CallUnary(ctx, capabilityServiceListOperationGrantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *capabilityServiceClient) GetDefaults(ctx context.Context, req *v1.CapabilityServiceGetDefaultsRequest) (*v1.CapabilityServiceGetDefaultsResponse, error) {
+	var res v1.CapabilityServiceGetDefaultsResponse
+	if err := c.client.CallUnary(ctx, capabilityServiceGetDefaultsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -667,6 +699,18 @@ func (h capabilityServiceHandler) listOperationGrants(ctx context.Context, _ con
 		return err
 	}
 	res, err := h.svc.ListOperationGrants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h capabilityServiceHandler) getDefaults(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CapabilityServiceGetDefaultsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDefaults(ctx, &req)
 	if err != nil {
 		return err
 	}

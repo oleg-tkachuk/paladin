@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/meter"
 )
 
@@ -39,6 +40,11 @@ func TestDefaultsAreWhatLoadFillsIn(t *testing.T) {
 		if !reflect.DeepEqual(pair[0], pair[1]) {
 			t.Errorf("%s: defaults %+v, Load fills in %+v", name, pair[0], pair[1])
 		}
+	}
+	// The replay cache's share defaults to limes' own, and Load fills it in.
+	if got := d.Capability.DPoPReplay.EntriesPerHolder; got != dpop.DefaultReplayEntriesPerHolder || loaded.Capability.DPoPReplay != d.Capability.DPoPReplay {
+		t.Errorf("capability.dpop_replay.entries_per_holder defaults to %d (Load: %d), want limes' %d",
+			got, loaded.Capability.DPoPReplay.EntriesPerHolder, dpop.DefaultReplayEntriesPerHolder)
 	}
 	if d.Worker.Jobs.Capability.ChargesOlderThan != meter.MinChargeRetention {
 		t.Errorf("charges_older_than defaults to %s", d.Worker.Jobs.Capability.ChargesOlderThan)
