@@ -455,3 +455,13 @@ class CapabilityOperationGrant(_message.Message):
     paired_ops: _containers.RepeatedScalarFieldContainer[str]
     procedures: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, op: _Optional[str] = ..., actions: _Optional[_Iterable[str]] = ..., basis: _Optional[_Union[CapabilityGrantBasis, str]] = ..., paired_ops: _Optional[_Iterable[str]] = ..., procedures: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class CapabilityServiceGetDefaultsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class CapabilityServiceGetDefaultsResponse(_message.Message):
+    __slots__ = ("default_ttl",)
+    DEFAULT_TTL_FIELD_NUMBER: _ClassVar[int]
+    default_ttl: _duration_pb2.Duration
+    def __init__(self, default_ttl: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...

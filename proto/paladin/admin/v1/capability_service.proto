@@ -136,6 +136,13 @@ service CapabilityService {
   rpc ListOperationGrants(CapabilityServiceListOperationGrantsRequest) returns (CapabilityServiceListOperationGrantsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // GetDefaults returns what Issue gives a request that leaves a setting
+  // out: the lifetime of one naming no ttl_seconds. The same for every
+  // caller; it reads no tenant.
+  rpc GetDefaults(CapabilityServiceGetDefaultsRequest) returns (CapabilityServiceGetDefaultsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // PrincipalKind discriminates the principal-shape oneof. Mirrors the
@@ -635,4 +642,12 @@ message CapabilityOperationGrant {
   // The RPCs the caveats alone open, for CAPABILITY_GRANT_BASIS_CAVEATS_ONLY,
   // as service.Method.
   repeated string procedures = 5;
+}
+
+message CapabilityServiceGetDefaultsRequest {}
+
+message CapabilityServiceGetDefaultsResponse {
+  // default_ttl is the lifetime Issue gives a capability whose request sets
+  // no ttl_seconds: the issuer's own (capability.default_ttl).
+  google.protobuf.Duration default_ttl = 1;
 }

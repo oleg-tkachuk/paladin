@@ -4,6 +4,7 @@ import (
 	"context"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
@@ -43,4 +44,15 @@ var grantBasisToProto = map[cedar.GrantBasis]adminv1.CapabilityGrantBasis{
 	cedar.GrantTenantPolicy: adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_TENANT_POLICY,
 	cedar.GrantPaired:       adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_PAIRED,
 	cedar.GrantCaveatsOnly:  adminv1.CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_CAVEATS_ONLY,
+}
+
+// GetDefaults answers what Issue gives a request that leaves a setting out:
+// the issuer's own default lifetime, so a client can say what "no TTL" means
+// rather than guess it. Gated as ListOperationGrants, which is the same for
+// every caller too.
+func (h *Handler) GetDefaults(ctx context.Context, _ *adminv1.CapabilityServiceGetDefaultsRequest) (*adminv1.CapabilityServiceGetDefaultsResponse, error) {
+	if _, err := h.authorize(ctx, cedar.ActionReadCapability); err != nil {
+		return nil, err
+	}
+	return &adminv1.CapabilityServiceGetDefaultsResponse{DefaultTtl: durationpb.New(h.issuer.DefaultTTL())}, nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -48,6 +49,26 @@ func TestListOperationGrants_NeedsReadCapability(t *testing.T) {
 	h := mkHandler(t, &fakeStore{}, nil, &denyAuthorizer{})
 	_, err := h.ListOperationGrants(adminCtx(), &adminv1.CapabilityServiceListOperationGrantsRequest{})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("err = %v, want PermissionDenied", err)
+	}
+}
+
+// The default lifetime is the issuer's own, so a client states what a
+// request with no TTL gets rather than guessing it.
+func TestGetDefaults_ServesTheIssuersDefaultTTL(t *testing.T) {
+	h := mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{})
+	resp, err := h.GetDefaults(adminCtx(), &adminv1.CapabilityServiceGetDefaultsRequest{})
+	if err != nil {
+		t.Fatalf("GetDefaults: %v", err)
+	}
+	if got := resp.GetDefaultTtl().AsDuration(); got != h.issuer.DefaultTTL() || got != captest.TTL {
+		t.Errorf("default ttl = %s, want the issuer's %s", got, captest.TTL)
+	}
+}
+
+func TestGetDefaults_NeedsReadCapability(t *testing.T) {
+	h := mkHandler(t, &fakeStore{}, nil, &denyAuthorizer{})
+	if _, err := h.GetDefaults(adminCtx(), &adminv1.CapabilityServiceGetDefaultsRequest{}); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("err = %v, want PermissionDenied", err)
 	}
 }

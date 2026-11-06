@@ -128,6 +128,7 @@ var procedureKinds = map[string]Kind{
 	admin.CapabilityServiceGetLeaseProcedure:            Reads,
 	admin.CapabilityServiceGetBiscuitUsageProcedure:     Reads,
 	admin.CapabilityServiceListOperationGrantsProcedure: Reads,
+	admin.CapabilityServiceGetDefaultsProcedure:         Reads,
 	admin.CapabilityServiceGetProcedure:                 Reads,
 	admin.CapabilityServiceListProcedure:                Reads,
 	admin.CapabilityServiceGetUsageProcedure:            Reads,
