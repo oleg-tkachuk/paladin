@@ -1,6 +1,6 @@
 # ADR-0043: Stabilize how the SDKs are delivered
 
-- **Status:** Proposed 2026-11-06.
+- **Status:** Accepted 2026-11-06 (steps 1–6 implemented; step 7 waits for limes 1.0).
 - **Related:** [ADR-0018](0018-sdk-layers.md) (the layers),
   [ADR-0020](0020-sdk-integration-grade.md) (integration grade).
 
