@@ -647,11 +647,29 @@ the same commit. Treat this file like a runtime invariant.
   prints the plan that replaced it.
 - **Blockers:** none.
 
+### A map lookup on a missing key fails the whole list
+
+- **Status:** Deferred.
+- **Reason:** CEL raises "no such key" for `labels["env"]` on a row without
+  `env`, and `FilterPage` turns any row's evaluation error into
+  InvalidArgument for the request, so the same filter succeeds or fails
+  depending on which rows the page holds. A conjunct of map entries is now
+  pushed into SQL (tenant labels, object tags and metadata), which keeps rows
+  without the key out of the CEL pass; a disjunction or a negation still
+  meets them. Whether a per-row evaluation error should count as "no match"
+  is a semantics decision: it would also hide genuine type errors.
+- **Definition of Done:** A filter's outcome does not depend on page
+  contents: either a missing key evaluates as no match (and other evaluation
+  errors still fail the request, told apart by type), or the schemas declare
+  the map fields so that a lookup cannot fail, with tests over a page that
+  mixes rows with and without the key.
+- **Blockers:** none; needs the semantics choice above.
+
 ### List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 (timestamps), 2026-10-05
   (operation `state` and `done`), 2026-10-06 (value sets) and 2026-11-06
-  (the bucket browser's collection list).
+  (the bucket browser's collection list, tenant `labels` entries).
 - **Reason:** The filterable list RPCs extract the SQL-expressible subset of
   the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
   `filter` selects from the table rather than from whichever page the cursor
@@ -665,7 +683,7 @@ the same commit. Treat this file like a runtime invariant.
   to their inclusive forms deliberately: the pushdown may only narrow, so an
   extra boundary row is free and a missing one is a wrong answer.
   What still reaches only the in-memory pass: disjunctions across fields or
-  over anything but equalities, `labels[…]`, functions, and `updated_at` — which is left out on purpose rather than
+  over anything but equalities, functions, and `updated_at` — which is left out on purpose rather than
   forgotten, since a mutable column pushed into the query can exclude a row
   that the CEL pass, running microseconds later against a row someone just
   touched, would have accepted. A filter made entirely of those reads the

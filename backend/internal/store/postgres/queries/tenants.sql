@@ -90,6 +90,9 @@ WHERE (sqlc.narg('after_id')::uuid IS NULL OR tenants.id > sqlc.narg('after_id')
   -- query ("invalid input value for enum") instead of returning no rows.
   AND (sqlc.narg('storage_layout_in')::text[] IS NULL
        OR tenants.storage_layout::text = ANY(sqlc.narg('storage_layout_in')::text[]))
+  -- `labels["k"] == "v"` conjuncts, as one object the labels must contain.
+  AND (sqlc.narg('labels_contain')::jsonb IS NULL
+       OR tenants.labels @> sqlc.narg('labels_contain')::jsonb)
   -- Timestamp bounds. Strict `>` / `<` in the filter arrive here widened to
   -- their inclusive forms: the pushdown may only narrow, so an extra boundary
   -- row is free and a missing one is not.

@@ -577,7 +577,7 @@ type Querier interface {
 	// The boolean gating is inline-CASE so sqlc emits a single prepared
 	// statement; planner uses the partial idx_tenants_active index on
 	// the common path.
-	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, purgeEligible *bool, trashRetentionSeconds *float64, asOf pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
+	ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTrashed bool, includeTrashed bool, slugIn []string, slugLike *string, displayNameIn []string, displayNameLike *string, searchLike *string, storageLayoutIn []string, labelsContain []byte, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, purgeEligible *bool, trashRetentionSeconds *float64, asOf pgtype.Timestamptz, pageSize int32) ([]ListTenantsRow, error)
 	// Admin-side: surface configured settings across a tenant for support and
 	// compliance flows ("which users opted into the dark theme?").
 	ListUserSettingsByTenant(ctx context.Context, tenantID pgtype.UUID, limit int32) ([]ListUserSettingsByTenantRow, error)
