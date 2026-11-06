@@ -46,14 +46,15 @@ type PurgedSubscription struct {
 }
 
 // PurgeBlockers counts the ON DELETE RESTRICT children of a tenant
-// (docs/deletion-semantics.md).
+// (docs/deletion-semantics.md). BucketsDeleting are the buckets whose
+// backend deletion is still running; Buckets are the rest.
 type PurgeBlockers struct {
-	Collections, Buckets, Users int64
+	Collections, Buckets, BucketsDeleting, Users int64
 }
 
 // None reports whether nothing the tenant owns refuses its purge.
 func (b PurgeBlockers) None() bool {
-	return b.Collections == 0 && b.Buckets == 0 && b.Users == 0
+	return b.Collections == 0 && b.Buckets == 0 && b.BucketsDeleting == 0 && b.Users == 0
 }
 
 // PreviewPurgeTenant answers what PurgeTenant would remove with the tenant

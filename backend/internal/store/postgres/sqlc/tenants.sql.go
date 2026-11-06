@@ -25,23 +25,33 @@ func (q *Queries) CountPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID)
 const countPurgeBlockers = `-- name: CountPurgeBlockers :one
 SELECT
     (SELECT count(*) FROM collections c WHERE c.tenant_id = $1)::bigint AS collections,
-    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = $1)::bigint AS buckets,
+    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = $1
+        AND b.provision_state <> 'deleting')::bigint AS buckets,
+    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = $1
+        AND b.provision_state = 'deleting')::bigint AS buckets_deleting,
     (SELECT count(*) FROM users u WHERE u.tenant_id = $1)::bigint AS users
 `
 
 type CountPurgeBlockersRow struct {
-	Collections int64 `json:"collections"`
-	Buckets     int64 `json:"buckets"`
-	Users       int64 `json:"users"`
+	Collections     int64 `json:"collections"`
+	Buckets         int64 `json:"buckets"`
+	BucketsDeleting int64 `json:"buckets_deleting"`
+	Users           int64 `json:"users"`
 }
 
 // The ON DELETE RESTRICT children of the tenant, which refuse its purge
 // while any is left (docs/deletion-semantics.md). Trashed collections count:
-// the foreign key does not tell them apart.
+// the foreign key does not tell them apart. Buckets being deleted on the
+// backend are counted apart: they leave without the operator doing anything.
 func (q *Queries) CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error) {
 	row := q.db.QueryRow(ctx, countPurgeBlockers, tenantID)
 	var i CountPurgeBlockersRow
-	err := row.Scan(&i.Collections, &i.Buckets, &i.Users)
+	err := row.Scan(
+		&i.Collections,
+		&i.Buckets,
+		&i.BucketsDeleting,
+		&i.Users,
+	)
 	return i, err
 }
 

@@ -117,7 +117,8 @@ type Querier interface {
 	CountPurgeAPITokens(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// The ON DELETE RESTRICT children of the tenant, which refuse its purge
 	// while any is left (docs/deletion-semantics.md). Trashed collections count:
-	// the foreign key does not tell them apart.
+	// the foreign key does not tell them apart. Buckets being deleted on the
+	// backend are counted apart: they leave without the operator doing anything.
 	CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error)
 	CountPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// Trashed tenants whose trash retention has lapsed as of as_of: the ones the

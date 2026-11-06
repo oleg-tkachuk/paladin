@@ -14,6 +14,10 @@ const BLOCKER_NOUNS: Record<PurgeBlockerKind, [one: string, many: string]> = {
   [PurgeBlockerKind.COLLECTIONS]: ["collection", "collections"],
   [PurgeBlockerKind.BUCKETS]: ["bucket", "buckets"],
   [PurgeBlockerKind.USERS]: ["user", "users"],
+  [PurgeBlockerKind.BUCKETS_DELETING]: [
+    "bucket being deleted",
+    "buckets being deleted",
+  ],
 };
 
 /** one for a count of one, many for any other. */
@@ -81,18 +85,43 @@ export function affectedByPurge(p: PreviewPurgeTenantResponse): Affected[] {
   return out;
 }
 
-/**
- * Why the purge would be refused, naming what the tenant still owns; null
- * when nothing does.
- */
-export function whatBlocksPurge(
-  blockers: readonly PurgeBlocker[],
-): string | null {
-  if (blockers.length === 0) return null;
+/** Why rows the operator has to remove refuse the purge. */
+function toRemove(blockers: readonly PurgeBlocker[]): string {
   const owned = blockers
     .map((b) => counted(b.count, BLOCKER_NOUNS[b.kind]))
     .join(", ");
   const total = blockers.reduce((sum, b) => sum + b.count, 0n);
   const [it, is] = oneOrMany(total, ["it", "it is"], ["them", "they are"]);
   return `The tenant still owns ${owned}. The purge is refused until ${is} removed: restore the tenant, delete ${it}, and trash it again.`;
+}
+
+/** Why buckets still being deleted on their backend refuse the purge. */
+function toWaitFor(deleting: bigint): string {
+  const [noun, is] = oneOrMany(
+    deleting,
+    ["bucket is", "it finishes"],
+    ["buckets are", "they finish"],
+  );
+  return `${formatCount(deleting)} ${noun} still being deleted on the storage backend. Nothing needs doing: retry the purge once ${is}.`;
+}
+
+/**
+ * Why the purge would be refused: what the tenant still owns and has to
+ * remove, then the buckets it only has to wait for; null when nothing
+ * refuses it.
+ */
+export function whatBlocksPurge(
+  blockers: readonly PurgeBlocker[],
+): string | null {
+  const owned = blockers.filter(
+    (b) => b.kind !== PurgeBlockerKind.BUCKETS_DELETING,
+  );
+  const deleting = blockers
+    .filter((b) => b.kind === PurgeBlockerKind.BUCKETS_DELETING)
+    .reduce((sum, b) => sum + b.count, 0n);
+  const reasons = [
+    ...(owned.length > 0 ? [toRemove(owned)] : []),
+    ...(deleting > 0n ? [toWaitFor(deleting)] : []),
+  ];
+  return reasons.length > 0 ? reasons.join(" ") : null;
 }
