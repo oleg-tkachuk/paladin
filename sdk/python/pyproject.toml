@@ -135,8 +135,6 @@ exclude = [
     "src/paladin/common",
     "src/paladin/data",
     "src/paladin/iam",
-    # Not yet strict; BACKLOG.md, "paladin.testing is not type-checked".
-    "src/paladin/testing.py",
 ]
 typeCheckingMode = "strict"
 pythonVersion = "3.13"
@@ -146,6 +144,10 @@ reportPrivateUsage = false
 # Public functions check their arguments at run time as well, for callers
 # that are not type-checked.
 reportUnnecessaryIsInstance = false
+# A suppression names the rule it suppresses (`# pyright: ignore[rule]`) and
+# goes when the finding does; a bare `# type: ignore` would hide anything.
+enableTypeIgnoreComments = false
+reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

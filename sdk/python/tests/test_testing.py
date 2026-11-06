@@ -32,6 +32,7 @@ from paladin import (
     download_uri,
     lookup_object,
     pages,
+    testing,
     upload,
 )
 from paladin.admin.v1 import tenant_service_pb2
@@ -603,3 +604,22 @@ def test_the_fake_serves_concurrent_callers(fake: FakePaladin) -> None:
 
     with ThreadPoolExecutor(callers) as pool:
         assert list(pool.map(call, range(callers))) == [obj.name] * callers
+
+
+@pytest.mark.parametrize(
+    ("field", "want"),
+    [
+        (["parent"], "parent: value is required"),
+        (["object", "key"], "object.key: value is required"),
+        ([], "value is required"),
+    ],
+    ids=["field", "nested", "whole message"],
+)
+def test_a_violation_is_worded_as_the_server_words_it(field: list[str], want: str) -> None:
+    protovalidate = pytest.importorskip("protovalidate")
+    violation = protovalidate.ViolationPb(message="value is required")
+    if field:
+        violation.field = protovalidate.FieldPathPb(
+            elements=[protovalidate.FieldPathElementPb(field_name=f) for f in field]
+        )
+    assert testing._violation_text(violation) == want

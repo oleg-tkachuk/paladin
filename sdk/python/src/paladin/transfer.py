@@ -436,8 +436,9 @@ class _Check:
         if obj.size_bytes > 0:
             self._want_size = obj.size_bytes
         new = _DIGESTS.get(obj.checksum.algorithm)
-        digest = new() if new else None
-        if digest is None:
+        # Unknown, or known but not computable here (CRC32C without its extra).
+        digest = new() if new is not None else None
+        if new is None or digest is None:
             return
         size = len(digest.digest())
         if obj.checksum.part_size_bytes > 0:
@@ -445,7 +446,7 @@ class _Check:
             # the server recorded beside it.
             parsed = _parse_composite(obj.checksum.value, size)
             if parsed is not None:
-                self._composite = _Composite(new, obj.checksum.part_size_bytes)  # type: ignore[arg-type]
+                self._composite = _Composite(new, obj.checksum.part_size_bytes)
                 self._want_digest, self._want_parts = parsed
                 self._algorithm = obj.checksum.algorithm
             return
