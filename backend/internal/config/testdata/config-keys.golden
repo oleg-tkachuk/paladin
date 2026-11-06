@@ -128,6 +128,8 @@ capability.dpop_nonce.key_secret.key
 capability.dpop_nonce.key_secret.name
 capability.dpop_nonce.key_secret.namespace
 capability.dpop_nonce.lifetime
+capability.dpop_replay
+capability.dpop_replay.entries_per_holder
 capability.enabled
 capability.issuer_name
 capability.revocation_cache_max_stale

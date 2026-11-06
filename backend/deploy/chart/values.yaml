@@ -1136,6 +1136,11 @@ config:
     # key_secret (and add its name to rbac.secretReader.secretNames); an
     # inline key is for dev. Enable only once clients answer use_dpop_nonce:
     # the Go and Python SDKs do from the release that adds this.
+    # The DPoP replay cache every replica shares: how many live proof ids one
+    # key-bound capability's holder may have before it is refused
+    # (proof_quota_exceeded) — a thousand requests within a proof's lifetime.
+    dpop_replay:
+      entries_per_holder: 1000
     dpop_nonce:
       enabled: false
       lifetime: 5m

@@ -710,6 +710,17 @@ type CapabilityWorker struct {
 	ChargesOlderThan time.Duration `yaml:"charges_older_than" json:"charges_older_than"`
 }
 
+// DPoPReplay bounds the DPoP replay cache: the proof ids each key-bound
+// capability's holder has used, kept until they expire so none is accepted
+// twice.
+type DPoPReplay struct {
+	// EntriesPerHolder is how many live proof ids one holder may have; a
+	// holder past it is refused (proof_quota_exceeded), so one client cannot
+	// fill the cache every replica shares. Defaults to limes'
+	// dpop.DefaultReplayEntriesPerHolder.
+	EntriesPerHolder int `yaml:"entries_per_holder" json:"entries_per_holder"`
+}
+
 // DPoPNonce configures DPoP server nonces. Every replica must share Key: a
 // nonce one replica issues is checked by whichever serves the next request.
 type DPoPNonce struct {
@@ -1280,6 +1291,8 @@ type Capability struct {
 	// DPoPNonce makes a key-bound capability's proof carry a nonce the server
 	// issued (RFC 9449 §8), bounding how long a captured proof stays usable.
 	DPoPNonce DPoPNonce `yaml:"dpop_nonce" json:"dpop_nonce"`
+	// DPoPReplay bounds the DPoP replay cache every replica shares.
+	DPoPReplay DPoPReplay `yaml:"dpop_replay" json:"dpop_replay"`
 
 	// RevocationCacheTTL is how long the verifier caches IsRevoked
 	// answers while no revocation signal vouches for the cache: before the
