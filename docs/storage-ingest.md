@@ -161,9 +161,10 @@ takes the next segment as the bucket and the one after it as the tenant. A
 tenant segment that is no UUID — the gateway's own `/buckets/.system/…`
 records — is ignored, not an error.
 
-The NATS sources (`seaweedfs_nats`, and `seaweedfs` on the `nats` /
-`rabbitmq` / `sqs` drivers) accept only `paladin-primary`, which `pickSource`
-hard-codes; the webhook route `/webhook/seaweedfs` accepts every bucket.
+No source filters by bucket: each event carries the bucket it came from,
+and the handler acts on it only when that is the bucket the object's
+collection is bound to. The same path in another bucket is another object,
+and its events are skipped with a warning naming both buckets.
 
 > ⚠️ **Drift risk.** The `buckets/` strip was inferred from observed live
 > paths on the current SeaweedFS version. A future SF release that drops the
