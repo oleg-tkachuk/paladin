@@ -18,6 +18,9 @@ import (
 )
 
 // componentOf runs p as the health page would.
+// signalLease is how long the test signal vouches for the cache.
+const signalLease = time.Minute
+
 func componentOf(t *testing.T, p health.Probe) health.Component {
 	t.Helper()
 	return (&health.Handler{Ready: []health.Probe{p}}).Snapshot(context.Background(), "api").Components[0]
@@ -131,7 +134,7 @@ func TestCapabilityRevocationsFollowTheWatcher(t *testing.T) {
 
 	signal := cache.NewSignal()
 	defer signal.Close()
-	signal.Listening()
+	signal.Listening(signalLease)
 	signal.Revoked(uuid.New())
 	got = componentOf(t, c)
 	if got.Status != health.StatusHealthy {

@@ -37,21 +37,21 @@ type UserDirectory interface {
 // their roles do not reach, and a user disabled, gone or in another tenant
 // since the token was issued.
 func Policy(users UserDirectory, unit string) exchange.Policy {
-	return func(ctx context.Context, g exchange.Grant) (limes.IssueRequest, error) {
+	return func(ctx context.Context, g exchange.Grant) (exchange.Decision, error) {
 		user, err := delegatingUser(ctx, users, g.Subject)
 		if err != nil {
-			return limes.IssueRequest{}, err
+			return exchange.Decision{}, err
 		}
 		planes, err := delegatedPlanes(user, g)
 		if err != nil {
-			return limes.IssueRequest{}, err
+			return exchange.Decision{}, err
 		}
 		ops, err := auth.DelegatedOps(g.Subject.Scopes)
 		if err != nil {
-			return limes.IssueRequest{}, fmt.Errorf("%w: %w", exchange.ErrInvalidScope, err)
+			return exchange.Decision{}, fmt.Errorf("%w: %w", exchange.ErrInvalidScope, err)
 		}
 		client := g.Subject.ClientID
-		return limes.IssueRequest{
+		issue := limes.IssueRequest{
 			// The MCP server holds and presents it, as the exchange's client,
 			// for the agent's MCP client; the audit names it as the relay.
 			Subject: limes.Principal{
@@ -72,7 +72,10 @@ func Policy(users UserDirectory, unit string) exchange.Policy {
 				Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: unit},
 			},
 			ClientID: client,
-		}, nil
+		}
+		// Every scope asked is granted: the token's own scopes already bound
+		// what the capability may do (DelegatedOps above).
+		return exchange.Decision{Issue: issue, Scopes: g.Scopes}, nil
 	}
 }
 

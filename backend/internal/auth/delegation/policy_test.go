@@ -54,9 +54,16 @@ func TestDelegationPolicyIssuesForTheUser(t *testing.T) {
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Roles: []string{apiutil.AdminAudienceRoles[0]}}
 	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}}, limes.AbstractUnitCode)
 
-	req, err := policy(t.Context(), delegationGrant(user, []string{auth.OAuthScopeRead}, allPlanes...))
+	grant := delegationGrant(user, []string{auth.OAuthScopeRead}, allPlanes...)
+	grant.Scopes = []string{auth.OAuthScopeRead}
+	decision, err := policy(t.Context(), grant)
+	req := decision.Issue
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The token response states the scopes granted: every one asked.
+	if !slices.Equal(decision.Scopes, grant.Scopes) {
+		t.Errorf("scopes granted = %v, want the ones asked, %v", decision.Scopes, grant.Scopes)
 	}
 	if s := req.Subject; s.Type != limes.PrincipalTypeAgent || s.Subject != relayClientID ||
 		s.TenantID != user.TenantID || s.Agent == nil || s.Agent.MCPClient != subjectClientID {
@@ -93,7 +100,8 @@ var allPlanes = Planes
 func TestDelegationPolicyLeavesOutWhatTheUserMayNotHold(t *testing.T) {
 	member := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
 	policy := Policy(usersByID{users: map[uuid.UUID]authstore.User{member.UserID: member}}, limes.AbstractUnitCode)
-	req, err := policy(t.Context(), delegationGrant(member, []string{auth.OAuthScopeRead}, allPlanes...))
+	decision, err := policy(t.Context(), delegationGrant(member, []string{auth.OAuthScopeRead}, allPlanes...))
+	req := decision.Issue
 	if err != nil {
 		t.Fatal(err)
 	}
