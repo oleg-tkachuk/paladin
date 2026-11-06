@@ -4,7 +4,8 @@
 # resolve.
 #
 # On a throwaway clone: a commit that was never pushed must pass, which only a
-# fetch from the clone can do; a commit whose sdk/go/go.mod requires a version
+# fetch from the clone can do, and so must one checked out as CI checks out a
+# pull request, detached in a clone with no branch; a commit whose sdk/go/go.mod requires a version
 # of a module it imports that nobody serves must fail. (A requirement on a
 # module the SDK does not import is pruned from a consumer's graph and never
 # fetched, so it is no failure.)
@@ -32,6 +33,13 @@ fail() { printf 'FAIL %s\n' "$1"; failed=1; }
 commit "test: a commit no remote has"
 "$script" "$work/repo" >"$work/unpushed.log" 2>&1 ||
     { cat "$work/unpushed.log"; fail "an unpushed commit with a sound go.mod did not pass"; }
+
+# A pull request's CI checkout: the merge commit detached, no local branch.
+git -C "$work/repo" checkout --quiet --detach
+git -C "$work/repo" for-each-ref --format='%(refname)' refs/heads |
+    while read -r ref; do git -C "$work/repo" update-ref -d "$ref"; done
+"$script" "$work/repo" >"$work/detached.log" 2>&1 ||
+    { cat "$work/detached.log"; fail "a detached commit in a clone with no branch did not pass"; }
 
 (cd "$work/repo/sdk/go" && go mod edit -require="$UNSERVED_REQUIREMENT")
 commit "test: require a version nobody serves"

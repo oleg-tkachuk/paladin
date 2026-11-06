@@ -9,7 +9,8 @@
 # leaves out — passes there and fails here.
 #
 # The commit is fetched from the local clone (git's url.insteadOf, set through
-# the environment only), so any committed tree can be checked, pushed or not.
+# the environment only), so any committed tree can be checked, pushed or not,
+# including the merge commit CI checks out for a pull request.
 # Every other module comes through the proxy and the checksum database, as it
 # does for a consumer.
 #
@@ -26,6 +27,8 @@ readonly SDK_MODULE=$REPO_MODULE/sdk/go
 readonly SDK_PACKAGE=$SDK_MODULE/paladin
 readonly LIMES_MODULE=github.com/oleg-tkachuk/limes
 readonly CONSUMER_MODULE=example.com/paladin-sdk-consumer
+# The branch the mirror points at the commit under test.
+readonly CHECK_BRANCH=paladin-sdk-consumer-check
 
 log() { printf 'go sdk consumer: %s\n' "$1"; }
 
@@ -38,15 +41,26 @@ log "resolving $SDK_MODULE at $sha from $repo"
 work=$(mktemp -d "${TMPDIR:-/tmp}/go-sdk-consumer.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
-# The paladin repository from the local clone, everything else as usual.
+# Go fetches a commit with a shallow fetch and then unshallows through the
+# remote's branches, which a pull request's CI checkout (a detached merge
+# commit, no local branch) does not have. A mirror sharing the clone's objects
+# gets one, at the commit.
+mirror="$work/mirror.git"
+git clone --quiet --mirror --shared "$repo" "$mirror"
+git -C "$mirror" update-ref "refs/heads/$CHECK_BRANCH" "$sha"
+
+# The paladin repository from the mirror, everything else as usual.
 # GOPRIVATE makes go fetch the SDK directly and skip the checksum database,
-# which cannot know an unpublished commit; it applies to nothing else.
+# which cannot know an unpublished commit; it applies to nothing else. A module
+# cache of its own, because go keeps the repository it fetched there and a run
+# would otherwise depend on what an earlier one left.
 export GIT_CONFIG_COUNT=1
-export GIT_CONFIG_KEY_0="url.file://$repo.insteadOf"
+export GIT_CONFIG_KEY_0="url.file://$mirror.insteadOf"
 export GIT_CONFIG_VALUE_0=$REPO_URL
 export GOPRIVATE=$REPO_MODULE
 export GOWORK=off
-export GOFLAGS=-mod=mod
+export GOFLAGS="-mod=mod -modcacherw"
+export GOMODCACHE="$work/modcache"
 
 cd "$work"
 go mod init "$CONSUMER_MODULE" >/dev/null 2>&1
