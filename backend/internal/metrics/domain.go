@@ -50,6 +50,15 @@ func newPresignDuration(m metric.Meter) (metric.Float64Histogram, error) {
 	)
 }
 
+func newCapabilityCallDuration(m metric.Meter) (metric.Float64Histogram, error) {
+	return m.Float64Histogram(
+		"paladin_capability_call_duration_seconds",
+		metric.WithDescription("Duration of a capability issuer, verifier or revoker call, as limes reports it."),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(requestBucketsSeconds...),
+	)
+}
+
 func newStorageCallDuration(m metric.Meter) (metric.Float64Histogram, error) {
 	return m.Float64Histogram(
 		"paladin_storage_call_duration_seconds",
@@ -86,6 +95,8 @@ var (
 	loginAttempts metric.Int64Counter
 
 	idempotencyLookups metric.Int64Counter
+	capabilityCalls    metric.Int64Counter
+	capabilitySeconds  metric.Float64Histogram
 )
 
 func init() {
@@ -100,6 +111,18 @@ func init() {
 		otel.Handle(err)
 	}
 	if presignSeconds, err = newPresignDuration(meterDomain); err != nil {
+		otel.Handle(err)
+	}
+	if capabilityCalls, err = meterDomain.Int64Counter(
+		"paladin_capability_calls_total",
+		metric.WithDescription(
+			"Capability issuer, verifier and revoker calls by component, operation, "+
+				"outcome (ok|refused|failed) and limes code: a rise in refusals of one code "+
+				"is a client problem, any failure the server's."),
+	); err != nil {
+		otel.Handle(err)
+	}
+	if capabilitySeconds, err = newCapabilityCallDuration(meterDomain); err != nil {
 		otel.Handle(err)
 	}
 	if capabilityAmount, err = meterDomain.Float64Histogram(
@@ -198,6 +221,32 @@ func RecordPresign(ctx context.Context, op, outcome string, seconds float64) {
 	presignIssued.Add(ctx, 1, attrs)
 	if presignSeconds != nil {
 		presignSeconds.Record(ctx, seconds, attrs)
+	}
+}
+
+// The outcomes of a capability call, as RecordCapabilityCall counts them.
+const (
+	CapabilityCallOK      = "ok"
+	CapabilityCallRefused = "refused"
+	CapabilityCallFailed  = "failed"
+)
+
+// RecordCapabilityCall counts one call of a capability component — the
+// issuer, the verifier or the revoker — and records its duration. code is
+// limes' code of a refusal or failure, empty for none; it is a closed set, so
+// it bounds the series.
+func RecordCapabilityCall(ctx context.Context, component, operation, outcome, code string, seconds float64) {
+	if capabilityCalls == nil {
+		return
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("component", component),
+		attribute.String("operation", operation),
+		attribute.String("outcome", outcome),
+	}
+	capabilityCalls.Add(ctx, 1, metric.WithAttributes(append(attrs, attribute.String("code", code))...))
+	if capabilitySeconds != nil {
+		capabilitySeconds.Record(ctx, seconds, metric.WithAttributes(attrs...))
 	}
 }
 

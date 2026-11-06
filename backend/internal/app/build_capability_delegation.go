@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
 // capabilityIssuers are the capability issuer and the delegation issuer the
@@ -83,6 +84,7 @@ func newCapabilityIssuer(kid string, key limes.SigningKey, store limes.IssuanceS
 	issuer, err := limes.NewIssuer(limes.IssuerConfig{
 		Biscuit: biscuit.Form(), Signer: signer, Store: store, IssuerName: name, DefaultTTL: ttl,
 		Logger: logger.Slog(log, "capability-issuer"),
+		Events: issuerEvents(metrics.RecordCapabilityCall),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability issuer %s: %w", name, err)

@@ -21,6 +21,7 @@ import (
 	capabilitypg "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
 // CapabilityBundle bundles the ready-to-use issuer / verifier / store
@@ -244,6 +245,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// Every refusal at WARN and every failure on the server's side at
 		// ERROR, so the interceptor logs none of them again.
 		Logger: logger.Slog(deps.Logger, "capability-verifier"),
+		Events: verifierEvents(metrics.RecordCapabilityCall),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
@@ -280,6 +282,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	revoker, err := limes.NewRevoker(limes.RevokerConfig{
 		Store: store, Bulk: store, Biscuits: store, Cache: cache,
 		Logger: logger.Slog(deps.Logger, "capability-revoker"),
+		Events: revokerEvents(metrics.RecordCapabilityCall),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability revoker: %w", err)
