@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -231,18 +232,30 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 	}
 	onBackend, onBucket := bucketScope(args.BackendID, args.BucketName)
 	// Pushdown: see admin_bucket.go — the handler's CEL pass over the
-	// page stays authoritative, these only narrow the scan.
-	pd := hints(cel.CollectionSchema, args.Filter)
-	nameIn, nameLike := pd.StringHint("collection")
-	displayIn, displayLike := pd.StringHint("display_name")
-	backendIn, _ := pd.StringHint("storage_backend")
-
-	createdGTE, createdLTE := createdBounds(pd)
-	// Only the `like` half — see admin_bucket.go.
-	_, searchLike := pd.StringHint("search")
-	rows, err := r.q.ListCollections(ctx, pgUUIDOptional(args.TenantID), onBackend, onBucket, after, afterTenant,
-		nameIn, nameLike, displayIn, displayLike, searchLike, backendIn,
-		createdGTE, createdLTE, pageSize)
+	// page stays authoritative, these only narrow the scan. One query per
+	// disjunct of the filter, merged in (tenant, name) order (fanOut).
+	rows, err := fanOut(branchHints(cel.CollectionSchema, args.Filter), pageSize,
+		func(pd cel.Pushdown) ([]sqlc.ListCollectionsRow, error) {
+			nameIn, nameLike := pd.StringHint("collection")
+			displayIn, displayLike := pd.StringHint("display_name")
+			backendIn, _ := pd.StringHint("storage_backend")
+			createdGTE, createdLTE := createdBounds(pd)
+			// Only the `like` half — see admin_bucket.go.
+			_, searchLike := pd.StringHint("search")
+			return r.q.ListCollections(ctx, pgUUIDOptional(args.TenantID), onBackend, onBucket, after, afterTenant,
+				nameIn, nameLike, displayIn, displayLike, searchLike, backendIn,
+				createdGTE, createdLTE, pageSize)
+		},
+		func(a, b sqlc.ListCollectionsRow) bool {
+			if c := bytes.Compare(a.Collection.TenantID.Bytes[:], b.Collection.TenantID.Bytes[:]); c != 0 {
+				return c < 0
+			}
+			return a.Collection.Name < b.Collection.Name
+		},
+		func(row sqlc.ListCollectionsRow) collectionKey {
+			return collectionKey{row.Collection.TenantID.Bytes, row.Collection.Name}
+		},
+	)
 	if err != nil {
 		return nil, "", fmt.Errorf("list collections: %w", err)
 	}
@@ -251,6 +264,12 @@ func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollection
 		out = append(out, collectionFromSQLC(row.Collection, row.BackendName, row.BucketName))
 	}
 	return out, nextCollectionCursor(out, pageSize), nil
+}
+
+// collectionKey is a collection's place in the list's (tenant, name) order.
+type collectionKey struct {
+	tenant [16]byte
+	name   string
 }
 
 // bucketScope is the (backend, bucket) pair the storage-first browser lists,

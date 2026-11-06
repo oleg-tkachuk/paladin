@@ -650,8 +650,9 @@ the same commit. Treat this file like a runtime invariant.
 ### List filters push down only the conjuncts SQL can express
 
 - **Status:** Deferred, narrowed 2026-08-28 (timestamps), 2026-10-05
-  (operation `state` and `done`), 2026-10-06 (value sets) and 2026-11-06
-  (the bucket browser's collection list, tenant `labels` entries).
+  (operation `state` and `done`), 2026-10-06 (value sets), 2026-11-06
+  (the bucket browser's collection list, tenant `labels` entries) and
+  2026-11-07 (disjunctions across fields).
 - **Reason:** The filterable list RPCs extract the SQL-expressible subset of
   the caller's CEL (`cel.ExtractPushdown`) and hand it to the query, so
   `filter` selects from the table rather than from whichever page the cursor
@@ -661,11 +662,14 @@ the same commit. Treat this file like a runtime invariant.
   field's equality is a set of values, pushed as `= ANY(…)`: `field in [...]`
   and a disjunction of equalities on that one field reach the table too, in
   the six queries the generic walk serves (objects and audit keep their own
-  walkers, and the object walk already split disjunctions into branches). Strict `>` / `<` are widened
+  walkers). As of 2026-11-07 the six split a filter into disjunctive normal
+  form as objects do (`cel.ExtractPushdownBranches`), one query per branch
+  merged in the list's order, up to eight branches. Strict `>` / `<` are widened
   to their inclusive forms deliberately: the pushdown may only narrow, so an
   extra boundary row is free and a missing one is a wrong answer.
-  What still reaches only the in-memory pass: disjunctions across fields or
-  over anything but equalities, functions, and `updated_at` — which is left out on purpose rather than
+  What still reaches only the in-memory pass: an arm of a disjunction that
+  pushes nothing (which leaves the whole disjunction to it), negation,
+  functions, and `updated_at` — which is left out on purpose rather than
   forgotten, since a mutable column pushed into the query can exclude a row
   that the CEL pass, running microseconds later against a row someone just
   touched, would have accepted. A filter made entirely of those reads the

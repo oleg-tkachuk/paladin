@@ -5,6 +5,8 @@ package components
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"uuid"
 
@@ -80,15 +82,14 @@ func TestPushdown_Backends(t *testing.T) {
 		t.Fatalf("a one-field disjunction returned %v, want [%s %s]", names(got), first, last)
 	}
 
-	// A predicate the walk cannot express must not narrow anything: the repo
-	// returns the page and the handler's CEL pass decides.
-	got, _, err = repo.List(ctx, 100, "", `backend_id == "a" || provider == "b"`)
-	if err != nil {
-		t.Fatalf("list cross-field disjunction: %v", err)
-	}
-	if len(got) < 5 {
-		t.Errorf("a disjunction over two fields narrowed the scan to %d rows — "+
-			"pushdown must only narrow what it fully understands", len(got))
+	// A disjunction across two fields runs one query per arm: walked a row a
+	// page, it returns each match once and nothing else.
+	filter := fmt.Sprintf(`backend_id.startsWith(%q) && (backend_id == %q || display_name == "backend number 1")`, prefix, last)
+	seen := walkPages(t, func(token string) ([]admindomain.StorageBackend, string, error) {
+		return repo.List(ctx, 1, token, filter)
+	}, func(b admindomain.StorageBackend) string { return b.BackendID })
+	if want := []string{prefix + "-01", last}; !slices.Equal(seen, want) {
+		t.Errorf("cross-field disjunction walked %v, want %v", seen, want)
 	}
 }
 
@@ -186,6 +187,68 @@ func TestPushdown_TenantLabels(t *testing.T) {
 			slugs = append(slugs, tn.Slug)
 		}
 		t.Errorf("page %v, want only %s-prod", slugs, env)
+	}
+}
+
+// walkPages lists page after page from an empty token until the token runs
+// out, and returns every row's name, in the order the pages gave them.
+func walkPages[T any](t *testing.T, list func(token string) ([]T, string, error), name func(T) string) []string {
+	t.Helper()
+	const maxPages = 50
+	var seen []string
+	token := ""
+	for range maxPages {
+		page, next, err := list(token)
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		for _, row := range page {
+			seen = append(seen, name(row))
+		}
+		if next == "" {
+			return seen
+		}
+		token = next
+	}
+	t.Fatalf("list did not end after %d pages", maxPages)
+	return nil
+}
+
+// A disjunction across two fields selects from the table, one query per arm:
+// walked one row per page, the list returns each tenant either arm matches,
+// once, and none that neither does.
+func TestPushdown_TenantsAcrossFields(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
+
+	p := "pd" + uuid.New().String()[:8]
+	for _, slug := range []string{"a", "b", "c", "d", "e"} {
+		display := "other"
+		if slug == "c" || slug == "e" {
+			display = "pick"
+		}
+		mustExec(t, ctx, pool,
+			`INSERT INTO tenants (id, slug, display_name, storage_layout) VALUES ($1, $2, $3, 'shared')`,
+			uuid.New(), p+"-"+slug, p+"-"+display+"-"+slug)
+	}
+	filter := fmt.Sprintf(`slug.startsWith(%q) && (slug == "%s-a" || display_name.startsWith("%s-pick"))`, p, p, p)
+
+	seen := walkPages(t, func(token string) ([]tenanth.Tenant, string, error) {
+		args := tenanth.ListTenantsArgs{PageSize: 1, Filter: filter}
+		if token != "" {
+			id, err := uuid.Parse(token)
+			if err != nil {
+				return nil, "", err
+			}
+			args.AfterID = id
+		}
+		return repo.List(ctx, args)
+	}, func(tn tenanth.Tenant) string { return tn.Slug })
+	slices.Sort(seen)
+	if want := []string{p + "-a", p + "-c", p + "-e"}; !slices.Equal(seen, want) {
+		t.Errorf("walked %v, want %v", seen, want)
 	}
 }
 
@@ -376,6 +439,15 @@ func TestPushdown_Collections(t *testing.T) {
 	if len(got) != 1 || got[0].Collection != last {
 		t.Fatalf("got %d rows, want just %s", len(got), last)
 	}
+
+	// Across two fields: one query per arm, each match once.
+	filter := fmt.Sprintf(`collection.startsWith(%q) && (collection == %q || display_name == "collection 1")`, prefix, last)
+	seen := walkPages(t, func(token string) ([]objectkey.Collection, string, error) {
+		return repo.List(ctx, objectkey.ListCollectionsArgs{TenantID: tenantID, PageSize: 1, PageToken: token, Filter: filter})
+	}, func(c objectkey.Collection) string { return c.Collection })
+	if want := []string{prefix + "-01", last}; !slices.Equal(seen, want) {
+		t.Errorf("cross-field disjunction walked %v, want %v", seen, want)
+	}
 }
 
 func TestPushdown_Users(t *testing.T) {
@@ -404,5 +476,101 @@ func TestPushdown_Users(t *testing.T) {
 	}
 	if len(got) != 1 {
 		t.Fatalf("got %d rows, want the single disabled user", len(got))
+	}
+
+	// Across two fields: one query per arm, each match once.
+	filter := fmt.Sprintf(`subject.startsWith(%q) && (subject == "%s-04@example.test" || display_name == "user 1")`, prefix, prefix)
+	seen := walkPages(t, func(token string) ([]authstore.User, string, error) {
+		return repo.List(ctx, authstore.ListUsersArgs{TenantID: tenantID, PageSize: 1, PageToken: token, Filter: filter})
+	}, func(u authstore.User) string { return u.Subject })
+	slices.Sort(seen)
+	if want := []string{prefix + "-01@example.test", prefix + "-04@example.test"}; !slices.Equal(seen, want) {
+		t.Errorf("cross-field disjunction walked %v, want %v", seen, want)
+	}
+}
+
+// Operations across two fields, oldest and newest first: one query per arm,
+// merged in the order the page runs, each match once.
+func TestPushdown_OperationsAcrossFields(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	tenantID, _ := mkTenant(t, ctx, pool, "shared")
+	repo := adapters.NewOperationRepo(sqlc.New(pool), pool)
+
+	var want []string
+	for i, op := range []struct{ typ, state string }{
+		{"BatchCopy", "PENDING"},
+		{"BatchCopy", "RUNNING"},
+		{"BatchCopy", "PENDING"},
+		{"BatchUpdateTags", "PENDING"},
+		{"BatchCopy", "PENDING"},
+	} {
+		id := uuid.New()
+		mustExec(t, ctx, pool,
+			`INSERT INTO operations (id, tenant_id, type, state) VALUES ($1, $2, $3, $4::operation_state)`,
+			id, tenantID, op.typ, op.state)
+		if i == 1 || i == 3 {
+			want = append(want, id.String())
+		}
+	}
+	// The list runs in id order; a uuid's canonical text sorts as its bytes.
+	slices.Sort(want)
+	filter := `type == "BatchUpdateTags" || state == "RUNNING"`
+	for _, newestFirst := range []bool{false, true} {
+		seen := walkPages(t, func(token string) ([]operationh.Operation, string, error) {
+			args := operationh.ListArgs{TenantID: tenantID, PageSize: 1, Filter: filter, NewestFirst: newestFirst}
+			if token != "" {
+				id, err := uuid.Parse(token)
+				if err != nil {
+					return nil, "", err
+				}
+				args.AfterID = id
+			}
+			return repo.List(ctx, args)
+		}, func(o operationh.Operation) string { return o.OperationID.String() })
+		expect := slices.Clone(want)
+		if newestFirst {
+			slices.Reverse(expect)
+		}
+		if !slices.Equal(seen, expect) {
+			t.Errorf("newest first %v: walked %v, want %v", newestFirst, seen, expect)
+		}
+	}
+}
+
+// Buckets across two fields: one query per arm, merged in (backend, name)
+// order, each match once.
+func TestPushdown_BucketsAcrossFields(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	owner, _ := mkTenant(t, ctx, pool, "shared")
+	repo := adapters.NewBucketRepoV2(sqlc.New(pool), pool)
+
+	backend := "pd-be-" + uuid.New().String()[:8]
+	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
+	prefix := "pd" + uuid.New().String()[:8]
+	for i := range 5 {
+		display := "other"
+		if i == 1 {
+			display = "pick"
+		}
+		mustExec(t, ctx, pool,
+			`INSERT INTO buckets (backend_id, name, display_name, owner_tenant_id)
+			 SELECT id, $2, $3, $4 FROM storage_backends WHERE name = $1`,
+			backend, fmt.Sprintf("%s-%02d", prefix, i), display, owner)
+	}
+	last := fmt.Sprintf("%s-04", prefix)
+	filter := fmt.Sprintf(`bucket_id.startsWith(%q) && (bucket_id == %q || display_name == "pick")`, prefix, last)
+	seen := walkPages(t, func(token string) ([]admindomain.Bucket, string, error) {
+		args := admindomain.ListBucketsArgs{BackendID: backend, PageSize: 1, Filter: filter}
+		if token != "" {
+			args.AfterBackend, args.AfterName, _ = strings.Cut(token, "/")
+		}
+		return repo.List(ctx, args)
+	}, func(b admindomain.Bucket) string { return b.BucketName })
+	if want := []string{prefix + "-01", last}; !slices.Equal(seen, want) {
+		t.Errorf("cross-field disjunction walked %v, want %v", seen, want)
 	}
 }

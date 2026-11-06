@@ -284,24 +284,28 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 	if afterID != "" {
 		afterPtr = &afterID
 	}
-	// The filter's SQL-expressible conjuncts narrow the scan; the handler's
-	// CEL pass over the returned page stays authoritative.
-	pd := hints(cel.StorageBackendSchema, filter)
-	nameIn, nameLike := pd.StringHint("backend_id")
-	displayIn, displayLike := pd.StringHint("display_name")
-	providerIn, _ := pd.StringHint("provider")
-	regionIn, _ := pd.StringHint("region")
-
-	createdGTE, createdLTE := createdBounds(pd)
-	// Only the `like` half — the derived field exists for a search box, which
-	// emits `contains`. See admin_bucket.go.
-	_, searchLike := pd.StringHint("search")
-
-	rows, err := r.q.ListStorageBackends(ctx, afterPtr,
-		nameIn, nameLike, displayIn, displayLike, searchLike, providerIn, regionIn,
-		pd.BoolHint("enabled"), pd.BoolHint("read_only"), pd.BoolHint("maintenance"),
-		createdGTE, createdLTE,
-		pageSize)
+	// The filter's SQL-expressible conjuncts narrow the scan, one query per
+	// disjunct merged in name order (fanOut); the handler's CEL pass over the
+	// returned page stays authoritative.
+	rows, err := fanOut(branchHints(cel.StorageBackendSchema, filter), pageSize,
+		func(pd cel.Pushdown) ([]sqlc.ListStorageBackendsRow, error) {
+			nameIn, nameLike := pd.StringHint("backend_id")
+			displayIn, displayLike := pd.StringHint("display_name")
+			providerIn, _ := pd.StringHint("provider")
+			regionIn, _ := pd.StringHint("region")
+			createdGTE, createdLTE := createdBounds(pd)
+			// Only the `like` half — the derived field exists for a search
+			// box, which emits `contains`. See admin_bucket.go.
+			_, searchLike := pd.StringHint("search")
+			return r.q.ListStorageBackends(ctx, afterPtr,
+				nameIn, nameLike, displayIn, displayLike, searchLike, providerIn, regionIn,
+				pd.BoolHint("enabled"), pd.BoolHint("read_only"), pd.BoolHint("maintenance"),
+				createdGTE, createdLTE,
+				pageSize)
+		},
+		func(a, b sqlc.ListStorageBackendsRow) bool { return a.Name < b.Name },
+		func(row sqlc.ListStorageBackendsRow) string { return row.Name },
+	)
 	if err != nil {
 		return nil, "", err
 	}
