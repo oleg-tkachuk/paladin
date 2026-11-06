@@ -45,9 +45,10 @@ from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from socketserver import ThreadingMixIn
 from types import TracebackType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 from urllib.parse import parse_qs, urlencode
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
+from wsgiref.types import StartResponse, WSGIEnvironment
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
@@ -55,10 +56,13 @@ from connectrpc.method import IdempotencyLevel
 from connectrpc.request import RequestContext
 from google.protobuf import descriptor_pool, timestamp_pb2
 from google.protobuf.message import Message
-from google.rpc import error_details_pb2
-from google.type import money_pb2
+
+# googleapis-common-protos ships its messages without stubs.
+from google.rpc import error_details_pb2  # pyright: ignore[reportMissingTypeStubs]
+from google.type import money_pb2  # pyright: ignore[reportMissingTypeStubs]
 
 from paladin import _fake_biscuit
+from paladin._connect_types import Context
 from paladin.admin.v1 import capability_service_pb2
 from paladin.admin.v1.capability_service_connect import (
     CapabilityServiceSync,
@@ -100,6 +104,11 @@ from paladin.transfer import CHECKSUM_SHA256
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
     from typing import Self
+
+    from protovalidate import ValidationError, Validator, ViolationPb
+
+REQ = TypeVar("REQ")
+RES = TypeVar("RES")
 
 DEFAULT_COLLECTION = "default"
 DEFAULT_PUBLIC_COLLECTION = "public"
@@ -242,12 +251,11 @@ class Request:
     it changes nothing in the fake."""
 
     def _copy(self) -> Request:
-        return Request(self.procedure, dict(self.headers), _copy_message(self.message))
+        message = _copy_message(self.message) if self.message is not None else None
+        return Request(self.procedure, dict(self.headers), message)
 
 
-def _copy_message(message: Message | None) -> Message | None:
-    if message is None:
-        return None
+def _copy_message[M: Message](message: M) -> M:
     out = type(message)()
     out.CopyFrom(message)
     return out
@@ -272,8 +280,8 @@ store, a refused part."""
 class _Multipart:
     name: str
     size: int
-    parts: dict[int, bytes] = field(default_factory=dict)
-    bindings: dict[int, _Binding] = field(default_factory=dict)
+    parts: dict[int, bytes] = field(default_factory=dict[int, bytes])
+    bindings: dict[int, _Binding] = field(default_factory=dict[int, _Binding])
 
 
 _CAPABILITY_SERVICE = capability_service_pb2.DESCRIPTOR.services_by_name[
@@ -339,16 +347,23 @@ class _Calls:
     def __init__(self, fake: FakePaladin) -> None:
         self._fake = fake
 
-    def intercept_unary_sync(self, call_next, request, ctx: RequestContext):  # type: ignore[no-untyped-def]
+    def intercept_unary_sync(
+        self,
+        call_next: Callable[[REQ, RequestContext[REQ, RES]], RES],
+        request: REQ,
+        ctx: RequestContext[REQ, RES],
+    ) -> RES:
+        # Every request the fake serves is a contract message.
+        message = cast(Message, request)
         method = ctx.method
         procedure = f"/{method.service_name}/{method.name}"
         headers = dict(ctx.request_headers.items())
-        self._fake._record(Request(procedure, headers, _copy_message(request)))
+        self._fake._record(Request(procedure, headers, _copy_message(message)))
         if self._fake.strict_auth:
-            self._fake._authenticate(procedure, headers, request)
+            self._fake._authenticate(procedure, headers, message)
         # After authentication, as the server's interceptor chain runs it.
-        self._fake._validate(request)
-        err = self._fake._take_rpc_fault(procedure, request)
+        self._fake._validate(message)
+        err = self._fake._take_rpc_fault(procedure, message)
         if err is not None:
             raise err
         return self._fake._memoise(procedure, request, ctx, call_next)
@@ -777,7 +792,7 @@ class _CapabilityRecord:
 
     msg: capability_service_pb2.Capability
     credentials: list[str]
-    children: list[str] = field(default_factory=list)
+    children: list[str] = field(default_factory=list[str])
     revocation: capability_service_pb2.CapabilityRevocation | None = None
     """Its own revocation entry, the first one written; None while it has none."""
     requests: int = 0
@@ -832,7 +847,9 @@ def _check_ops(ops: Iterable[str]) -> None:
             raise _with_reason(Code.INVALID_ARGUMENT, refusal)
 
 
-def _biscuit_status(jkt: str, nbf: datetime | None, now: datetime) -> int:
+def _biscuit_status(
+    jkt: str, nbf: datetime | None, now: datetime
+) -> capability_service_pb2.BiscuitStatus:
     """The server's: a key-bound capability and one valid only later go
     without a Biscuit; its ops play no part."""
     if jkt:
@@ -842,7 +859,7 @@ def _biscuit_status(jkt: str, nbf: datetime | None, now: datetime) -> int:
     return capability_service_pb2.BISCUIT_STATUS_ISSUED
 
 
-def _require_biscuit(status: int) -> None:
+def _require_biscuit(status: capability_service_pb2.BiscuitStatus) -> None:
     """``require_biscuit``'s refusal of a capability ``status`` leaves without
     its Biscuit."""
     if status != capability_service_pb2.BISCUIT_STATUS_ISSUED:
@@ -853,11 +870,14 @@ def _require_biscuit(status: int) -> None:
         )
 
 
-def _not_before(request: Message) -> datetime | None:
+def _not_before(
+    request: capability_service_pb2.CapabilityServiceIssueRequest
+    | capability_service_pb2.CapabilityServiceDelegateRequest,
+) -> datetime | None:
     """The request's ``not_before``, None when it names none."""
     if not request.HasField("not_before"):
         return None
-    return request.not_before.ToDatetime(tzinfo=UTC)  # type: ignore[attr-defined,no-any-return]
+    return request.not_before.ToDatetime(tzinfo=UTC)
 
 
 # What the server's issuer refuses a delegation with (limes.ErrDelegationTooWide).
@@ -1145,6 +1165,8 @@ class _CapabilityService(CapabilityServiceSync):
             )
             fake._revoke_capability(request.id, cascade=request.cascade_children, entry=entry)
             # The first entry stands, as the server keeps it.
+            # _revoke_capability has just recorded it, or kept an earlier one.
+            assert record.revocation is not None
             out = capability_service_pb2.CapabilityRevocation()
             out.CopyFrom(record.revocation)
         return capability_service_pb2.CapabilityServiceRevokeResponse(
@@ -1235,7 +1257,8 @@ class _CapabilityService(CapabilityServiceSync):
 
 
 def _list_filters(
-    request: capability_service_pb2.CapabilityServiceListRequest, wanted: set[int]
+    request: capability_service_pb2.CapabilityServiceListRequest,
+    wanted: set[capability_service_pb2.CapabilityDisposition],
 ) -> str:
     """What ``request`` lists, as the server's cursor holds it: the tenant
     (limes binds a cursor to it), the principal kind, the subject, the session
@@ -1247,7 +1270,9 @@ def _list_filters(
     return hashlib.sha256(key.encode()).hexdigest()
 
 
-def _list_dispositions(request: capability_service_pb2.CapabilityServiceListRequest) -> set[int]:
+def _list_dispositions(
+    request: capability_service_pb2.CapabilityServiceListRequest,
+) -> set[capability_service_pb2.CapabilityDisposition]:
     """What ``request`` lists: its dispositions, or, when it names none, the
     active capabilities and those its deprecated include flags add."""
     if request.dispositions:
@@ -1269,8 +1294,8 @@ class FakePaladin(
         """``strict_auth`` checks credentials as the server's data plane does,
         instead of serving every call; see ``issue_bearer_token``."""
         protovalidate = _protovalidate()
-        self._validator = protovalidate.Validator()
-        self._validation_error: type[Exception] = protovalidate.ValidationError
+        self._validator: Validator = protovalidate.Validator()
+        self._validation_error: type[ValidationError] = protovalidate.ValidationError
         self.strict_auth = strict_auth
         """Whether the fake checks credentials."""
         self.tenant = str(uuid.uuid4())
@@ -1310,10 +1335,12 @@ class FakePaladin(
             CapabilityServiceWSGIApplication(_CapabilityService(self), interceptors=faults),
         ]
 
-        def route(environ, respond):  # type: ignore[no-untyped-def]
-            def start_response(status, headers, *exc_info):  # type: ignore[no-untyped-def]
+        def route(environ: WSGIEnvironment, respond: StartResponse) -> Iterable[bytes]:
+            def start_response(
+                status: str, headers: list[tuple[str, str]], exc_info: Any = None
+            ) -> Callable[[bytes], object]:
                 return respond(
-                    status, [*headers, (HEADER_SERVER_VERSION, SERVER_VERSION)], *exc_info
+                    status, [*headers, (HEADER_SERVER_VERSION, SERVER_VERSION)], exc_info
                 )
 
             if environ["PATH_INFO"].startswith(_STORAGE):
@@ -1483,7 +1510,7 @@ class FakePaladin(
         with self._lock:
             faults = list(self._rpc_faults.get(procedure, []))
         for fault in reversed(faults):
-            if fault.match is not None and not fault.match(_copy_message(message)):  # type: ignore[arg-type]
+            if fault.match is not None and not fault.match(_copy_message(message)):
                 continue
             with self._lock:
                 live = any(f is fault for f in self._rpc_faults.get(procedure, []))
@@ -1540,7 +1567,7 @@ class FakePaladin(
         now: datetime,
         nbf: datetime | None,
         expires: datetime,
-        status: int,
+        status: capability_service_pb2.BiscuitStatus,
         parent: str,
     ) -> capability_service_pb2.CapabilityServiceIssueResponse:
         """Record ``c``, issued at ``now`` and valid from ``nbf`` until
@@ -1575,7 +1602,9 @@ class FakePaladin(
         res.capability.CopyFrom(c)
         return res
 
-    def _disposition(self, record: _CapabilityRecord, now: datetime) -> int:
+    def _disposition(
+        self, record: _CapabilityRecord, now: datetime
+    ) -> capability_service_pb2.CapabilityDisposition:
         """``record``'s disposition at ``now``. The caller holds the lock."""
         r: _CapabilityRecord | None = record
         while r is not None:
@@ -1705,9 +1734,7 @@ class FakePaladin(
         for r in chain:
             r.requests += 1
 
-    def _allow_locked(
-        self, ctx: RequestContext, request: Message, resource: str, *ops: str
-    ) -> None:
+    def _allow_locked(self, ctx: Context, request: Message, resource: str, *ops: str) -> None:
         """Raise the server's refusal when the capability a call carries does
         not allow ``ops`` on ``resource``, in order; return when it carries none
         CapabilityService issued, or the fake is not strict."""
@@ -1882,7 +1909,13 @@ class FakePaladin(
         with self._lock:
             return list(self._storage_ops)
 
-    def _memoise(self, procedure: str, request: Message, ctx: RequestContext, call_next):  # type: ignore[no-untyped-def]
+    def _memoise(
+        self,
+        procedure: str,
+        request: REQ,
+        ctx: RequestContext[REQ, RES],
+        call_next: Callable[[REQ, RequestContext[REQ, RES]], RES],
+    ) -> RES:
         """Answer as the server's idempotency interceptor does: a call
         declared free of side effects runs as it is; one with a key replays
         the response first given to the same request with that key, and is
@@ -1893,14 +1926,15 @@ class FakePaladin(
         key = ctx.request_headers.get(HEADER_IDEMPOTENCY_KEY.lower(), "")
         if not key:
             return call_next(request, ctx)
-        fingerprint = hashlib.sha256(request.SerializeToString(deterministic=True)).digest()
+        message = cast(Message, request)
+        fingerprint = hashlib.sha256(message.SerializeToString(deterministic=True)).digest()
         slot = (procedure, key)
         with self._lock:
             prior = self._replays.get(slot)
         if prior is not None:
             if prior[0] != fingerprint:
                 raise ConnectError(Code.INVALID_ARGUMENT, _KEY_REUSED)
-            return prior[1]
+            return cast(RES, prior[1])
         response = call_next(request, ctx)
         with self._lock:
             self._replays[slot] = (fingerprint, response)
@@ -1982,17 +2016,13 @@ class FakePaladin(
         try:
             self._validator.validate(request)
         except self._validation_error as err:
-            # Each violation named by its field, as the server's message does.
-            named = "; ".join(
-                ".".join(e.field_name for e in v.proto.field.elements) + f": {v.proto.message}"
-                for v in err.violations  # type: ignore[attr-defined]
-            )
+            named = "; ".join(_violation_text(v.proto) for v in err.violations)
             raise ConnectError(
                 Code.INVALID_ARGUMENT,
                 f"{_VALIDATION_FAILED}: {named}",
                 # protovalidate builds its Violations with connectrpc's own
                 # Protobuf runtime, which a ConnectError detail takes as is.
-                [err.to_proto()],  # type: ignore[attr-defined]
+                [err.to_proto()],
             ) from err
 
     @staticmethod
@@ -2033,7 +2063,9 @@ class FakePaladin(
 
     # ─── ObjectService ──────────────────────────────────────────────────────
 
-    def upload_object(self, request, ctx):  # type: ignore[no-untyped-def]
+    def upload_object(
+        self, request: object_service_pb2.UploadObjectRequest, ctx: Context
+    ) -> object_service_pb2.UploadObjectResponse:
         self._parent(request.parent)
         _require_checksum(request.checksum_value)
         with self._lock:
@@ -2052,7 +2084,9 @@ class FakePaladin(
             url.required_headers.update(o.bound.headers())
             return object_service_pb2.UploadObjectResponse(object=o.msg, upload_url=url)
 
-    def complete_object(self, request, ctx):  # type: ignore[no-untyped-def]
+    def complete_object(
+        self, request: object_service_pb2.CompleteObjectRequest, ctx: Context
+    ) -> types_pb2.Object:
         with self._lock:
             o = self._objects.get(request.name)
             if o is None:
@@ -2076,13 +2110,17 @@ class FakePaladin(
             self._commit(o, o.put, registered)
             return o.msg
 
-    def get_object(self, request, ctx):  # type: ignore[no-untyped-def]
+    def get_object(
+        self, request: object_service_pb2.GetObjectRequest, ctx: Context
+    ) -> types_pb2.Object:
         with self._lock:
             o = self._get(request.name)
             self._allow_locked(ctx, request, self._object_uri(o), str(Op.GET))
             return o.msg
 
-    def lookup_object(self, request, ctx):  # type: ignore[no-untyped-def]
+    def lookup_object(
+        self, request: object_service_pb2.LookupObjectRequest, ctx: Context
+    ) -> types_pb2.Object:
         prefix = request.parent + _OBJECTS_SEP
         with self._lock:
             for o in self._objects.values():
@@ -2095,7 +2133,9 @@ class FakePaladin(
                     return o.msg
         raise ConnectError(Code.NOT_FOUND, f"{request.parent} has no key {request.key!r}")
 
-    def list_objects(self, request, ctx):  # type: ignore[no-untyped-def]
+    def list_objects(
+        self, request: object_service_pb2.ListObjectsRequest, ctx: Context
+    ) -> object_service_pb2.ListObjectsResponse:
         unhonoured = _unhonoured_list_field(request)
         if unhonoured:
             raise ConnectError(
@@ -2126,7 +2166,9 @@ class FakePaladin(
             resp.page.next_page_token = str(end)
         return resp
 
-    def download_object(self, request, ctx):  # type: ignore[no-untyped-def]
+    def download_object(
+        self, request: object_service_pb2.DownloadObjectRequest, ctx: Context
+    ) -> object_service_pb2.DownloadObjectResponse:
         with self._lock:
             o = self._get(request.name)
             self._allow_locked(
@@ -2139,7 +2181,9 @@ class FakePaladin(
                 url.required_headers[_IF_MATCH] = f'"{o.msg.etag}"'
             return object_service_pb2.DownloadObjectResponse(object=o.msg, download_url=url)
 
-    def delete_object(self, request, ctx):  # type: ignore[no-untyped-def]
+    def delete_object(
+        self, request: object_service_pb2.DeleteObjectRequest, ctx: Context
+    ) -> object_service_pb2.DeleteObjectResponse:
         with self._lock:
             if request.permanent:
                 # As the server: one in the trash is purged too, and the path
@@ -2165,7 +2209,9 @@ class FakePaladin(
 
     # ─── PresignService ─────────────────────────────────────────────────────
 
-    def regenerate_upload_url(self, request, ctx):  # type: ignore[no-untyped-def]
+    def regenerate_upload_url(
+        self, request: presign_service_pb2.RegenerateUploadUrlRequest, ctx: Context
+    ) -> presign_service_pb2.RegenerateUploadUrlResponse:
         """Presigns a PENDING object's upload URL again, bound as the first
         was."""
         with self._lock:
@@ -2179,7 +2225,9 @@ class FakePaladin(
             url.required_headers.update(o.bound.headers())
             return presign_service_pb2.RegenerateUploadUrlResponse(upload_url=url)
 
-    def presign_download(self, request, ctx):  # type: ignore[no-untyped-def]
+    def presign_download(
+        self, request: presign_service_pb2.PresignDownloadRequest, ctx: Context
+    ) -> presign_service_pb2.PresignDownloadResponse:
         """Presigns a GET of an AVAILABLE object on the fake's storage, as the
         server does: an absent TTL is ``DEFAULT_DOWNLOAD_TTL``, one that is
         negative or above ``MAX_PRESIGN_TTL`` is INVALID_ARGUMENT, a name that
@@ -2214,7 +2262,9 @@ class FakePaladin(
 
     # ─── MultipartUploadService ─────────────────────────────────────────────
 
-    def initiate_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
+    def initiate_multipart_upload(
+        self, request: multipart_service_pb2.InitiateMultipartUploadRequest, ctx: Context
+    ) -> multipart_service_pb2.InitiateMultipartUploadResponse:
         self._parent(request.parent)
         if request.size_bytes <= 0:
             raise ConnectError(Code.INVALID_ARGUMENT, "size_bytes must be positive")
@@ -2232,7 +2282,9 @@ class FakePaladin(
                 total_parts=-(-request.size_bytes // PART_SIZE),
             )
 
-    def presign_part(self, request, ctx):  # type: ignore[no-untyped-def]
+    def presign_part(
+        self, request: multipart_service_pb2.PresignPartRequest, ctx: Context
+    ) -> multipart_service_pb2.PresignPartResponse:
         _require_checksum(request.checksum_value)
         with self._lock:
             up = self._uploads.get(request.upload_id)
@@ -2251,7 +2303,9 @@ class FakePaladin(
             url.required_headers.update(up.bindings[n].headers())
         return multipart_service_pb2.PresignPartResponse(upload_url=url)
 
-    def complete_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
+    def complete_multipart_upload(
+        self, request: multipart_service_pb2.CompleteMultipartUploadRequest, ctx: Context
+    ) -> types_pb2.Object:
         with self._lock:
             up = self._uploads.get(request.upload_id)
             if up is None:
@@ -2282,7 +2336,9 @@ class FakePaladin(
             del self._uploads[request.upload_id]
             return o.msg
 
-    def list_parts(self, request, ctx):  # type: ignore[no-untyped-def]
+    def list_parts(
+        self, request: multipart_service_pb2.ListPartsRequest, ctx: Context
+    ) -> multipart_service_pb2.ListPartsResponse:
         with self._lock:
             up = self._uploads.get(request.upload_id)
             if up is None:
@@ -2296,7 +2352,9 @@ class FakePaladin(
                 page=pagination_pb2.PageResponse(),
             )
 
-    def abort_multipart_upload(self, request, ctx):  # type: ignore[no-untyped-def]
+    def abort_multipart_upload(
+        self, request: multipart_service_pb2.AbortMultipartUploadRequest, ctx: Context
+    ) -> multipart_service_pb2.AbortMultipartUploadResponse:
         with self._lock:
             up = self._uploads.get(request.upload_id)
             if up is not None:
@@ -2307,7 +2365,9 @@ class FakePaladin(
 
     # ─── StorageBootstrapService ────────────────────────────────────────────
 
-    def ensure_tenant_storage(self, request, ctx):  # type: ignore[no-untyped-def]
+    def ensure_tenant_storage(
+        self, request: storage_bootstrap_service_pb2.EnsureTenantStorageRequest, ctx: Context
+    ) -> storage_bootstrap_service_pb2.EnsureTenantStorageResponse:
         """Records the bucket and the collections, and reports which this call
         created. Any backend id is taken to exist; every collection already
         works for objects, bootstrapped or not."""
@@ -2335,7 +2395,7 @@ class FakePaladin(
 
     # ─── Storage ────────────────────────────────────────────────────────────
 
-    def _serve_public(self, environ, start_response):  # type: ignore[no-untyped-def]
+    def _serve_public(self, environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
         """An unsigned GET of a public object, as the store answers it: the
         bytes with the collection's Cache-Control, 404 once it is gone."""
         if environ["REQUEST_METHOD"] != _GET:
@@ -2363,7 +2423,7 @@ class FakePaladin(
         )
         return [body]
 
-    def _storage(self, environ, start_response):  # type: ignore[no-untyped-def]
+    def _storage(self, environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
         object_id = environ["PATH_INFO"][len(_STORAGE) :]
         raw_query = environ.get("QUERY_STRING", "")
         query = parse_qs(raw_query)
@@ -2519,7 +2579,16 @@ def _protovalidate() -> Any:
     return protovalidate
 
 
-def _status(start_response, status: str | int, body: str = "") -> list[bytes]:  # type: ignore[no-untyped-def]
+def _violation_text(violation: ViolationPb) -> str:
+    """One violation as the server's message words it: named by its field's
+    path, or bare when a rule on the whole message refused it."""
+    if violation.field is None:
+        return violation.message
+    path = ".".join(e.field_name for e in violation.field.elements)
+    return f"{path}: {violation.message}"
+
+
+def _status(start_response: StartResponse, status: str | int, body: str = "") -> list[bytes]:
     if isinstance(status, int):
         status = f"{status} {HTTPStatus(status).phrase}"
     encoded = body.encode()
@@ -2527,7 +2596,7 @@ def _status(start_response, status: str | int, body: str = "") -> list[bytes]:  
     return [encoded]
 
 
-def _unimplemented(start_response) -> list[bytes]:  # type: ignore[no-untyped-def]
+def _unimplemented(start_response: StartResponse) -> list[bytes]:
     """What a server answers for a procedure it does not serve."""
     body = json.dumps({"code": "unimplemented", "message": "not served by the fake"}).encode()
     start_response(

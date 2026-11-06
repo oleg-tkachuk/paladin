@@ -60,17 +60,6 @@ the same commit. Treat this file like a runtime invariant.
   enforced by `release.yaml`.
 - **Blockers:** the owner's decision.
 
-### `paladin.testing` is not type-checked (ADR-0043, step 5)
-
-- **Status:** Deferred.
-- **Reason:** the rest of the Python SDK is checked strictly by pyright in
-  `verify-py-sdk`; `src/paladin/testing.py`, the in-memory fake, is excluded
-  in `[tool.pyright]` because it still has about 320 findings, mostly values
-  from protobuf messages and request handlers it leaves untyped.
-- **Definition of Done:** `testing.py` is removed from `[tool.pyright]`'s
-  `exclude` in `sdk/python/pyproject.toml` and pyright reports nothing.
-- **Blockers:** none.
-
 ### The SDKs are pre-1.0 and the Python SDK is not published (ADR-0043, step 7)
 
 - **Status:** Blocked.
