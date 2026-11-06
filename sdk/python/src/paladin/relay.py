@@ -16,10 +16,8 @@ own wraps its transport the same way; without it, typed errors carry no
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
-from typing import Any
+from collections.abc import Mapping
+from contextvars import ContextVar, Token
 
 import pyqwest
 
@@ -56,15 +54,25 @@ class Captured:
 _waiting: ContextVar[tuple[Captured, ...]] = ContextVar("paladin_response_headers", default=())
 
 
-@contextmanager
-def captured() -> Iterator[Captured]:
-    """Receive the headers of the responses to calls made within."""
-    holder = Captured()
-    token = _waiting.set((*_waiting.get(), holder))
-    try:
-        yield holder
-    finally:
-        _waiting.reset(token)
+class captured:
+    """Receive the headers of the responses to calls made within.
+
+    A class rather than a generator: its ``__exit__`` returns None, which
+    tells a type checker no exception is swallowed, so a value bound inside
+    the block is bound after it.
+    """
+
+    def __init__(self) -> None:
+        self._holder = Captured()
+        self._token: Token[tuple[Captured, ...]] | None = None
+
+    def __enter__(self) -> Captured:
+        self._token = _waiting.set((*_waiting.get(), self._holder))
+        return self._holder
+
+    def __exit__(self, *exc: object) -> None:
+        if self._token is not None:
+            _waiting.reset(self._token)
 
 
 def _sent() -> None:
@@ -72,7 +80,7 @@ def _sent() -> None:
         holder.relayed = True
 
 
-def _received(headers: Mapping[str, str]) -> None:
+def _received(headers: pyqwest.Headers | Mapping[str, str]) -> None:
     holders = _waiting.get()
     if not holders:
         return
@@ -85,10 +93,12 @@ class RelaySyncTransport:
     """A ``pyqwest.SyncTransport`` that relays response headers to the SDK;
     ``inner`` defaults to pyqwest's shared transport."""
 
-    def __init__(self, inner: Any = None) -> None:
-        self._inner = inner if inner is not None else pyqwest.get_default_sync_transport()
+    def __init__(self, inner: pyqwest.SyncTransport | None = None) -> None:
+        self._inner: pyqwest.SyncTransport = (
+            inner if inner is not None else pyqwest.get_default_sync_transport()
+        )
 
-    def execute_sync(self, request: Any) -> Any:
+    def execute_sync(self, request: pyqwest.SyncRequest) -> pyqwest.SyncResponse:
         _sent()
         response = self._inner.execute_sync(request)
         _received(response.headers)
@@ -98,10 +108,12 @@ class RelaySyncTransport:
 class RelayTransport:
     """``RelaySyncTransport`` for the async clients."""
 
-    def __init__(self, inner: Any = None) -> None:
-        self._inner = inner if inner is not None else pyqwest.get_default_transport()
+    def __init__(self, inner: pyqwest.Transport | None = None) -> None:
+        self._inner: pyqwest.Transport = (
+            inner if inner is not None else pyqwest.get_default_transport()
+        )
 
-    async def execute(self, request: Any) -> Any:
+    async def execute(self, request: pyqwest.Request) -> pyqwest.Response:
         _sent()
         response = await self._inner.execute(request)
         _received(response.headers)

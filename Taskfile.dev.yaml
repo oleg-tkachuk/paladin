@@ -295,9 +295,10 @@ tasks:
       - task: go-sdk-gen:proto:check
 
   verify-py-sdk:
-    desc: "Lint + test the Python SDK, and fail when its stubs are stale"
+    desc: "Lint, type-check + test the Python SDK, and fail when its stubs are stale"
     cmds:
       - task: py-sdk:lint
+      - task: verify:py-sdk-types
       - task: py-sdk:test
       - ./scripts/py-sdk-gen.test.sh
       - ./scripts/py-sdk-compat.test.sh
@@ -606,6 +607,12 @@ tasks:
     desc: "Fail when the backend image does not copy a directory the server imports"
     cmds:
       - ./scripts/image-sources.test.sh
+
+  verify:py-sdk-types:
+    desc: "Type-check the Python SDK strictly (pyright; [tool.pyright] in its pyproject.toml)"
+    dir: sdk/python
+    cmds:
+      - uv run --frozen pyright
 
   verify:frontend-gen:
     desc: "Fail when the console's Connect-ES stubs are stale against proto/"

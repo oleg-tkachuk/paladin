@@ -19,23 +19,22 @@ import random
 import re
 import secrets
 import time
-from collections.abc import Awaitable, Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from importlib import metadata
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypedDict, TypeVar, cast
 from urllib.parse import urlsplit
 
 import pyqwest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
-from connectrpc.interceptor import Interceptor, InterceptorSync
 from connectrpc.method import IdempotencyLevel
-from connectrpc.request import RequestContext
 
+from paladin._connect_types import Context, Interceptor, InterceptorSync
 from paladin._http_settings import call_deadline
 from paladin.dpop import DPoPAsync, DPoPNonceAsync, DPoPNonceSync, DPoPSync, NonceState
 from paladin.errors import convert
@@ -88,7 +87,7 @@ _NO_KEY = ""
 
 
 @contextmanager
-def idempotency_key(key: str) -> Iterator[None]:
+def idempotency_key(key: str) -> Generator[None]:
     """Send ``key`` as the idempotency key on the calls made inside the block
     that the contract does not declare free of side effects or idempotent —
     those never carry one.
@@ -113,7 +112,7 @@ def idempotency_key(key: str) -> Iterator[None]:
 
 
 @contextmanager
-def no_idempotency_key() -> Iterator[None]:
+def no_idempotency_key() -> Generator[None]:
     """Send every call made inside the block without an idempotency key: not
     the default fresh one, not the request's own field. Such a call is never
     retried, unless the contract declares it free of side effects or
@@ -128,7 +127,7 @@ def no_idempotency_key() -> Iterator[None]:
 
 
 @contextmanager
-def _own_keys() -> Iterator[None]:
+def _own_keys() -> Generator[None]:
     """Lift any ``idempotency_key`` or ``no_idempotency_key`` for the block,
     so each call in it gets the default: a fresh key of its own. For the calls
     a workflow makes more than once per operation — ``download_object`` on a
@@ -225,6 +224,32 @@ class Retry:
         return max(wait, retry_after) if retry_after is not None else wait
 
 
+if TYPE_CHECKING:
+    from paladin.auth import AsyncTokenSource, TokenSource
+    from paladin.dpop import DPoPKey
+
+type CapabilitySource = Callable[[], str | None] | Callable[[], Awaitable[str | None]]
+"""What ``capability_source`` is: called for each call, it returns the
+capability token to send, or nothing; an async client awaits it."""
+
+
+class ClientOptions(TypedDict, total=False):
+    """``Client``'s options that ``connect`` and ``connect_async`` pass on to
+    every plane; ``connect`` sets each plane's ``audience`` itself."""
+
+    bearer_token: str | None
+    api_token: str | None
+    capability: str | None
+    capability_source: CapabilitySource | None
+    retry: Retry | None
+    headers: dict[str, str] | None
+    token_source: TokenSource | AsyncTokenSource | None
+    user_agent_suffix: str | None
+    hooks: Hooks | None
+    interceptors: Sequence[InterceptorSync | Interceptor]
+    dpop_key: DPoPKey | None
+
+
 class Client:
     """What the generated service clients of one plane need."""
 
@@ -235,15 +260,15 @@ class Client:
         bearer_token: str | None = None,
         api_token: str | None = None,
         capability: str | None = None,
-        capability_source: Callable[[], Any] | None = None,
+        capability_source: CapabilitySource | None = None,
         retry: Retry | None = None,
         headers: dict[str, str] | None = None,
-        token_source: Any = None,
+        token_source: TokenSource | AsyncTokenSource | None = None,
         audience: str | None = None,
         user_agent_suffix: str | None = None,
         hooks: Hooks | None = None,
-        interceptors: Sequence[Any] = (),
-        dpop_key: Any = None,
+        interceptors: Sequence[InterceptorSync | Interceptor] = (),
+        dpop_key: DPoPKey | None = None,
     ) -> None:
         """Validate ``base_url`` and hold the credentials and retry policy.
 
@@ -313,21 +338,22 @@ class Client:
         """The first argument of every generated service client."""
         return self._base_url
 
-    def http_client(self, transport: Any = None) -> pyqwest.SyncClient:
+    def http_client(self, transport: pyqwest.SyncTransport | None = None) -> pyqwest.SyncClient:
         """The ``http_client`` for a generated ``…ClientSync``: it relays the
         response headers that typed errors and retries read. ``transport`` is
         a ``pyqwest.SyncTransport`` to send through, pyqwest's shared one by
         default."""
         return pyqwest.SyncClient(RelaySyncTransport(transport))
 
-    def async_http_client(self, transport: Any = None) -> pyqwest.Client:
+    def async_http_client(self, transport: pyqwest.Transport | None = None) -> pyqwest.Client:
         """``http_client`` for a generated async ``…Client``."""
         return pyqwest.Client(RelayTransport(transport))
 
     def interceptors(self) -> list[InterceptorSync]:
         """Interceptors for a generated ``…ClientSync``."""
         result: list[InterceptorSync] = [
-            *self._extra,
+            # The caller gives the kind its clients take (see __init__).
+            *cast("Sequence[InterceptorSync]", self._extra),
             _ErrorsSync(),
             _HeadersSync(self._headers),
             _IdempotencySync(),
@@ -350,7 +376,7 @@ class Client:
     def async_interceptors(self) -> list[Interceptor]:
         """Interceptors for a generated async ``…Client``."""
         result: list[Interceptor] = [
-            *self._extra,
+            *cast("Sequence[Interceptor]", self._extra),
             _ErrorsAsync(),
             _HeadersAsync(self._headers),
             _IdempotencyAsync(),
@@ -373,12 +399,12 @@ class _CapabilitySync:
     def __init__(self, source: Callable[[], Any]) -> None:
         self._source = source
 
-    def on_start_sync(self, ctx: RequestContext) -> None:
+    def on_start_sync(self, ctx: Context) -> None:
         token = self._source()
         if token:
             ctx.request_headers[HEADER_CAPABILITY] = token
 
-    def on_end_sync(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+    def on_end_sync(self, token: None, ctx: Context, error: Exception | None) -> None:
         return None
 
 
@@ -386,23 +412,23 @@ class _CapabilityAsync:
     def __init__(self, source: Callable[[], Any]) -> None:
         self._source = source
 
-    async def on_start(self, ctx: RequestContext) -> None:
+    async def on_start(self, ctx: Context) -> None:
         token = self._source()
         if asyncio.iscoroutine(token):
             token = await token
         if token:
             ctx.request_headers[HEADER_CAPABILITY] = token
 
-    async def on_end(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+    async def on_end(self, token: None, ctx: Context, error: Exception | None) -> None:
         return None
 
 
-def _apply_headers(headers: dict[str, str], ctx: RequestContext) -> None:
+def _apply_headers(headers: dict[str, str], ctx: Context) -> None:
     for name, value in headers.items():
         ctx.request_headers[name] = value
 
 
-def _key_for(request: object, ctx: RequestContext) -> str | None:
+def _key_for(request: object, ctx: Context) -> str | None:
     """The key a unary call sends: the block's, else the request's own field,
     else a fresh one when the call has side effects the contract makes no
     promise about. None when the call needs none."""
@@ -423,7 +449,7 @@ def _key_for(request: object, ctx: RequestContext) -> str | None:
     return secrets.token_hex(_IDEMPOTENCY_KEY_BYTES)
 
 
-def _stamp(request: object, ctx: RequestContext) -> None:
+def _stamp(request: object, ctx: Context) -> None:
     key = _key_for(request, ctx)
     if key:
         ctx.request_headers[HEADER_IDEMPOTENCY_KEY] = key
@@ -459,7 +485,7 @@ def default_retryable(err: ConnectError) -> bool:
     return err.code in _TRANSIENT_CODES
 
 
-def _retryable(retry: Retry, err: ConnectError, ctx: RequestContext) -> bool:
+def _retryable(retry: Retry, err: ConnectError, ctx: Context) -> bool:
     """Whether err is transient and the call safe to repeat: declared free of
     side effects or idempotent, or carrying an idempotency key. The second
     half is not the classifier's to decide."""
@@ -470,7 +496,7 @@ def _retryable(retry: Retry, err: ConnectError, ctx: RequestContext) -> bool:
     return bool(ctx.request_headers.get(HEADER_IDEMPOTENCY_KEY))
 
 
-def _fits(wait: float, ctx: RequestContext) -> bool:
+def _fits(wait: float, ctx: Context) -> bool:
     """Whether a retry after ``wait`` seconds starts before the call's timeout."""
     remaining = ctx.timeout_ms
     return remaining is None or wait * _MS_PER_SECOND < remaining
@@ -480,10 +506,10 @@ class _HeadersSync:
     def __init__(self, headers: dict[str, str]) -> None:
         self._headers = headers
 
-    def on_start_sync(self, ctx: RequestContext) -> None:
+    def on_start_sync(self, ctx: Context) -> None:
         _apply_headers(self._headers, ctx)
 
-    def on_end_sync(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+    def on_end_sync(self, token: None, ctx: Context, error: Exception | None) -> None:
         return None
 
 
@@ -491,10 +517,10 @@ class _HeadersAsync:
     def __init__(self, headers: dict[str, str]) -> None:
         self._headers = headers
 
-    async def on_start(self, ctx: RequestContext) -> None:
+    async def on_start(self, ctx: Context) -> None:
         _apply_headers(self._headers, ctx)
 
-    async def on_end(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+    async def on_end(self, token: None, ctx: Context, error: Exception | None) -> None:
         return None
 
 
@@ -503,7 +529,7 @@ class _IdempotencySync:
     attempt of one call carries the same key."""
 
     def intercept_unary_sync(
-        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+        self, call_next: Callable[[REQ, Context], RES], request: REQ, ctx: Context
     ) -> RES:
         _stamp(request, ctx)
         return call_next(request, ctx)
@@ -512,9 +538,9 @@ class _IdempotencySync:
 class _IdempotencyAsync:
     async def intercept_unary(
         self,
-        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        call_next: Callable[[REQ, Context], Awaitable[RES]],
         request: REQ,
-        ctx: RequestContext,
+        ctx: Context,
     ) -> RES:
         _stamp(request, ctx)
         return await call_next(request, ctx)
@@ -534,7 +560,7 @@ class _TokensSync:
         self._audience = audience
 
     def intercept_unary_sync(
-        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+        self, call_next: Callable[[REQ, Context], RES], request: REQ, ctx: Context
     ) -> RES:
         ctx.request_headers[HEADER_AUTHORIZATION] = _bearer(self._source.token(self._audience))
         try:
@@ -559,9 +585,9 @@ class _TokensAsync:
 
     async def intercept_unary(
         self,
-        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        call_next: Callable[[REQ, Context], Awaitable[RES]],
         request: REQ,
-        ctx: RequestContext,
+        ctx: Context,
     ) -> RES:
         ctx.request_headers[HEADER_AUTHORIZATION] = _bearer(await self._token())
         try:
@@ -575,27 +601,42 @@ class _TokensAsync:
         return await call_next(request, ctx)
 
 
+def _backoff(
+    retry: Retry,
+    hooks: Hooks | None,
+    err: ConnectError,
+    meta: Captured,
+    ctx: Context,
+    ceiling: float,
+    attempt: int,
+) -> float:
+    """How long to wait before ``attempt``, reported to ``hooks``; raises
+    ``err`` when the call is not retried."""
+    if not _retryable(retry, err, ctx):
+        raise err
+    wait = retry.wait(ceiling, _retry_after(meta))
+    if not _fits(wait, ctx):
+        raise err
+    report_retry(hooks, RetryEvent(_procedure(ctx), attempt, wait, err))
+    return wait
+
+
 class _RetrySync:
     def __init__(self, retry: Retry, hooks: Hooks | None) -> None:
         self._retry = retry
         self._hooks = hooks
 
     def intercept_unary_sync(
-        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+        self, call_next: Callable[[REQ, Context], RES], request: REQ, ctx: Context
     ) -> RES:
         attempt = 0
         for ceiling in self._retry.delays():
-            try:
-                with captured() as meta:
+            with captured() as meta:
+                try:
                     return call_next(request, ctx)
-            except ConnectError as err:
-                if not _retryable(self._retry, err, ctx):
-                    raise
-                wait = self._retry.wait(ceiling, _retry_after(meta))
-                if not _fits(wait, ctx):
-                    raise
-                attempt += 1
-                report_retry(self._hooks, RetryEvent(_procedure(ctx), attempt, wait, err))
+                except ConnectError as err:
+                    attempt += 1
+                    wait = _backoff(self._retry, self._hooks, err, meta, ctx, ceiling, attempt)
             time.sleep(wait)
         return call_next(request, ctx)
 
@@ -607,33 +648,28 @@ class _RetryAsync:
 
     async def intercept_unary(
         self,
-        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        call_next: Callable[[REQ, Context], Awaitable[RES]],
         request: REQ,
-        ctx: RequestContext,
+        ctx: Context,
     ) -> RES:
         attempt = 0
         for ceiling in self._retry.delays():
-            try:
-                with captured() as meta:
+            with captured() as meta:
+                try:
                     return await call_next(request, ctx)
-            except ConnectError as err:
-                if not _retryable(self._retry, err, ctx):
-                    raise
-                wait = self._retry.wait(ceiling, _retry_after(meta))
-                if not _fits(wait, ctx):
-                    raise
-                attempt += 1
-                report_retry(self._hooks, RetryEvent(_procedure(ctx), attempt, wait, err))
+                except ConnectError as err:
+                    attempt += 1
+                    wait = _backoff(self._retry, self._hooks, err, meta, ctx, ceiling, attempt)
             await asyncio.sleep(wait)
         return await call_next(request, ctx)
 
 
-def _procedure(ctx: RequestContext) -> str:
+def _procedure(ctx: Context) -> str:
     method = ctx.method
     return f"/{method.service_name}/{method.name}"
 
 
-def _typed(err: ConnectError, ctx: RequestContext, meta: Captured) -> ConnectError:
+def _typed(err: ConnectError, ctx: Context, meta: Captured) -> ConnectError:
     return convert(err, _procedure(ctx), meta, sdk_version(), parse_retry_after)
 
 
@@ -643,7 +679,7 @@ class _DeadlineSync:
     connectrpc instead."""
 
     def intercept_unary_sync(
-        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+        self, call_next: Callable[[REQ, Context], RES], request: REQ, ctx: Context
     ) -> RES:
         timeout_ms = ctx.timeout_ms
         if timeout_ms is None:
@@ -660,7 +696,7 @@ class _ErrorsSync:
     while the interceptors inside see the ``ConnectError`` they act on."""
 
     def intercept_unary_sync(
-        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+        self, call_next: Callable[[REQ, Context], RES], request: REQ, ctx: Context
     ) -> RES:
         with captured() as meta:
             try:
@@ -676,9 +712,9 @@ class _ErrorsSync:
 class _ErrorsAsync:
     async def intercept_unary(
         self,
-        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        call_next: Callable[[REQ, Context], Awaitable[RES]],
         request: REQ,
-        ctx: RequestContext,
+        ctx: Context,
     ) -> RES:
         with captured() as meta:
             try:

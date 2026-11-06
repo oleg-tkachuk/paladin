@@ -17,7 +17,9 @@ from typing import Any
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError, ErrorDetail
 from google.protobuf.message import Message
-from google.rpc import error_details_pb2
+
+# googleapis-common-protos ships its messages without stubs.
+from google.rpc import error_details_pb2  # pyright: ignore[reportMissingTypeStubs]
 from protobuf.wkt import Any as DetailAny
 
 from paladin.common.v1 import error_reason_pb2

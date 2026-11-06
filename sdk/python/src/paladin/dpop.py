@@ -18,18 +18,36 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import json
 import secrets
 import threading
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
-from connectrpc.request import RequestContext
 
+from paladin._connect_types import Context
 from paladin.relay import Captured, captured
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric.ec import (
+        EllipticCurvePrivateKey,
+        EllipticCurvePublicKey,
+    )
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+        Ed25519PrivateKey,
+        Ed25519PublicKey,
+    )
+
+type DPoPKey = Ed25519PrivateKey | EllipticCurvePrivateKey
+"""A key DPoP proofs are signed with: Ed25519, or ECDSA on P-256 (checked
+when it is first used)."""
+
+type DPoPPublicKey = Ed25519PublicKey | EllipticCurvePublicKey
+"""The public half of a ``DPoPKey``."""
 
 REQ = TypeVar("REQ")
 RES = TypeVar("RES")
@@ -55,17 +73,20 @@ def _b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def _crypto() -> Any:
+def _crypto() -> None:
+    """Raise the extra's hint unless ``cryptography`` is installed; the
+    functions that need it import it themselves after this."""
     try:
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils
+        importlib.import_module("cryptography.hazmat.primitives")
     except ImportError as err:  # pragma: no cover - exercised without the extra
         raise ImportError(EXTRA_HINT) from err
-    return hashes, serialization, ec, ed25519, utils
 
 
-def _jwk(public_key: Any) -> dict[str, str]:
-    _, serialization, ec, ed25519, _ = _crypto()
+def _jwk(public_key: DPoPPublicKey) -> dict[str, str]:
+    _crypto()
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+
     if isinstance(public_key, ed25519.Ed25519PublicKey):
         raw = public_key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
         return {"kty": "OKP", "crv": "Ed25519", "x": _b64(raw)}
@@ -82,7 +103,7 @@ def _jwk(public_key: Any) -> dict[str, str]:
     raise TypeError(f"DPoP keys are Ed25519 or ECDSA P-256, not {type(public_key).__name__}")
 
 
-def dpop_thumbprint(public_key: Any) -> str:
+def dpop_thumbprint(public_key: DPoPPublicKey) -> str:
     """The RFC 7638 thumbprint of ``public_key``: the ``confirmation_jkt`` to
     issue or delegate a capability with, binding it to the holder of the key."""
     jwk = _jwk(public_key)
@@ -92,11 +113,14 @@ def dpop_thumbprint(public_key: Any) -> str:
 
 
 def dpop_proof(
-    key: Any, method: str, url: str, token: str, now: float | None = None, nonce: str = ""
+    key: DPoPKey, method: str, url: str, token: str, now: float | None = None, nonce: str = ""
 ) -> str:
     """A proof that the caller holds ``key``, for one ``method`` ``url`` request
     presenting capability ``token``, carrying the server's ``nonce`` if any."""
-    hashes, _, ec, ed25519, utils = _crypto()
+    _crypto()
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils
+
     jwk = _jwk(key.public_key())
     alg = ALG_ED25519 if jwk["kty"] == "OKP" else ALG_ES256
     header = {"typ": "dpop+jwt", "alg": alg, "jwk": jwk}
@@ -150,7 +174,7 @@ def _challenged(err: ConnectError, meta: Captured) -> bool:
 
 
 def _stamp(
-    key: Any, base_url: str, header_capability: str, nonces: NonceState, ctx: RequestContext
+    key: DPoPKey, base_url: str, header_capability: str, nonces: NonceState, ctx: Context
 ) -> None:
     headers = ctx.request_headers
     token = headers.get(header_capability)
@@ -170,7 +194,7 @@ class DPoPNonceSync:
         self._nonces = nonces
 
     def intercept_unary_sync(
-        self, call_next: Callable[[REQ, RequestContext], RES], request: REQ, ctx: RequestContext
+        self, call_next: Callable[[REQ, Context], RES], request: REQ, ctx: Context
     ) -> RES:
         with captured() as meta:
             try:
@@ -195,9 +219,9 @@ class DPoPNonceAsync:
 
     async def intercept_unary(
         self,
-        call_next: Callable[[REQ, RequestContext], Awaitable[RES]],
+        call_next: Callable[[REQ, Context], Awaitable[RES]],
         request: REQ,
-        ctx: RequestContext,
+        ctx: Context,
     ) -> RES:
         with captured() as meta:
             try:
@@ -219,16 +243,16 @@ class DPoPSync:
     the server refuses a proof it has already seen."""
 
     def __init__(
-        self, key: Any, base_url: str, header_capability: str, nonces: NonceState
+        self, key: DPoPKey, base_url: str, header_capability: str, nonces: NonceState
     ) -> None:
         _jwk(key.public_key())  # refuse an unsupported key up front
         self._key, self._base_url, self._header = key, base_url, header_capability
         self._nonces = nonces
 
-    def on_start_sync(self, ctx: RequestContext) -> None:
+    def on_start_sync(self, ctx: Context) -> None:
         _stamp(self._key, self._base_url, self._header, self._nonces, ctx)
 
-    def on_end_sync(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+    def on_end_sync(self, token: None, ctx: Context, error: Exception | None) -> None:
         return None
 
 
@@ -236,14 +260,14 @@ class DPoPAsync:
     """The async ``DPoPSync``."""
 
     def __init__(
-        self, key: Any, base_url: str, header_capability: str, nonces: NonceState
+        self, key: DPoPKey, base_url: str, header_capability: str, nonces: NonceState
     ) -> None:
         _jwk(key.public_key())
         self._key, self._base_url, self._header = key, base_url, header_capability
         self._nonces = nonces
 
-    async def on_start(self, ctx: RequestContext) -> None:
+    async def on_start(self, ctx: Context) -> None:
         _stamp(self._key, self._base_url, self._header, self._nonces, ctx)
 
-    async def on_end(self, token: None, ctx: RequestContext, error: Exception | None) -> None:
+    async def on_end(self, token: None, ctx: Context, error: Exception | None) -> None:
         return None

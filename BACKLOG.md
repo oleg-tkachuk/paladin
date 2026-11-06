@@ -71,14 +71,15 @@ the same commit. Treat this file like a runtime invariant.
   enforced by `release.yaml`.
 - **Blockers:** the owner's decision.
 
-### The Python SDK is not type-checked (ADR-0043, step 5)
+### `paladin.testing` is not type-checked (ADR-0043, step 5)
 
 - **Status:** Deferred.
-- **Reason:** it ships `py.typed`, but no type checker runs in CI, and
-  `token_source`, `dpop_key`, `capability_source` and `connect`'s
-  `**client_options` are `Any`, so a mistyped option fails only at runtime.
-- **Definition of Done:** a strict type checker runs over `sdk/python/src`
-  in CI, and those parameters carry their real types.
+- **Reason:** the rest of the Python SDK is checked strictly by pyright in
+  `verify-py-sdk`; `src/paladin/testing.py`, the in-memory fake, is excluded
+  in `[tool.pyright]` because it still has about 320 findings, mostly values
+  from protobuf messages and request handlers it leaves untyped.
+- **Definition of Done:** `testing.py` is removed from `[tool.pyright]`'s
+  `exclude` in `sdk/python/pyproject.toml` and pyright reports nothing.
 - **Blockers:** none.
 
 ### The SDKs are pre-1.0 and the Python SDK is not published (ADR-0043, step 7)
