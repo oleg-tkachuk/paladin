@@ -79,6 +79,8 @@ var notNameFields = map[protoreflect.Name]bool{
 	"delimiter": true, "destination_key_prefix": true, "etag": true, "external_ref": true, "filter": true,
 	"idempotency_key": true, "key": true, "keys": true, "mode": true, "order_by": true, "prefix": true,
 	"resource_version": true, "upload_id": true,
+	// A tag's value, which ObjectFacets.tags chooses by.
+	"value": true,
 }
 
 func TestDataPlaneNameFieldsAreKnown(t *testing.T) {

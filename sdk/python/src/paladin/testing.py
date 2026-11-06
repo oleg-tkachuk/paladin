@@ -2565,6 +2565,8 @@ def _unhonoured_list_field(request: object_service_pb2.ListObjectsRequest) -> st
         return "sort_order"
     if request.facets.states or request.facets.content_categories:
         return "facets"
+    if request.facets.tags:
+        return "facets.tags"
     if request.count_facets:
         return "count_facets"
     return ""

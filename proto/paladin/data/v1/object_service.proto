@@ -428,14 +428,40 @@ message ListObjectsResponse {
   // by object: a count would include objects the listing does not return.
   repeated paladin.common.v1.FacetCount facet_counts = 5;
   // facet_counts_exact is false when the count stopped at its scan cap: the
-  // counts are then a lower bound.
+  // counts are then a lower bound. It holds for tag_counts too.
   bool facet_counts_exact = 6;
+  // tag_counts, when count_facets asked for them on the first page: for each
+  // tag the listing's objects carry, how many carry it — the filter, the
+  // prefix, the folder level and the other facets applied, but not the tag
+  // choices. Absent when facet_counts is. Only the tags the listing carries
+  // are counted, so this is no inventory: the choices to offer come from
+  // ListDistinctTags. At most 100 values per key, the most frequent first,
+  // then by value; ordered by key.
+  repeated ObjectTagCount tag_counts = 7;
+  // tag_counts_truncated is true when a key carried more values than
+  // tag_counts holds for it.
+  bool tag_counts_truncated = 8;
 }
 
 // ObjectFacets narrows an object listing by the facets it counts.
 message ObjectFacets {
   repeated ObjectState states = 1 [(buf.validate.field).repeated.items.enum = {defined_only: true, not_in: [0]}];
   repeated ObjectContentCategory content_categories = 2 [(buf.validate.field).repeated.items.enum = {defined_only: true, not_in: [0]}];
+  // tags keeps the objects that carry any of these tags.
+  repeated ObjectTag tags = 3 [(buf.validate.field).repeated.max_items = 100];
+}
+
+// ObjectTag is one tag: a key and its value.
+message ObjectTag {
+  string key = 1 [(buf.validate.field).string.min_len = 1];
+  string value = 2;
+}
+
+// ObjectTagCount is how many of a listing's objects carry one tag.
+message ObjectTagCount {
+  string key = 1;
+  string value = 2;
+  int64 count = 3;
 }
 
 // ObjectContentCategory groups content types the way the console filters

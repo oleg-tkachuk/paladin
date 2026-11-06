@@ -53,6 +53,19 @@ func objectFacetsFromProto(f *pb.ObjectFacets) objecth.ObjectFacets {
 			}
 		}
 	}
+	for _, t := range f.GetTags() {
+		out.Tags = append(out.Tags, objecth.Tag{Key: t.GetKey(), Value: t.GetValue()})
+	}
+	return out
+}
+
+// objectTagCountsToProto lists the tag counts in the order the domain gives
+// them: by key, each key's values the most frequent first.
+func objectTagCountsToProto(c *objecth.ObjectFacetCounts) []*pb.ObjectTagCount {
+	out := make([]*pb.ObjectTagCount, 0, len(c.Tags))
+	for _, t := range c.Tags {
+		out = append(out, &pb.ObjectTagCount{Key: t.Tag.Key, Value: t.Tag.Value, Count: t.Count})
+	}
 	return out
 }
 

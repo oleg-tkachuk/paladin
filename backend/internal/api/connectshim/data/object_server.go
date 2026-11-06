@@ -297,6 +297,8 @@ func (s *ObjectServer) ListObjects(ctx context.Context, req *pb.ListObjectsReque
 			if counts != nil {
 				out.FacetCounts = objectFacetCountsToProto(counts)
 				out.FacetCountsExact = counts.Exact
+				out.TagCounts = objectTagCountsToProto(counts)
+				out.TagCountsTruncated = counts.TagsTruncated
 			}
 		}
 	}
