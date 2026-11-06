@@ -77,6 +77,12 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	if idempotencyLookups, err = meterDomain.Int64Counter("paladin_idempotency_lookups_total"); err != nil {
 		t.Fatalf("counter: %v", err)
 	}
+	if capabilityCalls, err = meterDomain.Int64Counter("paladin_capability_calls_total"); err != nil {
+		t.Fatalf("counter: %v", err)
+	}
+	if capabilitySeconds, err = newCapabilityCallDuration(meterDomain); err != nil {
+		t.Fatalf("histogram: %v", err)
+	}
 
 	ctx := context.Background()
 	RecordPresign(ctx, "put", "ok", 0.012)
@@ -86,6 +92,7 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 	RecordQuotaDecision(ctx, "t1", "tenant", "allowed")
 	RecordLoginAttempt(ctx, "invalid_credentials")
 	RecordIdempotencyLookup(ctx, "/paladin.admin.v1.TenantService/CreateTenant", "replayed")
+	RecordCapabilityCall(ctx, "verifier", "verify", CapabilityCallRefused, "expired", 0.001)
 
 	got := names(collect(t, reader))
 	for _, want := range []string{
@@ -98,6 +105,8 @@ func TestDomainInstrumentsReachACollector(t *testing.T) {
 		"paladin_quota_decisions_total",
 		"paladin_login_attempts_total",
 		"paladin_idempotency_lookups_total",
+		"paladin_capability_calls_total",
+		"paladin_capability_call_duration_seconds",
 	} {
 		if !got[want] {
 			t.Errorf("%s never reached the collector", want)
@@ -117,6 +126,7 @@ func TestRecordingWithNilInstrumentsIsSafe(t *testing.T) {
 	quotaDecisions = nil
 	loginAttempts = nil
 	idempotencyLookups = nil
+	capabilityCalls, capabilitySeconds = nil, nil
 
 	ctx := context.Background()
 	RecordPresign(ctx, "get", "ok", 1)
@@ -126,6 +136,7 @@ func TestRecordingWithNilInstrumentsIsSafe(t *testing.T) {
 	RecordQuotaDecision(ctx, "t1", "bucket", "rejected")
 	RecordLoginAttempt(ctx, "ok")
 	RecordIdempotencyLookup(ctx, "m", "miss")
+	RecordCapabilityCall(ctx, "issuer", "issue", CapabilityCallOK, "", 1)
 }
 
 // attrsOf returns the attribute sets recorded for one metric.

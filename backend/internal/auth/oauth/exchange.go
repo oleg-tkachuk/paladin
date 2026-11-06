@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"uuid"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/exp/zapslog"
 
 	"github.com/oleg-tkachuk/limes/exchange"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // The endpoints Mount serves.
@@ -55,7 +54,7 @@ func (h *Handler) WithTokenExchange(ex *exchange.Exchanger, clientIDs map[string
 	handler, err := exchange.NewHandler(exchange.HandlerConfig{
 		Exchanger:    ex,
 		Authenticate: h.exchangeClient,
-		Logger:       slog.New(zapslog.NewHandler(h.log.Named("token-exchange").Core())),
+		Logger:       logger.Slog(h.log, "token-exchange"),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("oauth: token exchange: %w", err)

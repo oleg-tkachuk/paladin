@@ -8,7 +8,7 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	connectrpc.com/connect/v2 v2.0.2
-	github.com/oleg-tkachuk/limes v1.0.0-rc.49
+	github.com/oleg-tkachuk/limes v1.0.0-rc.54
 	github.com/oleg-tkachuk/limes/biscuit v0.1.30
 	github.com/spiffe/go-spiffe/v2 v2.9.0
 	google.golang.org/genproto v0.0.0-20261026165753-2ffab32bce7e

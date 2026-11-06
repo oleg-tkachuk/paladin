@@ -382,7 +382,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// authentication; the handler does its own Cedar gate per RPC.
 		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Verifier, deps.Capability.Store,
 			deps.Capability.Usage, polEngine).
-			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Copies).
+			WithRevoker(deps.Capability.Revoker).
+			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Revoker).
 			WithCopyUsage(deps.Capability.CopyUsage).
 			WithRecords(deps.Capability.Records).
 			WithHoldRelease(deps.Capability.BulkRevocation).
