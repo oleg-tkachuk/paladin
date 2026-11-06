@@ -21,7 +21,7 @@ func TestPurgePreviewToProto(t *testing.T) {
 		Subscriptions:     []tenanth.PurgedSubscription{{ID: sub, SinkKind: "webhook"}},
 		SubscriptionCount: 1,
 		CapabilityCount:   9,
-		Blockers:          tenanth.PurgeBlockers{Collections: 2, Users: 3},
+		Blockers:          tenanth.PurgeBlockers{Collections: 2, Users: 3, BucketsDeleting: 1},
 	})
 	want := &pb.PreviewPurgeTenantResponse{
 		ApiTokens:              []*pb.PurgedResource{{Name: "tenants/" + tenant.String() + "/apiTokens/" + token.String(), DisplayName: "ci"}},
@@ -32,6 +32,7 @@ func TestPurgePreviewToProto(t *testing.T) {
 		Blockers: []*pb.PurgeBlocker{
 			{Kind: pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_COLLECTIONS, Count: 2},
 			{Kind: pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_USERS, Count: 3},
+			{Kind: pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS_DELETING, Count: 1},
 		},
 	}
 	if !proto.Equal(got, want) {

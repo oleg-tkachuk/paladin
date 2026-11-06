@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -49,6 +50,12 @@ func TestThePurgePreviewReadsTheTenantsRowsUnderRLS(t *testing.T) {
 		mustExec(t, ctx, admin,
 			`INSERT INTO users (tenant_id, subject, password_hash, roles) VALUES ($1, 'holder', 'x', '{}')`, owner)
 	}
+	backend := "purge-preview-" + uuid.New().String()
+	mustExec(t, ctx, admin, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backend)
+	for name, state := range map[string]string{"kept": admindomain.BucketProvisionStateReady, "going": admindomain.BucketProvisionStateDeleting} {
+		mustExec(t, ctx, admin, `INSERT INTO buckets (backend_id, name, provision_state, owner_tenant_id)
+			SELECT id, $2, $3, $4 FROM storage_backends WHERE name = $1`, backend, name+"-"+tenant.String()[:8], state, tenant)
+	}
 	records := newCapStore(t, pool)
 	for _, subject := range []string{"agent:a", "agent:b"} {
 		c := mkCap(tenant, subject, time.Now().Add(time.Hour))
@@ -73,7 +80,7 @@ func TestThePurgePreviewReadsTheTenantsRowsUnderRLS(t *testing.T) {
 	if got.CapabilityCount != 2 {
 		t.Errorf("capabilities: %d, want 2", got.CapabilityCount)
 	}
-	if want := (tenanth.PurgeBlockers{Users: 1}); got.Blockers != want {
+	if want := (tenanth.PurgeBlockers{Buckets: 1, BucketsDeleting: 1, Users: 1}); got.Blockers != want {
 		t.Errorf("blockers: %+v, want %+v", got.Blockers, want)
 	}
 }

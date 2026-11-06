@@ -280,10 +280,15 @@ enum PurgeBlockerKind {
   PURGE_BLOCKER_KIND_UNSPECIFIED = 0;
   // Collections, and with them the objects they hold.
   PURGE_BLOCKER_KIND_COLLECTIONS = 1;
-  // Buckets the tenant owns.
+  // Buckets the tenant owns, other than those being deleted.
   PURGE_BLOCKER_KIND_BUCKETS = 2;
   // The tenant's users.
   PURGE_BLOCKER_KIND_USERS = 3;
+  // Buckets whose deletion on the backend is still running
+  // (DeleteBucket with delete_on_backend). They need nothing from the
+  // operator: each row goes once the backend bucket is gone, and the purge
+  // can be retried then.
+  PURGE_BLOCKER_KIND_BUCKETS_DELETING = 4;
 }
 
 message RenameTenantSlugRequest {

@@ -183,8 +183,12 @@ SELECT count(*) FROM event_subscriptions WHERE tenant_id = sqlc.arg('tenant_id')
 -- name: CountPurgeBlockers :one
 -- The ON DELETE RESTRICT children of the tenant, which refuse its purge
 -- while any is left (docs/deletion-semantics.md). Trashed collections count:
--- the foreign key does not tell them apart.
+-- the foreign key does not tell them apart. Buckets being deleted on the
+-- backend are counted apart: they leave without the operator doing anything.
 SELECT
     (SELECT count(*) FROM collections c WHERE c.tenant_id = sqlc.arg('tenant_id'))::bigint AS collections,
-    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id'))::bigint AS buckets,
+    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id')
+        AND b.provision_state <> 'deleting')::bigint AS buckets,
+    (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id')
+        AND b.provision_state = 'deleting')::bigint AS buckets_deleting,
     (SELECT count(*) FROM users u WHERE u.tenant_id = sqlc.arg('tenant_id'))::bigint AS users;

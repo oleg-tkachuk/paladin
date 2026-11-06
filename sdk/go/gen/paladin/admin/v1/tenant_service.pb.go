@@ -35,10 +35,15 @@ const (
 	PurgeBlockerKind_PURGE_BLOCKER_KIND_UNSPECIFIED PurgeBlockerKind = 0
 	// Collections, and with them the objects they hold.
 	PurgeBlockerKind_PURGE_BLOCKER_KIND_COLLECTIONS PurgeBlockerKind = 1
-	// Buckets the tenant owns.
+	// Buckets the tenant owns, other than those being deleted.
 	PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS PurgeBlockerKind = 2
 	// The tenant's users.
 	PurgeBlockerKind_PURGE_BLOCKER_KIND_USERS PurgeBlockerKind = 3
+	// Buckets whose deletion on the backend is still running
+	// (DeleteBucket with delete_on_backend). They need nothing from the
+	// operator: each row goes once the backend bucket is gone, and the purge
+	// can be retried then.
+	PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS_DELETING PurgeBlockerKind = 4
 )
 
 // Enum value maps for PurgeBlockerKind.
@@ -48,12 +53,14 @@ var (
 		1: "PURGE_BLOCKER_KIND_COLLECTIONS",
 		2: "PURGE_BLOCKER_KIND_BUCKETS",
 		3: "PURGE_BLOCKER_KIND_USERS",
+		4: "PURGE_BLOCKER_KIND_BUCKETS_DELETING",
 	}
 	PurgeBlockerKind_value = map[string]int32{
-		"PURGE_BLOCKER_KIND_UNSPECIFIED": 0,
-		"PURGE_BLOCKER_KIND_COLLECTIONS": 1,
-		"PURGE_BLOCKER_KIND_BUCKETS":     2,
-		"PURGE_BLOCKER_KIND_USERS":       3,
+		"PURGE_BLOCKER_KIND_UNSPECIFIED":      0,
+		"PURGE_BLOCKER_KIND_COLLECTIONS":      1,
+		"PURGE_BLOCKER_KIND_BUCKETS":          2,
+		"PURGE_BLOCKER_KIND_USERS":            3,
+		"PURGE_BLOCKER_KIND_BUCKETS_DELETING": 4,
 	}
 )
 
@@ -1659,12 +1666,13 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\"?\n" +
 	" ClearTenantDefaultBindingRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"#\n" +
-	"!ClearTenantDefaultBindingResponse*\x98\x01\n" +
+	"!ClearTenantDefaultBindingResponse*\xc1\x01\n" +
 	"\x10PurgeBlockerKind\x12\"\n" +
 	"\x1ePURGE_BLOCKER_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePURGE_BLOCKER_KIND_COLLECTIONS\x10\x01\x12\x1e\n" +
 	"\x1aPURGE_BLOCKER_KIND_BUCKETS\x10\x02\x12\x1c\n" +
-	"\x18PURGE_BLOCKER_KIND_USERS\x10\x032\xa8\r\n" +
+	"\x18PURGE_BLOCKER_KIND_USERS\x10\x03\x12'\n" +
+	"#PURGE_BLOCKER_KIND_BUCKETS_DELETING\x10\x042\xa8\r\n" +
 	"\rTenantService\x12O\n" +
 	"\fCreateTenant\x12%.paladin.admin.v1.CreateTenantRequest\x1a\x18.paladin.admin.v1.Tenant\x12N\n" +
 	"\tGetTenant\x12\".paladin.admin.v1.GetTenantRequest\x1a\x18.paladin.admin.v1.Tenant\"\x03\x90\x02\x01\x12T\n" +

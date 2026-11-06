@@ -107,4 +107,30 @@ describe("whatBlocksPurge", () => {
     expect(text).toContain("2 collections, 1 user");
     expect(text).toContain("until they are removed");
   });
+
+  it("says buckets still being deleted need only waiting for", () => {
+    expect(
+      whatBlocksPurge([
+        create(PurgeBlockerSchema, {
+          kind: PurgeBlockerKind.BUCKETS_DELETING,
+          count: 1n,
+        }),
+      ]),
+    ).toBe(
+      "1 bucket is still being deleted on the storage backend. Nothing needs doing: retry the purge once it finishes.",
+    );
+  });
+
+  it("asks to remove what is owned, then to wait for the buckets being deleted", () => {
+    const text = whatBlocksPurge([
+      create(PurgeBlockerSchema, { kind: PurgeBlockerKind.BUCKETS, count: 1n }),
+      create(PurgeBlockerSchema, {
+        kind: PurgeBlockerKind.BUCKETS_DELETING,
+        count: 2n,
+      }),
+    ]);
+    expect(text).toBe(
+      "The tenant still owns 1 bucket. The purge is refused until it is removed: restore the tenant, delete it, and trash it again. 2 buckets are still being deleted on the storage backend. Nothing needs doing: retry the purge once they finish.",
+    );
+  });
 });

@@ -575,6 +575,7 @@ func purgePreviewToProto(tenant uuid.UUID, p *tenanth.PurgePreview) *pb.PreviewP
 		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_COLLECTIONS, p.Blockers.Collections},
 		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS, p.Blockers.Buckets},
 		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_USERS, p.Blockers.Users},
+		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS_DELETING, p.Blockers.BucketsDeleting},
 	} {
 		if b.count > 0 {
 			out.Blockers = append(out.Blockers, &pb.PurgeBlocker{Kind: b.kind, Count: b.count})

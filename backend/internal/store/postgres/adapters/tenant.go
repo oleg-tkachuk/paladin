@@ -896,7 +896,12 @@ func (r *TenantRepo) PreviewPurge(ctx context.Context, tenantID uuid.UUID, names
 	if err != nil {
 		return out, fmt.Errorf("preview purge: blockers: %w", err)
 	}
-	out.Blockers = tenanth.PurgeBlockers{Collections: blockers.Collections, Buckets: blockers.Buckets, Users: blockers.Users}
+	out.Blockers = tenanth.PurgeBlockers{
+		Collections:     blockers.Collections,
+		Buckets:         blockers.Buckets,
+		BucketsDeleting: blockers.BucketsDeleting,
+		Users:           blockers.Users,
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return out, fmt.Errorf("preview purge: commit: %w", err)
 	}
