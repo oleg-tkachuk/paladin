@@ -10,14 +10,20 @@ import type { FacetCount } from "@/gen/paladin/common/v1/facet_pb";
 import {
   ObjectContentCategory,
   ObjectContentCategorySchema,
+  type ObjectTagCount,
 } from "@/gen/paladin/data/v1/object_service_pb";
+import { formatCount } from "@/lib/format/locale";
+import { parseKeyValue } from "@/lib/objectFilter";
 import {
   ObjectState,
   ObjectStateSchema,
   type Object$,
 } from "@/gen/paladin/data/v1/types_pb";
 import {
+  AT_LEAST_MARK,
+  FACET_COUNTING,
   groupFacetCounts,
+  type FacetCounting,
   type Facet,
   type FacetCounts,
   type FacetOption,
@@ -28,6 +34,8 @@ import {
 export const OBJECT_FACET_STATUS = "status";
 /** The content-category facet's id, and its URL parameter. */
 export const OBJECT_FACET_TYPE = "type";
+/** The tag facet's id: its choices are "key=value", under the URL's `tag`. */
+export const OBJECT_FACET_TAG = "tag";
 
 // The facets as ListObjectsResponse.facet_counts names them.
 const SERVER_FACET_STATE = "state";
@@ -132,10 +140,22 @@ export function viewFacetSelection(filters: {
   };
 }
 
+/** The tag choice, "key=value", as ListObjectsRequest.facets.tags names it. */
+export function objectTagFacet(
+  tag: string | undefined,
+): { key: string; value: string }[] {
+  const kv = parseKeyValue(tag);
+  return kv ? [kv] : [];
+}
+
 /** The facet choices as ListObjectsRequest.facets names them. */
-export function objectFacetsRequest(selection: FacetSelection): {
+export function objectFacetsRequest(
+  selection: FacetSelection,
+  tag?: string,
+): {
   states: ObjectState[];
   contentCategories: ObjectContentCategory[];
+  tags: { key: string; value: string }[];
 } {
   const states = (selection[OBJECT_FACET_STATUS] ?? []).flatMap((value) => {
     const v = ObjectStateSchema.values.find(
@@ -153,7 +173,7 @@ export function objectFacetsRequest(selection: FacetSelection): {
       return v ? [v.number as ObjectContentCategory] : [];
     },
   );
-  return { states, contentCategories };
+  return { states, contentCategories, tags: objectTagFacet(tag) };
 }
 
 /**
@@ -163,7 +183,10 @@ export function objectFacetsRequest(selection: FacetSelection): {
  * "OBJECT_CONTENT_CATEGORY_PDF", offered as "pdf". A facet the page does not
  * offer is left out.
  */
-export function objectFacetCounts(counts: readonly FacetCount[]): FacetCounts {
+export function objectFacetCounts(
+  counts: readonly FacetCount[],
+  tagCounts: readonly ObjectTagCount[] = [],
+): FacetCounts {
   const named = counts.flatMap((c) => {
     if (c.facet === SERVER_FACET_STATE) {
       const v = ObjectStateSchema.values.find((e) => e.name === c.value);
@@ -187,5 +210,29 @@ export function objectFacetCounts(counts: readonly FacetCount[]): FacetCounts {
     }
     return [];
   });
-  return groupFacetCounts(named);
+  const tags = tagCounts.map((t) => ({
+    facet: OBJECT_FACET_TAG,
+    value: `${t.key}=${t.value}`,
+    count: t.count,
+  }));
+  return groupFacetCounts([...named, ...tags]);
+}
+
+/**
+ * A tag choice, "key=value", as the tag filter lists it: "env: prod · 3",
+ * "· 10k+" where the count is a lower bound, and no count where none is
+ * known — the server withheld them, or capped the key's values short of it.
+ */
+export function tagOptionLabel(
+  option: string,
+  counts: FacetCounts,
+  counting: FacetCounting,
+  truncated: boolean,
+): string {
+  const label = option.replace("=", ": ");
+  if (counting === FACET_COUNTING.withheld) return label;
+  const count = counts.get(OBJECT_FACET_TAG)?.get(option);
+  if (count === undefined && truncated) return label;
+  const shown = formatCount(count ?? 0);
+  return `${label} · ${counting === FACET_COUNTING.lowerBound ? shown + AT_LEAST_MARK : shown}`;
 }

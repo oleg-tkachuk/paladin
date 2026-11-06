@@ -158,10 +158,12 @@ describe("useObjects facets", () => {
   const FACETS = {
     states: [ObjectState.AVAILABLE],
     contentCategories: [ObjectContentCategory.PDF],
+    tags: [{ key: "env", value: "prod" }],
   };
   const COUNTS = [
     { facet: "state", value: "OBJECT_STATE_AVAILABLE", count: 4n },
   ];
+  const TAG_COUNTS = [{ key: "env", value: "dev", count: 2n }];
 
   it("sends the facets, counts them with the first page only, and keeps the counts", async () => {
     h.listObjects.mockClear();
@@ -171,6 +173,8 @@ describe("useObjects facets", () => {
         page: { nextPageToken: "p2" },
         facetCounts: COUNTS,
         facetCountsExact: false,
+        tagCounts: TAG_COUNTS,
+        tagCountsTruncated: true,
       } as never)
       .mockResolvedValueOnce({
         objects: [],
@@ -195,6 +199,8 @@ describe("useObjects facets", () => {
     );
     // The first page's counts stand for the listing.
     expect(result.current.facetCounts).toEqual(COUNTS);
+    expect(result.current.tagCounts).toEqual(TAG_COUNTS);
+    expect(result.current.tagCountsTruncated).toBe(true);
   });
 
   it("asks for no counts unless told to", async () => {

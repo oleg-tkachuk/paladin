@@ -22,14 +22,15 @@ import {
 import { StatusDot } from "@/components/ui/StatusIcon";
 import type { FacetControl } from "@/hooks/useTableFacets";
 import { formatCount } from "@/lib/format/locale";
-import { FACET_COUNTING, type FacetCounting } from "@/lib/table/facets";
+import {
+  AT_LEAST_MARK,
+  FACET_COUNTING,
+  type FacetCounting,
+} from "@/lib/table/facets";
 import { cn } from "@/lib/utils";
 
 /** What the menu says when the loaded rows give no answer to offer. */
 const NOTHING_TO_CHOOSE = "Nothing to filter by";
-
-/** Follows a count that is a lower bound: "10k+". */
-const AT_LEAST_MARK = "+";
 
 /** How an answer reads aloud: "Disabled, 3 rows", or its label alone. */
 function optionName(label: string, count: number, counting: FacetCounting) {

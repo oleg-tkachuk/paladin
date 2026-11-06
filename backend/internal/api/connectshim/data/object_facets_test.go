@@ -71,6 +71,37 @@ func TestListObjects_Facets(t *testing.T) {
 		}
 	})
 
+	t.Run("the tag choices reach the listing and the count, and the tags are counted", func(t *testing.T) {
+		tagged := &objecth.ObjectFacetCounts{
+			States: map[statemachine.State]int64{},
+			Tags: []objecth.TagCount{
+				{Tag: objecth.Tag{Key: "env", Value: "dev"}, Count: 3},
+				{Tag: objecth.Tag{Key: "env", Value: "prod"}, Count: 1},
+			},
+			TagsTruncated: true,
+			Exact:         true,
+		}
+		h := &facetHandler{counts: tagged}
+		req := &pb.ListObjectsRequest{Parent: parent, CountFacets: true, Facets: &pb.ObjectFacets{
+			Tags: []*pb.ObjectTag{{Key: "env", Value: "prod"}},
+		}}
+		out, err := (&ObjectServer{H: h}).ListObjects(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantTags := []objecth.Tag{{Key: "env", Value: "prod"}}
+		if !slices.Equal(h.listed.Facets.Tags, wantTags) || !slices.Equal(h.countedIn.Facets.Tags, wantTags) {
+			t.Errorf("listed with %+v, counted with %+v, want %v", h.listed.Facets.Tags, h.countedIn.Facets.Tags, wantTags)
+		}
+		got := out.GetTagCounts()
+		if len(got) != 2 || got[0].GetValue() != "dev" || got[0].GetCount() != 3 || got[1].GetValue() != "prod" || got[1].GetKey() != "env" {
+			t.Errorf("tag counts = %v, want env=dev 3 then env=prod 1", got)
+		}
+		if !out.GetTagCountsTruncated() {
+			t.Error("a truncated tag count reported as whole")
+		}
+	})
+
 	t.Run("no counts unless asked", func(t *testing.T) {
 		h := &facetHandler{counts: counts}
 		out, err := (&ObjectServer{H: h}).ListObjects(ctx, &pb.ListObjectsRequest{Parent: parent, Facets: facets})

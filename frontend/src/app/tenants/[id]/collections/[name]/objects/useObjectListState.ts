@@ -117,9 +117,11 @@ export function useObjectListState(): ObjectListState {
   );
   // The facets' choices come from a fixed vocabulary, which the URL reading
   // already holds them to: a value it does not offer never reaches the server.
+  // The tag is a facet too: the server counts each tag without the tag
+  // choice, which it could not if the choice were part of `filter`.
   const facets = useMemo(
-    () => objectFacetsRequest(facetSelection),
-    [facetSelection],
+    () => objectFacetsRequest(facetSelection, unset(tag)),
+    [facetSelection, tag],
   );
   const handleSort = (column: string) => {
     if (isObjectOrderField(column)) toggleSort(column);
@@ -138,7 +140,6 @@ export function useObjectListState(): ObjectListState {
   // nobody can predict is not a filter.
   const filter = buildObjectFilter({
     search: debouncedSearch,
-    tag: unset(tag),
     meta: unset(meta),
   });
 

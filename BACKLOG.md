@@ -762,17 +762,6 @@ order they are being taken up.
   with its filters, from the rows the shared table hooks hold.
 - **Blockers:** none — taken up when it is asked for.
 
-#### Tag facet counts on the object listing
-
-- **Status:** Deferred.
-- **Reason:** a folder's objects count by state and content category beside
-  their choices, but not by tag: tag values are unbounded per key,
-  ListDistinctTags already serves the values (capped at 100 per key) for the
-  tag filter, and a count per key=value would need its own cap and paging.
-- **Definition of Done:** the object listing's tag filter shows a count
-  beside each tag value; or this entry says why not.
-- **Blockers:** none.
-
 #### Facet choices remembered between visits
 
 - **Status:** Deferred (needs an owner decision).

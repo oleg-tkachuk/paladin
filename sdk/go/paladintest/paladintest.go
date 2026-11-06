@@ -905,6 +905,8 @@ func unhonouredListField(req *datav1.ListObjectsRequest) string {
 		return "sort_order"
 	case len(req.GetFacets().GetStates()) > 0 || len(req.GetFacets().GetContentCategories()) > 0:
 		return "facets"
+	case len(req.GetFacets().GetTags()) > 0:
+		return "facets.tags"
 	case req.GetCountFacets():
 		return "count_facets"
 	}

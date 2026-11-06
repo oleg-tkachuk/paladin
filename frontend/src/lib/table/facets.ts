@@ -163,6 +163,9 @@ export function countedOptions<R>(
   return offered.map((o) => ({ ...o, count: counts.get(o.value) ?? 0 }));
 }
 
+/** Follows a count that is a lower bound: "10k+". */
+export const AT_LEAST_MARK = "+";
+
 /** One count a server gave: how many rows give `value` for `facet`. */
 export interface ServerFacetCount {
   facet: string;
