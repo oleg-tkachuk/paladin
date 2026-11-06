@@ -152,6 +152,7 @@ func (s *S3EventSource) event(r s3Record, raw json.RawMessage) (CloudEvent, bool
 	if !ok {
 		return CloudEvent{}, false
 	}
+	subj.Bucket = r.S3.Bucket.Name
 	subj.Etag = r.S3.Object.ETag
 	subj.SizeBytes = r.S3.Object.Size
 	subj.Sequencer = r.S3.Object.Sequencer

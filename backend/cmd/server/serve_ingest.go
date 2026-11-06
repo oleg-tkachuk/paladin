@@ -465,21 +465,15 @@ func newSQSReceiveClient(ctx context.Context, sc config.IngestSQS) (eventingest.
 // `ErrUnrecognisedEvent` on every message and the dedup table fills
 // with junk.
 //
-// BucketName for the SeaweedFS sources is hard-coded to "paladin-primary",
-// the bucket of the cluster's primary backend; BACKLOG.md ("Storage events
-// are not checked against the collection's bucket") tracks deriving it.
+// No source filters by bucket: each event names its own, and
+// eventingest.PromoteHandler acts only on the bucket the event's collection
+// is bound to.
 func pickSource(format string) (eventingest.Source, error) {
 	switch format {
 	case "seaweedfs":
-		return &eventingest.SeaweedFSSource{
-			BucketName: "paladin-primary",
-			URI:        "seaweedfs://primary",
-		}, nil
+		return &eventingest.SeaweedFSSource{URI: "seaweedfs://primary"}, nil
 	case "seaweedfs_nats":
-		return &eventingest.SeaweedFSNATSSource{
-			BucketName: "paladin-primary",
-			URI:        "seaweedfs-nats://primary",
-		}, nil
+		return &eventingest.SeaweedFSNATSSource{URI: "seaweedfs-nats://primary"}, nil
 	case "s3":
 		// Generic AWS-S3 event-notification JSON — AWS S3, or any
 		// S3-compatible store that emits bucket notifications.

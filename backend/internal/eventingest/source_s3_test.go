@@ -33,6 +33,10 @@ func TestS3Source_AWSShape_CreatedPut(t *testing.T) {
 	if ev.ID == "" || ev.ID != again.ID || ev.ID == other.ID {
 		t.Errorf("ids = %q, %q, %q; want one per broker request id, stable on a retry", ev.ID, again.ID, other.ID)
 	}
+	// The handler checks it against the collection's binding.
+	if ev.SubjectFields.Bucket != "paladin" {
+		t.Errorf("bucket = %q, want the record's", ev.SubjectFields.Bucket)
+	}
 	if ev.SubjectFields.TenantID != "11111111-1111-4111-8111-111111111111" {
 		t.Errorf("tenant = %q", ev.SubjectFields.TenantID)
 	}

@@ -428,22 +428,6 @@ open deliberately — each notes why._
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### Storage events are not checked against the collection's bucket
-
-- **Status:** Deferred
-- **Reason:** A storage event names its bucket, but `PromoteHandler` finds
-  the object by tenant, collection and key alone. A source that accepts
-  every bucket — the SeaweedFS webhook route, the `s3` and `minio` routes —
-  would let an event from another bucket at the same path promote or delete
-  the object, so the NATS sources keep a filter instead, `paladin-primary`,
-  hard-coded in `pickSource` (`backend/cmd/server/serve_ingest.go`).
-- **Definition of Done:** `SubjectFields` carries the event's bucket, the
-  handler skips an event whose bucket is not the collection's binding (as
-  `objectResourceName` already reads it), and `pickSource` drops the
-  hard-coded bucket; a test covers an event from another bucket at the same
-  path.
-- **Blockers:** none.
-
 ### Replication: real `StorageReplicator` implementation
 
 - **Status:** Aspirational
