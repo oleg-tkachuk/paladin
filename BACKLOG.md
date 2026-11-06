@@ -48,17 +48,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a `biscuit-python` release with a CPython 3.14 (or abi3)
   wheel.
 
-### Nothing in CI resolves the published Go SDK (ADR-0043, step 3)
-
-- **Status:** Deferred.
-- **Reason:** the backend builds the SDK through `replace => ../sdk/go`, so
-  its `require` of `sdk/go` is never resolved, and a requirement only a
-  consumer sees (a limes release-candidate floor, a test-only module) passes.
-- **Definition of Done:** a CI check builds a minimal consumer against
-  `sdk/go` as a dependency, without `replace`, and fails on a module graph a
-  consumer could not resolve.
-- **Blockers:** none.
-
 ### The SDK version streams are undecided (ADR-0043, step 4)
 
 - **Status:** Blocked.

@@ -293,6 +293,9 @@ tasks:
       - task: go-sdk-otel:lint
       - task: go-sdk-otel:test
       - task: go-sdk-gen:proto:check
+      # A consumer's view of the module: `go get` of the commit, no replace.
+      - ./scripts/go-sdk-consumer.sh
+      - ./scripts/go-sdk-consumer.test.sh
 
   verify-py-sdk:
     desc: "Lint + test the Python SDK, and fail when its stubs are stale"
