@@ -49,18 +49,14 @@ function unescapedQuotes(expr: string): number {
 }
 
 describe("useObjectListState filter escaping", () => {
-  it("builds the ordinary filters as literals", () => {
-    expect(filterFor("tag=env%3Dprod")).toContain('tags["env"] == "prod"');
-  });
-
-  it("escapes both halves of a tag facet, not just the key", () => {
-    const filter = filterFor("tag=" + encodeURIComponent('k"=v" || true || "'));
-    // The whole hostile value stays INSIDE the literals. Asserting
-    // `not.toContain("|| true ||")` would be wrong: those characters
-    // legitimately appear, as data, between escaped quotes. What
-    // distinguishes data from syntax is the quote count and the exact shape.
-    expect(unescapedQuotes(filter)).toBe(4); // two literals, key and value
-    expect(filter).toBe('tags["k\\""] == "v\\" || true || \\""');
+  // The tag is a facet, so the server can count tags without the tag choice:
+  // it reaches the request as data, never as expression text.
+  it("sends the tag as a facet, never in the filter", () => {
+    const hostile = 'k"=v" || true || "';
+    expect(filterFor("tag=" + encodeURIComponent(hostile))).toBe("");
+    expect(facetsFor("tag=" + encodeURIComponent(hostile)).tags).toEqual([
+      { key: 'k"', value: 'v" || true || "' },
+    ]);
   });
 
   it("reads metadata from the URL, escaped", () => {
@@ -77,6 +73,7 @@ describe("useObjectListState facets from the URL", () => {
     expect(facetsFor("status=AVAILABLE,PENDING&type=pdf")).toEqual({
       states: [ObjectState.PENDING, ObjectState.AVAILABLE],
       contentCategories: [ObjectContentCategory.PDF],
+      tags: [],
     });
     expect(filterFor("status=AVAILABLE&type=pdf")).toBe("");
   });
@@ -87,7 +84,11 @@ describe("useObjectListState facets from the URL", () => {
     "status=" + encodeURIComponent("c:\\"),
     "type=" + encodeURIComponent('image" || true || "'),
   ])("sends nothing for %s, which no facet offers", (query) => {
-    expect(facetsFor(query)).toEqual({ states: [], contentCategories: [] });
+    expect(facetsFor(query)).toEqual({
+      states: [],
+      contentCategories: [],
+      tags: [],
+    });
     expect(filterFor(query)).toBe("");
   });
 
@@ -106,6 +107,7 @@ describe("useObjectListState facets from the URL", () => {
         ObjectContentCategory.IMAGE,
         ObjectContentCategory.OTHER,
       ],
+      tags: [],
     });
     expect(new URLSearchParams(window.location.search).get("type")).toBe(
       "image,other",

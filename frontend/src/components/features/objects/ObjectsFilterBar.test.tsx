@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { FacetControl } from "@/hooks/useTableFacets";
-import { OBJECT_FACETS } from "@/lib/objectFacets";
+import { OBJECT_FACETS, OBJECT_FACET_TAG } from "@/lib/objectFacets";
 import { FACET_COUNTING } from "@/lib/table/facets";
 
 import { ObjectsFilterBar, type FilterState } from "./ObjectsFilterBar";
@@ -22,8 +22,8 @@ function facetControls(): FacetControl[] {
   }));
 }
 
-function bar(filter: Partial<FilterState> = {}) {
-  const props = {
+function barProps(filter: Partial<FilterState> = {}) {
+  return {
     filter: {
       search: "",
       tag: undefined,
@@ -43,6 +43,10 @@ function bar(filter: Partial<FilterState> = {}) {
     loading: false,
     onRefresh: vi.fn(),
   };
+}
+
+function bar(filter: Partial<FilterState> = {}) {
+  const props = barProps(filter);
   render(<ObjectsFilterBar {...props} />);
   return props;
 }
@@ -158,5 +162,23 @@ describe("ObjectsFilterBar refresh", () => {
       within(row).getByRole("button", { name: "Refresh the object list" }),
     );
     expect(props.onRefresh).toHaveBeenCalled();
+  });
+});
+
+describe("ObjectsFilterBar tag filter", () => {
+  // The server counts each tag over the listing without the tag choice, so
+  // every option says how many objects choosing it would show.
+  it("offers each tag with how many objects carry it", async () => {
+    const counts = new Map([[OBJECT_FACET_TAG, new Map([["env=prod", 3]])]]);
+    render(
+      <ObjectsFilterBar
+        {...barProps()}
+        tagOptions={["env=dev", "env=prod"]}
+        tagCounts={{ counts, counting: FACET_COUNTING.exact, truncated: false }}
+      />,
+    );
+    await userEvent.click(screen.getByLabelText("Filter by tag"));
+    expect(screen.getByRole("option", { name: "env: prod · 3" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "env: dev · 0" })).toBeTruthy();
   });
 });

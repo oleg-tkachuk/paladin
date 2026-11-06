@@ -12,12 +12,10 @@ describe("buildObjectFilter", () => {
       buildObjectFilter({
         status: "AVAILABLE",
         search: "report",
-        tag: "env=prod",
         meta: "owner=ops",
       }),
     ).toBe(
-      'state == "AVAILABLE" && key.contains("report") && tags["env"] == "prod"' +
-        ' && metadata["owner"] == "ops"',
+      'state == "AVAILABLE" && key.contains("report") && metadata["owner"] == "ops"',
     );
   });
 
