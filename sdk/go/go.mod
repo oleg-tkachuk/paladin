@@ -13,7 +13,7 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.9.0
 	google.golang.org/genproto v0.0.0-20261026165753-2ffab32bce7e
 	google.golang.org/genproto/googleapis/api v0.0.0-20261026165753-2ffab32bce7e
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261026165753-2ffab32bce7e
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261104224025-d1e00e9f33ab
 	google.golang.org/protobuf v1.36.12
 )
 
