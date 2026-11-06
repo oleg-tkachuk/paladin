@@ -491,6 +491,21 @@ the same commit. Treat this file like a runtime invariant.
       validate the cardinality assumption holds for their
       tenant.
 
+### A refunded charge emits no event
+
+- **Status:** Blocked
+- **Reason:** `ChargeCapability` enqueues `paladin.capability.charged` on the
+  charge's own transaction, but `RefundLastCharge` emits nothing: limes'
+  `meter.UsageStore.Refund` takes no callback on its transaction, as `Charge`
+  does. Since the interceptor refunds every call that fails after charging, a
+  subscriber summing `charged` events (`dispatcher.charge_events_enabled`)
+  counts spend the ledger has returned.
+- **Definition of Done:** a refund enqueues `paladin.capability.refunded`,
+  naming the charge it returns, on the refund's transaction, and the event
+  catalogue documents it.
+- **Blockers:** a limes release whose `UsageStore.Refund` runs a callback on
+  its transaction.
+
 ### Event dispatcher: per-tenant Kafka topic prefix
 
 - **Status:** Deferred — the Kafka sink, its SASL/SCRAM and mTLS auth, secret
