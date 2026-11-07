@@ -64,8 +64,9 @@ func newLifecycleEventProbe(t *testing.T, f *dispatcherFixture, tenant, url stri
 
 // expect drains the outbox once and asserts a single CloudEvents 1.0 envelope
 // with the wanted `type` + tenantid reached NATS — the producer-wiring
-// contract (handler called Dispatch after its write).
-func (p *lifecycleEventProbe) expect(t *testing.T, f *dispatcherFixture, tenant, wantType string) {
+// contract (handler called Dispatch after its write). It returns the raw
+// envelope for a caller that also checks the event's data.
+func (p *lifecycleEventProbe) expect(t *testing.T, f *dispatcherFixture, tenant, wantType string) []byte {
 	t.Helper()
 	r := f.outboxRunner(p.d)
 	if n := f.tickOnce(t, r); n != 1 {
@@ -94,9 +95,11 @@ func (p *lifecycleEventProbe) expect(t *testing.T, f *dispatcherFixture, tenant,
 		if env.Subject == "" {
 			t.Error("subject empty — resource_name should be stamped for routing")
 		}
+		return m.Data
 	case <-time.After(2 * time.Second):
 		t.Fatalf("nats: no %q within 2s — producer wired but delivery short-circuited", wantType)
 	}
+	return nil
 }
 
 // TestQuotaHandler_SetQuotaDispatches pins quotah → paladin.quota.set.

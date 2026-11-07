@@ -133,7 +133,7 @@ func TestChargeEmitter_PropagatesDispatchError(t *testing.T) {
 // TestNewChargeEmitter_NilDispatcher: events disabled (nil dispatcher) →
 // nil emitter, so the charge path short-circuits with no overhead.
 func TestNewChargeEmitter_NilDispatcher(t *testing.T) {
-	if got := newChargeEmitter(nil, zap.NewNop()); got != nil {
-		t.Fatalf("newChargeEmitter(nil) = %v, want nil", got)
+	if got := NewChargeEmitter(nil, zap.NewNop()); got != nil {
+		t.Fatalf("NewChargeEmitter(nil) = %v, want nil", got)
 	}
 }
