@@ -48,6 +48,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
@@ -898,15 +900,18 @@ func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
 		         WHERE status = 'pending'
 		           AND next_attempt_at <= now()
 		           -- A tenant in the trash is frozen: its events wait for a
-		           -- restore, and go with it on a purge.
-		           AND NOT EXISTS (SELECT 1 FROM tenants t
-		                            WHERE t.id = event_deliveries.tenant_id AND t.deleted_at IS NOT NULL)
+		           -- restore, and go with it on a purge. All but the one that
+		           -- says it was trashed, which would otherwise reach its
+		           -- subscribers only once the trash no longer held it.
+		           AND (event_deliveries.event_type = $3
+		                OR NOT EXISTS (SELECT 1 FROM tenants t
+		                                WHERE t.id = event_deliveries.tenant_id AND t.deleted_at IS NOT NULL))
 		         ORDER BY next_attempt_at
 		         FOR UPDATE SKIP LOCKED
 		         LIMIT $1)
 		RETURNING id, tenant_id, subscription_id, event_type, event_at, event_payload, attempts
 	`
-	rows, err := r.Pool.Query(ctx, q, batch, claimLease.Seconds())
+	rows, err := r.Pool.Query(ctx, q, batch, claimLease.Seconds(), eventtype.TenantTrashed)
 	if err != nil {
 		return 0, fmt.Errorf("claim ready: %w", err)
 	}
