@@ -131,7 +131,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// nil on ctx, ChargeCapability skips the dispatch).
 		var chargeEm auth.ChargeEventEmitter
 		if cfg.Dispatcher.ChargeEventsEnabled {
-			chargeEm = newChargeEmitter(dispatcher, l.Named("charge-events"))
+			chargeEm = NewChargeEmitter(dispatcher, l.Named("charge-events"))
 		}
 		capAdmin = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,

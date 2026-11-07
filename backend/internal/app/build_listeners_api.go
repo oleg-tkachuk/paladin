@@ -161,7 +161,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// coarser `kind`) to keep their queue depth bounded.
 		var chargeEm auth.ChargeEventEmitter
 		if cfg.Dispatcher.ChargeEventsEnabled {
-			chargeEm = newChargeEmitter(apiDispatcher, l.Named("charge-events"))
+			chargeEm = NewChargeEmitter(apiDispatcher, l.Named("charge-events"))
 		}
 		// Establishing on the data plane: a capability names its tenant and
 		// the verifier has checked signature, expiry and revocation, so it is

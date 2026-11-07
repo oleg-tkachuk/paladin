@@ -20,7 +20,8 @@ import (
 // (charge, audit) depend on. *worker.Dispatcher satisfies it in production;
 // unit tests substitute a fake to assert the emitted event + the drop guards
 // without standing up a DB + NATS stack (the dispatcher → outbox → NATS path
-// itself is covered by tests/integration/lifecycle_events_test.go).
+// itself is covered by tests/integration/lifecycle_events_test.go, and
+// this adapter on it by tests/integration/charge_event_test.go).
 //
 // DispatchTx is the transactional variant: the outbox rows land on the
 // caller's tx so the fan-out is atomic with the source write (ADR-0003).
@@ -49,11 +50,12 @@ type chargeEmitter struct {
 	log        *zap.Logger
 }
 
-// newChargeEmitter wires the optional event emitter. Returns nil
+// NewChargeEmitter wires the optional event emitter. Returns nil
 // when events are disabled — callers stamp nil on ctx so
 // chargeEventEmitterFromContext returns nil and ChargeCapability
-// short-circuits with no overhead.
-func newChargeEmitter(d *worker.Dispatcher, l *zap.Logger) auth.ChargeEventEmitter {
+// short-circuits with no overhead. Exported so the integration suite
+// drives the adapter the app wires, from charge to subscriber.
+func NewChargeEmitter(d *worker.Dispatcher, l *zap.Logger) auth.ChargeEventEmitter {
 	if d == nil {
 		return nil
 	}
