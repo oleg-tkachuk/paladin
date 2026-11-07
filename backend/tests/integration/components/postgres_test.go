@@ -4,6 +4,7 @@ package components
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"sync"
@@ -40,7 +41,9 @@ import (
 //   - a role a test creates is named after its database (see rlsPool);
 //   - a query over pg_stat_activity filters on current_database();
 //   - a test that ALTERs a shared role, sets goose's globals or calls
-//     t.Setenv stays serial, and says so on its first line.
+//     t.Setenv stays serial, and says so on its first line;
+//   - migrating a database from empty runs 002, which ALTERs the shared
+//     roles, so startPostgresAt does it under sharedRoles.
 const (
 	postgresImage = testimage.Postgres
 	postgresUser  = "paladin"
@@ -243,7 +246,7 @@ func startPostgresAt(tb testing.TB, version int64) *pgxpool.Pool {
 	}
 	db := stdlib.OpenDBFromPool(pool)
 	defer func() { _ = db.Close() }()
-	if err := goose.UpTo(db, ".", version); err != nil {
+	if err := migrateUpTo(db, version); err != nil {
 		tb.Fatalf("migrate up to %d: %v", version, err)
 	}
 	if version >= rolesMigration {
@@ -252,6 +255,19 @@ func startPostgresAt(tb testing.TB, version int64) *pgxpool.Pool {
 		}
 	}
 	return pool
+}
+
+// sharedRoles serialises migrating a database from empty. 002_roles_and_rls
+// ALTERs the runtime roles, and roles belong to the server, not to a
+// database: two tests running it at once update the same pg_authid row, and
+// one fails with "tuple concurrently updated".
+var sharedRoles sync.Mutex
+
+// migrateUpTo runs goose up to version on db, one database at a time.
+func migrateUpTo(db *sql.DB, version int64) error {
+	sharedRoles.Lock()
+	defer sharedRoles.Unlock()
+	return goose.UpTo(db, ".", version)
 }
 
 // testUnit is the unit this package's budgets are in: limes assumes none for
