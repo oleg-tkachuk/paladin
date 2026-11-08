@@ -163,9 +163,7 @@ func jetStreamOutbox(t *testing.T, url, subject string) (*dispatcherFixture, del
 	t.Cleanup(pool.Close)
 	d := f.dispatcher()
 	d.NATS = pool
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	rows := f.allDeliveryRows(t, tenant)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %#v, want one", rows)

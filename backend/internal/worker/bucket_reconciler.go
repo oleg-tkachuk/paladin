@@ -75,11 +75,11 @@ type BucketProvisionRepo interface {
 	MarkDeletionFailed(ctx context.Context, backendID, bucketName string, terminal bool, errMsg string) error
 }
 
-// BucketEventProducer is the outbox fan-out seam the reconciler uses to
+// BucketEventProducer is the event-recording seam the reconciler uses to
 // enqueue the terminal paladin.bucket.deleted on the row-removal tx. nil-safe:
 // an unwired reconciler just removes the row. *Dispatcher implements it.
 type BucketEventProducer interface {
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt Event) (int, error)
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt Event) error
 }
 
 type BucketReconcilerConfig struct {
@@ -334,7 +334,7 @@ func (r *BucketReconciler) emitBucketDeleted(ctx context.Context, tx pgx.Tx, b a
 	if r.events == nil {
 		return nil
 	}
-	_, err := r.events.DispatchTx(ctx, tx, b.OwnerTenantID.String(), Event{
+	err := r.events.RecordTx(ctx, tx, b.OwnerTenantID.String(), Event{
 		Type:         "paladin.bucket.deleted",
 		At:           time.Now().UTC(),
 		TenantID:     b.OwnerTenantID.String(),

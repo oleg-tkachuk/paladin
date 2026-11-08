@@ -122,7 +122,7 @@ func TestAuditMirror_DropsTenantless(t *testing.T) {
 }
 
 // TestAuditMirror_PropagatesDispatchError: the transactional fan-out is NOT
-// best-effort — a DispatchTx failure must propagate so the audit row rolls
+// best-effort — a RecordTx failure must propagate so the audit row rolls
 // back with it (no audit-row-without-event window). The interceptor keeps the
 // RPC best-effort by swallowing the returned error at its own boundary.
 func TestAuditMirror_PropagatesDispatchError(t *testing.T) {
@@ -167,7 +167,7 @@ func TestAuditEventType(t *testing.T) {
 // sites rely on: events disabled → nil emitter; enabled but no dispatcher →
 // nil; enabled with a dispatcher → live emitter.
 func TestAuditMirrorWiring(t *testing.T) {
-	d := &worker.Dispatcher{} // non-nil; never dispatched against here
+	d := worker.NewEventRecorder(nil) // non-nil; never recorded on here
 
 	if got := newAuditMirror(nil, zap.NewNop()); got != nil {
 		t.Errorf("newAuditMirror(nil) = %v, want nil", got)

@@ -28,12 +28,12 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
-// serveDispatcherCmd runs the durable webhook fan-out loop over the
-// outbox in `001_initial_schema.sql`. Producer (admin pod) writes one event_deliveries
-// row per matching subscription on each inbound event; this loop polls
-// the outbox via FOR UPDATE SKIP LOCKED, posts to sinks, and updates
-// status / attempts / next_attempt_at. Multiple replicas safe — the
-// SKIP LOCKED clause hands each row to exactly one replica per cycle.
+// serveDispatcherCmd runs the durable event loop. Producers record each
+// event once in event_outbox; each pass of this loop fans recorded events
+// out to one event_deliveries row per subscription that receives them
+// (ADR-0044), then claims due rows, posts them to sinks, and updates
+// status / attempts / next_attempt_at. Multiple replicas are safe — FOR
+// UPDATE SKIP LOCKED hands each event and each row to one replica per pass.
 //
 // Why a separate pod (vs. running this in `serve worker`):
 //   - Worker pods own per-job leases — the dispatcher loop is one

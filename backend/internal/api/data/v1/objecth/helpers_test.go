@@ -248,10 +248,10 @@ func (f *fakeEvents) Dispatch(_ context.Context, tenantID string, evt worker.Eve
 	return 1, f.err
 }
 
-func (f *fakeEvents) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) (int, error) {
+func (f *fakeEvents) RecordTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) error {
 	f.tids = append(f.tids, tenantID)
 	f.evts = append(f.evts, evt)
-	return 1, f.err
+	return f.err
 }
 
 // ─── dispatchEventTx ───────────────────────────────────────────────────────

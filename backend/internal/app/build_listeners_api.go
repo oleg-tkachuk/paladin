@@ -71,23 +71,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	objH.SetVersionHandler(versionH)
 	objH.SetQuotaUpdater(quotaUpdater)
 
-	// Object lifecycle producer wiring — fans CompleteObject /
-	// DeleteObject / RestoreObject / UpdateObject / CopyObject events
-	// into event_deliveries. Same shape as the admin builder's
-	// dispatcher; we construct a fresh one here because each plane
-	// has its own listener scope (the admin builder's dispatcher is
-	// not exported across packages, and crossing it would weld the
-	// admin and api builders together unnecessarily). NATS pool is
-	// lazy — sockets only open if a NATS sink is actually configured
-	// for an object event the api plane fires.
-	apiDispatcher := &worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(deps.Repos.EventSub),
-		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
-		NATS:        worker.NewNatsConnPool(l.Named("api-nats-pool")),
-		Logger:      l.Named("api-event-dispatcher"),
-		MaxAttempts: 3,
-	}
-	objH.SetEventProducer(apiDispatcher)
+	// Object lifecycle producer wiring — CompleteObject / DeleteObject /
+	// RestoreObject / UpdateObject / CopyObject record their events on their
+	// own transactions; the dispatcher pod fans them out (ADR-0044).
+	apiEvents := worker.NewEventRecorder(l.Named("api-event-dispatcher"))
+	objH.SetEventProducer(apiEvents)
 	objH.SetLogger(l.Named("object-events"))
 	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
 	mpH.SetQuotaUpdater(quotaUpdater)
@@ -100,10 +88,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// lifecycle events an admin create would. repos.BucketV2 doubles as the
 	// backend-existence checker (a tenant may not create backends).
 	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
-	bucketBootstrapH.SetEventProducer(apiDispatcher)
+	bucketBootstrapH.SetEventProducer(apiEvents)
 	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
 	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
-	collectionBootstrapH.SetEventProducer(apiDispatcher)
+	collectionBootstrapH.SetEventProducer(apiEvents)
 	collectionBootstrapH.SetLogger(l.Named("collection-events"))
 	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
 
@@ -161,7 +149,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// coarser `kind`) to keep their queue depth bounded.
 		var chargeEm auth.ChargeEventEmitter
 		if cfg.Dispatcher.ChargeEventsEnabled {
-			chargeEm = NewChargeEmitter(apiDispatcher, l.Named("charge-events"))
+			chargeEm = NewChargeEmitter(apiEvents, l.Named("charge-events"))
 		}
 		// Establishing on the data plane: a capability names its tenant and
 		// the verifier has checked signature, expiry and revocation, so it is

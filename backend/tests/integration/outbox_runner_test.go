@@ -153,9 +153,7 @@ func TestOutboxRunner_SubscriptionLookupErrorIsRetried(t *testing.T) {
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "outbox-lookup")
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
 	d := f.dispatcher()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	id := f.allDeliveryRows(t, tenant)[0].ID
 
 	lookupErr := errors.New("connection reset by peer")
@@ -181,9 +179,7 @@ func TestOutboxRunner_ZeroBatchSizeUsesTheDefault(t *testing.T) {
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "outbox-batch-default")
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
 	d := f.dispatcher()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 
 	r := f.outboxRunner(d)
 	r.BatchSize = 0

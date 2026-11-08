@@ -59,12 +59,9 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
 	eventSubH := wire.ProvideEventSubHandler(repos, polEngine, cfg.Dispatcher.Sinks)
-	// Admin pod owns the producer side of the outbox — Dispatch writes
-	// rows; the dispatcher pod (a separate Deployment, see
-	// cmd/server/serve_dispatcher.go) consumes them. The same struct
-	// retains DeliverOne for the synchronous TestSubscription RPC,
-	// which intentionally bypasses the outbox: operator clicked
-	// "Test delivery", they want the result now.
+	// The admin plane's Dispatcher serves only the synchronous
+	// TestSubscription RPC (DeliverOne), which bypasses the outbox: the
+	// operator clicked "Test delivery" and wants the result now.
 	//
 	// Every broker pool is wired here too — TestSubscription runs
 	// through THIS Dispatcher (not the dispatcher pod's), so without an
@@ -77,7 +74,6 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// pod relies on process exit — same as the NATS pool always has.)
 	dispatcher := &worker.Dispatcher{
 		Store:       worker.NewRepoSubscriptionStore(repos.EventSub),
-		Outbox:      worker.PgxOutboxWriter{Pool: deps.Pool},
 		NATS:        worker.NewNatsConnPool(l.Named("nats-pool")),
 		SQS:         worker.NewSQSClientPool(l.Named("sqs-pool")),
 		RabbitMQ:    worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool")),
@@ -89,23 +85,19 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	eventSubH.SetDispatcher(dispatcher)
 
-	// Producer wiring — handler-level lifecycle events fan out into
-	// event_deliveries on commit. Without this attach the outbox
-	// stays empty in production traffic and only TestSubscription's
-	// DeliverOne path lights up NATS / HTTP. Scope today: tenant
-	// lifecycle (created / updated / deleted). Bucket / collection /
-	// quota lifecycle and data-plane object events follow the same
-	// pattern; tracked under the BACKLOG entry "Event dispatcher:
-	// producer wiring".
-	tenantH.SetEventProducer(dispatcher)
+	// Producer wiring — each handler records its lifecycle events on its
+	// own transaction (ADR-0003); the dispatcher pod (`serve dispatcher`)
+	// fans them out to subscriptions and delivers them (ADR-0044).
+	events := worker.NewEventRecorder(l.Named("event-recorder"))
+	tenantH.SetEventProducer(events)
 	tenantH.SetLogger(l.Named("tenant-events"))
-	bucketV2H.SetEventProducer(dispatcher)
+	bucketV2H.SetEventProducer(events)
 	bucketV2H.SetLogger(l.Named("bucket-events"))
-	collectionH.SetEventProducer(dispatcher)
+	collectionH.SetEventProducer(events)
 	collectionH.SetLogger(l.Named("collection-events"))
-	quotaH.SetEventProducer(dispatcher)
+	quotaH.SetEventProducer(events)
 	quotaH.SetLogger(l.Named("quota-events"))
-	backendH.SetEventProducer(dispatcher)
+	backendH.SetEventProducer(events)
 	backendH.SetLogger(l.Named("backend-events"))
 
 	// ─── Interceptor stack ───────────────────────────────────────────────
@@ -131,7 +123,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// nil on ctx, ChargeCapability skips the dispatch).
 		var chargeEm auth.ChargeEventEmitter
 		if cfg.Dispatcher.ChargeEventsEnabled {
-			chargeEm = NewChargeEmitter(dispatcher, l.Named("charge-events"))
+			chargeEm = NewChargeEmitter(events, l.Named("charge-events"))
 		}
 		capAdmin = auth.CapabilityInterceptorWithEvents(
 			deps.Capability.Verifier,
@@ -269,7 +261,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// Each action that changes one resource also records it before and
 		// after, read through stateReaders, which the servers fill below.
 		middleware.AuditWithState(repos.Audit, auth.AudienceAdmin, false,
-			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, dispatcher, l.Named("audit-mirror")), stateReaders),
+			optionalAuditMirror(cfg.Dispatcher.AuditMirrorEnabled, events, l.Named("audit-mirror")), stateReaders),
 	)
 
 	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("admin")

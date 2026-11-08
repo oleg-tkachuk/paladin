@@ -154,11 +154,43 @@ func (f *dispatcherFixture) seedSubscription(t *testing.T, tenant uuid.UUID, opt
 func (f *dispatcherFixture) dispatcher() *worker.Dispatcher {
 	return &worker.Dispatcher{
 		Store:       directSubStore{pool: f.h.PoolMigrate},
-		Outbox:      worker.PgxOutboxWriter{Pool: f.h.PoolMigrate},
 		HTTPClient:  &http.Client{Timeout: 2 * time.Second},
 		MaxAttempts: 1, // outbox loop owns retry; the sync per-attempt loop is a single shot
 		BaseBackoff: 10 * time.Millisecond,
 	}
+}
+
+// enqueue records evt for tenant on a transaction of its own, as a producer
+// does, and runs the dispatcher's fan-out, leaving the event's delivery rows
+// queued for the next tick. It returns how many rows the fan-out queued for
+// the tenant.
+func (f *dispatcherFixture) enqueue(t *testing.T, tenant string, evt worker.Event) int {
+	t.Helper()
+	ctx := context.Background()
+	countRows := func() int {
+		var n int
+		if err := f.h.PoolMigrate.QueryRow(ctx,
+			`SELECT count(*) FROM event_deliveries WHERE tenant_id = $1`, tenant).Scan(&n); err != nil {
+			t.Fatalf("count delivery rows: %v", err)
+		}
+		return n
+	}
+	before := countRows()
+	tx, err := f.h.PoolMigrate.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if err := worker.NewEventRecorder(nil).RecordTx(ctx, tx, tenant, evt); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatalf("RecordTx: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if _, err := f.outboxRunner(f.dispatcher()).FanOut(ctx); err != nil {
+		t.Fatalf("FanOut: %v", err)
+	}
+	return countRows() - before
 }
 
 // outboxRunner constructs a runner with deterministic-friendly values:
@@ -321,10 +353,7 @@ func TestDispatcher_OutboxToHTTPDelivery_HappyPath(t *testing.T) {
 	subID := f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
 
 	d := f.dispatcher()
-	queued, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant))
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	queued := f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	if queued != 1 {
 		t.Fatalf("queued = %d, want 1", queued)
 	}
@@ -400,9 +429,7 @@ func TestDispatcher_RetryWithBackoff_5xx(t *testing.T) {
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
 
 	d := f.dispatcher()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	rows := f.allDeliveryRows(t, tenant)
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d, want 1", len(rows))
@@ -468,9 +495,7 @@ func TestDispatcher_MaxAttemptsTransitionsToFailed(t *testing.T) {
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
 
 	d := f.dispatcher()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	rows := f.allDeliveryRows(t, tenant)
 	rowID := rows[0].ID
 
@@ -532,10 +557,7 @@ func TestDispatcher_FilterMatch_OnlyMatchingSubsGetRow(t *testing.T) {
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL, Filter: `type == "paladin.tenant.created"`})
 
 	d := f.dispatcher()
-	queued, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("paladin.object.uploaded", tenant))
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	queued := f.enqueue(t, tenant.String(), makeEvent("paladin.object.uploaded", tenant))
 	if queued != 2 {
 		t.Errorf("queued = %d, want 2", queued)
 	}
@@ -569,11 +591,7 @@ func TestDispatcher_DisabledSubsSkipped(t *testing.T) {
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "disp-disabled")
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL, Disabled: true})
 
-	d := f.dispatcher()
-	queued, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant))
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	queued := f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	if queued != 0 {
 		t.Errorf("queued = %d, want 0", queued)
 	}
@@ -656,9 +674,7 @@ func TestDispatcher_ConcurrentRunnersUseSkipLocked(t *testing.T) {
 	d := f.dispatcher()
 	const total = 50
 	for i := 0; i < total; i++ {
-		if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-			t.Fatalf("dispatch %d: %v", i, err)
-		}
+		f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	}
 	if rows := f.allDeliveryRows(t, tenant); len(rows) != total {
 		t.Fatalf("seeded rows = %d, want %d", len(rows), total)
@@ -756,10 +772,7 @@ func TestDispatcher_OutboxToNATSDelivery_HappyPath(t *testing.T) {
 	d := f.dispatcher()
 	d.NATS = pool
 
-	queued, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant))
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	queued := f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	if queued != 1 {
 		t.Fatalf("queued = %d, want 1", queued)
 	}
@@ -864,9 +877,7 @@ func TestDispatcher_SubscriptionStoreOnBypassPool_Delivers(t *testing.T) {
 	d := f.dispatcher()
 	d.Store = repoSubStore(f.h.PoolMigrate)
 
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	if n := f.tickOnce(t, f.outboxRunner(d)); n != 1 {
 		t.Fatalf("tick processed = %d, want 1", n)
 	}
@@ -893,9 +904,7 @@ func TestDispatcher_SubscriptionStoreOnRLSPoolWithNoGUC_LosesEveryDelivery(t *te
 	// it sees the subscription and writes the delivery row.
 	d := f.dispatcher()
 	d.Store = repoSubStore(f.h.PoolMigrate)
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
 		t.Fatalf("enqueued %d rows, want 1 — the setup must produce a row to lose", len(rows))
 	}
@@ -954,9 +963,7 @@ func TestDispatcher_DeliversOutsideTheRowLock(t *testing.T) {
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "disp-unlocked")
 	f.seedSubscription(t, tenant, subOpts{URL: srv.URL})
 	d := f.dispatcher()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	rowID := f.allDeliveryRows(t, tenant)[0].ID
 
 	done := make(chan int, 1)

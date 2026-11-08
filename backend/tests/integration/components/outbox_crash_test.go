@@ -111,13 +111,15 @@ func objectState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id uuid.
 	return s
 }
 
-func deliveryCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, eventType string) int {
+// recordedEventCount counts the events of eventType the producer recorded for
+// tenantID and the dispatcher has not yet fanned out (ADR-0044).
+func recordedEventCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, eventType string) int {
 	t.Helper()
 	var n int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM event_deliveries WHERE tenant_id = $1 AND event_type = $2`,
+		`SELECT count(*) FROM event_outbox WHERE tenant_id = $1 AND event_type = $2`,
 		tenantID, eventType).Scan(&n); err != nil {
-		t.Fatalf("count deliveries: %v", err)
+		t.Fatalf("count recorded events: %v", err)
 	}
 	return n
 }
@@ -141,12 +143,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	f := seedFixture(t, ctx, pool)
 
 	q := sqlc.New(pool)
-	disp := &worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(q)),
-		Outbox:      worker.PgxOutboxWriter{Pool: pool},
-		Logger:      zap.NewNop(),
-		MaxAttempts: 3,
-	}
+	disp := worker.NewEventRecorder(zap.NewNop())
 	sm := statemachine.New(pool)
 	repo := adapters.NewObjectRepo(q, pool)
 
@@ -159,7 +156,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
 		changed, err := sm.PromoteToAvailableInTx(ctx, id, "etag", 10, "", "", statemachine.SourceEvent,
 			func(ctx context.Context, tx pgx.Tx) error {
-				_, e := disp.DispatchTx(ctx, tx, f.tenantID.String(), uploaded(f.tenantID))
+				e := disp.RecordTx(ctx, tx, f.tenantID.String(), uploaded(f.tenantID))
 				return e
 			})
 		if err != nil || !changed {
@@ -168,7 +165,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 		if got := objectState(t, ctx, pool, id); got != "AVAILABLE" {
 			t.Fatalf("state = %s, want AVAILABLE", got)
 		}
-		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded"); n != 1 {
+		if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded"); n != 1 {
 			t.Fatalf("outbox rows = %d, want 1", n)
 		}
 	})
@@ -179,10 +176,10 @@ func TestOutboxCrashWindow(t *testing.T) {
 	// transition. This is the crash window the ADR closes: no half-state.
 	t.Run("dispatch error rolls back promote and outbox", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		before := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded")
+		before := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded")
 		_, err := sm.PromoteToAvailableInTx(ctx, id, "etag", 10, "", "", statemachine.SourceEvent,
 			func(ctx context.Context, tx pgx.Tx) error {
-				if _, e := disp.DispatchTx(ctx, tx, f.tenantID.String(), uploaded(f.tenantID)); e != nil {
+				if e := disp.RecordTx(ctx, tx, f.tenantID.String(), uploaded(f.tenantID)); e != nil {
 					return e
 				}
 				return errors.New("boom: simulated dispatch failure")
@@ -193,7 +190,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 		if got := objectState(t, ctx, pool, id); got != "PENDING" {
 			t.Fatalf("state = %s, want PENDING (rolled back)", got)
 		}
-		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded"); n != before {
+		if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded"); n != before {
 			t.Fatalf("outbox rows = %d, want %d (unchanged — rolled back)", n, before)
 		}
 	})
@@ -206,7 +203,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 			if e := repo.HardDeleteTx(ctx, tx, f.tenantID, id, 0); e != nil {
 				return e
 			}
-			_, e := disp.DispatchTx(ctx, tx, f.tenantID.String(), worker.Event{
+			e := disp.RecordTx(ctx, tx, f.tenantID.String(), worker.Event{
 				Type: "paladin.object.deleted", At: time.Now().UTC(), TenantID: f.tenantID.String(), ResourceName: "r",
 			})
 			return e
@@ -217,7 +214,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 		if objectExists(t, ctx, pool, id) {
 			t.Fatal("row still present, want deleted")
 		}
-		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 1 {
+		if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 1 {
 			t.Fatalf("outbox rows = %d, want 1", n)
 		}
 	})
@@ -226,12 +223,12 @@ func TestOutboxCrashWindow(t *testing.T) {
 	t.Run("dispatch error rolls back hard delete and outbox", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
 		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
-		before := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted")
+		before := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted")
 		err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			if e := repo.HardDeleteTx(ctx, tx, f.tenantID, id, 0); e != nil {
 				return e
 			}
-			if _, e := disp.DispatchTx(ctx, tx, f.tenantID.String(), worker.Event{
+			if e := disp.RecordTx(ctx, tx, f.tenantID.String(), worker.Event{
 				Type: "paladin.object.deleted", At: time.Now().UTC(), TenantID: f.tenantID.String(), ResourceName: "r",
 			}); e != nil {
 				return e
@@ -244,14 +241,14 @@ func TestOutboxCrashWindow(t *testing.T) {
 		if !objectExists(t, ctx, pool, id) {
 			t.Fatal("row removed despite rollback")
 		}
-		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != before {
+		if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != before {
 			t.Fatalf("outbox rows = %d, want %d (unchanged — rolled back)", n, before)
 		}
 	})
 
 	// ── bucket reconciler seam: terminal delete + event commit together ──
 	// The BucketReconciler removes the row and enqueues paladin.bucket.deleted on
-	// one tx (RunInTx + GetTx + DeleteTx + DispatchTx). Exercise that exact
+	// one tx (RunInTx + GetTx + DeleteTx + RecordTx). Exercise that exact
 	// seam against a standalone bucket owned by the fixture tenant.
 	bucketRepo := adapters.NewBucketRepoV2(q, pool)
 	seedOwnedBucket := func(t *testing.T) (string, string) {
@@ -274,7 +271,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 			if e := bucketRepo.DeleteTx(ctx, tx, be, bn, 0); e != nil {
 				return e
 			}
-			_, e = disp.DispatchTx(ctx, tx, b.OwnerTenantID.String(), worker.Event{
+			e = disp.RecordTx(ctx, tx, b.OwnerTenantID.String(), worker.Event{
 				Type: "paladin.bucket.deleted", At: time.Now().UTC(), TenantID: b.OwnerTenantID.String(), ResourceName: "r",
 			})
 			return e
@@ -285,19 +282,19 @@ func TestOutboxCrashWindow(t *testing.T) {
 		if bucketExists(t, ctx, pool, be, bn) {
 			t.Fatal("bucket row still present, want deleted")
 		}
-		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted"); n != 1 {
+		if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted"); n != 1 {
 			t.Fatalf("outbox rows = %d, want 1", n)
 		}
 	})
 
 	t.Run("dispatch error rolls back bucket terminal delete and outbox", func(t *testing.T) {
 		be, bn := seedOwnedBucket(t)
-		before := deliveryCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted")
+		before := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted")
 		err := bucketRepo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			if e := bucketRepo.DeleteTx(ctx, tx, be, bn, 0); e != nil {
 				return e
 			}
-			if _, e := disp.DispatchTx(ctx, tx, f.tenantID.String(), worker.Event{
+			if e := disp.RecordTx(ctx, tx, f.tenantID.String(), worker.Event{
 				Type: "paladin.bucket.deleted", At: time.Now().UTC(), TenantID: f.tenantID.String(), ResourceName: "r",
 			}); e != nil {
 				return e
@@ -310,7 +307,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 		if !bucketExists(t, ctx, pool, be, bn) {
 			t.Fatal("bucket row removed despite rollback")
 		}
-		if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted"); n != before {
+		if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.bucket.deleted"); n != before {
 			t.Fatalf("outbox rows = %d, want %d (unchanged — rolled back)", n, before)
 		}
 	})

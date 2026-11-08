@@ -100,9 +100,7 @@ func TestOutboxRunner_RunDrainsUntilCancelled(t *testing.T) {
 	d := f.dispatcher()
 	dispatch := func() {
 		t.Helper()
-		if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-			t.Fatalf("dispatch: %v", err)
-		}
+		f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	}
 
 	core, logs := observer.New(zap.WarnLevel)
@@ -137,9 +135,7 @@ func TestOutboxRunner_RunSleepsOnlyWhenIdle(t *testing.T) {
 	d := f.dispatcher()
 	const queued = 3
 	for range queued {
-		if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-			t.Fatalf("dispatch: %v", err)
-		}
+		f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	}
 
 	r := f.outboxRunner(d)

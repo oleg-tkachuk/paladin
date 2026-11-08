@@ -8,9 +8,10 @@ Covers `PaladinOutboxNotDraining` in the backend chart's PrometheusRule
 |-----------|---------|
 | the minimum of `paladin_outbox_pending` over 15m stays above 500 rows, for 10m | Event deliveries are being written faster than the dispatcher clears them, or not cleared at all. |
 
-Every state change that notifies subscribers writes an `event_deliveries` row
-in the same transaction (ADR-0003); the dispatcher delivers them afterwards,
-at least once. RPCs keep succeeding while it falls behind, so subscribers
+Every state change that notifies subscribers records an `event_outbox` row in
+the same transaction (ADR-0003); the dispatcher fans each event out to one
+`event_deliveries` row per subscription that receives it, then delivers those,
+at least once (ADR-0044). RPCs keep succeeding while it falls behind, so subscribers
 learn late, or not at all, with nothing failing on the request path. The
 minimum over the window is what the rule reads because depth alone spikes on
 every write burst.
@@ -52,7 +53,7 @@ rises with a healthy loop and an unhealthy sink.
 
    ```
    kubectl --context=<ctx> -n paladin get pods -l app.kubernetes.io/component=dispatcher
-   kubectl --context=<ctx> -n paladin logs deploy/paladin-core-dispatcher --tail=300 | grep -E 'outbox (tick failed|depth sample failed|backlog high)|failed to mark delivery row'
+   kubectl --context=<ctx> -n paladin logs deploy/paladin-core-dispatcher --tail=300 | grep -E 'outbox (tick failed|depth sample failed|backlog high)|failed to mark delivery row|fan-out (failed|backlog)'
    ```
 
    | Line | Cause |
@@ -61,6 +62,8 @@ rises with a healthy loop and an unhealthy sink.
    | `failed to mark delivery row` | A delivery finished but its status write failed; the row is retried. |
    | `outbox depth sample failed` | The gauges were not updated; the alert reads the last sample. |
    | `outbox backlog high` | One tenant has 10,000 pending rows: the warning this alert escalates. |
+   | `event fan-out failed` | Recorded events could not be matched to subscriptions; they stay in `event_outbox` and are retried next pass. |
+   | `fan-out backlog high` | 10,000 recorded events wait for fan-out. `paladin_outbox_pending` does not count them, so a stalled fan-out shows here, not in the alert. |
 
 4. **What the rows say.** As an RLS-exempt role (`paladin_migrate`):
 

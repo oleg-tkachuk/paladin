@@ -474,6 +474,15 @@ type EventDelivery struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type EventOutbox struct {
+	ID           pgtype.UUID        `json:"id"`
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	EventType    string             `json:"event_type"`
+	EventAt      pgtype.Timestamptz `json:"event_at"`
+	EventPayload []byte             `json:"event_payload"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type EventSubscription struct {
 	ID              pgtype.UUID        `json:"id"`
 	TenantID        pgtype.UUID        `json:"tenant_id"`

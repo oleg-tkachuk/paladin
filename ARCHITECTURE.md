@@ -223,8 +223,11 @@ only through the API can be probed but not used yet
 
 Everything durable goes through a transactional outbox (ADR-0003): the
 state change and the event row commit in the same transaction, so there
-is no window where one happened and the other did not. `serve dispatcher`
-drains the outbox to webhook and broker sinks. Delivery is at-least-once,
+is no window where one happened and the other did not. The producer
+records each event once; `serve dispatcher` matches it to the tenant's
+subscriptions and delivers it to webhook and broker sinks (ADR-0044), so
+what an event adds to the producer's transaction does not grow with the
+number of subscriptions. Delivery is at-least-once,
 and the dedup contract consumers need is written down in
 [`docs/event-delivery-dedup.md`](docs/event-delivery-dedup.md).
 

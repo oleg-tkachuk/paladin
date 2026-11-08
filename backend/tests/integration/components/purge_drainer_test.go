@@ -9,12 +9,10 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -68,7 +66,7 @@ func purgedEventCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ten
 	t.Helper()
 	var n int64
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM event_deliveries
+		`SELECT count(*) FROM event_outbox
 		  WHERE tenant_id = $1 AND event_type = 'paladin.object.purged'`, tenantID).Scan(&n); err != nil {
 		t.Fatalf("count purged events: %v", err)
 	}
@@ -125,18 +123,13 @@ func TestPurgeDrainerSettlesAndAnnouncesOnSuccess(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 	id := seedPurgeDebt(t, ctx, pool, f)
-	// The fixture seeds one enabled http subscription, so the fan-out has a
-	// subscriber and the event lands in event_deliveries.
+	// The drainer records its event on its own transaction; the dispatcher
+	// fans it out later (ADR-0044), so the event is counted in event_outbox.
 	deleter := &scriptedDeleter{}
 
 	d := &worker.PurgeDrainer{
 		Pool: pool, Q: sqlc.New(pool), Storage: deleter,
-		Events: &worker.Dispatcher{
-			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(sqlc.New(pool))),
-			Outbox:      worker.PgxOutboxWriter{Pool: pool},
-			Logger:      zap.NewNop(),
-			MaxAttempts: 3,
-		},
+		Events:    worker.NewEventRecorder(zap.NewNop()),
 		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
 	}
 	if err := d.Sweep(ctx); err != nil {
@@ -192,17 +185,11 @@ func TestPurgeDrainerRetriesUntilSuccess(t *testing.T) {
 	}
 }
 
-// failingSubscriptionStore makes Dispatcher.DispatchTx fail, which is the only
-// way to reach the emit branch of the drainer: Events is a *Dispatcher, and
-// its Store is the one seam already in it.
-type failingSubscriptionStore struct{}
+// failingProducer fails every RecordTx: the emit branch of the drainer.
+type failingProducer struct{}
 
-func (failingSubscriptionStore) List(context.Context, admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
-	return nil, "", errors.New("subscription store unavailable")
-}
-
-func (failingSubscriptionStore) Get(context.Context, uuid.UUID) (admindomain.EventSubscription, error) {
-	return admindomain.EventSubscription{}, errors.New("subscription store unavailable")
+func (failingProducer) RecordTx(context.Context, pgx.Tx, string, worker.Event) error {
+	return errors.New("event outbox unavailable")
 }
 
 // The bytes are gone but the announcement failed: the whole tick must roll
@@ -231,7 +218,7 @@ func TestPurgeDrainerKeepsDebtWhenTheAnnouncementFails(t *testing.T) {
 	d := &worker.PurgeDrainer{
 		Pool: pool, Q: sqlc.New(pool),
 		Storage:   &scriptedDeleter{},
-		Events:    &worker.Dispatcher{Store: failingSubscriptionStore{}, Logger: zap.NewNop()},
+		Events:    failingProducer{},
 		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
 	}
 	if err := d.Sweep(ctx); err == nil {

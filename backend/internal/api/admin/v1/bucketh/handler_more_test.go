@@ -42,11 +42,11 @@ func (f *fakeEvents) Dispatch(context.Context, string, worker.Event) (int, error
 	return 0, nil
 }
 
-func (f *fakeEvents) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) (int, error) {
+func (f *fakeEvents) RecordTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) error {
 	f.txCalls++
 	f.lastTenantID = tenantID
 	f.lastEvent = evt
-	return 1, f.dispatchTxErr
+	return f.dispatchTxErr
 }
 
 // ctxTenant builds an authed context with an explicit tenant id, so tests that
@@ -609,7 +609,7 @@ func TestCreateBucket_DispatchesCreatedEvent(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if ev.txCalls != 1 {
-		t.Fatalf("DispatchTx calls = %d, want 1", ev.txCalls)
+		t.Fatalf("RecordTx calls = %d, want 1", ev.txCalls)
 	}
 	if ev.lastEvent.Type != "paladin.bucket.created" {
 		t.Errorf("event type = %q, want paladin.bucket.created", ev.lastEvent.Type)

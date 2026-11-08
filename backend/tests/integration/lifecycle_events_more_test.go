@@ -38,7 +38,7 @@ func TestCollectionHandler_CreateAndDeleteDispatch(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewCollectionRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := collectionpkg.NewHandler(repo, allowAll{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 	ctx := ctxAdmin(t, tenant)
 
 	if _, err := handler.CreateCollection(ctx, collectionpkg.CreateCollectionArgs{
@@ -84,7 +84,7 @@ func TestBucketHandler_CreateAndDeleteOnBackendDispatch(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewBucketRepoV2(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := bucketh.NewHandler(repo, adoptingProvisioner{}, allowAll{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 	ctx := ctxAdmin(t, tenant)
 
 	if _, err := handler.CreateBucket(ctx, bucketh.CreateBucketInput{
@@ -120,7 +120,7 @@ func TestTenantHandler_TrashAndRestoreDispatch(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewTenantRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := tenantpkg.NewHandler(repo, allowAuth{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 	ctx := ctxAdmin(t, tenant)
 
 	if err := handler.DeleteTenant(ctx, tenant, firstResourceVersion); err != nil {
@@ -156,7 +156,7 @@ func TestObjectHandler_RestoreDispatches(t *testing.T) {
 	repo := adapters.NewObjectRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := objectpkg.NewHandler(repo, presentStorage{}, allowAll{}, nil,
 		statemachine.New(f.h.PoolMigrate), objectpkg.PresignConfig{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 	ctx := ctxAdmin(t, tenant)
 
 	if err := handler.DeleteObject(ctx, "docs", objID.String(), "", false, false); err != nil {

@@ -30,7 +30,7 @@ func NewBackendRepoV2(q *sqlc.Queries, pool *pgxpool.Pool) *BackendRepoV2 {
 var _ admindomain.BackendRepository = (*BackendRepoV2)(nil)
 
 // RunInTx runs fn inside one transaction on the repo's pool — the ADR-0003
-// seam so a mutation and its outbox fan-out commit (or roll back) atomically.
+// seam so a mutation and its event record commit (or roll back) atomically.
 func (r *BackendRepoV2) RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

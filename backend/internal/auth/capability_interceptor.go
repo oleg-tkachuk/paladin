@@ -704,7 +704,7 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 	actor := cap.Subject.Subject
 	// Optional transactional fan-out — only wired when the operator
 	// enabled charge events (cfg.Dispatcher.ChargeEventsEnabled).
-	// onCharged runs INSIDE the charge transaction (dispatcher.DispatchTx
+	// onCharged runs INSIDE the charge transaction (dispatcher.RecordTx
 	// on the same tx), so the event outbox rows are atomic with the spend —
 	// no dual-write window. nil ⇒ the store commits counters + ledger
 	// with no fan-out.

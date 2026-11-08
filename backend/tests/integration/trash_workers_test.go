@@ -159,9 +159,7 @@ func TestWorkersLeaveATrashedTenantAlone(t *testing.T) {
 		d := h.dispatcher()
 		for _, tenant := range []uuid.UUID{f.live, f.trashed} {
 			h.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
-			if _, err := d.Dispatch(ctx, tenant.String(), makeEvent("", tenant)); err != nil {
-				t.Fatal(err)
-			}
+			h.enqueue(t, tenant.String(), makeEvent("", tenant))
 		}
 		h.tickOnce(t, h.outboxRunner(d))
 		live := h.allDeliveryRows(t, f.live)

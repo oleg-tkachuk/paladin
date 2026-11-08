@@ -122,16 +122,10 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			},
 			l.Named("bucket-reconciler"),
 		)
-		// Producer-only dispatcher (ADR-0003): on the terminal row removal
-		// the reconciler enqueues paladin.bucket.deleted on the same tx. Bound to
-		// the worker pool; the dispatcher pod drains event_deliveries, so no
-		// NATS pool here (enqueue never opens a socket).
-		bucketRec.SetEventProducer(&worker.Dispatcher{
-			Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),
-			Outbox:      worker.PgxOutboxWriter{Pool: reaperPool},
-			Logger:      l.Named("bucket-reconciler-events"),
-			MaxAttempts: 3,
-		})
+		// On the terminal row removal the reconciler records
+		// paladin.bucket.deleted on the same tx (ADR-0003); the dispatcher
+		// pod fans it out (ADR-0044).
+		bucketRec.SetEventProducer(worker.NewEventRecorder(l.Named("bucket-reconciler-events")))
 		out = append(out, bucketRec)
 	}
 
@@ -260,16 +254,9 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	// duration enables the cascade. Routed: ListHardDeletable returns each
 	// object's backend, so the DELETE reclaims bytes on the object's own
 	// backend rather than the default.
-	// purgeEvents is the producer-only dispatcher the two byte-reclaiming
-	// workers share. Bound to the worker pool; the dispatcher pod drains
-	// event_deliveries, so enqueueing here never opens a socket. Same shape
-	// as the bucket reconciler's above.
-	purgeEvents := &worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(reaperQ)),
-		Outbox:      worker.PgxOutboxWriter{Pool: reaperPool},
-		Logger:      l.Named("purge-events"),
-		MaxAttempts: 3,
-	}
+	// purgeEvents records the events of the two byte-reclaiming workers on
+	// their own transactions; the dispatcher pod fans them out (ADR-0044).
+	purgeEvents := worker.NewEventRecorder(l.Named("purge-events"))
 
 	if cfg.Worker.Jobs.Housekeeping.HardDeleteAfter > 0 {
 		out = append(out, &worker.LifecycleHardDeleter{
@@ -490,12 +477,7 @@ func newPermanentDeleter(
 		sm,
 		objecth.PresignConfig{},
 	)
-	h.SetEventProducer(&worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(q)),
-		Outbox:      worker.PgxOutboxWriter{Pool: pool},
-		Logger:      l.Named("batch-delete-events"),
-		MaxAttempts: 3,
-	})
+	h.SetEventProducer(worker.NewEventRecorder(l.Named("batch-delete-events")))
 	h.SetLogger(l.Named("batch-delete"))
 	return h
 }

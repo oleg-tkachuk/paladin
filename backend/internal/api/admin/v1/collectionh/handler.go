@@ -32,13 +32,12 @@ import (
 )
 
 // EventProducer mirrors the seam used by tenanth / bucketh — narrow
-// interface so handler tests can stub the dispatcher. *worker.Dispatcher
+// interface so handler tests can stub the dispatcher. *worker.EventRecorder
 // implements it. nil-safe via dispatchEvent's guard.
 type EventProducer interface {
-	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
-	// DispatchTx fans the event out on the caller's tx so the outbox rows
-	// commit atomically with the collection mutation (ADR-0003).
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+	// RecordTx records the event on the caller's tx so it commits
+	// atomically with the collection mutation (ADR-0003).
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) error
 }
 
 type Collection struct {
@@ -133,8 +132,8 @@ type Repository interface {
 	// Holding counts what keeps the collection from being deleted.
 	Holding(ctx context.Context, tenantID uuid.UUID, collection string) (CollectionHolding, error)
 
-	// RunInTx + the *Tx variants are the ADR-0003 seam: mutation + outbox
-	// fan-out on one tx so a crash can't leave a committed change without
+	// RunInTx + the *Tx variants are the ADR-0003 seam: mutation + event
+	// record on one tx so a crash can't leave a committed change without
 	// its event.
 	RunInTx(ctx context.Context, fn func(ctx context.Context, tx pgx.Tx) error) error
 	CreateTx(ctx context.Context, tx pgx.Tx, args CreateCollectionArgs) (Collection, error)
@@ -166,8 +165,8 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
-// dispatchEventTx fans the event out on the caller's tx so the outbox rows
-// commit atomically with the collection mutation (ADR-0003). Returns the
+// dispatchEventTx records the event on the caller's tx so it commits
+// atomically with the collection mutation (ADR-0003). Returns the
 // error (caller rolls back); nil-safe.
 func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
 	if h.events == nil {
@@ -177,7 +176,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	if p, err := auth.PrincipalFromContext(ctx); err == nil {
 		actor = p.Subject
 	}
-	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+	err := h.events.RecordTx(ctx, tx, tenantID.String(), worker.Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     tenantID.String(),

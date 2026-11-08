@@ -388,7 +388,7 @@ func (t *Transitioner) restore(ctx context.Context, exec dbExec, objectID uuid.U
 }
 
 // transitionInTx runs a single-statement transition `do` then `after`
-// (the outbox fan-out) in one transaction. If `do` errors (incl. the
+// (recording the event) in one transaction. If `do` errors (incl. the
 // ErrConflict / ErrNotFound 0-row sentinels) the tx rolls back and
 // `after` never runs; if `after` errors, both roll back. Shared by the
 // SoftDeleteInTx / RestoreInTx orchestrators.

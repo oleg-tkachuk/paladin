@@ -13,7 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
-// auditMirror adapts *worker.Dispatcher to middleware.AuditMirrorEmitter.
+// auditMirror adapts *worker.EventRecorder to middleware.AuditMirrorEmitter.
 //
 // Same shape as chargeEmitter — wiring layer bridges concerns the
 // auth / middleware packages can't import directly without cycles.
@@ -28,7 +28,7 @@ type auditMirror struct {
 	log        *zap.Logger
 }
 
-func newAuditMirror(d *worker.Dispatcher, l *zap.Logger) middleware.AuditMirrorEmitter {
+func newAuditMirror(d *worker.EventRecorder, l *zap.Logger) middleware.AuditMirrorEmitter {
 	if d == nil {
 		return nil
 	}
@@ -39,7 +39,7 @@ func newAuditMirror(d *worker.Dispatcher, l *zap.Logger) middleware.AuditMirrorE
 // AND the dispatcher is non-nil, else nil. Single helper so admin /
 // api / iam wiring sites read the same way: pass cfg + dispatcher,
 // get either an emitter or nil. AuditWithMirror handles nil natively.
-func optionalAuditMirror(enabled bool, d *worker.Dispatcher, l *zap.Logger) middleware.AuditMirrorEmitter {
+func optionalAuditMirror(enabled bool, d *worker.EventRecorder, l *zap.Logger) middleware.AuditMirrorEmitter {
 	if !enabled {
 		return nil
 	}
@@ -74,7 +74,7 @@ func (m *auditMirror) EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admind
 	if entry.ErrorMessage != "" {
 		severity = "warning"
 	}
-	queued, err := m.dispatcher.DispatchTx(ctx, tx, entry.ActorTenantID.String(), worker.Event{
+	err := m.dispatcher.RecordTx(ctx, tx, entry.ActorTenantID.String(), worker.Event{
 		Type:         auditEventType(entry.Action),
 		At:           entry.At,
 		TenantID:     entry.ActorTenantID.String(),
@@ -96,7 +96,7 @@ func (m *auditMirror) EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admind
 	})
 	if err != nil {
 		if m.log != nil {
-			m.log.Warn("audit mirror fan-out failed",
+			m.log.Warn("audit mirror event not recorded",
 				zap.String("audit_entry_id", entry.EntryID.String()),
 				zap.String("action", entry.Action),
 				zap.String("tenant_id", entry.ActorTenantID.String()),
@@ -106,9 +106,8 @@ func (m *auditMirror) EmitAuditedTx(ctx context.Context, tx pgx.Tx, entry admind
 		return err
 	}
 	if m.log != nil {
-		m.log.Debug("audit mirror queued",
+		m.log.Debug("audit mirror event recorded",
 			zap.String("action", entry.Action),
-			zap.Int("subscriptions_matched", queued),
 		)
 	}
 	return nil

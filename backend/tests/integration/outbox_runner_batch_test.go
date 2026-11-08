@@ -77,9 +77,7 @@ func TestOutboxRunner_HTTPRowStaysOutOfTheBatches(t *testing.T) {
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "outbox-http-unbatched")
 	f.seedSubscription(t, tenant, subOpts{URL: rec.srv.URL})
 	d := f.batchingDispatcher()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 
 	f.tickOnce(t, f.outboxRunner(d))
 
@@ -95,9 +93,7 @@ func TestOutboxRunner_HTTPRowStaysOutOfTheBatches(t *testing.T) {
 // written back to it as a retry.
 func (f *dispatcherFixture) failedBatchRow(t *testing.T, tenant uuid.UUID, d *worker.Dispatcher, wantErr string) {
 	t.Helper()
-	if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	f.tickOnce(t, f.outboxRunner(d))
 
 	row := f.allDeliveryRows(t, tenant)[0]

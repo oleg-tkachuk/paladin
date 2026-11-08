@@ -27,12 +27,11 @@ import (
 
 // EventProducer mirrors the seam used by tenanth — narrow interface
 // so handler tests can stub the dispatcher without spinning up the
-// outbox + Postgres. *worker.Dispatcher implements it.
+// outbox + Postgres. *worker.EventRecorder implements it.
 type EventProducer interface {
-	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
-	// DispatchTx fans the event out on the caller's tx so the outbox rows
-	// commit atomically with the bucket mutation (ADR-0003).
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+	// RecordTx records the event on the caller's tx so it commits
+	// atomically with the bucket mutation (ADR-0003).
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) error
 }
 
 // Repository is the admindomain BucketRepository plus the ADR-0003 tx seam
@@ -125,8 +124,8 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
-// dispatchEventTx fans the event out on the caller's tx so the outbox rows
-// commit atomically with the bucket mutation (ADR-0003). Returns the error
+// dispatchEventTx records the event on the caller's tx so it commits
+// atomically with the bucket mutation (ADR-0003). Returns the error
 // so the caller rolls back; nil-safe.
 func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
 	if h.events == nil {
@@ -136,7 +135,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	if p, err := auth.PrincipalFromContext(ctx); err == nil {
 		actor = p.Subject
 	}
-	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+	err := h.events.RecordTx(ctx, tx, tenantID.String(), worker.Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     tenantID.String(),

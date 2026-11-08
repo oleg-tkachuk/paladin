@@ -51,6 +51,15 @@ A subscription's CEL filter sees `type`, `tenant_id`, `resource_name`,
 `type == "paladin.capability.charged"`, not `event.type`, which the server
 refuses.
 
+## Which subscriptions receive an event
+
+The producer records the event with the change it reports; the dispatcher
+then matches it to the tenant's subscriptions ([ADR-0044](adr/0044-event-fan-out-in-the-dispatcher.md)).
+A subscription receives the event when, at that point, it exists, is enabled,
+its filter matches, and it was created no later than the event was recorded.
+A subscription created a moment after a change does not receive that change's
+event; one deleted before the event was matched receives nothing.
+
 ## Delivery is at-least-once
 
 A delivery row is retried until the sink acknowledges it. Redelivery of an event

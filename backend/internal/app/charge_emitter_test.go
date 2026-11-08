@@ -16,10 +16,10 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
-// fakeEventDispatcher records every Dispatch/DispatchTx call so the
+// fakeEventDispatcher records every Dispatch/RecordTx call so the
 // cross-cutting emitter tests can assert the produced worker.Event (and the
 // drop guards) without a DB + NATS stack. Shared by charge + audit emitter
-// tests. The charge + audit emitters use the transactional DispatchTx path;
+// tests. The charge + audit emitters use the transactional RecordTx path;
 // the fake ignores the tx (nil in these unit tests) and records into the same
 // slice so assertions read uniformly.
 type fakeEventDispatcher struct {
@@ -40,12 +40,12 @@ func (f *fakeEventDispatcher) Dispatch(_ context.Context, tenantID string, evt w
 	return len(f.calls), nil
 }
 
-func (f *fakeEventDispatcher) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) (int, error) {
+func (f *fakeEventDispatcher) RecordTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) error {
 	f.calls = append(f.calls, dispatchCall{tenantID: tenantID, evt: evt})
 	if f.err != nil {
-		return 0, f.err
+		return f.err
 	}
-	return len(f.calls), nil
+	return nil
 }
 
 // emitFunc is one of the emitter's two entry points.
@@ -137,7 +137,7 @@ func TestChargeEmitter_DropsTenantless(t *testing.T) {
 	}
 }
 
-// The transactional fan-out is NOT best-effort — a DispatchTx failure
+// The transactional fan-out is NOT best-effort — a RecordTx failure
 // propagates so the store rolls the whole charge or refund back (no
 // committed-charge-without-event window).
 func TestChargeEmitter_PropagatesDispatchError(t *testing.T) {

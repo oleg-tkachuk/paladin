@@ -17,22 +17,19 @@ import (
 )
 
 // eventDispatcher is the producer-side seam the cross-cutting emitters
-// (charge, audit) depend on. *worker.Dispatcher satisfies it in production;
+// (charge, audit) depend on. *worker.EventRecorder satisfies it in production;
 // unit tests substitute a fake to assert the emitted event + the drop guards
 // without standing up a DB + NATS stack (the dispatcher → outbox → NATS path
 // itself is covered by tests/integration/lifecycle_events_test.go, and
 // this adapter on it by tests/integration/charge_event_test.go).
 //
-// DispatchTx is the transactional variant: the outbox rows land on the
-// caller's tx so the fan-out is atomic with the source write (ADR-0003).
-// The charge + audit emitters use it exclusively — the pool-backed
-// Dispatch is only for producers that own no transaction.
+// RecordTx records the event on the caller's tx, so it is atomic with the
+// source write (ADR-0003); the dispatcher fans it out (ADR-0044).
 type eventDispatcher interface {
-	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) error
 }
 
-// chargeEmitter adapts *worker.Dispatcher to auth.ChargeEventEmitter.
+// chargeEmitter adapts *worker.EventRecorder to auth.ChargeEventEmitter.
 //
 // Lives here, not in the auth package, because auth must not import
 // worker (would invert the layering — worker depends on
@@ -40,11 +37,10 @@ type eventDispatcher interface {
 // import auth (the dispatcher is plumbing, not a request handler).
 // app/ is the wiring layer; both are fair game.
 //
-// Transactional fan-out: EmitChargedTx enqueues the outbox rows on the
-// charge's own transaction (dispatcher.DispatchTx), so the event is
-// atomic with the spend — a crash can never leave a committed charge
-// without its event, and a fan-out failure rolls the charge back
-// (ADR-0003, no dual-write window).
+// EmitChargedTx records the event on the charge's own transaction
+// (RecordTx), so the event is atomic with the spend — a crash can never
+// leave a committed charge without its event, and a failure to record it
+// rolls the charge back (ADR-0003, no dual-write window).
 type chargeEmitter struct {
 	dispatcher eventDispatcher
 	log        *zap.Logger
@@ -55,7 +51,7 @@ type chargeEmitter struct {
 // chargeEventEmitterFromContext returns nil and ChargeCapability
 // short-circuits with no overhead. Exported so the integration suite
 // drives the adapter the app wires, from charge to subscriber.
-func NewChargeEmitter(d *worker.Dispatcher, l *zap.Logger) auth.ChargeEventEmitter {
+func NewChargeEmitter(d *worker.EventRecorder, l *zap.Logger) auth.ChargeEventEmitter {
 	if d == nil {
 		return nil
 	}
@@ -96,7 +92,7 @@ func (e *chargeEmitter) emitTx(ctx context.Context, tx pgx.Tx, eventType string,
 	}
 	tenantID := ev.TenantID.String()
 	capabilityID := ev.CapabilityID.String()
-	queued, err := e.dispatcher.DispatchTx(ctx, tx, tenantID, worker.Event{
+	err := e.dispatcher.RecordTx(ctx, tx, tenantID, worker.Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     tenantID,
@@ -111,7 +107,7 @@ func (e *chargeEmitter) emitTx(ctx context.Context, tx pgx.Tx, eventType string,
 		},
 	})
 	if err != nil {
-		e.log.Warn("charge event fan-out failed",
+		e.log.Warn("charge event not recorded",
 			zap.String("event_type", eventType),
 			zap.String("tenant_id", tenantID),
 			zap.String("capability_id", capabilityID),
@@ -120,11 +116,10 @@ func (e *chargeEmitter) emitTx(ctx context.Context, tx pgx.Tx, eventType string,
 		)
 		return err
 	}
-	e.log.Debug("charge event queued",
+	e.log.Debug("charge event recorded",
 		zap.String("event_type", eventType),
 		zap.String("tenant_id", tenantID),
 		zap.String("charge_id", ev.ChargeID.String()),
-		zap.Int("subscriptions_matched", queued),
 	)
 	return nil
 }

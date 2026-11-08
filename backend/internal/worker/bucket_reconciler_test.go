@@ -84,7 +84,7 @@ func (f *fakeBucketRepo) MarkDeletionFailed(_ context.Context, _, bucketName str
 }
 
 // RunInTx hands the closure a nil pgx.Tx: nothing below it touches the tx,
-// it only passes it along to GetTx / DeleteTx / DispatchTx, which are fakes.
+// it only passes it along to GetTx / DeleteTx / RecordTx, which are fakes.
 func (f *fakeBucketRepo) RunInTx(ctx context.Context, fn func(context.Context, pgx.Tx) error) error {
 	if f.runInTxErr != nil {
 		return f.runInTxErr
@@ -143,9 +143,9 @@ type fakeBucketEvents struct {
 	err        error
 }
 
-func (f *fakeBucketEvents) DispatchTx(_ context.Context, _ pgx.Tx, _ string, evt Event) (int, error) {
+func (f *fakeBucketEvents) RecordTx(_ context.Context, _ pgx.Tx, _ string, evt Event) error {
 	f.dispatched = append(f.dispatched, evt)
-	return 1, f.err
+	return f.err
 }
 
 var (

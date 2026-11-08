@@ -48,7 +48,7 @@ import (
 )
 
 // EventProducer mirrors the seam used by the admin handlers — narrow
-// interface, *worker.Dispatcher implements it.
+// interface, *worker.EventRecorder implements it.
 //
 // Object lifecycle is the highest-cardinality producer in the
 // system: every CompleteObject call fans out, so the per-tenant
@@ -60,15 +60,12 @@ import (
 //	`type == "paladin.object.uploaded"`
 //
 // (see frontend/src/app/events/page.tsx hint copy) so the
-// dispatcher's per-row List doesn't queue rows the consumer would
-// drop anyway.
+// dispatcher's fan-out doesn't queue rows the consumer would drop anyway.
 type EventProducer interface {
-	Dispatch(ctx context.Context, tenantID string, evt worker.Event) (int, error)
-	// DispatchTx writes the outbox rows on the caller's transaction so the
-	// fan-out is atomic with the state change (ADR-0003). Used by the
-	// promote path; the other lifecycle events still use best-effort
-	// Dispatch until they adopt the same tx flow.
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+	// RecordTx records the event on the caller's transaction, so it is
+	// atomic with the state change (ADR-0003); the dispatcher fans it out
+	// (ADR-0044).
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) error
 }
 
 // Storage abstracts S3 / GCS / MinIO. Keep this interface intentionally
@@ -588,10 +585,10 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
-// dispatchEventTx fans the lifecycle event out on the caller's tx so the
-// outbox rows commit atomically with the state transition (ADR-0003). An
-// error propagates to the caller, which rolls the transition back — the
-// client's at-least-once retry re-runs both. Used by the transactional
+// dispatchEventTx records the lifecycle event on the caller's tx so it
+// commits atomically with the state transition (ADR-0003). An error
+// propagates to the caller, which rolls the transition back — the client's
+// at-least-once retry re-runs both. Used by the transactional
 // promote / soft-delete / restore paths.
 func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, eventType, resourceName string, payload map[string]any) error {
 	if h.events == nil {
@@ -601,7 +598,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	if p, err := auth.PrincipalFromContext(ctx); err == nil {
 		actor = p.Subject
 	}
-	_, err := h.events.DispatchTx(ctx, tx, tenantID.String(), worker.Event{
+	err := h.events.RecordTx(ctx, tx, tenantID.String(), worker.Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     tenantID.String(),
@@ -974,7 +971,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 			"checksum_value differs from the checksum the object was registered with")
 	}
 
-	// Promote + outbox fan-out run in ONE transaction (ADR-0003): the
+	// Promote + event record run in ONE transaction (ADR-0003): the
 	// `paladin.object.uploaded` rows are written atomically with the
 	// PENDING→AVAILABLE flip, so a crash can no longer leave the object
 	// AVAILABLE with the event lost (the only notification channel for

@@ -42,7 +42,7 @@ type PurgeDrainer struct {
 	// Events is optional. Without it the bytes are still reclaimed and the
 	// debt still settles — only paladin.object.purged is skipped, which keeps a
 	// deployment with no subscriptions from needing a dispatcher here.
-	Events    *Dispatcher
+	Events    EventProducer
 	Interval  time.Duration
 	BatchSize int32
 	// MaxBackoff caps the retry curve. Debt is never dropped: a row that
@@ -221,7 +221,7 @@ func (w *PurgeDrainer) emitPurged(ctx context.Context, tx pgx.Tx, tenantID uuid.
 		return nil
 	}
 	objectID := uuid.UUID(r.ObjectID.Bytes)
-	_, err := w.Events.DispatchTx(ctx, tx, tenantID.String(), Event{
+	err := w.Events.RecordTx(ctx, tx, tenantID.String(), Event{
 		Type:     "paladin.object.purged",
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),

@@ -75,9 +75,7 @@ func TestOutboxRunner_LogsOnlyTheOutcomeWritesThatFail(t *testing.T) {
 			tenant := mustCreateTenant(t, f.h.PoolMigrate, "outbox-logs")
 			f.seedSubscription(t, tenant, subOpts{URL: sink.URL})
 			d := f.dispatcher()
-			if _, err := d.Dispatch(context.Background(), tenant.String(), makeEvent("", tenant)); err != nil {
-				t.Fatalf("dispatch: %v", err)
-			}
+			f.enqueue(t, tenant.String(), makeEvent("", tenant))
 
 			core, logs := observer.New(zap.WarnLevel)
 			r := f.outboxRunner(d)

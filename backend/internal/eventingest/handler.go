@@ -60,12 +60,12 @@ type ObjectLookup interface {
 // where a presign was issued and the client uploaded before the
 // objects-row was committed; reconciler + sequencer guard win
 // the race anyway.
-// EventProducer is the outbox fan-out seam. nil-safe: when the handler is
+// EventProducer is the event-recording seam. nil-safe: when the handler is
 // wired without one (e.g. a deployment that doesn't deliver webhooks), the
 // promote still happens — it just enqueues no `paladin.object.uploaded` rows.
 // Only the tx variant is needed: the event is written on the promote tx.
 type EventProducer interface {
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) error
 }
 
 // Promoter is the slice of *statemachine.Transitioner the handler uses.
@@ -305,7 +305,7 @@ func (h *PromoteHandler) emitDeleted(ctx context.Context, tx pgx.Tx, ev CloudEve
 	if h.Events == nil {
 		return nil
 	}
-	_, err := h.Events.DispatchTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
+	err := h.Events.RecordTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
 		Type:         string(EventTypeDeleted),
 		At:           time.Now().UTC(),
 		TenantID:     ev.SubjectFields.TenantID,
@@ -335,7 +335,7 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 	// the source's naive split; resourceName is those same values canonicalized
 	// to A-shape by the caller — so the emitted event references the real OK in
 	// the same form the data-plane handler uses.
-	_, err := h.Events.DispatchTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
+	err := h.Events.RecordTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
 		Type:         string(EventTypeUploaded),
 		At:           time.Now().UTC(),
 		TenantID:     ev.SubjectFields.TenantID,
