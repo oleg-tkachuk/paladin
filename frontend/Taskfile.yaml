@@ -13,7 +13,7 @@ vars:
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
   # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.2.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.3.0'
   PROJECT_NAME: paladin-console
   K8S_NAMESPACE: paladin
   # GLOBAL_REGISTRY, IMAGE_NAMESPACE and K8S_CONTEXT are deliberately NOT
@@ -23,10 +23,10 @@ vars:
   # from the entry point (orbstack by default), the command line or the
   # environment; deploy requires the first two, the cluster tasks the third
   # (scripts/taskfile-forwarded-vars.test.sh).
-  # Only v* tags version this image. The others — api/*, sdk/go/* and the
-  # retired capability/* — carry a `/` that is invalid in a Docker tag, and one of them
-  # landing on a release commit must not restamp the release.
-  VERSION_TAG_EXCLUDE: '*/*'
+  # Only the product's release/v* tags version this image (ADR-0045): the
+  # library reads no other, so the old v* releases, api/*, sdk/* and the
+  # retired capability/* never restamp it, and needs no exclude for them.
+  VERSION_TAG_PREFIX: 'release/v'
   # The shared buildx builder this repo builds through; its cache is separate
   # from the default builder's and needs pruning by name.
   BUILDX_BUILDER: lean

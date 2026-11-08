@@ -21,28 +21,30 @@ test("each run reports the tags it pushed, or the ones left unpublished", async 
     await repo.run("tag", "api/v3.0.0");
     assert.equal(await product(), undefined, "a proto baseline is not a release");
 
-    await repo.run("tag", "v4.2.0");
-    assert.equal(await product(), "v4.2.0", "the tag this run pushed");
+    await repo.run("tag", "release/v4.2.0");
+    assert.equal(await product(), "release/v4.2.0", "the tag this run pushed");
 
     before = await tagsOnHead(repo.dir);
-    assert.equal(await product(), "v4.2.0", "a tag an earlier run pushed and never published");
+    assert.equal(await product(), "release/v4.2.0", "a tag an earlier run pushed and never published");
 
-    data.released.add("v4.2.0");
+    data.released.add("release/v4.2.0");
     assert.equal(await product(), undefined, "a tag an earlier run pushed and published");
 
-    await repo.run("tag", "v4.2.1");
-    assert.equal(await product(), "v4.2.1", "a new tag beside an old one");
-    data.released.add("v4.2.1");
+    await repo.run("tag", "release/v4.2.1");
+    assert.equal(await product(), "release/v4.2.1", "a new tag beside an old one");
+    data.released.add("release/v4.2.1");
 
     await repo.run("tag", "sdk/go/v0.3.0");
     await repo.run("tag", "sdk/python/v0.3.0");
     // The capability module released here as capability/v* before it moved to
     // its own repository; those tags are history, never a stream this run cut.
     await repo.run("tag", "capability/v0.2.0");
-    // A tag that only starts like a stream's is no release of it.
+    // A tag that only starts like a stream's is no release of it, and one of
+    // the numbering before the product's restart (ADR-0045) is never cut again.
     await repo.run("tag", "vnext");
+    await repo.run("tag", "v42.2.0");
     await repo.run("tag", "sdk/go/vlatest");
-    assert.equal(await product(), "v4.2.1", "a module tag is not the product's");
+    assert.equal(await product(), "release/v4.2.1", "a module tag is not the product's");
     // One release of both SDKs, on the stream's tag; the Go module's tag
     // beside it is the same release.
     assert.deepEqual(await sdk(), ["sdk/python/v0.3.0"], "the new SDK release, and no product tag");

@@ -31,8 +31,14 @@
 // a `!` or `BREAKING CHANGE:` footer is a major, and
 // docs/style/refactor/test/build/ci/chore release nothing on their own.
 // `security` is a patch on every stream: the preset knows no such type, so a
-// security fix released nothing. The SDK is pre-1.0, where a breaking change
-// is a minor; its stream says so until it reaches 1.0. release-rules.test.mjs pins all of it.
+// security fix released nothing. Both streams are pre-1.0, where a breaking
+// change is a minor; each says so until it reaches 1.0, which is cut by hand.
+//
+// RELEASE_BUMP is a release an operator asks for by hand — `minor` or
+// `major` — cut whatever the commits say (release.yaml's `bump` input). From
+// 0.x a major is 1.0.0. Once a stream is past 1.0, drop its
+// BREAKING_IS_A_MINOR_BEFORE_1_0, and a major comes from a breaking commit or
+// from this alone. release-rules.test.mjs pins all of it.
 
 const ANALYZER = "./paths-analyzer.mjs";
 const PRESET = "conventionalcommits";
@@ -55,13 +61,17 @@ const DOCUMENTATION = { prefixes: ["docs/"], suffixes: [".md"] };
 
 const streams = {
   product: {
-    tagFormat: "v${version}",
+    // Restarted at 0.x under this prefix (ADR-0045): semantic-release reads
+    // only tags of tagFormat, and v1.0.0…v42.1.0 would outrank any 0.x.
+    tagFormat: "release/v${version}",
+    // The numbering before the restart, still named in the upgrade guide.
+    legacyTagFormats: ["v${version}"],
     // Only the Python SDK is in no image. sdk/go/ is in the backend's, and
     // proto/ is the server's contract. A breaking change to the Go SDK's own
     // API alone is not the product's: it releases the product as a minor, the
     // way it releases the SDK.
     analyzer: {
-      releaseRules: [SECURITY_IS_A_PATCH],
+      releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
       exclude: PYTHON_SDK_OWN,
       modules: { paths: MODULE_PATHS, releaseRules: [BREAKING_IS_A_MINOR_BEFORE_1_0] },
       documentation: DOCUMENTATION,
@@ -87,8 +97,16 @@ if (!streams[stream]) {
   throw new Error(`RELEASE_STREAM=${stream}: not one of ${Object.keys(streams).join(", ")}`);
 }
 
-/** The analyzer's options for one stream. */
-const analyzerFor = (name) => ({ preset: PRESET, ...streams[name].analyzer });
+// The release asked for by hand, if any; empty or "auto" is none.
+const AUTO_BUMP = "auto";
+const bump = process.env.RELEASE_BUMP || AUTO_BUMP;
+
+/** The analyzer's options for one stream, with the release asked for by hand. */
+const analyzerFor = (name, atLeast = bump === AUTO_BUMP ? undefined : bump) => ({
+  preset: PRESET,
+  ...streams[name].analyzer,
+  ...(atLeast === undefined ? {} : { atLeast }),
+});
 
 module.exports = {
   branches: ["main"],

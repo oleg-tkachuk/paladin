@@ -11,6 +11,9 @@ import type { Documentation } from "../../release/paths-analyzer.d.mts";
 export interface Stream {
   tagFormat: string;
   goModuleTagFormat?: string;
+  // Formats the stream's tags had before tagFormat: still read as its own —
+  // the upgrade guide names releases by them — and never cut.
+  legacyTagFormats?: string[];
   analyzer: { include?: string[]; exclude?: string[]; documentation?: Documentation };
 }
 
@@ -58,9 +61,10 @@ export function withGoModuleTags(tags: readonly string[], all: Record<string, St
 }
 
 // isTagOf reports whether tag is one of stream's: a version after its own
-// prefix or its Go module's.
+// prefix, its Go module's, or a prefix it had before.
 function isTagOf(tag: string, stream: Stream): boolean {
-  return [tagPrefix(stream), goModulePrefix(stream)].some((p) => p !== undefined && tag.startsWith(p) && VERSION.test(tag.slice(p.length)));
+  const legacy = (stream.legacyTagFormats ?? []).map((f) => f.replace(VERSION_PLACEHOLDER, ""));
+  return [tagPrefix(stream), goModulePrefix(stream), ...legacy].some((p) => p !== undefined && tag.startsWith(p) && VERSION.test(tag.slice(p.length)));
 }
 
 // streamOf is the name of the stream tag is a release of, or undefined.

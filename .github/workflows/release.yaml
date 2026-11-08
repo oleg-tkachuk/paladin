@@ -33,7 +33,7 @@ name: Release
 #                        product's tag from every change since the last one, so
 #                        however many breaking changes it carries make one major.
 #                        The prerelease channel tags a release candidate of that
-#                        version instead, vX.Y.Z-rc.N, published like a release
+#                        version instead, release/vX.Y.Z-rc.N, published like a release
 #                        and announced as a prerelease (.github/ci/prerelease.ts).
 #
 # A manual run releases main's head only once CI passed on it
@@ -53,15 +53,24 @@ on:
   repository_dispatch:
     types: [release]
   workflow_dispatch:
-    # The one input picks the tag cut, vX.Y.Z or vX.Y.Z-rc.N, not what is
+    # channel picks the tag cut, release/vX.Y.Z or release/vX.Y.Z-rc.N, not what is
     # built: the build is the commit CI passed on main, from its own tree.
     # checkov:skip=CKV_GHA_7: the channel names a release, it does not change the build
     inputs:
       channel:
-        description: A release, or a release candidate (vX.Y.Z-rc.N)
+        description: A release, or a release candidate (release/vX.Y.Z-rc.N)
         type: choice
         options: [release, prerelease]
         default: release
+      # The release the commits call for, or at least a minor or a major
+      # asked for by hand. Before 1.0 a breaking commit is a minor, so a
+      # major — 1.0.0 among them — comes only from here
+      # (.github/release/release.config.cjs).
+      bump:
+        description: The release the commits call for (auto), or at least a minor or a major
+        type: choice
+        options: [auto, minor, major]
+        default: auto
 
 permissions: {}
 
@@ -162,21 +171,33 @@ jobs:
         if: steps.head.outputs.release == 'true'
         run: node .github/ci/release-tags.ts before "$RUNNER_TEMP/tags-before"
 
+      # A stream with no tag would start at 1.0.0; the product's first tag of
+      # a numbering is cut by hand, as the SDK's was. See .github/ci/stream-seeded.ts.
+      - name: Check the product stream has a tag
+        id: product-seeded
+        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch'
+        run: node .github/ci/stream-seeded.ts
+        env:
+          RELEASE_STREAM: product
+
       # The product releases by hand only: a train of every change since the
       # last release, rather than a release per merge.
       - name: Compute and push the tag
-        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'release'
+        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'release' && steps.product-seeded.outputs.seeded == 'true'
         working-directory: .github/release
         run: npx semantic-release --no-ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_STREAM: product
+          RELEASE_BUMP: ${{ inputs.bump }}
 
       # A release candidate of the version the release would be: the same
       # pipeline below publishes and announces it. See .github/ci/prerelease.ts.
       - name: Tag a release candidate
-        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'prerelease'
+        if: steps.head.outputs.release == 'true' && github.event_name == 'workflow_dispatch' && inputs.channel == 'prerelease' && steps.product-seeded.outputs.seeded == 'true'
         run: node .github/ci/prerelease.ts
+        env:
+          RELEASE_BUMP: ${{ inputs.bump }}
 
       # Both SDKs version together, from the commits that touch either
       # (.github/release/release.config.cjs, ADR-0043). The tags are the

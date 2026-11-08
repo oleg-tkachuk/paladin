@@ -6,13 +6,15 @@ import { buildTime, checkVersion, targets } from "./publish-target.ts";
 
 describe("checkVersion: a release its tag, a dev build a dev version", () => {
   const ok: [string, string, string, string | undefined][] = [
-    ["a release at its tag", "release", "37.1.0", "v37.1.0"],
+    ["a release at its tag", "release", "0.1.0", "release/v0.1.0"],
     ["a dev build", "dev", "37.1.1-dev.1792157052.gabcdef12", undefined],
   ];
   for (const [name, kind, version, tag] of ok) test(name, () => assert.doesNotThrow(() => checkVersion(kind, version, tag)));
   const refused: [string, string, string, string | undefined][] = [
-    ["a release that is not its tag", "release", "37.1.1", "v37.1.0"],
-    ["a release that derived a dev version", "release", "37.1.1-dev.1792.gabc", "v37.1.0"],
+    ["a release that is not its tag", "release", "0.1.1", "release/v0.1.0"],
+    ["a release that derived a dev version", "release", "0.1.1-dev.1792.gabc", "release/v0.1.0"],
+    // The numbering before the restart (ADR-0045) is never published again.
+    ["a release at a tag of the old numbering", "release", "37.1.0", "v37.1.0"],
     ["a release with no tag", "release", "37.1.0", undefined],
     ["a dev build that derived a release version", "dev", "37.1.0", undefined],
     ["no version", "dev", "", undefined],

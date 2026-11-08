@@ -54,6 +54,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0042](0042-limes-errors-answered-by-code.md) | An error about a presented capability is answered by its limes code | Accepted |
 | [0043](0043-sdk-delivery-stabilization.md) | Stabilize how the SDKs are delivered | Accepted |
 | [0044](0044-event-fan-out-in-the-dispatcher.md) | An event is fanned out by the dispatcher, not in the producer's transaction | Accepted |
+| [0045](0045-the-product-restarts-at-0x.md) | The product restarts at 0.x, and a major is cut by hand | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to

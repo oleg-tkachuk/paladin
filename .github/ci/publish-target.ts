@@ -4,7 +4,7 @@
 //
 // Usage: COMPONENT=<dir> KIND=<release|dev> TAG=<tag> REGISTRY=… IMAGE_NAMESPACE=… CHART_PATH=… node publish-target.ts
 //
-//   release  the version is the tag's, without its leading v
+//   release  the version is the tag's, without the product's tag prefix
 //   dev      the version is a prerelease of the next patch, <x.y.z>-dev.<…>,
 //            or of the candidate it follows, <x.y.z>-rc.<n>.dev.<…>: either
 //            sorts after the last tag and before the next
@@ -23,6 +23,7 @@ import { optionalEnv, requireEnv } from "./lib/env.ts";
 import { execute } from "./lib/exec.ts";
 import { git } from "./lib/git.ts";
 import { runMain } from "./lib/main.ts";
+import { PRODUCT, streams, tagPrefix } from "./lib/release-config.ts";
 import { isDevVersion } from "./lib/versions.ts";
 import { Kind } from "./publish-plan.ts";
 
@@ -33,17 +34,14 @@ const VERSION_TASK = "release:version";
 // SHORT_SHA is how much of the commit the image is labelled with: what the
 // library's image:build passes.
 export const SHORT_SHA = 8;
-// TAG_PREFIX starts a product tag.
-const TAG_PREFIX = "v";
-
 // checkVersion refuses a version this kind of publish may not push.
-export function checkVersion(kind: string, version: string, tag: string | undefined): void {
+export function checkVersion(kind: string, version: string, tag: string | undefined, prefix = productTagPrefix()): void {
   if (version === "") {
     throw new Error("no version derived");
   }
   switch (kind) {
     case Kind.Release:
-      if (tag === undefined || version !== tag.replace(new RegExp(`^${TAG_PREFIX}`), "")) {
+      if (tag === undefined || !tag.startsWith(prefix) || version !== tag.slice(prefix.length)) {
         throw new Error(`the library derives ${version}, the tag is ${tag ?? "<none>"} — refusing to publish`);
       }
       return;
@@ -55,6 +53,15 @@ export function checkVersion(kind: string, version: string, tag: string | undefi
     default:
       throw new Error(`unknown publish kind: ${kind || "<none>"}`);
   }
+}
+
+// productTagPrefix is what a product release tag starts with: release.config.cjs's.
+function productTagPrefix(): string {
+  const product = streams()[PRODUCT];
+  if (product === undefined) {
+    throw new Error(`release.config.cjs has no ${PRODUCT} stream`);
+  }
+  return tagPrefix(product);
 }
 
 // Where is where a component publishes.

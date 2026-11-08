@@ -56,6 +56,11 @@ version: "3"
 #   IMAGE_LATEST     set to 1 to also push a floating :latest beside the
 #                    version tag. Off by default — see the note below.
 #   VERSION_TAG_EXCLUDE  tag glob to keep out of the version (e.g. "api/*")
+#   VERSION_TAG_PREFIX   what a version tag starts with (default "v"); with
+#                        any other prefix, e.g. "release/v", only tags of
+#                        that prefix are versions — not "v…", not bare
+#                        numbers. An exclude that matches the prefix would
+#                        drop every version tag: version and doctor refuse it
 #   APP_VERSION          pin the version outright, skipping git derivation
 #
 # Nothing here is defined as a bare knob name: a var declared in an included
@@ -171,13 +176,32 @@ vars:
   # Only a tag that starts with a version is one: `stable` or `latest` on HEAD
   # would otherwise become the version itself, and git picks between two tags
   # on one commit by name, not by which is the release.
-  _REL_TAG_MATCH: "--match 'v[0-9]*' --match '[0-9]*'"
+  #
+  # VERSION_TAG_PREFIX replaces the `v`. The default reads `v1.2.3` and a bare
+  # `1.2.3`, as it always has; any other prefix reads its own tags alone, so a
+  # repository that restarted its numbering under a new prefix is not handed
+  # its old, higher tags back.
+  _REL_TAG_PREFIX_DEFAULT: 'v'
+  _REL_TAG_PREFIX: '{{.VERSION_TAG_PREFIX | default ._REL_TAG_PREFIX_DEFAULT}}'
+  _REL_TAG_MATCH: >-
+    --match {{printf "%s[0-9]*" ._REL_TAG_PREFIX | q}}
+    {{- if eq ._REL_TAG_PREFIX ._REL_TAG_PREFIX_DEFAULT}} --match '[0-9]*'{{end}}
+  # A version tag the exclude would drop, when it drops them all: set when the
+  # exclude glob matches the prefix's own first version tag. Empty otherwise.
+  # The glob reaches `case` through a variable: unquoted there it matches as a
+  # pattern, and is never parsed as shell.
+  _REL_TAG_CLASH:
+    sh: >-
+      {{if .VERSION_TAG_EXCLUDE -}}
+      tag={{printf "%s0.0.0" ._REL_TAG_PREFIX | q}}; pat={{.VERSION_TAG_EXCLUDE | q}};
+      case "$tag" in $pat) printf '%s' "$tag" ;; esac
+      {{- end}}
   _REL_TAG_RAW:
     sh: >-
       git describe --tags --exact-match {{._REL_TAG_MATCH}}
       {{if .VERSION_TAG_EXCLUDE}}--exclude {{.VERSION_TAG_EXCLUDE | q}}{{end}}
       HEAD 2>/dev/null || true
-  _REL_TAG: '{{._REL_TAG_RAW | trimPrefix "v"}}'
+  _REL_TAG: '{{._REL_TAG_RAW | trimPrefix ._REL_TAG_PREFIX}}'
   # The base an untagged build counts up from: the newest version tag this
   # commit descends from, one patch up. It was VERSION_BASE alone, 0.1.0 unless
   # someone kept it current, so once 1.2.0 was tagged every later build was
@@ -191,7 +215,7 @@ vars:
       {{if .VERSION_TAG_EXCLUDE}}--exclude {{.VERSION_TAG_EXCLUDE | q}}{{end}}
       HEAD 2>/dev/null || true
   # The last tag's version, pre-release included and build metadata dropped.
-  _REL_LAST_VER: '{{regexFind "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?" (._REL_LAST_TAG | trimPrefix "v")}}'
+  _REL_LAST_VER: '{{regexFind "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?" (._REL_LAST_TAG | trimPrefix ._REL_TAG_PREFIX)}}'
   _REL_LAST_CORE: '{{regexFind "^[0-9]+\\.[0-9]+\\.[0-9]+" ._REL_LAST_VER}}'
   # Set when the last tag is a pre-release and nothing else names the base.
   #
@@ -272,6 +296,9 @@ tasks:
 
   version:
     desc: "Print the version this working tree publishes as"
+    preconditions:
+      - sh: '[ -z {{._REL_TAG_CLASH | q}} ]'
+        msg: 'VERSION_TAG_EXCLUDE {{.VERSION_TAG_EXCLUDE}} matches {{._REL_TAG_CLASH}}: it drops every version tag of VERSION_TAG_PREFIX {{._REL_TAG_PREFIX}}'
     cmds:
       - printf '%s\n' {{._REL_VERSION | q}}
 
@@ -304,6 +331,7 @@ tasks:
           version={{._REL_VERSION | q}}
           sha_raw={{._REL_SHA_RAW | q}}
           dirty={{._REL_DIRTY | q}}
+          tag_clash={{._REL_TAG_CLASH | q}}
           chart_dir={{._REL_CHART_DIR | q}}
           chart={{._REL_CHART | q}}
           chart_repo={{._REL_CHART_REPO | q}}
@@ -325,6 +353,9 @@ tasks:
           done
 
           # ─── version ──────────────────────────────────────────────────────
+          if [ -n "$tag_clash" ]; then
+            bad "VERSION_TAG_EXCLUDE matches $tag_clash: it drops every version tag of VERSION_TAG_PREFIX"
+          fi
           if [ -z "$version" ]; then
             bad "no version could be derived — is this a git repository?"
           elif [ -z "$sha_raw" ]; then
