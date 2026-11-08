@@ -1,0 +1,8 @@
+version: v2
+# Go types for the SeaweedFS filer subset in this directory. Run from here
+# (`task backend:filerpb:proto` does): `module=` strips the package's import
+# path, so filer.pb.go lands beside filer.proto.
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: module=github.com/oleg-tkachuk/paladin/backend/internal/eventingest/filerpb

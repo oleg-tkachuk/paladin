@@ -78,6 +78,17 @@ includes:
       # drift gate below then reports the output as stale when it was fine and
       # the gate itself had just dirtied it.
       SQLC_MODULE: github.com/sqlc-dev/sqlc/cmd/sqlc
+  # The SeaweedFS filer messages ingest decodes, generated from the subset of
+  # upstream's filer.proto kept beside them.
+  filerpb:
+    taskfile: '{{printf .TASKLIB "codegen"}}'
+    dir: internal/eventingest/filerpb
+    vars:
+      PROJECT_NAME: filerpb
+      # Installed from the backend's go.mod, so the generator is the version
+      # the generated code is compiled against.
+      PROTO_PLUGINS: google.golang.org/protobuf/cmd/protoc-gen-go
+      PROTO_PATHSPEC: filer.pb.go
       # Must match `out:` in sqlc.yaml. sqlc writes there and the gate diffs
       # there; nothing reconciles the two spellings, and a gate pointed at the
       # wrong directory passes by finding nothing.
@@ -139,10 +150,11 @@ tasks:
       - task: k8s:restart
 
   generate:
-    desc: "Regenerate mocks and sqlc bindings"
+    desc: "Regenerate mocks, sqlc bindings and the SeaweedFS filer types"
     cmds:
       - task: codegen:mocks
       - task: codegen:sqlc
+      - task: filerpb:proto
 
   # ─── seed fixture ───────────────────────────────────────────────────────────
   # Applies (or removes) the demo fixture against a running cluster. Both

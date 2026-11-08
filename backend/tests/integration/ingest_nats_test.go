@@ -30,9 +30,10 @@ import (
 
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
-	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest"
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest/filerpb"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
@@ -60,7 +61,6 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 	url := runNATSForIngestTest(t)
 
 	subject := "seaweedfs.filer"
-	receivedAt := time.Now()
 	q := sqlc.New(h.PoolMigrate)
 	driver := &eventingest.NATSDriver{
 		URL:     url,
@@ -71,9 +71,6 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 		SourceAdapt: &eventingest.SeaweedFSNATSSource{
 			BucketName: "paladin-test",
 			URI:        "seaweedfs-nats://test",
-			// One instant for both publishes: the id hashes the minute,
-			// and two parses either side of one would be two events.
-			Now: func() time.Time { return receivedAt },
 		},
 	}
 	worker := &eventingest.Worker{
@@ -120,7 +117,7 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	path := fmt.Sprintf("/buckets/paladin-test/%s/docs/report.pdf", tenantID)
-	payload := buildSFNATSPayload(t, path, false /*hasOld*/, true /*hasNew*/)
+	payload := buildSFNATSPayload(t, path)
 	// Publish twice to also verify dedup (second is a no-op).
 	for i := 0; i < 2; i++ {
 		if err := pc.Publish(subject, payload); err != nil {
@@ -148,10 +145,10 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 			"check ingest_nats source path-strip + Lookup join", lastState)
 	}
 
-	// Dedup window check: the second publish above must NOT have
-	// produced a second ingested_events row. The id is derived from
-	// (path + event type + minute bucket), and the source's clock is
-	// pinned, so both publishes hash to the same id.
+	// Dedup check: the second publish above must NOT have produced a
+	// second ingested_events row. The id hashes the path, the event type
+	// and the entry's commit time, so a redelivery has the first's id
+	// whenever it arrives.
 	if n := mustCountIngested(t, h.PoolMigrate); n != 1 {
 		t.Errorf("ingested_events count = %d, want 1 (dedup window)", n)
 	}
@@ -172,18 +169,24 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 
 // ─── publish-side fakes ────────────────────────────────────────────────
 
+// sfCommitTs is the filer commit time of the entry the test publishes.
+const sfCommitTs int64 = 1793700668832899354
+
 // buildSFNATSPayload assembles the wire bytes a SF gocdk_pub_sub
-// publisher writes to NATS:
+// publisher writes to NATS for a create of path:
 //
 //	gob(map[string]string{"key": <path>}) || gob([]byte{<protobuf body>})
 //
-// The body is a `filer_pb.EventNotification` with optional old_entry
-// (tag 1) and new_entry (tag 2). We only need tag PRESENCE for the
-// source adapter to derive create / update / delete; we don't need
-// to populate Entry fields.
-func buildSFNATSPayload(t *testing.T, path string, hasOld, hasNew bool) []byte {
+// The body is an EventNotification whose new_entry carries a commit time,
+// as SeaweedFS 4.51 and later publish it.
+func buildSFNATSPayload(t *testing.T, path string) []byte {
 	t.Helper()
-	body := buildFilerEventBody(t, hasOld, hasNew)
+	body, err := proto.Marshal(&filerpb.EventNotification{
+		NewEntry: &filerpb.Entry{Name: "report.pdf", CommitTsNs: sfCommitTs},
+	})
+	if err != nil {
+		t.Fatalf("marshal notification: %v", err)
+	}
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(map[string]string{"key": path}); err != nil {
@@ -193,30 +196,6 @@ func buildSFNATSPayload(t *testing.T, path string, hasOld, hasNew bool) []byte {
 		t.Fatalf("encode body: %v", err)
 	}
 	return buf.Bytes()
-}
-
-// buildFilerEventBody emits the proto bytes for an EventNotification
-// with the requested tags present. Each Entry stub carries only
-// `name = ...` (tag 1, length-delimited) — minimal, but enough for
-// the scanner to identify the outer field.
-func buildFilerEventBody(t *testing.T, hasOld, hasNew bool) []byte {
-	t.Helper()
-	var out []byte
-	if hasOld {
-		out = append(out, encEntryField(1, "old.txt")...)
-	}
-	if hasNew {
-		out = append(out, encEntryField(2, "new.txt")...)
-	}
-	return out
-}
-
-func encEntryField(num protowire.Number, name string) []byte {
-	inner := protowire.AppendTag(nil, 1, protowire.BytesType)
-	inner = protowire.AppendString(inner, name)
-	out := protowire.AppendTag(nil, num, protowire.BytesType)
-	out = protowire.AppendBytes(out, inner)
-	return out
 }
 
 // runNATSForIngestTest boots an in-process nats-server. Distinct

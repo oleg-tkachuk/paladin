@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest/filerpb"
 )
 
 // natsEnvelope mirrors gocloud.dev/pubsub/natspubsub#encodeMessage
@@ -28,33 +31,37 @@ func natsEnvelope(t *testing.T, metadata map[string]string, body []byte) []byte 
 	return buf.Bytes()
 }
 
-// fakeFilerEvent emits a proto-shaped EventNotification body with
-// the requested old_entry / new_entry tags present. The Entry
-// payload is a minimal `name` field (tag 1, length-delimited) — SF
-// lets us send a stub without all of Entry's fields populated, and
-// our scanner only checks tag presence.
+// fakeFilerEvent is an EventNotification body with the requested entries
+// present, each carrying only its name: no version, so a parse falls back to
+// the receipt minute.
 func fakeFilerEvent(t *testing.T, hasOld, hasNew bool) []byte {
 	t.Helper()
-	var buf []byte
+	var n filerpb.EventNotification
 	if hasOld {
-		buf = append(buf, encodeEntryField(1, "old.txt")...)
+		n.OldEntry = &filerpb.Entry{Name: "old.txt"}
 	}
 	if hasNew {
-		buf = append(buf, encodeEntryField(2, "new.txt")...)
+		n.NewEntry = &filerpb.Entry{Name: "new.txt"}
 	}
-	return buf
+	return marshalNotification(t, &n)
 }
 
-// encodeEntryField writes one EventNotification field whose value
-// is a length-delimited Entry containing only `name = name`.
-func encodeEntryField(num protowire.Number, name string) []byte {
-	// Inner Entry: `name = <string>` at tag 1, wire type 2.
-	inner := protowire.AppendTag(nil, 1, protowire.BytesType)
-	inner = protowire.AppendString(inner, name)
-	// Outer EventNotification field: tag `num`, wire type 2 (Entry).
-	out := protowire.AppendTag(nil, num, protowire.BytesType)
-	out = protowire.AppendBytes(out, inner)
-	return out
+func marshalNotification(t *testing.T, n *filerpb.EventNotification) []byte {
+	t.Helper()
+	body, err := proto.Marshal(n)
+	if err != nil {
+		t.Fatalf("marshal notification: %v", err)
+	}
+	return body
+}
+
+// natsPath is the filer path of an object under the test bucket.
+const natsPath = "/paladin-primary/00000000-0000-0000-0000-000000000abc/docs/obj.txt"
+
+// createOf is a create event for entry at natsPath.
+func createOf(t *testing.T, entry *filerpb.Entry) []byte {
+	t.Helper()
+	return natsEnvelope(t, map[string]string{"key": natsPath}, marshalNotification(t, &filerpb.EventNotification{NewEntry: entry}))
 }
 
 func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
@@ -216,22 +223,113 @@ func TestSeaweedFSNATSSource_Parse_MalformedGob_Unrecognised(t *testing.T) {
 	}
 }
 
-func TestScanFilerEventNotification_TolersUnknownFields(t *testing.T) {
-	// Build a body that carries old_entry (1), new_entry (2), AND a
-	// future field at tag 99 (varint). The scanner must still report
-	// has_old + has_new and not error on the unknown tag.
-	body := fakeFilerEvent(t, true, true)
-	body = append(body,
-		protowire.AppendTag(nil, 99, protowire.VarintType)...,
+// Fields SeaweedFS sends that the subset leaves out — an entry's chunks, a
+// notification's delete_chunks, one a later release adds — are skipped.
+func TestSeaweedFSNATSSource_Parse_ToleratesUnknownFields(t *testing.T) {
+	const (
+		chunksField       protowire.Number = 3
+		deleteChunksField protowire.Number = 3
+		laterField        protowire.Number = 99
+		laterValue                         = 12345
 	)
-	body = protowire.AppendVarint(body, 12345)
+	entry := marshalEntryWith(t, &filerpb.Entry{Name: "new.txt"}, chunksField)
+	body := protowire.AppendTag(nil, 2, protowire.BytesType) // new_entry
+	body = protowire.AppendBytes(body, entry)
+	body = protowire.AppendTag(body, deleteChunksField, protowire.VarintType)
+	body = protowire.AppendVarint(body, 1)
+	body = protowire.AppendTag(body, laterField, protowire.VarintType)
+	body = protowire.AppendVarint(body, laterValue)
 
-	hasOld, hasNew, err := scanFilerEventNotification(body)
+	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	ev, err := parseOne(src, natsEnvelope(t, map[string]string{"key": natsPath}, body), "")
 	if err != nil {
-		t.Fatalf("scan: %v", err)
+		t.Fatalf("Parse: %v", err)
 	}
-	if !hasOld || !hasNew {
-		t.Errorf("hasOld=%v hasNew=%v, want both true (unknown field 99 should be skipped)",
-			hasOld, hasNew)
+	if ev.Type != EventTypeUploaded {
+		t.Errorf("Type = %q, want %q", ev.Type, EventTypeUploaded)
+	}
+}
+
+// marshalEntryWith is entry's bytes with an empty length-delimited field
+// appended, as a chunk the subset does not decode.
+func marshalEntryWith(t *testing.T, entry *filerpb.Entry, field protowire.Number) []byte {
+	t.Helper()
+	b, err := proto.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal entry: %v", err)
+	}
+	b = protowire.AppendTag(b, field, protowire.BytesType)
+	return protowire.AppendBytes(b, nil)
+}
+
+// A body that is no protobuf is no event of SeaweedFS's.
+func TestSeaweedFSNATSSource_Parse_MalformedBody_Unrecognised(t *testing.T) {
+	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	malformed := protowire.AppendTag(nil, 2, protowire.BytesType) // a length that never comes
+	_, err := parseOne(src, natsEnvelope(t, map[string]string{"key": natsPath}, malformed), "")
+	if !errors.Is(err, ErrUnrecognisedEvent) {
+		t.Errorf("err = %v, want ErrUnrecognisedEvent", err)
+	}
+}
+
+// The directories the filer creates for a key's prefixes are no object.
+func TestSeaweedFSNATSSource_Parse_Directory_Ignored(t *testing.T) {
+	src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x"}
+	_, err := parseOne(src, createOf(t, &filerpb.Entry{Name: "docs", IsDirectory: true}), "")
+	if !errors.Is(err, ErrIgnoredEvent) {
+		t.Errorf("err = %v, want ErrIgnoredEvent", err)
+	}
+}
+
+// An entry with a version names its event whenever it is received: a
+// redelivery an hour later is the same event, a second write of the key —
+// a later commit, or before 4.51 a later or different modification — is
+// another, and the event's time is the version's.
+func TestSeaweedFSNATSSource_Parse_IDFromTheEntry(t *testing.T) {
+	const (
+		commitTs  int64  = 1793700668832899354
+		mtime     int64  = 1793700665
+		size      uint64 = 5
+		otherSize uint64 = 6
+	)
+	md5 := []byte("hello-digest")
+	clock := time.Date(2026, 10, 31, 21, 27, 0, 0, time.UTC)
+	parseAt := func(at time.Time, entry *filerpb.Entry) CloudEvent {
+		t.Helper()
+		src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x", Now: func() time.Time { return at }}
+		ev, err := parseOne(src, createOf(t, entry), "")
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		return ev
+	}
+	committed := func(ts int64) *filerpb.Entry { return &filerpb.Entry{Name: "obj.txt", CommitTsNs: ts} }
+	modified := func(sec int64, sz uint64) *filerpb.Entry {
+		return &filerpb.Entry{Name: "obj.txt", Attributes: &filerpb.FuseAttributes{Mtime: sec, FileSize: sz, Md5: md5}}
+	}
+
+	first := parseAt(clock, committed(commitTs))
+	if !first.Time.Equal(time.Unix(0, commitTs)) {
+		t.Errorf("Time = %s, want the commit time", first.Time)
+	}
+	if later := parseAt(clock.Add(time.Hour), committed(commitTs)); later.ID != first.ID {
+		t.Error("a redelivery an hour later has a new id: dedup would not catch it")
+	}
+	if next := parseAt(clock, committed(commitTs+1)); next.ID == first.ID {
+		t.Error("a later commit of the key shares the first's id: it would be dropped")
+	}
+
+	old := parseAt(clock, modified(mtime, size))
+	if !old.Time.Equal(time.Unix(mtime, 0)) {
+		t.Errorf("Time = %s, want the modification time", old.Time)
+	}
+	if later := parseAt(clock.Add(time.Hour), modified(mtime, size)); later.ID != old.ID {
+		t.Error("before 4.51, a redelivery an hour later has a new id")
+	}
+	if sameSecond := parseAt(clock, modified(mtime, otherSize)); sameSecond.ID == old.ID {
+		t.Error("before 4.51, another write in the same second shares the id: it would be dropped")
+	}
+	if nextSecond := parseAt(clock, modified(mtime+1, size)); nextSecond.ID == old.ID {
+		t.Error("before 4.51, a later write of the same bytes shares the id")
 	}
 }

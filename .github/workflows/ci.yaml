@@ -217,7 +217,7 @@ jobs:
           tools: golangci-lint
 
       - name: Set up buf
-        if: matrix.group == 'sdk' || matrix.group == 'frontend' || matrix.group == 'repo'
+        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'frontend' || matrix.group == 'repo'
         uses: ./.github/actions/setup-tools
         with:
           tools: buf

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"uuid"
@@ -26,9 +27,9 @@ import (
 // the filer creates for a key's prefixes are events too, and are ignored.
 //
 // id derivation: the body carries no broker-assigned id, so we hash the
-// path, the event type and the entry's commit time. A retry of one event
-// produces the same id and the dedup table catches it; a second put of the
-// same key is a new entry with its own commit time, so it is not dropped as
+// path, the event type and the entry's version (entryVersion). A retry of
+// one event produces the same id and the dedup table catches it; a second put
+// of the same key is a new entry with its own version, so it is not dropped as
 // a replay of the first.
 
 // SeaweedFSSource parses SeaweedFS webhook bodies. BucketName, when set,
@@ -61,7 +62,9 @@ type seaweedFSEntry struct {
 		FileSize int64 `json:"file_size"`
 		// MD5 is the object's digest, base64 in the JSON; absent for an
 		// object written in parts.
-		MD5 []byte `json:"md5"`
+		MD5     []byte `json:"md5"`
+		Mtime   int64  `json:"mtime"`
+		MtimeNs int32  `json:"mtime_ns"`
 	} `json:"attributes"`
 }
 
@@ -107,8 +110,9 @@ func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		subjFields.Etag = hex.EncodeToString(entry.Attributes.MD5)
 	}
 
-	t := time.Unix(0, entry.CommitTsNs)
-	if entry.CommitTsNs == 0 {
+	version, t, ok := entryVersion(entry.CommitTsNs, entry.Attributes.Mtime, entry.Attributes.MtimeNs,
+		entry.Attributes.FileSize, entry.Attributes.MD5)
+	if !ok {
 		t = time.Now()
 	}
 
@@ -116,7 +120,7 @@ func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		SpecVersion:     "1.0",
 		Type:            evType,
 		Source:          s.URI,
-		ID:              seaweedFSID(p.Key, p.EventType, entry.CommitTsNs),
+		ID:              seaweedFSID(p.Key, p.EventType, version),
 		Time:            t,
 		DataContentType: "application/json",
 		Subject: fmt.Sprintf(
@@ -182,10 +186,31 @@ func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
 	}, true
 }
 
+// entryVersion names the version of a filer entry an event is about, and
+// when it was written. A redelivery of the event carries the same entry and
+// so the same version; a later write of the key carries another.
+//
+// The filer's commit time names it where the entry records one (SeaweedFS
+// 4.51 and later). Before that, the modification time every filer writes
+// does, with the size and digest beside it: the filer may keep the time to
+// the second only, and two writes in one second differ in their bytes, or
+// are the same write. ok is false when the entry records neither time.
+// The size is the webhook's int64 or the protobuf's uint64, as each decodes it.
+func entryVersion[Size int64 | uint64](commitTsNs, mtime int64, mtimeNs int32, size Size, md5 []byte) (version string, at time.Time, ok bool) {
+	if commitTsNs != 0 {
+		return strconv.FormatInt(commitTsNs, 10), time.Unix(0, commitTsNs), true
+	}
+	if mtime == 0 && mtimeNs == 0 {
+		return "", time.Time{}, false
+	}
+	at = time.Unix(mtime, int64(mtimeNs))
+	return fmt.Sprintf("mtime:%d|size:%d|md5:%x", at.UnixNano(), size, md5), at, true
+}
+
 // seaweedFSID hashes the canonical fields a duplicate event would
-// share — same path + same event type + same timestamp = same id.
-func seaweedFSID(key, evType string, ts int64) string {
+// share — same path + same event type + same entry version = same id.
+func seaweedFSID(key, evType, version string) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "seaweedfs|%s|%s|%d", key, evType, ts)
+	fmt.Fprintf(h, "seaweedfs|%s|%s|%s", key, evType, version)
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }

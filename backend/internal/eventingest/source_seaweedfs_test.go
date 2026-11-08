@@ -154,3 +154,57 @@ func TestParseSeaweedFSPath(t *testing.T) {
 		})
 	}
 }
+
+// Before SeaweedFS 4.51 the webhook carries no commit time: a redelivery
+// keeps its id by the modification time, size and digest, and a re-upload
+// of the key in another second gets another.
+func TestSeaweedFSSource_WithoutCommitTime_ModificationNamesTheEvent(t *testing.T) {
+	const mtime int64 = 1793700665
+	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
+	pre451 := []byte(strings.Replace(string(webhookBody(t, "create")), `,"commit_ts_ns":1793700668832899354`, "", 1))
+	reupload := []byte(strings.Replace(string(pre451), `"mtime":1793700665`, `"mtime":1793700666`, 1))
+	a, errA := parseOne(src, pre451, "application/json")
+	b, errB := parseOne(src, reupload, "application/json")
+	if errA != nil || errB != nil {
+		t.Fatalf("Parse: %v, %v", errA, errB)
+	}
+	if !a.Time.Equal(time.Unix(mtime, 0)) {
+		t.Errorf("Time = %s, want the modification time", a.Time)
+	}
+	if a.ID == b.ID {
+		t.Error("two puts of one key share an id")
+	}
+	if again, _ := parseOne(src, pre451, "application/json"); again.ID != a.ID {
+		t.Error("a redelivery of one put has a new id: dedup would not catch it")
+	}
+}
+
+func TestEntryVersion(t *testing.T) {
+	const (
+		commitTs int64 = 1793700668832899354
+		mtime    int64 = 1793700665
+		mtimeNs  int32 = 7
+	)
+	md5 := []byte{0xab}
+	tests := []struct {
+		name        string
+		commit      int64
+		sec         int64
+		ns          int32
+		wantOK      bool
+		wantAt      time.Time
+		wantVersion string
+	}{
+		{"commit time wins", commitTs, mtime, mtimeNs, true, time.Unix(0, commitTs), "1793700668832899354"},
+		{"modification time without one", 0, mtime, mtimeNs, true, time.Unix(mtime, int64(mtimeNs)), "mtime:1793700665000000007|size:5|md5:ab"},
+		{"neither", 0, 0, 0, false, time.Time{}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			version, at, ok := entryVersion(tc.commit, tc.sec, tc.ns, uint64(5), md5)
+			if ok != tc.wantOK || !at.Equal(tc.wantAt) || version != tc.wantVersion {
+				t.Errorf("entryVersion = (%q, %s, %v), want (%q, %s, %v)", version, at, ok, tc.wantVersion, tc.wantAt, tc.wantOK)
+			}
+		})
+	}
+}

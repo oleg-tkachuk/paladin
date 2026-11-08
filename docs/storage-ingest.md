@@ -119,8 +119,10 @@ Two publishers; **not interchangeable** — the wrong `source_format` yields
 ### `seaweedfs_nats` — gocdk_pubsub over NATS
 
 Source: `source_seaweedfs_nats.go` decodes the gob envelope wrapping a
-proto-marshalled `filer_pb.EventNotification`, then `parseSeaweedFSPath`
-(`source_seaweedfs.go`) parses the path.
+proto-marshalled `filer_pb.EventNotification` into the types generated from
+the subset of SeaweedFS's `filer.proto` in `eventingest/filerpb`, then
+`parseSeaweedFSPath` (`source_seaweedfs.go`) parses the path. Directory
+entries are ignored, and the event id is the entry's version, as below.
 
 SeaweedFS filer notification config (`notification.toml`):
 
@@ -143,8 +145,16 @@ Source: `source_seaweedfs.go`. The body is the JSON of the filer's
 entry's `attributes.file_size` and the etag its `attributes.md5` in hex;
 directory entries the filer creates for a key's prefixes are ignored. Point
 SF's `[notification.webhook]` at `https://…/webhook/seaweedfs`. No broker id
-→ the adapter hashes `(key, event_type, entry commit_ts_ns)` for dedup, so a
-second put of one key is a new event. `backend/internal/eventingest/testdata/
+→ the adapter hashes `(key, event_type, entry version)` for dedup, so a
+redelivery is the same event whenever it arrives and a second put of one key
+is a new one.
+
+The entry version is its `commit_ts_ns`, which SeaweedFS 4.51 added. An
+earlier filer leaves it 0, and the version is then the entry's `mtime`
+(with `mtime_ns`), size and md5: the filer may keep the time to the second,
+and two writes in one second differ in their bytes or are the same write.
+The NATS source derives its id the same way; an entry with neither time
+falls back to the receipt minute. `backend/internal/eventingest/testdata/
 seaweedfs-webhook-*.json` are bodies SeaweedFS 4.51 posted.
 
 ### The filer path
