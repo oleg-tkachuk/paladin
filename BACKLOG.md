@@ -490,6 +490,25 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a limes release whose `UsageStore.Refund` runs a callback on
   its transaction.
 
+### SeaweedFS NATS ingest ids from receipt time
+
+- **Status:** Deferred
+- **Reason:** `SeaweedFSNATSSource` hashes the event id from the receipt
+  time truncated to the minute, as the gocdk_pub_sub body carries no
+  timestamp it reads. Dedup keys on that id, so a redelivery that crosses a
+  minute boundary is processed twice, and a second write of one key within
+  a minute is dropped as a duplicate of the first. The webhook source
+  avoids both with the entry's `commit_ts_ns`, which `filer.proto` also
+  carries (`Entry` field 6), but reading it means decoding `Entry`, which
+  the source's tag-presence scan does not.
+- **Definition of Done:** the NATS source derives its id from the entry's
+  commit time, decoded through code generated from SeaweedFS's
+  `filer.proto` rather than a hand-written field walk, with a fallback for
+  entries written before the field existed (`commit_ts_ns = 0`).
+- **Blockers:** confirm the SeaweedFS version the cluster runs publishes
+  `commit_ts_ns`; decide between vendoring the proto subset and the
+  upstream `filer_pb` package (it pulls in the whole SeaweedFS module).
+
 ### Event dispatcher: per-tenant Kafka topic prefix
 
 - **Status:** Deferred — the Kafka sink, its SASL/SCRAM and mTLS auth, secret

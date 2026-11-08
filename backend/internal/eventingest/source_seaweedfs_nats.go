@@ -55,9 +55,20 @@ import (
 // as the JSON source. Operators set it to the bucket the SF S3
 // gateway publishes for; leaving it empty disables the strip and
 // expects the path to start at the tenant id.
+//
+// Now is the clock the event's time and id are read from; nil is time.Now.
 type SeaweedFSNATSSource struct {
 	BucketName string
 	URI        string
+	Now        func() time.Time
+}
+
+// now is the source's clock.
+func (s *SeaweedFSNATSSource) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
 }
 
 func (s *SeaweedFSNATSSource) Name() string { return "seaweedfs_nats" }
@@ -112,9 +123,11 @@ func (s *SeaweedFSNATSSource) parseEvent(raw []byte) (CloudEvent, error) {
 	// publishes only the inner EventNotification. Use receipt time
 	// (now) for the CloudEvent. ID derivation hashes the path +
 	// event type + a coarse minute bucket so retries within the same
-	// minute dedup; redeliveries that span minutes do show up as
-	// distinct events, but the ingest dedup window catches them.
-	t := time.Now().UTC()
+	// minute dedup. A redelivery that crosses a minute boundary gets
+	// another id, and dedup (keyed on the id) processes it again; two
+	// writes of one key within a minute share an id, and the second is
+	// dropped (BACKLOG: "SeaweedFS NATS ingest ids from receipt time").
+	t := s.now().UTC()
 	id := seaweedFSNATSID(path, string(evType), t.Truncate(time.Minute).Unix())
 
 	return CloudEvent{
@@ -197,8 +210,7 @@ func seaweedFSNATSEventType(hasOld, hasNew bool) (EventType, bool) {
 
 // seaweedFSNATSID hashes (path + event type + minute-bucket) so a
 // redelivery within the same minute produces the same id and gets
-// caught by the dedup window. Cross-minute retries are uncommon;
-// the broader ingest dedup table handles them.
+// caught by the dedup window. A redelivery in another minute is not.
 func seaweedFSNATSID(path, evType string, minute int64) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "seaweedfs_nats|%s|%s|%d", strings.TrimPrefix(path, "/"), evType, minute)

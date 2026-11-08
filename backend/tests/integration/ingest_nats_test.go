@@ -60,6 +60,7 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 	url := runNATSForIngestTest(t)
 
 	subject := "seaweedfs.filer"
+	receivedAt := time.Now()
 	q := sqlc.New(h.PoolMigrate)
 	driver := &eventingest.NATSDriver{
 		URL:     url,
@@ -70,6 +71,9 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 		SourceAdapt: &eventingest.SeaweedFSNATSSource{
 			BucketName: "paladin-test",
 			URI:        "seaweedfs-nats://test",
+			// One instant for both publishes: the id hashes the minute,
+			// and two parses either side of one would be two events.
+			Now: func() time.Time { return receivedAt },
 		},
 	}
 	worker := &eventingest.Worker{
@@ -146,8 +150,8 @@ func TestIngest_SeaweedFSNATSPromotesPending(t *testing.T) {
 
 	// Dedup window check: the second publish above must NOT have
 	// produced a second ingested_events row. The id is derived from
-	// (path + event type + minute bucket) so two publishes within
-	// the same minute hash to the same id.
+	// (path + event type + minute bucket), and the source's clock is
+	// pinned, so both publishes hash to the same id.
 	if n := mustCountIngested(t, h.PoolMigrate); n != 1 {
 		t.Errorf("ingested_events count = %d, want 1 (dedup window)", n)
 	}

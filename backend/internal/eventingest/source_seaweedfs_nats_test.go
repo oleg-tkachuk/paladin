@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
@@ -93,6 +94,35 @@ func TestSeaweedFSNATSSource_Parse_Create(t *testing.T) {
 	}
 	if ev.Source != src.URI {
 		t.Errorf("Source = %q, want %q", ev.Source, src.URI)
+	}
+}
+
+// The event's time and id come from the source's clock: one event parsed
+// twice in the same minute is one event to dedup, and in the next minute
+// another.
+func TestSeaweedFSNATSSource_Parse_IDFromTheClock(t *testing.T) {
+	minuteStart := time.Date(2026, 10, 31, 21, 27, 0, 0, time.UTC)
+	path := "/paladin-primary/00000000-0000-0000-0000-000000000abc/docs/obj.txt"
+	raw := natsEnvelope(t, map[string]string{"key": path}, fakeFilerEvent(t, false, true))
+	parseAt := func(at time.Time) CloudEvent {
+		t.Helper()
+		src := &SeaweedFSNATSSource{BucketName: "paladin-primary", URI: "x", Now: func() time.Time { return at }}
+		ev, err := parseOne(src, raw, "")
+		if err != nil {
+			t.Fatalf("Parse at %s: %v", at, err)
+		}
+		if !ev.Time.Equal(at) {
+			t.Errorf("Time = %s, want the clock's %s", ev.Time, at)
+		}
+		return ev
+	}
+
+	first := parseAt(minuteStart.Add(time.Second))
+	if same := parseAt(minuteStart.Add(time.Minute - time.Second)); same.ID != first.ID {
+		t.Errorf("same minute: ID %s, want %s", same.ID, first.ID)
+	}
+	if next := parseAt(minuteStart.Add(time.Minute)); next.ID == first.ID {
+		t.Errorf("next minute: ID %s, want another than %s", next.ID, first.ID)
 	}
 }
 
