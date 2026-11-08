@@ -29,6 +29,25 @@ on absence.
       dashboard to tell a dispatcher problem from one tenant's sink.
     {{- include "chart.alerts.runbook" (dict "ctx" . "rule" $outbox) | nindent 4 }}
 {{- end }}
+{{- if $rules.fanOutNotDraining.enabled }}
+{{- $fanOut := $rules.fanOutNotDraining }}
+{{- /* Recorded events wait in event_outbox until the dispatcher fans them
+       out (ADR-0044); paladin_outbox_pending counts only the delivery rows
+       fan-out writes, so a stalled fan-out leaves it at zero. */}}
+- alert: PaladinEventFanOutNotDraining
+  expr: |
+    min_over_time(max(paladin_outbox_recorded)[{{ $fanOut.window }}:{{ $fanOut.step }}]) > {{ $fanOut.events }}
+  for: {{ $fanOut.for }}
+  labels:
+    severity: {{ $fanOut.severity }}
+  annotations:
+    summary: "Paladin has not fanned out below {{ $fanOut.events }} recorded events in {{ $fanOut.window }}"
+    description: >-
+      Recorded events are not being matched to subscriptions. Check the
+      dispatcher logs for event fan-out failed; the delivery outbox stays
+      empty while this lasts.
+    {{- include "chart.alerts.runbook" (dict "ctx" . "rule" $fanOut) | nindent 4 }}
+{{- end }}
 {{- if $rules.rateLimitFailingOpen.enabled }}
 {{- $failOpen := $rules.rateLimitFailingOpen }}
 {{- /* Admitting on a storage failure is intended, but the ceiling is not

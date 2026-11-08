@@ -68,6 +68,7 @@ Prometheus rendering replaces dots with underscores and adds unit and
 | `paladin_object_failures` | counter | objects discarded because they could not become available, by `reason` | `internal/statemachine/metrics.go` |
 | `paladin.outbox.pending` | gauge | `event_deliveries` rows pending, cluster-wide | `internal/worker/metrics.go` |
 | `paladin.outbox.pending.max_per_tenant` | gauge | the deepest single tenant's pending backlog | `internal/worker/metrics.go` |
+| `paladin.outbox.recorded` | gauge | `event_outbox` rows: events recorded and not yet fanned out | `internal/worker/metrics.go` |
 | `paladin.objects.pending_overdue` | gauge | `PENDING` objects past their presign expiry plus the reconciler's grace | `internal/worker/metrics.go` |
 | `paladin.objects.pending_overdue.age` | gauge | how far past that deadline the oldest one is, in seconds | `internal/worker/metrics.go` |
 | `paladin.tenants.past_trash_retention` | gauge | trashed tenants past `admin.tenants.trash_retention`, which nothing purges on its own | `internal/worker/trash_retention_gauge.go` |

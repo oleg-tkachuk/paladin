@@ -55,6 +55,15 @@ func TestRecordPendingOverdue(t *testing.T) {
 	}
 }
 
+// The recorded events not yet fanned out reach their own gauge.
+func TestRecordFanoutBacklog(t *testing.T) {
+	const recorded = 23
+	recordFanoutBacklog(context.Background(), recorded)
+	if n, _, ok := gauge[int64](t, "paladin.outbox.recorded"); !ok || n != recorded {
+		t.Errorf("outbox.recorded = %d (found %v), want %d", n, ok, recorded)
+	}
+}
+
 // The backlog the dispatcher samples reaches both gauges.
 func TestRecordOutboxDepth(t *testing.T) {
 	const total, deepest = 42, 17

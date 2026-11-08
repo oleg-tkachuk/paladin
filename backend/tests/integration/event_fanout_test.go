@@ -133,3 +133,23 @@ func TestFanOut_ASubscriptionDeletedBeforeFanOutFailsNothing(t *testing.T) {
 		t.Errorf("deliveries go to %v, want only the subscription that remains (%v)", subs, kept)
 	}
 }
+
+// FanoutBacklog counts the recorded events the fan-out has not reached —
+// what paladin_outbox_recorded publishes — and drops to zero once it has.
+func TestFanOut_BacklogCountsRecordedEvents(t *testing.T) {
+	f := setupDispatcher(t)
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "fanout-backlog")
+	const recorded = 3
+	for range recorded {
+		f.recordEvent(t, tenant, makeEvent("", tenant))
+	}
+	r := f.outboxRunner(f.dispatcher())
+	ctx := context.Background()
+	if n, err := r.FanoutBacklog(ctx); err != nil || n < recorded {
+		t.Fatalf("FanoutBacklog = %d, %v; want at least %d", n, err, recorded)
+	}
+	f.fanOut(t)
+	if got := f.recordedEvents(t, tenant); got != 0 {
+		t.Errorf("recorded events after fan-out = %d, want 0", got)
+	}
+}

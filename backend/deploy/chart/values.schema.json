@@ -1819,6 +1819,34 @@
                   },
                   "type": "object"
                 },
+                "fanOutNotDraining": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "events": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "for": {
+                      "type": "string"
+                    },
+                    "runbook": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string"
+                    },
+                    "step": {
+                      "type": "string"
+                    },
+                    "window": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
                 "highErrorRate": {
                   "additionalProperties": false,
                   "properties": {

@@ -1,12 +1,14 @@
 # Runbook: outbox not draining
 
-Covers `PaladinOutboxNotDraining` in the backend chart's PrometheusRule
+Covers `PaladinOutboxNotDraining` and `PaladinEventFanOutNotDraining` in the
+backend chart's PrometheusRule
 ([`_alerts-operations.tpl`](../../backend/deploy/chart/templates/_alerts-operations.tpl),
-`metrics.alerts.rules.outboxNotDraining`).
+`metrics.alerts.rules.outboxNotDraining` and `fanOutNotDraining`).
 
-| Fires when | Meaning |
-|-----------|---------|
-| the minimum of `paladin_outbox_pending` over 15m stays above 500 rows, for 10m | Event deliveries are being written faster than the dispatcher clears them, or not cleared at all. |
+| Alert | Fires when | Meaning |
+|-------|-----------|---------|
+| `PaladinOutboxNotDraining` | the minimum of `paladin_outbox_pending` over 15m stays above 500 rows, for 10m | Event deliveries are being written faster than the dispatcher clears them, or not cleared at all. |
+| `PaladinEventFanOutNotDraining` | the minimum of `paladin_outbox_recorded` over 15m stays above 500 events, for 10m | Recorded events are not being matched to subscriptions. No delivery row is written while this lasts, so `paladin_outbox_pending` stays low. |
 
 Every state change that notifies subscribers records an `event_outbox` row in
 the same transaction (ADR-0003); the dispatcher fans each event out to one
@@ -23,7 +25,9 @@ every write burst.
 
 - `paladin_outbox_pending` — every `status = 'pending'` row, cluster-wide.
 - `paladin_outbox_pending_max_per_tenant` — the deepest single tenant's
-  pending rows. Neither carries a tenant label.
+  pending rows.
+- `paladin_outbox_recorded` — `event_outbox` rows: events recorded and not
+  yet fanned out. None of the three carries a tenant label.
 
 Pending includes rows that are not due yet: rows backing off after a failed
 attempt (`next_attempt_at` in the future) and rows a tick has claimed (their
@@ -63,7 +67,8 @@ rises with a healthy loop and an unhealthy sink.
    | `outbox depth sample failed` | The gauges were not updated; the alert reads the last sample. |
    | `outbox backlog high` | One tenant has 10,000 pending rows: the warning this alert escalates. |
    | `event fan-out failed` | Recorded events could not be matched to subscriptions; they stay in `event_outbox` and are retried next pass. |
-   | `fan-out backlog high` | 10,000 recorded events wait for fan-out. `paladin_outbox_pending` does not count them, so a stalled fan-out shows here, not in the alert. |
+   | `fan-out backlog high` | 10,000 recorded events wait for fan-out; `PaladinEventFanOutNotDraining` reads the same backlog from `paladin_outbox_recorded`. |
+   | `fan-out backlog sample failed` | `paladin_outbox_recorded` was not updated; the alert reads the last sample. |
 
 4. **What the rows say.** As an RLS-exempt role (`paladin_migrate`):
 

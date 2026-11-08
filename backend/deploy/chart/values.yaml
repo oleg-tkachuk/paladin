@@ -563,6 +563,17 @@ metrics:
         step: 1m
         for: 10m
         runbook: outbox-not-draining.md
+      fanOutNotDraining:
+        enabled: true
+        severity: critical
+        # The floor of recorded events not yet fanned out to subscriptions —
+        # the minimum over `window`, sampled every `step` — stayed above
+        # `events` (ADR-0044). paladin_outbox_pending does not count them.
+        events: 500
+        window: 15m
+        step: 1m
+        for: 10m
+        runbook: outbox-not-draining.md
       rateLimitFailingOpen:
         enabled: true
         severity: critical
