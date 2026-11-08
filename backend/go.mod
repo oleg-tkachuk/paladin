@@ -42,7 +42,7 @@ require (
 	// limes is the capability primitive the auth planes run on.
 	github.com/oleg-tkachuk/limes v1.0.0-rc.55
 	github.com/oleg-tkachuk/limes/biscuit v0.1.30
-	github.com/oleg-tkachuk/limes/exchange v0.21.0
+	github.com/oleg-tkachuk/limes/exchange v0.22.0
 	github.com/oleg-tkachuk/limes/otelmetric v0.18.0
 	github.com/oleg-tkachuk/limes/pgstore v0.70.0
 	github.com/oleg-tkachuk/paladin/sdk/go v0.142.0
