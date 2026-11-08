@@ -40,6 +40,12 @@ def _mac(secret: str, t: int, body: bytes) -> bytes:
     return hmac.new(secret.encode(), str(t).encode() + _SIGNED_SEP + body, hashlib.sha256).digest()
 
 
+def _is_hex(value: str) -> bool:
+    """Whether value is whole bytes of hex, checked by hand: bytes.fromhex
+    would also take spaces."""
+    return bool(value) and len(value) % 2 == 0 and all(c in string.hexdigits for c in value)
+
+
 def sign_webhook(secret: str, t: int, body: bytes) -> str:
     """The ``X-Paladin-Webhook-Signature`` value for ``body`` signed at unix
     second ``t``, as the server sends it."""
@@ -67,12 +73,10 @@ def verify_webhook(
             if t is not None or not value or not all(c in string.digits for c in value):
                 raise WebhookSignatureError("bad timestamp")
             t = int(value)
-        elif key == _V1_KEY:
+        elif key == _V1_KEY and _is_hex(value):
             # A value that is not hex cannot match; it is skipped, not fatal,
-            # so another v1 beside it can still verify. Checked by hand:
-            # bytes.fromhex would also take spaces.
-            if value and len(value) % 2 == 0 and all(c in string.hexdigits for c in value):
-                sigs.append(bytes.fromhex(value))
+            # so another v1 beside it can still verify.
+            sigs.append(bytes.fromhex(value))
     if t is None or not sigs:
         raise WebhookSignatureError("want t=<unix seconds>,v1=<hex>")
     want = _mac(secret, t, body)

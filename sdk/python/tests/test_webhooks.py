@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 import paladin
+from paladin.webhooks import _is_hex
 
 SHARED = Path(__file__).resolve().parents[2] / "testdata" / "webhook_signatures.json"
 GO_WEBHOOK = Path(__file__).resolve().parents[2] / "go" / "paladin" / "webhook.go"
@@ -54,3 +55,18 @@ def test_round_trip_and_a_narrower_window() -> None:
 
 def test_the_error_is_a_value_error() -> None:
     assert issubclass(paladin.WebhookSignatureError, ValueError)
+
+
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [
+        ("ab01", True),
+        ("AB01", True),
+        ("", False),
+        ("abc", False),  # half a byte
+        ("ab 1", False),  # bytes.fromhex would take the space
+        ("zz", False),
+    ],
+)
+def test_is_hex_takes_whole_bytes_of_hex_only(value: str, want: bool) -> None:
+    assert _is_hex(value) is want
