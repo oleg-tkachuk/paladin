@@ -1,0 +1,57 @@
+name: Set up the release tools
+description: >-
+  Tools pinned in the workflow's env, installed from their GitHub releases by
+  .github/ci/install-tool.ts and put on PATH, from the Actions cache when a run
+  on main has cached them, so a run does not depend on github.com/releases
+  answering. Needs Node first (./.github/actions/setup-ci).
+
+inputs:
+  tools:
+    description: The tools to install, by their install-tool.ts names, space-separated.
+    required: true
+  cache:
+    description: >-
+      Restore the tools from the Actions cache. "false" for a job that holds a
+      write token: a cache another run wrote is not something to restore into
+      it, as setup-ci keeps no dependency cache for the same reason.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Name the cache entry
+      id: key
+      if: inputs.cache == 'true'
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.tools }}
+      # TOOLS is split on purpose: one argument per tool.
+      run: printf 'key=%s\n' "$(node .github/ci/install-tool.ts --cache-key $TOOLS)" >>"$GITHUB_OUTPUT"
+
+    - name: Restore the tools
+      id: restore
+      if: inputs.cache == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/tools/bin
+        key: ${{ steps.key.outputs.key }}
+
+    # A restored tool at its pinned version is not downloaded again.
+    - name: Install the tools
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.tools }}
+      run: node .github/ci/install-tool.ts $TOOLS
+
+    # Only main writes, as with the Go caches: a pull request cannot seed what
+    # main and every other pull request restore. Two jobs saving one key at
+    # once is a warning, not a failure.
+    - name: Save the tools
+      if: >-
+        inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true' &&
+        github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/tools/bin
+        key: ${{ steps.key.outputs.key }}

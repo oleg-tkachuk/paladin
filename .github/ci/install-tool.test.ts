@@ -8,7 +8,7 @@ import { describe, test } from "node:test";
 import { parse } from "yaml";
 
 import { execute } from "./lib/exec.ts";
-import { ChecksumFormat, TOOLS, install, orderedSumOf, sumOf, type Fetch, type Tool } from "./install-tool.ts";
+import { ChecksumFormat, TOOLS, cacheKey, install, installed, orderedSumOf, sumOf, type Fetch, type Tool } from "./install-tool.ts";
 
 const SUM = "a".repeat(64);
 
@@ -40,7 +40,28 @@ test("each tool's release names its assets as published", () => {
   assert.deepEqual(at(TOOLS.trivy!, "v0.75.0"), ["v0.75.0", "trivy_0.75.0_Linux-64bit.tar.gz", "trivy_0.75.0_checksums.txt", "trivy"]);
   assert.deepEqual(at(TOOLS.promtool!, "v3.15.0"), ["v3.15.0", "prometheus-3.15.0.linux-amd64.tar.gz", "sha256sums.txt", "prometheus-3.15.0.linux-amd64/promtool"]);
   assert.deepEqual(at(TOOLS.step!, "0.31.0"), ["v0.31.0", "step_linux_0.31.0_amd64.tar.gz", "checksums.txt", "step_0.31.0/bin/step"]);
+  assert.deepEqual(at(TOOLS.task!, "3.54.0"), ["v3.54.0", "task_linux_amd64.tar.gz", "task_checksums.txt", "task"]);
+  assert.deepEqual(at(TOOLS.buf!, "1.75.0"), ["v1.75.0", "buf-Linux-x86_64", "sha256.txt", undefined]);
+  assert.deepEqual(at(TOOLS["golangci-lint"]!, "v2.15.0"), [
+    "v2.15.0",
+    "golangci-lint-2.15.0-linux-amd64.tar.gz",
+    "golangci-lint-2.15.0-checksums.txt",
+    "golangci-lint-2.15.0-linux-amd64/golangci-lint",
+  ]);
   assert.equal(TOOLS.yq!.format, ChecksumFormat.Ordered);
+});
+
+describe("cacheKey", () => {
+  const tools = [
+    { name: "yq", version: "v4.54.2" },
+    { name: "task", version: "3.54.0" },
+  ];
+  test("does not depend on the order the tools are named in", () =>
+    assert.equal(cacheKey(tools, "installer"), cacheKey([...tools].reverse(), "installer")));
+  test("changes with a pin", () =>
+    assert.notEqual(cacheKey(tools, "installer"), cacheKey([tools[0]!, { name: "task", version: "3.55.0" }], "installer")));
+  test("changes with the installer", () => assert.notEqual(cacheKey(tools, "installer"), cacheKey(tools, "installer v2")));
+  test("tells the tools' entries apart", () => assert.match(cacheKey(tools, "installer"), /^release-tools-[0-9a-f]{64}$/));
 });
 
 describe("install", () => {
@@ -87,12 +108,39 @@ describe("install", () => {
     }
   });
 
+  // A directory restored from the cache already holds the tool: the run must
+  // not reach github.com/releases for it, and a new pin must.
+  test("a tool already installed at its version is not downloaded again; another version is", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "paladin-ci-"));
+    try {
+      const body = Buffer.from("#!/bin/sh\necho tool\n");
+      const files = { "tool-linux": body, "sums.txt": Buffer.from(`${sha(body)}  tool-linux\n`) };
+      const fetched: string[] = [];
+      const counting: Fetch = async (url) => {
+        fetched.push(url);
+        return served(files)(url);
+      };
+      await install(binaryTool, "v1", dir, counting, BASE);
+      assert.ok(installed(binaryTool, "v1", dir));
+      const first = fetched.length;
+      await install(binaryTool, "v1", dir, counting, BASE);
+      assert.equal(fetched.length, first, "the second install fetched nothing");
+      assert.ok(!installed(binaryTool, "v2", dir));
+      await install(binaryTool, "v2", dir, counting, BASE);
+      assert.ok(fetched.length > first, "a new version is downloaded");
+      assert.ok(installed(binaryTool, "v2", dir));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a download whose SHA-256 is not the listed one is refused, and nothing installed", async () => {
     const dir = mkdtempSync(join(tmpdir(), "paladin-ci-"));
     try {
       const get = served({ "tool-linux": Buffer.from("tampered"), "sums.txt": Buffer.from(`${SUM}  tool-linux\n`) });
       await assert.rejects(install(binaryTool, "v1", dir, get, BASE), /refusing to install it/);
       assert.ok(!existsSync(join(dir, "tool")));
+      assert.ok(!installed(binaryTool, "v1", dir), "no stamp for what was refused");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

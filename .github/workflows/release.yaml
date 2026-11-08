@@ -315,14 +315,12 @@ jobs:
       - name: Set up the CI scripts
         uses: ./.github/actions/setup-ci
 
-      - name: Set up yq
-        run: node .github/ci/install-tool.ts yq
-
-      - name: Set up Task
-        uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+      # Downloaded, not restored: this job holds write tokens.
+      - name: Set up yq and Task
+        uses: ./.github/actions/setup-tools
         with:
-          version: ${{ env.TASK_VERSION }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          tools: yq task
+          cache: "false"
 
       # Everything the image build needs, read from the component's Taskfile
       # and the task library rather than restated here, and refused when the
