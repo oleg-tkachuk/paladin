@@ -1,4 +1,4 @@
-## Unreleased — a filter on a missing map key no longer fails
+## v42.1.0 — a filter on a missing map key no longer fails
 
 - In every CEL filter and lifecycle rule, `labels`, `tags` and `metadata`
   read a key they do not hold as `""`, as a NULL column reads. A filter such

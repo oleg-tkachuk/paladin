@@ -99,7 +99,7 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
-## sdk/python/v0.143.0, sdk/go/v0.143.0 — a refund emits paladin.capability.refunded
+## v42.1.0, sdk/python/v0.143.0, sdk/go/v0.143.0 — a refund emits paladin.capability.refunded
 
 - With `dispatcher.charge_events_enabled` on, a refund that returns spend now
   emits `paladin.capability.refunded`, on the refund's own transaction. The
@@ -110,7 +110,7 @@ here.
 - `paladin.capability.charged` gains `data.charge_id`, the charge's ledger id,
   which a refund event names as the charge it returns from.
 
-## Unreleased — `paladin.tenant.trashed` reaches subscribers when it happens
+## v42.1.0 — `paladin.tenant.trashed` reaches subscribers when it happens
 
 - A tenant in the trash is frozen, and its pending events wait for a restore.
   The event announcing the trash waited with them, so a subscriber learnt a
@@ -118,7 +118,7 @@ here.
   purged. `paladin.tenant.trashed` is now delivered at once; every other
   event of a trashed tenant still waits.
 
-## Unreleased — a filter on a missing map key no longer fails
+## v42.1.0 — a filter on a missing map key no longer fails
 
 - In every CEL filter and lifecycle rule, `labels`, `tags` and `metadata`
   read a key they do not hold as `""`, as a NULL column reads. A filter such
