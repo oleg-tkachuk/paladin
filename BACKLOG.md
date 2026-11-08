@@ -32,23 +32,18 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## Releases
 
-### Restart the product's numbering at 0.x: the steps outside the code
+### Restart the product's numbering at 0.x: the first release
 
 - **Status:** In-Progress
 - **Reason:** ADR-0045 moved the product to `release/vX.Y.Z` tags restarting
-  at 0.x, and the task library (v14.3.0) reads that prefix. Three steps are
-  not code: a repository setting, the first tag, and the dev cluster's chart
-  constraint. Until they are done the workflow releases no product.
-- **Definition of Done:**
-  - The `protect-release-tags` ruleset includes `refs/tags/release/**`.
-  - `release/v0.0.0` is tagged on main by hand — before the change that sets
-    `VERSION_TAG_PREFIX` merges, or dev builds start at `0.1.0-dev.…` and
-    outrank the `0.0.1-dev.…` ones that follow the tag.
-  - local-iac bounds the paladin-core and paladin-console charts to
-    `>=0.0.0-0 <1.0.0-0` (local-iac#714), once a 0.x chart is published.
-  - The first product release, 0.1.0, is cut with `-f bump=minor`, and this
-    entry is deleted.
-- **Blockers:** none; each step waits on the one before it.
+  at 0.x. The tag ruleset covers `release/**`, `release/v0.0.0` is cut, and
+  the dev cluster follows charts below 1.0; no 0.x release is cut yet. It is
+  cut from a commit after `release/v0.0.0`: two release tags on one commit
+  derive the lower version, which the publish refuses.
+- **Definition of Done:** `release/v0.1.0` is cut with
+  `gh workflow run release.yaml -f bump=minor`, its images and charts are
+  published, and this entry is deleted.
+- **Blockers:** none.
 
 ## SDKs
 
