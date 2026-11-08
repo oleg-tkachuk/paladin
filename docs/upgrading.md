@@ -99,6 +99,25 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## Unreleased — `paladin.tenant.trashed` reaches subscribers when it happens
+
+- A tenant in the trash is frozen, and its pending events wait for a restore.
+  The event announcing the trash waited with them, so a subscriber learnt a
+  tenant had been trashed only after it was restored, and never if it was
+  purged. `paladin.tenant.trashed` is now delivered at once; every other
+  event of a trashed tenant still waits.
+
+## Unreleased — a filter on a missing map key no longer fails
+
+- In every CEL filter and lifecycle rule, `labels`, `tags` and `metadata`
+  read a key they do not hold as `""`, as a NULL column reads. A filter such
+  as `tags["env"] == "prod"` used to fail the whole list with
+  `INVALID_ARGUMENT` ("no such key") whenever one row on the page lacked
+  `env`; it now matches the rows that hold the pair.
+- `has(tags.env)` and `"env" in tags` still test whether the key is
+  present. `tags["env"] == ""` matches a missing key and a key set to `""`
+  alike; tell them apart with `has`.
+
 ## v42.0.0, sdk/go/v0.137.0, sdk/python/v0.138.0 — a capability that is no longer good is UNAUTHENTICATED
 
 - A capability the server cannot accept as a credential — not issued by it,
