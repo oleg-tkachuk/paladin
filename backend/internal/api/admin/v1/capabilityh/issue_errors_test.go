@@ -155,7 +155,10 @@ func TestIssueRefusesAnUnsetCeiling(t *testing.T) {
 
 // The lineage refusals only a delegation meets: a chain past
 // MaxDelegationDepth is a parent that can no longer delegate, and a child
-// wider than its parent — another tenant among them — is a denial.
+// wider than its parent — another tenant among them — is a denial. The store
+// refuses with its own sentinels; the issuer answers a chain too deep as
+// delegation_depth_exceeded and an erased tenant as tenant_gone (limes
+// v0.172.0); both answer as before, a state the caller must act on.
 func TestDelegateAnswersALineageRefusal(t *testing.T) {
 	for _, tc := range []struct {
 		name string

@@ -145,19 +145,24 @@ func TestLeaseActions(t *testing.T) {
 	}
 }
 
-// Asked again while open, a lease adds to what it holds.
+// Asked again while open, a lease is settled and a new one opened under a
+// new id, holding what the old one had left plus the top-up.
 func TestLeaseTopsUp(t *testing.T) {
 	f := newLeaseFixture(t)
 	req := &adminv1.CapabilityServiceLeaseRequest{Id: f.id, Amount: units(apiutil.NoUnit, leaseUnits)}
-	if _, err := f.h.Lease(adminCtx(), req); err != nil {
+	first, err := f.h.Lease(adminCtx(), req)
+	if err != nil {
 		t.Fatal(err)
 	}
 	res, err := f.h.Lease(adminCtx(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if res.GetLease().GetId() == first.GetLease().GetId() {
+		t.Errorf("topped-up lease kept id %s, want a new one", first.GetLease().GetId())
+	}
 	if got := res.GetLease().GetAmount().GetUnits(); got != 2*leaseUnits {
-		t.Errorf("topped-up amount = %d, want %d", got, 2*leaseUnits)
+		t.Errorf("topped-up amount = %d, want %d — nothing was spent, so all of the first is left", got, 2*leaseUnits)
 	}
 }
 

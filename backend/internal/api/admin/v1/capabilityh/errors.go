@@ -30,17 +30,21 @@ var issuanceExceptions = func() auth.Exceptions {
 
 // delegationExceptions answer Delegate: issuance's, and the parent's. A
 // parent revoked, expired, at the depth limit or in an erased tenant can no
-// longer delegate,
-// which is a state the caller must act on, not a refusal of this call; a
-// child in another unit than its parent's is wider than the parent allows.
+// longer delegate, which is a state the caller must act on, not a refusal of
+// this call; a child in another unit than its parent's is wider than the
+// parent allows. The mint answers a chain at the depth limit as
+// delegation_depth_exceeded; verifying a parent whose own chain is already
+// too deep still answers delegation_too_deep. A mint for an erased tenant
+// answers tenant_gone, which the table answers as state that is gone.
 var delegationExceptions = func() auth.Exceptions {
 	e := maps.Clone(issuanceExceptions)
 	maps.Copy(e, auth.Exceptions{
-		limes.CodeRevoked:           {Code: connect.CodeFailedPrecondition},
-		limes.CodeExpired:           {Code: connect.CodeFailedPrecondition},
-		limes.CodeDelegationTooDeep: {Code: connect.CodeFailedPrecondition},
-		limes.CodeTenantErased:      {Code: connect.CodeFailedPrecondition},
-		limes.CodeUnitCodeMismatch:  {Code: connect.CodePermissionDenied},
+		limes.CodeRevoked:                 {Code: connect.CodeFailedPrecondition},
+		limes.CodeExpired:                 {Code: connect.CodeFailedPrecondition},
+		limes.CodeDelegationTooDeep:       {Code: connect.CodeFailedPrecondition},
+		limes.CodeDelegationDepthExceeded: {Code: connect.CodeFailedPrecondition},
+		limes.CodeTenantErased:            {Code: connect.CodeFailedPrecondition},
+		limes.CodeUnitCodeMismatch:        {Code: connect.CodePermissionDenied},
 	})
 	return e
 }()

@@ -97,6 +97,9 @@ func newMinter(t *testing.T, store limes.Store) *captest.Minter {
 	}
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys: keys, Revocations: store, TrustedIssuers: []string{captest.Issuer},
+		// The fakes keep no record a lineage lookup could answer; the record
+		// requirement is the production verifier's, not these tests'.
+		AllowUnrecorded: true,
 	})
 	if err != nil {
 		t.Fatal(err)
