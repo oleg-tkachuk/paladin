@@ -99,6 +99,36 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## sdk/python/v0.145.0, sdk/go/v0.145.0 — a lease top-up opens a new lease
+
+- `CapabilityService.Lease` on a capability whose lease is open now settles
+  that lease — what it spent charged to every ancestor and the tenant — and
+  opens a new one under a new id, holding what the old one had left plus the
+  request, until the request's TTL from now. It added to the open lease and
+  kept its id. A caller that kept a lease's id across a top-up reads it from
+  the top-up's answer. Both SDKs' fakes do the same.
+- Delegating from a capability whose chain is at the depth limit answers
+  `FAILED_PRECONDITION` with limes code `delegation_depth_exceeded`, where it
+  named `delegation_too_deep`. Issuing for a tenant whose usage was erased
+  answers `FAILED_PRECONDITION` with `tenant_gone`, where it answered
+  `UNAUTHENTICATED` with `tenant_erased`; delegating there keeps
+  `FAILED_PRECONDITION`, now with `tenant_gone`.
+- A capability the revocation store has no record of is refused, where it
+  was accepted as not revoked; every capability Paladin issues is recorded.
+
+## Unreleased — events are matched to subscriptions by the dispatcher
+
+- A producer now records each event once, in a new `event_outbox` table
+  (migration 107), and the dispatcher matches it to subscriptions. The
+  change that emits an event no longer fails when a subscription is deleted
+  at the same moment, and a storage backend's credential rotation no longer
+  fails when the dispatcher is wired.
+- A subscription receives an event if it existed when the event was
+  recorded; one created a moment later does not. See
+  `docs/event-delivery-dedup.md`.
+- A stalled fan-out does not raise `paladin_outbox_pending`: look for
+  `fan-out backlog high` in the dispatcher's log.
+
 ## v42.1.0, sdk/python/v0.143.0, sdk/go/v0.143.0 — a refund emits paladin.capability.refunded
 
 - With `dispatcher.charge_events_enabled` on, a refund that returns spend now
