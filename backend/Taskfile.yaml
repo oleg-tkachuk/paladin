@@ -78,6 +78,10 @@ includes:
       # drift gate below then reports the output as stale when it was fine and
       # the gate itself had just dirtied it.
       SQLC_MODULE: github.com/sqlc-dev/sqlc/cmd/sqlc
+      # Must match `out:` in sqlc.yaml. sqlc writes there and the gate diffs
+      # there; nothing reconciles the two spellings, and a gate pointed at the
+      # wrong directory passes by finding nothing.
+      SQLC_DIR: internal/store/postgres/sqlc
   # The SeaweedFS filer messages ingest decodes, generated from the subset of
   # upstream's filer.proto kept beside them.
   filerpb:
@@ -89,10 +93,10 @@ includes:
       # the generated code is compiled against.
       PROTO_PLUGINS: google.golang.org/protobuf/cmd/protoc-gen-go
       PROTO_PATHSPEC: filer.pb.go
-      # Must match `out:` in sqlc.yaml. sqlc writes there and the gate diffs
-      # there; nothing reconciles the two spellings, and a gate pointed at the
-      # wrong directory passes by finding nothing.
-      SQLC_DIR: internal/store/postgres/sqlc
+      # Normalised with goimports after generating, as the commit hook formats
+      # it: otherwise the committed file and a fresh generate differ in their
+      # import grouping and the stub gate fails.
+      GENERATED_DIRS: ["."]
   auth:
     taskfile: '{{printf .TASKLIB "auth"}}'
     dir: .

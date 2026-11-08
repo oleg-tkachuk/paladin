@@ -26,17 +26,19 @@ func TestDevTokenDefaultAudienceIsAPlane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// An include's vars are any YAML value (a list for codegen's
+	// GENERATED_DIRS); only this one is read, as the string it must be.
 	var tf struct {
 		Includes map[string]struct {
-			Vars map[string]string `yaml:"vars"`
+			Vars map[string]any `yaml:"vars"`
 		} `yaml:"includes"`
 	}
 	if err := yaml.Unmarshal(raw, &tf); err != nil {
 		t.Fatal(err)
 	}
-	value, ok := tf.Includes["auth"].Vars["JWT_AUD"]
+	value, ok := tf.Includes["auth"].Vars["JWT_AUD"].(string)
 	if !ok {
-		t.Fatal("Taskfile.yaml: includes.auth.vars.JWT_AUD not found")
+		t.Fatal("Taskfile.yaml: includes.auth.vars.JWT_AUD not found, or not a string")
 	}
 	m := templateDefault.FindStringSubmatch(value)
 	if m == nil {
