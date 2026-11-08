@@ -53,6 +53,9 @@ type leaseStep struct {
 	Code      string `json:"code"`
 	LimesCode string `json:"limes_code"`
 	Held      *int64 `json:"held"`
+	// Renewed, when set, says whether the step's lease has another id than
+	// the one the step before it answered with.
+	Renewed *bool `json:"renewed"`
 }
 
 type leaseCase struct {
@@ -132,25 +135,39 @@ type leaseCalls interface {
 	SettleLease(ctx context.Context, req *adminv1.CapabilityServiceSettleLeaseRequest) (*adminv1.CapabilityServiceSettleLeaseResponse, error)
 }
 
-func runLeaseStep(ctx context.Context, c, operator leaseCalls, operatorCtx context.Context, s leaseStep, id string) leaseAnswer {
+// runLeaseStep runs s and returns its answer and the id of the lease it
+// answered with, "" for none.
+func runLeaseStep(ctx context.Context, c, operator leaseCalls, operatorCtx context.Context, s leaseStep, id string) (leaseAnswer, string) {
 	switch s.Call {
 	case callRevoke:
 		_, err := operator.Revoke(operatorCtx, &adminv1.CapabilityServiceRevokeRequest{Id: id})
 		if err != nil {
-			return leaseAnswer{Code: connect.CodeOf(err).String()}
+			return leaseAnswer{Code: connect.CodeOf(err).String()}, ""
 		}
-		return leaseAnswer{}
+		return leaseAnswer{}, ""
 	case callLease:
 		res, err := c.Lease(ctx, &adminv1.CapabilityServiceLeaseRequest{Id: id, Requests: s.Requests})
-		return answerOfLease(res.GetLease(), err)
+		return answerOfLease(res.GetLease(), err), res.GetLease().GetId()
 	case callGetLease:
 		res, err := c.GetLease(ctx, &adminv1.CapabilityServiceGetLeaseRequest{Id: id})
-		return answerOfLease(res.GetLease(), err)
+		return answerOfLease(res.GetLease(), err), res.GetLease().GetId()
 	case callSettleLease:
 		res, err := c.SettleLease(ctx, &adminv1.CapabilityServiceSettleLeaseRequest{Id: id})
-		return answerOfLease(res.GetLease(), err)
+		return answerOfLease(res.GetLease(), err), res.GetLease().GetId()
 	}
 	panic("lease table: unknown call " + s.Call)
+}
+
+// checkRenewed holds a step's lease id to the table's renewed: another id
+// than prev's, or the same.
+func checkRenewed(t *testing.T, who string, i int, s leaseStep, prev, got string) {
+	t.Helper()
+	if s.Renewed == nil {
+		return
+	}
+	if renewed := got != prev; renewed != *s.Renewed {
+		t.Errorf("%s step %d (%s of %s): lease %q after %q, renewed %v, the table %v", who, i, s.Call, s.Of, got, prev, renewed, *s.Renewed)
+	}
 }
 
 // serverLeaseChain seeds the table's roles on limes's in-memory stores.
@@ -253,14 +270,18 @@ func TestTheSDKFakeLeasesAsTheServerDoes(t *testing.T) {
 			if tc.As != "" {
 				ctx = auth.WithCapability(context.Background(), roles[tc.As])
 			}
+			var prev string
 			for i, s := range tc.Steps {
 				id := uuid.New().String()
 				if s.Of != roleUnknown {
 					id = roles[s.Of].Capability().ID.String()
 				}
-				if got := runLeaseStep(ctx, h, h, adminCtx(), s, id); got != s.want() {
+				got, lease := runLeaseStep(ctx, h, h, adminCtx(), s, id)
+				if got != s.want() {
 					t.Errorf("server step %d (%s of %s) answers %+v, the table %+v", i, s.Call, s.Of, got, s.want())
 				}
+				checkRenewed(t, "server", i, s, prev, lease)
+				prev = lease
 			}
 
 			srv := paladintest.New(t)
@@ -269,14 +290,18 @@ func TestTheSDKFakeLeasesAsTheServerDoes(t *testing.T) {
 			if tc.As != "" {
 				client = srv.Connect(paladin.WithCapability(tokens[tc.As])).Admin.Capability
 			}
+			prev = ""
 			for i, s := range tc.Steps {
 				id := uuid.New().String()
 				if s.Of != roleUnknown {
 					id = ids[s.Of]
 				}
-				if got := runLeaseStep(context.Background(), client, srv.Connect().Admin.Capability, context.Background(), s, id); got != s.want() {
+				got, lease := runLeaseStep(context.Background(), client, srv.Connect().Admin.Capability, context.Background(), s, id)
+				if got != s.want() {
 					t.Errorf("fake step %d (%s of %s) answers %+v, the table %+v", i, s.Call, s.Of, got, s.want())
 				}
+				checkRenewed(t, "fake", i, s, prev, lease)
+				prev = lease
 			}
 		})
 	}

@@ -24,8 +24,9 @@ import (
 
 // Lease, GetLease and SettleLease, as the fake serves them: who may lease
 // for a capability is the server's rule, and a lease is kept as the server
-// answers it — what it holds, every top-up added, until it is settled or its
-// capability revoked. The fake counts no budget, so a lease's spent amount
+// answers it — what it holds, until it is settled, topped up or its
+// capability revoked. A top-up settles the open lease and opens a new one
+// under a new id, holding what the old one had left plus the top-up. The fake counts no budget, so a lease's spent amount
 // stays zero, and no ceiling of the chain refuses it.
 
 // The server's refusals of a presented capability's lease call, word for word.
@@ -35,7 +36,8 @@ const (
 	msgLeaseNotBelow     = "capability: a capability leases only for itself or a capability delegated from it"
 )
 
-// Lease opens a lease on the capability named, or adds to the one it holds.
+// Lease opens a lease on the capability named; on one it holds already, it
+// settles that and opens a new one with what was left plus the request.
 func (s capabilityService) Lease(ctx context.Context, req *adminv1.CapabilityServiceLeaseRequest) (*adminv1.CapabilityServiceLeaseResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -70,23 +72,22 @@ func (s capabilityService) Lease(ctx context.Context, req *adminv1.CapabilitySer
 	if exp := rec.msg.GetExpiresAt().AsTime(); end.After(exp) {
 		end = exp
 	}
-	l, ok := s.leases[req.GetId()]
-	if !ok {
-		l = &adminv1.CapabilityLease{
-			Id:           uuid.New().String(),
-			CapabilityId: req.GetId(),
-			TenantId:     rec.msg.GetSubject().GetTenantId(),
-			Amount:       &money.Money{CurrencyCode: unit},
-			Spent:        &money.Money{CurrencyCode: unit},
-		}
-		s.leases[req.GetId()] = l
+	// The fake counts no spend, so a lease topped up has all it held left.
+	l := &adminv1.CapabilityLease{
+		Id:           uuid.New().String(),
+		CapabilityId: req.GetId(),
+		TenantId:     rec.msg.GetSubject().GetTenantId(),
+		Amount:       &money.Money{CurrencyCode: unit},
+		Spent:        &money.Money{CurrencyCode: unit},
+		ExpiresAt:    timestamppb.New(end),
+	}
+	if open, ok := s.leases[req.GetId()]; ok {
+		l.Amount = open.GetAmount()
+		l.Requests = open.GetRequests()
 	}
 	l.Amount = addMoney(unit, l.GetAmount(), req.GetAmount())
 	l.Requests += req.GetRequests()
-	// A lease topped up lasts until the later of its end and this one.
-	if prev := l.GetExpiresAt(); prev == nil || end.After(prev.AsTime()) {
-		l.ExpiresAt = timestamppb.New(end)
-	}
+	s.leases[req.GetId()] = l
 	return &adminv1.CapabilityServiceLeaseResponse{Lease: proto.CloneOf(l)}, nil
 }
 
