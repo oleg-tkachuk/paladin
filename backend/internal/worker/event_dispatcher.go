@@ -692,6 +692,24 @@ func (r *OutboxRunner) OutboxDepth(ctx context.Context) (total, maxPerTenant int
 	return total, maxPerTenant, err
 }
 
+// sampleFanoutBacklog publishes the recorded events not yet fanned out, and
+// warns when they are many: paladin.outbox.pending does not count them, so a
+// stalled fan-out shows only here.
+func (r *OutboxRunner) sampleFanoutBacklog(ctx context.Context) {
+	backlog, err := r.FanoutBacklog(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			r.log().Warn("fan-out backlog sample failed", zap.Error(err))
+		}
+		return
+	}
+	recordFanoutBacklog(ctx, backlog)
+	if backlog >= OutboxDepthWarnThreshold {
+		r.log().Warn("fan-out backlog high — recorded events wait to be matched to subscriptions; raise dispatcher.batch_size or lower poll_interval",
+			zap.Int64("events_recorded", backlog))
+	}
+}
+
 // sampleDepth measures the backlog, publishes the gauges, and warns when a
 // single tenant's backlog is deep enough to signal the drain is falling behind.
 func (r *OutboxRunner) sampleDepth(ctx context.Context) {
@@ -703,15 +721,7 @@ func (r *OutboxRunner) sampleDepth(ctx context.Context) {
 		return
 	}
 	recordOutboxDepth(ctx, total, maxPerTenant)
-	backlog, err := r.FanoutBacklog(ctx)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			r.log().Warn("fan-out backlog sample failed", zap.Error(err))
-		}
-	} else if backlog >= OutboxDepthWarnThreshold {
-		r.log().Warn("fan-out backlog high — recorded events wait to be matched to subscriptions; raise dispatcher.batch_size or lower poll_interval",
-			zap.Int64("events_recorded", backlog))
-	}
+	r.sampleFanoutBacklog(ctx)
 	if maxPerTenant >= OutboxDepthWarnThreshold {
 		r.log().Warn("outbox backlog high — a tenant's pending fan-out is deep; raise dispatcher.batch_size / lower poll_interval, or narrow that tenant's subscription filters",
 			zap.Int64("pending_total", total),

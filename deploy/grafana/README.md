@@ -81,7 +81,7 @@ The work that does not show up in RPC metrics.
 
 | Panel | Metric | Source |
 |-------|--------|--------|
-| Outbox backlog, Outbox depth | `paladin_outbox_pending`, `paladin_outbox_pending_max_per_tenant` | `internal/worker/metrics.go` |
+| Outbox backlog, Outbox depth | `paladin_outbox_pending`, `paladin_outbox_pending_max_per_tenant`, `paladin_outbox_recorded` | `internal/worker/metrics.go` |
 | Stalled workers, Worker ticks, Worker tick duration | `paladin_worker_*` | `internal/worker.RunTicker` |
 | Postgres errors, Postgres operation latency | `db_client_operation_errors_total`, `db_client_operation_duration_seconds` (label `pgx_operation_type`) | otelpgx |
 | Rate limiting failing open, Per-tenant rate-limit decisions | `paladin_tenant_ratelimit_*`, `paladin_api_token_ratelimit_fail_open_total` | `internal/middleware/tenant_ratelimit.go`, `internal/auth/api_token_metrics.go` |

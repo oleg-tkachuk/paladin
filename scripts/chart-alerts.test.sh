@@ -25,7 +25,7 @@ readonly RENDERED_RULES=prometheusrule.yaml
 readonly RUNBOOKS=docs/runbooks
 readonly SELECTOR='namespace="paladin"'
 # Every rule the chart ships, all enabled by default.
-readonly RULE_COUNT=13
+readonly RULE_COUNT=14
 # The lifecycle rules have no runbook of their own: their descriptions say
 # what to inspect. Every other rule links one.
 readonly LIFECYCLE_RULES=3
@@ -94,6 +94,10 @@ PROMQL
 )"
 check "defaults: PaladinOutboxNotDraining expr" "$(rule defaults PaladinOutboxNotDraining .expr)" "$(cat <<'PROMQL'
 min_over_time(max(paladin_outbox_pending)[15m:1m]) > 500
+PROMQL
+)"
+check "defaults: PaladinEventFanOutNotDraining expr" "$(rule defaults PaladinEventFanOutNotDraining .expr)" "$(cat <<'PROMQL'
+min_over_time(max(paladin_outbox_recorded)[15m:1m]) > 500
 PROMQL
 )"
 check "defaults: PaladinWorkerStalled expr" "$(rule defaults PaladinWorkerStalled .expr)" "$(cat <<'PROMQL'

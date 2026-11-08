@@ -219,7 +219,8 @@ tasks:
       - task: backend:go:test:tagged:compile
       - task: backend:lint
       - task: verify:sqlc-pin
-      - task: backend:filerpb:proto:check
+      # Mocks, sqlc bindings and filer types against what generates them.
+      - task: backend:generated:check
       - task: verify:image-build-meta
       - task: verify:security-scans
 

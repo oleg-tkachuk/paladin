@@ -8,5 +8,6 @@
 - A subscription receives an event if it existed when the event was
   recorded; one created a moment later does not. See
   `docs/event-delivery-dedup.md`.
-- A stalled fan-out does not raise `paladin_outbox_pending`: look for
-  `fan-out backlog high` in the dispatcher's log.
+- A stalled fan-out does not raise `paladin_outbox_pending`; the new
+  `paladin_outbox_recorded` gauge counts the events waiting for it, and
+  `PaladinEventFanOutNotDraining` fires on it.

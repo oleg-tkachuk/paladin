@@ -199,7 +199,7 @@
     {
       "type": "timeseries",
       "title": "Outbox depth",
-      "description": "Total pending beside the deepest single-tenant backlog. A high total with a low per-tenant maximum points at the dispatcher; a per-tenant maximum close to the total points at one tenant's sink.",
+      "description": "Total pending beside the deepest single-tenant backlog, and the recorded events not yet fanned out. A high total with a low per-tenant maximum points at the dispatcher; a per-tenant maximum close to the total points at one tenant's sink; recorded events piling up with nothing pending point at the fan-out.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,
@@ -217,6 +217,11 @@
           "datasource": "${datasource}",
           "expr": "max(paladin_outbox_pending_max_per_tenant)",
           "legendFormat": "deepest tenant"
+        },
+        {
+          "datasource": "${datasource}",
+          "expr": "max(paladin_outbox_recorded)",
+          "legendFormat": "recorded, not fanned out"
         }
       ],
       "fieldConfig": {

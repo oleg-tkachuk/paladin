@@ -56,7 +56,7 @@ Test tiers and where each suite lives: [tests/README.md](../tests/README.md).
 
 ```bash
 task generate          # mocks and sqlc bindings
-task codegen:check     # fail when committed generated output is stale
+task generated:check   # fail when committed generated output is stale
 ```
 
 The protobuf stubs are generated into `sdk/go`

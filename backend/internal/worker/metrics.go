@@ -24,6 +24,7 @@ var (
 
 	outboxPendingTotal metric.Int64Gauge // event_deliveries in status=pending, cluster-wide
 	outboxPendingMax   metric.Int64Gauge // deepest single-tenant pending backlog
+	outboxRecorded     metric.Int64Gauge // event_outbox rows not yet fanned out (ADR-0044)
 )
 
 func initOutboxMetrics() {
@@ -38,7 +39,21 @@ func initOutboxMetrics() {
 			"paladin.outbox.pending.max_per_tenant",
 			metric.WithDescription("Deepest per-tenant pending backlog — the fan-out-volume signal for drain / admission-control tuning."),
 		)
+		outboxRecorded, _ = meter.Int64Gauge(
+			"paladin.outbox.recorded",
+			metric.WithDescription("event_outbox rows recorded and not yet fanned out to subscriptions (ADR-0044)."),
+		)
 	})
+}
+
+// recordFanoutBacklog publishes the recorded events the dispatcher has not
+// fanned out yet. paladin.outbox.pending counts delivery rows only, so a
+// stalled fan-out shows here and nowhere else.
+func recordFanoutBacklog(ctx context.Context, recorded int64) {
+	initOutboxMetrics()
+	if outboxRecorded != nil {
+		outboxRecorded.Record(ctx, recorded)
+	}
 }
 
 // recordOutboxDepth publishes the sampled backlog gauges. No-op-safe before the

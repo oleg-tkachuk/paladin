@@ -475,21 +475,6 @@ the same commit. Treat this file like a runtime invariant.
       validate the cardinality assumption holds for their
       tenant.
 
-### Event dispatcher: a metric and an alert for the fan-out backlog
-
-- **Status:** Deferred
-- **Reason:** since ADR-0044 a recorded event waits in `event_outbox` until
-  the dispatcher fans it out, and `paladin_outbox_pending` counts only
-  `event_deliveries`; a stalled fan-out shows only as the dispatcher's
-  `fan-out backlog high` warning, and adding a gauge means extending the
-  metrics contract (ADR-0023) with its alert and runbook in one change.
-- **Definition of Done:**
-  - A `paladin_event_outbox_pending` gauge sampled with the outbox depth,
-    registered in the metrics contract.
-  - An alert on it beside `outboxNotDraining`, and
-    `docs/runbooks/outbox-not-draining.md` reading it.
-- **Blockers:** none; sized out of the ADR-0044 change to keep it reviewable.
-
 ### Event dispatcher: per-tenant Kafka topic prefix
 
 - **Status:** Deferred — the Kafka sink, its SASL/SCRAM and mTLS auth, secret

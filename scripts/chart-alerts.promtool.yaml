@@ -292,6 +292,35 @@ tests:
         alertname: PaladinOutboxNotDraining
         exp_alerts: []
 
+  # Recorded events stay above 500 → fires after the 15m window plus `for: 10m`.
+  - interval: 1m
+    input_series:
+      - series: paladin_outbox_recorded
+        values: "800x40"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PaladinEventFanOutNotDraining
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Paladin has not fanned out below 500 recorded events in 15m"
+              description: >-
+                Recorded events are not being matched to subscriptions. Check the
+                dispatcher logs for event fan-out failed; the delivery outbox stays
+                empty while this lasts.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/outbox-not-draining.md"
+
+  # A burst the fan-out clears once per window does not fire.
+  - interval: 1m
+    input_series:
+      - series: paladin_outbox_recorded
+        values: "900 900 900 900 900 900 900 900 900 900 0 900 900 900 900 900 900 900 900 900 900 900 900 900 900 0 900 900 900 900 900 900 900 900 900 900 900 900 900 900 0"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: PaladinEventFanOutNotDraining
+        exp_alerts: []
+
   # The tenant limiter failed open; the token limiter series does not exist.
   - interval: 1m
     input_series:
