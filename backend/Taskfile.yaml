@@ -160,6 +160,17 @@ tasks:
       - task: codegen:sqlc
       - task: filerpb:proto
 
+  # What `generate` writes, checked against the working tree. Not the
+  # library's codegen:check: that always runs proto:check, and this
+  # component's protobuf stubs live in sdk/go, so it fails on a missing
+  # buf.gen.yaml whatever the tree holds.
+  generated:check:
+    desc: "Fail when the mocks, sqlc bindings or filer types are stale"
+    cmds:
+      - task: codegen:mocks:check
+      - task: codegen:sqlc:check
+      - task: filerpb:proto:check
+
   # ─── seed fixture ───────────────────────────────────────────────────────────
   # Applies (or removes) the demo fixture against a running cluster. Both
   # directions port-forward the three planes themselves, so neither needs a
