@@ -8,7 +8,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -49,16 +49,16 @@ func (_m *MockChargeEventEmitter) EXPECT() *MockChargeEventEmitter_Expecter {
 }
 
 // EmitChargedTx provides a mock function for the type MockChargeEventEmitter
-func (_mock *MockChargeEventEmitter) EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount limes.Nanos, unitCode string) error {
-	ret := _mock.Called(ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)
+func (_mock *MockChargeEventEmitter) EmitChargedTx(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent) error {
+	ret := _mock.Called(ctx, tx, ev)
 
 	if len(ret) == 0 {
 		panic("no return value specified for EmitChargedTx")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, pgx.Tx, string, string, string, string, limes.Nanos, string) error); ok {
-		r0 = returnFunc(ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, pgx.Tx, auth.ChargeEvent) error); ok {
+		r0 = returnFunc(ctx, tx, ev)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -73,17 +73,12 @@ type MockChargeEventEmitter_EmitChargedTx_Call struct {
 // EmitChargedTx is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tx pgx.Tx
-//   - tenantID string
-//   - capabilityID string
-//   - op string
-//   - actor string
-//   - amount limes.Nanos
-//   - unitCode string
-func (_e *MockChargeEventEmitter_Expecter) EmitChargedTx(ctx any, tx any, tenantID any, capabilityID any, op any, actor any, amount any, unitCode any) *MockChargeEventEmitter_EmitChargedTx_Call {
-	return &MockChargeEventEmitter_EmitChargedTx_Call{Call: _e.mock.On("EmitChargedTx", ctx, tx, tenantID, capabilityID, op, actor, amount, unitCode)}
+//   - ev auth.ChargeEvent
+func (_e *MockChargeEventEmitter_Expecter) EmitChargedTx(ctx any, tx any, ev any) *MockChargeEventEmitter_EmitChargedTx_Call {
+	return &MockChargeEventEmitter_EmitChargedTx_Call{Call: _e.mock.On("EmitChargedTx", ctx, tx, ev)}
 }
 
-func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount limes.Nanos, unitCode string)) *MockChargeEventEmitter_EmitChargedTx_Call {
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent)) *MockChargeEventEmitter_EmitChargedTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -93,39 +88,14 @@ func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Run(run func(ctx context.Co
 		if args[1] != nil {
 			arg1 = args[1].(pgx.Tx)
 		}
-		var arg2 string
+		var arg2 auth.ChargeEvent
 		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		var arg4 string
-		if args[4] != nil {
-			arg4 = args[4].(string)
-		}
-		var arg5 string
-		if args[5] != nil {
-			arg5 = args[5].(string)
-		}
-		var arg6 limes.Nanos
-		if args[6] != nil {
-			arg6 = args[6].(limes.Nanos)
-		}
-		var arg7 string
-		if args[7] != nil {
-			arg7 = args[7].(string)
+			arg2 = args[2].(auth.ChargeEvent)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
-			arg4,
-			arg5,
-			arg6,
-			arg7,
 		)
 	})
 	return _c
@@ -136,7 +106,70 @@ func (_c *MockChargeEventEmitter_EmitChargedTx_Call) Return(err error) *MockChar
 	return _c
 }
 
-func (_c *MockChargeEventEmitter_EmitChargedTx_Call) RunAndReturn(run func(ctx context.Context, tx pgx.Tx, tenantID string, capabilityID string, op string, actor string, amount limes.Nanos, unitCode string) error) *MockChargeEventEmitter_EmitChargedTx_Call {
+func (_c *MockChargeEventEmitter_EmitChargedTx_Call) RunAndReturn(run func(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent) error) *MockChargeEventEmitter_EmitChargedTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// EmitRefundedTx provides a mock function for the type MockChargeEventEmitter
+func (_mock *MockChargeEventEmitter) EmitRefundedTx(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent) error {
+	ret := _mock.Called(ctx, tx, ev)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EmitRefundedTx")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, pgx.Tx, auth.ChargeEvent) error); ok {
+		r0 = returnFunc(ctx, tx, ev)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockChargeEventEmitter_EmitRefundedTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EmitRefundedTx'
+type MockChargeEventEmitter_EmitRefundedTx_Call struct {
+	*mock.Call
+}
+
+// EmitRefundedTx is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tx pgx.Tx
+//   - ev auth.ChargeEvent
+func (_e *MockChargeEventEmitter_Expecter) EmitRefundedTx(ctx any, tx any, ev any) *MockChargeEventEmitter_EmitRefundedTx_Call {
+	return &MockChargeEventEmitter_EmitRefundedTx_Call{Call: _e.mock.On("EmitRefundedTx", ctx, tx, ev)}
+}
+
+func (_c *MockChargeEventEmitter_EmitRefundedTx_Call) Run(run func(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent)) *MockChargeEventEmitter_EmitRefundedTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 pgx.Tx
+		if args[1] != nil {
+			arg1 = args[1].(pgx.Tx)
+		}
+		var arg2 auth.ChargeEvent
+		if args[2] != nil {
+			arg2 = args[2].(auth.ChargeEvent)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockChargeEventEmitter_EmitRefundedTx_Call) Return(err error) *MockChargeEventEmitter_EmitRefundedTx_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockChargeEventEmitter_EmitRefundedTx_Call) RunAndReturn(run func(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent) error) *MockChargeEventEmitter_EmitRefundedTx_Call {
 	_c.Call.Return(run)
 	return _c
 }

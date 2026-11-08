@@ -87,7 +87,7 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 		t.Fatalf("charge: %v", err)
 	}
 	// A refund that names itself is kept by its id, so a resend returns it.
-	if _, err := usage.Refund(acting, meter.RefundRequest{ChargeID: charged.ChargeID, Amount: limes.NanosPerUnit / 2, RefundID: uuid.New()}); err != nil {
+	if _, err := usage.Refund(acting, meter.RefundRequest{ChargeID: charged.ChargeID, Amount: limes.NanosPerUnit / 2, RefundID: uuid.New()}, nil); err != nil {
 		t.Fatalf("refund: %v", err)
 	}
 	if _, err := usage.Reserve(acting, meter.ReserveRequest{Subject: subject, Amount: limes.NanosPerUnit}); err != nil {

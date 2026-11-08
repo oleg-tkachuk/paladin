@@ -64,6 +64,10 @@ type verifiedEntry struct {
 // charge is refused rather than written without them.
 var errChargeWithoutTx = errors.New("capability: the usage store passed no transaction to onCharged")
 
+// errRefundWithoutTx is errChargeWithoutTx for a refund: the refund is
+// refused rather than written without its event.
+var errRefundWithoutTx = errors.New("capability: the usage store passed no transaction to onRefunded")
+
 func CapabilityFromContext(ctx context.Context) (*limes.Capability, bool) {
 	e, ok := ctx.Value(capabilityKey{}).(verifiedEntry)
 	return e.cap, ok && e.cap != nil
@@ -587,9 +591,25 @@ type chargeEventsKey struct{}
 // EmitChargedTx enqueues the event's outbox rows on `tx` — the same
 // transaction the UsageStore uses for the counters + ledger row — so
 // the fan-out commits atomically with the charge (or rolls back with
-// it). An error propagates up and rolls the charge back.
+// it). An error propagates up and rolls the charge back. EmitRefundedTx
+// does the same on a refund's transaction.
 type ChargeEventEmitter interface {
-	EmitChargedTx(ctx context.Context, tx pgx.Tx, tenantID, capabilityID, op, actor string, amount limes.Nanos, unitCode string) error
+	EmitChargedTx(ctx context.Context, tx pgx.Tx, ev ChargeEvent) error
+	EmitRefundedTx(ctx context.Context, tx pgx.Tx, ev ChargeEvent) error
+}
+
+// ChargeEvent is what a charge or a refund event reports. ChargeID names the
+// ledger row: a refund event carries the ID of the charge it returns from, so
+// a subscriber matches the two. Amount is what this charge took, or what this
+// refund returned, in UnitCode.
+type ChargeEvent struct {
+	TenantID     uuid.UUID
+	CapabilityID uuid.UUID
+	ChargeID     uuid.UUID
+	Op           string
+	Actor        string
+	Amount       limes.Nanos
+	UnitCode     string
 }
 
 // WithChargeEventEmitter stamps the optional emitter on ctx. Wiring
@@ -690,13 +710,21 @@ func ChargeCapability(ctx context.Context, amount limes.Nanos) error {
 	// with no fan-out.
 	var onCharged func(ctx context.Context, c meter.Charged) error
 	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
-		onCharged = func(ctx context.Context, _ meter.Charged) error {
+		onCharged = func(ctx context.Context, c meter.Charged) error {
 			// The store hands its transaction over in the context.
 			tx, ok := pgstore.TxFrom(ctx)
 			if !ok {
 				return errChargeWithoutTx
 			}
-			return emitter.EmitChargedTx(ctx, tx, tenantID.String(), cap.ID.String(), string(op), actor, amount, subject.UnitCode())
+			return emitter.EmitChargedTx(ctx, tx, ChargeEvent{
+				TenantID:     tenantID,
+				CapabilityID: cap.ID,
+				ChargeID:     c.Receipt.ChargeID,
+				Op:           string(op),
+				Actor:        actor,
+				Amount:       amount,
+				UnitCode:     subject.UnitCode(),
+			})
 		}
 	}
 	receipt, err := store.Charge(ledgerContext(ctx, cap), meter.ChargeRequest{
@@ -752,6 +780,12 @@ func ChargeRequest(ctx context.Context) error {
 // partial refund larger than what is left is refused. No-op when no
 // capability is on context, no store is wired, or this request has made no
 // charge.
+//
+// With charge events on, a refund that returns spend enqueues
+// paladin.capability.refunded on the refund's own transaction, as a charge
+// enqueues paladin.capability.charged: the event commits with the refund or
+// not at all. A refund of nothing (Remaining, once nothing remains) emits
+// none.
 func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	cap, ok := CapabilityFromContext(ctx)
 	if !ok {
@@ -769,7 +803,27 @@ func RefundLastCharge(ctx context.Context, amount limes.Nanos) error {
 	if amount == 0 {
 		req = meter.RefundRequest{ChargeID: chargeID, Remaining: true}
 	}
-	if _, err := store.Refund(ledgerContext(ctx, cap), req); err != nil {
+	var onRefunded func(ctx context.Context, r meter.Refunded) error
+	if emitter := chargeEventEmitterFromContext(ctx); emitter != nil {
+		op := readLastOp(ctx)
+		actor := cap.Subject.Subject
+		onRefunded = func(ctx context.Context, r meter.Refunded) error {
+			tx, ok := pgstore.TxFrom(ctx)
+			if !ok {
+				return errRefundWithoutTx
+			}
+			return emitter.EmitRefundedTx(ctx, tx, ChargeEvent{
+				TenantID:     r.Receipt.TenantID,
+				CapabilityID: cap.ID,
+				ChargeID:     r.Receipt.ChargeID,
+				Op:           string(op),
+				Actor:        actor,
+				Amount:       r.Receipt.Amount,
+				UnitCode:     r.Receipt.UnitCode,
+			})
+		}
+	}
+	if _, err := store.Refund(ledgerContext(ctx, cap), req, onRefunded); err != nil {
 		return meterError(ctx, err)
 	}
 	return nil

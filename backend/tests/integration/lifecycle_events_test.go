@@ -68,38 +68,56 @@ func newLifecycleEventProbe(t *testing.T, f *dispatcherFixture, tenant, url stri
 // envelope for a caller that also checks the event's data.
 func (p *lifecycleEventProbe) expect(t *testing.T, f *dispatcherFixture, tenant, wantType string) []byte {
 	t.Helper()
+	return p.expectEach(t, f, tenant, wantType)[wantType]
+}
+
+// expectEach is expect for several events queued before the drain: one tick
+// delivers exactly one envelope of each wanted type, in whatever order, and
+// it returns each raw envelope by its type.
+func (p *lifecycleEventProbe) expectEach(t *testing.T, f *dispatcherFixture, tenant string, wantTypes ...string) map[string][]byte {
+	t.Helper()
 	r := f.outboxRunner(p.d)
-	if n := f.tickOnce(t, r); n != 1 {
-		t.Fatalf("tick processed = %d, want 1", n)
+	if n := f.tickOnce(t, r); n != len(wantTypes) {
+		t.Fatalf("tick processed = %d, want %d", n, len(wantTypes))
 	}
-	select {
-	case m := <-p.got:
-		var env struct {
-			SpecVersion string `json:"specversion"`
-			Type        string `json:"type"`
-			TenantID    string `json:"tenantid"`
-			Subject     string `json:"subject"`
-		}
-		if err := json.Unmarshal(m.Data, &env); err != nil {
-			t.Fatalf("envelope unmarshal: %v (raw: %s)", err, string(m.Data))
-		}
-		if env.SpecVersion != "1.0" {
-			t.Errorf("specversion = %q, want 1.0", env.SpecVersion)
-		}
-		if env.Type != wantType {
-			t.Errorf("type = %q, want %q", env.Type, wantType)
-		}
-		if env.TenantID != tenant {
-			t.Errorf("tenantid = %q, want %q", env.TenantID, tenant)
-		}
-		if env.Subject == "" {
-			t.Error("subject empty — resource_name should be stamped for routing")
-		}
-		return m.Data
-	case <-time.After(2 * time.Second):
-		t.Fatalf("nats: no %q within 2s — producer wired but delivery short-circuited", wantType)
+	want := map[string]bool{}
+	for _, typ := range wantTypes {
+		want[typ] = true
 	}
-	return nil
+	got := map[string][]byte{}
+	for range wantTypes {
+		select {
+		case m := <-p.got:
+			var env struct {
+				SpecVersion string `json:"specversion"`
+				Type        string `json:"type"`
+				TenantID    string `json:"tenantid"`
+				Subject     string `json:"subject"`
+			}
+			if err := json.Unmarshal(m.Data, &env); err != nil {
+				t.Fatalf("envelope unmarshal: %v (raw: %s)", err, string(m.Data))
+			}
+			if env.SpecVersion != "1.0" {
+				t.Errorf("specversion = %q, want 1.0", env.SpecVersion)
+			}
+			if !want[env.Type] {
+				t.Errorf("type = %q, want one of %q", env.Type, wantTypes)
+			}
+			if _, dup := got[env.Type]; dup {
+				t.Errorf("type %q delivered twice", env.Type)
+			}
+			if env.TenantID != tenant {
+				t.Errorf("tenantid = %q, want %q", env.TenantID, tenant)
+			}
+			if env.Subject == "" {
+				t.Error("subject empty — resource_name should be stamped for routing")
+			}
+			got[env.Type] = m.Data
+		case <-time.After(2 * time.Second):
+			t.Fatalf("nats: %d of %q within 2s — producer wired but delivery short-circuited", len(got), wantTypes)
+		}
+	}
+	return got
 }
 
 // TestQuotaHandler_SetQuotaDispatches pins quotah → paladin.quota.set.

@@ -439,8 +439,9 @@ dispatcher: {
   // status='failed' and the queue stops touching it.
   default_max_attempts: int & >= 1 | *5
   // ChargeEventsEnabled fans out one paladin.capability.charged event
-  // per successful capability.UsageStore.Charge. Default OFF; high
-  // cardinality.
+  // per successful meter.UsageStore.Charge, and one
+  // paladin.capability.refunded per refund that returns spend. Default
+  // OFF; high cardinality.
   charge_events_enabled: bool | *false
   // AuditMirrorEnabled mirrors every audit_log row to paladin.audit.<action>.
   // Default OFF; even higher cardinality than charges.

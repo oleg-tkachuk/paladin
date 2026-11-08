@@ -110,11 +110,11 @@ func TestCharge_RefundReturnsExactlyTheCharge(t *testing.T) {
 		t.Fatalf("seed charge: %v", err)
 	}
 	// Refund more than was charged — refused, and nothing moves.
-	if _, err := store.Refund(ctx, meter.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5.0")}); !errors.Is(err, meter.ErrRefundExceedsCharge) {
+	if _, err := store.Refund(ctx, meter.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5.0")}, nil); !errors.Is(err, meter.ErrRefundExceedsCharge) {
 		t.Fatalf("over-refund err = %v, want ErrRefundExceedsCharge", err)
 	}
 	// Refund the whole charge — both counters back to 0.
-	if _, err := store.Refund(ctx, meter.RefundRequest{ChargeID: receipt.ChargeID, Remaining: true}); err != nil {
+	if _, err := store.Refund(ctx, meter.RefundRequest{ChargeID: receipt.ChargeID, Remaining: true}, nil); err != nil {
 		t.Fatalf("refund: %v", err)
 	}
 

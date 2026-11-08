@@ -10,9 +10,9 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/type/money"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -59,58 +59,73 @@ func NewChargeEmitter(d *worker.Dispatcher, l *zap.Logger) auth.ChargeEventEmitt
 	if d == nil {
 		return nil
 	}
+	if l == nil {
+		l = zap.NewNop()
+	}
 	return &chargeEmitter{dispatcher: d, log: l}
 }
 
 // EmitChargedTx fans out one paladin.capability.charged event into the
 // outbox on the charge's transaction `tx`, so the event is atomic with
-// the spend. tenantID may be uuid.Nil (capability without a tenant
-// binding); we drop those rather than emit a malformed event with an
-// empty tenant_id (a nil-tenant charge writes no ledger row either, so
-// there's nothing to mirror). capabilityID, op, actor, amount, unitCode
-// come from ChargeCapability's local view.
+// the spend. A charge without a tenant (uuid.Nil) is dropped rather than
+// emitted with an empty tenant_id: a nil-tenant charge writes no ledger
+// row either, so there is nothing to mirror.
 //
 // A dispatch error propagates to the caller (UsageStore.Charge), which
 // rolls the whole charge back — no committed-charge-without-event window.
-func (e *chargeEmitter) EmitChargedTx(
-	ctx context.Context,
-	tx pgx.Tx,
-	tenantID, capabilityID, op, actor string,
-	amount limes.Nanos,
-	unitCode string,
-) error {
-	if tenantID == "" || tenantID == uuid.Nil().String() {
+func (e *chargeEmitter) EmitChargedTx(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent) error {
+	return e.emitTx(ctx, tx, eventtype.CapabilityCharged, ev)
+}
+
+// EmitRefundedTx fans out one paladin.capability.refunded event on the
+// refund's transaction `tx`, as EmitChargedTx does for a charge: its
+// charge_id names the charge the refund returns from, and its amount is what
+// the refund returned. A dispatch error rolls the refund back.
+func (e *chargeEmitter) EmitRefundedTx(ctx context.Context, tx pgx.Tx, ev auth.ChargeEvent) error {
+	return e.emitTx(ctx, tx, eventtype.CapabilityRefunded, ev)
+}
+
+// emitTx enqueues one charge-shaped event of eventType on tx.
+func (e *chargeEmitter) emitTx(ctx context.Context, tx pgx.Tx, eventType string, ev auth.ChargeEvent) error {
+	if ev.TenantID == uuid.Nil() {
+		e.log.Debug("charge event dropped: no tenant",
+			zap.String("event_type", eventType),
+			zap.String("capability_id", ev.CapabilityID.String()),
+		)
 		return nil
 	}
+	tenantID := ev.TenantID.String()
+	capabilityID := ev.CapabilityID.String()
 	queued, err := e.dispatcher.DispatchTx(ctx, tx, tenantID, worker.Event{
-		Type:         "paladin.capability.charged",
+		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     tenantID,
 		ResourceName: "capabilities/" + capabilityID,
-		ActorSubject: actor,
+		ActorSubject: ev.Actor,
 		Payload: map[string]any{
 			"tenant_id":     tenantID,
 			"capability_id": capabilityID,
-			"op":            op,
-			"amount":        moneyPayload(apiutil.MoneyOf(unitCode, amount)),
+			"charge_id":     ev.ChargeID.String(),
+			"op":            ev.Op,
+			"amount":        moneyPayload(apiutil.MoneyOf(ev.UnitCode, ev.Amount)),
 		},
 	})
 	if err != nil {
-		if e.log != nil {
-			e.log.Warn("capability.charged event fan-out failed",
-				zap.String("tenant_id", tenantID),
-				zap.String("capability_id", capabilityID),
-				zap.Error(err),
-			)
-		}
+		e.log.Warn("charge event fan-out failed",
+			zap.String("event_type", eventType),
+			zap.String("tenant_id", tenantID),
+			zap.String("capability_id", capabilityID),
+			zap.String("charge_id", ev.ChargeID.String()),
+			zap.Error(err),
+		)
 		return err
 	}
-	if e.log != nil {
-		e.log.Debug("capability.charged event queued",
-			zap.String("tenant_id", tenantID),
-			zap.Int("subscriptions_matched", queued),
-		)
-	}
+	e.log.Debug("charge event queued",
+		zap.String("event_type", eventType),
+		zap.String("tenant_id", tenantID),
+		zap.String("charge_id", ev.ChargeID.String()),
+		zap.Int("subscriptions_matched", queued),
+	)
 	return nil
 }
 
