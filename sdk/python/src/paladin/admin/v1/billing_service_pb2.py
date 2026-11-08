@@ -29,7 +29,7 @@ from google.type import money_pb2 as google_dot_type_dot_money__pb2
 from paladin.admin.v1 import types_pb2 as paladin_dot_admin_dot_v1_dot_types__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\x1a\x1cpaladin/admin/v1/types.proto\"\x92\x01\n\x16ListTenantSpendRequest\x12\x30\n\x0cperiod_start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x05limit\x18\x03 \x01(\x05\x42\x07\xbaH\x04\x1a\x02(\x00\"a\n\x17ListTenantSpendResponse\x12.\n\x07tenants\x18\x01 \x03(\x0b\x32\x1d.paladin.admin.v1.TenantSpend\x12\x16\n\ttruncated\x18\x02 \x01(\x08\x42\x03\xe0\x41\x03\"\xac\x01\n\x0bTenantSpend\x12\x16\n\ttenant_id\x18\x01 \x01(\tB\x03\xe0\x41\x03\x12\x11\n\x04slug\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x19\n\x0c\x64isplay_name\x18\x03 \x01(\tB\x03\xe0\x41\x03\x12\x14\n\x07\x64\x65leted\x18\x04 \x01(\x08\x42\x03\xe0\x41\x03\x12&\n\x05spent\x18\x05 \x01(\x0b\x32\x12.google.type.MoneyB\x03\xe0\x41\x03\x12\x19\n\x0c\x63harge_count\x18\x06 \x01(\x03\x42\x03\xe0\x41\x03\"\x1b\n\x19GetBillingSettingsRequest\"8\n\x1aGetBillingSettingsResponse\x12\x1a\n\rcurrency_code\x18\x01 \x01(\tB\x03\xe0\x41\x03\"\x98\x01\n\x17GetTenantSummaryRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12\x30\n\x0cperiod_start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xcc\x03\n\x18GetTenantSummaryResponse\x12!\n\x05total\x18\n \x01(\x0b\x32\x12.google.type.Money\x12(\n\nmax_budget\x18\x0b \x01(\x0b\x32\x12.google.type.MoneyH\x00\x12=\n\x10unlimited_budget\x18\x0c \x01(\x0b\x32!.paladin.admin.v1.UnlimitedBudgetH\x00\x12\x34\n\x10top_capabilities\x18\x04 \x03(\x0b\x32\x1a.paladin.admin.v1.TopEntry\x12.\n\ntop_actors\x18\x05 \x03(\x0b\x32\x1a.paladin.admin.v1.TopEntry\x12+\n\x07top_ops\x18\x06 \x03(\x0b\x32\x1a.paladin.admin.v1.TopEntry\x12\x14\n\x0c\x63harge_count\x18\x07 \x01(\x03\x42\x10\n\x0e\x62udget_ceilingJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03J\x04\x08\x08\x10\tJ\x04\x08\x03\x10\x04J\x04\x08\t\x10\nR\x0ctotal_amountR\x0ctotal_microsR\tunit_codeR\x11max_budget_amountR\x11max_budget_micros\"u\n\x08TopEntry\x12\r\n\x05label\x18\x01 \x01(\t\x12\x14\n\x0c\x63harge_count\x18\x03 \x01(\x03\x12!\n\x05spent\x18\x05 \x01(\x0b\x32\x12.google.type.MoneyJ\x04\x08\x02\x10\x03J\x04\x08\x04\x10\x05R\x06\x61mountR\ramount_micros\"\xb0\x01\n\x1aGetTenantTimeSeriesRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12\x30\n\x0cperiod_start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bgranularity\x18\x04 \x01(\t\"]\n\x1bGetTenantTimeSeriesResponse\x12-\n\x07\x62uckets\x18\x01 \x03(\x0b\x32\x1c.paladin.admin.v1.TimeBucketJ\x04\x08\x02\x10\x03R\tunit_code\"\x95\x01\n\x1cGetPlatformTimeSeriesRequest\x12\x30\n\x0cperiod_start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bgranularity\x18\x03 \x01(\t\"N\n\x1dGetPlatformTimeSeriesResponse\x12-\n\x07\x62uckets\x18\x01 \x03(\x0b\x32\x1c.paladin.admin.v1.TimeBucket\"\xbd\x01\n\x1bListTenantTimeSeriesRequest\x12\'\n\ntenant_ids\x18\x01 \x03(\tB\x13\xbaH\x10\x92\x01\r\x08\x01\x10\x32\x18\x01\"\x05r\x03\xb0\x01\x01\x12\x30\n\x0cperiod_start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bgranularity\x18\x04 \x01(\t\"R\n\x1cListTenantTimeSeriesResponse\x12\x32\n\x06series\x18\x01 \x03(\x0b\x32\".paladin.admin.v1.TenantTimeSeries\"^\n\x10TenantTimeSeries\x12\x16\n\ttenant_id\x18\x01 \x01(\tB\x03\xe0\x41\x03\x12\x32\n\x07\x62uckets\x18\x02 \x03(\x0b\x32\x1c.paladin.admin.v1.TimeBucketB\x03\xe0\x41\x03\"\x98\x01\n\nTimeBucket\x12.\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x14\n\x0c\x63harge_count\x18\x03 \x01(\x03\x12!\n\x05spent\x18\x05 \x01(\x0b\x32\x12.google.type.MoneyJ\x04\x08\x02\x10\x03J\x04\x08\x04\x10\x05R\x06\x61mountR\ramount_micros2\xd7\x05\n\x0e\x42illingService\x12n\n\x10GetTenantSummary\x12).paladin.admin.v1.GetTenantSummaryRequest\x1a*.paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12w\n\x13GetTenantTimeSeries\x12,.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a-.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01\x12}\n\x15GetPlatformTimeSeries\x12..paladin.admin.v1.GetPlatformTimeSeriesRequest\x1a/.paladin.admin.v1.GetPlatformTimeSeriesResponse\"\x03\x90\x02\x01\x12z\n\x14ListTenantTimeSeries\x12-.paladin.admin.v1.ListTenantTimeSeriesRequest\x1a..paladin.admin.v1.ListTenantTimeSeriesResponse\"\x03\x90\x02\x01\x12k\n\x0fListTenantSpend\x12(.paladin.admin.v1.ListTenantSpendRequest\x1a).paladin.admin.v1.ListTenantSpendResponse\"\x03\x90\x02\x01\x12t\n\x12GetBillingSettings\x12+.paladin.admin.v1.GetBillingSettingsRequest\x1a,.paladin.admin.v1.GetBillingSettingsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n&paladin/admin/v1/billing_service.proto\x12\x10paladin.admin.v1\x1a\x1b\x62uf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x17google/type/money.proto\x1a\x1cpaladin/admin/v1/types.proto\"\x92\x01\n\x16ListTenantSpendRequest\x12\x30\n\x0cperiod_start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x05limit\x18\x03 \x01(\x05\x42\x07\xbaH\x04\x1a\x02(\x00\"a\n\x17ListTenantSpendResponse\x12.\n\x07tenants\x18\x01 \x03(\x0b\x32\x1d.paladin.admin.v1.TenantSpend\x12\x16\n\ttruncated\x18\x02 \x01(\x08\x42\x03\xe0\x41\x03\"\xd7\x01\n\x0bTenantSpend\x12\x16\n\ttenant_id\x18\x01 \x01(\tB\x03\xe0\x41\x03\x12\x11\n\x04slug\x18\x02 \x01(\tB\x03\xe0\x41\x03\x12\x19\n\x0c\x64isplay_name\x18\x03 \x01(\tB\x03\xe0\x41\x03\x12\x14\n\x07\x64\x65leted\x18\x04 \x01(\x08\x42\x03\xe0\x41\x03\x12&\n\x05spent\x18\x05 \x01(\x0b\x32\x12.google.type.MoneyB\x03\xe0\x41\x03\x12\x19\n\x0c\x63harge_count\x18\x06 \x01(\x03\x42\x03\xe0\x41\x03\x12)\n\x08refunded\x18\x07 \x01(\x0b\x32\x12.google.type.MoneyB\x03\xe0\x41\x03\"\x1b\n\x19GetBillingSettingsRequest\"8\n\x1aGetBillingSettingsResponse\x12\x1a\n\rcurrency_code\x18\x01 \x01(\tB\x03\xe0\x41\x03\"\x98\x01\n\x17GetTenantSummaryRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12\x30\n\x0cperiod_start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xf2\x03\n\x18GetTenantSummaryResponse\x12!\n\x05total\x18\n \x01(\x0b\x32\x12.google.type.Money\x12(\n\nmax_budget\x18\x0b \x01(\x0b\x32\x12.google.type.MoneyH\x00\x12=\n\x10unlimited_budget\x18\x0c \x01(\x0b\x32!.paladin.admin.v1.UnlimitedBudgetH\x00\x12\x34\n\x10top_capabilities\x18\x04 \x03(\x0b\x32\x1a.paladin.admin.v1.TopEntry\x12.\n\ntop_actors\x18\x05 \x03(\x0b\x32\x1a.paladin.admin.v1.TopEntry\x12+\n\x07top_ops\x18\x06 \x03(\x0b\x32\x1a.paladin.admin.v1.TopEntry\x12\x14\n\x0c\x63harge_count\x18\x07 \x01(\x03\x12$\n\x08refunded\x18\r \x01(\x0b\x32\x12.google.type.MoneyB\x10\n\x0e\x62udget_ceilingJ\x04\x08\x01\x10\x02J\x04\x08\x02\x10\x03J\x04\x08\x08\x10\tJ\x04\x08\x03\x10\x04J\x04\x08\t\x10\nR\x0ctotal_amountR\x0ctotal_microsR\tunit_codeR\x11max_budget_amountR\x11max_budget_micros\"u\n\x08TopEntry\x12\r\n\x05label\x18\x01 \x01(\t\x12\x14\n\x0c\x63harge_count\x18\x03 \x01(\x03\x12!\n\x05spent\x18\x05 \x01(\x0b\x32\x12.google.type.MoneyJ\x04\x08\x02\x10\x03J\x04\x08\x04\x10\x05R\x06\x61mountR\ramount_micros\"\xb0\x01\n\x1aGetTenantTimeSeriesRequest\x12\x1b\n\ttenant_id\x18\x01 \x01(\tB\x08\xbaH\x05r\x03\xb0\x01\x01\x12\x30\n\x0cperiod_start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bgranularity\x18\x04 \x01(\t\"]\n\x1bGetTenantTimeSeriesResponse\x12-\n\x07\x62uckets\x18\x01 \x03(\x0b\x32\x1c.paladin.admin.v1.TimeBucketJ\x04\x08\x02\x10\x03R\tunit_code\"\x95\x01\n\x1cGetPlatformTimeSeriesRequest\x12\x30\n\x0cperiod_start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bgranularity\x18\x03 \x01(\t\"N\n\x1dGetPlatformTimeSeriesResponse\x12-\n\x07\x62uckets\x18\x01 \x03(\x0b\x32\x1c.paladin.admin.v1.TimeBucket\"\xbd\x01\n\x1bListTenantTimeSeriesRequest\x12\'\n\ntenant_ids\x18\x01 \x03(\tB\x13\xbaH\x10\x92\x01\r\x08\x01\x10\x32\x18\x01\"\x05r\x03\xb0\x01\x01\x12\x30\n\x0cperiod_start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nperiod_end\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bgranularity\x18\x04 \x01(\t\"R\n\x1cListTenantTimeSeriesResponse\x12\x32\n\x06series\x18\x01 \x03(\x0b\x32\".paladin.admin.v1.TenantTimeSeries\"^\n\x10TenantTimeSeries\x12\x16\n\ttenant_id\x18\x01 \x01(\tB\x03\xe0\x41\x03\x12\x32\n\x07\x62uckets\x18\x02 \x03(\x0b\x32\x1c.paladin.admin.v1.TimeBucketB\x03\xe0\x41\x03\"\x98\x01\n\nTimeBucket\x12.\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x03\xe0\x41\x03\x12\x14\n\x0c\x63harge_count\x18\x03 \x01(\x03\x12!\n\x05spent\x18\x05 \x01(\x0b\x32\x12.google.type.MoneyJ\x04\x08\x02\x10\x03J\x04\x08\x04\x10\x05R\x06\x61mountR\ramount_micros2\xd7\x05\n\x0e\x42illingService\x12n\n\x10GetTenantSummary\x12).paladin.admin.v1.GetTenantSummaryRequest\x1a*.paladin.admin.v1.GetTenantSummaryResponse\"\x03\x90\x02\x01\x12w\n\x13GetTenantTimeSeries\x12,.paladin.admin.v1.GetTenantTimeSeriesRequest\x1a-.paladin.admin.v1.GetTenantTimeSeriesResponse\"\x03\x90\x02\x01\x12}\n\x15GetPlatformTimeSeries\x12..paladin.admin.v1.GetPlatformTimeSeriesRequest\x1a/.paladin.admin.v1.GetPlatformTimeSeriesResponse\"\x03\x90\x02\x01\x12z\n\x14ListTenantTimeSeries\x12-.paladin.admin.v1.ListTenantTimeSeriesRequest\x1a..paladin.admin.v1.ListTenantTimeSeriesResponse\"\x03\x90\x02\x01\x12k\n\x0fListTenantSpend\x12(.paladin.admin.v1.ListTenantSpendRequest\x1a).paladin.admin.v1.ListTenantSpendResponse\"\x03\x90\x02\x01\x12t\n\x12GetBillingSettings\x12+.paladin.admin.v1.GetBillingSettingsRequest\x1a,.paladin.admin.v1.GetBillingSettingsResponse\"\x03\x90\x02\x01\x42LZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -53,6 +53,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TENANTSPEND'].fields_by_name['spent']._serialized_options = b'\340A\003'
   _globals['_TENANTSPEND'].fields_by_name['charge_count']._loaded_options = None
   _globals['_TENANTSPEND'].fields_by_name['charge_count']._serialized_options = b'\340A\003'
+  _globals['_TENANTSPEND'].fields_by_name['refunded']._loaded_options = None
+  _globals['_TENANTSPEND'].fields_by_name['refunded']._serialized_options = b'\340A\003'
   _globals['_GETBILLINGSETTINGSRESPONSE'].fields_by_name['currency_code']._loaded_options = None
   _globals['_GETBILLINGSETTINGSRESPONSE'].fields_by_name['currency_code']._serialized_options = b'\340A\003'
   _globals['_GETTENANTSUMMARYREQUEST'].fields_by_name['tenant_id']._loaded_options = None
@@ -84,33 +86,33 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_LISTTENANTSPENDRESPONSE']._serialized_start=359
   _globals['_LISTTENANTSPENDRESPONSE']._serialized_end=456
   _globals['_TENANTSPEND']._serialized_start=459
-  _globals['_TENANTSPEND']._serialized_end=631
-  _globals['_GETBILLINGSETTINGSREQUEST']._serialized_start=633
-  _globals['_GETBILLINGSETTINGSREQUEST']._serialized_end=660
-  _globals['_GETBILLINGSETTINGSRESPONSE']._serialized_start=662
-  _globals['_GETBILLINGSETTINGSRESPONSE']._serialized_end=718
-  _globals['_GETTENANTSUMMARYREQUEST']._serialized_start=721
-  _globals['_GETTENANTSUMMARYREQUEST']._serialized_end=873
-  _globals['_GETTENANTSUMMARYRESPONSE']._serialized_start=876
-  _globals['_GETTENANTSUMMARYRESPONSE']._serialized_end=1336
-  _globals['_TOPENTRY']._serialized_start=1338
-  _globals['_TOPENTRY']._serialized_end=1455
-  _globals['_GETTENANTTIMESERIESREQUEST']._serialized_start=1458
-  _globals['_GETTENANTTIMESERIESREQUEST']._serialized_end=1634
-  _globals['_GETTENANTTIMESERIESRESPONSE']._serialized_start=1636
-  _globals['_GETTENANTTIMESERIESRESPONSE']._serialized_end=1729
-  _globals['_GETPLATFORMTIMESERIESREQUEST']._serialized_start=1732
-  _globals['_GETPLATFORMTIMESERIESREQUEST']._serialized_end=1881
-  _globals['_GETPLATFORMTIMESERIESRESPONSE']._serialized_start=1883
-  _globals['_GETPLATFORMTIMESERIESRESPONSE']._serialized_end=1961
-  _globals['_LISTTENANTTIMESERIESREQUEST']._serialized_start=1964
-  _globals['_LISTTENANTTIMESERIESREQUEST']._serialized_end=2153
-  _globals['_LISTTENANTTIMESERIESRESPONSE']._serialized_start=2155
-  _globals['_LISTTENANTTIMESERIESRESPONSE']._serialized_end=2237
-  _globals['_TENANTTIMESERIES']._serialized_start=2239
-  _globals['_TENANTTIMESERIES']._serialized_end=2333
-  _globals['_TIMEBUCKET']._serialized_start=2336
-  _globals['_TIMEBUCKET']._serialized_end=2488
-  _globals['_BILLINGSERVICE']._serialized_start=2491
-  _globals['_BILLINGSERVICE']._serialized_end=3218
+  _globals['_TENANTSPEND']._serialized_end=674
+  _globals['_GETBILLINGSETTINGSREQUEST']._serialized_start=676
+  _globals['_GETBILLINGSETTINGSREQUEST']._serialized_end=703
+  _globals['_GETBILLINGSETTINGSRESPONSE']._serialized_start=705
+  _globals['_GETBILLINGSETTINGSRESPONSE']._serialized_end=761
+  _globals['_GETTENANTSUMMARYREQUEST']._serialized_start=764
+  _globals['_GETTENANTSUMMARYREQUEST']._serialized_end=916
+  _globals['_GETTENANTSUMMARYRESPONSE']._serialized_start=919
+  _globals['_GETTENANTSUMMARYRESPONSE']._serialized_end=1417
+  _globals['_TOPENTRY']._serialized_start=1419
+  _globals['_TOPENTRY']._serialized_end=1536
+  _globals['_GETTENANTTIMESERIESREQUEST']._serialized_start=1539
+  _globals['_GETTENANTTIMESERIESREQUEST']._serialized_end=1715
+  _globals['_GETTENANTTIMESERIESRESPONSE']._serialized_start=1717
+  _globals['_GETTENANTTIMESERIESRESPONSE']._serialized_end=1810
+  _globals['_GETPLATFORMTIMESERIESREQUEST']._serialized_start=1813
+  _globals['_GETPLATFORMTIMESERIESREQUEST']._serialized_end=1962
+  _globals['_GETPLATFORMTIMESERIESRESPONSE']._serialized_start=1964
+  _globals['_GETPLATFORMTIMESERIESRESPONSE']._serialized_end=2042
+  _globals['_LISTTENANTTIMESERIESREQUEST']._serialized_start=2045
+  _globals['_LISTTENANTTIMESERIESREQUEST']._serialized_end=2234
+  _globals['_LISTTENANTTIMESERIESRESPONSE']._serialized_start=2236
+  _globals['_LISTTENANTTIMESERIESRESPONSE']._serialized_end=2318
+  _globals['_TENANTTIMESERIES']._serialized_start=2320
+  _globals['_TENANTTIMESERIES']._serialized_end=2414
+  _globals['_TIMEBUCKET']._serialized_start=2417
+  _globals['_TIMEBUCKET']._serialized_end=2569
+  _globals['_BILLINGSERVICE']._serialized_start=2572
+  _globals['_BILLINGSERVICE']._serialized_end=3299
 # @@protoc_insertion_point(module_scope)

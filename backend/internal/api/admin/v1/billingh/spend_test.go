@@ -62,7 +62,7 @@ func TestRankSpend(t *testing.T) {
 		{TenantID: tied[1], UnitCode: spendCurrency, Charged: units(3), Charges: 2},
 	}
 	want := []TenantSpend{
-		{TenantID: big, UnitCode: spendCurrency, Amount: units(30), ChargeCount: 6},
+		{TenantID: big, UnitCode: spendCurrency, Amount: units(30), Refunded: units(10), ChargeCount: 6},
 		{TenantID: tied[0], UnitCode: spendCurrency, Amount: units(3), ChargeCount: 2},
 		{TenantID: tied[1], UnitCode: spendCurrency, Amount: units(3), ChargeCount: 2},
 		{TenantID: tied[2], UnitCode: spendCurrency, Amount: units(3), ChargeCount: 1},

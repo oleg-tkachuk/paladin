@@ -32,20 +32,22 @@ class ListTenantSpendResponse(_message.Message):
     def __init__(self, tenants: _Optional[_Iterable[_Union[TenantSpend, _Mapping]]] = ..., truncated: _Optional[bool] = ...) -> None: ...
 
 class TenantSpend(_message.Message):
-    __slots__ = ("tenant_id", "slug", "display_name", "deleted", "spent", "charge_count")
+    __slots__ = ("tenant_id", "slug", "display_name", "deleted", "spent", "charge_count", "refunded")
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     DELETED_FIELD_NUMBER: _ClassVar[int]
     SPENT_FIELD_NUMBER: _ClassVar[int]
     CHARGE_COUNT_FIELD_NUMBER: _ClassVar[int]
+    REFUNDED_FIELD_NUMBER: _ClassVar[int]
     tenant_id: str
     slug: str
     display_name: str
     deleted: bool
     spent: _money_pb2.Money
     charge_count: int
-    def __init__(self, tenant_id: _Optional[str] = ..., slug: _Optional[str] = ..., display_name: _Optional[str] = ..., deleted: _Optional[bool] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., charge_count: _Optional[int] = ...) -> None: ...
+    refunded: _money_pb2.Money
+    def __init__(self, tenant_id: _Optional[str] = ..., slug: _Optional[str] = ..., display_name: _Optional[str] = ..., deleted: _Optional[bool] = ..., spent: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., charge_count: _Optional[int] = ..., refunded: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
 
 class GetBillingSettingsRequest(_message.Message):
     __slots__ = ()
@@ -68,7 +70,7 @@ class GetTenantSummaryRequest(_message.Message):
     def __init__(self, tenant_id: _Optional[str] = ..., period_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., period_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class GetTenantSummaryResponse(_message.Message):
-    __slots__ = ("total", "max_budget", "unlimited_budget", "top_capabilities", "top_actors", "top_ops", "charge_count")
+    __slots__ = ("total", "max_budget", "unlimited_budget", "top_capabilities", "top_actors", "top_ops", "charge_count", "refunded")
     TOTAL_FIELD_NUMBER: _ClassVar[int]
     MAX_BUDGET_FIELD_NUMBER: _ClassVar[int]
     UNLIMITED_BUDGET_FIELD_NUMBER: _ClassVar[int]
@@ -76,6 +78,7 @@ class GetTenantSummaryResponse(_message.Message):
     TOP_ACTORS_FIELD_NUMBER: _ClassVar[int]
     TOP_OPS_FIELD_NUMBER: _ClassVar[int]
     CHARGE_COUNT_FIELD_NUMBER: _ClassVar[int]
+    REFUNDED_FIELD_NUMBER: _ClassVar[int]
     total: _money_pb2.Money
     max_budget: _money_pb2.Money
     unlimited_budget: _types_pb2.UnlimitedBudget
@@ -83,7 +86,8 @@ class GetTenantSummaryResponse(_message.Message):
     top_actors: _containers.RepeatedCompositeFieldContainer[TopEntry]
     top_ops: _containers.RepeatedCompositeFieldContainer[TopEntry]
     charge_count: int
-    def __init__(self, total: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., top_capabilities: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_actors: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_ops: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., charge_count: _Optional[int] = ...) -> None: ...
+    refunded: _money_pb2.Money
+    def __init__(self, total: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., max_budget: _Optional[_Union[_money_pb2.Money, _Mapping]] = ..., unlimited_budget: _Optional[_Union[_types_pb2.UnlimitedBudget, _Mapping]] = ..., top_capabilities: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_actors: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., top_ops: _Optional[_Iterable[_Union[TopEntry, _Mapping]]] = ..., charge_count: _Optional[int] = ..., refunded: _Optional[_Union[_money_pb2.Money, _Mapping]] = ...) -> None: ...
 
 class TopEntry(_message.Message):
     __slots__ = ("label", "charge_count", "spent")
