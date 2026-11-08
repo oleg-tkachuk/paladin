@@ -409,8 +409,8 @@ github.com/oleg-tkachuk/limes v1.0.0-rc.55 h1:331+LqdfWlj97z7XAbd7ulH9eJmDxOO7dH
 github.com/oleg-tkachuk/limes v1.0.0-rc.55/go.mod h1:aTkmw5NCLsvFWLWjbxjzUlWjhhQuhXGnW3jX/Gf+SJ4=
 github.com/oleg-tkachuk/limes/biscuit v0.1.30 h1:y8pqVsX3HfRXB60lZswwmmsH3Q6KqtRpCjHjR5hRll4=
 github.com/oleg-tkachuk/limes/biscuit v0.1.30/go.mod h1:GKDK2PVSJTvGuWYwNDrhSQ1qvFsM9HMApRvBPLjVQ+k=
-github.com/oleg-tkachuk/limes/exchange v0.21.0 h1:UBYnKxLMc3e7Xlyb+9ZoKJscJOWS3Zf/MlLHkeBzOI8=
-github.com/oleg-tkachuk/limes/exchange v0.21.0/go.mod h1:6OdiNlBwk6/5z++keI2Bh4wEXfAuCLGi5k446qT9K7w=
+github.com/oleg-tkachuk/limes/exchange v0.22.0 h1:RJCTe4jDL/epFTdwAFan9ni5RpOq/relRWuWZjQKDH4=
+github.com/oleg-tkachuk/limes/exchange v0.22.0/go.mod h1:6OdiNlBwk6/5z++keI2Bh4wEXfAuCLGi5k446qT9K7w=
 github.com/oleg-tkachuk/limes/otelmetric v0.18.0 h1:6tmutSinQMxKP/qDnx0kR7DiIJU1xbQNEpZ8a/10ofA=
 github.com/oleg-tkachuk/limes/otelmetric v0.18.0/go.mod h1:yC04h5WvI0ufvVNS7kCZ7PY5CZ3IiUKgWiCWstY/yhs=
 github.com/oleg-tkachuk/limes/pgstore v0.70.0 h1:OELTlgkQ8OLGjH2S7IngWFN8nQhxOJ4jGHt51gy6nCQ=
