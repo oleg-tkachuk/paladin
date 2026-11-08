@@ -71,6 +71,10 @@ across retries, the dedup key of
 
 - An event-producing transaction writes one row whatever the number of
   subscriptions; the defects above have no code left to live in.
+- `event_outbox` accepts an insert for any tenant: a platform admin acting
+  on a tenant's resources records that tenant's event from a session pinned
+  to its own, and the producer takes the tenant from the changed row, never
+  from the request. Reading and deleting stay pinned to the session tenant.
 - An event reaches its sink one stage later: fan-out and delivery run in
   the same tick, so the added latency is at most one poll interval.
 - A backlog can now sit in `event_outbox` as well as in `event_deliveries`;
