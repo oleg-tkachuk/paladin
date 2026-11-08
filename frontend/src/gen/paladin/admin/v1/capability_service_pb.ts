@@ -1283,7 +1283,8 @@ export const CapabilityServiceSettleLeaseResponseSchema: GenMessage<CapabilitySe
  */
 export type CapabilityLease = Message<"paladin.admin.v1.CapabilityLease"> & {
   /**
-   * id is the lease's, from its first Lease until it is settled.
+   * id is the lease's, until it is settled or topped up: a top-up settles it
+   * and opens another under a new id.
    *
    * @generated from field: string id = 1;
    */
@@ -1300,8 +1301,9 @@ export type CapabilityLease = Message<"paladin.admin.v1.CapabilityLease"> & {
   tenantId: string;
 
   /**
-   * amount is what the lease holds, every top-up added; spent is what its
-   * capability and those delegated from it charged under it.
+   * amount is what the lease holds — after a top-up, what the lease it
+   * replaced had left plus the top-up; spent is what its capability and
+   * those delegated from it charged under it.
    *
    * @generated from field: google.type.Money amount = 4;
    */
@@ -1784,7 +1786,10 @@ export const CapabilityService: GenService<{
    * Lease holds budget and requests of a capability's chain for it in
    * advance, so its charges and bumps, and those of the capabilities
    * delegated from it, lock its own counters rather than every ancestor's
-   * and the tenant's. Asked again while the lease is open, it adds to it.
+   * and the tenant's. Asked again while the lease is open, it settles that
+   * lease — what it spent charged to every ancestor and the tenant — and
+   * opens a new one under a new id, holding what the old one had left plus
+   * this request.
    *
    * Gated as Issue, or, for a caller presenting a capability, by that
    * capability alone: one holding the share op leases for itself or for a

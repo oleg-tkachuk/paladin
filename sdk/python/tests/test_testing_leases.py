@@ -90,14 +90,16 @@ def _chain(fake: FakePaladin) -> tuple[dict[str, str], dict[str, str]]:
     return ids, tokens
 
 
-def _answer(call: Any) -> tuple[str, str, int]:
-    """What a step got: its refusal's code and limes code, or the requests
-    its lease holds."""
+def _answer(call: Any) -> tuple[tuple[str, str, int], str]:
+    """What a step got — its refusal's code and limes code, or the requests
+    its lease holds — and the id of the lease it answered with, "" for none."""
     try:
         res = call()
     except ConnectError as err:
-        return err.code.value, limes_code(err), 0
-    return "", "", res.lease.requests if hasattr(res, "lease") else 0
+        return (err.code.value, limes_code(err), 0), ""
+    if not hasattr(res, "lease"):
+        return ("", "", 0), ""
+    return ("", "", res.lease.requests), res.lease.id
 
 
 def _want(step: dict[str, Any]) -> tuple[str, str, int]:
@@ -119,6 +121,7 @@ def test_a_lease_call_answers_as_the_table_says(case: dict[str, Any]) -> None:
             client = fake.connect(
                 bearer_token=fake.issue_bearer_token(fake.tenant)
             ).admin.capability
+        prev = ""
         for i, step in enumerate(case["steps"]):
             target = str(uuid.uuid4()) if step["of"] == _UNKNOWN else ids[step["of"]]
             calls = {
@@ -133,6 +136,10 @@ def test_a_lease_call_answers_as_the_table_says(case: dict[str, Any]) -> None:
                     pb.CapabilityServiceSettleLeaseRequest(id=t)
                 ),
             }
-            assert _answer(calls[step["call"]]) == _want(step), (
-                f"step {i} ({step['call']} of {step['of']})"
-            )
+            got, lease = _answer(calls[step["call"]])
+            assert got == _want(step), f"step {i} ({step['call']} of {step['of']})"
+            if "renewed" in step:
+                assert (lease != prev) == step["renewed"], (
+                    f"step {i} ({step['call']} of {step['of']}): lease {lease!r} after {prev!r}"
+                )
+            prev = lease

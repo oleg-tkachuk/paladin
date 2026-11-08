@@ -1048,9 +1048,10 @@ class _CapabilityService(CapabilityServiceSync):
     def lease(
         self, request: capability_service_pb2.CapabilityServiceLeaseRequest, ctx: Any, /
     ) -> capability_service_pb2.CapabilityServiceLeaseResponse:
-        """Open a lease on the capability named, or add to the one it holds.
-        The fake counts no budget: a lease's spent amount stays zero, and no
-        ceiling of the chain refuses it."""
+        """Open a lease on the capability named; on one it holds already,
+        settle that and open a new one, under a new id, with what was left
+        plus the request. The fake counts no budget: a lease's spent amount
+        stays zero, and no ceiling of the chain refuses it."""
         fake = self._fake
         with fake._lock:
             record = fake._lease_target_locked(request.id, ctx)
@@ -1088,16 +1089,19 @@ class _CapabilityService(CapabilityServiceSync):
                 else DEFAULT_LEASE_TTL
             )
             end = min(now + ttl, record.msg.expires_at.ToDatetime(tzinfo=UTC))
-            held = fake._leases.get(request.id)
-            if held is None:
-                held = capability_service_pb2.CapabilityLease(
-                    id=str(uuid.uuid4()),
-                    capability_id=request.id,
-                    tenant_id=record.msg.subject.tenant_id,
-                    amount=money_pb2.Money(currency_code=unit),
-                    spent=money_pb2.Money(currency_code=unit),
-                )
-                fake._leases[request.id] = held
+            # The fake counts no spend, so a lease topped up has all it held left.
+            open_lease = fake._leases.get(request.id)
+            held = capability_service_pb2.CapabilityLease(
+                id=str(uuid.uuid4()),
+                capability_id=request.id,
+                tenant_id=record.msg.subject.tenant_id,
+                amount=money_pb2.Money(currency_code=unit),
+                spent=money_pb2.Money(currency_code=unit),
+                expires_at=_timestamp(end),
+            )
+            if open_lease is not None:
+                held.amount.CopyFrom(open_lease.amount)
+                held.requests = open_lease.requests
             nanos = _nanos(held.amount) + (
                 _nanos(request.amount) if request.HasField("amount") else 0
             )
@@ -1109,9 +1113,7 @@ class _CapabilityService(CapabilityServiceSync):
                 )
             )
             held.requests += request.requests
-            # A lease topped up lasts until the later of its end and this one.
-            if not held.HasField("expires_at") or end > held.expires_at.ToDatetime(tzinfo=UTC):
-                held.expires_at.CopyFrom(_timestamp(end))
+            fake._leases[request.id] = held
             out = capability_service_pb2.CapabilityLease()
             out.CopyFrom(held)
         return capability_service_pb2.CapabilityServiceLeaseResponse(lease=out)

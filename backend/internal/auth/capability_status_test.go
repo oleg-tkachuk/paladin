@@ -38,6 +38,8 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		limes.CodeNotYetValid:                 connect.CodeUnauthenticated,
 		limes.CodeTenantErased:                connect.CodeUnauthenticated,
 		limes.CodeDelegationTooDeep:           connect.CodeUnauthenticated,
+		limes.CodeDelegationDepthExceeded:     connect.CodePermissionDenied,
+		limes.CodeTenantGone:                  connect.CodeFailedPrecondition,
 		limes.CodeRevoked:                     connect.CodeUnauthenticated,
 		limes.CodeAudienceMismatch:            connect.CodeUnauthenticated,
 		limes.CodeUnauthenticated:             connect.CodeUnauthenticated,

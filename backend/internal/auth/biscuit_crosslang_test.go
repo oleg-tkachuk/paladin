@@ -164,12 +164,14 @@ func crossLangVerifier(t *testing.T) *limes.Verifier {
 		t.Fatalf("proof verifier: %v", err)
 	}
 	v, err := limes.NewVerifier(limes.VerifierConfig{
-		Keys:           keys,
-		Revocations:    noBiscuitRevocations{},
-		Biscuit:        &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: noBiscuitRevocations{}, MeterCopies: true},
-		TrustedIssuers: []string{crossLangIssuer},
-		Now:            crossLangClock,
-		DPoP:           proofs,
+		Keys:        keys,
+		Revocations: noBiscuitRevocations{},
+		// The tokens come from fixtures no store recorded.
+		AllowUnrecorded: true,
+		Biscuit:         &limes.BiscuitConfig{Form: biscuit.Form(), Revocations: noBiscuitRevocations{}, MeterCopies: true},
+		TrustedIssuers:  []string{crossLangIssuer},
+		Now:             crossLangClock,
+		DPoP:            proofs,
 	})
 	if err != nil {
 		t.Fatalf("verifier: %v", err)

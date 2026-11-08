@@ -2484,12 +2484,14 @@ func (x *CapabilityServiceSettleLeaseResponse) GetLease() *CapabilityLease {
 // CapabilityLease is budget and requests a capability holds of its chain.
 type CapabilityLease struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// id is the lease's, from its first Lease until it is settled.
+	// id is the lease's, until it is settled or topped up: a top-up settles it
+	// and opens another under a new id.
 	Id           string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	CapabilityId string `protobuf:"bytes,2,opt,name=capability_id,json=capabilityId,proto3" json:"capability_id,omitempty"`
 	TenantId     string `protobuf:"bytes,3,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// amount is what the lease holds, every top-up added; spent is what its
-	// capability and those delegated from it charged under it.
+	// amount is what the lease holds — after a top-up, what the lease it
+	// replaced had left plus the top-up; spent is what its capability and
+	// those delegated from it charged under it.
 	Amount *money.Money `protobuf:"bytes,4,opt,name=amount,proto3" json:"amount,omitempty"`
 	Spent  *money.Money `protobuf:"bytes,5,opt,name=spent,proto3" json:"spent,omitempty"`
 	// requests is how many requests the lease holds; requests_spent how many
