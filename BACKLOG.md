@@ -30,21 +30,6 @@ When work lands that surfaces *new* deferred items, add them here in
 the same commit. Treat this file like a runtime invariant.
 
 ---
-## Releases
-
-### Restart the product's numbering at 0.x: the first release
-
-- **Status:** In-Progress
-- **Reason:** ADR-0045 moved the product to `release/vX.Y.Z` tags restarting
-  at 0.x. The tag ruleset covers `release/**`, `release/v0.0.0` is cut, and
-  the dev cluster follows charts below 1.0; no 0.x release is cut yet. It is
-  cut from a commit after `release/v0.0.0`: two release tags on one commit
-  derive the lower version, which the publish refuses.
-- **Definition of Done:** `release/v0.1.0` is cut with
-  `gh workflow run release.yaml -f bump=minor`, its images and charts are
-  published, and this entry is deleted.
-- **Blockers:** none.
-
 ## SDKs
 
 ### The Python SDK still supports Python 3.13
