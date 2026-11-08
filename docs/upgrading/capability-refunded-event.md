@@ -1,4 +1,4 @@
-## sdk/python/v0.143.0, sdk/go/v0.143.0 — a refund emits paladin.capability.refunded
+## v42.1.0, sdk/python/v0.143.0, sdk/go/v0.143.0 — a refund emits paladin.capability.refunded
 
 - With `dispatcher.charge_events_enabled` on, a refund that returns spend now
   emits `paladin.capability.refunded`, on the refund's own transaction. The

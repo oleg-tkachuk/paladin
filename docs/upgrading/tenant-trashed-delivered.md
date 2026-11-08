@@ -1,4 +1,4 @@
-## Unreleased — `paladin.tenant.trashed` reaches subscribers when it happens
+## v42.1.0 — `paladin.tenant.trashed` reaches subscribers when it happens
 
 - A tenant in the trash is frozen, and its pending events wait for a restore.
   The event announcing the trash waited with them, so a subscriber learnt a
