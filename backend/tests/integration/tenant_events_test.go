@@ -72,7 +72,7 @@ func TestTenantHandler_UpdateDispatchesPaladinTenantUpdated(t *testing.T) {
 
 	repo := adapters.NewTenantRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := tenantpkg.NewHandler(repo, allowAuth{})
-	handler.SetEventProducer(d)
+	handler.SetEventProducer(worker.NewEventRecorder(nil))
 
 	ctx := ctxAdmin(t, tenant)
 
@@ -90,15 +90,11 @@ func TestTenantHandler_UpdateDispatchesPaladinTenantUpdated(t *testing.T) {
 		t.Fatalf("UpdateTenant: %v", err)
 	}
 
-	// Producer half: outbox row landed.
-	rows := f.allDeliveryRows(t, tenant)
-	if len(rows) != 1 {
-		t.Fatalf("event_deliveries rows = %d, want 1 — handler.SetEventProducer wiring "+
+	// Producer half: the event is recorded.
+	if got := f.recordedEvents(t, tenant); got != 1 {
+		t.Fatalf("recorded events = %d, want 1 — handler.SetEventProducer wiring "+
 			"is the most likely regression. Check build_listeners_admin.go "+
-			"and tenanth.dispatchEvent.", len(rows))
-	}
-	if rows[0].Status != "pending" {
-		t.Fatalf("row[0].Status = %q, want pending", rows[0].Status)
+			"and tenanth.dispatchEvent.", got)
 	}
 
 	// Consumer half: outbox runner picks it up and the NATS subscriber
@@ -175,8 +171,8 @@ func TestTenantHandler_UpdateWithNilProducer_DoesNotPanic(t *testing.T) {
 	}
 }
 
-// Compile-time assertion: *worker.Dispatcher must satisfy
+// Compile-time assertion: *worker.EventRecorder must satisfy
 // tenantpkg.EventProducer. Without this the integration test would
 // only catch the mismatch at SetEventProducer call time, but we want
 // the failure to surface in `go vet`/`go build` immediately.
-var _ tenantpkg.EventProducer = (*worker.Dispatcher)(nil)
+var _ tenantpkg.EventProducer = (*worker.EventRecorder)(nil)

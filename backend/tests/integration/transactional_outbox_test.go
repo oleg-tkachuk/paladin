@@ -33,7 +33,7 @@ import (
 
 // insertOutboxOnTx is a stand-in fan-out hook: it writes one
 // event_deliveries row on the caller's tx, exactly as
-// dispatcher.DispatchTx would. Runs on the BYPASSRLS migrate pool's tx
+// dispatcher.RecordTx would. Runs on the BYPASSRLS migrate pool's tx
 // so the event_deliveries RLS policy is out of the picture.
 // subID is a parameter rather than a fresh uuid because
 // event_deliveries.subscription_id is a real FK — the row it points at has to

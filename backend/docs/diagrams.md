@@ -144,7 +144,7 @@ flowchart TB
 
 Policies are compiled once per tenant and cached; a `LISTEN policy_changed`
 connection evicts them, and flushes everything after a reconnect. A mutation
-writes its outbox row in the same transaction as the change.
+records its event in the same transaction as the change.
 
 ## Main request: upload
 
@@ -199,14 +199,16 @@ flowchart LR
         worker["<b>worker</b>"]
         ingest["<b>ingest</b><br/>dedup · PENDING → AVAILABLE"]
     end
+    recorded[("<b>event_outbox</b><br/>one row per event")]
     outbox[("<b>event_deliveries</b><br/>pending · delivered · failed")]
-    disp["<b>dispatcher</b><br/>SKIP LOCKED batches · backoff"]
+    disp["<b>dispatcher</b><br/>fan-out · SKIP LOCKED batches · backoff"]
     sinks{{"<b>sinks</b><br/>HTTP · NATS · Kafka<br/>RabbitMQ · SQS"}}
     audit[("<b>audit_log</b>")]
     sse["admin: audit stream<br/>LISTEN paladin_audit → SSE"]
 
     notif --> ingest
-    api & admin & worker & ingest --> outbox --> disp --> sinks
+    api & admin & worker & ingest --> recorded --> disp
+    disp --> outbox --> disp --> sinks
     api & admin --> audit --> sse
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
@@ -218,7 +220,7 @@ flowchart LR
     class notif client
     class api,admin,worker,disp,sse role
     class ingest optional
-    class outbox,audit store
+    class recorded,outbox,audit store
     class sinks external
     style prod fill:#F8FAFC,stroke:#16A34A
 ```

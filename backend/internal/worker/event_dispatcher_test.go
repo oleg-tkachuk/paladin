@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,150 +19,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 )
-
-type fakeStore struct {
-	subs []admindomain.EventSubscription
-	// lastListArgs records the most recent List call so tests can
-	// assert the producer scopes the query (tenant filter) instead of
-	// fetching everything and filtering in-process.
-	lastListArgs admindomain.ListEventSubscriptionsArgs
-}
-
-func (f *fakeStore) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
-	f.lastListArgs = args
-	if args.TenantID == uuid.Nil() {
-		return f.subs, "", nil
-	}
-	var out []admindomain.EventSubscription
-	for _, s := range f.subs {
-		if s.TenantID == args.TenantID {
-			out = append(out, s)
-		}
-	}
-	return out, "", nil
-}
-
-func (f *fakeStore) Get(_ context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
-	for _, s := range f.subs {
-		if s.SubscriptionID == id {
-			return s, nil
-		}
-	}
-	return admindomain.EventSubscription{}, errors.New("not found")
-}
-
-// fakeOutbox captures what the producer writes so tests can assert
-// on row shape without standing up Postgres.
-type fakeOutbox struct {
-	mu   sync.Mutex
-	rows []OutboxRow
-}
-
-func (f *fakeOutbox) Insert(_ context.Context, row OutboxRow) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.rows = append(f.rows, row)
-	return nil
-}
-
-func (f *fakeOutbox) snapshot() []OutboxRow {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make([]OutboxRow, len(f.rows))
-	copy(out, f.rows)
-	return out
-}
-
-// TestDispatchWritesOutbox replaces the pre-slice-9 "Dispatch POSTs
-// synchronously" test. The producer no longer touches the network —
-// it writes one row per matching sub to the outbox and returns.
-func TestDispatchWritesOutbox(t *testing.T) {
-	tenantID := uuid.NewV7()
-	subID := uuid.NewV7()
-	cfg, _ := json.Marshal(map[string]any{
-		"url":                "http://nowhere.invalid",
-		"signing_secret_ref": "test-secret",
-	})
-	out := &fakeOutbox{}
-	d := &Dispatcher{
-		Store: &fakeStore{
-			subs: []admindomain.EventSubscription{{
-				SubscriptionID: subID,
-				TenantID:       tenantID,
-				SinkKind:       "http",
-				SinkConfig:     cfg,
-			}},
-		},
-		Outbox: out,
-	}
-	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{
-		Type:     "paladin.object.uploaded",
-		At:       time.Now().UTC(),
-		TenantID: tenantID.String(),
-	})
-	if err != nil {
-		t.Fatalf("Dispatch: %v", err)
-	}
-	if n != 1 {
-		t.Errorf("queued: got %d want 1", n)
-	}
-	rows := out.snapshot()
-	if len(rows) != 1 {
-		t.Fatalf("rows: got %d want 1", len(rows))
-	}
-	if rows[0].SubscriptionID != subID {
-		t.Errorf("sub id: got %s want %s", rows[0].SubscriptionID, subID)
-	}
-	if rows[0].EventType != "paladin.object.uploaded" {
-		t.Errorf("event type: got %q", rows[0].EventType)
-	}
-	if len(rows[0].EventPayload) == 0 {
-		t.Error("event payload is empty")
-	}
-}
-
-// TestDispatchScopesListToTenant pins the fan-out query shape: the
-// producer must push the tenant filter into the store query (SQL
-// WHERE) rather than listing every tenant's subscriptions and
-// filtering in-process — at scale the unscoped form both leaks work
-// across tenants and silently truncates past the page cap.
-func TestDispatchScopesListToTenant(t *testing.T) {
-	tenantID := uuid.NewV7()
-	otherTenant := uuid.NewV7()
-	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
-	store := &fakeStore{
-		subs: []admindomain.EventSubscription{
-			{
-				SubscriptionID: uuid.NewV7(),
-				TenantID:       tenantID,
-				SinkKind:       "http",
-				SinkConfig:     cfg,
-			},
-			{
-				SubscriptionID: uuid.NewV7(),
-				TenantID:       otherTenant,
-				SinkKind:       "http",
-				SinkConfig:     cfg,
-			},
-		},
-	}
-	out := &fakeOutbox{}
-	d := &Dispatcher{Store: store, Outbox: out}
-	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "paladin.object.uploaded"})
-	if err != nil {
-		t.Fatalf("Dispatch: %v", err)
-	}
-	if store.lastListArgs.TenantID != tenantID {
-		t.Errorf("List args.TenantID: got %s want %s (tenant filter must be pushed into the query)",
-			store.lastListArgs.TenantID, tenantID)
-	}
-	if n != 1 {
-		t.Errorf("queued: got %d want 1 (only this tenant's sub)", n)
-	}
-	if got := len(out.snapshot()); got != 1 {
-		t.Errorf("outbox writes: got %d want 1", got)
-	}
-}
 
 func TestKindFromType(t *testing.T) {
 	cases := []struct {
@@ -259,141 +114,13 @@ func TestBucketFromResourceName(t *testing.T) {
 // pagingStore returns subscriptions in fixed-size pages with a subscription-id
 // cursor, like the real repo — so the fan-out's paging loop is exercised. subs
 // must be pre-sorted by SubscriptionID (uuid v7 = creation order).
-type pagingStore struct {
-	subs     []admindomain.EventSubscription
-	pageSize int
-	calls    int
-}
-
-func (s *pagingStore) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
-	s.calls++
-	var eligible []admindomain.EventSubscription
-	for _, sub := range s.subs {
-		if sub.TenantID != args.TenantID {
-			continue
-		}
-		if args.AfterID != uuid.Nil() && sub.SubscriptionID.String() <= args.AfterID.String() {
-			continue // keyset cursor (v7 ids sort lexicographically by creation time)
-		}
-		eligible = append(eligible, sub)
-	}
-	ps := s.pageSize
-	if ps <= 0 || ps > len(eligible) {
-		ps = len(eligible)
-	}
-	page := eligible[:ps]
-	var next string
-	if ps < len(eligible) && ps > 0 {
-		next = page[ps-1].SubscriptionID.String()
-	}
-	return page, next, nil
-}
-
-func (s *pagingStore) Get(_ context.Context, id uuid.UUID) (admindomain.EventSubscription, error) {
-	for _, sub := range s.subs {
-		if sub.SubscriptionID == id {
-			return sub, nil
-		}
-	}
-	return admindomain.EventSubscription{}, errors.New("not found")
-}
-
-// TestDispatch_PagesAllSubscriptions: the fan-out must reach EVERY matching
-// subscription across pages — the old single-page cap silently dropped subs
-// beyond the page size.
-func TestDispatch_PagesAllSubscriptions(t *testing.T) {
+// TestSubscribersFilterMatch exercises the subscription CEL filter
+// (EventEnvelopeSchema) at fan-out: matching filters receive the event,
+// non-matching ones do not, richer predicates over envelope fields work, and
+// an uncompilable filter fails closed rather than fanning out.
+func TestSubscribersFilterMatch(t *testing.T) {
 	tenantID := uuid.NewV7()
-	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
-	const n = 5
-	subs := make([]admindomain.EventSubscription, n)
-	for i := range subs {
-		subs[i] = admindomain.EventSubscription{
-			SubscriptionID: uuid.NewV7(),
-			TenantID:       tenantID,
-			SinkKind:       "http",
-			SinkConfig:     cfg, // empty filter → matches every event
-		}
-	}
-	store := &pagingStore{subs: subs, pageSize: 2}
-	out := &fakeOutbox{}
-	d := &Dispatcher{Store: store, Outbox: out}
-
-	queued, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "paladin.object.uploaded"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if queued != n {
-		t.Fatalf("queued = %d, want %d (every subscription across pages)", queued, n)
-	}
-	if len(out.snapshot()) != n {
-		t.Fatalf("outbox rows = %d, want %d", len(out.snapshot()), n)
-	}
-	if store.calls < 3 { // 2+2+1 → 3 pages
-		t.Errorf("List calls = %d, want >=3 — pagination did not actually page", store.calls)
-	}
-}
-
-// TestDispatchRejectsInvalidTenantID — Dispatch parses the tenant id
-// for the SQL filter; garbage must fail loudly, not fan out to
-// nothing.
-func TestDispatchRejectsInvalidTenantID(t *testing.T) {
-	d := &Dispatcher{Store: &fakeStore{}, Outbox: &fakeOutbox{}}
-	if _, err := d.Dispatch(context.Background(), "not-a-uuid", Event{Type: "paladin.object.uploaded"}); err == nil {
-		t.Fatal("expected error for invalid tenant id")
-	}
-}
-
-func TestDispatchSkipsDisabled(t *testing.T) {
-	tenantID := uuid.NewV7()
-	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
-	out := &fakeOutbox{}
-	d := &Dispatcher{
-		Store: &fakeStore{
-			subs: []admindomain.EventSubscription{{
-				SubscriptionID: uuid.NewV7(),
-				TenantID:       tenantID,
-				SinkKind:       "http",
-				SinkConfig:     cfg,
-				Disabled:       true,
-			}},
-		},
-		Outbox: out,
-	}
-	n, err := d.Dispatch(context.Background(), tenantID.String(), Event{Type: "paladin.object.uploaded"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 0 {
-		t.Errorf("queued: got %d want 0 (disabled)", n)
-	}
-	if got := len(out.snapshot()); got != 0 {
-		t.Errorf("outbox writes: got %d want 0", got)
-	}
-}
-
-// TestDispatchFilterMatch exercises the subscription CEL filter
-// (EventEnvelopeSchema) at fan-out: matching filters queue, non-matching
-// ones drop, richer predicates over envelope fields work, and an
-// uncompilable filter fails closed rather than fanning out.
-func TestDispatchFilterMatch(t *testing.T) {
-	tenantID := uuid.NewV7()
-	cfg, _ := json.Marshal(map[string]any{"url": "http://unused"})
-
-	newDispatcher := func(filter string) (*Dispatcher, *fakeOutbox) {
-		out := &fakeOutbox{}
-		return &Dispatcher{
-			Store: &fakeStore{
-				subs: []admindomain.EventSubscription{{
-					SubscriptionID: uuid.NewV7(),
-					TenantID:       tenantID,
-					SinkKind:       "http",
-					SinkConfig:     cfg,
-					CELFilter:      filter,
-				}},
-			},
-			Outbox: out,
-		}, out
-	}
+	recordedAt := time.Now()
 
 	cases := []struct {
 		name   string
@@ -471,13 +198,12 @@ func TestDispatchFilterMatch(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d, out := newDispatcher(tc.filter)
-			n, err := d.Dispatch(context.Background(), tenantID.String(), tc.evt)
-			if err != nil {
-				t.Fatal(err)
+			sub := fanoutSubscription{
+				ID: uuid.NewV7(), TenantID: tenantID, CELFilter: tc.filter, CreatedAt: recordedAt,
 			}
-			if n != tc.want || len(out.snapshot()) != tc.want {
-				t.Errorf("queued=%d writes=%d, want %d/%d", n, len(out.snapshot()), tc.want, tc.want)
+			got := (&Dispatcher{}).subscribers([]fanoutSubscription{sub}, tc.evt, recordedAt)
+			if len(got) != tc.want {
+				t.Errorf("subscribers = %d, want %d", len(got), tc.want)
 			}
 		})
 	}

@@ -86,12 +86,7 @@ func permanentDeleteHandler(pool *pgxpool.Pool, st objecth.Storage) *objecth.Han
 		statemachine.New(pool),
 		objecth.PresignConfig{},
 	)
-	h.SetEventProducer(&worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(q)),
-		Outbox:      worker.PgxOutboxWriter{Pool: pool},
-		Logger:      zap.NewNop(),
-		MaxAttempts: 3,
-	})
+	h.SetEventProducer(worker.NewEventRecorder(zap.NewNop()))
 	h.SetLogger(zap.NewNop())
 	return h
 }
@@ -116,10 +111,10 @@ func TestPermanentDeleteRemovesRowBytesAndDebtInOrder(t *testing.T) {
 	if len(st.deleted) != 1 {
 		t.Fatalf("storage deletes = %v, want exactly one", st.deleted)
 	}
-	if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 1 {
+	if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 1 {
 		t.Errorf("paladin.object.deleted rows = %d, want 1", n)
 	}
-	if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.purged"); n != 1 {
+	if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.purged"); n != 1 {
 		t.Errorf("paladin.object.purged rows = %d, want 1 — the bytes went, so subscribers are owed the fact", n)
 	}
 	// Debt written and then settled. A leftover row would make the drainer
@@ -148,7 +143,7 @@ func TestPermanentDeleteKeepsTheDebtWhenStorageFails(t *testing.T) {
 	if objectExists(t, ctx, pool, obj.ObjectID) {
 		t.Error("row survived")
 	}
-	if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 1 {
+	if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 1 {
 		t.Errorf("paladin.object.deleted rows = %d, want 1", n)
 	}
 	// The whole reason the debt is written inside the removal transaction:
@@ -159,7 +154,7 @@ func TestPermanentDeleteKeepsTheDebtWhenStorageFails(t *testing.T) {
 	}
 	// And no purged event: nothing was reclaimed. The drainer emits it when
 	// the retry succeeds.
-	if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.purged"); n != 0 {
+	if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.purged"); n != 0 {
 		t.Errorf("paladin.object.purged rows = %d, want 0 — the bytes are still there", n)
 	}
 }
@@ -188,7 +183,7 @@ func TestPermanentDeleteRefusesAVersionMismatch(t *testing.T) {
 	if n := purgeDebtCount(t, ctx, pool, obj.ObjectID); n != 0 {
 		t.Errorf("pending_purges rows = %d, want 0", n)
 	}
-	if n := deliveryCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 0 {
+	if n := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted"); n != 0 {
 		t.Errorf("paladin.object.deleted rows = %d, want 0", n)
 	}
 }

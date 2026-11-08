@@ -280,9 +280,9 @@ func (r *recordingEvents) Dispatch(_ context.Context, tenantID string, _ worker.
 	return 1, nil
 }
 
-func (r *recordingEvents) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, _ worker.Event) (int, error) {
+func (r *recordingEvents) RecordTx(_ context.Context, _ pgx.Tx, tenantID string, _ worker.Event) error {
 	r.tenants = append(r.tenants, tenantID)
-	return 1, nil
+	return nil
 }
 
 // A bucket quota's paladin.quota.set goes to the tenant owning the bucket.

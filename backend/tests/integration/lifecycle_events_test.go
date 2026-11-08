@@ -37,8 +37,9 @@ import (
 // outbox loop drains to it, returns the live dispatcher (already as the
 // handler's would-be EventProducer) and the received-message channel.
 type lifecycleEventProbe struct {
-	d   *worker.Dispatcher
-	got chan *nats.Msg
+	d      *worker.Dispatcher
+	events *worker.EventRecorder
+	got    chan *nats.Msg
 }
 
 func newLifecycleEventProbe(t *testing.T, f *dispatcherFixture, tenant, url string) *lifecycleEventProbe {
@@ -59,7 +60,7 @@ func newLifecycleEventProbe(t *testing.T, f *dispatcherFixture, tenant, url stri
 	t.Cleanup(pool.Close)
 	d := f.dispatcher()
 	d.NATS = pool
-	return &lifecycleEventProbe{d: d, got: got}
+	return &lifecycleEventProbe{d: d, events: worker.NewEventRecorder(nil), got: got}
 }
 
 // expect drains the outbox once and asserts a single CloudEvents 1.0 envelope
@@ -131,7 +132,7 @@ func TestQuotaHandler_SetQuotaDispatches(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewQuotaRepoV2(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := quotahpkg.NewHandler(repo, allowAll{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 
 	if _, err := handler.SetQuota(ctxAdmin(t, tenant), admindomain.Quota{
 		TenantID:      tenant,
@@ -140,8 +141,8 @@ func TestQuotaHandler_SetQuotaDispatches(t *testing.T) {
 		t.Fatalf("SetQuota: %v", err)
 	}
 
-	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
-		t.Fatalf("event_deliveries rows = %d, want 1 (SetEventProducer wiring)", len(rows))
+	if got := f.recordedEvents(t, tenant); got != 1 {
+		t.Fatalf("recorded events = %d, want 1 (SetEventProducer wiring)", got)
 	}
 	probe.expect(t, f, tenant.String(), "paladin.quota.set")
 }
@@ -158,7 +159,7 @@ func TestCollectionHandler_UpdateDispatches(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewCollectionRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := objectkeypkg.NewHandler(repo, allowAll{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 
 	newName := "Docs Renamed"
 	if _, err := handler.UpdateCollection(ctxAdmin(t, tenant), objectkeypkg.UpdateCollectionArgs{
@@ -169,8 +170,8 @@ func TestCollectionHandler_UpdateDispatches(t *testing.T) {
 		t.Fatalf("UpdateCollection: %v", err)
 	}
 
-	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
-		t.Fatalf("event_deliveries rows = %d, want 1 (SetEventProducer wiring)", len(rows))
+	if got := f.recordedEvents(t, tenant); got != 1 {
+		t.Fatalf("recorded events = %d, want 1 (SetEventProducer wiring)", got)
 	}
 	probe.expect(t, f, tenant.String(), "paladin.collection.updated")
 }
@@ -190,7 +191,7 @@ func TestBucketHandler_UpdateDispatches(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewBucketRepoV2(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := bucketh.NewHandler(repo, nil, allowAll{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 
 	if _, err := handler.UpdateBucket(ctxAdmin(t, tenant), bucketh.UpdateBucketInput{
 		Bucket: admindomain.Bucket{
@@ -205,8 +206,8 @@ func TestBucketHandler_UpdateDispatches(t *testing.T) {
 		t.Fatalf("UpdateBucket: %v", err)
 	}
 
-	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
-		t.Fatalf("event_deliveries rows = %d, want 1 (SetEventProducer wiring)", len(rows))
+	if got := f.recordedEvents(t, tenant); got != 1 {
+		t.Fatalf("recorded events = %d, want 1 (SetEventProducer wiring)", got)
 	}
 	probe.expect(t, f, tenant.String(), "paladin.bucket.updated")
 }
@@ -226,7 +227,7 @@ func TestObjectHandler_UpdateDispatches(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	repo := adapters.NewObjectRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
 	handler := objectpkg.NewHandler(repo, nil, allowAll{}, nil, nil, objectpkg.PresignConfig{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 
 	if _, err := handler.UpdateObject(ctxAdmin(t, tenant), objectpkg.UpdateObjectInput{
 		Collection:      "docs",
@@ -238,8 +239,8 @@ func TestObjectHandler_UpdateDispatches(t *testing.T) {
 		t.Fatalf("UpdateObject: %v", err)
 	}
 
-	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
-		t.Fatalf("event_deliveries rows = %d, want 1 (SetEventProducer wiring)", len(rows))
+	if got := f.recordedEvents(t, tenant); got != 1 {
+		t.Fatalf("recorded events = %d, want 1 (SetEventProducer wiring)", got)
 	}
 	probe.expect(t, f, tenant.String(), "paladin.object.updated")
 }
@@ -304,7 +305,7 @@ func TestObjectHandler_PermanentDeleteDispatchesDeletedAndPurged(t *testing.T) {
 	storage := &deleteOnlyStorage{}
 	handler := objectpkg.NewHandler(repo, storage, allowAll{}, nil,
 		statemachine.New(f.h.PoolMigrate), objectpkg.PresignConfig{})
-	handler.SetEventProducer(probe.d)
+	handler.SetEventProducer(probe.events)
 
 	ctx := ctxAdmin(t, tenant)
 	obj, err := repo.FindByName(ctx, tenant, "docs", objID.String())

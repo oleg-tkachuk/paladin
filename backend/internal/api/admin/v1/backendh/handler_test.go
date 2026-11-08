@@ -73,9 +73,9 @@ func (fakeBackendRepo) GetTx(context.Context, pgx.Tx, string) (admindomain.Stora
 // recordingProducer captures the last event a handler dispatches.
 type recordingProducer struct{ last worker.Event }
 
-func (p *recordingProducer) DispatchTx(_ context.Context, _ pgx.Tx, _ string, evt worker.Event) (int, error) {
+func (p *recordingProducer) RecordTx(_ context.Context, _ pgx.Tx, _ string, evt worker.Event) error {
 	p.last = evt
-	return 1, nil
+	return nil
 }
 
 func ctxWithRoles(roles ...string) context.Context {

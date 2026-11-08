@@ -35,9 +35,7 @@ func TestRedriveFailedDeliveries_SendsThemAgain(t *testing.T) {
 	otherFailed := seedDelivery(t, f, other, otherSub, statusFailed, nil)
 
 	d := f.dispatcher()
-	if _, err := d.Dispatch(ctx, tenant.String(), makeEvent("", tenant)); err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
+	f.enqueue(t, tenant.String(), makeEvent("", tenant))
 	row := f.allDeliveryRows(t, tenant)[0]
 	runner := f.outboxRunnerWithMax(d, 1)
 	f.tickOnce(t, runner)

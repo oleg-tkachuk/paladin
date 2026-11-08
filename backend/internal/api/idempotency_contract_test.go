@@ -68,7 +68,7 @@ var writeVerb = regexp.MustCompile(
 		// capital. Without this it is a bare prefix match, and `Dispatch` swallowed
 		// `DispatcherStats`: an HTTP GET for the dispatcher's stats page, reported
 		// as a write, which is how a genuine read stays undeclared for looking
-		// guilty. `DispatchTx` still matches, because Tx is a new word.
+		// guilty. `RecordTx` still matches, because Tx is a new word.
 		`([A-Z]|$)`)
 
 // noSideEffectRPCs collects every method the descriptors declare NO_SIDE_EFFECTS.

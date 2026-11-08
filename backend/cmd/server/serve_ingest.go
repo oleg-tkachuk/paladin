@@ -126,19 +126,10 @@ func runIngest(
 	// statemachine.Transitioner already lives on SharedDeps but
 	// we replace it with one bound to ingestQueries so PROMOTE
 	// flows through the same BYPASSRLS pool.
-	// Producer-only dispatcher: enqueues paladin.object.uploaded outbox
-	// rows on the promote tx (ADR-0003) so an explicit-mode storage
-	// event notifies webhook subscribers just like a CompleteObject
-	// RPC does. Bound to the ingest (BYPASSRLS) queries so the sub
-	// fan-out isn't RLS-gated. The separate `serve dispatcher` pod
-	// drains event_deliveries and does the actual delivery, so NATS
-	// stays nil here — enqueue never opens a socket.
-	ingestDispatcher := &worker.Dispatcher{
-		Store:       worker.NewRepoSubscriptionStore(adapters.NewEventSubscriptionRepoV2(ingestQueries)),
-		Outbox:      worker.PgxOutboxWriter{Pool: ingestPool},
-		Logger:      l.Named("ingest-event-dispatcher"),
-		MaxAttempts: 3,
-	}
+	// Records paladin.object.uploaded on the promote tx (ADR-0003), so a
+	// storage event notifies subscribers just as a CompleteObject RPC
+	// does; the `serve dispatcher` pod fans it out (ADR-0044).
+	ingestEvents := worker.NewEventRecorder(l.Named("ingest-events"))
 
 	handler := &eventingest.PromoteHandler{
 		// Wrap the queries in the per-tenant longest-prefix cache so
@@ -146,7 +137,7 @@ func runIngest(
 		// event (bounded-staleness — see eventingest.CachingLookup).
 		Lookup:       eventingest.NewCachingLookup(ingestQueries, eventingest.DefaultPrefixCacheTTL, l.Named("ingest.prefix-cache")),
 		Transitioner: ingestSM,
-		Events:       ingestDispatcher,
+		Events:       ingestEvents,
 		Logger:       l.Named("ingest.handler"),
 		Tenants:      tenantstate.NewReader(ingestPool),
 		// A delete event is believed only when a HEAD at the object's

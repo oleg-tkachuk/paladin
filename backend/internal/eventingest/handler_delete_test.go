@@ -58,9 +58,9 @@ type recordedEvents struct {
 	events []worker.Event
 }
 
-func (r *recordedEvents) DispatchTx(_ context.Context, _ pgx.Tx, _ string, evt worker.Event) (int, error) {
+func (r *recordedEvents) RecordTx(_ context.Context, _ pgx.Tx, _ string, evt worker.Event) error {
 	r.events = append(r.events, evt)
-	return 1, nil
+	return nil
 }
 
 const deletedObjectVersion = 7

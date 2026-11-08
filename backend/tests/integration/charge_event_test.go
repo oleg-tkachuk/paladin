@@ -131,7 +131,7 @@ func TestChargeCapability_ChargedEventReachesSubscriber(t *testing.T) {
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	callCtx := auth.WithCapability(ctx, verified)
 	callCtx = auth.WithChargeStore(callCtx, newUsageStore(t, f.h.PoolApp))
-	callCtx = auth.WithChargeEventEmitter(callCtx, app.NewChargeEmitter(probe.d, zap.NewNop()))
+	callCtx = auth.WithChargeEventEmitter(callCtx, app.NewChargeEmitter(probe.events, zap.NewNop()))
 
 	if err := auth.ChargeCapability(callCtx, chargedAmount); err != nil {
 		t.Fatalf("ChargeCapability: %v", err)
@@ -156,7 +156,7 @@ func TestFailedCall_RefundedEventReachesSubscriber(t *testing.T) {
 
 	probe := newLifecycleEventProbe(t, f, tenant.String(), url)
 	interceptor := auth.CapabilityEstablishingInterceptor(minter.Verifier, captest.Audience,
-		newUsageStore(t, f.h.PoolApp), 0, app.NewChargeEmitter(probe.d, zap.NewNop()))
+		newUsageStore(t, f.h.PoolApp), 0, app.NewChargeEmitter(probe.events, zap.NewNop()))
 	server := connect.NewServer(interceptor)
 	paladiniamv1connect.RegisterHealthServiceHandler(server, chargeThenFail{})
 	mux := http.NewServeMux()

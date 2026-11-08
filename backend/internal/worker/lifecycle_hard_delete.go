@@ -52,7 +52,7 @@ type LifecycleHardDeleter struct {
 	// paladin.object.deleted announces a state transition, paladin.object.purged
 	// announces that the bytes are gone, and only the latter is emitted from
 	// a path that has observed the storage delete succeed.
-	Events    *Dispatcher
+	Events    EventProducer
 	TTL       time.Duration
 	Interval  time.Duration
 	BatchSize int32
@@ -257,7 +257,7 @@ func (w *LifecycleHardDeleter) settleAndAnnounce(ctx context.Context, r sqlc.Lis
 		return tx.Commit(ctx)
 	}
 	objectID := uuid.UUID(r.ID.Bytes)
-	if _, err := w.Events.DispatchTx(ctx, tx, tenantID.String(), Event{
+	if err := w.Events.RecordTx(ctx, tx, tenantID.String(), Event{
 		Type:     "paladin.object.purged",
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),

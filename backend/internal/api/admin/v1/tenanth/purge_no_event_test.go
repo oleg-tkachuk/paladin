@@ -34,12 +34,12 @@ func (p *refusingProducer) Dispatch(context.Context, string, worker.Event) (int,
 	return 0, errors.New("Dispatch must not be reached from PurgeTenant")
 }
 
-func (p *refusingProducer) DispatchTx(context.Context, pgx.Tx, string, worker.Event) (int, error) {
+func (p *refusingProducer) RecordTx(context.Context, pgx.Tx, string, worker.Event) error {
 	p.calls++
 	// The real failure was a foreign-key violation on the insert. Standing in
 	// for it with any error reproduces what matters: an error returned from
 	// inside the transaction aborts the purge.
-	return 0, errors.New("DispatchTx must not be reached from PurgeTenant")
+	return errors.New("RecordTx must not be reached from PurgeTenant")
 }
 
 func TestPurgeTenantDoesNotFanOutItsOwnEvent(t *testing.T) {

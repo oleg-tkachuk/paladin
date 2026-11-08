@@ -2,7 +2,7 @@
 
 // The meter is limes/pgstore's, contract-tested by limes and here by
 // capability_meter_contract_test.go. What these tests pin is Paladin's use of
-// it: the outbox fan-out (ADR-0003) runs on the charge's own transaction, so
+// it: the event record (ADR-0003) is written on the charge's own transaction, so
 // a fan-out that fails takes the charge with it, and a tenant budget set with
 // no unit is written in the platform's currency.
 package components

@@ -26,11 +26,11 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
-// EventProducer is the ADR-0003 outbox seam: DispatchTx writes the event's
-// outbox rows on the caller's tx so they commit atomically with the mutation.
-// *worker.Dispatcher implements it.
+// EventProducer is the ADR-0003 outbox seam: RecordTx records the
+// event on the caller's tx so it commits atomically with the mutation.
+// *worker.EventRecorder implements it.
 type EventProducer interface {
-	DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) (int, error)
+	RecordTx(ctx context.Context, tx pgx.Tx, tenantID string, evt worker.Event) error
 }
 
 // Repository is the admindomain BackendRepository plus the ADR-0003 tx seam
@@ -156,9 +156,9 @@ func backendResourceName(backendID string) string {
 	return "storageBackends/" + backendID
 }
 
-// dispatchEventTx fans a backend lifecycle event into the outbox on the
-// caller's tx (ADR-0003). Backends are tenant-agnostic infra, so the event is
-// platform-scoped (empty tenant). Returns the error so the caller rolls back.
+// dispatchEventTx records a backend lifecycle event on the caller's tx
+// (ADR-0003). Backends are tenant-agnostic infra, so the event has no tenant
+// and no subscription receives it: the recorder records nothing (ADR-0044).
 func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, eventType, resourceName string, payload map[string]any) error {
 	if h.events == nil {
 		return nil
@@ -167,7 +167,7 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, eventType, res
 	if p, err := auth.PrincipalFromContext(ctx); err == nil {
 		actor = p.Subject
 	}
-	_, err := h.events.DispatchTx(ctx, tx, "", worker.Event{
+	err := h.events.RecordTx(ctx, tx, "", worker.Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     "",

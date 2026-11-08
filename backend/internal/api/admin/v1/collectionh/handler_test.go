@@ -187,11 +187,11 @@ func (f *fakeEvents) Dispatch(_ context.Context, _ string, _ worker.Event) (int,
 	return 0, nil
 }
 
-func (f *fakeEvents) DispatchTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) (int, error) {
+func (f *fakeEvents) RecordTx(_ context.Context, _ pgx.Tx, tenantID string, evt worker.Event) error {
 	f.txCalls++
 	f.lastTxTenant = tenantID
 	f.lastTx = evt
-	return 1, f.err
+	return f.err
 }
 
 // --- context helpers (mirrors object_tag/handler_test.go) ---
@@ -788,7 +788,7 @@ func TestEventDispatch(t *testing.T) {
 			t.Fatalf("unexpected err: %v", err)
 		}
 		if ev.txCalls != 1 {
-			t.Fatalf("DispatchTx calls: got %d want 1", ev.txCalls)
+			t.Fatalf("RecordTx calls: got %d want 1", ev.txCalls)
 		}
 		if ev.lastTx.Type != "paladin.collection.created" {
 			t.Fatalf("event type: got %q", ev.lastTx.Type)

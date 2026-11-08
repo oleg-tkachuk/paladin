@@ -144,7 +144,7 @@ func TestApp_AssembledMuxesEmitLifecycleEvents(t *testing.T) {
 		t.Fatalf("UpdateObject through the assembled mux: %v", err)
 	}
 
-	if rows := f.allDeliveryRows(t, tenant); len(rows) != 1 {
-		t.Fatalf("event_deliveries rows = %d, want 1", len(rows))
+	if got := f.recordedEvents(t, tenant); got != 1 {
+		t.Fatalf("recorded events = %d, want 1", got)
 	}
 }

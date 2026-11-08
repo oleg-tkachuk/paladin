@@ -1,38 +1,18 @@
-// Event dispatcher — durable webhook fan-out.
+// Event dispatcher — durable fan-out to event sinks.
 //
-// Pre-slice-9 this lived in-process inside the admin pod and POSTed
-// to customer sinks synchronously on the request path. Two problems
-// with that:
+// The producer records each event once, on its own transaction
+// (EventRecorder, event_recorder.go), so the event commits with the change
+// it reports (ADR-0003). The dispatcher pod does the rest (ADR-0044):
 //
-//   - One slow customer sink stalls admin's connection pool.
-//   - Admin pod crash = events lost forever (no durability).
+//	event_outbox ──fanOut──▶ event_deliveries ──deliver──▶ sinks
 //
-// The current shape:
+// fanOut claims recorded events FOR UPDATE SKIP LOCKED, matches each against
+// the tenant's subscriptions and writes one delivery row per subscription
+// that receives it (event_fanout.go). The delivery loop then claims due rows
+// and delivers them, retrying each on its own.
 //
-//	┌─ admin handler (producer) ─────────────────────────┐
-//	│  Dispatcher.Dispatch(ctx, tenantID, evt):          │
-//	│    Store.List → filter-match → INSERT one          │
-//	│    event_deliveries row per matching sub.          │
-//	│    Returns immediately. No HTTP I/O.               │
-//	└────────────────────────────────────────────────────┘
-//	                    │
-//	                    ▼
-//	            event_deliveries (outbox)
-//	                    │
-//	                    ▼
-//	┌─ dispatcher pod (consumer) ───────────────────────┐
-//	│  OutboxRunner.Run(ctx):                            │
-//	│    SELECT ... FROM event_deliveries WHERE          │
-//	│      status='pending' AND next_attempt_at<=now()   │
-//	│      FOR UPDATE SKIP LOCKED LIMIT N                │
-//	│    Per row: deliver(); update status/attempts.     │
-//	└────────────────────────────────────────────────────┘
-//
-// TestSubscription RPC keeps Dispatcher.DeliverOne — operator clicked
-// "Test Webhook", they want the result now, no outbox row written.
-//
-// Sinks: HTTP (signed POST) is wired. Kafka / SQS branch-out from
-// deliver() the same way the previous in-process path did.
+// TestSubscription keeps Dispatcher.DeliverOne: an operator who clicked
+// "Test Webhook" wants the result now, with no outbox row written.
 package worker
 
 import (
@@ -54,7 +34,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -81,18 +60,15 @@ type Event struct {
 	ID string `json:"-"`
 }
 
-// SubscriptionStore is the read seam the producer uses to look up subs
-// at fan-out time, and the dispatcher pod uses to load a sub by ID at
-// delivery time. Defined narrowly so tests can stub.
+// SubscriptionStore is the read seam the dispatcher uses to load a
+// subscription by id at delivery time. Defined narrowly so tests can stub.
 type SubscriptionStore interface {
 	List(ctx context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error)
 	Get(ctx context.Context, id uuid.UUID) (admindomain.EventSubscription, error)
 }
 
 // RepoSubscriptionStore adapts an EventSubscriptionRepository to the
-// SubscriptionStore read seam (List + Get). Shared by every producer plane
-// (api / admin / ingest) so the fan-out reads subscriptions the same way
-// regardless of which pool/queries the repo is bound to.
+// SubscriptionStore read seam (List + Get).
 type RepoSubscriptionStore struct {
 	Repo admindomain.EventSubscriptionRepository
 }
@@ -110,36 +86,11 @@ func (s RepoSubscriptionStore) Get(ctx context.Context, id uuid.UUID) (admindoma
 	return s.Repo.Get(ctx, id)
 }
 
-// OutboxWriter is the producer-side write seam. Implemented by a thin
-// wrapper around *pgxpool.Pool in production; tests substitute a fake.
-type OutboxWriter interface {
-	Insert(ctx context.Context, row OutboxRow) error
-}
-
-// OutboxRow is the shape of a single row inserted by the producer and
-// consumed by the dispatcher pod. Mirrors the event_deliveries columns
-// the producer is responsible for stamping.
-type OutboxRow struct {
-	ID             uuid.UUID
-	TenantID       uuid.UUID
-	SubscriptionID uuid.UUID
-	EventType      string
-	EventAt        time.Time
-	EventPayload   []byte // raw JSON
-}
-
-// Dispatcher is the producer-side helper used by admin handlers. It
-// resolves subscriptions, runs the filter-match, and writes one outbox
-// row per match. It also retains DeliverOne for the synchronous test
-// path bound to TestSubscription RPC.
-//
-// Note: the consumer-side loop lives on OutboxRunner; Dispatcher's
-// only HTTP I/O today is DeliverOne. Keeping the deliver / deliverHTTP
-// methods on Dispatcher means OutboxRunner can hold one and call into
-// it without duplicating the sink branching.
+// Dispatcher holds what delivering to a sink takes: the subscription store,
+// the per-kind connection pools and the filter evaluator. OutboxRunner uses
+// it to fan out and deliver; TestSubscription uses DeliverOne.
 type Dispatcher struct {
 	Store      SubscriptionStore
-	Outbox     OutboxWriter // nil in TestSubscription-only deployments
 	HTTPClient *http.Client
 	Logger     *zap.Logger
 	// NATS is the optional shared connection pool used by the NATS
@@ -182,111 +133,6 @@ type Dispatcher struct {
 	// envelope (cel.EventEnvelopeSchema). Optional — nil falls back to a
 	// process-shared evaluator, so struct-literal construction keeps working.
 	Filter *cel.Evaluator
-}
-
-// Dispatch enumerates every enabled subscription for tenantID whose
-// filter matches `evt` and writes one row per match into the outbox.
-// Returns the count of inserted rows. NO HTTP I/O happens here — the
-// dispatcher pod consumes the outbox.
-//
-// Backwards-incompatible from the pre-slice-9 contract: the return
-// value used to be "successful HTTP deliveries"; it is now "rows
-// queued for the dispatcher pod". Call sites that logged the count
-// for telemetry should keep doing so — the semantic shift is from
-// "delivered" to "queued".
-func (d *Dispatcher) Dispatch(ctx context.Context, tenantID string, evt Event) (int, error) {
-	if d.Outbox == nil {
-		return 0, errors.New("dispatcher: no outbox writer")
-	}
-	return d.dispatch(ctx, tenantID, evt, d.Outbox.Insert)
-}
-
-// DispatchTx is the transactional variant: it writes the outbox rows on
-// the caller's transaction `tx` instead of the pool, so the fan-out is
-// atomic with whatever state change the caller is committing (ADR-0003 —
-// closes the dual-write crash window). The caller owns the tx lifecycle
-// (begin/commit/rollback); DispatchTx only INSERTs.
-func (d *Dispatcher) DispatchTx(ctx context.Context, tx pgx.Tx, tenantID string, evt Event) (int, error) {
-	return d.dispatch(ctx, tenantID, evt, func(ctx context.Context, row OutboxRow) error {
-		return insertOutboxRow(ctx, tx, row)
-	})
-}
-
-// subscriptionFanoutPageSize pages the per-event subscription fan-out. Modest
-// so each round-trip is cheap; the loop covers every subscription, so there is
-// no silent cap regardless of how many a tenant has.
-const subscriptionFanoutPageSize = 500
-
-// dispatch is the shared fan-out: resolve subscriptions, filter-match,
-// and call `insert` once per match. `insert` is either the pool-backed
-// OutboxWriter.Insert (Dispatch) or a tx-bound insert (DispatchTx).
-func (d *Dispatcher) dispatch(ctx context.Context, tenantID string, evt Event, insert func(context.Context, OutboxRow) error) (int, error) {
-	if d.Store == nil {
-		return 0, errors.New("dispatcher: no subscription store")
-	}
-	tenantUUID, err := uuid.Parse(tenantID)
-	if err != nil {
-		return 0, fmt.Errorf("dispatch: invalid tenant id %q: %w", tenantID, err)
-	}
-	// Page through EVERY matching subscription. A single-page cap would
-	// silently drop events for tenants with more subscriptions than the page
-	// size — a real hazard now that audit_mirror fans every mutation out.
-	var subs []admindomain.EventSubscription
-	var afterID uuid.UUID
-	for {
-		page, next, lErr := d.Store.List(ctx, admindomain.ListEventSubscriptionsArgs{
-			TenantID: tenantUUID,
-			PageSize: subscriptionFanoutPageSize,
-			AfterID:  afterID,
-		})
-		if lErr != nil {
-			return 0, fmt.Errorf("list subscriptions: %w", lErr)
-		}
-		subs = append(subs, page...)
-		if next == "" {
-			break // exhausted (a short/empty page never carries a cursor)
-		}
-		parsed, pErr := uuid.Parse(next)
-		if pErr != nil {
-			// A non-UUID cursor should be impossible (it's a subscription id);
-			// stop rather than risk an infinite loop, and surface the anomaly.
-			d.log().Warn("subscription fan-out: unparseable page cursor; stopping early",
-				zap.String("tenant_id", tenantID), zap.String("cursor", next), zap.Error(pErr))
-			break
-		}
-		afterID = parsed
-	}
-	payload, err := json.Marshal(evt)
-	if err != nil {
-		return 0, fmt.Errorf("marshal event: %w", err)
-	}
-	queued := 0
-	for _, sub := range subs {
-		if sub.Disabled {
-			continue
-		}
-		if !d.subscriptionMatches(sub, evt) {
-			continue
-		}
-		row := OutboxRow{
-			ID:             uuid.New(),
-			TenantID:       sub.TenantID,
-			SubscriptionID: sub.SubscriptionID,
-			EventType:      evt.Type,
-			EventAt:        evt.At,
-			EventPayload:   payload,
-		}
-		if err := insert(ctx, row); err != nil {
-			d.log().Warn("failed to insert outbox row",
-				zap.String("subscription_id", sub.SubscriptionID.String()),
-				zap.String("event_type", evt.Type),
-				zap.Error(err),
-			)
-			continue
-		}
-		queued++
-	}
-	return queued, nil
 }
 
 // defaultEventEvaluator backs Dispatchers constructed without an explicit
@@ -712,44 +558,6 @@ func (d *Dispatcher) log() *zap.Logger {
 	return zap.NewNop()
 }
 
-// ─── OutboxWriter (production impl) ─────────────────────────────────────────
-
-// PgxOutboxWriter is the production OutboxWriter — INSERTs straight
-// into event_deliveries on the supplied pgxpool.Pool. The producer
-// (admin pod) connection has the tenant GUC set per-request via the
-// RLS PrepareConn hook; the policy WITH CHECK clause keeps the
-// INSERT honest even if a future regression bypasses tenant context.
-type PgxOutboxWriter struct {
-	Pool *pgxpool.Pool
-}
-
-func (w PgxOutboxWriter) Insert(ctx context.Context, row OutboxRow) error {
-	if w.Pool == nil {
-		return errors.New("outbox writer: nil pool")
-	}
-	return insertOutboxRow(ctx, w.Pool, row)
-}
-
-// outboxExecer is the Exec subset shared by *pgxpool.Pool and pgx.Tx, so
-// one INSERT helper serves both the pool-backed writer and the
-// transactional DispatchTx path.
-type outboxExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-const insertOutboxSQL = `
-	INSERT INTO event_deliveries (
-		id, tenant_id, subscription_id, event_type, event_at, event_payload
-	) VALUES ($1, $2, $3, $4, $5, $6)
-`
-
-func insertOutboxRow(ctx context.Context, exec outboxExecer, row OutboxRow) error {
-	_, err := exec.Exec(ctx, insertOutboxSQL,
-		row.ID, row.TenantID, row.SubscriptionID, row.EventType, row.EventAt, row.EventPayload,
-	)
-	return err
-}
-
 // ─── OutboxRunner (consumer-side loop) ──────────────────────────────────────
 
 // OutboxRunner is the long-running loop that the dispatcher pod boots.
@@ -818,13 +626,40 @@ func (r *OutboxRunner) Run(ctx context.Context) error {
 	}
 }
 
-// Tick is a single batch claim+process pass. Public surface for
-// integration tests that need deterministic stepping (no goroutine
-// timing) — see tests/integration/dispatcher_test.go. Production callers
-// use Run; the loop and the sleep scheduling live there. Returns the same
-// (processed, err) tuple the internal tick produces.
+// Tick is a single pass: fan out a batch of recorded events, then deliver a
+// batch of due rows. Public surface for integration tests that need
+// deterministic stepping (no goroutine timing) — see
+// tests/integration/dispatcher_test.go. Production callers use Run. Returns
+// the number of delivery rows processed.
 func (r *OutboxRunner) Tick(ctx context.Context) (int, error) {
-	return r.tick(ctx)
+	_, delivered, err := r.pass(ctx)
+	return delivered, err
+}
+
+// tick is one pass for Run: the events fanned out and the rows processed
+// together, so the loop sleeps only when neither stage had work.
+func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
+	fanned, delivered, err := r.pass(ctx)
+	return fanned + delivered, err
+}
+
+// pass fans out, then delivers. A failed fan-out is logged and does not hold
+// back the delivery of rows already queued.
+func (r *OutboxRunner) pass(ctx context.Context) (fanned, delivered int, err error) {
+	fanned, ferr := r.FanOut(ctx)
+	if ferr != nil && !errors.Is(ferr, context.Canceled) {
+		r.log().Error("event fan-out failed; the batch stays recorded for the next pass", zap.Error(ferr))
+	}
+	delivered, err = r.deliverBatch(ctx)
+	return fanned, delivered, err
+}
+
+// batchSize is BatchSize, or its default when unset.
+func (r *OutboxRunner) batchSize() int {
+	if r.BatchSize > 0 {
+		return r.BatchSize
+	}
+	return DefaultOutboxBatchSize
 }
 
 // outboxDepthSampleInterval throttles the backlog measurement — the drain loop
@@ -868,6 +703,15 @@ func (r *OutboxRunner) sampleDepth(ctx context.Context) {
 		return
 	}
 	recordOutboxDepth(ctx, total, maxPerTenant)
+	backlog, err := r.FanoutBacklog(ctx)
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			r.log().Warn("fan-out backlog sample failed", zap.Error(err))
+		}
+	} else if backlog >= OutboxDepthWarnThreshold {
+		r.log().Warn("fan-out backlog high — recorded events wait to be matched to subscriptions; raise dispatcher.batch_size or lower poll_interval",
+			zap.Int64("events_recorded", backlog))
+	}
 	if maxPerTenant >= OutboxDepthWarnThreshold {
 		r.log().Warn("outbox backlog high — a tenant's pending fan-out is deep; raise dispatcher.batch_size / lower poll_interval, or narrow that tenant's subscription filters",
 			zap.Int64("pending_total", total),
@@ -875,14 +719,10 @@ func (r *OutboxRunner) sampleDepth(ctx context.Context) {
 	}
 }
 
-// tick claims and processes one batch. Returns the number of rows
-// processed (delivered or marked-failed) so the caller can skip the
-// idle-sleep when there's still backlog.
-func (r *OutboxRunner) tick(ctx context.Context) (int, error) {
-	batch := r.BatchSize
-	if batch <= 0 {
-		batch = DefaultOutboxBatchSize
-	}
+// deliverBatch claims and processes one batch of delivery rows. Returns the
+// number of rows processed (delivered or marked-failed).
+func (r *OutboxRunner) deliverBatch(ctx context.Context) (int, error) {
+	batch := r.batchSize()
 	// Claim, then deliver, then record — not one transaction around all
 	// three. Holding the row locks across sink I/O stretched a transaction
 	// over every HTTP retry and its sleeps, and a failed status write rolled
