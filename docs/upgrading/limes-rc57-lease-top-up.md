@@ -1,4 +1,4 @@
-## Unreleased — a lease top-up opens a new lease
+## sdk/python/v0.145.0, sdk/go/v0.145.0 — a lease top-up opens a new lease
 
 - `CapabilityService.Lease` on a capability whose lease is open now settles
   that lease — what it spent charged to every ancestor and the tenant — and
