@@ -32,29 +32,23 @@ the same commit. Treat this file like a runtime invariant.
 ---
 ## Releases
 
-### Restart the product's numbering at 0.x: the steps outside this repository
+### Restart the product's numbering at 0.x: the steps outside the code
 
 - **Status:** In-Progress
 - **Reason:** ADR-0045 moved the product to `release/vX.Y.Z` tags restarting
-  at 0.x; the release workflow and CI scripts read the new prefix, but the
-  version a build is published at is derived by the task library, which reads
-  only `v` tags, and three steps are outside the code: a library release, a
-  repository setting, and the dev cluster's chart constraint. Until all are
-  done the workflow releases no product (the stream has no tag) and dev builds
-  keep counting from v42.
+  at 0.x, and the task library (v14.3.0) reads that prefix. Three steps are
+  not code: a repository setting, the first tag, and the dev cluster's chart
+  constraint. Until they are done the workflow releases no product.
 - **Definition of Done:**
-  - The task library takes a tag prefix (`VERSION_TAG_PREFIX`); `TASKLIB` is
-    bumped to that release in `backend/Taskfile.yaml` and
-    `frontend/Taskfile.yaml`, with `VERSION_TAG_PREFIX: release/v` and
-    `VERSION_TAG_EXCLUDE` narrowed from `*/*` so it no longer drops
-    `release/v` tags.
   - The `protect-release-tags` ruleset includes `refs/tags/release/**`.
-  - `release/v0.0.0` is tagged on main's head, by hand.
+  - `release/v0.0.0` is tagged on main by hand — before the change that sets
+    `VERSION_TAG_PREFIX` merges, or dev builds start at `0.1.0-dev.…` and
+    outrank the `0.0.1-dev.…` ones that follow the tag.
   - local-iac bounds the paladin-core and paladin-console charts to
-    `>=0.0.0-0 <1.0.0-0`.
+    `>=0.0.0-0 <1.0.0-0` (local-iac#714), once a 0.x chart is published.
   - The first product release, 0.1.0, is cut with `-f bump=minor`, and this
     entry is deleted.
-- **Blockers:** the task library's release with the prefix input.
+- **Blockers:** none; each step waits on the one before it.
 
 ## SDKs
 

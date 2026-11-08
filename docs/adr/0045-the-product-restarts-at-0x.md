@@ -42,6 +42,8 @@ old tags, and deleting published releases would rewrite public history.
 - 0.x sorts below 42.x. Whatever resolves the product's charts or images by
   the highest version must be bounded below 1.0 until 1.0 is cut — the dev
   cluster's chart constraint among them — or it keeps the old numbering.
-- The task library derives dev builds' versions from the last tag; it reads
-  the product's prefix, so dev builds restart at `0.0.1-dev.…` once the first
-  `release/v` tag exists.
+- The task library derives dev builds' versions from the last tag of the
+  product's prefix. With none it starts them at `0.1.0-dev.…`, which would
+  outrank the `0.0.1-dev.…` builds that follow `release/v0.0.0`; so that tag
+  is cut on main before the prefix reaches it, and dev builds restart at
+  `0.0.1-dev.…`.
