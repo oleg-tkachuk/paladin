@@ -13,6 +13,10 @@
 // product compiles in — the Go SDK — is that module's
 // break, not the product's, and must not cut a product major.
 //
+// `atLeast` is the smallest release an operator asked for by hand — `minor`
+// or `major` — released whatever the commits say, even when they say nothing:
+// a major is cut only by a breaking commit or by this.
+//
 // `documentation` names the files a commit's place is not decided by: a
 // commit that changes code and its upgrade notes belongs where its code
 // does. Without it, a breaking SDK commit that also wrote docs/upgrading.md
@@ -36,6 +40,9 @@ export function within(files, prefixes = []) {
 }
 
 const RELEASES = [null, "patch", "minor", "major"];
+
+/** The releases an operator may ask for by hand. */
+export const MANUAL_RELEASES = ["minor", "major"];
 
 /** Whether `file` is documentation: under one of `prefixes`, or ending in one of `suffixes`. */
 export function isDocumentation(file, { prefixes = [], suffixes = [] } = {}) {
@@ -67,6 +74,19 @@ export async function analyzeCommits(pluginConfig, context) {
 
 /** analyzeCommits with the files of each commit from `files`, for tests. */
 export async function analyzeWith(pluginConfig, context, allFiles) {
+  const { atLeast, ...rest } = pluginConfig;
+  if (atLeast !== undefined && !MANUAL_RELEASES.includes(atLeast)) {
+    throw new Error(`atLeast ${atLeast}: not one of ${MANUAL_RELEASES.join(", ")}`);
+  }
+  const analyzed = await analyzeCommitsOf(rest, context, allFiles);
+  if (atLeast !== undefined) {
+    context.logger.log(`a ${atLeast} release was asked for by hand`);
+  }
+  return larger(analyzed ?? null, atLeast ?? null) ?? undefined;
+}
+
+/** The release the commits that touch the stream call for. */
+async function analyzeCommitsOf(pluginConfig, context, allFiles) {
   const { include, exclude, modules, documentation, ...analyzerConfig } = pluginConfig;
   const files = (hash) => deciding(allFiles(hash), documentation);
   const commits = context.commits.filter((c) => belongs(files(c.hash), { include, exclude }));

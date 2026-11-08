@@ -30,7 +30,8 @@ const cases = [
   ["product", "fix(api): repair a thing", BACKEND, "patch"],
   ["product", "perf(api): speed a thing up", BACKEND, "patch"],
   ["product", "security(audit): stop storing credentials", BACKEND, "patch"],
-  ["product", "feat(api)!: drop a field", BACKEND, "major"],
+  // Before 1.0 a break is a minor; 1.0 is cut by hand.
+  ["product", "feat(api)!: drop a field", BACKEND, "minor"],
   ["product", "feat(api): a contract change is a server change", PROTO, "minor"],
   ["product", "docs: explain a thing", BACKEND, null],
   ["product", "chore: tidy", BACKEND, null],
@@ -42,15 +43,15 @@ const cases = [
   ["product", "feat(sdk): the Python SDK and the server", [...PYTHON_SDK, ...BACKEND], "minor"],
   // A module's own breaking change is not a product major.
   ["product", "feat(sdk)!: the Go SDK's API breaks", SDK, "minor"],
-  ["product", "feat(sdk)!: the SDK and the server break together", [...SDK, ...BACKEND], "major"],
-  ["product", "feat(api)!: a contract break is the server's", PROTO, "major"],
+  ["product", "feat(sdk)!: the SDK and the server break together", [...SDK, ...BACKEND], "minor"],
+  ["product", "feat(api)!: a contract break is the server's", PROTO, "minor"],
   // Its upgrade notes do not make a module's break the product's: what
   // released v5.0.0 and v6.0.0 for SDK-only breaks.
   ["product", "feat(sdk)!: the Go SDK breaks, with its notes", [...SDK, ...UPGRADING], "minor"],
   ["product", "feat(sdk): the Python SDK and its archive version", [...PYTHON_SDK, ...ARCHIVAL, "BACKLOG.md"], null],
   ["product", "fix(sdk): the archive version alone", ARCHIVAL, null],
   ["product", "feat(sdk)!: the Python SDK breaks, with its notes", [...PYTHON_SDK, ...UPGRADING, "sdk/python/README.md"], null],
-  ["product", "feat(api)!: the server breaks, with its notes", [...BACKEND, ...UPGRADING], "major"],
+  ["product", "feat(api)!: the server breaks, with its notes", [...BACKEND, ...UPGRADING], "minor"],
   ["product", "docs: documentation alone releases nothing", UPGRADING, null],
   ["sdk", "feat(sdk)!: a break with its notes is still the SDK's", [...SDK, ...UPGRADING], "minor"],
 
@@ -79,6 +80,39 @@ const cases = [
 
 const logger = { log() {}, error() {}, warn() {}, success() {} };
 let failed = 0;
+
+// A release asked for by hand: cut whatever the commits say, never smaller
+// than they call for. [stream, asked, commits as [message, files], want]
+const manual = [
+  ["product", "major", [], "major"],
+  ["product", "minor", [], "minor"],
+  ["product", "major", [["fix(api): repair a thing", BACKEND]], "major"],
+  ["product", "minor", [["fix(api): repair a thing", BACKEND]], "minor"],
+  ["product", "minor", [["feat(api)!: drop a field", BACKEND]], "minor"],
+  ["product", "minor", [["feat(sdk): only the Python SDK", PYTHON_SDK]], "minor"],
+  ["sdk", "major", [["fix(sdk): repair a helper", SDK]], "major"],
+];
+for (const [stream, asked, commits, want] of manual) {
+  const byHash = new Map(commits.map(([, files], i) => [String(i), files]));
+  const got = await analyzeWith(
+    analyzerFor(stream, asked),
+    { commits: commits.map(([message], i) => ({ hash: String(i), message })), logger, cwd: process.cwd(), options: {} },
+    (hash) => byHash.get(hash),
+  );
+  if ((got ?? null) !== want) {
+    console.log(`FAIL [${stream}] ${asked} asked by hand over ${commits.length} commits: got ${got ?? null}, want ${want}`);
+    failed = 1;
+  }
+}
+for (const asked of ["patch", "1.0.0", "Major"]) {
+  try {
+    await analyzeWith(analyzerFor("product", asked), { commits: [], logger, cwd: process.cwd(), options: {} }, () => []);
+    console.log(`FAIL ${asked} asked by hand was accepted`);
+    failed = 1;
+  } catch {
+    // refused, as it must be
+  }
+}
 for (const [stream, message, files, want] of cases) {
   const got = await analyzeWith(
     analyzerFor(stream),
