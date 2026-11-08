@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { BillingPeriodBar } from "./BillingPeriodBar";
 import { KPI_TILE_HEIGHT, KPITile } from "./KPITile";
 import { SpendOverTimeCard } from "./SpendOverTimeCard";
+import { refundedNote } from "./refunds";
 import { spendStats } from "./spendStats";
 import { allowedGranularities, pickGranularity } from "./period";
 import { RankedSpendCard } from "./RankedSpendCard";
@@ -189,13 +190,19 @@ export function TenantBilling({
               <KPITile
                 label="Spend"
                 value={money(total)}
-                helper={
+                helper={[
                   capped
                     ? `${pctOfBudget.toFixed(1)}% of budget`
                     : unlimited
                       ? "unlimited budget"
-                      : "no budget configured"
-                }
+                      : "no budget configured",
+                  refundedNote(summary.refunded, {
+                    fallbackUnit: unit,
+                    fractionDigits: SPEND_DIGITS,
+                  }),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               />
               <KPITile
                 label="Charges"
