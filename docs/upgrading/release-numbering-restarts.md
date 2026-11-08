@@ -1,4 +1,4 @@
-## Unreleased — the product's numbering restarts at 0.x
+## release/v0.1.0 — the product's numbering restarts at 0.x
 
 - Product releases are tagged `release/vX.Y.Z` and restart at 0.x
   ([ADR-0045](../adr/0045-the-product-restarts-at-0x.md)); the images and
