@@ -1,4 +1,4 @@
-## Unreleased — events are matched to subscriptions by the dispatcher
+## release/v0.1.0 — events are matched to subscriptions by the dispatcher
 
 - A producer now records each event once, in a new `event_outbox` table
   (migration 107), and the dispatcher matches it to subscriptions. The

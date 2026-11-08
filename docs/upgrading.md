@@ -99,6 +99,19 @@ here.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
 
+## release/v0.1.0 — the product's numbering restarts at 0.x
+
+- Product releases are tagged `release/vX.Y.Z` and restart at 0.x
+  ([ADR-0045](../adr/0045-the-product-restarts-at-0x.md)); the images and
+  charts carry the bare version, `0.1.0` and on. The old `vX.Y.Z` releases
+  stay, and are never published again.
+- 0.x sorts below every old release. A deployment that takes the highest
+  chart or image version must bound it below 1.0 (for Helm,
+  `>=0.0.0-0 <1.0.0-0`) or it stays on the old numbering.
+- Before 1.0 a breaking change is a minor; read each release's *Behaviour
+  changes* and its upgrade section, not the version, to tell whether it
+  breaks anything.
+
 ## sdk/python/v0.145.0, sdk/go/v0.145.0 — a lease top-up opens a new lease
 
 - `CapabilityService.Lease` on a capability whose lease is open now settles
@@ -116,7 +129,7 @@ here.
 - A capability the revocation store has no record of is refused, where it
   was accepted as not revoked; every capability Paladin issues is recorded.
 
-## Unreleased — events are matched to subscriptions by the dispatcher
+## release/v0.1.0 — events are matched to subscriptions by the dispatcher
 
 - A producer now records each event once, in a new `event_outbox` table
   (migration 107), and the dispatcher matches it to subscriptions. The
@@ -126,8 +139,9 @@ here.
 - A subscription receives an event if it existed when the event was
   recorded; one created a moment later does not. See
   `docs/event-delivery-dedup.md`.
-- A stalled fan-out does not raise `paladin_outbox_pending`: look for
-  `fan-out backlog high` in the dispatcher's log.
+- A stalled fan-out does not raise `paladin_outbox_pending`; the new
+  `paladin_outbox_recorded` gauge counts the events waiting for it, and
+  `PaladinEventFanOutNotDraining` fires on it.
 
 ## v42.1.0, sdk/python/v0.143.0, sdk/go/v0.143.0 — a refund emits paladin.capability.refunded
 
