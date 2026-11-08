@@ -82,6 +82,21 @@ includes:
       # there; nothing reconciles the two spellings, and a gate pointed at the
       # wrong directory passes by finding nothing.
       SQLC_DIR: internal/store/postgres/sqlc
+  # The SeaweedFS filer messages ingest decodes, generated from the subset of
+  # upstream's filer.proto kept beside them.
+  filerpb:
+    taskfile: '{{printf .TASKLIB "codegen"}}'
+    dir: internal/eventingest/filerpb
+    vars:
+      PROJECT_NAME: filerpb
+      # Installed from the backend's go.mod, so the generator is the version
+      # the generated code is compiled against.
+      PROTO_PLUGINS: google.golang.org/protobuf/cmd/protoc-gen-go
+      PROTO_PATHSPEC: filer.pb.go
+      # Normalised with goimports after generating, as the commit hook formats
+      # it: otherwise the committed file and a fresh generate differ in their
+      # import grouping and the stub gate fails.
+      GENERATED_DIRS: ["."]
   auth:
     taskfile: '{{printf .TASKLIB "auth"}}'
     dir: .
@@ -139,10 +154,11 @@ tasks:
       - task: k8s:restart
 
   generate:
-    desc: "Regenerate mocks and sqlc bindings"
+    desc: "Regenerate mocks, sqlc bindings and the SeaweedFS filer types"
     cmds:
       - task: codegen:mocks
       - task: codegen:sqlc
+      - task: filerpb:proto
 
   # ─── seed fixture ───────────────────────────────────────────────────────────
   # Applies (or removes) the demo fixture against a running cluster. Both

@@ -1,0 +1,39 @@
+// The part of SeaweedFS's filer.proto (weed/pb/filer.proto) that ingest
+// reads: the messages and fields below, at their upstream names and numbers,
+// so the wire bytes SeaweedFS publishes decode into them. Every field left
+// out is skipped as unknown on the wire.
+//
+// Not the upstream filer_pb package: it lives in the SeaweedFS module, and
+// importing it links the whole of SeaweedFS into the server for three
+// messages. A field taken from upstream keeps its number; check it against
+// filer.proto at the SeaweedFS release the cluster runs.
+syntax = "proto3";
+
+package filer_pb;
+
+option go_package = "github.com/oleg-tkachuk/paladin/backend/internal/eventingest/filerpb";
+
+// EventNotification is what the filer publishes for each change to an entry.
+message EventNotification {
+  Entry old_entry = 1;
+  Entry new_entry = 2;
+}
+
+// Entry is a file or a directory as the filer stores it.
+message Entry {
+  string name = 1;
+  bool is_directory = 2;
+  FuseAttributes attributes = 4;
+  // The filer's commit time of this version of the entry. SeaweedFS 4.51
+  // added it; an earlier filer leaves it 0.
+  int64 commit_ts_ns = 6;
+}
+
+// FuseAttributes is an entry's file attributes.
+message FuseAttributes {
+  uint64 file_size = 1;
+  // Modification time, seconds since the epoch; mtime_ns is its nanoseconds.
+  int64 mtime = 2;
+  bytes md5 = 14;
+  int32 mtime_ns = 19;
+}

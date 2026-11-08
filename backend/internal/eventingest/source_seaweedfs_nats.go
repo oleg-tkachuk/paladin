@@ -6,10 +6,13 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest/filerpb"
 )
 
 // SeaweedFS-over-NATS source adapter.
@@ -29,19 +32,14 @@ import (
 // use NATS native headers — that's the `nats2://` v2 scheme. So
 // what we receive here is `gob(map[string]string) || gob([]byte)`.
 //
-// Why we don't import the SF protobuf in full: `filer_pb.EventNotification`
-// pulls in `Entry`, `FileChunk`, `FuseAttributes`, the whole filer
-// metadata graph — hundreds of generated types we don't use. We only
-// need to know whether the EventNotification carries an `old_entry`
-// (tag 1) and / or a `new_entry` (tag 2) to derive the Paladin event type:
+// The body decodes into filerpb's EventNotification, generated from the
+// part of SeaweedFS's filer.proto ingest reads (see filerpb/filer.proto for
+// why not upstream's package). Which entries it carries gives the Paladin
+// event type:
 //
 //	   old=nil, new=present → create
 //	   old=present, new=present → update
 //	   old=present, new=nil → delete
-//
-// Tag-presence scanning via `protowire.ConsumeField` is enough; we
-// avoid the proto-vendoring tax. If a future event type needs Entry
-// fields we'd promote to a vendored proto then.
 //
 // Reference: gocloud.dev/pubsub/natspubsub#encodeMessage (it's a
 // gob.NewEncoder writing Metadata, then Body).
@@ -56,7 +54,8 @@ import (
 // gateway publishes for; leaving it empty disables the strip and
 // expects the path to start at the tenant id.
 //
-// Now is the clock the event's time and id are read from; nil is time.Now.
+// Now is the clock an event's time and id fall back to when its entry
+// records no version (entryVersion); nil is time.Now.
 type SeaweedFSNATSSource struct {
 	BucketName string
 	URI        string
@@ -94,18 +93,29 @@ func (s *SeaweedFSNATSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		return CloudEvent{}, ErrUnrecognisedEvent
 	}
 
-	hasOld, hasNew, err := scanFilerEventNotification(body)
-	if err != nil {
+	var notification filerpb.EventNotification
+	if err := proto.Unmarshal(body, &notification); err != nil {
 		return CloudEvent{}, fmt.Errorf("%w: seaweedfs_nats: %w", ErrUnrecognisedEvent, err)
 	}
+	oldEntry, newEntry := notification.GetOldEntry(), notification.GetNewEntry()
 
-	evType, ok := seaweedFSNATSEventType(hasOld, hasNew)
+	evType, ok := seaweedFSNATSEventType(oldEntry != nil, newEntry != nil)
 	if !ok {
 		// Both old and new absent — SF guards against this on its
 		// side, but the empty notification slips through if the filer
 		// signals a metadata-only no-op (rare, but observed). Ignore
 		// rather than dead-letter — the dedup table doesn't need the
 		// noise.
+		return CloudEvent{}, ErrIgnoredEvent
+	}
+	// The entry the event is about: what was written, or what was removed.
+	entry := newEntry
+	if evType == EventTypeDeleted {
+		entry = oldEntry
+	}
+	if entry.GetIsDirectory() {
+		// The filer creates a directory for each prefix of a key; those
+		// are events too, and are no Paladin object.
 		return CloudEvent{}, ErrIgnoredEvent
 	}
 
@@ -118,17 +128,20 @@ func (s *SeaweedFSNATSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		return CloudEvent{}, ErrIgnoredEvent
 	}
 
-	// SF's EventNotification body has no timestamp — the parent
-	// SubscribeMetadataResponse carries TsNs but gocdk_pub_sub
-	// publishes only the inner EventNotification. Use receipt time
-	// (now) for the CloudEvent. ID derivation hashes the path +
-	// event type + a coarse minute bucket so retries within the same
-	// minute dedup. A redelivery that crosses a minute boundary gets
-	// another id, and dedup (keyed on the id) processes it again; two
-	// writes of one key within a minute share an id, and the second is
-	// dropped (BACKLOG: "SeaweedFS NATS ingest ids from receipt time").
-	t := s.now().UTC()
-	id := seaweedFSNATSID(path, string(evType), t.Truncate(time.Minute).Unix())
+	// The id hashes the path, the event type and the entry's version, as
+	// the webhook source's does: a redelivery is the same event whenever it
+	// arrives, and a second write of the key is another. An entry that
+	// records no version falls back to the receipt minute: a redelivery
+	// within it dedups, one in the next minute does not.
+	attrs := entry.GetAttributes()
+	version, t, ok := entryVersion(entry.GetCommitTsNs(), attrs.GetMtime(), attrs.GetMtimeNs(),
+		attrs.GetFileSize(), attrs.GetMd5())
+	if !ok {
+		t = s.now()
+		version = "received:" + strconv.FormatInt(t.Truncate(time.Minute).UnixNano(), 10)
+	}
+	t = t.UTC()
+	id := seaweedFSNATSID(path, string(evType), version)
 
 	return CloudEvent{
 		SpecVersion:     "1.0",
@@ -160,41 +173,6 @@ func decodeNATSEnvelope(raw []byte) (metadata map[string]string, body []byte, er
 	return metadata, body, nil
 }
 
-// scanFilerEventNotification walks the proto-marshalled body and
-// reports whether the `old_entry` (field 1) and/or `new_entry`
-// (field 2) wire-tags are present. We don't decode Entry — its
-// presence is enough to derive create/update/delete.
-//
-// Ignores all other fields; an unknown tag (a future SF release
-// adding new fields) is consumed and dropped silently.
-//
-// `protowire.ConsumeTag` returns the field number and wire type as
-// separate values; `ConsumeFieldValue` then needs the wire type to
-// know how many bytes to consume. We pull the tag's low 3 bits
-// directly from the leading byte rather than re-reading via the
-// helper — one less varint walk per field on a hot path.
-func scanFilerEventNotification(body []byte) (hasOld, hasNew bool, err error) {
-	for len(body) > 0 {
-		num, _, tagLen := protowire.ConsumeTag(body)
-		if tagLen < 0 {
-			return false, false, fmt.Errorf("proto: tag: %w", protowire.ParseError(tagLen))
-		}
-		wireType := protowire.Type(body[0] & 0x07)
-		valLen := protowire.ConsumeFieldValue(num, wireType, body[tagLen:])
-		if valLen < 0 {
-			return false, false, fmt.Errorf("proto: value: %w", protowire.ParseError(valLen))
-		}
-		switch num {
-		case 1:
-			hasOld = true
-		case 2:
-			hasNew = true
-		}
-		body = body[tagLen+valLen:]
-	}
-	return hasOld, hasNew, nil
-}
-
 func seaweedFSNATSEventType(hasOld, hasNew bool) (EventType, bool) {
 	switch {
 	case !hasOld && hasNew:
@@ -208,11 +186,10 @@ func seaweedFSNATSEventType(hasOld, hasNew bool) (EventType, bool) {
 	}
 }
 
-// seaweedFSNATSID hashes (path + event type + minute-bucket) so a
-// redelivery within the same minute produces the same id and gets
-// caught by the dedup window. A redelivery in another minute is not.
-func seaweedFSNATSID(path, evType string, minute int64) string {
+// seaweedFSNATSID hashes the path, the event type and the entry's version
+// (or, without one, the receipt minute).
+func seaweedFSNATSID(path, evType, version string) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "seaweedfs_nats|%s|%s|%d", strings.TrimPrefix(path, "/"), evType, minute)
+	fmt.Fprintf(h, "seaweedfs_nats|%s|%s|%s", strings.TrimPrefix(path, "/"), evType, version)
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }

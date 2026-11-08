@@ -219,6 +219,7 @@ tasks:
       - task: backend:go:test:tagged:compile
       - task: backend:lint
       - task: verify:sqlc-pin
+      - task: backend:filerpb:proto:check
       - task: verify:image-build-meta
       - task: verify:security-scans
 

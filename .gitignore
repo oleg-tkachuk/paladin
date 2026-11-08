@@ -39,6 +39,7 @@ backend/seed-fixture
 # The codegen task installs the protoc plugins a module pins into its ./bin
 # before running buf.
 sdk/go/bin/
+backend/internal/eventingest/filerpb/bin/
 
 # ── Coverage ────────────────────────────────────────────────────────────────
 # The shared task library runs `go test -coverprofile=coverage/cover.out`, so
