@@ -36,13 +36,13 @@ describe("tagCandidate", () => {
     try {
       await git(["init", "--quiet", "--bare", remote]);
       const head = await repo.commit("feat(api): a thing");
-      await repo.run("tag", "v38.3.0-rc.1");
+      await repo.run("tag", "release/v38.3.0-rc.1");
 
       assert.equal(await tagCandidate(repo.dir, async () => undefined, remote), undefined);
       assert.equal((await git(["tag", "--list"], remote)).trim(), "");
 
-      assert.equal(await tagCandidate(repo.dir, async () => "38.3.0", remote), "v38.3.0-rc.2");
-      assert.equal((await git(["rev-parse", "v38.3.0-rc.2^{commit}"], remote)).trim(), head);
+      assert.equal(await tagCandidate(repo.dir, async () => "38.3.0", remote), "release/v38.3.0-rc.2");
+      assert.equal((await git(["rev-parse", "release/v38.3.0-rc.2^{commit}"], remote)).trim(), head);
     } finally {
       repo.cleanup();
       rmSync(base, { recursive: true, force: true });

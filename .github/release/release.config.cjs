@@ -61,7 +61,11 @@ const DOCUMENTATION = { prefixes: ["docs/"], suffixes: [".md"] };
 
 const streams = {
   product: {
-    tagFormat: "v${version}",
+    // Restarted at 0.x under this prefix (ADR-0045): semantic-release reads
+    // only tags of tagFormat, and v1.0.0…v42.1.0 would outrank any 0.x.
+    tagFormat: "release/v${version}",
+    // The numbering before the restart, still named in the upgrade guide.
+    legacyTagFormats: ["v${version}"],
     // Only the Python SDK is in no image. sdk/go/ is in the backend's, and
     // proto/ is the server's contract. A breaking change to the Go SDK's own
     // API alone is not the product's: it releases the product as a minor, the

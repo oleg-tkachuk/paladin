@@ -1,7 +1,7 @@
 # paladin
 
 [![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
-[![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin?sort=semver)](https://github.com/oleg-tkachuk/paladin/releases/latest)
+[![release](https://img.shields.io/github/v/release/oleg-tkachuk/paladin)](https://github.com/oleg-tkachuk/paladin/releases/latest)
 [![sdk](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fproxy.golang.org%2Fgithub.com%2Foleg-tkachuk%2Fpaladin%2Fsdk%2Fgo%2F%40latest&query=%24.Version&label=sdk)](sdk/go/README.md)
 
 [![license: backend & console](https://img.shields.io/badge/license%3A%20backend%20%26%20console-AGPL--3.0--only-A42E2B)](LICENSE)
@@ -97,7 +97,7 @@ AWS S3.
 
 ## Deploy to Kubernetes
 
-Two Helm charts, published to GHCR with every release (`vX.Y.Z`):
+Two Helm charts, published to GHCR with every release (`release/vX.Y.Z`):
 
 | Chart | Runs |
 |-------|------|

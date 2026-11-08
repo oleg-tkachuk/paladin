@@ -3,7 +3,7 @@
 // Usage: node release-tags.ts before <file>     note the tags on HEAD before semantic-release
 //        GH_TOKEN=… GITHUB_REPOSITORY=… node release-tags.ts product <file>
 //
-// product sets the step output `tag` to the product tag (v*) on HEAD that is
+// product sets the step output `tag` to the product tag (release/v*) on HEAD that is
 // not in the file, or to nothing. "A v* tag on HEAD" alone is not the same
 // question: release.yaml is dispatched once per CI run on main and checks out
 // the branch head, so two dispatches can land on one commit. The second found

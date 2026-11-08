@@ -33,7 +33,7 @@ name: Release
 #                        product's tag from every change since the last one, so
 #                        however many breaking changes it carries make one major.
 #                        The prerelease channel tags a release candidate of that
-#                        version instead, vX.Y.Z-rc.N, published like a release
+#                        version instead, release/vX.Y.Z-rc.N, published like a release
 #                        and announced as a prerelease (.github/ci/prerelease.ts).
 #
 # A manual run releases main's head only once CI passed on it
@@ -53,12 +53,12 @@ on:
   repository_dispatch:
     types: [release]
   workflow_dispatch:
-    # The one input picks the tag cut, vX.Y.Z or vX.Y.Z-rc.N, not what is
+    # channel picks the tag cut, release/vX.Y.Z or release/vX.Y.Z-rc.N, not what is
     # built: the build is the commit CI passed on main, from its own tree.
     # checkov:skip=CKV_GHA_7: the channel names a release, it does not change the build
     inputs:
       channel:
-        description: A release, or a release candidate (vX.Y.Z-rc.N)
+        description: A release, or a release candidate (release/vX.Y.Z-rc.N)
         type: choice
         options: [release, prerelease]
         default: release

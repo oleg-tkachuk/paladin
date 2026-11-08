@@ -8,7 +8,7 @@ release workflow.
 
 | Tag | Cut by | Publishes | Versioned by |
 | --- | --- | --- | --- |
-| `vX.Y.Z` | semantic-release, when `release.yaml` is run by hand | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
+| `release/vX.Y.Z` | semantic-release, when `release.yaml` is run by hand | both images and both Helm charts, plus the GitHub release | the commits that change what the images are built from — everything but `sdk/python/` |
 | `sdk/python/vX.Y.Z` and `sdk/go/vX.Y.Z` | semantic-release cuts the first after a green push to `main`, and the workflow the second beside it | both tags, which a git install of the package and the Go proxy resolve, and one GitHub release | the commits that touch `sdk/go/`, `sdk/python/`, `proto/` or `sdk/testdata/` |
 | `api/vX.Y.Z` | a maintainer, by hand | nothing; the baseline `buf breaking` compares against | the API contract |
 
@@ -19,15 +19,15 @@ none is marked latest: that stays the product's release.
 A commit counts for every stream whose files it touches, and its type
 decides the bump on each. The backend compiles `sdk/go/` through `replace`
 and its image copies it, so a change there releases the product as well as
-the SDK — `feat` a minor, `fix`/`perf`/`revert`/`security` a patch. The SDK is
-pre-1.0, so a breaking change is a minor on its stream until it reaches 1.0.
-A breaking change confined to `sdk/go/` breaks the SDK's API, not the
-product's, so it releases the product as a minor too; one that also touches the server is the
-product's major. Documentation does not decide where a commit belongs:
+the SDK — `feat` a minor, `fix`/`perf`/`revert`/`security` a patch. Both
+streams are pre-1.0, so a breaking change is a minor on each until it reaches
+1.0, which is cut by hand. A breaking change confined to `sdk/go/` breaks the
+SDK's API, not the product's, so it releases the product as a minor whatever
+the product's version. Documentation does not decide where a commit belongs:
 a breaking SDK commit that also writes its upgrade note is still
 the SDK's alone.
 
-## The product: `vX.Y.Z`
+## The product: `release/vX.Y.Z`
 
 The backend and the console ship under one tag, and neither has a version of
 its own. They are built from one commit, and the console calls the Connect
@@ -42,24 +42,38 @@ The product is released by hand, as a train
 commit ([`release-head.ts`](../.github/ci/release-head.ts)), and
 refuses an untested one. semantic-release computes the version from every
 commit since the last release (see
-[`release.config.cjs`](../.github/release/release.config.cjs)), so a train of
-several breaking changes is one major. The workflow then publishes an image and
+[`release.config.cjs`](../.github/release/release.config.cjs)), so a train is
+one release however many changes it carries. Before 1.0 a breaking change
+makes it a minor; a major — 1.0.0 the first — is asked for by hand,
+`gh workflow run release.yaml -f bump=major`, and `-f bump=minor` raises a
+train the commits would release as a patch. The workflow then publishes an image and
 a chart for each component at that tag. The GitHub
 release is created last, and only when every image and chart was pushed; if a
 push fails, the tag stays without a release until the failed jobs are re-run.
 
 A release candidate goes the same way with the `prerelease` channel —
 `gh workflow run release.yaml -f channel=prerelease`. It tags the version the
-release would take as `vX.Y.Z-rc.N`, one past the last candidate of that
+release would take as `release/vX.Y.Z-rc.N`, one past the last candidate of that
 version ([`prerelease.ts`](../.github/ci/prerelease.ts)), publishes its images
 and charts at `X.Y.Z-rc.N`, and announces it as a prerelease that is never the
 Latest. semantic-release counts only stable tags, so the release that follows
-the candidates is still `vX.Y.Z`.
+the candidates is still `release/vX.Y.Z`.
+
+### The numbering restarted at 0.x
+
+Until 2026-11 the product was tagged `vX.Y.Z` and every breaking change was a
+major, which took it to v42 within a year
+([ADR-0045](adr/0045-the-product-restarts-at-0x.md)). It restarted at 0.x
+under `release/vX.Y.Z`: semantic-release reads only that prefix, so the old
+tags stay in history, still name their sections of the upgrade guide, and are
+never cut again. The stream's first tag, `release/v0.0.0`, was cut by hand,
+as a stream's first tag is (below).
 Between releases every green commit is published as a dev build (below), so
 nothing waits on a release to reach the dev cluster.
 
 `feat` is a minor release, `fix`, `perf`, `revert` and `security` a patch, a breaking
-change (`!` or a `BREAKING CHANGE:` footer) a major. Any other type — `docs`,
+change (`!` or a `BREAKING CHANGE:` footer) a minor before 1.0 and a major
+after it. Any other type — `docs`,
 `style`, `refactor`, `test`, `build`, `ci`, `chore` — releases nothing on its
 own.
 
@@ -73,8 +87,8 @@ without its comments as it was (`.github/ci/proto-comments.ts`).
 
 ### What is a breaking change
 
-A `!` makes the train a major, so it marks only a change a deployment or a
-client **must act on**:
+A `!` lists the change under *Behaviour changes* and, from 1.0, makes the train
+a major, so it marks only a change a deployment or a client **must act on**:
 
 - a field, RPC or enum value removed or renamed on the wire (`buf breaking`
   reports it);
@@ -207,7 +221,7 @@ A change that alters what existing code does — a signature, a default, an
 error a caller handled — is breaking even when no signature changes: its
 commit carries `!` or a `BREAKING CHANGE:` footer, and it gets a section —
 a file `docs/upgrading/<slug>.md` headed `## Unreleased — …`, which the
-release names `## vX.Y.Z — …` and writes into [upgrading.md](upgrading.md). Pre-1.0 such a release is only a minor, so its notes list these
+release names `## release/vX.Y.Z — …` and writes into [upgrading.md](upgrading.md). Pre-1.0 such a release is only a minor, so its notes list these
 commits first, under *Behaviour changes*, with a link to that section
 ([`.github/ci/sdk-release.ts`](../.github/ci/sdk-release.ts)).
 

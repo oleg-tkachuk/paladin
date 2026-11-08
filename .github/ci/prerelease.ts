@@ -1,5 +1,5 @@
 // Tag a release candidate of the product: the version its next release
-// would be, as vX.Y.Z-rc.N on the checked-out commit. By hand only.
+// would be, as release/vX.Y.Z-rc.N on the checked-out commit. By hand only.
 //
 // Usage: node .github/ci/prerelease.ts
 //

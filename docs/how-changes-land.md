@@ -39,8 +39,10 @@ are never deleted.
 The product is **released by hand**, as a train ([ADR-0034](adr/0034-the-product-releases-as-a-train.md)):
 running `release.yaml` from the Actions tab, or `gh workflow run release.yaml`,
 tags main's head once CI passed on it. semantic-release computes the tag from
-every commit since the last release, so however many breaking changes the train
-carries make one major; the images and charts are pushed at that version, and
+every commit since the last release, so a train is one release however many
+changes it carries — before 1.0 a breaking change makes it a minor, and a major
+is asked for by hand (`-f bump=major`, [ADR-0045](adr/0045-the-product-restarts-at-0x.md));
+the images and charts are pushed at that version, and
 the GitHub release with generated notes is created once all of them are. The
 `api/v*` baseline is cut by hand. See [releasing.md](releasing.md).
 
@@ -62,7 +64,7 @@ flowchart LR
     passed{"CI passed<br/>on main's head?"}
     tag["semantic-release<br/>product stream"]
     pub["<b>publish</b> backend · frontend<br/>image → sign → SBOM per platform<br/>chart → sign · verify all"]
-    ann["<b>GitHub release</b> vX.Y.Z<br/>notes + SBOMs · latest"]
+    ann["<b>GitHub release</b> release/vX.Y.Z<br/>notes + SBOMs · latest"]
     mods["<b>sdk/go/v*</b><br/>GitHub release, not latest<br/>Go proxy told of the tag"]
     badges["<b>Badges</b><br/>stack versions → badges branch"]
 
