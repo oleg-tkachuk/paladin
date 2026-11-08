@@ -41,9 +41,9 @@ func (u *tenantRecordingUsage) Charge(ctx context.Context, req meter.ChargeReque
 	return u.usageStore.Charge(ctx, req, onCharged)
 }
 
-func (u *tenantRecordingUsage) Refund(ctx context.Context, req meter.RefundRequest) (meter.RefundReceipt, error) {
+func (u *tenantRecordingUsage) Refund(ctx context.Context, req meter.RefundRequest, onRefunded func(context.Context, meter.Refunded) error) (meter.RefundReceipt, error) {
 	u.record(ctx, "Refund")
-	return u.usageStore.Refund(ctx, req)
+	return u.usageStore.Refund(ctx, req, onRefunded)
 }
 
 // Every write to a capability's ledger runs on that capability's tenant. The

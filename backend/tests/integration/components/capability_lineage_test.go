@@ -121,7 +121,7 @@ func TestLineageHoldsUnderRowLevelSecurity(t *testing.T) {
 		t.Fatalf("sibling past the parent's ceiling under RLS: err = %v, want ErrBudgetExceeded", err)
 	}
 
-	if got, err := usage.Refund(ledgerCtx, meter.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5")}); err != nil || got.Amount != limes.MustParseAmount("5") {
+	if got, err := usage.Refund(ledgerCtx, meter.RefundRequest{ChargeID: receipt.ChargeID, Amount: limes.MustParseAmount("5")}, nil); err != nil || got.Amount != limes.MustParseAmount("5") {
 		t.Fatalf("refund under RLS = %v, %v; want 5", got, err)
 	}
 	if got := f.spent(t, ctx, f.root); got != limes.MustParseAmount("15") {

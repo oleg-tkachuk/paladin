@@ -26,6 +26,25 @@ receiver written before CloudEvents became the default.
 | `datacontenttype` | `application/json` |
 | `data` | the event's own fields; amounts are `google.type.Money` objects in the proto JSON mapping, `{"currency_code": "USD", "units": "1", "nanos": 500000000}` |
 
+### Charge events
+
+With `dispatcher.charge_events_enabled` on, every capability charge emits
+`paladin.capability.charged` and every refund that returns spend emits
+`paladin.capability.refunded`, each on the meter's own transaction: the event
+commits with the spend, or not at all. A call that fails after charging is
+refunded by the server, so it emits both. Both carry the same `data`:
+
+| Field | Value |
+|---|---|
+| `tenant_id` | the tenant the capability belongs to |
+| `capability_id` | the capability charged |
+| `charge_id` | the charge's ledger id; a refund names the charge it returns from |
+| `op` | the operation the request was admitted for |
+| `amount` | what the charge took, or what the refund returned, as `google.type.Money` |
+
+A subscriber summing spend adds each `charged` amount and subtracts each
+`refunded` one; a charge may be refunded in parts, each its own event.
+
 A subscription's CEL filter sees `type`, `tenant_id`, `resource_name`,
 `actor_subject`, `kind` (the class alone: `object`, `capability`),
 `severity_level` and the other envelope fields as bare names —

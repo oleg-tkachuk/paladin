@@ -631,7 +631,9 @@ type Dispatcher struct {
 	DefaultMaxAttempts int           `yaml:"default_max_attempts" json:"default_max_attempts"`
 
 	// ChargeEventsEnabled fans out one paladin.capability.charged event
-	// per successful meter.UsageStore.Charge. Default OFF —
+	// per successful meter.UsageStore.Charge, and one
+	// paladin.capability.refunded per refund that returns spend, naming
+	// the charge it returns from. Default OFF —
 	// every chargeable RPC fires, so the cardinality multiplies the
 	// outbox volume by the per-tenant request rate. Subscribers MUST
 	// set a CEL filter pinning `type == "paladin.capability.charged"`
