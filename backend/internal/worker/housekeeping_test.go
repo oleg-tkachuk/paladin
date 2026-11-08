@@ -69,12 +69,22 @@ func TestRefreshTokenPurgerTicks(t *testing.T) {
 type fakeAuditPurger struct {
 	mu      sync.Mutex
 	cutoffs []time.Time
+	// purged, when set, receives each cutoff as it is purged, so a test
+	// waits for the ticks themselves rather than for a stretch of time.
+	purged chan time.Time
 }
 
-func (f *fakeAuditPurger) PurgeOlderThan(_ context.Context, c time.Time) (int64, error) {
+func (f *fakeAuditPurger) PurgeOlderThan(ctx context.Context, c time.Time) (int64, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.cutoffs = append(f.cutoffs, c)
+	f.mu.Unlock()
+	if f.purged != nil {
+		// A tick after the test stopped reading must not hold Run open.
+		select {
+		case f.purged <- c:
+		case <-ctx.Done():
+		}
+	}
 	return 7, nil
 }
 
@@ -85,25 +95,34 @@ func TestAuditLogPurgerDisabledWhenTTLZero(t *testing.T) {
 	}
 }
 
+// auditPurgerTicksWanted is how many purges show the purger ticks, not
+// merely runs once; auditPurgerTickTimeout bounds the wait for them, far
+// above the interval so a loaded machine cannot fail it.
+const (
+	auditPurgerTicksWanted = 2
+	auditPurgerTickTimeout = 10 * time.Second
+	auditPurgerTTL         = 24 * time.Hour
+	auditPurgerCutoffSlack = time.Hour
+)
+
 func TestAuditLogPurgerTicks(t *testing.T) {
-	purger := &fakeAuditPurger{}
-	p := &AuditLogPurger{Purger: purger, TTL: 24 * time.Hour, Interval: 5 * time.Millisecond}
+	purger := &fakeAuditPurger{purged: make(chan time.Time)}
+	p := &AuditLogPurger{Purger: purger, TTL: auditPurgerTTL, Interval: 5 * time.Millisecond}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { _ = p.Run(ctx); close(done) }()
-	time.Sleep(15 * time.Millisecond)
-	cancel()
-	<-done
-	purger.mu.Lock()
-	defer purger.mu.Unlock()
-	if len(purger.cutoffs) < 2 {
-		t.Errorf("expected ≥2 ticks, got %d", len(purger.cutoffs))
-	}
-	// Cutoff should be approximately now-TTL.
-	for _, c := range purger.cutoffs {
-		age := time.Since(c)
-		if age < 23*time.Hour || age > 25*time.Hour {
-			t.Errorf("cutoff age out of band: %v", age)
+	defer func() { cancel(); <-done }()
+
+	timeout := time.After(auditPurgerTickTimeout)
+	for i := range auditPurgerTicksWanted {
+		select {
+		case c := <-purger.purged:
+			// The cutoff is now less the TTL.
+			if age := time.Since(c); age < auditPurgerTTL-auditPurgerCutoffSlack || age > auditPurgerTTL+auditPurgerCutoffSlack {
+				t.Errorf("purge %d: cutoff age %v, want about %v", i, age, auditPurgerTTL)
+			}
+		case <-timeout:
+			t.Fatalf("purges = %d within %v, want %d", i, auditPurgerTickTimeout, auditPurgerTicksWanted)
 		}
 	}
 }
