@@ -110,7 +110,7 @@ func (f *billingFixture) seedBudget(t *testing.T, tenant uuid.UUID, max limes.Na
 // charge runs UsageStore.Charge (the production write path) against the
 // capability as it is on record. The charge is in the capability's own unit;
 // unit and tenant are what the caller expects it to be.
-func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nanos, unit, op, actor string, tenant uuid.UUID) {
+func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nanos, unit, op, actor string, tenant uuid.UUID) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
 	records, err := capabilitypg.New(f.h.PoolMigrate)
@@ -124,9 +124,11 @@ func (f *billingFixture) charge(t *testing.T, capID uuid.UUID, amount limes.Nano
 	if subject.UnitCode() != unit || subject.TenantID() != tenant {
 		t.Fatalf("capability %s counts in (%s, %s), want (%s, %s)", capID, subject.UnitCode(), subject.TenantID(), unit, tenant)
 	}
-	if _, err := f.store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil); err != nil {
+	receipt, err := f.store.Charge(ctx, meter.ChargeRequest{Subject: subject, Amount: amount, Op: limes.Op(op), Actor: actor}, nil)
+	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
+	return receipt.ChargeID
 }
 
 // chargeAt charges at an explicit time through the meter, on a clock set to
@@ -645,4 +647,52 @@ func TestBilling_AdminListsEveryTenantsSpendUnderRLS(t *testing.T) {
 	if !okMore || !okLess || iMore > iLess {
 		t.Errorf("positions: more %d (%v), less %d (%v); want both listed, the larger first", iMore, okMore, iLess, okLess)
 	}
+}
+
+// What was refunded from a period's charges is reported beside their net,
+// in the summary through the Connect adapter and in the spend list: a
+// failed call that was charged and refunded shows as spend returned, not as
+// spend that never happened.
+func TestBilling_RefundedIsReported(t *testing.T) {
+	t.Parallel()
+	f := setupBilling(t)
+	tenant := mustCreateTenant(t, f.h.PoolMigrate, "bil-refunded")
+	capID := f.seedCapability(t, tenant, "agent-R")
+	f.charge(t, capID, limes.MustParseAmount("1.0"), "USD", "get", "agent-R", tenant)
+	refundedCharge := f.charge(t, capID, limes.MustParseAmount("1.0"), "USD", "put", "agent-R", tenant)
+	if _, err := f.store.Refund(context.Background(), meter.RefundRequest{
+		ChargeID: refundedCharge, Amount: limes.MustParseAmount("0.25"),
+	}, nil); err != nil {
+		t.Fatalf("refund: %v", err)
+	}
+
+	end := time.Now().UTC().Add(time.Hour)
+	start := end.Add(-24 * time.Hour)
+	resp, err := connectshim.NewBillingServer(f.handler, nil).GetTenantSummary(ctxAdmin(t, tenant), &pb.GetTenantSummaryRequest{
+		TenantId: tenant.String(), PeriodStart: timestamppb.New(start), PeriodEnd: timestamppb.New(end),
+	})
+	if err != nil {
+		t.Fatalf("GetTenantSummary: %v", err)
+	}
+	if got, want := resp.GetTotal(), (&money.Money{CurrencyCode: "USD", Units: 1, Nanos: 750_000_000}); !proto.Equal(got, want) {
+		t.Errorf("total = %v, want %v", got, want)
+	}
+	if got, want := resp.GetRefunded(), (&money.Money{CurrencyCode: "USD", Nanos: 250_000_000}); !proto.Equal(got, want) {
+		t.Errorf("refunded = %v, want %v", got, want)
+	}
+
+	spend, _, err := f.handler.ListTenantSpend(ctxAdmin(t, tenant), start, end, billingh.MaxSpendLimit)
+	if err != nil {
+		t.Fatalf("ListTenantSpend: %v", err)
+	}
+	for _, row := range spend {
+		if row.TenantID != tenant {
+			continue
+		}
+		if row.Refunded != limes.MustParseAmount("0.25") || row.Amount != limes.MustParseAmount("1.75") {
+			t.Errorf("spend row = %+v, want 1.75 net and 0.25 refunded", row)
+		}
+		return
+	}
+	t.Errorf("the tenant is not in the spend list: %+v", spend)
 }

@@ -66,6 +66,7 @@ func (s *BillingServer) GetTenantSummary(
 	}
 	out := &pb.GetTenantSummaryResponse{
 		Total:           apiutil.MoneyOf(sum.UnitCode, sum.TotalAmount),
+		Refunded:        apiutil.MoneyOf(sum.UnitCode, sum.Refunded),
 		ChargeCount:     sum.ChargeCount,
 		TopCapabilities: topEntriesToProto(sum.UnitCode, sum.TopCapabilities),
 		TopActors:       topEntriesToProto(sum.UnitCode, sum.TopActors),
@@ -196,6 +197,7 @@ func (s *BillingServer) ListTenantSpend(
 			DisplayName: name.DisplayName,
 			Deleted:     name.Deleted,
 			Spent:       apiutil.MoneyOf(t.UnitCode, t.Amount),
+			Refunded:    apiutil.MoneyOf(t.UnitCode, t.Refunded),
 			ChargeCount: t.ChargeCount,
 		})
 	}

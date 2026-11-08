@@ -154,9 +154,12 @@ type TenantSpend struct {
 	DisplayName string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	// deleted is true for a tenant in the trash, which still spent in the
 	// period.
-	Deleted       bool         `protobuf:"varint,4,opt,name=deleted,proto3" json:"deleted,omitempty"`
-	Spent         *money.Money `protobuf:"bytes,5,opt,name=spent,proto3" json:"spent,omitempty"`
-	ChargeCount   int64        `protobuf:"varint,6,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
+	Deleted     bool         `protobuf:"varint,4,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	Spent       *money.Money `protobuf:"bytes,5,opt,name=spent,proto3" json:"spent,omitempty"`
+	ChargeCount int64        `protobuf:"varint,6,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
+	// refunded is what was returned from the period's charges, in spent's
+	// unit: spent is what they took less this.
+	Refunded      *money.Money `protobuf:"bytes,7,opt,name=refunded,proto3" json:"refunded,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -231,6 +234,13 @@ func (x *TenantSpend) GetChargeCount() int64 {
 		return x.ChargeCount
 	}
 	return 0
+}
+
+func (x *TenantSpend) GetRefunded() *money.Money {
+	if x != nil {
+		return x.Refunded
+	}
+	return nil
 }
 
 type GetBillingSettingsRequest struct {
@@ -396,8 +406,12 @@ type GetTenantSummaryResponse struct {
 	TopActors       []*TopEntry                              `protobuf:"bytes,5,rep,name=top_actors,json=topActors,proto3" json:"top_actors,omitempty"`
 	TopOps          []*TopEntry                              `protobuf:"bytes,6,rep,name=top_ops,json=topOps,proto3" json:"top_ops,omitempty"`
 	ChargeCount     int64                                    `protobuf:"varint,7,opt,name=charge_count,json=chargeCount,proto3" json:"charge_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// refunded is what was returned from the period's charges, in total's
+	// unit — a call that failed after charging is refunded: total is what
+	// they took less this.
+	Refunded      *money.Money `protobuf:"bytes,13,opt,name=refunded,proto3" json:"refunded,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetTenantSummaryResponse) Reset() {
@@ -488,6 +502,13 @@ func (x *GetTenantSummaryResponse) GetChargeCount() int64 {
 		return x.ChargeCount
 	}
 	return 0
+}
+
+func (x *GetTenantSummaryResponse) GetRefunded() *money.Money {
+	if x != nil {
+		return x.Refunded
+	}
+	return nil
 }
 
 type isGetTenantSummaryResponse_BudgetCeiling interface {
@@ -1033,14 +1054,15 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\x05limit\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x05limit\"u\n" +
 	"\x17ListTenantSpendResponse\x127\n" +
 	"\atenants\x18\x01 \x03(\v2\x1d.paladin.admin.v1.TenantSpendR\atenants\x12!\n" +
-	"\ttruncated\x18\x02 \x01(\bB\x03\xe0A\x03R\ttruncated\"\xe6\x01\n" +
+	"\ttruncated\x18\x02 \x01(\bB\x03\xe0A\x03R\ttruncated\"\x9b\x02\n" +
 	"\vTenantSpend\x12 \n" +
 	"\ttenant_id\x18\x01 \x01(\tB\x03\xe0A\x03R\btenantId\x12\x17\n" +
 	"\x04slug\x18\x02 \x01(\tB\x03\xe0A\x03R\x04slug\x12&\n" +
 	"\fdisplay_name\x18\x03 \x01(\tB\x03\xe0A\x03R\vdisplayName\x12\x1d\n" +
 	"\adeleted\x18\x04 \x01(\bB\x03\xe0A\x03R\adeleted\x12-\n" +
 	"\x05spent\x18\x05 \x01(\v2\x12.google.type.MoneyB\x03\xe0A\x03R\x05spent\x12&\n" +
-	"\fcharge_count\x18\x06 \x01(\x03B\x03\xe0A\x03R\vchargeCount\"\x1b\n" +
+	"\fcharge_count\x18\x06 \x01(\x03B\x03\xe0A\x03R\vchargeCount\x123\n" +
+	"\brefunded\x18\a \x01(\v2\x12.google.type.MoneyB\x03\xe0A\x03R\brefunded\"\x1b\n" +
 	"\x19GetBillingSettingsRequest\"F\n" +
 	"\x1aGetBillingSettingsResponse\x12(\n" +
 	"\rcurrency_code\x18\x01 \x01(\tB\x03\xe0A\x03R\fcurrencyCode\"\xba\x01\n" +
@@ -1048,7 +1070,7 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\ttenant_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\btenantId\x12=\n" +
 	"\fperiod_start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
-	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xa0\x04\n" +
+	"period_end\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\"\xd0\x04\n" +
 	"\x18GetTenantSummaryResponse\x12(\n" +
 	"\x05total\x18\n" +
 	" \x01(\v2\x12.google.type.MoneyR\x05total\x123\n" +
@@ -1059,7 +1081,8 @@ const file_paladin_admin_v1_billing_service_proto_rawDesc = "" +
 	"\n" +
 	"top_actors\x18\x05 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\ttopActors\x123\n" +
 	"\atop_ops\x18\x06 \x03(\v2\x1a.paladin.admin.v1.TopEntryR\x06topOps\x12!\n" +
-	"\fcharge_count\x18\a \x01(\x03R\vchargeCountB\x10\n" +
+	"\fcharge_count\x18\a \x01(\x03R\vchargeCount\x12.\n" +
+	"\brefunded\x18\r \x01(\v2\x12.google.type.MoneyR\brefundedB\x10\n" +
 	"\x0ebudget_ceilingJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\b\x10\tJ\x04\b\x03\x10\x04J\x04\b\t\x10\n" +
 	"R\ftotal_amountR\ftotal_microsR\tunit_codeR\x11max_budget_amountR\x11max_budget_micros\"\x90\x01\n" +
 	"\bTopEntry\x12\x14\n" +
@@ -1145,44 +1168,46 @@ var file_paladin_admin_v1_billing_service_proto_depIdxs = []int32{
 	16, // 1: paladin.admin.v1.ListTenantSpendRequest.period_end:type_name -> google.protobuf.Timestamp
 	2,  // 2: paladin.admin.v1.ListTenantSpendResponse.tenants:type_name -> paladin.admin.v1.TenantSpend
 	17, // 3: paladin.admin.v1.TenantSpend.spent:type_name -> google.type.Money
-	16, // 4: paladin.admin.v1.GetTenantSummaryRequest.period_start:type_name -> google.protobuf.Timestamp
-	16, // 5: paladin.admin.v1.GetTenantSummaryRequest.period_end:type_name -> google.protobuf.Timestamp
-	17, // 6: paladin.admin.v1.GetTenantSummaryResponse.total:type_name -> google.type.Money
-	17, // 7: paladin.admin.v1.GetTenantSummaryResponse.max_budget:type_name -> google.type.Money
-	18, // 8: paladin.admin.v1.GetTenantSummaryResponse.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
-	7,  // 9: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
-	7,  // 10: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
-	7,  // 11: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
-	17, // 12: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
-	16, // 13: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	16, // 14: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	15, // 15: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
-	16, // 16: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	16, // 17: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	15, // 18: paladin.admin.v1.GetPlatformTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
-	16, // 19: paladin.admin.v1.ListTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
-	16, // 20: paladin.admin.v1.ListTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
-	14, // 21: paladin.admin.v1.ListTenantTimeSeriesResponse.series:type_name -> paladin.admin.v1.TenantTimeSeries
-	15, // 22: paladin.admin.v1.TenantTimeSeries.buckets:type_name -> paladin.admin.v1.TimeBucket
-	16, // 23: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
-	17, // 24: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
-	5,  // 25: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
-	8,  // 26: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
-	10, // 27: paladin.admin.v1.BillingService.GetPlatformTimeSeries:input_type -> paladin.admin.v1.GetPlatformTimeSeriesRequest
-	12, // 28: paladin.admin.v1.BillingService.ListTenantTimeSeries:input_type -> paladin.admin.v1.ListTenantTimeSeriesRequest
-	0,  // 29: paladin.admin.v1.BillingService.ListTenantSpend:input_type -> paladin.admin.v1.ListTenantSpendRequest
-	3,  // 30: paladin.admin.v1.BillingService.GetBillingSettings:input_type -> paladin.admin.v1.GetBillingSettingsRequest
-	6,  // 31: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
-	9,  // 32: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
-	11, // 33: paladin.admin.v1.BillingService.GetPlatformTimeSeries:output_type -> paladin.admin.v1.GetPlatformTimeSeriesResponse
-	13, // 34: paladin.admin.v1.BillingService.ListTenantTimeSeries:output_type -> paladin.admin.v1.ListTenantTimeSeriesResponse
-	1,  // 35: paladin.admin.v1.BillingService.ListTenantSpend:output_type -> paladin.admin.v1.ListTenantSpendResponse
-	4,  // 36: paladin.admin.v1.BillingService.GetBillingSettings:output_type -> paladin.admin.v1.GetBillingSettingsResponse
-	31, // [31:37] is the sub-list for method output_type
-	25, // [25:31] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	17, // 4: paladin.admin.v1.TenantSpend.refunded:type_name -> google.type.Money
+	16, // 5: paladin.admin.v1.GetTenantSummaryRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 6: paladin.admin.v1.GetTenantSummaryRequest.period_end:type_name -> google.protobuf.Timestamp
+	17, // 7: paladin.admin.v1.GetTenantSummaryResponse.total:type_name -> google.type.Money
+	17, // 8: paladin.admin.v1.GetTenantSummaryResponse.max_budget:type_name -> google.type.Money
+	18, // 9: paladin.admin.v1.GetTenantSummaryResponse.unlimited_budget:type_name -> paladin.admin.v1.UnlimitedBudget
+	7,  // 10: paladin.admin.v1.GetTenantSummaryResponse.top_capabilities:type_name -> paladin.admin.v1.TopEntry
+	7,  // 11: paladin.admin.v1.GetTenantSummaryResponse.top_actors:type_name -> paladin.admin.v1.TopEntry
+	7,  // 12: paladin.admin.v1.GetTenantSummaryResponse.top_ops:type_name -> paladin.admin.v1.TopEntry
+	17, // 13: paladin.admin.v1.GetTenantSummaryResponse.refunded:type_name -> google.type.Money
+	17, // 14: paladin.admin.v1.TopEntry.spent:type_name -> google.type.Money
+	16, // 15: paladin.admin.v1.GetTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 16: paladin.admin.v1.GetTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	15, // 17: paladin.admin.v1.GetTenantTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
+	16, // 18: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 19: paladin.admin.v1.GetPlatformTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	15, // 20: paladin.admin.v1.GetPlatformTimeSeriesResponse.buckets:type_name -> paladin.admin.v1.TimeBucket
+	16, // 21: paladin.admin.v1.ListTenantTimeSeriesRequest.period_start:type_name -> google.protobuf.Timestamp
+	16, // 22: paladin.admin.v1.ListTenantTimeSeriesRequest.period_end:type_name -> google.protobuf.Timestamp
+	14, // 23: paladin.admin.v1.ListTenantTimeSeriesResponse.series:type_name -> paladin.admin.v1.TenantTimeSeries
+	15, // 24: paladin.admin.v1.TenantTimeSeries.buckets:type_name -> paladin.admin.v1.TimeBucket
+	16, // 25: paladin.admin.v1.TimeBucket.start:type_name -> google.protobuf.Timestamp
+	17, // 26: paladin.admin.v1.TimeBucket.spent:type_name -> google.type.Money
+	5,  // 27: paladin.admin.v1.BillingService.GetTenantSummary:input_type -> paladin.admin.v1.GetTenantSummaryRequest
+	8,  // 28: paladin.admin.v1.BillingService.GetTenantTimeSeries:input_type -> paladin.admin.v1.GetTenantTimeSeriesRequest
+	10, // 29: paladin.admin.v1.BillingService.GetPlatformTimeSeries:input_type -> paladin.admin.v1.GetPlatformTimeSeriesRequest
+	12, // 30: paladin.admin.v1.BillingService.ListTenantTimeSeries:input_type -> paladin.admin.v1.ListTenantTimeSeriesRequest
+	0,  // 31: paladin.admin.v1.BillingService.ListTenantSpend:input_type -> paladin.admin.v1.ListTenantSpendRequest
+	3,  // 32: paladin.admin.v1.BillingService.GetBillingSettings:input_type -> paladin.admin.v1.GetBillingSettingsRequest
+	6,  // 33: paladin.admin.v1.BillingService.GetTenantSummary:output_type -> paladin.admin.v1.GetTenantSummaryResponse
+	9,  // 34: paladin.admin.v1.BillingService.GetTenantTimeSeries:output_type -> paladin.admin.v1.GetTenantTimeSeriesResponse
+	11, // 35: paladin.admin.v1.BillingService.GetPlatformTimeSeries:output_type -> paladin.admin.v1.GetPlatformTimeSeriesResponse
+	13, // 36: paladin.admin.v1.BillingService.ListTenantTimeSeries:output_type -> paladin.admin.v1.ListTenantTimeSeriesResponse
+	1,  // 37: paladin.admin.v1.BillingService.ListTenantSpend:output_type -> paladin.admin.v1.ListTenantSpendResponse
+	4,  // 38: paladin.admin.v1.BillingService.GetBillingSettings:output_type -> paladin.admin.v1.GetBillingSettingsResponse
+	33, // [33:39] is the sub-list for method output_type
+	27, // [27:33] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_billing_service_proto_init() }

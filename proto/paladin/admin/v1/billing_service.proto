@@ -92,6 +92,9 @@ message TenantSpend {
   bool deleted = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.type.Money spent = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
   int64 charge_count = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // refunded is what was returned from the period's charges, in spent's
+  // unit: spent is what they took less this.
+  google.type.Money refunded = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message GetBillingSettingsRequest {}
@@ -140,6 +143,10 @@ message GetTenantSummaryResponse {
   repeated TopEntry top_actors = 5;
   repeated TopEntry top_ops = 6;
   int64 charge_count = 7;
+  // refunded is what was returned from the period's charges, in total's
+  // unit — a call that failed after charging is refunded: total is what
+  // they took less this.
+  google.type.Money refunded = 13;
 }
 
 message TopEntry {

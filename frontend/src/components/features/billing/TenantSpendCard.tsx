@@ -17,12 +17,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { errorMessage } from "@/hooks/errorContract";
+import type { Money } from "@/gen/google/type/money_pb";
 import { formatMoney } from "@/lib/format/money";
 import { tenantSpendQuery, type BillingPeriod } from "@/lib/queries/billing";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 
 import { spendShare, type PlatformTotals } from "./platformSpend";
+import { refundedNote } from "./refunds";
 import { tenantLabel } from "./tenantLabel";
 
 // Spend is shown to four decimals so a sub-cent charge does not read as
@@ -123,6 +125,7 @@ export function TenantSpendCard({
                     ) : null}
                     <TableCell numeric>
                       {formatMoney(t.spent, { fractionDigits: SPEND_DIGITS })}
+                      <RefundedNote refunded={t.refunded} />
                     </TableCell>
                     <TableCell numeric className="font-mono text-sm">
                       <Count value={t.chargeCount} />
@@ -175,4 +178,11 @@ function ShareBar({ percent }: { percent: number | null }) {
       </span>
     </div>
   );
+}
+
+/** What was refunded from a row's spend, under it; nothing when none was. */
+function RefundedNote({ refunded }: { refunded: Money | undefined }) {
+  const note = refundedNote(refunded, { fractionDigits: SPEND_DIGITS });
+  if (!note) return null;
+  return <span className="block text-xs text-muted-foreground">{note}</span>;
 }

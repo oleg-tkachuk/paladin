@@ -115,7 +115,10 @@ func resolvePeriod(start, end time.Time) (time.Time, time.Time, error) {
 // Summary is the in-memory shape returned by GetTenantSummary.
 type Summary struct {
 	TotalAmount limes.Nanos
-	UnitCode    string
+	// Refunded is what was returned from the period's charges; TotalAmount
+	// is net of it.
+	Refunded limes.Nanos
+	UnitCode string
 	// Ceiling is the tenant's budget cap, in CeilingUnit; nil when the
 	// tenant has no budget row.
 	Ceiling         *limes.BudgetCeiling
@@ -164,7 +167,7 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 			return nil, err
 		}
 		if total, ok := dominant(totals); ok {
-			out.UnitCode, out.TotalAmount, out.ChargeCount = total.UnitCode, net(total), total.Charges
+			out.UnitCode, out.TotalAmount, out.Refunded, out.ChargeCount = total.UnitCode, net(total), total.Refunded, total.Charges
 			for _, top := range []struct {
 				into  *[]TopEntry
 				group func(*meter.SumChargesRequest)

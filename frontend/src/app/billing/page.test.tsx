@@ -46,6 +46,7 @@ const spendRows = {
       displayName: "Globex",
       deleted: false,
       spent: usd(2_500_000_000n),
+      refunded: usd(500_000_000n),
       chargeCount: 3n,
     },
     {
@@ -85,6 +86,19 @@ describe("BillingPage", () => {
           .getAllByRole("link")
           .map((a) => a.textContent),
       ).toEqual(["Globex", "Smoke · in trash"]);
+    });
+
+    // A tenant's refunds under its spend; a tenant with none shows no note.
+    it("says under a tenant's spend what was refunded from it", async () => {
+      render(<BillingPage />);
+      const globex = (
+        await screen.findByRole("link", { name: "Globex" })
+      ).closest("tr") as HTMLElement;
+      expect(within(globex).getByText(/0\.5000 refunded$/)).toBeInTheDocument();
+      const smoke = screen
+        .getByRole("link", { name: "Smoke · in trash" })
+        .closest("tr") as HTMLElement;
+      expect(within(smoke).queryByText(/refunded/)).not.toBeInTheDocument();
     });
 
     // What the platform was charged in all, and each tenant's part of it.

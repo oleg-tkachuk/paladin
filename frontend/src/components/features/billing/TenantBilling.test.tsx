@@ -167,6 +167,20 @@ describe("TenantBilling", () => {
     expect(await screen.findByText(helper)).toBeInTheDocument();
   });
 
+  it("says what was refunded beside the spend", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      total: usd(1_750_000_000n),
+      refunded: usd(250_000_000n),
+      budgetCeiling: { case: "unlimitedBudget", value: {} },
+      chargeCount: 2n,
+    });
+    render(<Harness />);
+    expect(
+      await screen.findByText(/^unlimited budget · .*0\.2500 refunded$/),
+    ).toBeInTheDocument();
+  });
+
   it("links to the tenant's budget, to set one or change it", async () => {
     h.summary.mockResolvedValue({ ...emptySummary, chargeCount: 1n });
     render(<Harness />);

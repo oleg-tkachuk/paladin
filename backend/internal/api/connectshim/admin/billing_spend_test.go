@@ -36,7 +36,7 @@ func TestListTenantSpendNamesEachRow(t *testing.T) {
 	const limit = 2
 	live, trashed := uuid.New(), uuid.New()
 	billing := &spendBilling{truncated: true, rows: []billingh.TenantSpend{
-		{TenantID: live, UnitCode: "USD", Amount: 30 * limes.NanosPerUnit, ChargeCount: 6},
+		{TenantID: live, UnitCode: "USD", Amount: 30 * limes.NanosPerUnit, Refunded: 2 * limes.NanosPerUnit, ChargeCount: 6},
 		{TenantID: trashed, UnitCode: "EUR", Amount: 7 * limes.NanosPerUnit, ChargeCount: 4},
 	}}
 	names := &fakeNames{names: map[uuid.UUID]tenanth.Name{
@@ -53,7 +53,8 @@ func TestListTenantSpendNamesEachRow(t *testing.T) {
 	}
 	first, second := res.GetTenants()[0], res.GetTenants()[1]
 	if first.GetTenantId() != live.String() || first.GetSlug() != "acme" || first.GetDeleted() ||
-		!proto.Equal(first.GetSpent(), &money.Money{CurrencyCode: "USD", Units: 30}) || first.GetChargeCount() != 6 {
+		!proto.Equal(first.GetSpent(), &money.Money{CurrencyCode: "USD", Units: 30}) || first.GetChargeCount() != 6 ||
+		!proto.Equal(first.GetRefunded(), &money.Money{CurrencyCode: "USD", Units: 2}) {
 		t.Errorf("first row = %v", first)
 	}
 	if second.GetTenantId() != trashed.String() || !second.GetDeleted() ||

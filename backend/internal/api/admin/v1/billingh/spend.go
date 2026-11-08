@@ -27,9 +27,11 @@ const (
 // TenantSpend is what one tenant's charges came to over a period, net of
 // refunds, in the unit most of them are in.
 type TenantSpend struct {
-	TenantID    uuid.UUID
-	UnitCode    string
-	Amount      limes.Nanos
+	TenantID uuid.UUID
+	UnitCode string
+	Amount   limes.Nanos
+	// Refunded is what was returned from the charges; Amount is net of it.
+	Refunded    limes.Nanos
 	ChargeCount int64
 }
 
@@ -104,7 +106,7 @@ func rankSpend(sums []meter.ChargeSum, currency string) []TenantSpend {
 		if !ok {
 			continue
 		}
-		out = append(out, TenantSpend{TenantID: tenant, UnitCode: best.UnitCode, Amount: net(best), ChargeCount: best.Charges})
+		out = append(out, TenantSpend{TenantID: tenant, UnitCode: best.UnitCode, Amount: net(best), Refunded: best.Refunded, ChargeCount: best.Charges})
 	}
 	slices.SortFunc(out, func(a, b TenantSpend) int {
 		if (a.UnitCode == currency) != (b.UnitCode == currency) {
