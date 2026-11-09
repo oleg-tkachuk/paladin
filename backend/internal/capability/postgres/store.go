@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 	"uuid"
 
@@ -28,6 +29,9 @@ type options struct {
 	now         func() time.Time
 	defaultUnit string
 	noLeases    bool
+	stripes     bool
+	log         *slog.Logger
+	events      meter.StoreEvents
 }
 
 // WithLeases decides whether the usage store opens budget leases
@@ -36,6 +40,28 @@ type options struct {
 // are still charged under and settled.
 func WithLeases(on bool) Option {
 	return func(o *options) { o.noLeases = !on }
+}
+
+// WithStripes decides whether the usage store counts a tenant with no
+// ceiling in stripes rather than on its aggregate's one row, so the tenant's
+// parallel calls stop queueing on that row (limes ADR-0022). Off unless told
+// otherwise, as in pgstore. Turn it on only once every replica runs a pgstore
+// that folds stripes: an older one checks a ceiling set meanwhile against
+// less than was spent.
+func WithStripes(on bool) Option {
+	return func(o *options) { o.stripes = on }
+}
+
+// WithLogger is where the stores log: a call that waited long for its
+// tenant's aggregate, a deadlock retried. Without it, slog.Default().
+func WithLogger(log *slog.Logger) Option {
+	return func(o *options) { o.log = log }
+}
+
+// WithEvents are the callbacks the usage store makes as it works: how long
+// each metered call waited for its tenant's aggregate, among them.
+func WithEvents(events meter.StoreEvents) Option {
+	return func(o *options) { o.events = events }
 }
 
 // WithClock runs the stores on now instead of the wall clock. For tests that
@@ -60,7 +86,7 @@ func config(pool *pgxpool.Pool, opts []Option) (pgstore.Config, options, error) 
 	}
 	return pgstore.Config{
 		DB: pool, Now: o.now, Scope: Scope, CheckScope: pgstore.CheckSchemaScope, CheckTenant: checkTenant,
-		DisableLeases: o.noLeases,
+		DisableLeases: o.noLeases, StripeUnlimitedTenants: o.stripes, Logger: o.log, Events: o.events,
 	}, o, nil
 }
 

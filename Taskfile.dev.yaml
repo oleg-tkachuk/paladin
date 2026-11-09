@@ -746,6 +746,10 @@ tasks:
       - task: frontend:node:deps:update
       # The Go SDK is a module of its own, so the backend's bump leaves it.
       - task: go-sdk:deps:update
+      # oteltest replaces the SDK with ../.., so the bump above leaves its
+      # go.mod behind the SDK's, and its own bump cannot load the module graph
+      # ("updates to go.mod needed") until it is tidied.
+      - task: go-sdk-otel:tidy
       - task: go-sdk-otel:deps:update
       # Within pyproject's constraints, so the floors the SDK declares to its
       # users stay where they are; only sdk/python/uv.lock moves.

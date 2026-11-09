@@ -486,6 +486,31 @@
         "defaults": {}
       },
       "id": 14
+    },
+    {
+      "type": "timeseries",
+      "title": "Wait for a tenant's aggregate p99 by operation",
+      "description": "How long a metered call waited for its tenant's aggregate row (limes.tenant.wait): the row alone, not the tenant's advisory lock nor the call's chain. A rising wait is one tenant's parallel calls queueing on its row; capability.stripe_unlimited_tenants takes a tenant without a ceiling off it. pgstore logs a wait past 100 ms at WARN.",
+      "datasource": "${datasource}",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "histogram_quantile(0.99, sum by (le, limes_operation) (rate(limes_tenant_wait_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{limes_operation}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "id": 16
     }
   ]
 }

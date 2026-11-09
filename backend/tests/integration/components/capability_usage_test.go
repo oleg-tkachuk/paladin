@@ -260,3 +260,66 @@ func TestRequestsOnlyUsageIsInTheCapabilitysUnit(t *testing.T) {
 		t.Errorf("usage = %d requests in %q, want 1 in %q", u.RequestCount, u.UnitCode, f.subject.UnitCode())
 	}
 }
+
+// stripeRows counts the tenant's rows in limes.tenant_budget_stripes.
+func (f usageFixture) stripeRows(t *testing.T, ctx context.Context) int {
+	t.Helper()
+	var n int
+	if err := f.pool.QueryRow(ctx,
+		`SELECT count(*) FROM limes.tenant_budget_stripes WHERE tenant_id = $1`, f.tenant).Scan(&n); err != nil {
+		t.Fatalf("count stripes: %v", err)
+	}
+	return n
+}
+
+// With capability.stripe_unlimited_tenants on, a tenant with no ceiling is
+// counted in stripes rather than on its budget row, its budget still reads
+// what it spent, and setting a ceiling folds the stripes back into the row
+// before checking against it (limes ADR-0022).
+func TestStripedTenantSpendFoldsWhenACeilingIsSet(t *testing.T) {
+	t.Parallel()
+	ctx, f := newUsageFixture(t)
+	f.usage = newUsageStore(t, f.pool, capstore.WithStripes(true))
+
+	set, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
+		TenantID: f.tenant, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: testUnit},
+	})
+	if err != nil {
+		t.Fatalf("set an unlimited budget: %v", err)
+	}
+	const charges = 3
+	for i := 0; i < charges; i++ {
+		if _, err := f.usage.Charge(ctx, meter.ChargeRequest{Subject: f.subject, Amount: limes.NanosPerUnit}, nil); err != nil {
+			t.Fatalf("charge %d: %v", i, err)
+		}
+	}
+	if f.stripeRows(t, ctx) == 0 {
+		t.Fatal("an unlimited tenant's charges wrote no stripe")
+	}
+	if got := f.tenantSpent(t, ctx); got != 0 {
+		t.Errorf("the budget row holds %d before a fold; the charges belong in the stripes", got)
+	}
+	budget, err := f.usage.GetTenantBudget(ctx, f.tenant)
+	if err != nil {
+		t.Fatalf("read the budget: %v", err)
+	}
+	if want := limes.Nanos(charges) * limes.NanosPerUnit; budget.SpentAmount != want {
+		t.Errorf("the budget reads %d spent, want the stripes' %d", budget.SpentAmount, want)
+	}
+
+	ceiling := limes.Nanos(charges+1) * limes.NanosPerUnit
+	if _, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
+		TenantID: f.tenant, Ceiling: limes.BudgetCeiling{Max: ceiling, UnitCode: testUnit}, ExpectedVersion: set.ResourceVersion,
+	}); err != nil {
+		t.Fatalf("set a ceiling: %v", err)
+	}
+	if n := f.stripeRows(t, ctx); n != 0 {
+		t.Errorf("%d stripes outlived setting a ceiling", n)
+	}
+	if got, want := f.tenantSpent(t, ctx), limes.Nanos(charges)*limes.NanosPerUnit; got != want {
+		t.Errorf("the budget row holds %d after the fold, want %d", got, want)
+	}
+	if _, err := f.usage.Charge(ctx, meter.ChargeRequest{Subject: f.subject, Amount: 2 * limes.NanosPerUnit}, nil); !errors.Is(err, limes.ErrTenantBudgetExceeded) {
+		t.Errorf("a charge past the folded spend's ceiling: %v, want the tenant's budget exceeded", err)
+	}
+}

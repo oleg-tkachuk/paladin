@@ -88,6 +88,7 @@ The work that does not show up in RPC metrics.
 | Presigns, Presign latency | `paladin_presign_total`, `paladin_presign_duration_seconds` (labels `op`, `outcome`) | `internal/metrics/domain.go` |
 | Capability charges | `limes_charge_decisions_total` (labels `limes_outcome`, `limes_scope` on a refusal, `limes_tenant_id`) | limes otelmetric, wired in `internal/app/build_capability.go` |
 | Capability request bumps | `limes_request_bumps_total` (labels `limes_outcome`, `limes_scope` on a refusal, `limes_tenant_id`) | limes otelmetric, wired in `internal/app/build_capability.go` |
+| Wait for a tenant's aggregate | `limes_tenant_wait_seconds` (histogram; labels `limes_operation`, `limes_tenant_id`) | limes otelmetric store events, wired in `internal/app/build_capability.go` |
 | Overdue uploads | `paladin_objects_pending_overdue`, `paladin_objects_pending_overdue_age_seconds` | `internal/worker/metrics.go`, sampled by the reconciler |
 
 `tenant_id` appears on the rate-limit series only, `limes_tenant_id` on the

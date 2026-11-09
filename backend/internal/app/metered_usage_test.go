@@ -74,3 +74,46 @@ func TestMeteredUsageCountsAChargeByTenant(t *testing.T) {
 	}
 	t.Errorf("no %s with %s=%s in %+v", chargeDecisionsMetric, tenantAttribute, tenant, rm.ScopeMetrics)
 }
+
+// tenantWaitMetric is the histogram limes records each metered call's wait
+// for its tenant's aggregate under.
+const tenantWaitMetric = "limes.tenant.wait"
+
+// A wait the usage store reports is recorded by limes, with its tenant, on
+// the global meter provider the app exports.
+func TestUsageStoreEventsRecordTheTenantWait(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	prev := otel.GetMeterProvider()
+	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	t.Cleanup(func() { otel.SetMeterProvider(prev) })
+
+	events, err := usageStoreEvents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events.OnTenantWait == nil {
+		t.Fatal("no callback for the wait on a tenant's aggregate")
+	}
+	tenant := uuid.New()
+	events.OnTenantWait(context.Background(), meter.TenantWaitEvent{
+		TenantID: tenant, Operation: meter.StoreOperationCharge, Wait: time.Millisecond,
+	})
+
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatal(err)
+	}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != tenantWaitMetric {
+				continue
+			}
+			for _, dp := range m.Data.(metricdata.Histogram[float64]).DataPoints {
+				if v, ok := dp.Attributes.Value(tenantAttribute); ok && v.AsString() == tenant.String() && dp.Count == 1 {
+					return
+				}
+			}
+		}
+	}
+	t.Errorf("no %s with %s=%s in %+v", tenantWaitMetric, tenantAttribute, tenant, rm.ScopeMetrics)
+}

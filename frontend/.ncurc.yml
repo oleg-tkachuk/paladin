@@ -13,3 +13,9 @@
 # gone, and nothing in the failure mentioned it.
 reject:
   - pnpm
+
+# A version its publisher marked deprecated is never an upgrade: that is how a
+# broken release is withdrawn. @cedar-policy/cedar-wasm 4.14.1 shipped without
+# its wasm, js and type files and was deprecated for it, yet a --target minor
+# bump took it, and pnpm installed it with only a warning.
+deprecated: false
