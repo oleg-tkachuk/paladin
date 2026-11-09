@@ -360,31 +360,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Performance / Scale
 
-### The login and OAuth token limiters count per replica
-
-- **Status:** Deferred
-- **Reason:** ADR-0046 moved the tenant and token limits onto a shared
-  backend; `middleware.LoginRateLimiter` and the `/oauth/token` limiter
-  (`internal/auth/oauth/ratelimit.go`) still keep their buckets in memory,
-  so each replica grants the full rate and the ceiling a brute-force attempt
-  meets is the replica count times the setting.
-- **Definition of Done:** both count on `middleware.rate_limit.backend`, with
-  the same per-process fallback, and a test shows two replicas sharing one
-  ceiling.
-- **Blockers:** none.
-
-### Roles that enforce no rate limit still build the counter
-
-- **Status:** Deferred
-- **Reason:** `buildRateCounter` runs in `SharedDeps`, so the worker and the
-  dispatcher open a Valkey connection, or start a postgres sync loop, that
-  nothing calls; the chart opens Valkey to every role for that reason. Only
-  api and admin apply the limits and report the `valkey` health row.
-- **Definition of Done:** the counter is built by the roles that apply the
-  limits, and the chart's Valkey egress narrows to those roles, with
-  `scripts/chart-netpol.py` checking it.
-- **Blockers:** none.
-
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked
@@ -720,6 +695,21 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
 
 ## UI / Admin Console
+
+### A tenant's wait for its budget row, on the tenant page
+
+- **Status:** Deferred
+- **Reason:** `limes_tenant_wait_seconds` (limes ADR-0022) says when one
+  tenant's parallel charges queue on its budget row, but only Prometheus holds
+  it: an OpenTelemetry histogram cannot be read back in the process, and a
+  per-process tally would show one replica's calls. Paladin has no path to
+  query Prometheus, so showing it means a new dependency and a configured
+  Prometheus address — a decision, not a page.
+- **Definition of Done:** the tenant page shows the p99 wait of its tenant
+  over a recent window, from a server-side read of the metric behind one
+  contract (an RPC field and a shared hook), with tests, and the deployment
+  names where to read it from.
+- **Blockers:** the decision to have the backend query Prometheus.
 
 ### Console UX programme (2026-10-19)
 

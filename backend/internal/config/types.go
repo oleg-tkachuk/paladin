@@ -337,7 +337,8 @@ type Auth struct {
 	// (Login + RefreshToken) per (subject, IP) per minute — the credential-
 	// stuffing defence. <= 0 keeps the built-in default (10); set a high value
 	// to effectively disable (e.g. an e2e stack that logs in repeatedly as one
-	// account). Mirrors auth.oauth.token_rate_limit_per_minute.
+	// account). Counted where middleware.rate_limit.backend names, so every
+	// replica shares the cap. Mirrors auth.oauth.token_rate_limit_per_minute.
 	LoginRateLimitPerSubjectPerMinute int `yaml:"login_rate_limit_per_subject_per_minute" json:"login_rate_limit_per_subject_per_minute"`
 	// LoginRateLimitPerIPPerMinute caps the same RPCs per source IP per minute
 	// — the subject-enumeration defence. <= 0 keeps the built-in default (60).
@@ -374,7 +375,8 @@ type OAuthAS struct {
 	// built-in server-rendered consent (works standalone, no front-end).
 	ConsentURL string `yaml:"consent_url" json:"consent_url"`
 	// TokenRateLimitPerMinute caps /oauth/token requests per client_id
-	// (in-memory token bucket, per pod) to blunt code/secret brute-forcing.
+	// to blunt code/secret brute-forcing, counted where
+	// middleware.rate_limit.backend names so every replica shares it.
 	// <= 0 falls back to a built-in default (60/min); set a high value to
 	// effectively disable.
 	TokenRateLimitPerMinute int `yaml:"token_rate_limit_per_minute" json:"token_rate_limit_per_minute"`

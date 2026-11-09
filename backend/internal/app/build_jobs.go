@@ -320,7 +320,6 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 	if deps.APIToken != nil && cfg.Worker.Jobs.APIToken.Interval > 0 {
 		out = append(out, &worker.APITokenPurger{
 			Store:      deps.APIToken.Store,
-			Limiter:    deps.APIToken.Limiter,
 			Interval:   cfg.Worker.Jobs.APIToken.Interval,
 			ExpiredFor: cfg.Worker.Jobs.APIToken.ExpiredFor,
 			Logger:     l.Named("api-token-purger"),

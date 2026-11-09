@@ -1634,7 +1634,7 @@ networkPolicies:
   nats:
     namespace: nats
     port: 4222
-  # Valkey, reached only when config.middleware.rate_limit.backend is valkey;
+  # Valkey, reached by api and admin only, when config.middleware.rate_limit.backend is valkey;
   # the port is read from config.datastores.valkey.addr.
   valkey:
     namespace: cache

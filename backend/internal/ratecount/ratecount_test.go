@@ -279,9 +279,6 @@ func TestTokenLimiterMatchesTheRetryContract(t *testing.T) {
 	if err != nil || snap.CurrentBucketCount != capacity || !snap.WindowResetsAt.Equal(bucketAt.Add(Window)) {
 		t.Fatalf("usage %+v %v", snap, err)
 	}
-	if n, err := l.Sweep(ctx, time.Minute); n != 0 || err != nil {
-		t.Fatalf("sweep %d %v", n, err)
-	}
 	if _, err := NewTokenLimiter(failing{errors.New("x")}).Allow(ctx, id, capacity); err == nil {
 		t.Fatal("allow swallowed a store error")
 	}

@@ -76,10 +76,6 @@ type Limiter interface {
 	// the bucket — distinct from Allow, which counts an admitted request. Cheap
 	// query, suitable for UI dashboards refreshing every few seconds.
 	Usage(ctx context.Context, tokenID uuid.UUID) (Snapshot, error)
-
-	// Sweep drops bucket rows older than the supplied grace window.
-	// Called by the api_token purger; safe to invoke from a goroutine.
-	Sweep(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
 // ErrUnconfigured is returned when callers wire a nil Limiter and
@@ -102,9 +98,4 @@ func (NoopLimiter) Allow(context.Context, uuid.UUID, int) (Decision, error) {
 // bars in the first place.
 func (NoopLimiter) Usage(context.Context, uuid.UUID) (Snapshot, error) {
 	return Snapshot{}, nil
-}
-
-// Sweep implements Limiter.
-func (NoopLimiter) Sweep(context.Context, time.Duration) (int64, error) {
-	return 0, nil
 }

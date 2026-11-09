@@ -207,8 +207,8 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Data plane: the API-token interceptor ESTABLISHES the principal, so a service
 		// can authenticate uploads with a long-lived `paladin_pat_…` key alone
 		// (paired with auth.InterceptorSkipAPITokens below). IAM plane stays additive.
-		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, auth.TokenPlaneData)
-		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.APIToken.Limiter, auth.TokenPlaneIAM)
+		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneData)
+		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneIAM)
 	} else {
 		apiTokData = auth.APITokenInterceptor(nil, "")
 		apiTokIAM = auth.APITokenInterceptor(nil, "")
@@ -276,7 +276,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// pass-through rather than an absent interceptor, so the chains below stay
 	// the same shape either way.
 	tenantRLCfg := middleware.TenantRateLimitConfig{
-		Store: ratecount.NewTenantStore(deps.RateCounter),
+		Store: ratecount.NewTenantStore(deps.RateLimits().Counter),
 	}
 	if cfg.Middleware.RateLimit.Enabled {
 		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond
@@ -385,6 +385,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Refuses a change to a tenant in the trash, whoever asks.
 		tenantFreeze,
 		middleware.NewLoginRateLimiter(
+			deps.RateLimits().Keys, l.Named("login-ratelimit"),
 			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 			cfg.Auth.LoginRateLimitPerIPPerMinute,
 		).Interceptor(),
@@ -415,7 +416,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	AddComponent(healthH, capabilityComponent(deps))
 	AddComponent(healthH, capabilityRevocationsComponent(deps))
 	AddComponent(healthH, apiTokenComponent(deps))
-	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateValkey))
+	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateLimits().Shared))
 
 	// The api role serves two listeners — data and iam — and Kubernetes
 	// allows one readiness probe per container, which points at data. So iam
@@ -511,7 +512,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 				exchangers[sc.ClientID] = true
 			}
 		}
-		as := oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).
+		as := oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, deps.RateLimits().Keys, l).
 			WithAuthorizer(polEngine).
 			WithAudit(repos.Audit).
 			WithSkipConsent(skipConsent).

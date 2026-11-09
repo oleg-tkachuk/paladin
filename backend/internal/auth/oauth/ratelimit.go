@@ -1,80 +1,65 @@
 package oauth
 
 import (
-	"sync"
+	"context"
+	"math"
+	"net/http"
+	"strconv"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-// tokenBucket is a per-key token-bucket rate limiter for the /oauth/token
-// endpoint (ADR-0009 hardening). It's in-memory and per-process: good enough
-// to blunt code/secret brute-forcing at the edge without a DB round-trip per
-// request. Each pod limits independently — for a strict global cap, front the
-// endpoint with an ingress rate-limit too.
-type tokenBucket struct {
-	mu       sync.Mutex
-	buckets  map[string]*bucket
-	rate     float64 // tokens refilled per second
-	capacity float64 // burst ceiling
-	now      func() time.Time
+// RateLimiter holds each key to a per-window ceiling. ratecount.KeyLimiter is
+// one, on the store middleware.rate_limit.backend names, so every replica of
+// the AS counts a client against one ceiling (ADR-0046).
+type RateLimiter interface {
+	// Allow counts one call under key when it fits capacity, and otherwise
+	// reports how long until one would. An error decides nothing.
+	Allow(ctx context.Context, key string, capacity int) (allowed bool, retryAfter time.Duration, err error)
 }
 
-type bucket struct {
-	tokens float64
-	last   time.Time
+// defaultTokenRatePerMinute is a client's ceiling when the configuration
+// sets none.
+const defaultTokenRatePerMinute = 60
+
+// perMinute is a configured ceiling, or the default for none.
+func perMinute(configured int) int {
+	if configured <= 0 {
+		return defaultTokenRatePerMinute
+	}
+	return configured
 }
 
-// newTokenBucket builds a limiter that allows ~perMinute requests/minute per
-// key with a burst up to perMinute. perMinute <= 0 falls back to 60.
-func newTokenBucket(perMinute int) *tokenBucket {
-	if perMinute <= 0 {
-		perMinute = 60
-	}
-	return &tokenBucket{
-		buckets:  make(map[string]*bucket),
-		rate:     float64(perMinute) / 60.0,
-		capacity: float64(perMinute),
-		now:      time.Now,
-	}
-}
+// OAuth error codes and descriptions a throttled call is answered with.
+const (
+	errCodeSlowDown               = "slow_down"
+	errCodeTemporarilyUnavailable = "temporarily_unavailable"
+	msgTooManyRequests            = "too many requests; retry later"
+	msgLimitUndecided             = "the request rate could not be checked; retry later"
+)
 
-// allow consumes one token for key. It returns ok=false plus the duration to
-// wait before the next token is available when the bucket is empty.
-func (t *tokenBucket) allow(key string) (ok bool, retryAfter time.Duration) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	now := t.now()
-	b, exists := t.buckets[key]
-	if !exists {
-		// First request for this key starts with a full bucket, minus this one.
-		t.buckets[key] = &bucket{tokens: t.capacity - 1, last: now}
-		return true, 0
+// throttled answers a call its client may not make yet, and reports whether
+// it did. It runs before any database work, to blunt code and secret
+// brute-forcing (ADR-0009 hardening). A limit that cannot be decided refuses
+// the call: these calls carry client secrets and codes.
+func (h *Handler) throttled(w http.ResponseWriter, r *http.Request, key, clientID string, capacity int) bool {
+	ok, retryAfter, err := h.rate.Allow(r.Context(), key, capacity)
+	if err != nil {
+		h.log.Error("oauth rate limit could not be decided; refusing the call",
+			zap.String("path", r.URL.Path), zap.String("client_id", clientID), zap.Error(err))
+		h.jsonError(w, http.StatusServiceUnavailable, errCodeTemporarilyUnavailable, msgLimitUndecided)
+		return true
 	}
-
-	// Refill based on elapsed time, capped at capacity.
-	elapsed := now.Sub(b.last).Seconds()
-	b.tokens = min(t.capacity, b.tokens+elapsed*t.rate)
-	b.last = now
-
-	if b.tokens < 1 {
-		// Time until one token accrues.
-		deficit := 1 - b.tokens
-		return false, time.Duration(deficit/t.rate*float64(time.Second)) + time.Millisecond
+	if ok {
+		return false
 	}
-	b.tokens--
-	return true, 0
-}
-
-// reap drops buckets idle long enough to have fully refilled, bounding memory.
-// Call periodically; safe to skip (the map just grows with distinct keys).
-func (t *tokenBucket) reap() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	now := t.now()
-	fullAfter := time.Duration(t.capacity/t.rate*float64(time.Second)) + time.Second
-	for k, b := range t.buckets {
-		if now.Sub(b.last) > fullAfter {
-			delete(t.buckets, k)
-		}
-	}
+	secs := max(int(math.Ceil(retryAfter.Seconds())), 1)
+	h.log.Warn("oauth call refused by its client's rate limit",
+		zap.String("path", r.URL.Path), zap.String("client_id", clientID), zap.Int("retry_after_seconds", secs))
+	w.Header().Set(paladin.HeaderRetryAfter, strconv.Itoa(secs))
+	h.jsonError(w, http.StatusTooManyRequests, errCodeSlowDown, msgTooManyRequests)
+	return true
 }

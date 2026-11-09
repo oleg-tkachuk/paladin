@@ -3,7 +3,6 @@ package ratecount
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"uuid"
 
@@ -64,7 +63,3 @@ func (l *TokenLimiter) Usage(ctx context.Context, tokenID uuid.UUID) (ratelimit.
 		WindowResetsAt:      c.ResetsAt(),
 	}, nil
 }
-
-// Sweep implements ratelimit.Limiter. A Counter's windows expire on their
-// own, so there is nothing to sweep.
-func (*TokenLimiter) Sweep(context.Context, time.Duration) (int64, error) { return 0, nil }

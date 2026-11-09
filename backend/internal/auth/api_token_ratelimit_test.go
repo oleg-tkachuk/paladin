@@ -33,10 +33,6 @@ func (r *recordingLimiter) Usage(context.Context, uuid.UUID) (ratelimit.Snapshot
 	return ratelimit.Snapshot{}, nil
 }
 
-func (r *recordingLimiter) Sweep(context.Context, time.Duration) (int64, error) {
-	return 0, nil
-}
-
 // TestRateLimitGate_NilLimiter confirms the gate is skipped when the
 // interceptor was wired without a Limiter — no DB call, no error.
 func TestRateLimitGate_NilLimiter(t *testing.T) {

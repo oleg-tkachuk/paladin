@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"go.uber.org/zap"
@@ -63,7 +64,7 @@ func TestOAuthFlowE2E(t *testing.T) {
 
 	h := oauth.NewHandler(
 		config.OAuthAS{Enabled: true, AuthorizationCodeTTL: time.Minute, AllowedRedirectSchemes: []string{"https"}},
-		store, adapters.NewUserRepo(q), adapters.NewRefreshTokenRepo(q), iss, dec, zap.NewNop())
+		store, adapters.NewUserRepo(q), adapters.NewRefreshTokenRepo(q), iss, dec, ratecount.NewKeyLimiter(ratecount.NewLocal()), zap.NewNop())
 	mux := http.NewServeMux()
 	h.Mount(mux)
 	srv := httptest.NewServer(mux)

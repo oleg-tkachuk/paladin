@@ -2,82 +2,109 @@ package middleware
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
+	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+)
+
+// KeyedLimiter holds each key to a per-window ceiling. ratecount.KeyLimiter
+// is one, on the store middleware.rate_limit.backend names, so every replica
+// counts against one ceiling (ADR-0046).
+type KeyedLimiter interface {
+	// Allow counts one call under key when it fits capacity, and otherwise
+	// reports how long until one would. An error decides nothing.
+	Allow(ctx context.Context, key string, capacity int) (allowed bool, retryAfter time.Duration, err error)
+}
+
+// Built-in caps per window, kept when a caller passes none.
+const (
+	defaultLoginPerSubjectMax = 10
+	defaultLoginPerIPMax      = 60
+)
+
+// The procedures throttled when a caller names none.
+const (
+	procedureLogin        = paladiniamv1connect.AuthServiceLoginProcedure
+	procedureRefreshToken = paladiniamv1connect.AuthServiceRefreshTokenProcedure
+)
+
+// msgTooManyAttempts is what a refused attempt is told.
+const msgTooManyAttempts = "too many attempts; try again later"
+
+// The layer a refusal came from, as its log line names it.
+const (
+	loginLayerIP      = "ip"
+	loginLayerSubject = "subject"
 )
 
 // LoginRateLimiter is a Connect interceptor that throttles credential-
-// bearing IAM RPCs (Login + RefreshToken) with two layered sliding
-// windows:
+// bearing IAM RPCs (Login + RefreshToken) with two layered windows of
+// ratecount.Window, counted in the shared store so the ceiling holds across
+// replicas:
 //
-//  1. Per-IP cap (`PerIPMax` / `Window`) — fires first; defends against
-//     enumeration attacks where the attacker varies `subject` to dodge the
-//     tighter cap. Without this layer a single IP could allocate one bucket
-//     per fabricated subject and exhaust process memory.
-//  2. Per-(subject, IP) cap (`PerSubjectMax` / `Window`) — defends a
-//     specific account against credential stuffing.
+//  1. Per-IP cap — checked first; defends against enumeration where the
+//     attacker varies `subject` to dodge the tighter cap.
+//  2. Per-(subject, IP) cap — defends one account against credential
+//     stuffing.
 //
-// A request must clear BOTH caps. Either layer fires `CodeResourceExhausted`.
-// Successful logins are NOT exempted — bots would otherwise game the limit
-// by occasionally guessing right.
+// A request must clear both. A request refused at the IP layer is not
+// counted against the subject, so an IP flood cannot lock a user out; one
+// refused at the subject layer has been counted against its IP, which only
+// tightens the IP's cap on a caller already over a subject's. Successful
+// logins are NOT exempted — bots would otherwise game the limit by
+// occasionally guessing right.
 //
-// Memory is bounded two ways: an opportunistic sweep drops emptied buckets
-// once per window, and a hard maxKeys cap rejects new keys (fail-closed)
-// if the map ever blows past it — so a botnet rotating subjects/IPs can't
-// OOM the IAM pod.
+// Keys are digests (ratecount.LoginIPKey, LoginSubjectKey): no login name
+// reaches the store in clear, and keys expire with their window there, so a
+// botnet rotating subjects cannot grow this process's memory.
 type LoginRateLimiter struct {
-	PerSubjectMax int
-	PerIPMax      int
-	Window        time.Duration
+	limiter       KeyedLimiter
+	perSubjectMax int
+	perIPMax      int
 	procedures    map[string]struct{}
-	maxKeys       int
-
-	mu        sync.Mutex
-	buckets   map[string][]time.Time
-	lastSweep time.Time
-	now       func() time.Time
+	log           *zap.Logger
 }
 
-// NewLoginRateLimiter constructs a limiter. perSubjectMax / perIPMax are the
-// per-(subject,IP) and per-IP caps per Window; either <= 0 keeps the built-in
-// default (10 and 60 respectively) so callers that don't tune them get the
-// safe defaults, while a deployment that needs to relax them (e.g. an e2e
-// stack logging in repeatedly as one account) can pass a high value.
-// The per-IP key is the client address the listener resolved from its trusted
-// proxies (clientip.Middleware); a forwarding header's leftmost entry is the
-// caller's to choose and would let it pick its own bucket. procedures lists
-// the RPC paths to throttle; empty defaults to Login + RefreshToken.
-func NewLoginRateLimiter(perSubjectMax, perIPMax int, procedures ...string) *LoginRateLimiter {
+// NewLoginRateLimiter constructs a limiter on limiter. perSubjectMax /
+// perIPMax are the per-(subject,IP) and per-IP caps per window; either <= 0
+// keeps the built-in default, so callers that don't tune them get the safe
+// defaults, while a deployment that needs to relax them (e.g. an e2e stack
+// logging in repeatedly as one account) can pass a high value. The per-IP key
+// is the client address the listener resolved from its trusted proxies
+// (clientip.Middleware); a forwarding header's leftmost entry is the caller's
+// to choose and would let it pick its own bucket. procedures lists the RPC
+// paths to throttle; empty defaults to Login + RefreshToken.
+func NewLoginRateLimiter(limiter KeyedLimiter, log *zap.Logger, perSubjectMax, perIPMax int, procedures ...string) *LoginRateLimiter {
 	if perSubjectMax <= 0 {
-		perSubjectMax = 10
+		perSubjectMax = defaultLoginPerSubjectMax
 	}
 	if perIPMax <= 0 {
-		perIPMax = 60
+		perIPMax = defaultLoginPerIPMax
 	}
 	if len(procedures) == 0 {
-		procedures = []string{
-			"/paladin.iam.v1.AuthService/Login",
-			"/paladin.iam.v1.AuthService/RefreshToken",
-		}
+		procedures = []string{procedureLogin, procedureRefreshToken}
 	}
 	procSet := make(map[string]struct{}, len(procedures))
 	for _, p := range procedures {
 		procSet[p] = struct{}{}
 	}
+	if log == nil {
+		log = zap.NewNop()
+	}
 	return &LoginRateLimiter{
-		PerSubjectMax: perSubjectMax,
-		PerIPMax:      perIPMax,
-		Window:        1 * time.Minute,
+		limiter:       limiter,
+		perSubjectMax: perSubjectMax,
+		perIPMax:      perIPMax,
 		procedures:    procSet,
-		maxKeys:       100_000,
-		buckets:       map[string][]time.Time{},
-		now:           time.Now,
+		log:           log,
 	}
 }
 
@@ -91,9 +118,9 @@ func (l *LoginRateLimiter) Interceptor() connect.ServerInterceptor {
 				return next(ctx, spec, req)
 			}
 			subject, ip := l.coords(ctx, req)
-			if !l.admit(subject, ip) {
-				return nil, connect.NewError(connect.CodeResourceExhausted,
-					"too many attempts; try again later")
+			if ok, retryAfter := l.admit(ctx, spec.Procedure, subject, ip); !ok {
+				unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, retryAfterHeader(retryAfter.Seconds()))
+				return nil, connect.NewError(connect.CodeResourceExhausted, msgTooManyAttempts)
 			}
 			return next(ctx, spec, req)
 		}
@@ -102,7 +129,7 @@ func (l *LoginRateLimiter) Interceptor() connect.ServerInterceptor {
 
 // coords extracts (subject, ip). Subject from the proto body; IP from the
 // resolved client address. Both empty when absent — the limiter still
-// throttles unidentified clients under the shared "ip=" bucket.
+// throttles unidentified clients under the shared empty-address key.
 func (l *LoginRateLimiter) coords(ctx context.Context, req proto.Message) (string, string) {
 	type subjectGetter interface{ GetSubject() string }
 	subject := ""
@@ -116,84 +143,31 @@ func (l *LoginRateLimiter) coords(ctx context.Context, req proto.Message) (strin
 	return subject, ip
 }
 
-// admit checks both layers atomically. Returns true only when both
-// buckets have capacity AND records the timestamp in both. Failing to
-// clear the per-IP cap leaves the per-subject bucket untouched.
-func (l *LoginRateLimiter) admit(subject, ip string) bool {
-	now := l.now()
-	cutoff := now.Add(-l.Window)
-	subjectKey := "s:" + subject + "|" + ip
-	ipKey := "i:" + ip
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.sweepLocked(cutoff, now)
-
-	// maxKeys backstop: at saturation, admit only when BOTH keys already
-	// exist — otherwise admitting would create the missing bucket below
-	// (checkLocked writes l.buckets[key]) and grow the map past the cap.
-	// Rejecting when EITHER key is new closes the memory-exhaustion vector
-	// where one known IP rotates subjects to mint unbounded subjectKeys.
-	// Fail-closed at the cap is acceptable; legitimate repeat clients
-	// (both keys present) are unaffected. maxKeys<=0 disables it (tests).
-	if l.maxKeys > 0 && len(l.buckets) >= l.maxKeys {
-		_, haveIP := l.buckets[ipKey]
-		_, haveSubject := l.buckets[subjectKey]
-		if !haveIP || !haveSubject {
-			return false
+// admit checks the IP layer, then the subject layer, counting each call it
+// admits, and reports how long a refused call should wait. A store error
+// refuses the call: these are credential-bearing calls, and the shared
+// store already falls back to this process's count rather than failing.
+func (l *LoginRateLimiter) admit(ctx context.Context, procedure, subject, ip string) (bool, time.Duration) {
+	for _, layer := range []struct {
+		name     string
+		key      string
+		capacity int
+	}{
+		{loginLayerIP, ratecount.LoginIPKey(ip), l.perIPMax},
+		{loginLayerSubject, ratecount.LoginSubjectKey(subject, ip), l.perSubjectMax},
+	} {
+		ok, retryAfter, err := l.limiter.Allow(ctx, layer.key, layer.capacity)
+		if err != nil {
+			l.log.Error("login rate limit could not be decided; refusing the attempt",
+				zap.String("procedure", procedure), zap.String("layer", layer.name), zap.Error(err))
+			return false, 0
+		}
+		if !ok {
+			l.log.Warn("login attempt refused by its rate limit",
+				zap.String("procedure", procedure), zap.String("layer", layer.name),
+				zap.Duration("retry_after", retryAfter))
+			return false, retryAfter
 		}
 	}
-
-	// Per-IP gate first — coarsest layer, also the cheapest to reject on.
-	if !l.checkLocked(ipKey, cutoff, l.PerIPMax) {
-		return false
-	}
-	if !l.checkLocked(subjectKey, cutoff, l.PerSubjectMax) {
-		return false
-	}
-	// Both layers have capacity. Record on both so a future credential-
-	// stuffing burst sees the right count regardless of which layer it
-	// races against.
-	l.buckets[ipKey] = append(l.buckets[ipKey], now)
-	l.buckets[subjectKey] = append(l.buckets[subjectKey], now)
-	return true
-}
-
-// sweepLocked drops buckets that hold no in-window timestamps. Runs at
-// most once per Window so the cost is amortised. Caller holds l.mu.
-func (l *LoginRateLimiter) sweepLocked(cutoff, now time.Time) {
-	if now.Sub(l.lastSweep) < l.Window {
-		return
-	}
-	l.lastSweep = now
-	for key, ts := range l.buckets {
-		fresh := false
-		for _, t := range ts {
-			if t.After(cutoff) {
-				fresh = true
-				break
-			}
-		}
-		if !fresh {
-			delete(l.buckets, key)
-		}
-	}
-}
-
-// checkLocked reports whether `key` has capacity under `max`, trimming
-// stale timestamps as a side-effect. Caller holds l.mu. max <= 0 → no cap.
-func (l *LoginRateLimiter) checkLocked(key string, cutoff time.Time, max int) bool {
-	if max <= 0 {
-		return true
-	}
-	timestamps := l.buckets[key]
-	keep := timestamps[:0]
-	for _, t := range timestamps {
-		if t.After(cutoff) {
-			keep = append(keep, t)
-		}
-	}
-	l.buckets[key] = keep
-	return len(keep) < max
+	return true, 0
 }
