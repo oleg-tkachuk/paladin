@@ -306,27 +306,54 @@ def egress_reaches(doc: dict, namespace: str, port: int) -> bool:
     for rule in doc["spec"].get("egress") or []:
         if not rule:  # `- {}` — open egress
             return True
-        ports = {p.get("port") for p in rule.get("ports") or []}
-        for to in rule.get("to") or []:
-            labels = (to.get("namespaceSelector") or {}).get("matchLabels") or {}
-            if labels.get("kubernetes.io/metadata.name") == namespace and port in ports:
-                return True
+        if egress_rule_names(rule, namespace, port):
+            return True
     return False
 
 
-def valkey_problems(chart: Path) -> list[str]:
-    """With the rate limits in Valkey, every role must reach it.
+def egress_rule_names(rule: dict, namespace: str, port: int) -> bool:
+    """Whether one egress rule names `namespace` on `port` itself, rather than
+    letting everything out."""
+    ports = {p.get("port") for p in rule.get("ports") or []}
+    for to in rule.get("to") or []:
+        labels = (to.get("namespaceSelector") or {}).get("matchLabels") or {}
+        if labels.get("kubernetes.io/metadata.name") == namespace and port in ports:
+            return True
+    return False
 
-    Every role builds the counter. Refused, nothing fails: each limit falls
-    back to the per-replica count and the shared ceiling quietly multiplies."""
+
+# The roles that apply the rate limits, and so build the counter (ADR-0046):
+# the api and admin planes. No other role dials Valkey.
+RATE_LIMIT_ROLES = {"api", "admin"}
+
+
+def valkey_problems(chart: Path) -> list[str]:
+    """With the rate limits in Valkey, the roles that apply them reach it, and
+    no other role is let out to it.
+
+    Refused, nothing fails: each limit falls back to the per-replica count and
+    the shared ceiling quietly multiplies. Allowed to a role that never dials
+    it, the rule only widens what a compromised pod can reach."""
     problems: list[str] = []
+    seen: set[str] = set()
     for doc in render(chart, VALKEY):
-        if doc.get("kind") != "NetworkPolicy" or not component(doc):
+        role = component(doc)
+        if doc.get("kind") != "NetworkPolicy" or not role:
             continue
-        if "Egress" in (doc["spec"].get("policyTypes") or []) and not egress_reaches(doc, VALKEY_NS, VALKEY_PORT):
+        if "Egress" not in (doc["spec"].get("policyTypes") or []):
+            continue
+        if role in RATE_LIMIT_ROLES:
+            seen.add(role)
+            if not egress_reaches(doc, VALKEY_NS, VALKEY_PORT):
+                problems.append(
+                    f"role {role!r} cannot reach Valkey in {VALKEY_NS!r} on port {VALKEY_PORT} "
+                    f"— its rate limits count per replica")
+        elif any(rule and egress_rule_names(rule, VALKEY_NS, VALKEY_PORT) for rule in doc["spec"].get("egress") or []):
             problems.append(
-                f"role {component(doc)!r} cannot reach Valkey in {VALKEY_NS!r} on port {VALKEY_PORT} "
-                f"— its rate limits count per replica")
+                f"role {role!r} is let out to Valkey in {VALKEY_NS!r} on port {VALKEY_PORT} "
+                f"but applies no rate limit")
+    for role in sorted(RATE_LIMIT_ROLES - seen):
+        problems.append(f"no egress policy for role {role!r} to check its way to Valkey")
     return problems
 
 CHARTS = ("backend/deploy/chart", "frontend/deploy/chart")

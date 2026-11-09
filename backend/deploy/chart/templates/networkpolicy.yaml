@@ -19,9 +19,10 @@
 
   "common" egress = DNS (kube-system:53), 443 anywhere (https webhooks/JWKS),
   networkPolicies.kubeAPIPorts anywhere (K8s API for the secret resolver),
-  Postgres, the OTLP collector on the port config.otel.endpoint names, and
-  Valkey on the port config.datastores.valkey.addr names when the rate limits
-  count there.
+  Postgres, and the OTLP collector on the port config.otel.endpoint names.
+  api and admin, the roles that apply the rate limits, are also let out to
+  Valkey on the port config.datastores.valkey.addr names when the limits count
+  there.
 
   With metrics.mode: scrape, every role that serves /metrics also admits the
   monitoring namespace on metrics.port — the scrape listener is a port of its
@@ -64,14 +65,16 @@
 {{- $scrape := dict "from" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicies.monitoring.namespace)))) "ports" (list (dict "protocol" "TCP" "port" (int .Values.metrics.port))) }}
 {{- $common = list $dns $https $pg $otlp }}
 {{/*
-  Valkey, when the rate limits count there (ADR-0046). Every role builds the
-  counter, so it is common egress; the port is read from the address the
-  client dials, like the OTLP one. Refused, every limit decision falls back to
-  the per-replica count and paladin_ratelimit_degraded_total climbs.
+  Valkey, when the rate limits count there (ADR-0046): only api and admin
+  apply the limits and build the counter, so only they are let out to it. The
+  port is read from the address the client dials, like the OTLP one. Refused,
+  every limit decision falls back to the per-replica count and
+  paladin_ratelimit_degraded_total climbs.
 */}}
+{{- $rateLimitEgress := list }}
 {{- if eq .Values.config.middleware.rate_limit.backend "valkey" }}
 {{- $valkeyPort := splitList ":" .Values.config.datastores.valkey.addr | last | int }}
-{{- $common = append $common (dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.valkey.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $valkeyPort))) }}
+{{- $rateLimitEgress = list (dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.valkey.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $valkeyPort))) }}
 {{- end }}
 {{- $storageEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.storage.namespace)))) }}
 {{- $natsEgress := dict "to" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" $np.nats.namespace)))) "ports" (list (dict "protocol" "TCP" "port" $np.nats.port)) }}
@@ -120,7 +123,7 @@ spec:
     - {{ $scrape | toJson }}
     {{- end }}
   egress:
-    {{- range $r := $common }}
+    {{- range $r := concat $common $rateLimitEgress }}
     - {{ $r | toJson }}
     {{- end }}
     - {{ $storageEgress | toJson }}
@@ -149,7 +152,7 @@ spec:
     - {{ $scrape | toJson }}
     {{- end }}
   egress:
-    {{- range $r := $common }}
+    {{- range $r := concat $common $rateLimitEgress }}
     - {{ $r | toJson }}
     {{- end }}
     - {{ $storageEgress | toJson }}

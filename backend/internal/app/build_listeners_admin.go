@@ -148,7 +148,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// the tenants it serves without a human session. A roleless service
 		// token still falls through to JWT, as before — it would gain nothing
 		// here and would newly reach any RPC gated on tenant alone.
-		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Verifier, deps.APIToken.Limiter, auth.TokenPlaneAdmin)
+		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneAdmin)
 	} else {
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}
@@ -179,7 +179,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// and any provisioning integration drive it, and its handlers are the
 	// expensive ones. Disabled yields a pass-through.
 	tenantRLCfg := middleware.TenantRateLimitConfig{
-		Store: ratecount.NewTenantStore(deps.RateCounter),
+		Store: ratecount.NewTenantStore(deps.RateLimits().Counter),
 	}
 	if cfg.Middleware.RateLimit.Enabled {
 		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond
@@ -273,7 +273,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	AddComponent(healthH, capabilityComponent(deps))
 	AddComponent(healthH, capabilityRevocationsComponent(deps))
 	AddComponent(healthH, apiTokenComponent(deps))
-	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateValkey))
+	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateLimits().Shared))
 
 	mux := http.NewServeMux()
 	// See AssembleAPIMuxes.
@@ -405,7 +405,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// when the api_token subsystem is off we mount the Unimplemented
 	// stub so methods return 501 (see CapabilityService rationale).
 	if deps.APIToken != nil {
-		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.APIToken.Limiter, polEngine)
+		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.RateLimits().Tokens, polEngine)
 		paladinadminv1connect.RegisterAPITokenServiceHandler(adminServer, apiTokH)
 	} else {
 		// See disabledCapabilityServiceHandler rationale.

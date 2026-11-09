@@ -6,11 +6,39 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount/pgsync"
 	rcvalkey "github.com/oleg-tkachuk/paladin/backend/internal/ratecount/valkey"
 )
+
+// RateLimits is where the rate limits a plane applies count (ADR-0046).
+type RateLimits struct {
+	// Counter is where the tenant and token limits count.
+	Counter ratecount.Counter
+	// Shared is Counter when the limits count in Valkey, for the health
+	// page; nil when they count in postgres.
+	Shared *ratecount.Degrading
+	// Tokens enforces a token's per-minute cap on Counter. A token with no
+	// cap never reaches it, and one capped at 0 is refused before it.
+	Tokens ratelimit.Limiter
+}
+
+// RateLimits builds where the rate limits count, on the first call, for the
+// roles that apply them: the api and admin planes. A role that never asks —
+// worker, dispatcher, ingest — opens no Valkey client and runs no sync loop,
+// and its NetworkPolicy does not let it out to Valkey. The counter stops with
+// the other watchers, before the pool closes, so its last sync still has a
+// connection.
+func (d *SharedDeps) RateLimits() RateLimits {
+	d.rateOnce.Do(func() {
+		counter, shared, stop := buildRateCounter(d.Cfg, d.Pool, d.Logger)
+		d.RegisterWatcherStop(stop)
+		d.rateLimits = RateLimits{Counter: counter, Shared: shared, Tokens: ratecount.NewTokenLimiter(counter)}
+	})
+	return d.rateLimits
+}
 
 // buildRateCounter builds where the tenant and token rate limits count
 // (ADR-0046): Valkey when the configuration names it, otherwise this process

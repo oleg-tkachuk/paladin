@@ -58,3 +58,41 @@ func TestBuildRateCounterFollowsTheBackend(t *testing.T) {
 		t.Fatal("valkey backend did not report the store it counts in to the health page")
 	}
 }
+
+// The counter is built by the first role that asks for it, once: a process
+// that never applies a limit (worker, dispatcher) opens no Valkey client and
+// runs no sync loop, and stopping the watchers stops the one that was built.
+func TestRateLimitsAreBuiltOnceOnDemand(t *testing.T) {
+	pool, err := pgxpool.New(context.Background(), lazyPoolDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	cfg := config.Config{}
+	cfg.Middleware.RateLimit.Backend = config.RateLimitBackendValkey
+	cfg.Datastores.Valkey.Addr = "127.0.0.1:1"
+	cfg.Datastores.Valkey.Timeout = testValkeyTimeout
+	deps := &SharedDeps{Cfg: cfg, Pool: pool, Logger: zap.NewNop()}
+
+	if n := len(deps.watcherStops); n != 0 {
+		t.Fatalf("%d watchers registered before any role asked for the rate limits", n)
+	}
+	first := deps.RateLimits()
+	second := deps.RateLimits()
+	if first.Counter == nil || first.Shared == nil || first.Tokens == nil {
+		t.Fatalf("rate limits missing a part: %+v", first)
+	}
+	if first.Counter != second.Counter || first.Shared != second.Shared {
+		t.Fatal("a second call built a second counter")
+	}
+	if n := len(deps.watcherStops); n != 1 {
+		t.Fatalf("%d watchers registered, want the counter's one", n)
+	}
+	done := make(chan struct{})
+	go func() { deps.StopWatchers(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stopping the counter hung")
+	}
+}
