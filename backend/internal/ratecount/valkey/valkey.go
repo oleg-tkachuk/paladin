@@ -149,6 +149,20 @@ func (c *Counter) dialUntilConnected(o Options, log *zap.Logger, done <-chan str
 	}
 }
 
+// Ping implements ratecount.Pinger: one PING, bounded by the call timeout.
+func (c *Counter) Ping(ctx context.Context) error {
+	cl := c.client.Load()
+	if cl == nil {
+		return ErrNotConnected
+	}
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	if err := (*cl).Do(ctx, (*cl).B().Ping().Build()).Error(); err != nil {
+		return fmt.Errorf("valkey: ping: %w", err)
+	}
+	return nil
+}
+
 // Bump implements ratecount.Counter.
 func (c *Counter) Bump(ctx context.Context, key string) (ratecount.Counts, error) {
 	return c.run(ctx, key, modeBumpAlways, 0)

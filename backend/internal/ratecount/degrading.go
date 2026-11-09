@@ -2,6 +2,7 @@ package ratecount
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
@@ -20,6 +21,9 @@ type Fallback struct {
 	log      *zap.Logger
 	degraded atomic.Bool
 	calls    metric.Int64Counter
+	// local counts what calls records, for the health page; the metric
+	// cannot be read back.
+	local atomic.Uint64
 }
 
 // degradedMetric names the counter of calls decided in this process.
@@ -60,10 +64,32 @@ func (f *Fallback) Degraded() bool { return f.degraded.Load() }
 
 // CountLocal records one call decided in the process.
 func (f *Fallback) CountLocal(ctx context.Context) {
+	f.local.Add(1)
 	if f.calls != nil {
 		f.calls.Add(ctx, 1, metric.WithAttributes(attribute.String("backend", f.backend)))
 	}
 }
+
+// Stats is how a shared store has been answering, as this process saw it.
+type Stats struct {
+	// PerProcess: the last call failed, so calls are decided in the process.
+	PerProcess bool
+	// DecidedPerProcess counts calls decided in the process since it started.
+	DecidedPerProcess uint64
+}
+
+// Stats reports how the shared store has been answering.
+func (f *Fallback) Stats() Stats {
+	return Stats{PerProcess: f.degraded.Load(), DecidedPerProcess: f.local.Load()}
+}
+
+// Pinger is a shared store that can say whether it answers, without counting.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// ErrNoPing answers Ping for a shared store that is not a Pinger.
+var ErrNoPing = errors.New("ratecount: the shared store cannot be pinged")
 
 // Degrading counts on a shared store and, for each call the store cannot
 // answer, on this process instead, so a limit stays in force at the
@@ -112,4 +138,17 @@ func (d *Degrading) Read(ctx context.Context, key string) (Counts, error) {
 		return c, nil
 	}
 	return d.local.Read(ctx, key)
+}
+
+// Stats reports how the shared store has been answering.
+func (d *Degrading) Stats() Stats { return d.fallback.Stats() }
+
+// Ping asks the shared store whether it answers. It counts nothing and does
+// not change Stats: only a limit decision does.
+func (d *Degrading) Ping(ctx context.Context) error {
+	p, ok := d.shared.(Pinger)
+	if !ok {
+		return ErrNoPing
+	}
+	return p.Ping(ctx)
 }
