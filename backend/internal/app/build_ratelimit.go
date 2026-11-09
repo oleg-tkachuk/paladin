@@ -14,9 +14,10 @@ import (
 
 // buildRateCounter builds where the tenant and token rate limits count
 // (ADR-0046): Valkey when the configuration names it, otherwise this process
-// synced through Postgres via db. stop ends the background work and closes
-// what it opened.
-func buildRateCounter(cfg config.Config, db pgsync.Batcher, log *zap.Logger) (counter ratecount.Counter, stop func()) {
+// synced through Postgres via db. shared is the Valkey store the health page
+// reports on, nil for postgres. stop ends the background work and closes what
+// it opened.
+func buildRateCounter(cfg config.Config, db pgsync.Batcher, log *zap.Logger) (counter ratecount.Counter, shared *ratecount.Degrading, stop func()) {
 	rl := cfg.Middleware.RateLimit
 	if rl.Backend == config.RateLimitBackendValkey {
 		v := cfg.Datastores.Valkey
@@ -24,7 +25,8 @@ func buildRateCounter(cfg config.Config, db pgsync.Batcher, log *zap.Logger) (co
 			Addr: v.Addr, Username: v.Username, Password: v.Password, TLS: v.TLS, Timeout: v.Timeout,
 		}, log)
 		log.Info("rate limits count in valkey", zap.String("addr", v.Addr))
-		return ratecount.NewDegrading(c, rl.Backend, log), stop
+		d := ratecount.NewDegrading(c, rl.Backend, log)
+		return d, d, stop
 	}
 	c := pgsync.New(pgsync.NewPostgresStore(db), rl.SyncInterval, log)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -33,5 +35,5 @@ func buildRateCounter(cfg config.Config, db pgsync.Batcher, log *zap.Logger) (co
 	go func() { defer wg.Done(); c.Run(ctx) }()
 	log.Info("rate limits count in this process, synced through postgres",
 		zap.Duration("sync_interval", rl.SyncInterval))
-	return c, func() { cancel(); wg.Wait() }
+	return c, nil, func() { cancel(); wg.Wait() }
 }

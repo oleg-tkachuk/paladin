@@ -352,3 +352,81 @@ func TestDegradingCountsEachLocalDecision(t *testing.T) {
 	}
 	t.Fatal("no degraded metric recorded")
 }
+
+// pingable is a shared store that answers Ping with err.
+type pingable struct {
+	failing
+	pingErr error
+}
+
+func (p pingable) Ping(context.Context) error { return p.pingErr }
+
+func TestDegradingStatsFollowTheStore(t *testing.T) {
+	s := &switchable{inner: NewLocal()}
+	d := NewDegrading(s, "valkey", zap.NewNop())
+	ctx := context.Background()
+
+	_, _ = d.Bump(ctx, testKey)
+	if st := d.Stats(); st.PerProcess || st.DecidedPerProcess != 0 {
+		t.Fatalf("answering store: stats %+v", st)
+	}
+	s.down = true
+	const outage = 3
+	for i := 0; i < outage; i++ {
+		_, _ = d.Bump(ctx, testKey)
+	}
+	if st := d.Stats(); !st.PerProcess || st.DecidedPerProcess != outage {
+		t.Fatalf("store down: stats %+v, want per process with %d decided", st, outage)
+	}
+	s.down = false
+	_, _ = d.Bump(ctx, testKey)
+	if st := d.Stats(); st.PerProcess || st.DecidedPerProcess != outage {
+		t.Fatalf("store back: stats %+v, want shared and %d decided so far", st, outage)
+	}
+}
+
+func TestDegradingPingAsksTheStore(t *testing.T) {
+	down := errors.New("refused")
+	cases := []struct {
+		name   string
+		shared Counter
+		want   error
+	}{
+		{"store answers", pingable{}, nil},
+		{"store refuses", pingable{pingErr: down}, down},
+		{"store cannot be pinged", failing{}, ErrNoPing},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewDegrading(tc.shared, "valkey", zap.NewNop()).Ping(context.Background())
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("Ping = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// fixed answers every call with counts.
+type fixed struct{ counts Counts }
+
+func (f fixed) Bump(context.Context, string) (Counts, error)            { return f.counts, nil }
+func (f fixed) BumpIfFits(context.Context, string, int) (Counts, error) { return f.counts, nil }
+func (f fixed) Read(context.Context, string) (Counts, error)            { return f.counts, nil }
+
+// While the store answers, its counts decide: the process's own are not
+// consulted.
+func TestDegradingReturnsTheStoresAnswer(t *testing.T) {
+	const shared = 42
+	d := NewDegrading(fixed{Counts{Current: shared}}, "valkey", zap.NewNop())
+	ctx := context.Background()
+	calls := map[string]func() (Counts, error){
+		"bump":         func() (Counts, error) { return d.Bump(ctx, testKey) },
+		"bump if fits": func() (Counts, error) { return d.BumpIfFits(ctx, testKey, 1) },
+		"read":         func() (Counts, error) { return d.Read(ctx, testKey) },
+	}
+	for name, call := range calls {
+		if c, err := call(); err != nil || c.Current != shared {
+			t.Errorf("%s = %+v, %v; want the store's count %d", name, c, err, shared)
+		}
+	}
+}

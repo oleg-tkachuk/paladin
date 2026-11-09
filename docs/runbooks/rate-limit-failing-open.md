@@ -63,8 +63,10 @@ as zero.
    failover in progress, disk full.
 
 4. **valkey: is it up and fast enough?** A call past `datastores.valkey.timeout`
-   counts as no answer. Check the Valkey pods, `valkey-cli --latency`, and
-   whether the password Secret still matches.
+   counts as no answer. The `valkey` row in the database card of `/health`
+   says, per role, whether Valkey answers a ping and whether the limits are
+   counted shared or per process. Check the Valkey pods,
+   `valkey-cli --latency`, and whether the password Secret still matches.
 
 5. **Is the sweeper keeping the table small?** The worker's
    `RateLimitBucketSweeper` deletes buckets older than five minutes:

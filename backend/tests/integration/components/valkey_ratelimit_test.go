@@ -11,6 +11,7 @@ package components
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strconv"
 	"sync"
@@ -207,6 +208,19 @@ func TestValkeyWindow(t *testing.T) {
 		}
 	})
 
+	t.Run("ping says whether the store answers", func(t *testing.T) {
+		c := rcvalkey.New(dialValkey(t, addr, valkeyCallTimeout), valkeyCallTimeout)
+		if err := c.Ping(ctx); err != nil {
+			t.Fatalf("ping a running server: %v", err)
+		}
+		// Nothing listens on the discard port, so Connect never connects.
+		never, stop := rcvalkey.Connect(rcvalkey.Options{Addr: unreachableAddr, Timeout: valkeyCallTimeout}, zap.NewNop())
+		t.Cleanup(stop)
+		if err := never.Ping(ctx); !errors.Is(err, rcvalkey.ErrNotConnected) {
+			t.Fatalf("ping before a connection = %v, want ErrNotConnected", err)
+		}
+	})
+
 	t.Run("an unreachable store degrades to the process", func(t *testing.T) {
 		const shortTimeout = 200 * time.Millisecond
 		client := dialValkey(t, addr, shortTimeout)
@@ -235,7 +249,16 @@ func TestValkeyWindow(t *testing.T) {
 		if got, _ := d.BumpIfFits(ctx, key, 1); got.Admitted {
 			t.Fatal("the per-process fallback lifted the limit")
 		}
+		if err := d.Ping(ctx); err == nil {
+			t.Fatal("a paused server answered a ping")
+		}
+		if st := d.Stats(); !st.PerProcess || st.DecidedPerProcess != 2 {
+			t.Fatalf("stats %+v, want per process with 2 decided", st)
+		}
 	})
 }
+
+// unreachableAddr is a loopback port nothing listens on.
+const unreachableAddr = "127.0.0.1:9"
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }

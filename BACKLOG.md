@@ -373,6 +373,18 @@ the same commit. Treat this file like a runtime invariant.
   ceiling.
 - **Blockers:** none.
 
+### Roles that enforce no rate limit still build the counter
+
+- **Status:** Deferred
+- **Reason:** `buildRateCounter` runs in `SharedDeps`, so the worker and the
+  dispatcher open a Valkey connection, or start a postgres sync loop, that
+  nothing calls; the chart opens Valkey to every role for that reason. Only
+  api and admin apply the limits and report the `valkey` health row.
+- **Definition of Done:** the counter is built by the roles that apply the
+  limits, and the chart's Valkey egress narrows to those roles, with
+  `scripts/chart-netpol.py` checking it.
+- **Blockers:** none.
+
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked

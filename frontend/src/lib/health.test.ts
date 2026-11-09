@@ -140,6 +140,39 @@ describe("splitDatabase", () => {
       message: "postgres-schema failing: see database",
     });
   });
+
+  // Valkey, where the rate limits count (ADR-0046), is a datastore beside
+  // postgres: one row on the database card, each role's view of it apart —
+  // whether it counts shared or per process is that role's own.
+  it("gathers valkey onto the database card, per role where roles differ", () => {
+    const valkey = (counted: string, extra: Partial<Component> = {}) =>
+      comp("valkey", {
+        critical: false,
+        details: [{ name: "rate limits counted", value: counted }],
+        ...extra,
+      });
+    const { roles, database } = splitDatabase([
+      role("api", [comp("postgres"), valkey("shared")]),
+      role("admin", [
+        comp("postgres"),
+        valkey("per process", { status: "unhealthy", message: "i/o timeout" }),
+      ]),
+    ]);
+    const row = database!.components.find((c) => c.name === "valkey")!;
+    expect(row).toMatchObject({ status: "unhealthy", critical: false });
+    expect(row.details).toEqual([
+      { name: "rate limits counted", value: "shared", role: "api" },
+      { name: "rate limits counted", value: "per process", role: "admin" },
+    ]);
+    expect(database!.status).toBe("degraded");
+    expect(roles[1].components).toEqual([
+      expect.objectContaining({
+        name: "postgres",
+        statusLabel: "Online",
+        message: "valkey failing: see database",
+      }),
+    ]);
+  });
 });
 
 describe("needsAttention", () => {

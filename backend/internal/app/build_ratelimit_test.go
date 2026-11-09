@@ -30,9 +30,12 @@ func TestBuildRateCounterFollowsTheBackend(t *testing.T) {
 	cfg := config.Config{}
 	cfg.Middleware.RateLimit.Backend = config.RateLimitBackendPostgres
 	cfg.Middleware.RateLimit.SyncInterval = time.Hour
-	c, stop := buildRateCounter(cfg, pool, zap.NewNop())
+	c, shared, stop := buildRateCounter(cfg, pool, zap.NewNop())
 	if _, ok := c.(*pgsync.Counter); !ok {
 		t.Fatalf("postgres backend built %T, want one synced through postgres", c)
+	}
+	if shared != nil {
+		t.Fatal("postgres backend reported a valkey store to the health page")
 	}
 	done := make(chan struct{})
 	go func() { stop(); close(done) }()
@@ -45,9 +48,13 @@ func TestBuildRateCounterFollowsTheBackend(t *testing.T) {
 	cfg.Middleware.RateLimit.Backend = config.RateLimitBackendValkey
 	cfg.Datastores.Valkey.Addr = "127.0.0.1:1"
 	cfg.Datastores.Valkey.Timeout = testValkeyTimeout
-	c, stop = buildRateCounter(cfg, pool, zap.NewNop())
+	c, shared, stop = buildRateCounter(cfg, pool, zap.NewNop())
 	defer stop()
-	if _, ok := c.(*ratecount.Degrading); !ok {
+	d, ok := c.(*ratecount.Degrading)
+	if !ok {
 		t.Fatalf("valkey backend built %T, want one that degrades to the process", c)
+	}
+	if shared != d {
+		t.Fatal("valkey backend did not report the store it counts in to the health page")
 	}
 }

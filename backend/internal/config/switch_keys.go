@@ -7,4 +7,6 @@ const (
 	KeyReplicaEnabled    = "datastores.postgres.replica.enabled"
 	KeyCapabilityEnabled = "capability.enabled"
 	KeyAPITokenEnabled   = "api_token.enabled"
+	// KeyRateLimitBackend puts the rate limits in Valkey when it is "valkey".
+	KeyRateLimitBackend = "middleware.rate_limit.backend"
 )

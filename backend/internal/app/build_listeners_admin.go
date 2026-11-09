@@ -273,6 +273,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	AddComponent(healthH, capabilityComponent(deps))
 	AddComponent(healthH, capabilityRevocationsComponent(deps))
 	AddComponent(healthH, apiTokenComponent(deps))
+	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateValkey))
 
 	mux := http.NewServeMux()
 	// See AssembleAPIMuxes.
