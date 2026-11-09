@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
+
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import { LIMES_CODE_KEY, PALADIN_ERROR_DOMAIN } from "@/hooks/errorContract";
+import { LIMES_TENANT_BUDGET_BUSY } from "@/lib/budgetSaveFailure";
 
 // The budget page reads/writes tenantBudgetClient and pulls tenantId from the
 // tenant context; mock both plus notifications.
@@ -363,6 +368,53 @@ describe("TenantBudgetPage OCC", () => {
     // The stale snapshot must not stay on screen: the page re-reads so the
     // next Apply carries the version that actually won.
     expect(h.get.mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+describe("TenantBudgetPage busy", () => {
+  beforeEach(() => {
+    h.get.mockReset();
+    h.set.mockReset();
+    h.notify.mockReset();
+  });
+
+  // tenant_budget_busy changed nothing: no re-read, and a Retry that sends the
+  // very same save again.
+  it("offers to send the same save again when the tenant's calls held the budget", async () => {
+    h.get.mockResolvedValue({ budget });
+    h.set
+      .mockRejectedValueOnce(
+        new ConnectError("busy", Code.Unavailable, undefined, [
+          {
+            desc: ErrorInfoSchema,
+            value: create(ErrorInfoSchema, {
+              domain: PALADIN_ERROR_DOMAIN,
+              metadata: { [LIMES_CODE_KEY]: LIMES_TENANT_BUDGET_BUSY },
+            }),
+          },
+        ]),
+      )
+      .mockResolvedValueOnce({});
+    render(<BudgetPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /apply changes/i }),
+    );
+    await waitFor(() =>
+      expect(h.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Budget busy" }),
+      ),
+    );
+    const reads = h.get.mock.calls.length;
+    const notice = h.notify.mock.calls.find(
+      ([n]) => n.title === "Budget busy",
+    )![0];
+    notice.action.onClick();
+
+    await waitFor(() => expect(h.set).toHaveBeenCalledTimes(2));
+    expect(h.set.mock.calls[1][0]).toEqual(h.set.mock.calls[0][0]);
+    // The busy answer itself read nothing again; only the retried save did.
+    expect(reads).toBe(1);
   });
 });
 

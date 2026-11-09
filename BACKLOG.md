@@ -696,6 +696,21 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
+### A tenant's wait for its budget row, on the tenant page
+
+- **Status:** Deferred
+- **Reason:** `limes_tenant_wait_seconds` (limes ADR-0022) says when one
+  tenant's parallel charges queue on its budget row, but only Prometheus holds
+  it: an OpenTelemetry histogram cannot be read back in the process, and a
+  per-process tally would show one replica's calls. Paladin has no path to
+  query Prometheus, so showing it means a new dependency and a configured
+  Prometheus address — a decision, not a page.
+- **Definition of Done:** the tenant page shows the p99 wait of its tenant
+  over a recent window, from a server-side read of the metric behind one
+  contract (an RPC field and a shared hook), with tests, and the deployment
+  names where to read it from.
+- **Blockers:** the decision to have the backend query Prometheus.
+
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console
