@@ -52,6 +52,9 @@ type SharedDeps struct {
 	ReaperPool *pgxpool.Pool
 	// RateCounter is where the tenant and token rate limits count (ADR-0046).
 	RateCounter ratecount.Counter
+	// RateValkey is RateCounter when the limits count in Valkey, for the
+	// health page; nil when they count in postgres.
+	RateValkey *ratecount.Degrading
 	// PartitionPool is the BYPASSRLS pool for the one background job that needs
 	// DDL — PartitionMaintainer (CREATE/ATTACH/DROP PARTITION), which requires
 	// the migrate role's table ownership that ReaperPool deliberately lacks.
@@ -227,8 +230,9 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 
 	// The rate-limit counter's sync loop or Valkey client stops with the
 	// rest, before the pool closes, so its last sync still has a connection.
-	rateCounter, stopRateCounter := buildRateCounter(cfg, pool, l)
+	rateCounter, rateValkey, stopRateCounter := buildRateCounter(cfg, pool, l)
 	deps.RateCounter = rateCounter
+	deps.RateValkey = rateValkey
 	deps.RegisterWatcherStop(stopRateCounter)
 
 	// Capability subsystem — additive; absence is fine. Built after the

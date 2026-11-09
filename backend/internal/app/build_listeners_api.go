@@ -415,6 +415,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	AddComponent(healthH, capabilityComponent(deps))
 	AddComponent(healthH, capabilityRevocationsComponent(deps))
 	AddComponent(healthH, apiTokenComponent(deps))
+	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateValkey))
 
 	// The api role serves two listeners — data and iam — and Kubernetes
 	// allows one readiness probe per container, which points at data. So iam

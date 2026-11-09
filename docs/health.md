@@ -34,6 +34,7 @@ The switch lives in one of three places, reported as the row's `control`:
 | all but mcp | `postgres-schema` | always_on | yes | the applied schema is not behind the newest migration this build carries; details: both versions. Ahead is normal mid-rollout |
 | all but mcp | `postgres-limes-schema` | always_on | yes | the `limes` schema pgstore keeps is not behind the version this build's pgstore queries; details: both versions. Ahead is normal mid-rollout |
 | all but mcp | `postgres-replica` | config: `datastores.postgres.replica.enabled` | no | the replica is reachable and within `max_lag` |
+| api, admin | `valkey` | config: `middleware.rate_limit.backend` is `valkey` | no | Valkey answers a `PING` within `datastores.valkey.timeout`; details: its address, whether the rate limits are counted shared or per process as of the last decision, and how many were decided per process since the pod started ([ADR-0046](adr/0046-rate-limits-off-the-request-path.md)) |
 | api, admin | `capability` | config: `capability.enabled` | yes | the capability store answers a lookup |
 | api, admin | `api_token` | config: `api_token.enabled` | no | the token store answers the lookup authentication makes |
 | api | `iam_listener` | always_on | yes | the iam listener accepts a connection |
