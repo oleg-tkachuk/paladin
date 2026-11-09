@@ -29,7 +29,6 @@ type options struct {
 	now         func() time.Time
 	defaultUnit string
 	noLeases    bool
-	stripes     bool
 	log         *slog.Logger
 	events      meter.StoreEvents
 }
@@ -40,16 +39,6 @@ type options struct {
 // are still charged under and settled.
 func WithLeases(on bool) Option {
 	return func(o *options) { o.noLeases = !on }
-}
-
-// WithStripes decides whether the usage store counts a tenant with no
-// ceiling in stripes rather than on its aggregate's one row, so the tenant's
-// parallel calls stop queueing on that row (limes ADR-0022). Off unless told
-// otherwise, as in pgstore. Turn it on only once every replica runs a pgstore
-// that folds stripes: an older one checks a ceiling set meanwhile against
-// less than was spent.
-func WithStripes(on bool) Option {
-	return func(o *options) { o.stripes = on }
 }
 
 // WithLogger is where the stores log: a call that waited long for its
@@ -86,7 +75,7 @@ func config(pool *pgxpool.Pool, opts []Option) (pgstore.Config, options, error) 
 	}
 	return pgstore.Config{
 		DB: pool, Now: o.now, Scope: Scope, CheckScope: pgstore.CheckSchemaScope, CheckTenant: checkTenant,
-		DisableLeases: o.noLeases, StripeUnlimitedTenants: o.stripes, Logger: o.log, Events: o.events,
+		DisableLeases: o.noLeases, Logger: o.log, Events: o.events,
 	}, o, nil
 }
 

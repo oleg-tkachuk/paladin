@@ -1359,14 +1359,6 @@ type Capability struct {
 	// on only once every replica runs a release that knows leases; off, a
 	// Lease is refused with limes code leasing_disabled. Default true.
 	BudgetLeases bool `yaml:"budget_leases" json:"budget_leases"`
-
-	// StripeUnlimitedTenants has the meter count a tenant with no ceiling in
-	// stripes rather than on its aggregate's one row, so the tenant's
-	// parallel calls stop queueing on that row (limes ADR-0022). Turn it on
-	// only once every replica runs a release on limes v1.0.0-rc.58 or later:
-	// an older one checks a ceiling set meanwhile against less than was
-	// spent. Default false.
-	StripeUnlimitedTenants bool `yaml:"stripe_unlimited_tenants" json:"stripe_unlimited_tenants"`
 }
 
 // APIToken configures the hashed-bearer M2M token subsystem. Distinct

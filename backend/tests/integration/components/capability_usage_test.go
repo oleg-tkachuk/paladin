@@ -260,14 +260,13 @@ func TestRequestsOnlyUsageIsInTheCapabilitysUnit(t *testing.T) {
 	}
 }
 
-// With capability.stripe_unlimited_tenants on, a tenant with no ceiling
+// A tenant with no ceiling, counted in stripes by default,
 // still reads what it spent, and a ceiling set later is checked against that
 // spend (limes ADR-0022). Where limes keeps the spend is its own business and
 // its own tests'.
 func TestStripedTenantSpendFoldsWhenACeilingIsSet(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	f.usage = newUsageStore(t, f.pool, capstore.WithStripes(true))
 
 	set, err := f.usage.SetTenantBudget(ctx, meter.SetTenantBudgetRequest{
 		TenantID: f.tenant, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: testUnit},

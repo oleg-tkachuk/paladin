@@ -47,8 +47,9 @@ millisecond. The series exist only with `otel.enabled: true`
 
    The metric names no tenant; limes logs each wait over 100ms at WARN
    (`a call waited long for its tenant's aggregate`) with the tenant's id.
-   - A tenant with no ceiling: turn on `capability.stripe_unlimited_tenants`,
-     which spreads its spend over several rows.
+   - A tenant with no ceiling: limes counts it in stripes, several rows,
+     so its charges do not queue on one; a wait for such a tenant points
+     elsewhere.
    - A tenant with a ceiling: stripes do not apply. The client that charges
      in parallel takes a budget lease per capability
      (`CapabilityService.Lease`, needs `capability.budget_leases`); a charge
