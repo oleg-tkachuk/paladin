@@ -24,6 +24,7 @@ func TestCapabilityStatusOfEveryLimesCode(t *testing.T) {
 		limes.CodeUnrecorded:                  connect.CodeUnauthenticated,
 		limes.CodeProofQuotaExceeded:          connect.CodeResourceExhausted,
 		limes.CodeOutcomeUnknown:              connect.CodeUnavailable,
+		limes.CodeTenantBudgetBusy:            connect.CodeUnavailable,
 		limes.CodeReserveConflict:             connect.CodeAborted,
 		limes.CodeRefundConflict:              connect.CodeAborted,
 		limes.CodeNonceRequired:               connect.CodeUnauthenticated,
