@@ -174,6 +174,8 @@ datastores: {
   }
   // Optional Valkey, where the request rate limits count when
   // middleware.rate_limit.backend is "valkey" (ADR-0046). Nothing else uses it.
+  // A single node, a primary, or a proxy in front of a cluster: the client
+  // talks to addr alone and does not follow a Valkey Cluster's topology.
   valkey: {
     addr:             string | *""
     username:         string | *""

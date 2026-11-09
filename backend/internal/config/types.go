@@ -192,7 +192,9 @@ type Datastores struct {
 // Valkey is the optional store the request rate limits count in when
 // Middleware.RateLimit.Backend is RateLimitBackendValkey (ADR-0046).
 type Valkey struct {
-	// Addr is host:port. Required by the valkey backend, unused otherwise.
+	// Addr is host:port of a single node, a primary, or a proxy; the client
+	// does not follow a Valkey Cluster's topology. Required by the valkey
+	// backend, unused otherwise.
 	Addr     string `yaml:"addr" json:"addr"`
 	Username string `yaml:"username" json:"username"`
 	// Password is resolved at boot from PasswordSecret; inline for local
