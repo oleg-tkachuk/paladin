@@ -1,0 +1,53 @@
+package app
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount/pgsync"
+)
+
+// testValkeyTimeout keeps a dial at an address nothing answers short.
+const testValkeyTimeout = 50 * time.Millisecond
+
+// lazyPoolDSN names a server nothing answers at; a pool connects lazily, so
+// building one there opens nothing.
+const lazyPoolDSN = "postgres://paladin@127.0.0.1:1/paladin"
+
+func TestBuildRateCounterFollowsTheBackend(t *testing.T) {
+	pool, err := pgxpool.New(context.Background(), lazyPoolDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+
+	cfg := config.Config{}
+	cfg.Middleware.RateLimit.Backend = config.RateLimitBackendPostgres
+	cfg.Middleware.RateLimit.SyncInterval = time.Hour
+	c, stop := buildRateCounter(cfg, pool, zap.NewNop())
+	if _, ok := c.(*pgsync.Counter); !ok {
+		t.Fatalf("postgres backend built %T, want one synced through postgres", c)
+	}
+	done := make(chan struct{})
+	go func() { stop(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stopping the sync loop hung")
+	}
+
+	cfg.Middleware.RateLimit.Backend = config.RateLimitBackendValkey
+	cfg.Datastores.Valkey.Addr = "127.0.0.1:1"
+	cfg.Datastores.Valkey.Timeout = testValkeyTimeout
+	c, stop = buildRateCounter(cfg, pool, zap.NewNop())
+	defer stop()
+	if _, ok := c.(*ratecount.Degrading); !ok {
+		t.Fatalf("valkey backend built %T, want one that degrades to the process", c)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount/pgsync"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
@@ -157,17 +158,13 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
-	// Tenant rate-bucket sweeper — always on, for the same reason the
-	// idempotency purger is: the limiter writes a row per active tenant per
-	// minute whatever else is toggled, and reads back only the last two.
-	out = append(out, &worker.TenantRateBucketSweeper{
-		// reaperQ, not the app queries: the sweep deletes across every
-		// tenant, and tenant_rate_buckets carries an RLS policy (011). On the
-		// app role with no tenant in context the policy would match nothing
-		// and the sweep would silently reclaim zero rows.
-		Store:    adapters.NewTenantRateStore(reaperQ),
+	// Rate-limit bucket sweeper — always on, for the same reason the
+	// idempotency purger is: the limits write a row per active tenant or token
+	// per minute whatever else is toggled, and read back only the last two.
+	out = append(out, &worker.RateLimitBucketSweeper{
+		Store:    pgsync.NewSweeper(reaperPool),
 		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
-		Logger:   l.Named("tenant-rate-sweeper"),
+		Logger:   l.Named("rate-limit-sweeper"),
 	})
 
 	// Trash-retention gauge — always on: admin.tenants.trash_retention is

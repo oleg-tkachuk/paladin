@@ -21,15 +21,12 @@ import (
 // TenantRateLimitInterceptor caps how fast one tenant can call the data and
 // admin planes.
 //
-// The limit is shared across replicas: the counters live in
-// tenant_rate_buckets, the same sliding-window shape api_token uses. An
+// The limit is shared across replicas: the counters live in the store
+// middleware.rate_limit.backend names (ADR-0046) — rate_limit_buckets in
+// Postgres, or Valkey — in the same sliding-window shape api_token uses. An
 // in-memory bucket per process would give each pod its own ceiling, so the
 // configured rate would silently be multiplied by the replica count — 600/s
 // at the chart's default of two api replicas, where the operator wrote 300.
-//
-// The cost is one statement per request. That is the trade a shared limit
-// requires, and it is the same trade the api_token verify path already makes
-// on every PAT request.
 //
 // Keyed on the caller's own tenant, from the authenticated principal. The
 // acting-tenant marker a platform admin sets to reach another tenant's rows is

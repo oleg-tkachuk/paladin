@@ -42,22 +42,6 @@ type Querier interface {
 	// The bucket whose policy layer storageBackends/{backend}/buckets/{name}
 	// addresses, its backend by name.
 	BucketIDForPolicy(ctx context.Context, backend string, bucket string) (pgtype.UUID, error)
-	// Per-tenant request rate limiting (009_tenant_rate_buckets.sql).
-	//
-	// Shared across replicas: an in-memory bucket gave each pod its own ceiling,
-	// so the configured rate was multiplied by the replica count.
-	// Atomic increment-and-read of the sliding window, in one statement so
-	// concurrent requests cannot interleave a read between another's write.
-	//
-	//   1. Bump the current minute's bucket (INSERT ... ON CONFLICT count + 1).
-	//   2. Read the previous minute's count (0 when the tenant was idle).
-	//   3. Weight the previous bucket by how much of the current minute is left.
-	//
-	// The increment is unconditional — a denied request still counts, so a caller
-	// that keeps hammering while throttled does not get to spend the next
-	// window's budget on rejected calls. Returns the weighted count and the
-	// seconds until the bucket rolls, which becomes Retry-After.
-	BumpTenantRateBucket(ctx context.Context, tenantID pgtype.UUID) (BumpTenantRateBucketRow, error)
 	CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error)
 	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
@@ -969,9 +953,6 @@ type Querier interface {
 	// database, which is what lets any number of BFF replicas rotate safely
 	// without sharing anything.
 	SupersedeRefreshToken(ctx context.Context, id pgtype.UUID) (int64, error)
-	// Drops buckets older than the supplied age. Two buckets per active tenant
-	// are live at any moment; everything older is history nothing reads.
-	SweepTenantRateBuckets(ctx context.Context, olderThanMicros int64) (int64, error)
 	// Distinct buckets the tenant's collections currently bind to. The migration
 	// copies FROM this — a shared tenant's collections normally share one bucket;
 	// more than one row means the tenant spans buckets (not supported in slice 1).

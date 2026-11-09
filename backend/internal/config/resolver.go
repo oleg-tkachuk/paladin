@@ -202,6 +202,10 @@ func secretBindings(cfg *Config) []secretBinding {
 	if pg.Replica.Enabled {
 		bind("postgres.replica.password_secret", &pg.Replica.PasswordSecret, &pg.Replica.Password)
 	}
+	// Only a Valkey something counts in needs its password.
+	if cfg.Middleware.RateLimit.Backend == RateLimitBackendValkey {
+		bind("valkey.password_secret", &cfg.Datastores.Valkey.PasswordSecret, &cfg.Datastores.Valkey.Password)
+	}
 	if cfg.Bootstrap.Admin.Enabled {
 		bind("bootstrap.admin.password_secret", &cfg.Bootstrap.Admin.PasswordSecret, &cfg.Bootstrap.Admin.Password)
 	}
@@ -337,6 +341,9 @@ func (c *Config) Obfuscated() Config {
 	}
 	if cc.Datastores.Postgres.Replica.Password != "" {
 		cc.Datastores.Postgres.Replica.Password = Redacted
+	}
+	if cc.Datastores.Valkey.Password != "" {
+		cc.Datastores.Valkey.Password = Redacted
 	}
 
 	// Redact per-backend creds. Copy the map so we don't mutate the source.

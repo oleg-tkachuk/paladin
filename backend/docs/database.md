@@ -116,6 +116,7 @@ them, so they must exist before it runs.
 | `095` | `objects` gains an index answering a collection's usage — available objects' count, bytes, newest commit — on its own |
 | `098` | `audit_log` drops `detail` and `outcome`, which nothing ever wrote |
 | `104` | `dpop_seen_proofs` goes: the DPoP replay cache is pgstore's `limes.dpop_seen_proofs` |
+| `108` | `rate_limit_buckets` replaces `tenant_rate_buckets` and `api_token_rate_buckets`: one UNLOGGED table both rate limits sync their counts through ([ADR-0046](../../docs/adr/0046-rate-limits-off-the-request-path.md)) |
 
 Each file's header comment says why it exists.
 
@@ -141,7 +142,7 @@ among live tenants only; a soft-deleted tenant keeps its slug so the audit
 trail stays resolvable, and renames are recorded in `tenant_slug_history`.
 
 **Identity** — `users`, `user_settings`, `refresh_tokens`, `api_tokens`,
-`api_token_rate_buckets`, `oauth_clients`, `oauth_authorization_codes`.
+`oauth_clients`, `oauth_authorization_codes`.
 
 **Storage topology** — `storage_backends`, `storage_backend_health`,
 `storage_backend_features`, `buckets`, `bucket_grants`, `replication_state`. A bucket row can exist before the physical
@@ -163,7 +164,7 @@ either order within one transaction but can never disagree at commit.
 
 **Governance** — `quotas` (one per tenant), `bucket_quotas` (one per bucket,
 deliberately not RLS'd: a bucket's cap is platform configuration, like the
-bucket), `tenant_rate_buckets`. A quota cap of NULL is no cap and 0 is a cap
+bucket), `rate_limit_buckets` (UNLOGGED, no tenant column: the counts of every tenant and token, synced by each replica). A quota cap of NULL is no cap and 0 is a cap
 that allows nothing (`070`); before it, 0 meant "no cap", so a quota could not
 stop all writes and a reader could not tell the two apart.
 

@@ -130,6 +130,12 @@ datastores:
       connect: 5s
       statement: 30s                    # server-side statement_timeout; 0 = disabled (do not ship)
     healthcheck_period: 30s
+  valkey:                               # optional; where rate limits count when middleware.rate_limit.backend is valkey
+    addr: ""                            # host:port
+    username: ""
+    password: ""                        # or password_secret: {name, key}
+    tls: false
+    timeout: 100ms                      # per call; past it the call is decided in the process
 
 # ─── Request limits (single source of truth for refusals) ───────────────────
 limits:
@@ -210,6 +216,8 @@ middleware:
   rate_limit:                           # sliding window per-tenant
     enabled: true
     requests_per_second: 300
+    backend: postgres                   # postgres | valkey (ADR-0046); valkey needs datastores.valkey.addr
+    sync_interval: 1s                   # postgres backend: how often each replica shares its counts
     burst: 500
     max_tenants: 10000                  # LRU eviction beyond this
     cleanup_ttl: 10m

@@ -834,6 +834,14 @@ config:
         connect: 5s
         statement: 30s
       healthcheck_period: 30s
+    # Optional Valkey the request rate limits count in when
+    # middleware.rate_limit.backend is "valkey" (ADR-0046). Give the password
+    # as password_secret: { name, key, namespace } and add the Secret's name to
+    # rbac.secretReader.secretNames.
+    valkey:
+      addr: ""
+      tls: false
+      timeout: 100ms
 
   limits:
     max_object_size: "100MB"
@@ -914,6 +922,11 @@ config:
     rate_limit:
       enabled: true
       requests_per_second: 300
+      # postgres | valkey (ADR-0046); valkey needs datastores.valkey.addr.
+      backend: postgres
+      # postgres backend: how often each replica shares its counts. A tenant
+      # can exceed its ceiling by (replicas - 1) x rate x this, at most.
+      sync_interval: 1s
       burst: 500
       max_tenants: 10000
       cleanup_ttl: 10m
@@ -1620,6 +1633,10 @@ networkPolicies:
   nats:
     namespace: nats
     port: 4222
+  # Valkey, reached only when config.middleware.rate_limit.backend is valkey;
+  # the port is read from config.datastores.valkey.addr.
+  valkey:
+    namespace: cache
   # Ports the Kubernetes API server listens on; every role reads its secrets
   # through the API at boot. A policy is matched after the `kubernetes`
   # Service is translated to its endpoint, so this is the endpoint's port, not

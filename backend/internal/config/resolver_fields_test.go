@@ -98,6 +98,14 @@ func secretFields() []secretField {
 		{"ingest.nats.token_ref",
 			func(c *Config, r SecretRef) { c.Ingest.NATS.TokenRef = r },
 			func(c *Config) (string, bool) { return c.Ingest.NATS.Token, c.Ingest.NATS.TokenRef == SecretRef{} }},
+		{"valkey.password_secret",
+			func(c *Config, r SecretRef) {
+				c.Middleware.RateLimit.Backend = RateLimitBackendValkey
+				c.Datastores.Valkey.PasswordSecret = ptrRef(r)
+			},
+			func(c *Config) (string, bool) {
+				return c.Datastores.Valkey.Password, c.Datastores.Valkey.PasswordSecret == nil
+			}},
 		{"ingest.rabbitmq.url_ref",
 			func(c *Config, r SecretRef) { c.Ingest.RabbitMQ.URLRef = r },
 			func(c *Config) (string, bool) { return c.Ingest.RabbitMQ.URL, c.Ingest.RabbitMQ.URLRef == SecretRef{} }},
@@ -183,17 +191,19 @@ func TestResolveConfigFillsEveryField(t *testing.T) {
 	}
 }
 
-// A replica or bootstrap admin that is off reads no Secret, so a stale
+// A replica, bootstrap admin or Valkey that is off reads no Secret, so a stale
 // reference left behind cannot stop boot.
 func TestResolveConfigSkipsWhatIsOff(t *testing.T) {
 	absent := &SecretRef{Name: "absent", Key: fieldSecretKey}
 	cfg := &Config{}
 	cfg.Datastores.Postgres.Replica.PasswordSecret = absent
 	cfg.Bootstrap.Admin.PasswordSecret = absent
+	cfg.Datastores.Valkey.PasswordSecret = absent // rate limits count in Postgres
 	if err := resolverInCluster(t, false).ResolveConfig(context.Background(), cfg); err != nil {
 		t.Fatalf("ResolveConfig with the replica and bootstrap off: %v", err)
 	}
-	if cfg.Datastores.Postgres.Replica.PasswordSecret == nil || cfg.Bootstrap.Admin.PasswordSecret == nil {
+	if cfg.Datastores.Postgres.Replica.PasswordSecret == nil || cfg.Bootstrap.Admin.PasswordSecret == nil ||
+		cfg.Datastores.Valkey.PasswordSecret == nil {
 		t.Error("a reference of a feature that is off was resolved")
 	}
 }

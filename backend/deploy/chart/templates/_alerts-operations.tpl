@@ -56,17 +56,18 @@ on absence.
   expr: |
     (sum(increase(paladin_tenant_ratelimit_fail_open_total[{{ $failOpen.window }}])) or vector(0))
       + (sum(increase(paladin_api_token_ratelimit_fail_open_total[{{ $failOpen.window }}])) or vector(0))
+      + (sum(increase(paladin_ratelimit_degraded_total[{{ $failOpen.window }}])) or vector(0))
       > 0
   for: {{ $failOpen.for }}
   labels:
     severity: {{ $failOpen.severity }}
   annotations:
-    summary: "Paladin rate limiting is failing open"
+    summary: "Paladin rate limits are not shared across replicas"
     description: >-
-      Requests are admitted without a rate-limit decision; the per-tenant
-      or per-token ceiling is not in force. The limiters log nothing when
-      they fail open: check that the planes can write tenant_rate_buckets
-      and api_token_rate_buckets.
+      Requests are decided in each process, or admitted without a decision,
+      because the store the limits count in did not answer; each replica
+      grants the full rate. Check the store middleware.rate_limit.backend
+      names: rate_limit_buckets in Postgres, or Valkey.
     {{- include "chart.alerts.runbook" (dict "ctx" . "rule" $failOpen) | nindent 4 }}
 {{- end }}
 {{- if $rules.capabilityChargesRefused.enabled }}

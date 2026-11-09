@@ -11,8 +11,8 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	apitokenpg "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
-	ratelimitpg "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 )
 
 // hmacKeyDerivationLabel domain-separates the api-token HMAC key derived
@@ -51,8 +51,8 @@ type APITokenBundle struct {
 	Verifier *api_token.Verifier
 
 	// Limiter enforces the per-token rate limit when a token has a cap
-	// above 0. Always populated when the subsystem is enabled —
-	// Postgres-backed sliding window. A token with no cap never reaches
+	// above 0. Always populated when the subsystem is enabled — a sliding
+	// window in Postgres or Valkey (ADR-0046). A token with no cap never reaches
 	// it, and one capped at 0 is refused before it.
 	Limiter ratelimit.Limiter
 }
@@ -98,10 +98,7 @@ func BuildAPITokenBundle(cfg config.APIToken, authSigningKey string, log *zap.Lo
 		return nil, fmt.Errorf("app: api_token verifier: %w", err)
 	}
 
-	limiter, err := ratelimitpg.New(deps.Pool)
-	if err != nil {
-		return nil, fmt.Errorf("app: api_token rate limiter: %w", err)
-	}
+	limiter := ratecount.NewTokenLimiter(deps.RateCounter)
 
 	return &APITokenBundle{
 		Store:    store,

@@ -20,7 +20,7 @@ their parent, and children that hold their parent hostage.
 
 | Parent | `ON DELETE CASCADE` — vanishes silently | `ON DELETE RESTRICT` — blocks the delete |
 | --- | --- | --- |
-| `tenants` | `quotas`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `multipart_uploads`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `tenant_rate_buckets`, `erased_objects`, `bucket_grants` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections` |
+| `tenants` | `quotas`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `multipart_uploads`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `tenant_slug_history`, `erased_objects`, `bucket_grants` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections` |
 | `storage_backends` | `storage_backend_health`, `storage_backend_features` | `buckets` |
 | `buckets` | `replication_state`, `bucket_quotas`, `bucket_grants` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
 | `collections` | `erased_objects` | `objects` |

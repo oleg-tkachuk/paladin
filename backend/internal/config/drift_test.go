@@ -356,6 +356,9 @@ var unsetKnobAllowlist = map[string]string{
 	"datastores.postgres.reaper_password_secret":  "secret ref; per-deploy",
 	"datastores.postgres.replica.password":        "secret; per-deploy, defaults to the primary's",
 	"datastores.postgres.replica.password_secret": "secret ref; per-deploy, defaults to the primary's",
+	"datastores.valkey.password":                  "secret; per-deploy, only with the valkey rate-limit backend",
+	"datastores.valkey.password_secret":           "secret ref; per-deploy, only with the valkey rate-limit backend",
+	"datastores.valkey.username":                  "per-deploy; empty is Valkey's default user",
 	"runtime.health_snapshot_token":               "secret; opt-in debug endpoint",
 
 	// Built by the chart's ConfigMap template from the top-level `postgres`

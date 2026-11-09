@@ -123,12 +123,12 @@ comment. What each top-level block owns:
 | `runtime` | process-wide HTTP flags, shutdown timeout, `health_snapshot_token` |
 | `api` | the data and iam (`:8085`) listeners; data is `:8080` in the chart and compose, `:8083` by default on the host (`#LocalDataPort` in `schema.cue`) |
 | `admin` | the admin listener (`:8090`), and `tenants.trash_retention` — how long a trashed tenant waits before it is surfaced for purge ([deletion-semantics.md](deletion-semantics.md#tenant)) |
-| `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica |
+| `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica; the optional Valkey the rate limits can count in |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
 | `auth` | JWT signing, token TTLs, login rate limiting, the OAuth 2.1 authorization server (`auth.oauth`, ADR-0009) |
 | `security` | nothing to set: `log_sensitive` is retired (accepted, ignored, warned about) |
 | `bootstrap` | the platform admin provisioned by `paladin bootstrap` |
-| `middleware` | interceptor defaults shared by every plane; the per-tenant rate limit is counted in Postgres, and its `burst`, `max_tenants` and `cleanup_*` keys are accepted but no longer read |
+| `middleware` | interceptor defaults shared by every plane; `rate_limit.backend` says where the tenant and token limits count, `postgres` or `valkey` ([ADR-0046](adr/0046-rate-limits-off-the-request-path.md)), and the limit's `burst`, `max_tenants` and `cleanup_*` keys are accepted but no longer read |
 | `worker` | job intervals, leases, reaper batch sizes ([ops-housekeeping.md](../backend/docs/ops-housekeeping.md)) |
 | `dispatcher` | outbox drain loop and sink behaviour; every delivery is a CloudEvents 1.0 envelope ([event-delivery-dedup.md](event-delivery-dedup.md)) |
 | `storage` | backends, routing, SSE, per-backend auth mode ([backend-registry.md](../backend/docs/backend-registry.md)) |

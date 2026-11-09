@@ -2257,6 +2257,15 @@
             }
           },
           "type": "object"
+        },
+        "valkey": {
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"

@@ -360,6 +360,19 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Performance / Scale
 
+### The login and OAuth token limiters count per replica
+
+- **Status:** Deferred
+- **Reason:** ADR-0046 moved the tenant and token limits onto a shared
+  backend; `middleware.LoginRateLimiter` and the `/oauth/token` limiter
+  (`internal/auth/oauth/ratelimit.go`) still keep their buckets in memory,
+  so each replica grants the full rate and the ceiling a brute-force attempt
+  meets is the replica count times the setting.
+- **Definition of Done:** both count on `middleware.rate_limit.backend`, with
+  the same per-process fallback, and a test shows two replicas sharing one
+  ceiling.
+- **Blockers:** none.
+
 ### Per-table autovacuum tuning
 
 - **Status:** Blocked

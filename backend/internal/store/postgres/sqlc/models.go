@@ -332,13 +332,6 @@ type ApiToken struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
-type ApiTokenRateBucket struct {
-	ID          pgtype.UUID        `json:"id"`
-	TokenID     pgtype.UUID        `json:"token_id"`
-	BucketStart pgtype.Timestamptz `json:"bucket_start"`
-	Count       int64              `json:"count"`
-}
-
 type AuditLog struct {
 	ID               pgtype.UUID        `json:"id"`
 	At               pgtype.Timestamptz `json:"at"`
@@ -702,6 +695,12 @@ type Quota struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RateLimitBucket struct {
+	Key         string             `json:"key"`
+	BucketStart pgtype.Timestamptz `json:"bucket_start"`
+	Count       int64              `json:"count"`
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -796,12 +795,6 @@ type TenantDefaultBinding struct {
 	BucketID pgtype.UUID        `json:"bucket_id"`
 	SetAt    pgtype.Timestamptz `json:"set_at"`
 	SetBy    string             `json:"set_by"`
-}
-
-type TenantRateBucket struct {
-	TenantID    pgtype.UUID        `json:"tenant_id"`
-	BucketStart pgtype.Timestamptz `json:"bucket_start"`
-	Count       int64              `json:"count"`
 }
 
 type TenantSlugHistory struct {
