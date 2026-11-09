@@ -290,6 +290,45 @@ def kube_api_problems(chart: Path) -> list[str]:
     return problems
 
 
+# The rate limits counting in Valkey (ADR-0046), on a port and in a namespace
+# other than the defaults, so a hardcoded port or namespace shows up.
+VALKEY_PORT = 16379
+VALKEY_NS = "kv"
+VALKEY = {
+    "config.middleware.rate_limit.backend": "valkey",
+    "config.datastores.valkey.addr": f"valkey.{VALKEY_NS}.svc:{VALKEY_PORT}",
+    "networkPolicies.valkey.namespace": VALKEY_NS,
+}
+
+
+def egress_reaches(doc: dict, namespace: str, port: int) -> bool:
+    """Whether a policy lets its pods out to `namespace` on `port`."""
+    for rule in doc["spec"].get("egress") or []:
+        if not rule:  # `- {}` — open egress
+            return True
+        ports = {p.get("port") for p in rule.get("ports") or []}
+        for to in rule.get("to") or []:
+            labels = (to.get("namespaceSelector") or {}).get("matchLabels") or {}
+            if labels.get("kubernetes.io/metadata.name") == namespace and port in ports:
+                return True
+    return False
+
+
+def valkey_problems(chart: Path) -> list[str]:
+    """With the rate limits in Valkey, every role must reach it.
+
+    Every role builds the counter. Refused, nothing fails: each limit falls
+    back to the per-replica count and the shared ceiling quietly multiplies."""
+    problems: list[str] = []
+    for doc in render(chart, VALKEY):
+        if doc.get("kind") != "NetworkPolicy" or not component(doc):
+            continue
+        if "Egress" in (doc["spec"].get("policyTypes") or []) and not egress_reaches(doc, VALKEY_NS, VALKEY_PORT):
+            problems.append(
+                f"role {component(doc)!r} cannot reach Valkey in {VALKEY_NS!r} on port {VALKEY_PORT} "
+                f"— its rate limits count per replica")
+    return problems
+
 CHARTS = ("backend/deploy/chart", "frontend/deploy/chart")
 CONSOLE_CHART = "frontend/deploy/chart"
 BACKEND_CHART = "backend/deploy/chart"
@@ -446,6 +485,7 @@ def main() -> int:
 
     problems += observability_problems(root / "backend/deploy/chart")
     problems += kube_api_problems(root / "backend/deploy/chart")
+    problems += valkey_problems(root / "backend/deploy/chart")
     problems += in_release_problems({component(p): p for p in policies if component(p)})
     problems += console_problems(root)
     problems += every_workload_problems(root)

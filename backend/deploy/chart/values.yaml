@@ -1633,6 +1633,10 @@ networkPolicies:
   nats:
     namespace: nats
     port: 4222
+  # Valkey, reached only when config.middleware.rate_limit.backend is valkey;
+  # the port is read from config.datastores.valkey.addr.
+  valkey:
+    namespace: cache
   # Ports the Kubernetes API server listens on; every role reads its secrets
   # through the API at boot. A policy is matched after the `kubernetes`
   # Service is translated to its endpoint, so this is the endpoint's port, not
