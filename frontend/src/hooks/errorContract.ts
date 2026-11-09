@@ -87,19 +87,6 @@ export function errorMetadata(err: unknown): Readonly<Record<string, string>> {
   return paladinErrorInfo(err)?.metadata ?? {};
 }
 
-/** The metadata key the server puts a capability error's limes code under. */
-export const LIMES_CODE_KEY = "limes_code";
-
-/**
- * The limes code of a capability error — `tenant_budget_busy`,
- * `budget_exceeded`, … — as the server sends it beside the reason
- * (docs/errors in limes). Empty for any other error. Like errorReason, for
- * deciding what to offer, never for the text.
- */
-export function limesCode(err: unknown): string {
-  return errorMetadata(err)[LIMES_CODE_KEY] ?? "";
-}
-
 /** The server's own ErrorInfo on err, the "paladin" domain's; null if none. */
 function paladinErrorInfo(err: unknown) {
   if (!(err instanceof ConnectError)) return null;

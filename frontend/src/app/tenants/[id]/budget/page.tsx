@@ -61,7 +61,6 @@ import {
 import { LimitInput } from "@/components/ui/LimitInput";
 import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
-import { budgetSaveFailure } from "@/lib/budgetSaveFailure";
 
 import { useTenant, useTenantChangesBlocked } from "../tenant-context";
 import { Timestamp } from "@/components/Timestamp";
@@ -230,25 +229,10 @@ export default function TenantBudgetPage() {
         message: `${unlimited ? `Cap lifted (${shownUnit ?? "platform currency"})` : `Cap set to ${formatMoney(cap)}`}${resetSpend ? " and period rolled" : ""}.`,
       });
     } catch (err) {
-      const failure = budgetSaveFailure(err);
-      // The tenant's charges in flight held the budget past the server's
-      // bound: nothing changed, and the same save may simply go again. The
-      // form keeps the operator's values for it.
-      if (failure === "busy") {
-        showNotification({
-          type: "warning",
-          title: "Budget busy",
-          message:
-            "This tenant's charges in flight held its budget, so nothing changed. " +
-            "Your values are still in the form.",
-          action: { label: "Retry", onClick: () => void handleSubmit() },
-        });
-        return;
-      }
       // Aborted is the OCC guard, not a fault: the row moved under us. Refetch
       // so the form reflects what is actually stored before the operator
       // decides whether they still want their change.
-      if (failure === "conflict") {
+      if (err instanceof ConnectError && err.code === Code.Aborted) {
         // The stored row wins: drop the edit flag so the refetched snapshot
         // seeds the form and the operator sees what actually landed.
         setEdited(false);
