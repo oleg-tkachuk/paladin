@@ -56,7 +56,8 @@ const (
 // through the stores, acting on the tenant on the application role as a
 // request does: a capability, the exchange it was issued for, its revocation
 // and that of a Biscuit copy, the counters of both, a charge, a hold and a
-// budget.
+// budget. usage must stripe tenants without a ceiling (capstore.WithStripes),
+// so the unlimited budget's charges fill its stripes too.
 func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, records *pgstore.Store, usage *capstore.UsageStore, tenant uuid.UUID) {
 	t.Helper()
 	acting := auth.WithActingTenant(ctx, tenant)
@@ -151,7 +152,7 @@ func TestPurgingATenantErasesItsCapabilityRows(t *testing.T) {
 	f := newBiscuitFixture(t, admin)
 	pool := rlsPool(t, ctx, admin)
 	records := newCapStore(t, pool)
-	usage := newUsageStore(t, pool)
+	usage := newUsageStore(t, pool, capstore.WithStripes(true))
 	purged, _ := mkTenant(t, ctx, admin, "shared")
 	bystander, _ := mkTenant(t, ctx, admin, "shared")
 	platform, _ := mkTenant(t, ctx, admin, "shared")
@@ -226,7 +227,7 @@ func TestARefusedPurgeErasesNothing(t *testing.T) {
 	f := newBiscuitFixture(t, admin)
 	pool := rlsPool(t, ctx, admin)
 	tenant, _ := mkTenant(t, ctx, admin, "shared")
-	seedEveryLimesTable(t, ctx, f, newCapStore(t, pool), newUsageStore(t, pool), tenant)
+	seedEveryLimesTable(t, ctx, f, newCapStore(t, pool), newUsageStore(t, pool, capstore.WithStripes(true)), tenant)
 	live := mkCap(tenant, "agent:live", time.Now().Add(time.Hour))
 	records := newCapStore(t, pool)
 	if err := records.Insert(auth.WithActingTenant(ctx, tenant), limes.InsertRequest{Capability: live, IssuedBy: seedIssuer}); err != nil {
