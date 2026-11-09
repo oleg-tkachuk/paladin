@@ -37,11 +37,30 @@ millisecond. The series exist only with `otel.enabled: true`
    - Object store: `paladin_storage_call_duration_seconds` and
      `paladin_presign_duration_seconds`.
 
-3. **Streaming RPCs.** A server-streaming call's duration is the life of the
+3. **Is it one tenant's charges queueing.** Every charge of a tenant locks
+   its budget row, so parallel charges on one tenant wait for each other:
+
+   ```
+   histogram_quantile(0.99,
+     sum by (le, limes_operation) (rate(limes_tenant_wait_seconds_bucket[5m])))
+   ```
+
+   The metric names no tenant; limes logs each wait over 100ms at WARN
+   (`a call waited long for its tenant's aggregate`) with the tenant's id.
+   - A tenant with no ceiling: turn on `capability.stripe_unlimited_tenants`,
+     which spreads its spend over several rows.
+   - A tenant with a ceiling: stripes do not apply. The client that charges
+     in parallel takes a budget lease per capability
+     (`CapabilityService.Lease`, needs `capability.budget_leases`); a charge
+     under a lease locks none of the tenant's rows. On the dev cluster, 32
+     parallel charges on a capped tenant ran at about 300/s through the
+     tenant's row and about 2 800/s under leases.
+
+4. **Streaming RPCs.** A server-streaming call's duration is the life of the
    stream, not the time to first message. If only a streaming method is
    "slow", check whether its clients simply hold streams open longer.
 
-4. **Is it load.** Compare request rate with the api pods' CPU and their HPA:
+5. **Is it load.** Compare request rate with the api pods' CPU and their HPA:
 
    ```
    kubectl --context=<ctx> -n paladin get hpa,pods -l app.kubernetes.io/component=api
