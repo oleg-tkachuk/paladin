@@ -11,8 +11,6 @@ import {
   errorMetadata,
   errorReason,
   isAbortError,
-  limesCode,
-  LIMES_CODE_KEY,
 } from "./errorContract";
 
 // Pins the caller-facing half of the data-hook error contract (see
@@ -138,25 +136,5 @@ describe("errorMetadata", () => {
       errorMetadata(withInfo("googleapis.com", "X", { live_objects: "2" })),
     ).toEqual({});
     expect(errorMetadata(new Error("boom"))).toEqual({});
-  });
-});
-
-describe("limesCode", () => {
-  it("reads the capability library's code the server sends beside the reason", () => {
-    expect(
-      limesCode(
-        withInfo(PALADIN_ERROR_DOMAIN, "", {
-          [LIMES_CODE_KEY]: "tenant_budget_busy",
-        }),
-      ),
-    ).toBe("tenant_budget_busy");
-  });
-
-  it("is empty for another domain's detail, or no detail at all", () => {
-    expect(
-      limesCode(withInfo("googleapis.com", "", { [LIMES_CODE_KEY]: "x" })),
-    ).toBe("");
-    expect(limesCode(new ConnectError("x", Code.Unavailable))).toBe("");
-    expect(limesCode(new Error("x"))).toBe("");
   });
 });
