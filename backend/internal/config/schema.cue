@@ -700,6 +700,9 @@ capability: {
   revocation_cache_max_stale: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   // Whether CapabilityService.Lease opens budget leases.
   budget_leases: bool | *true
+  // Whether the meter counts a tenant with no ceiling in stripes (limes
+  // ADR-0022); on only once every replica runs limes v1.0.0-rc.58 or later.
+  stripe_unlimited_tenants: bool | *false
   // DPoP server nonces (RFC 9449 §8). The key is shared by every replica;
   // inline for dev, key_secret otherwise.
   // The DPoP replay cache's share of one key holder; the default is limes'

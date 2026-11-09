@@ -257,10 +257,23 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// MeterProvider so test paths and sidecar tools don't pay for
 	// instrument lookups.
 	// Labelled by tenant, as every Paladin meter of tenant activity is.
-	usageStore, err := capabilitypg.NewUsageStore(deps.Pool, capabilitypg.WithDefaultUnit(cfg.Currency), capabilitypg.WithLeases(cfg.BudgetLeases))
+	storeEvents, err := usageStoreEvents()
+	if err != nil {
+		return nil, fmt.Errorf("app: capability usage store events: %w", err)
+	}
+	usageStore, err := capabilitypg.NewUsageStore(deps.Pool,
+		capabilitypg.WithDefaultUnit(cfg.Currency),
+		capabilitypg.WithLeases(cfg.BudgetLeases),
+		capabilitypg.WithStripes(cfg.StripeUnlimitedTenants),
+		// A call that waited long for its tenant's aggregate is logged at WARN.
+		capabilitypg.WithLogger(logger.Slog(deps.Logger, "capability-usage")),
+		capabilitypg.WithEvents(storeEvents))
 	if err != nil {
 		return nil, fmt.Errorf("app: capability usage store: %w", err)
 	}
+	deps.Logger.Info("capability: usage store built",
+		zap.Bool("budget_leases", cfg.BudgetLeases),
+		zap.Bool("stripe_unlimited_tenants", cfg.StripeUnlimitedTenants))
 	usage, err := meteredUsage(usageStore)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)
@@ -385,6 +398,13 @@ func usagePartsOf(usage meter.UsageStore) (usageParts, error) {
 		return usageParts{}, fmt.Errorf("app: capability usage store: %w", err)
 	}
 	return p, nil
+}
+
+// usageStoreEvents are the usage store's callbacks recorded by limes's own
+// instruments, by tenant: how long each metered call waited for its tenant's
+// aggregate row (limes.tenant.wait).
+func usageStoreEvents() (meter.StoreEvents, error) {
+	return otelmetric.NewStoreEvents(otelmetric.WithTenantAttribute())
 }
 
 // meteredUsage is store counted by limes's own instruments, by tenant: each
