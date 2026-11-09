@@ -27,6 +27,7 @@ const (
 	ElasticMQ = "softwaremill/elasticmq-native:1.6.11"
 	RabbitMQ  = "rabbitmq:4.0-alpine"
 	Redpanda  = "docker.redpanda.com/redpandadata/redpanda:v24.3.6"
+	Valkey    = "valkey/valkey:9.1.3-alpine"
 )
 
 const (

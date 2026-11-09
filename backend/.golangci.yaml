@@ -86,6 +86,18 @@ linters:
           deny:
             - pkg: "github.com/oleg-tkachuk/paladin/backend/tests"
               desc: test infrastructure; import it from tests only
+        # The Valkey client is linked only by the package that counts rate
+        # limits in Valkey (ADR-0046), so a role that never counts there does
+        # not carry it.
+        valkey-client:
+          files:
+            - "**/internal/**"
+            - "**/cmd/**"
+            - "!**/internal/ratecount/valkey/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/valkey-io/valkey-go"
+              desc: import the client only from internal/ratecount/valkey
     errcheck:
       # Non-actionable errors: writes to buffers/stderr, and Close() on the
       # cleanup path (a Close error is rarely recoverable; resource *leaks* are
