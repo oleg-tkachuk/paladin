@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/limes"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -49,8 +50,8 @@ func TestStrictAuthHoldsACapabilityToItsPlanes(t *testing.T) {
 		audience []string
 		message  string
 	}{
-		"the bearer audience": {[]string{paladin.AudienceData}, `audience mismatch: token audience [paladin-data] lacks "data"`},
-		"another plane":       {paladin.PlaneNames(paladin.PlaneAdmin), `audience mismatch: token audience [admin] lacks "data"`},
+		"the bearer audience": {[]string{paladin.AudienceData}, problemTitle(t, limes.CodeAudienceMismatch)},
+		"another plane":       {paladin.PlaneNames(paladin.PlaneAdmin), problemTitle(t, limes.CodeAudienceMismatch)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			p, _ := strictCapability(t, srv, func(r *adminv1.CapabilityServiceIssueRequest) { r.Audience = tc.audience })
@@ -61,11 +62,10 @@ func TestStrictAuthHoldsACapabilityToItsPlanes(t *testing.T) {
 
 // An operation the caveats do not name, a resource outside them, and an
 // operation bound to no resource under a resource-restricted capability are
-// refused as limes refuses them, without the library's name.
+// refused as limes refuses them, with the title of its problem.
 func TestStrictAuthHoldsACallToTheCaveats(t *testing.T) {
 	srv := paladintest.New(t, paladintest.WithStrictAuth())
 	obj := srv.Put(srv.Collection(), "k", "text/plain", []byte("x"))
-	uri := paladin.ObjectResource(srv.Tenant(), paladintest.DefaultCollection, "k")
 	elsewhere := paladin.ObjectResource(srv.Tenant(), "elsewhere", "")
 	ctx := context.Background()
 
@@ -73,16 +73,16 @@ func TestStrictAuthHoldsACallToTheCaveats(t *testing.T) {
 		r.Caveats.Ops = paladin.OpNames(paladin.OpList)
 	})
 	refused(t, getObject(listOnly, obj), connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED,
-		`operation not allowed: "get" not in [list]`)
+		problemTitle(t, limes.CodeOpNotAllowed))
 
 	restricted, _ := strictCapability(t, srv, func(r *adminv1.CapabilityServiceIssueRequest) {
 		r.Caveats.ResourcePrefixes = []string{elsewhere}
 	})
 	refused(t, getObject(restricted, obj), connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED,
-		`resource not allowed: "`+uri+`"`)
+		problemTitle(t, limes.CodeResourceNotAllowed))
 	_, err := restricted.Data.StorageBootstrap.EnsureTenantStorage(ctx, &datav1.EnsureTenantStorageRequest{BackendId: "b", Bucket: "bucket"})
 	refused(t, err, connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED,
-		`resource not allowed: operation "manage" is not bound to a resource, and the capability is resource-restricted`)
+		problemTitle(t, limes.CodeResourceNotAllowed))
 
 	// A prefix that holds the object lets it through, and a listing is asked
 	// for by the collection's own prefix.
@@ -119,7 +119,7 @@ func TestStrictAuthCountsTheRequestCeiling(t *testing.T) {
 		}
 	}
 	refused(t, getObject(p, obj), connect.CodeResourceExhausted, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
-		"request limit exceeded")
+		problemTitle(t, limes.CodeRequestLimitExceeded))
 
 	// A parent whose limit its Delegate does not spend: managing
 	// capabilities is not counted, so its child has the parent's whole
@@ -142,7 +142,7 @@ func TestStrictAuthCountsTheRequestCeiling(t *testing.T) {
 		}
 	}
 	refused(t, getObject(asChild, obj), connect.CodeResourceExhausted, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
-		"request limit exceeded: ancestor "+parentCap.GetId())
+		problemTitle(t, limes.CodeRequestLimitExceeded))
 }
 
 // Without WithStrictAuth, the fake serves every call, as before.
@@ -156,4 +156,15 @@ func TestCaveatsAreCheckedOnlyUnderStrictAuth(t *testing.T) {
 	if err := getObject(p, obj); err != nil {
 		t.Errorf("err = %v, want the object", err)
 	}
+}
+
+// problemTitle is the message the server answers a limes refusal of code
+// with: the fixed title of its problem.
+func problemTitle(t *testing.T, code limes.Code) string {
+	t.Helper()
+	p, ok := limes.ProblemOfCode(code)
+	if !ok {
+		t.Fatalf("limes has no problem for %s", code)
+	}
+	return p.Title
 }

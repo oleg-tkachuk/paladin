@@ -267,7 +267,7 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	}
 	// What the server's issuer refuses as too wide, by limes's own rule.
 	if err := limes.Narrows(narrowedTerms(parent.msg), narrowedTerms(child)); err != nil {
-		return nil, withReason(connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err))
+		return nil, limesRefusal(connect.CodePermissionDenied, err)
 	}
 	return s.mint(child, now, nbf, expires, status, parent.msg.GetId())
 }

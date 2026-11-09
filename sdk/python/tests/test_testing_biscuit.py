@@ -213,6 +213,7 @@ def test_a_fact_of_two_terms_is_refused_as_limes_refuses_it(strict: FakePaladin)
     block.add_fact(ba.Fact(f'{FACT_OP}("{Op.GET}", "{Op.MANAGE}")'))
     narrowed = ba.Biscuit.from_base64(token, _root_key(ba, token)).append(block)
     p = strict.connect(capability=narrowed.to_base64().rstrip(_PADDING))
-    code, _, _, message = _answer(_get(p, obj.name))
+    code, _, limes, message = _answer(_get(p, obj.name))
     assert code == Code.UNAUTHENTICATED.value
-    assert message.endswith(f"block 1: fact {FACT_OP} takes one term")
+    assert limes == "biscuit_attenuation"
+    assert message == "The access token is invalid"

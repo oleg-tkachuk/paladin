@@ -54,12 +54,12 @@ func (s capabilityService) Lease(ctx context.Context, req *adminv1.CapabilitySer
 			"amount: unit %q, the capability's is %q", a.GetCurrencyCode(), unit))
 	}
 	if req.GetAmount() == nil && req.GetRequests() == 0 {
-		return nil, leaseRefusal(connect.CodeInvalidArgument,
+		return nil, limesRefusal(connect.CodeInvalidArgument,
 			fmt.Errorf("lease %s: %w: lease of no amount and no requests", req.GetId(), limes.ErrInvalidRequest))
 	}
 	for a := s.capabilities[rec.msg.GetParentId()]; a != nil; a = s.capabilities[a.msg.GetParentId()] {
 		if _, held := s.leases[a.msg.GetId()]; held {
-			return nil, leaseRefusal(connect.CodeFailedPrecondition,
+			return nil, limesRefusal(connect.CodeFailedPrecondition,
 				fmt.Errorf("lease %s: %w: %s holds one above it", req.GetId(), meter.ErrLeaseNested, a.msg.GetId()))
 		}
 	}
@@ -100,7 +100,7 @@ func (s capabilityService) GetLease(ctx context.Context, req *adminv1.Capability
 	}
 	l, ok := s.leases[req.GetId()]
 	if !ok {
-		return nil, leaseRefusal(connect.CodeNotFound, meter.ErrLeaseNotFound)
+		return nil, limesRefusal(connect.CodeNotFound, meter.ErrLeaseNotFound)
 	}
 	return &adminv1.CapabilityServiceGetLeaseResponse{Lease: proto.CloneOf(l)}, nil
 }
@@ -114,7 +114,7 @@ func (s capabilityService) SettleLease(ctx context.Context, req *adminv1.Capabil
 	}
 	l, ok := s.leases[req.GetId()]
 	if !ok {
-		return nil, leaseRefusal(connect.CodeNotFound, fmt.Errorf("settle lease %s: %w", req.GetId(), meter.ErrLeaseNotFound))
+		return nil, limesRefusal(connect.CodeNotFound, fmt.Errorf("settle lease %s: %w", req.GetId(), meter.ErrLeaseNotFound))
 	}
 	delete(s.leases, req.GetId())
 	return &adminv1.CapabilityServiceSettleLeaseResponse{Lease: l}, nil
@@ -133,7 +133,7 @@ func (s capabilityService) leaseTargetLocked(ctx context.Context, id string) (*c
 	if presented == "" {
 		rec, ok := s.capabilities[id]
 		if !ok {
-			return nil, leaseRefusal(connect.CodeNotFound, fmt.Errorf("%w: capability %s", limes.ErrNotFound, id))
+			return nil, limesRefusal(connect.CodeNotFound, fmt.Errorf("%w: capability %s", limes.ErrNotFound, id))
 		}
 		return rec, nil
 	}
@@ -143,7 +143,7 @@ func (s capabilityService) leaseTargetLocked(ctx context.Context, id string) (*c
 	}
 	rec, ok := s.capabilities[id]
 	if !ok {
-		return nil, leaseRefusal(connect.CodeNotFound, fmt.Errorf("%w: capability %s", limes.ErrNotFound, id))
+		return nil, limesRefusal(connect.CodeNotFound, fmt.Errorf("%w: capability %s", limes.ErrNotFound, id))
 	}
 	if id == holder.msg.GetId() {
 		return rec, nil
@@ -187,10 +187,10 @@ func (s capabilityService) presentedHolderLocked(presented string) (*capabilityR
 	return holder, nil
 }
 
-// leaseRefusal answers a limes error as the server's capability errors do:
+// limesRefusal answers a limes error as the server's capability errors do:
 // the capability reason when limes names one, and the limes code always.
-func leaseRefusal(code connect.Code, err error) *connect.Error {
-	e := connect.NewError(code, err.Error()).WithCause(err)
+func limesRefusal(code connect.Code, err error) *connect.Error {
+	e := connect.NewError(code, refusalMessage(err)).WithCause(err)
 	info := &errdetails.ErrorInfo{Domain: paladin.ErrorDomain}
 	if r, ok := limes.ReasonOf(err); ok {
 		if v, ok := commonv1.ErrorReason_value[capabilityReasonPrefix+strings.ToUpper(string(r))]; ok {

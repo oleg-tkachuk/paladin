@@ -102,7 +102,19 @@ func capabilityError(code connect.Code, err error) *connect.Error {
 	if r, ok := limes.ReasonOf(err); ok {
 		reason = capabilityErrorReason(r)
 	}
-	return withCapabilityInfo(connect.NewError(code, err.Error()).WithCause(err), err, reason)
+	return withCapabilityInfo(connect.NewError(code, capabilityMessage(err)).WithCause(err), err, reason)
+}
+
+// capabilityMessage is what a caller is told of err: the fixed title of its
+// limes problem when it is the library's, whose own text names kids, issuers
+// and stores and is for the server's log (limes docs/errors.md); err's text
+// otherwise. The text stays the cause, for the failure log, and the code
+// rides in the ErrorInfo.
+func capabilityMessage(err error) string {
+	if p, ok := limes.ProblemOf(err); ok && p.Title != "" {
+		return p.Title
+	}
+	return err.Error()
 }
 
 // withCapabilityInfo is e carrying the ErrorInfo an error of the capability
