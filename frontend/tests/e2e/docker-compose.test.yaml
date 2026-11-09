@@ -134,7 +134,7 @@ services:
   # PALADIN_E2E_PORT_S3 is what scripts/stack-ports.sh declares and what the
   # presigned PUT is signed for, so the host side of the mapping stays put.
   seaweedfs:
-    image: chrislusf/seaweedfs:4.52@sha256:57877e32bb90073b37dc109b438ba66e84fd5ed9ced5f5c04f56444ef243ce59
+    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
     # Credentials come from -s3.config; SeaweedFS has no env-var equivalent of
     # MINIO_ROOT_USER. A NAMED identity, not SeaweedFS' "anonymous" one, which
     # would grant these actions to unsigned requests — an unsigned GET must
@@ -168,7 +168,7 @@ services:
   # SeaweedFS image has both a shell and the weed binary, so the bucket is
   # created with the tool that already ships.
   seaweedfs-setup:
-    image: chrislusf/seaweedfs:4.52@sha256:57877e32bb90073b37dc109b438ba66e84fd5ed9ced5f5c04f56444ef243ce59
+    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
     restart: "no"
     environment:
       S3_BUCKET: ${PALADIN_E2E_S3_BUCKET:-paladin-e2e}
