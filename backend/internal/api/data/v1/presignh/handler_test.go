@@ -3,9 +3,12 @@ package presignh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 	"uuid"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 
 	"connectrpc.com/connect/v2"
 
@@ -258,7 +261,7 @@ func TestPresignGet(t *testing.T) {
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
 		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
-			return objecth.BucketMeta{}, errors.New("route missing")
+			return objecth.BucketMeta{}, fmt.Errorf("route missing: %w", apiutil.ErrNotFound)
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)
@@ -411,7 +414,7 @@ func TestRegenerateUploadURL(t *testing.T) {
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
 		repo := pendingRepo()
 		repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
-			return objecth.BucketMeta{}, errors.New("route missing")
+			return objecth.BucketMeta{}, fmt.Errorf("route missing: %w", apiutil.ErrNotFound)
 		}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
 		_, err := h.RegenerateUploadURL(authedCtx(tid), "obj", validObjectID, 0)

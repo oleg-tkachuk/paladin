@@ -10,6 +10,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -651,7 +653,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		&meta.PublicRead, &meta.CacheControl, &meta.PublicBaseURL,
 	); err != nil {
 		if isNoRows(err) {
-			return objecth.BucketMeta{}, fmt.Errorf("collection %q not found", collection)
+			return objecth.BucketMeta{}, fmt.Errorf("collection %q %w", collection, apiutil.ErrNotFound)
 		}
 		return objecth.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}

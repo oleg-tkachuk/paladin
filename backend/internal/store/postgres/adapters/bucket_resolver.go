@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -73,7 +75,7 @@ func resolveBucket(
 	if err := pool.QueryRow(ctx, resolveBucketQuery, pgUUID(tenantID), collection).
 		Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
 		if isNoRows(err) {
-			return "", "", fmt.Errorf("collection %q not found", collection)
+			return "", "", fmt.Errorf("collection %q %w", collection, apiutil.ErrNotFound)
 		}
 		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}
