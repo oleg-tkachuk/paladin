@@ -37,7 +37,7 @@ from connectrpc.method import IdempotencyLevel
 from paladin._connect_types import Context, Interceptor, InterceptorSync
 from paladin._http_settings import call_deadline
 from paladin.dpop import DPoPAsync, DPoPNonceAsync, DPoPNonceSync, DPoPSync, NonceState
-from paladin.errors import convert
+from paladin.errors import convert, permanent_refusal
 from paladin.observe import Hooks, RetryEvent, report_retry
 from paladin.relay import Captured, RelaySyncTransport, RelayTransport, captured
 
@@ -481,7 +481,11 @@ def parse_retry_after(value: str, now: datetime | None = None) -> float | None:
 
 def default_retryable(err: ConnectError) -> bool:
     """The failures ``Retry`` retries unless given ``retryable``: Unavailable
-    and ResourceExhausted, the two a server sends for a condition that passes."""
+    and ResourceExhausted, the two a server sends for a condition that passes
+    — but not a refusal of the capability the library holds permanent, such
+    as a spent request limit (``paladin.errors.PERMANENT_LIMES_CODES``)."""
+    if err.code == Code.RESOURCE_EXHAUSTED and permanent_refusal(err):
+        return False
     return err.code in _TRANSIENT_CODES
 
 

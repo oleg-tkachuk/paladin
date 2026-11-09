@@ -31,6 +31,28 @@ LIMES_CODE_KEY = "limes_code"
 the capability library — ``budget_exceeded``, ``not_found``, … — whatever code
 answered it. ``sdk/testdata/error_info.json`` holds the server and both SDKs
 to it."""
+PERMANENT_LIMES_CODES = frozenset(
+    {
+        "audience_mismatch",
+        "biscuit_attenuation",
+        "copy_limit_exceeded",
+        "delegation_too_deep",
+        "expired",
+        "invalid_token",
+        "lease_requests_exhausted",
+        "malformed_authorization",
+        "op_not_allowed",
+        "request_limit_exceeded",
+        "resource_not_allowed",
+        "revoked",
+        "source_ip_not_allowed",
+        "tenant_erased",
+    }
+)
+"""The limes codes of a refusal the capability library holds permanent: it
+stands for as long as the capability does, so a client stops and gets another
+capability rather than retrying. ``sdk/testdata/error_info.json`` holds this
+SDK to limes's own ``Reason.Permanent``, through Go's."""
 HEADER_SERVER_VERSION = "X-Paladin-Version"
 """The server's release, on every response."""
 _UNKNOWN_VERSION = "unknown version"
@@ -176,6 +198,14 @@ def limes_code(err: BaseException) -> str:
     """The capability library's code for ``err``; ``""`` when it is not a
     Paladin error or did not come from the library."""
     return err.limes_code if isinstance(err, PaladinError) else ""
+
+
+def permanent_refusal(err: ConnectError) -> bool:
+    """Whether ``err`` is a refusal of the capability whose limes code is one
+    of ``PERMANENT_LIMES_CODES``. A code this SDK does not know is not: a
+    newer server's refusal is retried as before."""
+    _, code, _ = _decode(err.details)
+    return code in PERMANENT_LIMES_CODES
 
 
 def _decode(details: Any) -> tuple[int, str, list[Any]]:

@@ -47,6 +47,7 @@ from paladin import (
     unpack_detail,
 )
 from paladin.common.v1 import error_reason_pb2
+from paladin.errors import PERMANENT_LIMES_CODES
 from paladin.iam.v1 import health_service_pb2
 from paladin.iam.v1.health_service_connect import (
     HealthServiceClientSync,
@@ -201,6 +202,7 @@ def test_error_info_matches_the_shared_contract() -> None:
     """sdk/testdata/error_info.json holds this SDK, Go's and the server alike."""
     contract = json.loads(ERROR_INFO_CONTRACT.read_text())
     assert (contract["domain"], contract["limes_code_key"]) == (ERROR_DOMAIN, LIMES_CODE_KEY)
+    assert frozenset(contract["permanent_limes_codes"]) == PERMANENT_LIMES_CODES
 
 
 def _with_code(domain: str, why: str, code: str) -> error_details_pb2.ErrorInfo:

@@ -1,5 +1,21 @@
 {
-  "_comment": "The google.rpc.ErrorInfo the server attaches, which the server and both SDKs are held to: its domain, and the metadata key naming the limes code of an error that came from the capability library \u2014 every one of limes's and the meter's codes, a stable lower_snake word such as budget_exceeded or not_found.",
+  "_comment": "The google.rpc.ErrorInfo the server attaches, which the server and both SDKs are held to: its domain, and the metadata key naming the limes code of an error that came from the capability library \u2014 every one of limes's and the meter's codes, a stable lower_snake word such as budget_exceeded or not_found. permanent_limes_codes are the codes whose refusal limes holds permanent (limes Reason.Permanent): it stands for as long as the capability does, so a client stops and gets another capability rather than retrying.",
   "domain": "paladin",
-  "limes_code_key": "limes_code"
+  "limes_code_key": "limes_code",
+  "permanent_limes_codes": [
+    "audience_mismatch",
+    "biscuit_attenuation",
+    "copy_limit_exceeded",
+    "delegation_too_deep",
+    "expired",
+    "invalid_token",
+    "lease_requests_exhausted",
+    "malformed_authorization",
+    "op_not_allowed",
+    "request_limit_exceeded",
+    "resource_not_allowed",
+    "revoked",
+    "source_ip_not_allowed",
+    "tenant_erased"
+  ]
 }
