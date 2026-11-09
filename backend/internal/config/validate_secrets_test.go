@@ -245,3 +245,28 @@ func TestValidate_SecretMutex_Ingest(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_SecretMutex_ValkeyPassword(t *testing.T) {
+	c := minimalValidConfig()
+	c.Datastores.Valkey.Password = "inline"
+	c.Datastores.Valkey.PasswordSecret = &SecretRef{Name: "x", Key: "k"}
+	mustReject(t, c, "valkey: cannot specify both password and password_secret")
+}
+
+// The valkey rate-limit backend has nowhere to count without an address;
+// the postgres backend never reads one.
+func TestValidate_ValkeyBackendNeedsAnAddress(t *testing.T) {
+	c := minimalValidConfig()
+	c.Middleware.RateLimit.Backend = RateLimitBackendValkey
+	mustReject(t, c, "datastores.valkey.addr is empty")
+
+	c.Datastores.Valkey.Addr = "valkey:6379"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valkey backend with an address: %v", err)
+	}
+	c = minimalValidConfig()
+	c.Middleware.RateLimit.Backend = RateLimitBackendPostgres
+	if err := c.Validate(); err != nil {
+		t.Fatalf("postgres backend without a valkey address: %v", err)
+	}
+}

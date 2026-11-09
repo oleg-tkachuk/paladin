@@ -172,6 +172,18 @@ datastores: {
       lag_check_period: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
     }
   }
+  // Optional Valkey, where the request rate limits count when
+  // middleware.rate_limit.backend is "valkey" (ADR-0046). Nothing else uses it.
+  valkey: {
+    addr:             string | *""
+    username:         string | *""
+    password:         string | *""
+    password_secret?: #SecretRef
+    tls:              bool | *false
+    // Bounds dialing and each call. A call past it is decided in the
+    // process, at the configured rate per replica.
+    timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"100ms"
+  }
 }
 
 limits: {
@@ -300,6 +312,9 @@ middleware: {
   rate_limit: {
     enabled:             bool   | *true
     requests_per_second: number | *300
+    // Where the tenant and token limits count (ADR-0046): "valkey" needs
+    // datastores.valkey.addr.
+    backend:             "postgres" | "valkey" | *"postgres"
     burst:               int    | *500
     max_tenants:         int    | *10000
     cleanup_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"

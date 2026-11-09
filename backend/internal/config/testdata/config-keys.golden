@@ -181,6 +181,16 @@ datastores.postgres.replica.password_secret.namespace
 datastores.postgres.timeouts
 datastores.postgres.timeouts.connect
 datastores.postgres.timeouts.statement
+datastores.valkey
+datastores.valkey.addr
+datastores.valkey.password
+datastores.valkey.password_secret
+datastores.valkey.password_secret.key
+datastores.valkey.password_secret.name
+datastores.valkey.password_secret.namespace
+datastores.valkey.timeout
+datastores.valkey.tls
+datastores.valkey.username
 dispatcher
 dispatcher.audit_mirror_enabled
 dispatcher.base_backoff
@@ -361,6 +371,7 @@ middleware.idempotency
 middleware.idempotency.enabled
 middleware.idempotency.ttl
 middleware.rate_limit
+middleware.rate_limit.backend
 middleware.rate_limit.burst
 middleware.rate_limit.cleanup_interval
 middleware.rate_limit.cleanup_ttl

@@ -222,6 +222,12 @@ func (c *Config) Validate() error {
 	if r := c.Datastores.Postgres.Replica; r.Password != "" && r.PasswordSecret != nil {
 		return fmt.Errorf("postgres: cannot specify both replica.password and replica.password_secret")
 	}
+	if v := c.Datastores.Valkey; v.Password != "" && v.PasswordSecret != nil {
+		return fmt.Errorf("valkey: cannot specify both password and password_secret")
+	}
+	if c.Middleware.RateLimit.Backend == RateLimitBackendValkey && c.Datastores.Valkey.Addr == "" {
+		return fmt.Errorf("middleware.rate_limit.backend is %q but datastores.valkey.addr is empty", RateLimitBackendValkey)
+	}
 	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
 		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
 	}

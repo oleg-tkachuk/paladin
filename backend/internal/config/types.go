@@ -186,7 +186,30 @@ type TLS struct {
 
 type Datastores struct {
 	Postgres Postgres `yaml:"postgres" json:"postgres"`
+	Valkey   Valkey   `yaml:"valkey" json:"valkey"`
 }
+
+// Valkey is the optional store the request rate limits count in when
+// Middleware.RateLimit.Backend is RateLimitBackendValkey (ADR-0046).
+type Valkey struct {
+	// Addr is host:port. Required by the valkey backend, unused otherwise.
+	Addr     string `yaml:"addr" json:"addr"`
+	Username string `yaml:"username" json:"username"`
+	// Password is resolved at boot from PasswordSecret; inline for local
+	// development only. Never logged.
+	Password       string     `yaml:"password" json:"password"`
+	PasswordSecret *SecretRef `yaml:"password_secret" json:"password_secret"`
+	TLS            bool       `yaml:"tls" json:"tls"`
+	// Timeout bounds dialing and each call; a call past it is decided in
+	// the process instead.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
+}
+
+// The stores Middleware.RateLimit.Backend names.
+const (
+	RateLimitBackendPostgres = "postgres"
+	RateLimitBackendValkey   = "valkey"
+)
 
 type Postgres struct {
 	// DSN is the runtime connection string. The user portion of this DSN
@@ -825,14 +848,18 @@ type Middleware struct {
 // RateLimit configures the per-tenant request ceiling enforced by
 // middleware.TenantRateLimitInterceptor.
 //
-// The counters live in Postgres (tenant_rate_buckets), so the limit is the
-// tenant's across every replica. It used to be an in-memory bucket per
-// process, which multiplied the configured rate by the replica count.
+// The counters are shared — in Postgres or in Valkey, as Backend says — so
+// the limit is the tenant's across every replica. It used to be an in-memory
+// bucket per process, which multiplied the configured rate by the replica
+// count.
 type RateLimit struct {
 	Enabled bool `yaml:"enabled" json:"enabled"`
 	// RequestsPerSecond is the sustained per-tenant rate. The window is a
 	// trailing minute, so the effective ceiling is this × 60 per minute.
 	RequestsPerSecond float64 `yaml:"requests_per_second" json:"requests_per_second"`
+	// Backend is where both the tenant and the token limits count:
+	// RateLimitBackendPostgres or RateLimitBackendValkey (ADR-0046).
+	Backend string `yaml:"backend" json:"backend"`
 	// Burst is retained for compatibility with existing values files and is
 	// no longer read. A trailing-minute window admits a spike on its own — a
 	// tenant idle for the previous minute may spend the whole budget at once
