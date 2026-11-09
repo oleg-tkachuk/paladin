@@ -79,7 +79,7 @@ func TestRateLimitsAreBuiltOnceOnDemand(t *testing.T) {
 	}
 	first := deps.RateLimits()
 	second := deps.RateLimits()
-	if first.Counter == nil || first.Shared == nil || first.Tokens == nil {
+	if first.Counter == nil || first.Shared == nil || first.Tokens == nil || first.Keys == nil {
 		t.Fatalf("rate limits missing a part: %+v", first)
 	}
 	if first.Counter != second.Counter || first.Shared != second.Shared {

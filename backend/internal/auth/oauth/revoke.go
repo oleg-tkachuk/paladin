@@ -3,13 +3,13 @@ package oauth
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 )
 
 // The RFC 7009 parameters and token type hints /oauth/revoke reads.
@@ -44,10 +44,8 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clientID := r.PostForm.Get("client_id")
-	if ok, retry := h.limiter.allow(clientID); !ok {
-		secs := max(int(retry.Seconds()), 1)
-		w.Header().Set("Retry-After", strconv.Itoa(secs))
-		h.jsonError(w, http.StatusTooManyRequests, "slow_down", "too many requests; retry later")
+	// The token endpoint's ceiling: a revoke authenticates the client too.
+	if h.throttled(w, r, ratecount.OAuthTokenKey(clientID), clientID, perMinute(h.cfg.TokenRateLimitPerMinute)) {
 		return
 	}
 	client, ok := h.tokenClient(w, r, clientID)

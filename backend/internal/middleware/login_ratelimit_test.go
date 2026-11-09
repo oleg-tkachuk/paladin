@@ -2,42 +2,65 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
-func newTestLimiter(perSubject, perIP int, window time.Duration, now time.Time) *LoginRateLimiter {
-	return &LoginRateLimiter{
-		PerSubjectMax: perSubject,
-		PerIPMax:      perIP,
-		Window:        window,
-		buckets:       map[string][]time.Time{},
-		now:           func() time.Time { return now },
+// newTestLimiter counts in one process's window, as a replica falling back
+// to its own count does; the shared stores are pinned in ratecount.
+func newTestLimiter(perSubject, perIP int) *LoginRateLimiter {
+	return NewLoginRateLimiter(ratecount.NewKeyLimiter(ratecount.NewLocal()), zap.NewNop(), perSubject, perIP)
+}
+
+// admitted reports whether an attempt by subject from ip is let through. An
+// admitted one is told no wait.
+func admitted(l *LoginRateLimiter, subject, ip string) bool {
+	ok, retry := l.admit(context.Background(), procedureLogin, subject, ip)
+	if ok && retry != 0 {
+		panic("an admitted attempt was told to wait")
+	}
+	return ok
+}
+
+// A cap of zero or below keeps the built-in default, never none.
+func TestLoginRateLimiterDefaultsItsCaps(t *testing.T) {
+	for _, configured := range []int{0, -1} {
+		l := newTestLimiter(configured, configured)
+		if l.perSubjectMax != defaultLoginPerSubjectMax || l.perIPMax != defaultLoginPerIPMax {
+			t.Errorf("caps %d: got subject %d ip %d, want the defaults", configured, l.perSubjectMax, l.perIPMax)
+		}
+	}
+	if l := newTestLimiter(1, 1); l.perSubjectMax != 1 || l.perIPMax != 1 {
+		t.Errorf("explicit caps of 1 were not kept: %d %d", l.perSubjectMax, l.perIPMax)
 	}
 }
 
 func TestLoginRateLimiterAdmitsUnderCap(t *testing.T) {
-	l := newTestLimiter(3, 100, 1*time.Minute, time.Now())
+	l := newTestLimiter(3, 100)
 	for i := 0; i < 3; i++ {
-		if !l.admit("alice", "1.1.1.1") {
+		if !admitted(l, "alice", "1.1.1.1") {
 			t.Fatalf("attempt %d denied unexpectedly", i+1)
 		}
 	}
 }
 
 func TestLoginRateLimiterRejectsAtPerSubjectCap(t *testing.T) {
-	l := newTestLimiter(2, 100, 1*time.Minute, time.Now())
-	_ = l.admit("alice", "1.1.1.1")
-	_ = l.admit("alice", "1.1.1.1")
-	if l.admit("alice", "1.1.1.1") {
+	l := newTestLimiter(2, 100)
+	_ = admitted(l, "alice", "1.1.1.1")
+	_ = admitted(l, "alice", "1.1.1.1")
+	if admitted(l, "alice", "1.1.1.1") {
 		t.Error("third attempt for same subject should be rejected")
 	}
 }
@@ -45,14 +68,14 @@ func TestLoginRateLimiterRejectsAtPerSubjectCap(t *testing.T) {
 func TestLoginRateLimiterRejectsAtPerIPCap(t *testing.T) {
 	// Per-IP cap = 5, per-subject cap = 100 — varying subjects shouldn't
 	// dodge the per-IP layer.
-	l := newTestLimiter(100, 5, 1*time.Minute, time.Now())
+	l := newTestLimiter(100, 5)
 	for i := 0; i < 5; i++ {
 		s := "fabricated-" + string(rune('a'+i))
-		if !l.admit(s, "1.1.1.1") {
+		if !admitted(l, s, "1.1.1.1") {
 			t.Fatalf("attempt %d denied under per-IP cap", i+1)
 		}
 	}
-	if l.admit("another-subject", "1.1.1.1") {
+	if admitted(l, "another-subject", "1.1.1.1") {
 		t.Error("6th attempt should hit per-IP cap regardless of subject")
 	}
 }
@@ -61,53 +84,67 @@ func TestLoginRateLimiterIPCapDoesNotConsumeSubjectQuota(t *testing.T) {
 	// A request rejected at the per-IP layer must NOT count toward the
 	// per-subject bucket — otherwise an IP-flood would lock specific users
 	// out by exhausting their per-subject window.
-	l := newTestLimiter(2, 1, 1*time.Minute, time.Now())
-	if !l.admit("alice", "1.1.1.1") {
+	l := newTestLimiter(1, 1)
+	if !admitted(l, "alice", "1.1.1.1") {
 		t.Fatal("alice's first attempt unexpectedly denied")
 	}
-	// Per-IP is now full. Bob trying from the same IP gets rejected — but
-	// his per-subject bucket should remain at 0.
-	if l.admit("bob", "1.1.1.1") {
+	if admitted(l, "bob", "1.1.1.1") {
 		t.Fatal("per-IP cap should reject bob")
 	}
-	// From a different IP, bob still has full quota.
-	if !l.admit("bob", "2.2.2.2") {
-		t.Error("bob's first attempt from a different IP should succeed")
-	}
-}
-
-func TestLoginRateLimiterReleasesOnWindowRoll(t *testing.T) {
-	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	cur := t0
-	l := &LoginRateLimiter{
-		PerSubjectMax: 1,
-		PerIPMax:      100,
-		Window:        30 * time.Second,
-		buckets:       map[string][]time.Time{},
-		now:           func() time.Time { return cur },
-	}
-	if !l.admit("alice", "1.1.1.1") {
-		t.Fatal("first attempt rejected")
-	}
-	if l.admit("alice", "1.1.1.1") {
-		t.Fatal("second attempt should still be rejected")
-	}
-	cur = t0.Add(31 * time.Second) // window has rolled
-	if !l.admit("alice", "1.1.1.1") {
-		t.Error("attempt after window-roll should be admitted")
+	// bob's subject key is per address, so prove the refusal above did not
+	// count against it: from the same address, once its IP cap allows, his
+	// one attempt still fits. Here a second limiter shares the window and
+	// raises only the IP cap.
+	wider := &LoginRateLimiter{limiter: l.limiter, perSubjectMax: 1, perIPMax: 100, procedures: l.procedures, log: l.log}
+	if !admitted(wider, "bob", "1.1.1.1") {
+		t.Error("an attempt refused at the IP layer was counted against bob")
 	}
 }
 
 func TestLoginRateLimiterScopesPerTuple(t *testing.T) {
-	l := newTestLimiter(1, 100, 1*time.Minute, time.Now())
-	if !l.admit("alice", "1.1.1.1") {
+	l := newTestLimiter(1, 100)
+	if !admitted(l, "alice", "1.1.1.1") {
 		t.Fatal("alice@1 first attempt denied")
 	}
-	if l.admit("alice", "1.1.1.1") {
+	if admitted(l, "alice", "1.1.1.1") {
 		t.Error("alice@1 should be capped")
 	}
-	if !l.admit("bob", "1.1.1.1") {
+	if !admitted(l, "bob", "1.1.1.1") {
 		t.Error("bob should not be impacted by alice's bucket")
+	}
+	if !admitted(l, "alice", "2.2.2.2") {
+		t.Error("alice from another address should have her own bucket")
+	}
+}
+
+// Two replicas on one store share one ceiling: the point of counting there.
+func TestLoginRateLimiterReplicasShareTheCeiling(t *testing.T) {
+	shared := ratecount.NewKeyLimiter(ratecount.NewLocal())
+	a := NewLoginRateLimiter(shared, zap.NewNop(), 2, 100)
+	b := NewLoginRateLimiter(shared, zap.NewNop(), 2, 100)
+	if !admitted(a, "alice", "1.1.1.1") || !admitted(b, "alice", "1.1.1.1") {
+		t.Fatal("attempts under the ceiling refused")
+	}
+	if admitted(a, "alice", "1.1.1.1") || admitted(b, "alice", "1.1.1.1") {
+		t.Error("a replica granted past the shared ceiling")
+	}
+}
+
+// failingLimiter decides nothing.
+type failingLimiter struct{}
+
+func (failingLimiter) Allow(context.Context, string, int) (bool, time.Duration, error) {
+	return false, 0, errors.New("store down")
+}
+
+// A limit that cannot be decided refuses the attempt: these calls carry
+// credentials.
+func TestLoginRateLimiterRefusesWhatItCannotDecide(t *testing.T) {
+	// No logger given: the refusal is still logged, to a no-op.
+	l := NewLoginRateLimiter(failingLimiter{}, nil, 0, 0)
+	ok, retry := l.admit(context.Background(), procedureLogin, "alice", "1.1.1.1")
+	if ok || retry != 0 {
+		t.Errorf("an undecided attempt: admitted=%v retry=%v, want refused with no wait", ok, retry)
 	}
 }
 
@@ -115,7 +152,7 @@ func TestLoginRateLimiterScopesPerTuple(t *testing.T) {
 // header: its leftmost entry is the caller's choice, so a client could pick a
 // fresh bucket for every attempt.
 func TestLoginRateLimiterKeysOnTheResolvedAddress(t *testing.T) {
-	l := NewLoginRateLimiter(0, 0)
+	l := newTestLimiter(0, 0)
 	req := &iamv1.LoginRequest{Subject: "alice"}
 
 	ctx := clientip.WithAddr(context.Background(), netip.MustParseAddr(resolvedAddr))
@@ -132,7 +169,7 @@ func TestLoginRateLimiterKeysOnTheResolvedAddress(t *testing.T) {
 // bucket is full, is refused.
 func TestLoginRateLimiterIgnoresTheForwardingHeader(t *testing.T) {
 	const perIPMax = 1
-	l := NewLoginRateLimiter(0, perIPMax)
+	l := newTestLimiter(0, perIPMax)
 	// Login is left unimplemented: an attempt the limiter admits is answered
 	// Unimplemented by the handler, one it refuses ResourceExhausted.
 	client := paladiniamv1connect.NewAuthServiceClient(unarytest.Client(func(s *connect.Server) {
@@ -162,11 +199,8 @@ const resolvedAddr = "198.51.100.7"
 const forwardedForHeader = "X-Forwarded-For"
 
 func TestLoginRateLimiterProcedureSelection(t *testing.T) {
-	l := NewLoginRateLimiter(0, 0)
-	for _, p := range []string{
-		"/paladin.iam.v1.AuthService/Login",
-		"/paladin.iam.v1.AuthService/RefreshToken",
-	} {
+	l := newTestLimiter(0, 0)
+	for _, p := range []string{procedureLogin, procedureRefreshToken} {
 		if _, ok := l.procedures[p]; !ok {
 			t.Errorf("default procedures should include %s", p)
 		}
@@ -176,55 +210,20 @@ func TestLoginRateLimiterProcedureSelection(t *testing.T) {
 	}
 }
 
-func TestLoginRateLimiterMaxKeysBackstop(t *testing.T) {
-	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	l := &LoginRateLimiter{
-		PerSubjectMax: 1000,
-		PerIPMax:      1000,
-		Window:        time.Minute,
-		maxKeys:       4, // tiny cap: fills after 2 distinct IPs (ip + subject key each)
-		buckets:       map[string][]time.Time{},
-		now:           func() time.Time { return t0 },
+// A refused attempt is told when to retry, so a client backs off rather than
+// hammering.
+func TestLoginRateLimiterSaysWhenToRetry(t *testing.T) {
+	l := NewLoginRateLimiter(ratecount.NewKeyLimiter(ratecount.NewLocal()), zap.NewNop(), 0, 1, unarytest.ProbeProcedure)
+	ctx := clientip.WithAddr(context.Background(), netip.MustParseAddr(resolvedAddr))
+	probe := &unarytest.Probe{}
+	if _, err := unarytest.CallProbe(ctx, probe, []connect.ServerInterceptor{l.Interceptor()}); err != nil {
+		t.Fatalf("first call: %v", err)
 	}
-	// Two distinct IPs → 4 keys, hitting the cap.
-	_ = l.admit("a", "1.1.1.1")
-	_ = l.admit("b", "2.2.2.2")
-	// A brand-new IP must be rejected by the backstop, not grow the map.
-	if l.admit("c", "3.3.3.3") {
-		t.Error("new key past maxKeys should be rejected")
+	header, err := unarytest.CallProbe(ctx, probe, []connect.ServerInterceptor{l.Interceptor()})
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("second call: %v, want ResourceExhausted", err)
 	}
-	// An existing IP+subject pair still admits (no new bucket created).
-	if !l.admit("a", "1.1.1.1") {
-		t.Error("existing key should still admit under its own cap")
-	}
-	// A known IP with a NEW subject must be rejected at the cap — admitting
-	// would mint a new subjectKey bucket and grow the map past maxKeys
-	// (the credential-stuffing memory-exhaustion vector).
-	if l.admit("z", "1.1.1.1") {
-		t.Error("new subject on an existing IP must be rejected at the cap")
-	}
-}
-
-func TestLoginRateLimiterSweepEvictsIdle(t *testing.T) {
-	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	cur := t0
-	l := &LoginRateLimiter{
-		PerSubjectMax: 100,
-		PerIPMax:      100,
-		Window:        30 * time.Second,
-		maxKeys:       100_000,
-		buckets:       map[string][]time.Time{},
-		now:           func() time.Time { return cur },
-	}
-	_ = l.admit("alice", "1.1.1.1") // 2 keys
-	if len(l.buckets) == 0 {
-		t.Fatal("expected buckets after admit")
-	}
-	// Roll past the window + sweep interval, then a fresh admit triggers
-	// the sweep which drops alice's now-stale buckets.
-	cur = t0.Add(61 * time.Second)
-	_ = l.admit("bob", "2.2.2.2")
-	if _, ok := l.buckets["i:1.1.1.1"]; ok {
-		t.Error("stale alice IP bucket should have been swept")
+	if header.Get(paladin.HeaderRetryAfter) == "" {
+		t.Errorf("refused with no %s", paladin.HeaderRetryAfter)
 	}
 }

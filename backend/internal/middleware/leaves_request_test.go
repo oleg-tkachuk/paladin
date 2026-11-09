@@ -183,7 +183,8 @@ func (h *loginHandler) Login(context.Context, *iamv1.LoginRequest) (*iamv1.Login
 
 // The login limiter reads the subject an attempt names, to key its bucket.
 func TestLoginRateLimitLeavesTheRequest(t *testing.T) {
-	l := NewLoginRateLimiter(0, 0)
+	counted := &countingLimiter{}
+	l := NewLoginRateLimiter(counted, nil, 0, 0)
 	h := &loginHandler{}
 	client := paladiniamv1connect.NewAuthServiceClient(unarytest.Client(func(s *connect.Server) {
 		paladiniamv1connect.RegisterAuthServiceHandler(s, h)
@@ -191,7 +192,15 @@ func TestLoginRateLimitLeavesTheRequest(t *testing.T) {
 	if _, err := client.Login(context.Background(), &iamv1.LoginRequest{Subject: leavesSubject}); err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	if h.calls != 1 || len(l.buckets) == 0 {
-		t.Fatalf("handler ran %d times and %d buckets were kept, want 1 and some", h.calls, len(l.buckets))
+	if h.calls != 1 || counted.calls == 0 {
+		t.Fatalf("handler ran %d times and the limiter counted %d calls, want 1 and some", h.calls, counted.calls)
 	}
+}
+
+// countingLimiter admits every call and counts them.
+type countingLimiter struct{ calls int }
+
+func (c *countingLimiter) Allow(context.Context, string, int) (bool, time.Duration, error) {
+	c.calls++
+	return true, 0, nil
 }

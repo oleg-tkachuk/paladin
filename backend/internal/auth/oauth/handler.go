@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 
 	"go.uber.org/zap"
 
@@ -60,17 +60,17 @@ type Handler struct {
 	refresh authstore.RefreshTokenRepository
 	iss     *issuer.Issuer
 	dec     *auth.RefreshDecoder
-	limiter *tokenBucket
-	// exchangeLimiter caps the token-exchange grant on its own.
-	exchangeLimiter *tokenBucket
-	corsOrigins     []string
-	authz           Authorizer
-	audit           AuditWriter
-	skipConsent     map[string]bool
-	exchange        *tokenExchange
-	mcpResource     string
-	log             *zap.Logger
-	now             func() time.Time
+	// rate holds each client to its ceiling on /oauth/token and
+	// /oauth/revoke, the token-exchange grant under its own.
+	rate        RateLimiter
+	corsOrigins []string
+	authz       Authorizer
+	audit       AuditWriter
+	skipConsent map[string]bool
+	exchange    *tokenExchange
+	mcpResource string
+	log         *zap.Logger
+	now         func() time.Time
 }
 
 // WithSkipConsent marks client_ids the operator pre-authorized (trusted
@@ -103,20 +103,20 @@ func (h *Handler) WithAudit(a AuditWriter) *Handler {
 	return h
 }
 
-// NewHandler builds the AS. now may be nil (defaults to time.Now).
-func NewHandler(cfg config.OAuthAS, store Store, users UserResolver, refresh authstore.RefreshTokenRepository, iss *issuer.Issuer, dec *auth.RefreshDecoder, l *zap.Logger) *Handler {
+// NewHandler builds the AS. rate is where a client's calls count: the shared
+// store in a server, so every replica holds it to one ceiling.
+func NewHandler(cfg config.OAuthAS, store Store, users UserResolver, refresh authstore.RefreshTokenRepository, iss *issuer.Issuer, dec *auth.RefreshDecoder, rate RateLimiter, l *zap.Logger) *Handler {
 	return &Handler{
-		cfg:             cfg,
-		store:           store,
-		users:           users,
-		refresh:         refresh,
-		iss:             iss,
-		dec:             dec,
-		limiter:         newTokenBucket(cfg.TokenRateLimitPerMinute),
-		exchangeLimiter: newTokenBucket(cfg.TokenExchangeRateLimitPerMinute),
-		corsOrigins:     cfg.TokenEndpointAllowedOrigins,
-		log:             l,
-		now:             time.Now,
+		cfg:         cfg,
+		store:       store,
+		users:       users,
+		refresh:     refresh,
+		iss:         iss,
+		dec:         dec,
+		rate:        rate,
+		corsOrigins: cfg.TokenEndpointAllowedOrigins,
+		log:         l,
+		now:         time.Now,
 	}
 }
 
@@ -390,19 +390,14 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		h.jsonError(w, http.StatusBadRequest, "invalid_request", "malformed form")
 		return
 	}
-	// Rate-limit per client_id before any DB work, to blunt code/secret
-	// brute-forcing (ADR-0009 hardening).
-	limiter := h.limiter
+	// Per client_id, the token-exchange grant under its own ceiling: the
+	// exchanges an MCP server makes are one client's, one per agent token.
+	clientID := r.PostForm.Get("client_id")
+	key, capacity := ratecount.OAuthTokenKey(clientID), perMinute(h.cfg.TokenRateLimitPerMinute)
 	if r.PostForm.Get("grant_type") == GrantTypeTokenExchange {
-		limiter = h.exchangeLimiter
+		key, capacity = ratecount.OAuthExchangeKey(clientID), perMinute(h.cfg.TokenExchangeRateLimitPerMinute)
 	}
-	if ok, retry := limiter.allow(r.PostForm.Get("client_id")); !ok {
-		secs := int(retry.Seconds())
-		if secs < 1 {
-			secs = 1
-		}
-		w.Header().Set("Retry-After", strconv.Itoa(secs))
-		h.jsonError(w, http.StatusTooManyRequests, "slow_down", "too many token requests; retry later")
+	if h.throttled(w, r, key, clientID, capacity) {
 		return
 	}
 	switch r.PostForm.Get("grant_type") {

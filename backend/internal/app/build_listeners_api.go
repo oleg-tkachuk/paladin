@@ -385,6 +385,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Refuses a change to a tenant in the trash, whoever asks.
 		tenantFreeze,
 		middleware.NewLoginRateLimiter(
+			deps.RateLimits().Keys, l.Named("login-ratelimit"),
 			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
 			cfg.Auth.LoginRateLimitPerIPPerMinute,
 		).Interceptor(),
@@ -511,7 +512,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 				exchangers[sc.ClientID] = true
 			}
 		}
-		as := oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, l).
+		as := oauth.NewHandler(cfg.Auth.OAuth, oauthStore, repos.IAMUser, repos.IAMRefresh, iss, dec, deps.RateLimits().Keys, l).
 			WithAuthorizer(polEngine).
 			WithAudit(repos.Audit).
 			WithSkipConsent(skipConsent).

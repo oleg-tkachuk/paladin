@@ -23,6 +23,9 @@ type RateLimits struct {
 	// Tokens enforces a token's per-minute cap on Counter. A token with no
 	// cap never reaches it, and one capped at 0 is refused before it.
 	Tokens ratelimit.Limiter
+	// Keys holds the login and OAuth token limits on Counter, each keyed by
+	// what the caller sends.
+	Keys *ratecount.KeyLimiter
 }
 
 // RateLimits builds where the rate limits count, on the first call, for the
@@ -35,7 +38,10 @@ func (d *SharedDeps) RateLimits() RateLimits {
 	d.rateOnce.Do(func() {
 		counter, shared, stop := buildRateCounter(d.Cfg, d.Pool, d.Logger)
 		d.RegisterWatcherStop(stop)
-		d.rateLimits = RateLimits{Counter: counter, Shared: shared, Tokens: ratecount.NewTokenLimiter(counter)}
+		d.rateLimits = RateLimits{
+			Counter: counter, Shared: shared,
+			Tokens: ratecount.NewTokenLimiter(counter), Keys: ratecount.NewKeyLimiter(counter),
+		}
 	})
 	return d.rateLimits
 }

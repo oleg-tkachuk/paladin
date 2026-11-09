@@ -13,6 +13,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 
 	"go.uber.org/zap/zaptest/observer"
 
@@ -168,7 +169,7 @@ func testHandlerCfg(t *testing.T, store Store, refresh authstore.RefreshTokenRep
 		t.Fatalf("issuer: %v", err)
 	}
 	dec := &auth.RefreshDecoder{Verifier: &auth.JWTVerifier{Key: []byte(testSigningKey), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceIAM}}
-	return NewHandler(cfg, store, memUsers{u: u}, refresh, iss, dec, zap.NewNop())
+	return NewHandler(cfg, store, memUsers{u: u}, refresh, iss, dec, ratecount.NewKeyLimiter(ratecount.NewLocal()), zap.NewNop())
 }
 
 func sampleUser() authstore.User {
