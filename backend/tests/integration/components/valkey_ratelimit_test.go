@@ -188,6 +188,25 @@ func TestValkeyWindow(t *testing.T) {
 		}
 	})
 
+	t.Run("connect reaches a running server in the background", func(t *testing.T) {
+		c, stop := rcvalkey.Connect(rcvalkey.Options{Addr: addr, Timeout: valkeyCallTimeout}, zap.NewNop())
+		t.Cleanup(stop)
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			got, err := c.Bump(ctx, "tenant:connect")
+			if err == nil {
+				if got.Current != 1 {
+					t.Fatalf("first bump %+v", got)
+				}
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("never connected: %v", err)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+
 	t.Run("an unreachable store degrades to the process", func(t *testing.T) {
 		const shortTimeout = 200 * time.Millisecond
 		client := dialValkey(t, addr, shortTimeout)

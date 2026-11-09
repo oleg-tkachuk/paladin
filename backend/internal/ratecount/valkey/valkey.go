@@ -11,9 +11,12 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	valkeygo "github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 )
@@ -76,16 +79,74 @@ func Dial(o Options) (valkeygo.Client, error) {
 	return c, nil
 }
 
+// ErrNotConnected answers every call until Connect's first dial succeeds.
+var ErrNotConnected = errors.New("valkey: not connected yet")
+
+// dialRetryInterval is the wait between Connect's attempts at a Valkey that
+// did not answer.
+const dialRetryInterval = 5 * time.Second
+
 // Counter is a ratecount.Counter in Valkey.
 type Counter struct {
-	client  valkeygo.Client
+	client  atomic.Pointer[valkeygo.Client]
 	script  *valkeygo.Lua
 	timeout time.Duration
 }
 
 // New counts through client; timeout bounds each call.
 func New(client valkeygo.Client, timeout time.Duration) *Counter {
-	return &Counter{client: client, script: valkeygo.NewLuaScript(windowScript), timeout: timeout}
+	c := newCounter(timeout)
+	c.client.Store(&client)
+	return c
+}
+
+func newCounter(timeout time.Duration) *Counter {
+	return &Counter{script: valkeygo.NewLuaScript(windowScript), timeout: timeout}
+}
+
+// Connect returns a Counter that dials in the background until it connects,
+// so a Valkey that is down at boot leaves the process counting on its own
+// (ratecount.Degrading) instead of failing to start. Calls before the first
+// connection return ErrNotConnected. stop ends the attempts and closes the
+// client; it is safe to call more than once.
+func Connect(o Options, log *zap.Logger) (counter *Counter, stop func()) {
+	c := newCounter(o.Timeout)
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.dialUntilConnected(o, log, done)
+	}()
+	var once sync.Once
+	return c, func() {
+		once.Do(func() {
+			close(done)
+			wg.Wait()
+			if cl := c.client.Load(); cl != nil {
+				(*cl).Close()
+			}
+		})
+	}
+}
+
+func (c *Counter) dialUntilConnected(o Options, log *zap.Logger, done <-chan struct{}) {
+	for attempt := 1; ; attempt++ {
+		cl, err := Dial(o)
+		if err == nil {
+			c.client.Store(&cl)
+			log.Info("valkey connected; rate limits count there", zap.String("addr", o.Addr), zap.Int("attempt", attempt))
+			return
+		}
+		log.Warn("valkey did not answer; rate limits count per process until it does",
+			zap.String("addr", o.Addr), zap.Int("attempt", attempt),
+			zap.Duration("retry_in", dialRetryInterval), zap.Error(err))
+		select {
+		case <-done:
+			return
+		case <-time.After(dialRetryInterval):
+		}
+	}
 }
 
 // Bump implements ratecount.Counter.
@@ -104,6 +165,10 @@ func (c *Counter) Read(ctx context.Context, key string) (ratecount.Counts, error
 }
 
 func (c *Counter) run(ctx context.Context, key, mode string, capacity int) (ratecount.Counts, error) {
+	cl := c.client.Load()
+	if cl == nil {
+		return ratecount.Counts{}, ErrNotConnected
+	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	args := []string{
@@ -112,7 +177,7 @@ func (c *Counter) run(ctx context.Context, key, mode string, capacity int) (rate
 		strconv.Itoa(capacity),
 		strconv.FormatInt(keyTTL.Milliseconds(), 10),
 	}
-	vals, err := c.script.Exec(ctx, c.client, []string{keyPrefix + key}, args).AsIntSlice()
+	vals, err := c.script.Exec(ctx, *cl, []string{keyPrefix + key}, args).AsIntSlice()
 	if err != nil {
 		return ratecount.Counts{}, fmt.Errorf("valkey: window %s: %w", key, err)
 	}

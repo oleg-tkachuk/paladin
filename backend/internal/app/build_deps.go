@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -48,6 +50,9 @@ type SharedDeps struct {
 	// RLS-scoped Pool: with no per-request tenant GUC, RLS returns zero rows and
 	// every reaper silently no-ops.
 	ReaperPool *pgxpool.Pool
+	// RateCounter is the shared store the tenant and token rate limits count
+	// in when it is not Postgres (ADR-0046); nil means they count in Postgres.
+	RateCounter ratecount.Counter
 	// PartitionPool is the BYPASSRLS pool for the one background job that needs
 	// DDL — PartitionMaintainer (CREATE/ATTACH/DROP PARTITION), which requires
 	// the migrate role's table ownership that ReaperPool deliberately lacks.
@@ -220,6 +225,11 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 		Registry:  registry,
 	}
 	deps.RegisterWatcherStop(cancelWatchers)
+
+	// The Valkey client, when the limits count there, closes with the rest.
+	rateCounter, stopRateCounter := buildRateCounter(cfg, l)
+	deps.RateCounter = rateCounter
+	deps.RegisterWatcherStop(stopRateCounter)
 
 	// Capability subsystem — additive; absence is fine. Built after the
 	// rest so the bundle can take a *SharedDeps for logging convenience.

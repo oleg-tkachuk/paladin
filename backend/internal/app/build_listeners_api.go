@@ -275,7 +275,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	// pass-through rather than an absent interceptor, so the chains below stay
 	// the same shape either way.
 	tenantRLCfg := middleware.TenantRateLimitConfig{
-		Store: adapters.NewTenantRateStore(deps.DB.Queries),
+		Store: tenantRateStore(deps),
 	}
 	if cfg.Middleware.RateLimit.Enabled {
 		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond
