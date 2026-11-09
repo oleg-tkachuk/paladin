@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"connectrpc.com/connect/v2"
@@ -305,6 +307,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// wave of failed authentications leaving no log line was the
 		// widest part of this gap. Failures only; successes are otel's job.
 		middleware.LogOutcome(l),
+		// Inside the failure log: a call the caller cancelled, or that found
+		// the database unreachable, is logged and answered as that, not as
+		// the server's own fault.
+		middleware.ClassifyTransient(pgerr.IsUnavailable),
 		// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
 		// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
 		// establishes the principal. Both paths land a principal before RequireAudience.
@@ -370,6 +376,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// wave of failed authentications leaving no log line was the
 		// widest part of this gap. Failures only; successes are otel's job.
 		middleware.LogOutcome(l),
+		// Inside the failure log: a call the caller cancelled, or that found
+		// the database unreachable, is logged and answered as that, not as
+		// the server's own fault.
+		middleware.ClassifyTransient(pgerr.IsUnavailable),
 		iamGate.Intercept,
 		apiTokIAM,
 		// A capability the MCP server exchanged acts for its user (ADR-0041);
