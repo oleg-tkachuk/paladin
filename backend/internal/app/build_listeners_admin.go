@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"connectrpc.com/connect/v2"
@@ -206,6 +208,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// wave of failed authentications leaving no log line was the
 		// widest part of this gap. Failures only; successes are otel's job.
 		middleware.LogOutcome(l),
+		// Inside the failure log: a call the caller cancelled, or that found
+		// the database unreachable, is logged and answered as that, not as
+		// the server's own fault.
+		middleware.ClassifyTransient(pgerr.IsUnavailable),
 		// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
 		// API-token interceptor below can authenticate them. Without this the
 		// JWT verifier rejects the bearer first with "jwt: malformed token" and

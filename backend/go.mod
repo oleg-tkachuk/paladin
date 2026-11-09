@@ -26,6 +26,7 @@ require (
 	github.com/dustin/go-humanize v1.1.0
 	github.com/exaring/otelpgx v0.13.0
 	github.com/google/go-cmp v0.7.0
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env/v2 v2.0.2
