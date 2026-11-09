@@ -14,7 +14,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/limes"
@@ -83,21 +82,19 @@ func newUsageFixture(t *testing.T) (context.Context, usageFixture) {
 	}
 }
 
-// spentOn reads the per-capability counter straight from the table, so the
-// assertion does not depend on the same code path it is checking.
+// spentOn is what the capability spent, as limes reads it; its tables are
+// limes's own (limes docs/compatibility.md). A capability never charged has
+// spent nothing.
 func (f usageFixture) spentOn(t *testing.T, ctx context.Context) limes.Nanos {
 	t.Helper()
-	var spent limes.Nanos
-	err := f.pool.QueryRow(ctx,
-		`SELECT spent FROM limes.usage WHERE capability_id = $1`, f.capID,
-	).Scan(&spent)
-	if errors.Is(err, pgx.ErrNoRows) {
+	u, err := f.usage.GetUsage(ctx, f.capID)
+	if errors.Is(err, limes.ErrNotFound) {
 		return 0
 	}
 	if err != nil {
 		t.Fatalf("read capability spend: %v", err)
 	}
-	return spent
+	return u.SpentAmount
 }
 
 // tenantSpent is what the tenant spent, as limes reads it: its aggregate and
@@ -114,12 +111,29 @@ func (f usageFixture) tenantSpent(t *testing.T, ctx context.Context) limes.Nanos
 	return budget.SpentAmount
 }
 
-func (f usageFixture) ledgerRows(t *testing.T, ctx context.Context) int {
+// ledgerWindow is how far either side of now ledgerRows sums the ledger: a
+// test's charges are all made within it.
+const ledgerWindow = time.Hour
+
+// ledgerRows is how many charges the ledger holds for the capability, as
+// limes sums them.
+func (f usageFixture) ledgerRows(t *testing.T, ctx context.Context) int64 {
 	t.Helper()
-	var n int
-	if err := f.pool.QueryRow(ctx,
-		`SELECT count(*) FROM limes.charges WHERE capability_id = $1`, f.capID).Scan(&n); err != nil {
-		t.Fatalf("count charges: %v", err)
+	ledger, err := capstore.NewLedger(f.pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	page, err := ledger.SumCharges(ctx, meter.SumChargesRequest{
+		TenantID: f.tenant, From: now.Add(-ledgerWindow), To: now.Add(ledgerWindow),
+		Filter: meter.ChargeFilter{Capabilities: []uuid.UUID{f.capID}},
+	})
+	if err != nil {
+		t.Fatalf("sum charges: %v", err)
+	}
+	var n int64
+	for _, sum := range page.Items {
+		n += sum.Charges
 	}
 	return n
 }

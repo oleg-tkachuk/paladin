@@ -77,12 +77,12 @@ func TestReservationLifecycleUnderRowLevelSecurity(t *testing.T) {
 	if root.SpentAmount != limes.MustParseAmount("4") || root.ReservedAmount != 0 {
 		t.Errorf("parent after settle = %+v, want 4 spent, 0 held", root)
 	}
-	var op, actor string
-	if err := f.pool.QueryRow(ctx, `SELECT op, actor FROM limes.charges WHERE id = $1`, receipt.ChargeID).Scan(&op, &actor); err != nil {
+	charge, err := f.usage.GetCharge(ledgerCtx, receipt.ChargeID)
+	if err != nil {
 		t.Fatalf("settled charge not in the ledger: %v", err)
 	}
-	if op != "llm" || actor != "agent" {
-		t.Errorf("ledger row op=%q actor=%q, want the reservation's", op, actor)
+	if charge.Op != "llm" || charge.Actor != "agent" {
+		t.Errorf("ledger row op=%q actor=%q, want the reservation's", charge.Op, charge.Actor)
 	}
 	// Settling again for the same amount is a replay; for another it is a
 	// conflict, not a quiet answer with the first receipt.
