@@ -97,7 +97,6 @@ func (denyingLimiter) Allow(context.Context, uuid.UUID, int) (ratelimit.Decision
 func (denyingLimiter) Usage(context.Context, uuid.UUID) (ratelimit.Snapshot, error) {
 	return ratelimit.Snapshot{}, nil
 }
-func (denyingLimiter) Sweep(context.Context, time.Duration) (int64, error) { return 0, nil }
 
 // TestRetryAfter_E2E_ConnectTransport boots a real httptest.Server
 // hosting a Connect server wrapped with APITokenInterceptor +

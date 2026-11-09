@@ -82,7 +82,6 @@ func (fakeLimiter) Allow(context.Context, uuid.UUID, int) (ratelimit.Decision, e
 func (f fakeLimiter) Usage(context.Context, uuid.UUID) (ratelimit.Snapshot, error) {
 	return f.snap, nil
 }
-func (fakeLimiter) Sweep(context.Context, time.Duration) (int64, error) { return 0, nil }
 
 func ctxAs(roles ...string) context.Context {
 	return auth.WithPrincipal(context.Background(), &auth.Principal{

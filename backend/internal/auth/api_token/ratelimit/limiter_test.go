@@ -26,16 +26,6 @@ func TestNoopLimiter_AllowsAll(t *testing.T) {
 	}
 }
 
-// TestNoopLimiter_SweepReturnsZero confirms Sweep is a no-op so the
-// purger doesn't log spurious "0 rows swept" lines.
-func TestNoopLimiter_SweepReturnsZero(t *testing.T) {
-	t.Parallel()
-	n, err := NoopLimiter{}.Sweep(context.Background(), time.Hour)
-	if err != nil || n != 0 {
-		t.Fatalf("noop sweep: n=%d err=%v", n, err)
-	}
-}
-
 // recordingLimiter is a stub that lets us drive interceptor tests
 // without hitting Postgres. Tracks the (tokenID, capacity) tuples it
 // was called with and returns a configurable Decision.
@@ -52,8 +42,6 @@ func (r *recordingLimiter) Allow(_ context.Context, _ uuid.UUID, _ int) (Decisio
 func (r *recordingLimiter) Usage(context.Context, uuid.UUID) (Snapshot, error) {
 	return Snapshot{}, nil
 }
-
-func (r *recordingLimiter) Sweep(context.Context, time.Duration) (int64, error) { return 0, nil }
 
 // TestRecordingLimiter_RoundTrip is a smoke test for the test helper —
 // confirms the interface contract holds against a non-noop impl.
