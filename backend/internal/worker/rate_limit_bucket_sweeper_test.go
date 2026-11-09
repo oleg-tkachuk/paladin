@@ -7,13 +7,11 @@ import (
 	"time"
 )
 
-// The sweeper had no test. Its seam is one method and its whole job is a
-// number with a unit attached — `olderThanMicros`, per the interface's own
-// comment — so the thing worth holding is that the grace crossing that
-// boundary is still five minutes when it arrives. Get the unit wrong and the
-// job either deletes buckets the limiter is still weighting (too small) or
-// never deletes anything and the table grows forever (too large), and neither
-// shows up as an error.
+// The sweeper's seam is one method and its whole job is one duration, so the
+// thing worth holding is that the grace crossing that boundary is still five
+// minutes when it arrives. Too small and the job deletes buckets the limiter
+// is still weighting; too large and the table grows, and neither shows up as
+// an error.
 
 // record never blocks. These workers tick on a millisecond interval in tests,
 // so a full channel on a buffered send would stall the tick — and RunTicker
@@ -28,16 +26,16 @@ func record[T any](ch chan T, v T) {
 }
 
 type fakeRateSweeper struct {
-	called chan int64 // the olderThanMicros it was handed
+	called chan time.Duration // the olderThan it was handed
 	err    error
 }
 
 func newFakeRateSweeper(err error) *fakeRateSweeper {
-	return &fakeRateSweeper{called: make(chan int64, 8), err: err}
+	return &fakeRateSweeper{called: make(chan time.Duration, 8), err: err}
 }
 
-func (f *fakeRateSweeper) SweepTenantRateBuckets(_ context.Context, olderThanMicros int64) (int64, error) {
-	record(f.called, olderThanMicros)
+func (f *fakeRateSweeper) SweepRateLimitBuckets(_ context.Context, olderThan time.Duration) (int64, error) {
+	record(f.called, olderThan)
 	if f.err != nil {
 		return 0, f.err
 	}
@@ -64,21 +62,20 @@ func runUntilCalled[T any](t *testing.T, run func(context.Context) error, called
 	}
 }
 
-func TestTenantRateBucketSweeper_PassesFiveMinutesInMicroseconds(t *testing.T) {
+func TestRateLimitBucketSweeper_PassesFiveMinutes(t *testing.T) {
 	store := newFakeRateSweeper(nil)
-	s := &TenantRateBucketSweeper{Store: store, Interval: time.Millisecond}
+	s := &RateLimitBucketSweeper{Store: store, Interval: time.Millisecond}
 
 	got := runUntilCalled(t, s.Run, store.called)
 
-	if want := (5 * time.Minute).Microseconds(); got != want {
-		t.Errorf("olderThanMicros = %d, want %d (five minutes); the boundary "+
-			"takes microseconds, so a duration passed raw is off by 10^6", got, want)
+	if want := 5 * time.Minute; got != want {
+		t.Errorf("olderThan = %v, want %v", got, want)
 	}
 }
 
-func TestTenantRateBucketSweeper_Disabled(t *testing.T) {
+func TestRateLimitBucketSweeper_Disabled(t *testing.T) {
 	t.Parallel()
-	cases := map[string]*TenantRateBucketSweeper{
+	cases := map[string]*RateLimitBucketSweeper{
 		"zero interval":     {Store: newFakeRateSweeper(nil), Interval: 0},
 		"negative interval": {Store: newFakeRateSweeper(nil), Interval: -time.Second},
 		// Not just "does not sweep": a nil store with a live interval would
@@ -95,11 +92,11 @@ func TestTenantRateBucketSweeper_Disabled(t *testing.T) {
 	}
 }
 
-func TestTenantRateBucketSweeper_KeepsTickingAfterAStoreError(t *testing.T) {
+func TestRateLimitBucketSweeper_KeepsTickingAfterAStoreError(t *testing.T) {
 	// A transient database error must not end the loop: the table keeps growing
 	// while the worker is gone, and nothing restarts it short of a pod restart.
 	store := newFakeRateSweeper(errors.New("deadlock detected"))
-	s := &TenantRateBucketSweeper{Store: store, Interval: time.Millisecond}
+	s := &RateLimitBucketSweeper{Store: store, Interval: time.Millisecond}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

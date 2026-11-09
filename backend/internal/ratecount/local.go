@@ -34,8 +34,8 @@ func newLocal(now func() time.Time) *Local {
 	return &Local{now: now, keys: map[string]*localWindow{}}
 }
 
-// bucketIndex numbers the bucket t falls in, and how far into it t is.
-func bucketIndex(t time.Time) (int64, time.Duration) {
+// BucketIndex numbers the bucket t falls in, and how far into it t is.
+func BucketIndex(t time.Time) (int64, time.Duration) {
 	us := t.UnixMicro()
 	width := Window.Microseconds()
 	return us / width, time.Duration(us%width) * time.Microsecond
@@ -81,15 +81,15 @@ func (l *Local) prune(index int64) {
 func (l *Local) decide(key string, capacity int, mode bumpMode) Counts {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	index, elapsed := bucketIndex(l.now())
+	index, elapsed := BucketIndex(l.now())
 	w := l.window(key, index)
-	c := Counts{Previous: w.prev, BucketStart: bucketStart(index), Elapsed: elapsed}
+	c := Counts{Previous: w.prev, BucketStart: BucketStart(index), Elapsed: elapsed}
 	switch mode {
 	case bumpAlways:
 		w.cur++
 		c.Admitted = true
 	case bumpIfFits:
-		if fits(w.cur, w.prev, elapsed, capacity) {
+		if Fits(w.cur, w.prev, elapsed, capacity) {
 			w.cur++
 			c.Admitted = true
 		}
@@ -122,14 +122,14 @@ const (
 	bumpIfFits
 )
 
-// bucketStart is when bucket index began.
-func bucketStart(index int64) time.Time {
+// BucketStart is when bucket index began.
+func BucketStart(index int64) time.Time {
 	return time.UnixMicro(index * Window.Microseconds()).UTC()
 }
 
-// fits reports whether one more request fits capacity over the trailing
+// Fits reports whether one more request fits capacity over the trailing
 // window, with cur and prev counted elapsed into the current bucket.
-func fits(cur, prev int64, elapsed time.Duration, capacity int) bool {
+func Fits(cur, prev int64, elapsed time.Duration, capacity int) bool {
 	share := float64(prev) * (1 - elapsed.Seconds()/Window.Seconds())
 	return float64(cur+1)+share <= float64(capacity)
 }

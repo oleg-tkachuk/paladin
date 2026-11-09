@@ -22,7 +22,7 @@ import (
 // admin planes.
 //
 // The limit is shared across replicas: the counters live in the store
-// middleware.rate_limit.backend names (ADR-0046) — tenant_rate_buckets in
+// middleware.rate_limit.backend names (ADR-0046) — rate_limit_buckets in
 // Postgres, or Valkey — in the same sliding-window shape api_token uses. An
 // in-memory bucket per process would give each pod its own ceiling, so the
 // configured rate would silently be multiplied by the replica count — 600/s

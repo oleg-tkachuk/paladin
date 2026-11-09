@@ -26,6 +26,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/wire"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -178,7 +179,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// and any provisioning integration drive it, and its handlers are the
 	// expensive ones. Disabled yields a pass-through.
 	tenantRLCfg := middleware.TenantRateLimitConfig{
-		Store: tenantRateStore(deps),
+		Store: ratecount.NewTenantStore(deps.RateCounter),
 	}
 	if cfg.Middleware.RateLimit.Enabled {
 		tenantRLCfg.RPS = cfg.Middleware.RateLimit.RequestsPerSecond

@@ -333,21 +333,43 @@ tests:
           - exp_labels:
               severity: critical
             exp_annotations:
-              summary: "Paladin rate limiting is failing open"
+              summary: "Paladin rate limits are not shared across replicas"
               description: >-
-                Requests are admitted without a rate-limit decision; the per-tenant
-                or per-token ceiling is not in force. The limiters log nothing when
-                they fail open: check that the planes can write tenant_rate_buckets
-                and api_token_rate_buckets.
+                Requests are decided in each process, or admitted without a decision,
+                because the store the limits count in did not answer; each replica
+                grants the full rate. Check the store middleware.rate_limit.backend
+                names: rate_limit_buckets in Postgres, or Valkey.
               runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/rate-limit-failing-open.md"
 
-  # Neither fail-open counter moves.
+  # The shared store stopped answering; calls are decided per process.
+  - interval: 1m
+    input_series:
+      - series: 'paladin_ratelimit_degraded_total{backend="valkey"}'
+        values: "0+5x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PaladinRateLimitFailingOpen
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Paladin rate limits are not shared across replicas"
+              description: >-
+                Requests are decided in each process, or admitted without a decision,
+                because the store the limits count in did not answer; each replica
+                grants the full rate. Check the store middleware.rate_limit.backend
+                names: rate_limit_buckets in Postgres, or Valkey.
+              runbook_url: "https://github.com/oleg-tkachuk/paladin/blob/main/docs/runbooks/rate-limit-failing-open.md"
+
+  # Neither fail-open counter nor the degraded counter moves.
   - interval: 1m
     input_series:
       - series: 'paladin_tenant_ratelimit_fail_open_total{tenant_id="t1"}'
         values: "3x20"
       - series: paladin_api_token_ratelimit_fail_open_total
         values: "1x20"
+      - series: 'paladin_ratelimit_degraded_total{backend="postgres"}'
+        values: "7x20"
     alert_rule_test:
       - eval_time: 15m
         alertname: PaladinRateLimitFailingOpen

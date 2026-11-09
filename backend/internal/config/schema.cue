@@ -315,6 +315,9 @@ middleware: {
     // Where the tenant and token limits count (ADR-0046): "valkey" needs
     // datastores.valkey.addr.
     backend:             "postgres" | "valkey" | *"postgres"
+    // How often each replica shares its postgres-backend counts. A tenant
+    // can exceed its ceiling by at most (replicas - 1) x rate x this.
+    sync_interval:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1s"
     burst:               int    | *500
     max_tenants:         int    | *10000
     cleanup_ttl:         =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"10m"

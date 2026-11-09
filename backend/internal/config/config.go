@@ -225,6 +225,9 @@ func (c *Config) Validate() error {
 	if v := c.Datastores.Valkey; v.Password != "" && v.PasswordSecret != nil {
 		return fmt.Errorf("valkey: cannot specify both password and password_secret")
 	}
+	if c.Middleware.RateLimit.Backend == RateLimitBackendPostgres && c.Middleware.RateLimit.SyncInterval <= 0 {
+		return fmt.Errorf("middleware.rate_limit.sync_interval must be positive")
+	}
 	if c.Middleware.RateLimit.Backend == RateLimitBackendValkey && c.Datastores.Valkey.Addr == "" {
 		return fmt.Errorf("middleware.rate_limit.backend is %q but datastores.valkey.addr is empty", RateLimitBackendValkey)
 	}

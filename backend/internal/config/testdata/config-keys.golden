@@ -378,6 +378,7 @@ middleware.rate_limit.cleanup_ttl
 middleware.rate_limit.enabled
 middleware.rate_limit.max_tenants
 middleware.rate_limit.requests_per_second
+middleware.rate_limit.sync_interval
 middleware.timeouts
 middleware.timeouts.default_operation
 middleware.timeouts.fast_operation

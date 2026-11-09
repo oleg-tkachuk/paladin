@@ -860,14 +860,19 @@ type RateLimit struct {
 	// Backend is where both the tenant and the token limits count:
 	// RateLimitBackendPostgres or RateLimitBackendValkey (ADR-0046).
 	Backend string `yaml:"backend" json:"backend"`
+	// SyncInterval is how often each replica adds its counts to Postgres and
+	// reads the totals back, with the postgres backend. Replicas do not see
+	// each other's requests for up to this long, so a limit can be exceeded
+	// by at most (replicas − 1) × rate × SyncInterval.
+	SyncInterval time.Duration `yaml:"sync_interval" json:"sync_interval"`
 	// Burst is retained for compatibility with existing values files and is
 	// no longer read. A trailing-minute window admits a spike on its own — a
 	// tenant idle for the previous minute may spend the whole budget at once
 	// — so a separate burst knob described the same slack twice.
 	Burst int `yaml:"burst" json:"burst"`
 	// MaxTenants, CleanupTTL and CleanupInterval sized the in-memory bucket
-	// map and are likewise no longer read: Postgres holds the buckets, and
-	// worker.TenantRateBucketSweeper reclaims them on the housekeeping
+	// map and are likewise no longer read: the buckets live in Backend, and
+	// worker.RateLimitBucketSweeper reclaims Postgres's on the housekeeping
 	// interval.
 	MaxTenants      int           `yaml:"max_tenants" json:"max_tenants"`
 	CleanupTTL      time.Duration `yaml:"cleanup_ttl" json:"cleanup_ttl"`

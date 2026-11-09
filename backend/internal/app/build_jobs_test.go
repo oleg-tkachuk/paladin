@@ -65,9 +65,9 @@ func TestBuildBackgroundJobs_AlwaysOn(t *testing.T) {
 	want := []string{
 		"*worker.IdempotencyKeyPurger",
 		"*worker.PartitionMaintainer",
+		"*worker.RateLimitBucketSweeper",
 		"*worker.RefreshTokenPurger",
 		"*worker.StorageMigrationWorker",
-		"*worker.TenantRateBucketSweeper",
 		"*worker.TrashRetentionGauge",
 	}
 	got := jobsFor(t, nil)

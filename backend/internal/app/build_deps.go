@@ -50,8 +50,7 @@ type SharedDeps struct {
 	// RLS-scoped Pool: with no per-request tenant GUC, RLS returns zero rows and
 	// every reaper silently no-ops.
 	ReaperPool *pgxpool.Pool
-	// RateCounter is the shared store the tenant and token rate limits count
-	// in when it is not Postgres (ADR-0046); nil means they count in Postgres.
+	// RateCounter is where the tenant and token rate limits count (ADR-0046).
 	RateCounter ratecount.Counter
 	// PartitionPool is the BYPASSRLS pool for the one background job that needs
 	// DDL — PartitionMaintainer (CREATE/ATTACH/DROP PARTITION), which requires
@@ -226,8 +225,9 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	}
 	deps.RegisterWatcherStop(cancelWatchers)
 
-	// The Valkey client, when the limits count there, closes with the rest.
-	rateCounter, stopRateCounter := buildRateCounter(cfg, l)
+	// The rate-limit counter's sync loop or Valkey client stops with the
+	// rest, before the pool closes, so its last sync still has a connection.
+	rateCounter, stopRateCounter := buildRateCounter(cfg, pool, l)
 	deps.RateCounter = rateCounter
 	deps.RegisterWatcherStop(stopRateCounter)
 

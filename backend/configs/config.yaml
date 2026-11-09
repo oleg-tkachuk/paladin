@@ -217,6 +217,7 @@ middleware:
     enabled: true
     requests_per_second: 300
     backend: postgres                   # postgres | valkey (ADR-0046); valkey needs datastores.valkey.addr
+    sync_interval: 1s                   # postgres backend: how often each replica shares its counts
     burst: 500
     max_tenants: 10000                  # LRU eviction beyond this
     cleanup_ttl: 10m

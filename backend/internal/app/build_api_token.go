@@ -12,6 +12,7 @@ import (
 	apitokenpg "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token/ratelimit"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 )
 
 // hmacKeyDerivationLabel domain-separates the api-token HMAC key derived
@@ -97,10 +98,7 @@ func BuildAPITokenBundle(cfg config.APIToken, authSigningKey string, log *zap.Lo
 		return nil, fmt.Errorf("app: api_token verifier: %w", err)
 	}
 
-	limiter, err := tokenRateLimiter(deps)
-	if err != nil {
-		return nil, fmt.Errorf("app: api_token rate limiter: %w", err)
-	}
+	limiter := ratecount.NewTokenLimiter(deps.RateCounter)
 
 	return &APITokenBundle{
 		Store:    store,

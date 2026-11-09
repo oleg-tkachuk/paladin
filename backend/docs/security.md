@@ -13,7 +13,7 @@ a kind, a tenant and a role set.
 |---|---|---|---|
 | User access token | JWT, HS256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience`, `SwitchTenant` | signed with `auth.signing_key` (`internal/auth/issuer`); with `auth.jwks_url` set the planes verify against that JWKS instead |
 | Refresh token | JWT, HS256, audience `paladin-iam` | `Login`, rotation in `RefreshToken` | stored by jti in `refresh_tokens`; rotation and reuse detection below |
-| API token | opaque, `TokenPrefix` + random body (`internal/auth/api_token/format.go`) | `APITokenService.Create` | stored as a keyed SHA-256 digest; per-token rate limit in `api_token_rate_buckets` |
+| API token | opaque, `TokenPrefix` + random body (`internal/auth/api_token/format.go`) | `APITokenService.Create` | stored as a keyed SHA-256 digest; per-token rate limit counted where `middleware.rate_limit.backend` says (ADR-0046) |
 | Capability token | JWT, `alg: Ed25519` (RFC 9864), `typ: at+jwt` (RFC 9068) under a `limes:` kid ([limes](https://github.com/oleg-tkachuk/limes)), or its Biscuit form; in `X-Paladin-Capability`, `Authorization: Capability <token>` or, for a key-bound one, `Authorization: DPoP <token>` | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable (a Biscuit copy can be revoked alone); a key-bound capability (`cnf.jkt`) also needs a DPoP proof; [limes](https://github.com/oleg-tkachuk/limes) |
 
 For MCP clients, the api role serves an OAuth 2.1 authorization server under

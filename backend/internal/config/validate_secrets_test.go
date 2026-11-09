@@ -266,7 +266,16 @@ func TestValidate_ValkeyBackendNeedsAnAddress(t *testing.T) {
 	}
 	c = minimalValidConfig()
 	c.Middleware.RateLimit.Backend = RateLimitBackendPostgres
+	c.Middleware.RateLimit.SyncInterval = time.Second
 	if err := c.Validate(); err != nil {
 		t.Fatalf("postgres backend without a valkey address: %v", err)
 	}
+}
+
+// The postgres backend shares its counts on a ticker; a zero interval has
+// no tick to run on.
+func TestValidate_PostgresBackendNeedsASyncInterval(t *testing.T) {
+	c := minimalValidConfig()
+	c.Middleware.RateLimit.Backend = RateLimitBackendPostgres
+	mustReject(t, c, "middleware.rate_limit.sync_interval must be positive")
 }

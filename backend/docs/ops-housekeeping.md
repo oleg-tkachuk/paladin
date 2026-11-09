@@ -21,7 +21,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `event_delivery_purger` | deletes delivered and failed `event_deliveries` rows whose last attempt is older than the TTL | `housekeeping.event_deliveries_ttl` | `336h` |
 | `partition_maintainer` | creates `audit_log` (monthly) and `idempotency_keys` (daily) partitions ahead; drops expired ones | `housekeeping.interval` | `1h` |
 | `idempotency_purger` | deletes expired idempotency keys | `housekeeping.interval` | `1h` |
-| `tenant_rate_bucket_sweeper` | drops elapsed per-tenant rate-limit windows | `housekeeping.interval` | `1h` |
+| `rate_limit_bucket_sweeper` | drops elapsed tenant and token rate-limit windows from `rate_limit_buckets` | `housekeeping.interval` | `1h` |
 | `trash_retention_gauge` | publishes `paladin.tenants.past_trash_retention`, the trashed tenants past `admin.tenants.trash_retention`; purges nothing | `housekeeping.interval`, `admin.tenants.trash_retention` | `1h`, `720h` |
 | `refresh_token_reaper` | deletes expired refresh tokens | `refresh_token_reap.interval` | `1h` |
 | `api_token_purger` | deletes API tokens expired for longer than the grace | `api_token.interval`, `.expired_for` | `1h`, `168h` |

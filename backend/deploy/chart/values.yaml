@@ -924,6 +924,9 @@ config:
       requests_per_second: 300
       # postgres | valkey (ADR-0046); valkey needs datastores.valkey.addr.
       backend: postgres
+      # postgres backend: how often each replica shares its counts. A tenant
+      # can exceed its ceiling by (replicas - 1) x rate x this, at most.
+      sync_interval: 1s
       burst: 500
       max_tenants: 10000
       cleanup_ttl: 10m
