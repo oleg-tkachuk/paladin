@@ -89,6 +89,36 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — limes v1.0.0-rc.64: striped tenant aggregates, store codes
+
+- limes migrations `042` and `043` run with the migration job: a table of
+  stripes beside each tenant's budget, and revocations marked in one walk per
+  statement.
+- The meter counts a tenant with no ceiling in stripes instead of on its
+  budget's one row, so that tenant's parallel calls stop queueing on the row
+  (limes ADR-0022). It is always on. Every replica must run this release
+  before one charges: an older one reads the budget without its stripes and
+  checks a ceiling set meanwhile against less than was spent.
+- **`capability.stripe_unlimited_tenants` is gone.** The configuration is
+  strict, so a values file that still sets it stops the server from starting:
+  remove the key before deploying.
+- Setting a tenant's budget now waits a bounded time for that tenant's calls
+  in flight. Past the bound it changes nothing and answers `UNAVAILABLE` with
+  limes code `tenant_budget_busy`; send it again.
+- New metric `limes_tenant_wait_seconds`, a histogram of how long each metered
+  call waited for its tenant's budget row, by `limes_operation`, on the
+  Operations dashboard. A wait past 100 ms is logged at WARN by
+  `capability-usage`, with the tenant's id.
+- A capability call whose database failed now carries limes code
+  `store_unavailable` (no connection, the database shutting down or out of
+  resources, a serialization failure) or `store_timeout` (a statement past
+  the database's own limit) in its ErrorInfo, answered `UNAVAILABLE`: send
+  it again after a pause. It carried no limes code before.
+- Text that is not valid UTF-8 or holds a NUL is refused as
+  `INVALID_ARGUMENT` wherever it reaches the capability library: subjects,
+  notes, actors, filters, ops and external refs. It failed as a server
+  error before.
+
 ## v41.1.0 — limes v1.0.0-rc.18: PostgreSQL 15 and pgstore's DPoP replay cache
 
 - **PostgreSQL 15 or later.** pgstore v0.45 reads capability records through
@@ -98,6 +128,97 @@ here.
   replay cache now, and migration `104` drops Paladin's `dpop_seen_proofs`.
   The new table starts empty: a proof accepted in the minute before the
   upgrade could be presented once more in that minute. Nothing to do.
+
+## sdk/python/v0.145.1, sdk/go/v0.145.1 — the SDKs stop retrying a permanent refusal
+
+- Both SDKs' default retry no longer repeats a `ResourceExhausted` whose
+  limes code the capability library holds permanent — `request_limit_exceeded`,
+  `copy_limit_exceeded`, `lease_requests_exhausted`. Such a refusal stands for
+  as long as the capability does: get another capability instead.
+- `sdk/testdata/error_info.json` lists every permanent code, held to limes's
+  `Reason.Permanent` by the Go SDK's tests; the Python SDK exposes the same
+  set as `paladin.errors.PERMANENT_LIMES_CODES`.
+
+## sdk/python/v0.145.1, sdk/go/v0.145.1 — capability refusals say the library's title, not its words
+
+- A refusal from the capability library now carries the fixed title of its
+  problem as its message, such as "The token does not allow this request",
+  instead of the library's own text. That text named resources, capability
+  ids, audiences and decoding errors, and limes keeps it for the server's log
+  (limes `docs/errors.md`).
+- A refusal of the client's own input — `invalid_request`,
+  `invalid_caveats`, `invalid_amount`, `delegation_too_wide` — adds after the
+  title which part of the request was refused, as the library words it:
+  "The delegation asks for more than its parent holds: an op is not among
+  the parent's". The detail names a rule, never a value.
+- Both fakes refuse a delegated op the parent lacks as the server does, with
+  limes code `delegation_too_wide`, where they answered a message of their
+  own without it.
+- Branch on what stays: the Connect code, the ErrorInfo reason and the limes
+  code in its metadata (`paladin.LimesCode`, `paladin.errors.limes_code`).
+  A client that matched the old message text must move to them.
+- Both SDKs' fakes answer with the same titles and details, held to the
+  server by `sdk/testdata/*.json`.
+
+## Unreleased — transient failures answered with their own codes
+
+- An RPC that fails because the database cannot be reached, or is shutting
+  down or starting, now answers `UNAVAILABLE` with a generic message instead
+  of `INTERNAL`. A client may retry it. The driver's error stays in the
+  server's failure log as the cause.
+- An RPC whose caller cancelled it, or whose deadline passed, now answers
+  `CANCELED` or `DEADLINE_EXCEEDED` instead of `INTERNAL`, and is logged at
+  info rather than error.
+- A handler that chose a precise code keeps it; only failures reported as
+  `INTERNAL`, `UNKNOWN` or `DATA_LOSS` are reclassified.
+- An object, presign or multipart RPC whose collection lookup fails used to
+  answer `NOT_FOUND` with the driver's error, the database's address
+  included. It now answers `NOT_FOUND` only for a collection that is not
+  there; a failed lookup answers `UNAVAILABLE` or `INTERNAL` like any other.
+- A capability, metering or tenant-budget RPC that failed with an error the
+  capability library did not code answered `UNAVAILABLE`, as if the store
+  were down. The library now codes its store's failures itself
+  (`store_unavailable`, `store_timeout`), which stay `UNAVAILABLE`; an
+  uncoded error is the server's own fault and answers `INTERNAL`.
+
+## Unreleased — login and OAuth limits shared across replicas
+
+- The login limits (`auth.login_rate_limit_per_subject_per_minute`,
+  `auth.login_rate_limit_per_ip_per_minute`) and the `/oauth/token` limits
+  (`auth.oauth.token_rate_limit_per_minute`,
+  `auth.oauth.token_exchange_rate_limit_per_minute`) now count where
+  `middleware.rate_limit.backend` names, like the tenant and token limits
+  ([ADR-0046](../adr/0046-rate-limits-off-the-request-path.md)). Each replica
+  used to grant the full rate on its own, so the cap was the replica count
+  times the setting; it is now the setting.
+- The OAuth limit is a sliding one-minute window rather than a token bucket:
+  the same number per minute, with no burst carried over from an idle minute.
+- A refused login now carries `Retry-After`. A limit the store cannot decide
+  refuses the call: a login with `RESOURCE_EXHAUSTED`, a token request with
+  `503 temporarily_unavailable`.
+- Only the api and admin planes build the rate counter now; the worker,
+  dispatcher and ingest no longer connect to Valkey, and the chart lets only
+  api and admin out to it.
+
+## Unreleased — rate limits count off the request path
+
+- The tenant and token rate limits no longer write Postgres on every request
+  ([ADR-0046](../adr/0046-rate-limits-off-the-request-path.md)). With the
+  default `middleware.rate_limit.backend: postgres`, each replica counts in
+  memory and shares its counts every `middleware.rate_limit.sync_interval`
+  (`1s`). A tenant can exceed its ceiling by at most
+  `(replicas − 1) × rate × sync_interval` — about 3% of a minute's budget at
+  three replicas.
+- `backend: valkey` counts exactly in a Valkey given under `datastores.valkey`
+  (`addr`, `password_secret`, `tls`, `timeout`). Add the password Secret's name
+  to `rbac.secretReader.secretNames`.
+- When the store does not answer, each replica now enforces the full rate on
+  its own instead of admitting every request. `PaladinRateLimitFailingOpen`
+  also fires on that, from `paladin_ratelimit_degraded_total`.
+- Migration `108` replaces `tenant_rate_buckets` and `api_token_rate_buckets`
+  with one UNLOGGED `rate_limit_buckets`; the counts of the minute it runs in
+  are dropped. The worker job `tenant_rate_bucket_sweeper` is now
+  `rate_limit_bucket_sweeper`.
 
 ## release/v0.1.0 — the product's numbering restarts at 0.x
 
