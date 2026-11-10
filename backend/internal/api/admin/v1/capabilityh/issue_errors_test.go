@@ -204,3 +204,21 @@ func TestExceptionsNameLimesCodes(t *testing.T) {
 		}
 	}
 }
+
+// A delegation wider than its parent is told the title of limes's problem
+// and which part of the request was refused, by limes's own words for it:
+// what the caller can fix, and nothing of the parent's.
+func TestDelegateTellsWhatWasTooWide(t *testing.T) {
+	store := &failingInsertStore{}
+	m := newMinter(t, store)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+	req := delegateReq(parent)
+	req.Caveats = openCaveats(limes.OpPut)
+	_, err := h.Delegate(auth.WithCapability(context.Background(), parent), req)
+	ce, ok := errors.AsType[*connect.Error](err)
+	const want = "The delegation asks for more than its parent holds: an op is not among the parent's"
+	if !ok || ce.Code() != connect.CodePermissionDenied || ce.Message() != want {
+		t.Fatalf("err = %v, want PermissionDenied telling %q", err, want)
+	}
+}

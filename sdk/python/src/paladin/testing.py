@@ -483,6 +483,26 @@ _TITLE_NOT_ALLOWED = "The token does not allow this request"
 _TITLE_LIMIT_EXHAUSTED = "The token's request or budget limit is exhausted"
 _TITLE_DELEGATION_TOO_WIDE = "The delegation asks for more than its parent holds"
 
+# What joins a limes problem's title to its detail, as the server joins them
+# (backend/internal/auth capabilityMessage).
+_PROBLEM_DETAIL_SEPARATOR = ": "
+
+# limes's detail of a delegation wider than its parent, by the rule it broke
+# (limes delegate.go): which part of the request was refused, no value of it.
+# sdk/testdata/delegation_details.json holds them to the library.
+_DELEGATION_DETAILS = {
+    "audience": "the audience is wider than the parent's",
+    "starts_before": "it starts before the parent",
+    "tenant": "it names another tenant than the parent",
+    "key_bound": "the parent is bound to a key and it is not",
+    "op": "an op is not among the parent's",
+    "resources_unrestricted": "the parent restricts resources and it does not",
+    "resource_prefix": "a resource prefix is not under the parent's",
+    "resource_uri": "a resource URI is not among the parent's",
+    "tainted_read": "it allows tainted reads and the parent does not",
+    "idempotency_key": "it drops the parent's idempotency key requirement",
+}
+
 # The limes code of a delegation wider than its parent.
 _LIMES_DELEGATION_TOO_WIDE = "delegation_too_wide"
 
@@ -872,40 +892,45 @@ def _wider_than(
     child: capability_service_pb2.Capability,
     child_from: datetime,
 ) -> str | None:
-    """How ``child``, valid from ``child_from``, is wider than ``parent``, by
-    limes.Narrows' rule — None when it is not: a plane, an earlier start,
+    """limes's detail of how ``child``, valid from ``child_from``, is wider
+    than ``parent``, by limes.Narrows' rule — None when it is not: a plane, an earlier start,
     another tenant, an op, a resource, tainted reads or an idempotency key
     the parent does not allow. The ceilings the fake counts itself are left
     to it; the expiry is cut to the parent's before this is asked."""
-    widened = set(child.audience) - set(parent.audience)
-    if widened:
-        return f"audience {sorted(child.audience)} widens parent {sorted(parent.audience)}"
+    return _DELEGATION_DETAILS[rule] if (rule := _wider_rule(parent, child, child_from)) else None
+
+
+def _wider_rule(
+    parent: capability_service_pb2.Capability,
+    child: capability_service_pb2.Capability,
+    child_from: datetime,
+) -> str | None:
+    """The rule of ``_DELEGATION_DETAILS`` ``child`` breaks, in limes's order."""
+    if set(child.audience) - set(parent.audience):
+        return "audience"
     parent_from = (
         parent.not_before if parent.HasField("not_before") else parent.issued_at
     ).ToDatetime(tzinfo=UTC)
     if child_from < parent_from:
-        return f"child starts {child_from}, before parent {parent_from}"
+        return "starts_before"
     if child.subject.tenant_id != parent.subject.tenant_id:
-        return "tenant_id mismatch"
+        return "tenant"
     if parent.confirmation_jkt and not child.confirmation_jkt:
-        return "parent is key-bound, child is not"
+        return "key_bound"
     p, c = parent.caveats, child.caveats
-    for op in c.ops:
-        if op not in p.ops:
-            return f"child op {json.dumps(op)} not in parent ops"
+    if any(op not in p.ops for op in c.ops):
+        return "op"
     if p.resource_prefixes or p.resource_uris:
         if not c.resource_prefixes and not c.resource_uris:
-            return "parent restricts resources, child unrestricted"
-        for prefix in c.resource_prefixes:
-            if not any(_match_resource(q, prefix) for q in p.resource_prefixes):
-                return f"child prefix {json.dumps(prefix)} not under any parent prefix"
-        for uri in c.resource_uris:
-            if not _allows_resource(p, uri):
-                return f"child URI {json.dumps(uri)} not in parent allowance"
+            return "resources_unrestricted"
+        if any(not any(_match_resource(q, x) for q in p.resource_prefixes) for x in c.resource_prefixes):
+            return "resource_prefix"
+        if any(not _allows_resource(p, uri) for uri in c.resource_uris):
+            return "resource_uri"
     if c.allow_tainted_read and not p.allow_tainted_read:
-        return "child grants tainted_read; parent does not"
+        return "tainted_read"
     if p.idempotency_key_required and not c.idempotency_key_required:
-        return "child relaxes idempotency_key requirement"
+        return "idempotency_key"
     return None
 
 
@@ -1006,12 +1031,6 @@ class _CapabilityService(CapabilityServiceSync):
         caveats = parent.msg.caveats
         if request.HasField("caveats"):
             _check_ops(request.caveats.ops)
-            for op in request.caveats.ops:
-                if op not in parent_ops:
-                    raise _with_reason(
-                        Code.PERMISSION_DENIED,
-                        f"delegation too wide: op {json.dumps(op)} is not granted to the parent",
-                    )
             caveats = request.caveats
         expires = _lifetime(now, nbf, request.ttl_seconds)
         # A child outliving its parent is cut to the parent's end, as limes does.
@@ -1026,7 +1045,9 @@ class _CapabilityService(CapabilityServiceSync):
         wider = _wider_than(parent.msg, c, nbf or now)
         if wider is not None:
             raise _limes_refusal(
-                Code.PERMISSION_DENIED, _LIMES_DELEGATION_TOO_WIDE, _TITLE_DELEGATION_TOO_WIDE
+                Code.PERMISSION_DENIED,
+                _LIMES_DELEGATION_TOO_WIDE,
+                _TITLE_DELEGATION_TOO_WIDE + _PROBLEM_DETAIL_SEPARATOR + wider,
             )
         return fake._mint_capability(c, now, nbf, expires, status, parent.msg.id)
 
