@@ -53,7 +53,7 @@ env:
   # renovate: datasource=github-releases depName=prometheus/prometheus
   PROMETHEUS_VERSION: "v3.16.0"
   # renovate: datasource=github-releases depName=mikefarah/yq
-  YQ_VERSION: "v4.54.2"
+  YQ_VERSION: "v4.54.3"
   # The Python the sdk group's own tests run on, rather than whatever the
   # runner ships (3.14 on ubuntu-26.04). The newest one biscuit-python has a
   # wheel for, so the attenuation tests run here instead of skipping; the
