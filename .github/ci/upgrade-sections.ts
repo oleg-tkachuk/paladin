@@ -151,12 +151,13 @@ async function shippedBefore(commit: string, tag: string, tags: readonly string[
 
 // filesAdded is, for each section file, the commit that added it and its
 // age: 0 for the newest, counting back through history, which orders files
-// added in the same second as surely as any others.
+// added in the same second as surely as any others. Renames are read as
+// additions: a file the change renamed was added, for its section, by it.
 async function filesAdded(root: string): Promise<Map<string, { commit: string; age: number }>> {
   const out = new Map<string, { commit: string; age: number }>();
   let commit = "";
   let age = -1;
-  for (const line of lines(await git(["log", "--diff-filter=A", "--format=%x00%H", "--name-only", "--", SECTIONS], root))) {
+  for (const line of lines(await git(["log", "--no-renames", "--diff-filter=A", "--format=%x00%H", "--name-only", "--", SECTIONS], root))) {
     if (line.startsWith("\0")) {
       commit = line.slice(1);
       age += 1;
