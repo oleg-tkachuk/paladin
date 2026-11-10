@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.60: striped tenant aggregates
+## Unreleased — limes v1.0.0-rc.64: striped tenant aggregates, store codes
 
 - limes migrations `042` and `043` run with the migration job: a table of
   stripes beside each tenant's budget, and revocations marked in one walk per
@@ -18,3 +18,12 @@
   call waited for its tenant's budget row, by `limes_operation`, on the
   Operations dashboard. A wait past 100 ms is logged at WARN by
   `capability-usage`, with the tenant's id.
+- A capability call whose database failed now carries limes code
+  `store_unavailable` (no connection, the database shutting down or out of
+  resources, a serialization failure) or `store_timeout` (a statement past
+  the database's own limit) in its ErrorInfo, answered `UNAVAILABLE`: send
+  it again after a pause. It carried no limes code before.
+- Text that is not valid UTF-8 or holds a NUL is refused as
+  `INVALID_ARGUMENT` wherever it reaches the capability library: subjects,
+  notes, actors, filters, ops and external refs. It failed as a server
+  error before.
