@@ -3,6 +3,7 @@ package objecth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 	"uuid"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
@@ -54,7 +56,9 @@ func TestObjectLockReason(t *testing.T) {
 
 // This is the single chokepoint that decides how a resolution failure reaches
 // the client. "Exists but not usable right now" must be FailedPrecondition so
-// clients retry, while an unresolvable key stays NotFound.
+// clients retry, a collection that is not there is NotFound, and a failure to
+// look it up at all is the server's, never NotFound: a client told "not
+// found" while the database was down would act on a lie.
 func TestMapResolveErr(t *testing.T) {
 	cases := []struct {
 		name string
@@ -64,7 +68,8 @@ func TestMapResolveErr(t *testing.T) {
 		{"disabled backend", ErrBackendDisabled, connect.CodeFailedPrecondition},
 		{"read-only backend", ErrBackendReadOnly, connect.CodeFailedPrecondition},
 		{"provisioning bucket", ErrBucketProvisioning, connect.CodeFailedPrecondition},
-		{"anything else", errors.New("no such object key"), connect.CodeNotFound},
+		{"missing collection", fmt.Errorf("collection %q %w", "photos", apiutil.ErrNotFound), connect.CodeNotFound},
+		{"failed lookup", errors.New("lookup bucket meta: failed to connect"), connect.CodeInternal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,7 +93,7 @@ func TestMapResolveErrUnwraps(t *testing.T) {
 	}{
 		{"wrapped once", errWrap(ErrBackendDisabled), connect.CodeFailedPrecondition},
 		{"wrapped twice", errWrap(errWrap(ErrBackendReadOnly)), connect.CodeFailedPrecondition},
-		{"same text, different error", wrapped, connect.CodeNotFound},
+		{"same text, different error", wrapped, connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := connect.CodeOf(MapResolveErr(tc.err)); got != tc.want {

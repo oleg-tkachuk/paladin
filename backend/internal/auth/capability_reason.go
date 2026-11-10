@@ -102,7 +102,29 @@ func capabilityError(code connect.Code, err error) *connect.Error {
 	if r, ok := limes.ReasonOf(err); ok {
 		reason = capabilityErrorReason(r)
 	}
-	return withCapabilityInfo(connect.NewError(code, err.Error()).WithCause(err), err, reason)
+	return withCapabilityInfo(connect.NewError(code, capabilityMessage(err)).WithCause(err), err, reason)
+}
+
+// problemDetailSeparator joins a limes problem's title to its detail in a
+// message; both SDKs' fakes spell it alike.
+const problemDetailSeparator = ": "
+
+// capabilityMessage is what a caller is told of err: the fixed title of its
+// limes problem when it is the library's, whose own text names kids, issuers
+// and stores and is for the server's log (limes docs/errors.md), followed by
+// the problem's detail when limes gives one — which part of the client's own
+// request was refused, a constant holding no value; err's text otherwise.
+// The text stays the cause, for the failure log, and the code rides in the
+// ErrorInfo.
+func capabilityMessage(err error) string {
+	p, ok := limes.ProblemOf(err)
+	if !ok || p.Title == "" {
+		return err.Error()
+	}
+	if p.Detail == "" {
+		return p.Title
+	}
+	return p.Title + problemDetailSeparator + p.Detail
 }
 
 // withCapabilityInfo is e carrying the ErrorInfo an error of the capability

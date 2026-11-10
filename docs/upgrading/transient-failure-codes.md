@@ -9,3 +9,12 @@
   info rather than error.
 - A handler that chose a precise code keeps it; only failures reported as
   `INTERNAL`, `UNKNOWN` or `DATA_LOSS` are reclassified.
+- An object, presign or multipart RPC whose collection lookup fails used to
+  answer `NOT_FOUND` with the driver's error, the database's address
+  included. It now answers `NOT_FOUND` only for a collection that is not
+  there; a failed lookup answers `UNAVAILABLE` or `INTERNAL` like any other.
+- A capability, metering or tenant-budget RPC that failed with an error the
+  capability library did not code answered `UNAVAILABLE`, as if the store
+  were down. The library now codes its store's failures itself
+  (`store_unavailable`, `store_timeout`), which stay `UNAVAILABLE`; an
+  uncoded error is the server's own fault and answers `INTERNAL`.

@@ -9,18 +9,22 @@ from email.utils import format_datetime
 import pytest
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
+from google.rpc import error_details_pb2  # pyright: ignore[reportMissingTypeStubs]
 
 import paladin.client
 from paladin import (
+    ERROR_DOMAIN,
     HEADER_API_TOKEN,
     HEADER_AUTHORIZATION,
     HEADER_CAPABILITY,
     HEADER_IDEMPOTENCY_KEY,
     HEADER_USER_AGENT,
+    LIMES_CODE_KEY,
     Client,
     Retry,
     current_idempotency_key,
     default_retryable,
+    error_details,
     idempotency_key,
     no_idempotency_key,
     parse_retry_after,
@@ -321,10 +325,33 @@ def test_the_classifier_cannot_retry_an_unkeyed_mutating_call(server) -> None:  
     assert server.recorder.calls == 1
 
 
+def _exhausted(code: str) -> ConnectError:
+    """A ResourceExhausted refusal carrying the limes code ``code``."""
+    info = error_details_pb2.ErrorInfo(domain=ERROR_DOMAIN)
+    info.metadata[LIMES_CODE_KEY] = code
+    return ConnectError(Code.RESOURCE_EXHAUSTED, "refused", error_details([info]))
+
+
 def test_default_retryable() -> None:
     assert default_retryable(ConnectError(Code.UNAVAILABLE, "x"))
     assert default_retryable(ConnectError(Code.RESOURCE_EXHAUSTED, "x"))
     assert not default_retryable(ConnectError(Code.INTERNAL, "x"))
+
+
+@pytest.mark.parametrize(
+    ("code", "want"),
+    [
+        ("budget_exceeded", True),
+        ("tenant_budget_exceeded", True),
+        ("request_limit_exceeded", False),
+        ("copy_limit_exceeded", False),
+        ("from_a_newer_server", True),
+    ],
+)
+def test_default_retryable_stops_at_a_permanent_refusal(code: str, want: bool) -> None:
+    """A limit something else can lift is retried; one the capability library
+    holds permanent stands for as long as the capability does."""
+    assert default_retryable(_exhausted(code)) is want
 
 
 def test_connect_takes_every_option_of_client_but_the_audience() -> None:

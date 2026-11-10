@@ -2,7 +2,6 @@ package capabilityh
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"uuid"
 
@@ -84,7 +83,7 @@ func TestRevokeRunRefusals(t *testing.T) {
 		"not wired":         {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}), runRequest(tenant, run), connect.CodeUnavailable},
 		"a bad run":         {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}).WithRunRevocation(&fakeRuns{}), &adminv1.CapabilityServiceRevokeRunRequest{TenantId: tenant.String(), RunId: "nope"}, connect.CodeInvalidArgument},
 		"a bad tenant":      {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}).WithRunRevocation(&fakeRuns{}), &adminv1.CapabilityServiceRevokeRunRequest{TenantId: "nope", RunId: run.String()}, connect.CodeInvalidArgument},
-		"the store failing": {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}).WithRunRevocation(&fakeRuns{err: errors.New("db down")}), runRequest(tenant, run), connect.CodeUnavailable},
+		"the store failing": {mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{}).WithRunRevocation(&fakeRuns{err: errDBDown}), runRequest(tenant, run), connect.CodeUnavailable},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

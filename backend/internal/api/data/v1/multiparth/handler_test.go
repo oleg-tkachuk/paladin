@@ -8,6 +8,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -400,7 +402,7 @@ func TestInitiateMultipartUpload(t *testing.T) {
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
 		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-			return "", "", errors.New("no bucket")
+			return "", "", fmt.Errorf("no bucket: %w", apiutil.ErrNotFound)
 		}}
 		_, err := newHandler(repo, &fakeStorage{}, allow()).
 			InitiateMultipartUpload(authedCtx(tid), base)
@@ -543,7 +545,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 				return s, nil
 			},
 			lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-				return "", "", errors.New("gone")
+				return "", "", fmt.Errorf("gone: %w", apiutil.ErrNotFound)
 			},
 		}
 		_, err := newHandler(repo, &fakeStorage{}, allow()).
@@ -712,7 +714,7 @@ func TestPresignPart(t *testing.T) {
 				return s, nil
 			},
 			lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
-				return "", "", errors.New("gone")
+				return "", "", fmt.Errorf("gone: %w", apiutil.ErrNotFound)
 			},
 		}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).

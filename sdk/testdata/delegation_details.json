@@ -1,0 +1,16 @@
+{
+  "_comment": "What the server tells a caller of a delegation wider than its parent, by the rule it broke: the message is the title of the capability library's problem, then \": \", then the detail named here, the library's own constant for that rule. sdk/go/paladintest holds every detail to the library's limes.Narrows, and the Python fake answers with the same.",
+  "title": "The delegation asks for more than its parent holds",
+  "details": {
+    "audience": "the audience is wider than the parent's",
+    "starts_before": "it starts before the parent",
+    "tenant": "it names another tenant than the parent",
+    "key_bound": "the parent is bound to a key and it is not",
+    "op": "an op is not among the parent's",
+    "resources_unrestricted": "the parent restricts resources and it does not",
+    "resource_prefix": "a resource prefix is not under the parent's",
+    "resource_uri": "a resource URI is not among the parent's",
+    "tainted_read": "it allows tainted reads and the parent does not",
+    "idempotency_key": "it drops the parent's idempotency key requirement"
+  }
+}

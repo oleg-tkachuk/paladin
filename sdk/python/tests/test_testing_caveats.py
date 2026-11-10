@@ -162,7 +162,7 @@ def test_an_ancestors_request_ceiling_counts(strict: FakePaladin) -> None:
         Code.RESOURCE_EXHAUSTED.value,
         "ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED",
         "request_limit_exceeded",
-        f"request limit exceeded: ancestor {parent.capability.id}",
+        "The token's request or budget limit is exhausted",
     )
 
 
@@ -203,7 +203,7 @@ def test_a_write_refused_without_the_key_its_capability_requires() -> None:
     assert refusal is not None
     assert (refusal.code, refusal.message) == (
         Code.PERMISSION_DENIED,
-        'idempotency key required: mutating operation "delete"',
+        "The token does not allow this request",
     )
     assert (
         _caveat_refusal(caveats, str(Op.DELETE), "object://t/c/k", has_idempotency_key=True) is None

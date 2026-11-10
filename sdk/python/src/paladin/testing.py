@@ -391,10 +391,9 @@ _JWT_MALFORMED = "jwt: malformed token"
 _JWT_EXPIRED = "jwt: token expired"
 _API_TOKEN_NOT_FOUND = "api_token: token not found"
 _API_TOKEN_REVOKED = "api_token: token revoked"
-_CAPABILITY_UNKNOWN = "invalid token: not a capability this server issued"
-"""The fake's words for a capability it did not issue. The server's code and
-reason, not its message: that is its library's account of why the token
-would not decode or verify, often in Go's own wording
+_CAPABILITY_UNKNOWN = "The access token is invalid"
+"""The server's words for a capability it did not issue: the title of its
+library's problem, as for every refusal of the library's
 (sdk/testdata/unknown_capabilities.json)."""
 _CAPABILITY_REVOKED = "capability: revoked"
 _TENANT_MISMATCH = "URL tenant does not match token tenant"
@@ -476,12 +475,36 @@ capability refuses."""
 
 _OBJECT_RESOURCE_SCHEME = "object://"
 
-# The limes errors the server sends, without the library's name.
-_AUDIENCE_MISMATCH = "audience mismatch"
-_OP_NOT_ALLOWED = "operation not allowed"
-_RESOURCE_NOT_ALLOWED = "resource not allowed"
-_IDEMPOTENCY_KEY_REQUIRED = "idempotency key required"
-_REQUEST_LIMIT_EXCEEDED = "request limit exceeded"
+# What the server tells a caller of a limes refusal: the fixed title of the
+# library's problem, never the library's own words, which name resources and
+# ids and are for the server's log (limes docs/errors.md).
+_TITLE_TOKEN_INVALID = "The access token is invalid"
+_TITLE_NOT_ALLOWED = "The token does not allow this request"
+_TITLE_LIMIT_EXHAUSTED = "The token's request or budget limit is exhausted"
+_TITLE_DELEGATION_TOO_WIDE = "The delegation asks for more than its parent holds"
+
+# What joins a limes problem's title to its detail, as the server joins them
+# (backend/internal/auth capabilityMessage).
+_PROBLEM_DETAIL_SEPARATOR = ": "
+
+# limes's detail of a delegation wider than its parent, by the rule it broke
+# (limes delegate.go): which part of the request was refused, no value of it.
+# sdk/testdata/delegation_details.json holds them to the library.
+_DELEGATION_DETAILS = {
+    "audience": "the audience is wider than the parent's",
+    "starts_before": "it starts before the parent",
+    "tenant": "it names another tenant than the parent",
+    "key_bound": "the parent is bound to a key and it is not",
+    "op": "an op is not among the parent's",
+    "resources_unrestricted": "the parent restricts resources and it does not",
+    "resource_prefix": "a resource prefix is not under the parent's",
+    "resource_uri": "a resource URI is not among the parent's",
+    "tainted_read": "it allows tainted reads and the parent does not",
+    "idempotency_key": "it drops the parent's idempotency key requirement",
+}
+
+# The limes code of a delegation wider than its parent.
+_LIMES_DELEGATION_TOO_WIDE = "delegation_too_wide"
 
 # limes's reading of a resource's segments (resource.go hasDotSegment).
 _DOT_SEGMENTS = frozenset({".", ".."})
@@ -492,16 +515,6 @@ _SEGMENT_SEPARATORS = (("%2f", "/"), ("\\", "/"), ("%5c", "/"))
 _CONSUMER_DECODES = 2
 _PERCENT = "%"
 _HEX_DIGITS = 2
-
-
-def _go_list(items: Iterable[str]) -> str:
-    """``items`` as Go's ``%v`` prints a slice of strings."""
-    return "[" + " ".join(items) + "]"
-
-
-def _go_quote(s: str) -> str:
-    """``s`` as Go's ``%q`` prints a printable string."""
-    return json.dumps(s, ensure_ascii=False)
 
 
 def _object_resource(tenant: str, collection: str, key: str) -> str:
@@ -656,7 +669,7 @@ def _audience_refusal(audience: Iterable[str], plane: str) -> ConnectError | Non
     return _capability_refusal(
         Code.UNAUTHENTICATED,
         error_reason_pb2.ERROR_REASON_CAPABILITY_AUDIENCE_MISMATCH,
-        f"{_AUDIENCE_MISMATCH}: token audience {_go_list(names)} lacks {_go_quote(plane)}",
+        _TITLE_TOKEN_INVALID,
     )
 
 
@@ -673,25 +686,19 @@ def _caveat_refusal(
         return _capability_refusal(
             Code.PERMISSION_DENIED,
             error_reason_pb2.ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED,
-            f"{_OP_NOT_ALLOWED}: {_go_quote(op)} not in {_go_list(caveats.ops)}",
+            _TITLE_NOT_ALLOWED,
         )
     if not _allows_resource(caveats, resource):
-        message = (
-            f"{_RESOURCE_NOT_ALLOWED}: operation {_go_quote(op)} is not bound to a resource, "
-            "and the capability is resource-restricted"
-            if resource == _NO_RESOURCE
-            else f"{_RESOURCE_NOT_ALLOWED}: {_go_quote(resource)}"
-        )
         return _capability_refusal(
             Code.PERMISSION_DENIED,
             error_reason_pb2.ERROR_REASON_CAPABILITY_RESOURCE_NOT_ALLOWED,
-            message,
+            _TITLE_NOT_ALLOWED,
         )
     if caveats.idempotency_key_required and op not in _READ_OPS and not has_idempotency_key:
         return _capability_refusal(
             Code.PERMISSION_DENIED,
             error_reason_pb2.ERROR_REASON_CAPABILITY_IDEMPOTENCY_KEY_REQUIRED,
-            f"{_IDEMPOTENCY_KEY_REQUIRED}: mutating operation {_go_quote(op)}",
+            _TITLE_NOT_ALLOWED,
         )
     return None
 
@@ -880,49 +887,50 @@ def _not_before(
     return request.not_before.ToDatetime(tzinfo=UTC)
 
 
-# What the server's issuer refuses a delegation with (limes.ErrDelegationTooWide).
-_DELEGATION_TOO_WIDE = "limes: child wider than parent"
-
-
 def _wider_than(
     parent: capability_service_pb2.Capability,
     child: capability_service_pb2.Capability,
     child_from: datetime,
 ) -> str | None:
-    """How ``child``, valid from ``child_from``, is wider than ``parent``, by
-    limes.Narrows' rule — None when it is not: a plane, an earlier start,
+    """limes's detail of how ``child``, valid from ``child_from``, is wider
+    than ``parent``, by limes.Narrows' rule — None when it is not: a plane, an earlier start,
     another tenant, an op, a resource, tainted reads or an idempotency key
     the parent does not allow. The ceilings the fake counts itself are left
     to it; the expiry is cut to the parent's before this is asked."""
-    widened = set(child.audience) - set(parent.audience)
-    if widened:
-        return f"audience {sorted(child.audience)} widens parent {sorted(parent.audience)}"
+    return _DELEGATION_DETAILS[rule] if (rule := _wider_rule(parent, child, child_from)) else None
+
+
+def _wider_rule(
+    parent: capability_service_pb2.Capability,
+    child: capability_service_pb2.Capability,
+    child_from: datetime,
+) -> str | None:
+    """The rule of ``_DELEGATION_DETAILS`` ``child`` breaks, in limes's order."""
+    if set(child.audience) - set(parent.audience):
+        return "audience"
     parent_from = (
         parent.not_before if parent.HasField("not_before") else parent.issued_at
     ).ToDatetime(tzinfo=UTC)
     if child_from < parent_from:
-        return f"child starts {child_from}, before parent {parent_from}"
+        return "starts_before"
     if child.subject.tenant_id != parent.subject.tenant_id:
-        return "tenant_id mismatch"
+        return "tenant"
     if parent.confirmation_jkt and not child.confirmation_jkt:
-        return "parent is key-bound, child is not"
+        return "key_bound"
     p, c = parent.caveats, child.caveats
-    for op in c.ops:
-        if op not in p.ops:
-            return f"child op {json.dumps(op)} not in parent ops"
+    if any(op not in p.ops for op in c.ops):
+        return "op"
     if p.resource_prefixes or p.resource_uris:
         if not c.resource_prefixes and not c.resource_uris:
-            return "parent restricts resources, child unrestricted"
-        for prefix in c.resource_prefixes:
-            if not any(_match_resource(q, prefix) for q in p.resource_prefixes):
-                return f"child prefix {json.dumps(prefix)} not under any parent prefix"
-        for uri in c.resource_uris:
-            if not _allows_resource(p, uri):
-                return f"child URI {json.dumps(uri)} not in parent allowance"
+            return "resources_unrestricted"
+        if any(not any(_match_resource(q, x) for q in p.resource_prefixes) for x in c.resource_prefixes):
+            return "resource_prefix"
+        if any(not _allows_resource(p, uri) for uri in c.resource_uris):
+            return "resource_uri"
     if c.allow_tainted_read and not p.allow_tainted_read:
-        return "child grants tainted_read; parent does not"
+        return "tainted_read"
     if p.idempotency_key_required and not c.idempotency_key_required:
-        return "child relaxes idempotency_key requirement"
+        return "idempotency_key"
     return None
 
 
@@ -1023,12 +1031,6 @@ class _CapabilityService(CapabilityServiceSync):
         caveats = parent.msg.caveats
         if request.HasField("caveats"):
             _check_ops(request.caveats.ops)
-            for op in request.caveats.ops:
-                if op not in parent_ops:
-                    raise _with_reason(
-                        Code.PERMISSION_DENIED,
-                        f"delegation too wide: op {json.dumps(op)} is not granted to the parent",
-                    )
             caveats = request.caveats
         expires = _lifetime(now, nbf, request.ttl_seconds)
         # A child outliving its parent is cut to the parent's end, as limes does.
@@ -1042,7 +1044,11 @@ class _CapabilityService(CapabilityServiceSync):
         )
         wider = _wider_than(parent.msg, c, nbf or now)
         if wider is not None:
-            raise _with_reason(Code.PERMISSION_DENIED, f"{_DELEGATION_TOO_WIDE}: {wider}")
+            raise _limes_refusal(
+                Code.PERMISSION_DENIED,
+                _LIMES_DELEGATION_TOO_WIDE,
+                _TITLE_DELEGATION_TOO_WIDE + _PROBLEM_DETAIL_SEPARATOR + wider,
+            )
         return fake._mint_capability(c, now, nbf, expires, status, parent.msg.id)
 
     def lease(
@@ -1708,7 +1714,7 @@ class FakePaladin(
                 if err.attenuation
                 else error_reason_pb2.ERROR_REASON_CAPABILITY_EXPIRED
             )
-            raise _capability_refusal(Code.UNAUTHENTICATED, reason, err.message) from None
+            raise _capability_refusal(Code.UNAUTHENTICATED, reason, _TITLE_TOKEN_INVALID) from None
         return _Presented(rec, narrowed)
 
     def _bump_requests_locked(self, rec: _CapabilityRecord) -> None:
@@ -1720,18 +1726,13 @@ class FakePaladin(
         while r is not None:
             chain.append(r)
             r = self._capabilities.get(r.msg.parent_id)
-        for i, r in enumerate(chain):
+        for r in chain:
             if _admits_request(r.msg.caveats, r.requests + 1):
                 continue
-            message = (
-                _REQUEST_LIMIT_EXCEEDED
-                if i == 0
-                else f"{_REQUEST_LIMIT_EXCEEDED}: ancestor {r.msg.id}"
-            )
             raise _capability_refusal(
                 Code.RESOURCE_EXHAUSTED,
                 error_reason_pb2.ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
-                message,
+                _TITLE_LIMIT_EXHAUSTED,
             )
         for r in chain:
             r.requests += 1

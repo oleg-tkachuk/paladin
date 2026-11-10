@@ -479,7 +479,6 @@ capability:
   revocation_cache_synced_ttl: 30s   # cached while the watcher listens and clears them on revoke; never below revocation_cache_ttl
   revocation_cache_max_stale: 30s    # a cached answer stands in this long past its TTL while the store fails; 0 fails closed; at most 1h
   budget_leases: true                # CapabilityService.Lease opens budget leases; off while any replica predates them
-  stripe_unlimited_tenants: false    # a tenant with no ceiling counts in stripes, not on one locked row; on only once every replica runs limes v1.0.0-rc.58+
   dpop_replay:                       # the DPoP replay cache every replica shares
     entries_per_holder: 1000         # live proof ids one key holder may have; past it, proof_quota_exceeded
   dpop_nonce:                        # DPoP server nonces (RFC 9449 §8)

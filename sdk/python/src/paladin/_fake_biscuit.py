@@ -183,8 +183,6 @@ def _fold(ba: Any, source: str, current: Grant) -> Grant:
         elif name in (FACT_BIND, FACT_MAX_REQUESTS, FACT_MAX_BUDGET_NANOS):
             continue  # read by the server, not counted here
         else:
-            from paladin.testing import _go_quote
-
             raise _Wide(f"fact {_go_quote(name)} is not part of the attenuation vocabulary")
     child = replace(
         current,
@@ -200,10 +198,20 @@ def _fold(ba: Any, source: str, current: Grant) -> Grant:
     return child
 
 
+def _go_list(items: Sequence[str]) -> str:
+    """``items`` as Go's ``%v`` prints a slice of strings."""
+    return "[" + " ".join(items) + "]"
+
+
+def _go_quote(s: str) -> str:
+    """``s`` as Go's ``%q`` prints a printable string."""
+    return json.dumps(s, ensure_ascii=False)
+
+
 def _narrows(parent: Grant, child: Grant) -> None:
     """Raise ``_Wide`` when ``child`` allows what ``parent`` does not, in the
     order and the words of limes's Narrows."""
-    from paladin.testing import _go_list, _go_quote, _match_resource
+    from paladin.testing import _match_resource
 
     if not set(child.audience) <= set(parent.audience):
         raise _Wide(

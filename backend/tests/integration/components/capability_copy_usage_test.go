@@ -125,16 +125,14 @@ func (m *copyMinter) verify(t *testing.T, ctx context.Context, token string) lim
 // copyID is the revocation id the copy's counters are keyed by.
 func copyID(s limes.MeterSubject) []byte { return s.Copies()[0].RevocationID }
 
-// copyRequestCount reads one copy's request counter as it is stored, past RLS.
-func copyRequestCount(t *testing.T, ctx context.Context, f lineageFixture, id []byte) int64 {
+// copyRequestCount is one copy's request counter, as limes reads it.
+func copyRequestCount(t *testing.T, ctx context.Context, f lineageFixture, capID uuid.UUID, id []byte) int64 {
 	t.Helper()
-	var n int64
-	if err := f.pool.QueryRow(ctx,
-		`SELECT request_count FROM limes.copy_usage WHERE revocation_id = $1`, id,
-	).Scan(&n); err != nil {
-		t.Fatalf("copy %x: %v", id, err)
+	got, err := f.usage.CopyUsage(ctx, meter.CopyUsageRequest{CapabilityID: capID, RevocationIDs: [][]byte{id}})
+	if err != nil || len(got.Copies) != 1 {
+		t.Fatalf("copy %x: %v, %d copies", id, err, len(got.Copies))
 	}
-	return n
+	return got.Copies[0].RequestCount
 }
 
 // copyRequests and copyBudget are the limits an attenuation gives a copy.
@@ -166,7 +164,7 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	if err := bump(one); !errors.Is(err, limes.ErrRequestLimitExceeded) {
 		t.Fatalf("past the copy's limit: err = %v", err)
 	}
-	if n := copyRequestCount(t, ctx, f, copyID(one)); n != 1 {
+	if n := copyRequestCount(t, ledgerCtx, f, root.Capability().ID, copyID(one)); n != 1 {
 		t.Fatalf("a refused request left the copy at %d", n)
 	}
 	if u, err := f.usage.GetUsage(ledgerCtx, root.Capability().ID); err != nil || u.RequestCount != 1 {

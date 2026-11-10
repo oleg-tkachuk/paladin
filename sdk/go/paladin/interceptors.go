@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/limes"
 )
 
 type idempotencyKeyCtx struct{}
@@ -235,14 +236,34 @@ func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 
 // DefaultRetryable is the failures retried unless WithRetryable says
 // otherwise: Unavailable and ResourceExhausted, the two a server sends for a
-// condition that passes.
+// condition that passes — but not a refusal of the capability that limes
+// holds permanent, such as a spent request limit, which stands for as long
+// as the capability does (limes Reason.Permanent).
 func DefaultRetryable(err error) bool {
 	switch connect.CodeOf(err) {
-	case connect.CodeUnavailable, connect.CodeResourceExhausted:
+	case connect.CodeUnavailable:
 		return true
+	case connect.CodeResourceExhausted:
+		return !permanentRefusal(err)
 	default:
 		return false
 	}
+}
+
+// permanentRefusal reports whether err is a refusal of the capability whose
+// limes code names a reason limes holds permanent. A code this binary's
+// limes does not know is not: a newer server's refusal is retried as before.
+func permanentRefusal(err error) bool {
+	cerr := new(connect.Error)
+	if !errors.As(err, &cerr) {
+		return false
+	}
+	info := paladinErrorInfo(cerr)
+	if info == nil {
+		return false
+	}
+	reason, ok := limes.ReasonOfCode(limes.Code(info.GetMetadata()[ErrorMetadataLimesCode]))
+	return ok && reason.Permanent()
 }
 
 // retryable reports whether err is transient and the call safe to repeat:

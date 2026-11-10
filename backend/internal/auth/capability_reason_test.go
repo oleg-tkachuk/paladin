@@ -154,7 +154,7 @@ func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 		"a bad proof":          {err: dpop.ErrReplayed, code: connect.CodeUnauthenticated},
 		"keys not fetched":     {err: fmt.Errorf("%w: %s", jwks.ErrUnavailable, internals), code: connect.CodeUnavailable},
 		"a revocation store down": {
-			err: fmt.Errorf("limes: revocation lookup: %s", internals), code: connect.CodeUnavailable, withheld: true,
+			err: fmt.Errorf("limes: revocation lookup: %w: %s", limes.ErrStoreUnavailable, internals), code: connect.CodeUnavailable, withheld: true,
 		},
 	}
 	for name, tc := range cases {
@@ -181,7 +181,8 @@ func TestVerifyErrorTellsARefusalFromAnOutage(t *testing.T) {
 
 // Every metering refusal is answered by its limes family, so one no retry
 // mends never reads as one to retry; the ones that refuse the capability
-// carry their reason. A store failure alone is Unavailable.
+// carry their reason. A store failure alone is Unavailable, and an error
+// limes did not code the server's own fault.
 func TestMeterErrorAnswersEachFamily(t *testing.T) {
 	cases := map[error]connect.Code{
 		limes.ErrRequestLimitExceeded:               connect.CodeResourceExhausted,
@@ -197,7 +198,9 @@ func TestMeterErrorAnswersEachFamily(t *testing.T) {
 		limes.ErrNotFound:                           connect.CodeFailedPrecondition,
 		meter.ErrSettleConflict:                     connect.CodeAborted,
 		meter.ErrExternalRefConflict:                connect.CodeAborted,
-		errors.New("store down"):                    connect.CodeUnavailable,
+		limes.ErrStoreUnavailable:                   connect.CodeUnavailable,
+		limes.ErrStoreTimeout:                       connect.CodeUnavailable,
+		errors.New("a bug"):                         connect.CodeInternal,
 		fmt.Errorf("wrapped: %w", limes.ErrRevoked): connect.CodeUnauthenticated,
 	}
 	for err, want := range cases {

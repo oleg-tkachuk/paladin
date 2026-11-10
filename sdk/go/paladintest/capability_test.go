@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/oleg-tkachuk/limes"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
@@ -242,7 +243,7 @@ func TestDelegateNarrowsByLimes(t *testing.T) {
 		"an audience the parent lacks": wider,
 		"no resource restriction":      unscoped,
 	} {
-		if _, err := as.Delegate(ctx, r); !errors.Is(err, paladin.ErrPermissionDenied) || !strings.Contains(err.Error(), "wider than parent") {
+		if _, err := as.Delegate(ctx, r); !errors.Is(err, paladin.ErrPermissionDenied) || paladin.LimesCode(err) != string(limes.CodeDelegationTooWide) {
 			t.Errorf("%s: %v, want PermissionDenied as too wide", name, err)
 		}
 	}

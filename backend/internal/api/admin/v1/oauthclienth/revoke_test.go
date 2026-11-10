@@ -2,7 +2,7 @@ package oauthclienth
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -76,7 +76,7 @@ func TestDeleteRevokesForAClientAlreadyGone(t *testing.T) {
 // The revocation failing fails the delete, to be retried; a refused delete
 // revokes nothing.
 func TestDeleteRevocationFailures(t *testing.T) {
-	failing := &fakeRevoker{err: errors.New("pgstore: connection refused")}
+	failing := &fakeRevoker{err: fmt.Errorf("pgstore: %w: connection refused", limes.ErrStoreUnavailable)}
 	if err := del(revokingHandler(&fakeClients{}, failing), ctxAs(apiutil.RolePlatformAdmin), registered); connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Errorf("revocation failing: code = %v, want Unavailable", connect.CodeOf(err))
 	}

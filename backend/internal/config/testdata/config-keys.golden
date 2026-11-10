@@ -137,7 +137,6 @@ capability.revocation_cache_synced_ttl
 capability.revocation_cache_ttl
 capability.signing_key_kid
 capability.signing_key_path
-capability.stripe_unlimited_tenants
 capability.trusted_issuers
 capability.verifier_leeway
 cedar

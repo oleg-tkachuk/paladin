@@ -31,9 +31,14 @@ func (s *failingInsertStore) Insert(context.Context, limes.InsertRequest) error 
 	return s.err
 }
 
-// errDriver is what an outage looks like on the way up: the store's
-// wrapping around text from the database that a caller must not act on.
+// errDriver is a database error no limes code covers — a broken
+// constraint — wrapped by the store around text a caller must not act on:
+// the server's own fault.
 var errDriver = errors.New(`capability/postgres: insert: ERROR: insert or update on table "capability_records" violates foreign key constraint (SQLSTATE 23503)`)
+
+// errDBDown is the store failing as pgstore answers it: under limes's
+// store_unavailable, which the caller retries.
+var errDBDown = fmt.Errorf("capability/postgres: %w: connection refused", limes.ErrStoreUnavailable)
 
 func issueRequest(tenant uuid.UUID) *adminv1.CapabilityServiceIssueRequest {
 	return &adminv1.CapabilityServiceIssueRequest{
@@ -58,7 +63,8 @@ var issuanceCases = []struct {
 }{
 	{"an unknown tenant", fmt.Errorf("%w: %s", limes.ErrUnknownTenant, uuid.New().String()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
 	{"a deleted tenant", fmt.Errorf("%w: %s", limes.ErrTenantDeleted, uuid.New().String()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
-	{"a store failure", errDriver, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+	{"a store failure", errDBDown, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+	{"an error limes did not code", errDriver, connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 }
 
 func TestIssueAnswersAFailureByItsKind(t *testing.T) {
@@ -196,5 +202,23 @@ func TestExceptionsNameLimesCodes(t *testing.T) {
 		if undefined := e.Undefined(); len(undefined) > 0 {
 			t.Errorf("%s exceptions name %v, which limes does not define", name, undefined)
 		}
+	}
+}
+
+// A delegation wider than its parent is told the title of limes's problem
+// and which part of the request was refused, by limes's own words for it:
+// what the caller can fix, and nothing of the parent's.
+func TestDelegateTellsWhatWasTooWide(t *testing.T) {
+	store := &failingInsertStore{}
+	m := newMinter(t, store)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+	req := delegateReq(parent)
+	req.Caveats = openCaveats(limes.OpPut)
+	_, err := h.Delegate(auth.WithCapability(context.Background(), parent), req)
+	ce, ok := errors.AsType[*connect.Error](err)
+	const want = "The delegation asks for more than its parent holds: an op is not among the parent's"
+	if !ok || ce.Code() != connect.CodePermissionDenied || ce.Message() != want {
+		t.Fatalf("err = %v, want PermissionDenied telling %q", err, want)
 	}
 }

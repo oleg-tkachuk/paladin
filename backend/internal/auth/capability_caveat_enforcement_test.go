@@ -15,6 +15,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"testing"
 	"uuid"
@@ -174,7 +175,7 @@ func TestEnforceCaveats_RequestCeiling(t *testing.T) {
 		// this from the limit itself, because one is the caller's fault and
 		// the other is ours.
 		const ceiling = 5
-		boom := errors.New("connection reset")
+		boom := fmt.Errorf("%w: connection reset", limes.ErrStoreUnavailable)
 		m, usage := newMeteredMinter(t)
 		i := &capabilityInterceptor{usage: erroringUsage{usageStore: usage, err: boom}}
 		c, _ := m.Mint(t, limes.Capability{Caveats: limes.Caveats{Requests: limes.RequestCeiling{Max: ceiling}}})

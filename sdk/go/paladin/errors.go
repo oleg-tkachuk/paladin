@@ -149,12 +149,28 @@ func newError(procedure string, info *connect.CallInfo, err error) error {
 			continue // a detail of a type this binary has not linked
 		}
 		e.Details = append(e.Details, v)
-		if info, ok := v.(*errdetails.ErrorInfo); ok && info.GetDomain() == ErrorDomain {
-			e.Reason = commonv1.ErrorReason(commonv1.ErrorReason_value[info.GetReason()])
-			e.LimesCode = info.GetMetadata()[ErrorMetadataLimesCode]
-		}
+	}
+	if info := paladinErrorInfo(cerr); info != nil {
+		e.Reason = commonv1.ErrorReason(commonv1.ErrorReason_value[info.GetReason()])
+		e.LimesCode = info.GetMetadata()[ErrorMetadataLimesCode]
 	}
 	return e
+}
+
+// paladinErrorInfo is the ErrorInfo of the server's own domain cerr carries,
+// the last when it carries several; nil when it carries none.
+func paladinErrorInfo(cerr *connect.Error) *errdetails.ErrorInfo {
+	var out *errdetails.ErrorInfo
+	for _, d := range cerr.Details() {
+		v, err := connectproto.UnmarshalErrorDetail(d)
+		if err != nil {
+			continue // a detail of a type this binary has not linked
+		}
+		if info, ok := v.(*errdetails.ErrorInfo); ok && info.GetDomain() == ErrorDomain {
+			out = info
+		}
+	}
+	return out
 }
 
 // errorInterceptor turns every failed unary call's Connect error into an

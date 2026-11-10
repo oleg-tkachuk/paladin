@@ -265,6 +265,27 @@ func TestRequireBearerDelegates(t *testing.T) {
 	}
 }
 
+// The endpoint's refusals that are the caller's are read as their
+// sentinels, whatever their status.
+func TestDelegationClientReadsTheEndpointsRefusal(t *testing.T) {
+	for code, want := range map[string]error{
+		"invalid_grant":  exchange.ErrInvalidGrant,
+		"invalid_target": exchange.ErrInvalidTarget,
+		"invalid_scope":  exchange.ErrInvalidScope,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"` + code + `","error_description":"refused"}`))
+		}))
+		_, err := NewDelegationClient(srv.Client(), srv.URL, bridgeClientID, bridgeSecret).Capability(t.Context(), "subject")
+		srv.Close()
+		if !errors.Is(err, want) {
+			t.Errorf("%s: err = %v, want %v", code, err, want)
+		}
+	}
+}
+
 // What the token endpoint answers that the caller cannot be told about —
 // a failure of the server's, or an answer that is no capability — is an
 // error of the server's, never a refusal of the caller.
@@ -287,6 +308,8 @@ func TestDelegationClientServerFailures(t *testing.T) {
 	}{
 		{"the bridge's own client refused", answer(http.StatusUnauthorized, `{"error":"invalid_client"}`)},
 		{"a server error", answer(http.StatusInternalServerError, `{"error":"server_error"}`)},
+		{"a code no exchange answers", answer(http.StatusBadRequest, `{"error":"from_a_newer_server"}`)},
+		{"a refusal that is no JSON", answer(http.StatusBadRequest, `not json`)},
 		{"an access token, not a capability", answer(http.StatusOK, `{"access_token":"x","issued_token_type":"`+exchange.TokenTypeAccessToken+`","expires_in":60}`)},
 		{"no token at all", answer(http.StatusOK, `{"issued_token_type":"`+exchange.IssuedTokenTypeCapability+`"}`)},
 		{"a body that is no JSON", answer(http.StatusOK, `not json`)},

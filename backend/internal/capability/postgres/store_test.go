@@ -32,19 +32,16 @@ func TestOptionsReachTheStoreConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.StripeUnlimitedTenants || cfg.DisableLeases || cfg.Logger != nil || cfg.Events.OnTenantWait != nil {
+	if cfg.DisableTenantStripes || cfg.DisableLeases || cfg.Logger != nil || cfg.Events.OnTenantWait != nil {
 		t.Fatalf("no options changed pgstore's defaults: %+v", cfg)
 	}
 
 	log := slog.New(slog.DiscardHandler)
 	var waited int
 	events := meter.StoreEvents{OnTenantWait: func(context.Context, meter.TenantWaitEvent) { waited++ }}
-	cfg, _, err = config(pool, []Option{WithStripes(true), WithLeases(false), WithLogger(log), WithEvents(events)})
+	cfg, _, err = config(pool, []Option{WithLeases(false), WithLogger(log), WithEvents(events)})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if !cfg.StripeUnlimitedTenants {
-		t.Error("WithStripes(true) did not stripe unlimited tenants")
 	}
 	if !cfg.DisableLeases {
 		t.Error("WithLeases(false) left leasing on")

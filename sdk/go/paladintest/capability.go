@@ -230,12 +230,6 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 		if err := validOps(c.GetOps()); err != nil {
 			return nil, err
 		}
-		for _, op := range c.GetOps() {
-			if !slices.Contains(parentCaveats.GetOps(), op) {
-				return nil, withReason(connect.Errorf(connect.CodePermissionDenied,
-					"delegation too wide: op %q is not granted to the parent", op))
-			}
-		}
 		caveats = c
 	}
 	expires, err := lifetime(now, nbf, req.GetTtlSeconds())
@@ -267,7 +261,7 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	}
 	// What the server's issuer refuses as too wide, by limes's own rule.
 	if err := limes.Narrows(narrowedTerms(parent.msg), narrowedTerms(child)); err != nil {
-		return nil, withReason(connect.NewError(connect.CodePermissionDenied, err.Error()).WithCause(err))
+		return nil, limesRefusal(connect.CodePermissionDenied, err)
 	}
 	return s.mint(child, now, nbf, expires, status, parent.msg.GetId())
 }

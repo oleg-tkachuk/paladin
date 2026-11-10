@@ -264,7 +264,6 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	usageStore, err := capabilitypg.NewUsageStore(deps.Pool,
 		capabilitypg.WithDefaultUnit(cfg.Currency),
 		capabilitypg.WithLeases(cfg.BudgetLeases),
-		capabilitypg.WithStripes(cfg.StripeUnlimitedTenants),
 		// A call that waited long for its tenant's aggregate is logged at WARN.
 		capabilitypg.WithLogger(logger.Slog(deps.Logger, "capability-usage")),
 		capabilitypg.WithEvents(storeEvents))
@@ -272,8 +271,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability usage store: %w", err)
 	}
 	deps.Logger.Info("capability: usage store built",
-		zap.Bool("budget_leases", cfg.BudgetLeases),
-		zap.Bool("stripe_unlimited_tenants", cfg.StripeUnlimitedTenants))
+		zap.Bool("budget_leases", cfg.BudgetLeases))
 	usage, err := meteredUsage(usageStore)
 	if err != nil {
 		return nil, fmt.Errorf("app: capability metering: %w", err)

@@ -75,7 +75,7 @@ func AnswerCapabilityError(err error, except Exceptions) error {
 			if row.Reason == commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED {
 				return capabilityError(row.Code, err)
 			}
-			return withCapabilityInfo(connect.NewError(row.Code, err.Error()).WithCause(err), err, row.Reason)
+			return withCapabilityInfo(connect.NewError(row.Code, capabilityMessage(err)).WithCause(err), err, row.Reason)
 		}
 	}
 	status := capabilityStatus(err)

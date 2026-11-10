@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
+	"github.com/oleg-tkachuk/limes"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	iamv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
@@ -163,8 +165,9 @@ func TestContractSkewNamesTheProcedureAndBothVersions(t *testing.T) {
 // errorInfoContract is sdk/testdata/error_info.json: the ErrorInfo the server
 // attaches, which this SDK and Python's are held to alike.
 type errorInfoContract struct {
-	Domain       string `json:"domain"`
-	LimesCodeKey string `json:"limes_code_key"`
+	Domain              string   `json:"domain"`
+	LimesCodeKey        string   `json:"limes_code_key"`
+	PermanentLimesCodes []string `json:"permanent_limes_codes"`
 }
 
 func TestErrorInfoMatchesTheSharedContract(t *testing.T) {
@@ -178,6 +181,16 @@ func TestErrorInfoMatchesTheSharedContract(t *testing.T) {
 	}
 	if c.Domain != paladin.ErrorDomain || c.LimesCodeKey != paladin.ErrorMetadataLimesCode {
 		t.Errorf("contract %+v, SDK %q / %q", c, paladin.ErrorDomain, paladin.ErrorMetadataLimesCode)
+	}
+	var permanent []string
+	for _, code := range limes.Codes() {
+		if r, ok := limes.ReasonOfCode(code); ok && r.Permanent() {
+			permanent = append(permanent, string(code))
+		}
+	}
+	slices.Sort(permanent)
+	if !slices.Equal(c.PermanentLimesCodes, permanent) {
+		t.Errorf("permanent_limes_codes = %v, limes holds %v permanent", c.PermanentLimesCodes, permanent)
 	}
 }
 

@@ -3,7 +3,6 @@ package capabilityh
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 	"uuid"
 
@@ -126,7 +125,7 @@ func TestGetBiscuitUsageRefusals(t *testing.T) {
 		"not wired":              {&allowAuthorizer{}, &fakeCopier{copy: good}, nil, &visible, connect.CodeUnavailable},
 		"not a genuine Biscuit":  {&allowAuthorizer{}, &fakeCopier{err: limes.ErrInvalidToken}, &fakeCopyUsage{}, &visible, connect.CodeInvalidArgument},
 		"capability not visible": {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{}, nil, connect.CodeNotFound},
-		"reader fails":           {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{err: errors.New("db down")}, &visible, connect.CodeUnavailable},
+		"reader fails":           {&allowAuthorizer{}, &fakeCopier{copy: good}, &fakeCopyUsage{err: errDBDown}, &visible, connect.CodeUnavailable},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -38,11 +38,31 @@ const libraryPrefix = "limes: "
 // ErrorReason, which the rest of names: limes's reason, in capitals.
 const capabilityReasonPrefix = "ERROR_REASON_CAPABILITY_"
 
+// problemDetailSeparator joins a limes problem's title to its detail, as
+// the server joins them.
+const problemDetailSeparator = ": "
+
+// refusalMessage is what the server tells a caller of err: the fixed title
+// of its limes problem when it is the library's, whose own text is for the
+// server's log, followed by the problem's detail when limes gives one
+// (backend/internal/auth capabilityMessage); err's text without the
+// library's name otherwise.
+func refusalMessage(err error) string {
+	p, ok := limes.ProblemOf(err)
+	if !ok || p.Title == "" {
+		return strings.ReplaceAll(err.Error(), libraryPrefix, "")
+	}
+	if p.Detail == "" {
+		return p.Title
+	}
+	return p.Title + problemDetailSeparator + p.Detail
+}
+
 // capabilityRefusal is the server's answer to a refusal of the capability:
-// code, the message without the library's name, and an ErrorInfo naming the
-// refusal's reason and, under paladin.ErrorMetadataLimesCode, its limes code.
+// code, refusalMessage, and an ErrorInfo naming the refusal's reason and,
+// under paladin.ErrorMetadataLimesCode, its limes code.
 func capabilityRefusal(code connect.Code, err error) *connect.Error {
-	e := connect.NewError(code, strings.ReplaceAll(err.Error(), libraryPrefix, "")).WithCause(err)
+	e := connect.NewError(code, refusalMessage(err)).WithCause(err)
 	r, ok := limes.ReasonOf(err)
 	if !ok {
 		return e

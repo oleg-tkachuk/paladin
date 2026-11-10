@@ -13,10 +13,11 @@ import (
 )
 
 // An operation answers a limes error by its own row first, then by
-// capabilityStatus, then as a dependency failing; a row with a reason names
-// it, a row without keeps the refusal's own.
+// capabilityStatus, then as the server's own fault; a row with a reason
+// names it, a row without keeps the refusal's own.
 func TestAnswerCapabilityErrorTakesTheOperationsRowFirst(t *testing.T) {
-	errStore := errors.New(`pgstore: insert: ERROR: violates foreign key constraint "capability_records_fkey" (SQLSTATE 23503)`)
+	errSQL := errors.New(`pgstore: insert: ERROR: violates foreign key constraint "capability_records_fkey" (SQLSTATE 23503)`)
+	errStore := fmt.Errorf("pgstore: insert: %w: connection refused", limes.ErrStoreUnavailable)
 	except := Exceptions{
 		limes.CodeUnknownTenant: {Code: connect.CodeNotFound, Reason: commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
 		limes.CodeRevoked:       {Code: connect.CodeFailedPrecondition},
@@ -32,7 +33,8 @@ func TestAnswerCapabilityErrorTakesTheOperationsRowFirst(t *testing.T) {
 		{"a row keeping the refusal's reason", limes.ErrRevoked, except, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REVOKED},
 		{"no row: the table's", fmt.Errorf("%w: t1", limes.ErrUnknownTenant), nil, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 		{"no row: a record revoked, not the caller's credential", limes.ErrRevoked, nil, connect.CodePermissionDenied, commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REVOKED},
-		{"no code: the store failing", errStore, except, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+		{"the store failing", errStore, except, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+		{"no code: the server's fault", errSQL, except, connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,7 +63,7 @@ func TestAnswerCapabilityErrorTakesTheOperationsRowFirst(t *testing.T) {
 // A dependency failing is told only to retry: its text is the server's, and
 // Unavailable is not scrubbed on the way out. It stays the cause, for the log.
 func TestAnswerCapabilityErrorWithholdsAStoresText(t *testing.T) {
-	errStore := errors.New("pgstore: dial tcp 10.0.0.7:5432: connection refused")
+	errStore := fmt.Errorf("pgstore: %w: dial tcp 10.0.0.7:5432: connection refused", limes.ErrStoreUnavailable)
 	err := AnswerCapabilityError(errStore, nil)
 	ce, ok := errors.AsType[*connect.Error](err)
 	if !ok || ce.Message() != capabilityUnanswered {

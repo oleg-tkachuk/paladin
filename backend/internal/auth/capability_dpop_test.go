@@ -191,8 +191,8 @@ func TestCapabilityDPoP_TheDPoPScheme(t *testing.T) {
 	}
 	bearer := f.mint(t, "")
 	err := callUnder(client, limes.AuthSchemeDPoP, bearer, f.proof(t, base+dpopProcedure, bearer))
-	// Over HTTP the cause stays on the server; the message carries it.
-	if connect.CodeOf(err) != connect.CodeUnauthenticated || !strings.Contains(err.Error(), limes.ErrAuthSchemeMismatch.Error()) {
+	// Over HTTP the cause stays on the server; the ErrorInfo names its code.
+	if connect.CodeOf(err) != connect.CodeUnauthenticated || wireLimesCode(t, err) != string(limes.CodeAuthSchemeMismatch) {
 		t.Fatalf("a bearer capability under DPoP: err = %v, want Unauthenticated for %v", err, limes.ErrAuthSchemeMismatch)
 	}
 }

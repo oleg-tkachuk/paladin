@@ -490,7 +490,7 @@
     {
       "type": "timeseries",
       "title": "Wait for a tenant's aggregate p99 by operation",
-      "description": "How long a metered call waited for its tenant's aggregate row (limes.tenant.wait): the row alone, not the tenant's advisory lock nor the call's chain. A rising wait is one tenant's parallel calls queueing on its row; capability.stripe_unlimited_tenants takes a tenant without a ceiling off it. pgstore logs a wait past 100 ms at WARN.",
+      "description": "How long a metered call waited for its tenant's aggregate row (limes.tenant.wait): the row alone, not the tenant's advisory lock nor the call's chain. A rising wait is one tenant's parallel calls queueing on its row; stripes take a tenant without a ceiling off it; a tenant with one is taken off by budget leases. pgstore logs a wait past 100 ms at WARN.",
       "datasource": "${datasource}",
       "gridPos": {
         "h": 8,

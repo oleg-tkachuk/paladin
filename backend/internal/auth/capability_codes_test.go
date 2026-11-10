@@ -29,11 +29,17 @@ func TestCapabilityCodesCoverEveryLimesCategory(t *testing.T) {
 	})
 }
 
-// A metering error answers by its code's category's row;
-// one that carries no limes code is the store failing.
-func TestCapabilityStatusFallsBackToUnavailable(t *testing.T) {
-	if got := capabilityStatus(errors.New("store down")); got != capabilityUnknownCode {
-		t.Errorf("an error with no limes code = %v, want %v", got, capabilityUnknownCode)
+// A metering error answers by its code's category's row; one that carries
+// no limes code is the server's own fault, and a store limes found failing
+// is retried.
+func TestCapabilityStatusFallsBackToInternal(t *testing.T) {
+	if got := capabilityStatus(errors.New("a bug")); got != connect.CodeInternal {
+		t.Errorf("an error with no limes code = %v, want %v", got, connect.CodeInternal)
+	}
+	for _, sentinel := range []error{limes.ErrStoreUnavailable, limes.ErrStoreTimeout} {
+		if got := capabilityStatus(fmt.Errorf("charge: %w", sentinel)); got != connect.CodeUnavailable {
+			t.Errorf("%v = %v, want %v", sentinel, got, connect.CodeUnavailable)
+		}
 	}
 	if got := capabilityStatus(fmt.Errorf("wrapped: %w", limes.ErrRevoked)); got != connect.CodeUnauthenticated {
 		t.Errorf("a wrapped revocation = %v, want its category's %v", got, connect.CodeUnauthenticated)
@@ -60,7 +66,8 @@ func TestMeterErrorAnswersWhatARetryCanMend(t *testing.T) {
 		"a misconfigured server":                     {limes.ErrInvalidConfig, connect.CodeInternal, true},
 		"a call scoped to another tenant":            {limes.ErrScopeMismatch, connect.CodeInternal, true},
 		"a store that repeats a cursor":              {limes.ErrCursorRepeated, connect.CodeUnavailable, true},
-		"a store down":                               {errors.New("store down"), connect.CodeUnavailable, true},
+		"a store down":                               {fmt.Errorf("charge: %w", limes.ErrStoreUnavailable), connect.CodeUnavailable, true},
+		"an error limes did not code":                {errors.New("a bug"), connect.CodeInternal, true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

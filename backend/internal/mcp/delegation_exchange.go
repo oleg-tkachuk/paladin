@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,7 +15,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
@@ -28,17 +26,6 @@ import (
 // is one caller's token, so this is a few hundred agents at once; past it
 // the expired entries go, and then everything.
 const delegationCacheMaxEntries = 1024
-
-// delegationErrorBodyLimit bounds how much of a refusal is read for its error.
-const delegationErrorBodyLimit = 1 << 12
-
-// The RFC 6749 §5.2 and RFC 8707 errors the exchange answers with, as far as
-// they are the caller's to hear.
-var delegationRefusals = map[limes.Code]error{
-	limes.CodeInvalidGrant:  exchange.ErrInvalidGrant,
-	limes.CodeInvalidTarget: exchange.ErrInvalidTarget,
-	limes.CodeInvalidScope:  exchange.ErrInvalidScope,
-}
 
 // DelegationClient exchanges a caller's paladin-mcp token for the capability
 // that acts for its user on every plane they may reach (ADR-0041), at the
@@ -134,16 +121,10 @@ func (d *DelegationClient) exchange(ctx context.Context, subject string) (delega
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		var refusal struct {
-			Error       string `json:"error"`
-			Description string `json:"error_description"`
-		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, delegationErrorBodyLimit)).Decode(&refusal)
-		if sentinel, ok := delegationRefusals[limes.Code(refusal.Error)]; ok {
-			return delegated{}, fmt.Errorf("%w: %s", sentinel, refusal.Description)
-		}
-		return delegated{}, fmt.Errorf("mcp: token exchange: %d %s: %s", resp.StatusCode, refusal.Error, refusal.Description)
+	// The endpoint's refusal, read as the sentinel of its RFC 6749 §5.2 code;
+	// refuseDelegation tells the caller the ones that are theirs.
+	if err := exchange.ParseErrorResponse(resp); err != nil {
+		return delegated{}, fmt.Errorf("mcp: token exchange: %w", err)
 	}
 	var body struct {
 		AccessToken     string `json:"access_token"`

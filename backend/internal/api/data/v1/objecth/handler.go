@@ -199,17 +199,18 @@ var ErrBackendReadOnly = errors.New("storage backend is read-only (draining)")
 // is ready rather than presigning a PUT against a bucket S3 doesn't have.
 var ErrBucketProvisioning = errors.New("storage bucket is still provisioning")
 
-// mapResolveErr maps a bucket-resolution error to the right Connect code:
+// MapResolveErr maps a bucket-resolution error to the right Connect code:
 // a disabled/read-only backend or a still-provisioning bucket is
 // FailedPrecondition (the resource exists but is not in a state that permits
-// the op); anything else is treated as NotFound (the historical behaviour for
-// an unresolved object key).
+// the op); a collection that is not there (apiutil.ErrNotFound) is NotFound;
+// anything else is a failure to look it up, which apiutil.MapError answers
+// as the server's — never NotFound, which a client would act on.
 func MapResolveErr(err error) error {
 	if errors.Is(err, ErrBackendDisabled) || errors.Is(err, ErrBackendReadOnly) ||
 		errors.Is(err, ErrBucketProvisioning) {
 		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 	}
-	return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	return apiutil.MapError(err)
 }
 
 type CompletionMode uint8
