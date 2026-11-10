@@ -439,19 +439,19 @@ func (_e *MockPgxPool_Expecter) Query(ctx any, sql any, args ...any) *MockPgxPoo
 }
 
 func (_c *MockPgxPool_Query_Call) Run(run func(ctx context.Context, sql string, args ...interface{})) *MockPgxPool_Query_Call {
-	_c.Call.Run(func(args mock.Arguments) {
+	_c.Call.Run(func(args1 mock.Arguments) {
 		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
+		if args1[0] != nil {
+			arg0 = args1[0].(context.Context)
 		}
 		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
+		if args1[1] != nil {
+			arg1 = args1[1].(string)
 		}
 		var arg2 []interface{}
 		var variadicArgs []interface{}
-		if len(args) > 2 {
-			variadicArgs = args[2].([]interface{})
+		if len(args1) > 2 {
+			variadicArgs = args1[2].([]interface{})
 		}
 		arg2 = variadicArgs
 		run(
@@ -513,19 +513,19 @@ func (_e *MockPgxPool_Expecter) QueryRow(ctx any, sql any, args ...any) *MockPgx
 }
 
 func (_c *MockPgxPool_QueryRow_Call) Run(run func(ctx context.Context, sql string, args ...interface{})) *MockPgxPool_QueryRow_Call {
-	_c.Call.Run(func(args mock.Arguments) {
+	_c.Call.Run(func(args1 mock.Arguments) {
 		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
+		if args1[0] != nil {
+			arg0 = args1[0].(context.Context)
 		}
 		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
+		if args1[1] != nil {
+			arg1 = args1[1].(string)
 		}
 		var arg2 []interface{}
 		var variadicArgs []interface{}
-		if len(args) > 2 {
-			variadicArgs = args[2].([]interface{})
+		if len(args1) > 2 {
+			variadicArgs = args1[2].([]interface{})
 		}
 		arg2 = variadicArgs
 		run(
