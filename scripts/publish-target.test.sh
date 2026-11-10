@@ -12,7 +12,7 @@
 # release day.
 #
 # Also checks the workflow's component matrix against the components
-# Taskfile.yaml includes, so a third component is not added to the entry points
+# Taskfile.yaml reaches, so a third component is not added to the entry points
 # and forgotten by the release.
 #
 # Runs from `task -t Taskfile.dev.yaml verify-all` — no Docker, no network.
@@ -25,6 +25,13 @@ cd "$root"
 readonly ROOT_TASKFILE=Taskfile.yaml
 readonly WORKFLOW=.github/workflows/release.yaml
 readonly RELEASE_CONFIG=.github/release/release.config.cjs
+# The task every component is started through, and the name of the variable
+# that carries the component's directory to it. Read by yq, through strenv.
+readonly COMPONENT_TASK=_component
+readonly COMPONENT_DIR_VAR=COMPONENT
+export COMPONENT_TASK COMPONENT_DIR_VAR
+# Where a directory keeps the task library modules its Taskfile includes.
+readonly REMOTE_LOCK=.task/remote
 readonly CHART_DIR=deploy/chart
 # Any valid SemVer; it only has to come back out of the render unchanged.
 readonly PROBE_VERSION=0.0.0-probe
@@ -67,14 +74,15 @@ owner=$(sed -n 's|.*repositoryUrl: *"https://github.com/\([^/]*\)/.*|\1|p' "$REL
 [[ "$owner" == "$namespace" ]] ||
     bad "$ROOT_TASKFILE defaults IMAGE_NAMESPACE to '$namespace', the repository owner in $RELEASE_CONFIG is '$owner'"
 
-# The includes naming a path in this repository, as taskfile-drift.test.sh
-# reads them; the library modules go through TASKLIB.
-components=$(yq -r '.includes | to_entries
-    | map(select((.value.taskfile // "") | test("TASKLIB") | not)) | .[].value.dir' "$ROOT_TASKFILE" | sort)
+# The directories the component tasks name, as taskfile-drift.test.sh reads
+# them.
+components=$(yq -r '.tasks | to_entries
+    | map(select(((.value.cmds // [])[0].task // "") == strenv(COMPONENT_TASK)))
+    | .[].value.cmds[0].vars[strenv(COMPONENT_DIR_VAR)]' "$ROOT_TASKFILE" | sort)
 matrix=$(yq -r '.jobs.publish.strategy.matrix.component // [] | .[]' "$WORKFLOW" | sort)
-[[ -n "$components" ]] || bad "$ROOT_TASKFILE includes no components — this check is asserting nothing"
+[[ -n "$components" ]] || bad "$ROOT_TASKFILE reaches no components — this check is asserting nothing"
 [[ "$components" == "$matrix" ]] ||
-    bad "$WORKFLOW publishes [$(echo $matrix)], $ROOT_TASKFILE includes [$(echo $components)]"
+    bad "$WORKFLOW publishes [$(echo $matrix)], $ROOT_TASKFILE reaches [$(echo $components)]"
 
 # Rendered rather than read from values.yaml: the image line the chart
 # produces is what a cluster pulls, tag included. Packaged first because only
@@ -95,17 +103,20 @@ for component in $components; do
         bad "$component: the chart pulls '$(echo $got)', release.yaml publishes '$want'"
 done
 
-# The library's chart repository, from its cached copy: Task fetches remote
-# includes before it runs any task, this one included.
-release_lib=$(find .task/remote -maxdepth 1 -name 'git.github.com.release.*.yaml' 2>/dev/null | head -1)
-if [[ -z "$release_lib" ]]; then
-    bad "the release task library is not cached under .task/remote; run any task first"
-else
+# The library's chart repository, from the copy each component keeps in its
+# committed lock: the components include the release module, the entry points
+# do not.
+wf_chart_path=$(yq -r '.env.CHART_PATH' "$WORKFLOW")
+for component in $components; do
+    release_lib=$(find "$component/$REMOTE_LOCK" -maxdepth 1 -name 'git.github.com.release.*.yaml' 2>/dev/null | head -1)
+    if [[ -z "$release_lib" ]]; then
+        bad "$component: the release task library is not under $component/$REMOTE_LOCK"
+        continue
+    fi
     lib_chart_path=$(yq -r '.vars._REL_CHART_REPO' "$release_lib" | sed 's|.*}}/||')
-    wf_chart_path=$(yq -r '.env.CHART_PATH' "$WORKFLOW")
     [[ "$lib_chart_path" == "$wf_chart_path" ]] ||
-        bad "release.yaml signs charts under '$wf_chart_path', the task library pushes them under '$lib_chart_path'"
-fi
+        bad "$component: release.yaml signs charts under '$wf_chart_path', the task library pushes them under '$lib_chart_path'"
+done
 
 [[ "$fail" == 0 ]] || exit 1
 

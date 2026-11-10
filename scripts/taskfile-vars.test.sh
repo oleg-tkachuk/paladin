@@ -1,62 +1,85 @@
 #!/usr/bin/env bash
-# taskfile-vars.test.sh — the component Taskfiles must declare the same set of
-# variable names.
+# taskfile-vars.test.sh — no entry point includes a component's Taskfile.
 #
-# Not a tidiness rule. Task does not isolate an included file's `vars:` from
-# its siblings: a variable one component leaves unset falls through to whatever
-# another component declared. backend set DOCKER_CONTEXT to `..` and frontend
-# set nothing, so from the repo root `task frontend:release:image:build` built
-# the console with the REPO ROOT as its docker context and died on a COPY of
-# frontend/pnpm-workspace.yaml — while the identical task run from frontend/
-# succeeded, because there was no sibling to inherit from. That took a while to
-# find, and `verify-e2e` was broken by it the whole time.
+# Task keeps one pool for the top-level `vars:` of every Taskfile a root
+# includes by path. backend and frontend each declare PROJECT_NAME,
+# DOCKER_CONTEXT, CHART_MIN_RESOURCES and the helm flags, with different
+# values, and included side by side a library module of one read the other's
+# in a share of its runs: from Taskfile.dev.yaml, `backend:go:fmt:check`
+# printed the console's name in 9 runs of 16. The same read decides the image,
+# the chart and the docker context a release task acts with. Earlier, with
+# DOCKER_CONTEXT declared by backend alone, the console image was built with
+# the repository root as its context from anywhere but frontend/.
 #
-# Identical NAMES, not identical values: each component still sets its own
-# PROJECT_NAME and its own context. What this refuses is a name declared on one
-# side only, because that is exactly the gap the fall-through fills.
+# Declaring every name on both sides did not close it, so the entry points do
+# not include the components at all: each `<component>:*` task starts `task`
+# in the component's directory, and a process of its own has a pool of its
+# own. This refuses the include coming back. taskfile-drift.test.sh holds the
+# tasks that replaced it.
 #
-# Runs from `task -t Taskfile.dev.yaml verify-all` — no Docker, no cluster.
+# Runs from `task -t Taskfile.dev.yaml verify-repo` — no Docker, no cluster.
 
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
+readonly ENTRY_POINTS=(Taskfile.yaml Taskfile.local.yaml Taskfile.dev.yaml)
+# What every include of an entry point is addressed through: the task library.
+# Anything else names a file of this repository. Read by yq, through strenv.
+readonly LIBRARY_VAR=TASKLIB
+export LIBRARY_VAR
+
 command -v yq >/dev/null 2>&1 || {
     echo "!!! yq is not installed; the Taskfile var contract went unchecked — https://github.com/mikefarah/yq#install" >&2
     exit 1
 }
 
-# `// {}` and `|| true`, and not for tidiness: a renamed or deleted `vars:`
-# block makes yq exit non-zero, and under `set -e` the script would then die on
-# yq's own message instead of reaching the empty-set guard below — failing, but
-# saying nothing useful about why.
-names_of() { yq -r '(.vars // {}) | keys | .[]' "$1" 2>/dev/null | sort || true; }
+# An include is a mapping with `taskfile:`, or the path alone.
+local_includes_of() {
+    yq -r '
+        (.includes // {})
+        | to_entries
+        | map(select((.value.taskfile // .value // "") | tostring | test(strenv(LIBRARY_VAR)) | not))
+        | .[]
+        | .key + " (" + ((.value.taskfile // .value) | tostring) + ")"
+    ' "$1"
+}
 
-backend=$(names_of backend/Taskfile.yaml)
-frontend=$(names_of frontend/Taskfile.yaml)
-
-# A rename on either side would otherwise empty a set and make the comparison
-# below trivially true.
-for side in backend frontend; do
-    if [[ -z "${!side}" ]]; then
-        echo "!!! $side/Taskfile.yaml declares no vars — this check is asserting nothing" >&2
-        exit 1
-    fi
-done
-
-only_backend=$(comm -23 <(printf '%s\n' "$backend") <(printf '%s\n' "$frontend"))
-only_frontend=$(comm -13 <(printf '%s\n' "$backend") <(printf '%s\n' "$frontend"))
-
-if [[ -n "$only_backend" || -n "$only_frontend" ]]; then
-    {
-        echo "!!! the component Taskfiles do not declare the same variables:"
-        [[ -n "$only_backend" ]] && printf '      backend only:  %s\n' $only_backend
-        [[ -n "$only_frontend" ]] && printf '      frontend only: %s\n' $only_frontend
-        echo "      A name set on one side only is inherited by the other from the"
-        echo "      repo root. Declare it on both, or drop it from the one that has it."
-    } >&2
+# The reader itself first, on both spellings of a local include beside a
+# library one: reading nothing out of every file would otherwise pass.
+fixture=$(mktemp "${TMPDIR:-/tmp}/taskfile-vars-test.XXXXXX")
+trap 'rm -f "$fixture"' EXIT
+cat >"$fixture" <<'FIXTURE'
+includes:
+  mapped: { taskfile: backend/Taskfile.yaml, dir: backend }
+  short: ./frontend
+  library: { taskfile: '{{printf .TASKLIB "go"}}', dir: . }
+FIXTURE
+readonly FIXTURE_WANT=$'mapped (backend/Taskfile.yaml)\nshort (./frontend)'
+if [[ "$(local_includes_of "$fixture")" != "$FIXTURE_WANT" ]]; then
+    echo "!!! the include reader no longer tells a local include from a library one — this check is asserting nothing" >&2
     exit 1
 fi
 
-echo "taskfiles: backend and frontend declare the same $(printf '%s\n' "$backend" | wc -l | tr -d ' ') variables"
+failed=0
+for entry in "${ENTRY_POINTS[@]}"; do
+    # yq's own failure must not read as "nothing included".
+    if ! found=$(local_includes_of "$entry"); then
+        echo "!!! $entry could not be read — this check is asserting nothing" >&2
+        exit 1
+    fi
+    if [[ -n "$found" ]]; then
+        {
+            echo "!!! $entry includes a Taskfile of this repository:"
+            printf '%s\n' "$found" | sed 's/^/      /'
+            echo "      Its top-level vars would share one pool with every other include's."
+            echo "      Run it as a child process instead, as the <component>:* tasks do."
+        } >&2
+        failed=1
+    fi
+done
+
+[[ "$failed" -eq 0 ]] || exit 1
+
+echo "taskfiles: none of the ${#ENTRY_POINTS[@]} entry points includes a component's Taskfile"

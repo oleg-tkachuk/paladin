@@ -4,8 +4,10 @@
 #
 #   ../scripts/task-offline.sh codegen:sqlc:check     # from backend/ or frontend/
 #
-# --offline, because Task 3.x reads only the flag: a TASK_OFFLINE variable in
-# the environment is ignored, and an expired cache is then refreshed by cloning
+# --offline, which .taskrc.yml sets as well: the flag keeps a hook offline
+# where that file is missing or edited. Task 3.x reads those two and nothing
+# else — a TASK_OFFLINE variable in the environment is ignored — and without
+# them an expired cache is refreshed by cloning
 # the include repository into Task's shared task-git-repos directory — one per
 # repo+ref for every process on the machine, with no lock. Offline, an expired
 # cache is used as it is and a missing one fails loudly instead of being fetched.

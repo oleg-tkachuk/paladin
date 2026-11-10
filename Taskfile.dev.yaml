@@ -32,11 +32,9 @@ vars:
   #
   # The second copy of this pin, and it has to be: `includes:` below resolves
   # before anything this entry point could read it from, and an included file
-  # cannot hand a var upward. Held to the same version as Taskfile.yaml by
-  # hand; a half-applied bump fails one entry point with a message about trust
-  # rather than about the version.
-  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.4.0'
+  # cannot hand a var upward. `tasklib:bump VERSION=<tag>` moves every copy
+  # and its lock together, and `tasklib:check` fails when they disagree.
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.6.2'
   # Pinned, and run through `uvx` rather than installed: the rules a scan
   # asserts against change between releases, so an unpinned checkov makes a
   # local run and the pipeline's disagree — a red nobody else can reproduce, or
@@ -49,18 +47,6 @@ vars:
   _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
 
 includes:
-  # ─── components ────────────────────────────────────────────────────────────
-  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these
-  # blocks byte-identical; `verify:taskfile-drift` below is what notices.
-  backend:
-    taskfile: backend/Taskfile.yaml
-    dir: backend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-  frontend:
-    taskfile: frontend/Taskfile.yaml
-    dir: frontend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-
   # ─── fan-out ───────────────────────────────────────────────────────────────
   # The other half of the split described in Taskfile.yaml: test, lint and
   # build are a developer's verbs, deploy is Taskfile.local.yaml's. Flattened for the same
@@ -71,6 +57,13 @@ includes:
     flatten: true
     excludes: ["deploy", "registry:check"]
     vars: { COMPONENTS: ["backend", "frontend"], GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}" }
+
+  # ─── the library pin ───────────────────────────────────────────────────────
+  # Moves the pin in every Taskfile and the committed .task/remote lock beside
+  # each together (tasklib:bump, tasklib:lock), and fails when they have come
+  # apart (tasklib:check, in verify-repo). Here rather than in Taskfile.yaml
+  # because moving a pin is a developer's command.
+  tasklib: { taskfile: '{{printf .TASKLIB "tasklib"}}', dir: . }
 
   # ─── repo-wide tooling ─────────────────────────────────────────────────────
   # Not wired into this repo's own aggregates on purpose: the tasks are here to
@@ -165,11 +158,44 @@ includes:
     vars: { PROJECT_NAME: py-sdk, PY_SRC: src tests examples }
 
 tasks:
+  # ─── components ────────────────────────────────────────────────────────────
+  # `task backend:<task>` runs `task <task>` in backend/ as a child process,
+  # and the same for frontend. A process of its own is what keeps a
+  # component's variables its own: included by path, both components' top-level
+  # `vars:` land in one pool, and a library module then read PROJECT_NAME,
+  # DOCKER_CONTEXT or the helm flags of the other component in a share of its
+  # runs.
+  #
+  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these three
+  # tasks byte-identical; `verify:taskfile-drift` below is what notices.
+  #
+  # A variable set on the command line stops at this process. The four named
+  # in _component are handed on; any other goes in front of the command
+  # (`NAME=value task backend:…`) or after `cd` into the component.
+  _component:
+    internal: true
+    dir: "{{.COMPONENT}}"
+    requires: { vars: [COMPONENT, TARGET] }
+    # Assigned on the command rather than through `env:`, which does not
+    # replace a variable the calling shell already exports.
+    cmd: >-
+      GLOBAL_REGISTRY={{.GLOBAL_REGISTRY | q}}
+      IMAGE_NAMESPACE={{.IMAGE_NAMESPACE | q}}
+      K8S_CONTEXT={{.K8S_CONTEXT | q}}
+      {{if .APP_VERSION}}APP_VERSION={{.APP_VERSION | q}}{{end}}
+      task {{.TARGET | q}} -- {{.CLI_ARGS}}
+
+  "backend:*":
+    desc: "Run a task of backend/ (task backend:default lists them)"
+    cmds: [{ task: _component, vars: { COMPONENT: backend, TARGET: "{{index .MATCH 0}}" } }]
+  "frontend:*":
+    desc: "Run a task of frontend/ (task frontend:default lists them)"
+    cmds: [{ task: _component, vars: { COMPONENT: frontend, TARGET: "{{index .MATCH 0}}" } }]
+
   default:
     desc: "The gates, codegen and dependency bumps"
-    # Written out for the same reason as Taskfile.yaml's: the flattened
-    # components put 100-odd tasks in `--list`, and the dozen below are the
-    # ones this entry point exists for.
+    # Written out for the same reason as Taskfile.yaml's: `--list` is a
+    # reference, and the dozen below are the ones this entry point exists for.
     cmds:
       - cmd: |
           printf '%s\n' \
@@ -186,7 +212,9 @@ tasks:
             "  task -t Taskfile.dev.yaml deps:update        bump dependencies, no majors" \
             "  task -t Taskfile.dev.yaml sec:scan           the security scanners" \
             "" \
-            "  task -t Taskfile.dev.yaml --list             the rest, component by component" \
+            "  task -t Taskfile.dev.yaml --list             the rest" \
+            "  task -t Taskfile.dev.yaml backend:default    every task of the backend" \
+            "  task -t Taskfile.dev.yaml frontend:default   every task of the console" \
             "  task                                         operating the stack" \
             "  task -t Taskfile.local.yaml                  publish to registry.local"
 
@@ -256,6 +284,9 @@ tasks:
       - task: verify:coverage-profile
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
+      # Every Taskfile pins the library at one ref and loads from its
+      # committed lock with nothing fetched.
+      - task: tasklib:check
       - task: verify:chart-values
       - task: verify:chart-reads
       - task: verify:chart-netpol
@@ -574,27 +605,22 @@ tasks:
       - python3 ./scripts/chart-netpol.py
 
   verify:taskfile-vars:
-    desc: "Fail when one component's Taskfile var leaks into the other, or an entry point's never reaches it"
-    # Task does not isolate an included file's vars from its siblings, so a
-    # name declared on one component only is silently inherited by the other.
-    # That shipped: the console image built with the repo root as its docker
-    # context from anywhere but frontend/, and took verify-e2e down with it.
+    desc: "Fail when an entry point includes a component's Taskfile, or a variable it is given never reaches the component"
+    # Task keeps one pool for the top-level vars of every Taskfile a root
+    # includes, so one component read the other's values. That shipped twice:
+    # the console image built with the repo root as its docker context, and
+    # the backend's Go gates printing the console's name in half their runs.
+    # The components run as child processes instead, which is also where a
+    # variable can now be dropped on the way.
     cmds:
       - ./scripts/taskfile-vars.test.sh
       - ./scripts/taskfile-forwarded-vars.test.sh
 
   verify:taskfile-drift:
-    desc: "Fail when the entry points list different components"
-    # The component includes are duplicated across Taskfile.yaml,
-    # Taskfile.local.yaml and this file because a single shared copy is not on
-    # offer: included with
-    # `flatten: true` — the only form that keeps the namespaces callable as
-    # `backend:deploy` rather than `components:backend:deploy` — Task 3.53.1
-    # resolves an included file's variables out of one pool shared with its
-    # siblings, which is the same leak `verify:taskfile-vars` above exists for
-    # and would be doubled by nesting the components a level deeper.
-    #
-    # So the list is in three places, and this fails when they stop agreeing.
+    desc: "Fail when the entry points reach different components, or hand them different variables"
+    # `_component`, `backend:*` and `frontend:*` are written out in
+    # Taskfile.yaml, Taskfile.local.yaml and this file, and this fails when
+    # the three copies stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
 

@@ -2,8 +2,8 @@ version: "3"
 
 # paladin-console — the operator UI (Next.js).
 #
-# Release chain and Node gates come from the shared task library; the OrbStack
-# no-registry path is shared with the backend through ../tasks/orbstack.task.yaml.
+# Release chain and Node gates come from the shared task library, and so does
+# the OrbStack no-registry path.
 
 silent: true
 
@@ -12,17 +12,15 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.4.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.6.2'
   PROJECT_NAME: paladin-console
   K8S_NAMESPACE: paladin
   # GLOBAL_REGISTRY, IMAGE_NAMESPACE and K8S_CONTEXT are deliberately NOT
-  # declared: Task 3.53.1 evaluates an included file's own vars before the
-  # include's `vars:`, so a declaration here — even one wrapped in `default` —
-  # always wins over what the entry point forwards. Undeclared, they arrive
-  # from the entry point (orbstack by default), the command line or the
-  # environment; deploy requires the first two, the cluster tasks the third
-  # (scripts/taskfile-forwarded-vars.test.sh).
+  # declared: an entry point starts this Taskfile as a child process and hands
+  # the three over in its environment, and a value declared here wins over the
+  # environment. Undeclared, they arrive from the entry point (orbstack by
+  # default), the command line or the environment; deploy requires the first
+  # two, the cluster tasks the third (scripts/taskfile-forwarded-vars.test.sh).
   # Only the product's release/v* tags version this image (ADR-0045): the
   # library reads no other, so the old v* releases, api/*, sdk/* and the
   # retired capability/* never restamp it, and needs no exclude for them.
@@ -31,13 +29,9 @@ vars:
   # from the default builder's and needs pruning by name.
   BUILDX_BUILDER: lean
   DOCKERFILE: ./deploy/Dockerfile
-  # Declared, not defaulted, and the difference was a real bug: a var a
-  # component leaves unset falls through to whatever a SIBLING include
-  # declared. backend sets DOCKER_CONTEXT to `..`, so from the repo root
-  # `task frontend:release:image:build` built the console with the repo root
-  # as its context and failed on a COPY of frontend/pnpm-workspace.yaml —
-  # while the same task from frontend/ worked. scripts/taskfile-vars.test.sh
-  # keeps the two var sets identical so the fall-through has nothing to find.
+  # This directory, where the backend's is the repository root. The release
+  # workflow reads it from here (.github/ci/publish-target.ts), so it is
+  # declared rather than left to the library's default.
   DOCKER_CONTEXT: .
   DOCKER_BUILD_FLAGS: --network=host
   # Floor for the chart render gate — it fails when the chart renders fewer
@@ -47,8 +41,7 @@ vars:
   # equality: adding a resource is free, removing one is a deliberate edit
   # here.
   CHART_MIN_RESOURCES: "4"
-  # Empty: the console chart has no input it cannot default. Declared so the
-  # variable does not fall through from the backend (taskfile-vars.test.sh).
+  # Empty: the console chart has no input it cannot default.
   HELM_LINT_FLAGS: ""
   HELM_TEMPLATE_FLAGS: ""
 

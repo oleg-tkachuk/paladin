@@ -8,6 +8,12 @@
 # manager for them, so none of those versions moved. This fails on an
 # annotation no custom manager would extract, naming it.
 #
+# The task library's pin is the one version held the other way round: the
+# library's own Renovate preset finds `?ref=` in every Taskfile with no
+# annotation, so an annotation above it would have two managers propose the
+# same change. This fails when renovate.json stops extending that preset, and
+# on an annotation naming the library.
+#
 # renovate.json's patterns are JavaScript regular expressions; their named
 # groups are translated to Python's spelling, the only difference they use.
 
@@ -32,6 +38,12 @@ ANNOTATION = re.compile(r"^[ \t]*# renovate: datasource=\S+ depName=\S+.*$", re.
 # fixtures, and the task library cache downloaded from another repository.
 NOT_PINS = ("scripts/renovate-annotations.test.sh",)
 NOT_PIN_DIRS = (".task/",)
+# The task library: what every Taskfile pins with `?ref=`, and the preset in
+# that repository that reads the pins.
+TASKLIB_DEP = "oleg-tkachuk/taskfiles"
+TASKLIB_PRESET = f"github>{TASKLIB_DEP}//renovate/tasklib"
+TASKLIB_ANNOTATION = re.compile(rf"depName={re.escape(TASKLIB_DEP)}(\s|$)")
+TASKLIB_PIN = re.compile(rf"github\.com/{re.escape(TASKLIB_DEP)}\.git//[^?\s'\"]*\?ref=")
 
 
 def js_regex(pattern):
@@ -67,8 +79,13 @@ def extracted(path, text, mgrs):
     return out
 
 
-mgrs = managers(json.load(open(RENOVATE_CONFIG)))
+config = json.load(open(RENOVATE_CONFIG))
+mgrs = managers(config)
 failed = False
+
+if TASKLIB_PRESET not in config.get("extends", []):
+    print(f"FAIL {RENOVATE_CONFIG} does not extend {TASKLIB_PRESET}; nothing reads the task library's pins", file=sys.stderr)
+    failed = True
 
 # The forms the repository pins in, so a manager that stops reading one fails
 # here rather than silently in Renovate.
@@ -78,11 +95,6 @@ cases = [
     (".github/actions/setup/action.yaml", '    # renovate: datasource=pypi depName=zizmor\n    ZIZMOR_VERSION: "1.30.1"\n', "1.30.1"),
     ("scripts/example.test.sh", "# renovate: datasource=pypi depName=packaging\nreadonly PACKAGING_VERSION=26.3\n", "26.3"),
     ("frontend/deploy/Dockerfile", "# renovate: datasource=npm depName=pnpm\nARG PNPM_VERSION=12.16.1\n", "12.16.1"),
-    (
-        "backend/Taskfile.yaml",
-        "  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles\n  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.1.0'\n",
-        "v14.1.0",
-    ),
     ("docs/notes.md", "# renovate: datasource=pypi depName=packaging\nPACKAGING_VERSION=26.3\n", None),
     ("scripts/example.test.sh", "# renovate: datasource=pypi depName=packaging\n# the pin\nreadonly PACKAGING_VERSION=26.3\n", None),
 ]
@@ -94,6 +106,7 @@ for path, text, want in cases:
 
 tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout.decode().split("\0")
 count = 0
+tasklib_pins = 0
 for path in tracked:
     if not path or path in NOT_PINS or path.startswith(NOT_PIN_DIRS):
         continue
@@ -102,8 +115,13 @@ for path in tracked:
             text = f.read()
     except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
         continue
+    tasklib_pins += len(TASKLIB_PIN.findall(text))
     for where, value in extracted(path, text, mgrs):
         count += 1
+        if TASKLIB_ANNOTATION.search(where):
+            print(f"FAIL {where}: the task library's pin takes no annotation; {TASKLIB_PRESET} already reads it", file=sys.stderr)
+            failed = True
+            continue
         if value is None or not VERSION.fullmatch(value):
             print(f"FAIL no custom manager in {RENOVATE_CONFIG} reads a version for {where} (got {value!r})", file=sys.stderr)
             failed = True
@@ -111,7 +129,10 @@ for path in tracked:
 if count == 0:
     print("FAIL found no annotation at all; the search is broken", file=sys.stderr)
     failed = True
+if tasklib_pins == 0:
+    print("FAIL found no task library pin at all; the search is broken", file=sys.stderr)
+    failed = True
 if failed:
     sys.exit(1)
-print(f"ok   renovate reads all {count} annotations")
+print(f"ok   renovate reads all {count} annotations, and the preset the {tasklib_pins} task library pins")
 PY
