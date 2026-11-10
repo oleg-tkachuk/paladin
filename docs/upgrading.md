@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## Unreleased — limes v1.0.0-rc.64: striped tenant aggregates, store codes
+## sdk/python/v0.145.2, sdk/go/v0.145.2 — limes v1.0.0-rc.64: striped tenant aggregates, store codes
 
 - limes migrations `042` and `043` run with the migration job: a table of
   stripes beside each tenant's budget, and revocations marked in one walk per
@@ -118,16 +118,6 @@ here.
   `INVALID_ARGUMENT` wherever it reaches the capability library: subjects,
   notes, actors, filters, ops and external refs. It failed as a server
   error before.
-
-## v41.1.0 — limes v1.0.0-rc.18: PostgreSQL 15 and pgstore's DPoP replay cache
-
-- **PostgreSQL 15 or later.** pgstore v0.45 reads capability records through
-  a `security_invoker` view, which an earlier PostgreSQL cannot create; the
-  migration fails there.
-- **DPoP proof ids move to `limes.dpop_seen_proofs`.** pgstore keeps the
-  replay cache now, and migration `104` drops Paladin's `dpop_seen_proofs`.
-  The new table starts empty: a proof accepted in the minute before the
-  upgrade could be presented once more in that minute. Nothing to do.
 
 ## sdk/python/v0.145.1, sdk/go/v0.145.1 — the SDKs stop retrying a permanent refusal
 
@@ -562,6 +552,16 @@ here.
   now also refuses the token's later exchanges (`invalid_grant`) until the
   agent's client fetches a new token, where before the next exchange issued
   a fresh capability. Nothing to configure.
+
+## v41.1.0 — limes v1.0.0-rc.18: PostgreSQL 15 and pgstore's DPoP replay cache
+
+- **PostgreSQL 15 or later.** pgstore v0.45 reads capability records through
+  a `security_invoker` view, which an earlier PostgreSQL cannot create; the
+  migration fails there.
+- **DPoP proof ids move to `limes.dpop_seen_proofs`.** pgstore keeps the
+  replay cache now, and migration `104` drops Paladin's `dpop_seen_proofs`.
+  The new table starts empty: a proof accepted in the minute before the
+  upgrade could be presented once more in that minute. Nothing to do.
 
 ## v41.1.0, sdk/go/v0.126.1, sdk/python/v0.127.1 — limes v1.0.0-rc.14: a capability no request can use is refused
 

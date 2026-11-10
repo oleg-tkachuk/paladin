@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.64: striped tenant aggregates, store codes
+## sdk/python/v0.145.2, sdk/go/v0.145.2 — limes v1.0.0-rc.64: striped tenant aggregates, store codes
 
 - limes migrations `042` and `043` run with the migration job: a table of
   stripes beside each tenant's budget, and revocations marked in one walk per
