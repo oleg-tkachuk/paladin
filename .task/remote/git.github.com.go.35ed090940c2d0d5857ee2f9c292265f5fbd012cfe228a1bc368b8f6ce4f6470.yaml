@@ -128,11 +128,14 @@ tasks:
       - printf '%s %s · go · integration tests\n' "{{._GO_RUN}}" {{._GO_NAME | q}}
       # gotestsum when it is installed, as the unit run; it also keeps the
       # run's go test -json stream where GO_TEST_JSON names, for a consumer
-      # that reads each package's result and time.
+      # that reads each package's result and time. Without gotestsum a
+      # GO_TEST_JSON fails the run here: a consumer would read no stream, or
+      # an earlier run's.
       - cmd: |-
           if command -v gotestsum >/dev/null 2>&1; then
             gotestsum --format pkgname --hide-summary skipped {{if .GO_TEST_JSON}}--jsonfile {{.GO_TEST_JSON | q}} {{end}}-- -race -timeout={{._GO_TEST_TIMEOUT | q}} -tags={{._GO_TAGS | q}} {{._GO_PKGS}}
           else
+            {{if .GO_TEST_JSON}}printf 'GO_TEST_JSON names %s, but go test alone keeps no stream: install gotestsum\n' {{.GO_TEST_JSON | q}} >&2; exit 1{{end}}
             go test -race -timeout={{._GO_TEST_TIMEOUT | q}} -tags={{._GO_TAGS | q}} {{._GO_PKGS}}
           fi
       - printf '%s %s · go · integration tests pass\n' "{{._GO_OK}}" {{._GO_NAME | q}}
