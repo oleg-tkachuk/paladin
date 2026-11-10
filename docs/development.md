@@ -43,7 +43,8 @@ task -t Taskfile.dev.yaml               # its own list of commands
 task -t Taskfile.dev.yaml verify-all    # the pre-commit gate: build + test
 task -t Taskfile.dev.yaml verify-deep   # integration suites + live-stack gates
 task -t Taskfile.dev.yaml verify-e2e    # Playwright, on images from your branch
-task -t Taskfile.dev.yaml --list        # everything it reaches
+task -t Taskfile.dev.yaml --list        # the rest of its tasks
+task backend:default                    # every task of one component
 ```
 
 `task stack:up` needs nothing but Docker. If it asks you for a credential or
