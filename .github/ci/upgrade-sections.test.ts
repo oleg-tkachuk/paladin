@@ -205,6 +205,27 @@ describe("section files", () => {
     }
   });
 
+  // A file renamed in the change it describes belongs to that change: read
+  // with rename detection, the rename is no addition, and the section stayed
+  // Unreleased in a release that held it.
+  test("a file renamed by the change is named by that change", async () => {
+    const repo = await tempRepo();
+    try {
+      const RENAMED_FILE = `${SECTIONS}/server-change-renamed.md`;
+      repo.write(UPGRADING, GUIDE);
+      repo.write(SERVER_FILE, "## Unreleased — server\n\nA body long enough to be read as the same file.\n");
+      await repo.commit("docs: guide and a section");
+      await repo.run("mv", SERVER_FILE, RENAMED_FILE);
+      repo.write(BACKEND, "x");
+      await repo.commit("feat(api): server");
+
+      assert.equal(await nameGuide(repo.dir, [PRODUCT_TAG]), true);
+      assert.match(await repo.run("diff", "--", RENAMED_FILE), new RegExp(`^\\+## ${PRODUCT_TAG} — server$`, "m"));
+    } finally {
+      repo.cleanup();
+    }
+  });
+
   test("a file the release has not reached stays Unreleased, and still reaches the guide", async () => {
     const repo = await tempRepo();
     try {
