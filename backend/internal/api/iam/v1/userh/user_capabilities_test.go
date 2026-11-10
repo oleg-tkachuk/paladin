@@ -3,6 +3,7 @@ package userh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"uuid"
@@ -122,7 +123,7 @@ func TestListUserCapabilitiesStoreErrors(t *testing.T) {
 	}{
 		{"a page token of another listing", limes.ErrCursorMismatch, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT},
 		{"a malformed request", limes.ErrInvalidRequest, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT},
-		{"the store failing", errors.New("connection reset"), connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+		{"the store failing", fmt.Errorf("%w: connection reset", limes.ErrStoreUnavailable), connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			u, l, _, h := capabilityFixture(t)

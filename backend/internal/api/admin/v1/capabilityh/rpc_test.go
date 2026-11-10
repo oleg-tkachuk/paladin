@@ -366,7 +366,7 @@ func TestRevokeSaysWhatItDid(t *testing.T) {
 }
 
 func TestRevokeStoreErrorIsUnavailable(t *testing.T) {
-	store := &recordingStore{revokeErr: errors.New("db down")}
+	store := &recordingStore{revokeErr: errDBDown}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
 	_, err := h.Revoke(adminCtx(), &adminv1.CapabilityServiceRevokeRequest{
@@ -609,7 +609,7 @@ func TestListRejectsBadTenant(t *testing.T) {
 }
 
 func TestListStoreErrorIsUnavailable(t *testing.T) {
-	store := &recordingStore{listErr: errors.New("db down")}
+	store := &recordingStore{listErr: errDBDown}
 	h := mkHandler(t, store, nil, &allowAuthorizer{})
 
 	_, err := h.List(adminCtx(), &adminv1.CapabilityServiceListRequest{
@@ -704,7 +704,7 @@ func TestGetUsageNotFound(t *testing.T) {
 
 func TestGetUsageStoreErrorIsUnavailable(t *testing.T) {
 	store := &fakeStore{}
-	usage := &fakeUsage{err: errors.New("db down")}
+	usage := &fakeUsage{err: errDBDown}
 	h := mkHandler(t, store, usage, &allowAuthorizer{})
 
 	_, err := h.GetUsage(adminCtx(), &adminv1.CapabilityServiceGetUsageRequest{

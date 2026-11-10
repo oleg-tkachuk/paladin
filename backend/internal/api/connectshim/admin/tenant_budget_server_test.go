@@ -196,7 +196,7 @@ func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 // store's text is no message of the caller's.
 func TestTenantBudgetServer_Get_StoreFailureIsUnavailable(t *testing.T) {
 	const storeText = "pgstore: dial tcp 10.0.0.7:5432: connection refused"
-	srv := newServer(&fakeUsageStore{getErr: errors.New(storeText)})
+	srv := newServer(&fakeUsageStore{getErr: fmt.Errorf("%w: %s", limes.ErrStoreUnavailable, storeText)})
 	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{TenantId: uuid.New().String()})
 	if connect.CodeOf(err) != connect.CodeUnavailable || strings.Contains(err.Error(), storeText) {
 		t.Errorf("err = %v, want Unavailable without the store's text", err)
@@ -397,10 +397,10 @@ func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 // on; a failure that refuses nothing is the store's, told to retry.
 func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
 	cases := map[error]connect.Code{
-		meter.ErrTenantBudgetVersionMismatch: connect.CodeAborted,
-		limes.ErrUnitCodeMismatch:            connect.CodeFailedPrecondition,
-		limes.ErrInvalidAmount:               connect.CodeInvalidArgument,
-		errors.New("store down"):             connect.CodeUnavailable,
+		meter.ErrTenantBudgetVersionMismatch:                 connect.CodeAborted,
+		limes.ErrUnitCodeMismatch:                            connect.CodeFailedPrecondition,
+		limes.ErrInvalidAmount:                               connect.CodeInvalidArgument,
+		fmt.Errorf("pgstore: %w", limes.ErrStoreUnavailable): connect.CodeUnavailable,
 	}
 	for storeErr, want := range cases {
 		srv := newServer(&fakeUsageStore{setErr: storeErr})

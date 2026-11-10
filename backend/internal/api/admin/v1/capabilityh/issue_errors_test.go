@@ -31,9 +31,14 @@ func (s *failingInsertStore) Insert(context.Context, limes.InsertRequest) error 
 	return s.err
 }
 
-// errDriver is what an outage looks like on the way up: the store's
-// wrapping around text from the database that a caller must not act on.
+// errDriver is a database error no limes code covers — a broken
+// constraint — wrapped by the store around text a caller must not act on:
+// the server's own fault.
 var errDriver = errors.New(`capability/postgres: insert: ERROR: insert or update on table "capability_records" violates foreign key constraint (SQLSTATE 23503)`)
+
+// errDBDown is the store failing as pgstore answers it: under limes's
+// store_unavailable, which the caller retries.
+var errDBDown = fmt.Errorf("capability/postgres: %w: connection refused", limes.ErrStoreUnavailable)
 
 func issueRequest(tenant uuid.UUID) *adminv1.CapabilityServiceIssueRequest {
 	return &adminv1.CapabilityServiceIssueRequest{
@@ -58,7 +63,8 @@ var issuanceCases = []struct {
 }{
 	{"an unknown tenant", fmt.Errorf("%w: %s", limes.ErrUnknownTenant, uuid.New().String()), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_TENANT_NOT_FOUND},
 	{"a deleted tenant", fmt.Errorf("%w: %s", limes.ErrTenantDeleted, uuid.New().String()), connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED},
-	{"a store failure", errDriver, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+	{"a store failure", errDBDown, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
+	{"an error limes did not code", errDriver, connect.CodeInternal, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED},
 }
 
 func TestIssueAnswersAFailureByItsKind(t *testing.T) {

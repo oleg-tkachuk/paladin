@@ -40,9 +40,10 @@ var capabilityCategoryCodes = map[limes.Category]connect.Code{
 }
 
 // capabilityUnknownCode answers an error that carries no limes code, or a
-// category capabilityCategoryCodes has no row for: the store failing, which
-// the caller retries.
-const capabilityUnknownCode = connect.CodeUnavailable
+// category capabilityCategoryCodes has no row for: the server's own fault.
+// limes codes its store's failures itself (store_unavailable,
+// store_timeout), so an error with no code is no dependency a retry mends.
+const capabilityUnknownCode = connect.CodeInternal
 
 // capabilityStatus is err's transport code: its limes code's, or
 // capabilityUnknownCode when err carries none.
