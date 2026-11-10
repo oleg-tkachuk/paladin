@@ -34,7 +34,8 @@ version: "3"
 #   MOCKS_PATHSPEC    git pathspec the mock gate watches   (default internal)
 #   PROTO_PATHSPEC    git pathspec the proto gate watches, when the `out:`
 #                     paths in the templates are not the right answer
-#   SQLC_DIR          directory the sqlc gate watches
+#   SQLC_DIR          git pathspec the sqlc gate watches; one that names no
+#                     tracked file is refused
 #
 # Order is fixed, not configurable: mocks first, so they are written against
 # the interfaces the tree already has; buf before the generate step, so the
@@ -98,6 +99,19 @@ vars:
   # Where the checks keep the working tree's state from before they
   # regenerate. Under .task/, which Task itself owns and repositories ignore.
   _CG_SNAP_DIR: .task/codegen
+  # Prints every `out:` value of the YAML files it reads, unquoted, one per
+  # line: where buf's templates and sqlc's config say a generator writes.
+  _CG_OUT_AWK: |-
+    BEGIN { q = "\047" }
+    /^[ \t]*out:[ \t]*/ {
+      v = $0
+      sub(/^[ \t]*out:[ \t]*/, "", v)
+      sub(/[ \t]*#.*$/, "", v)
+      sub(/[ \t]+$/, "", v)
+      if (v == "") { next }
+      if (index(v, "\"") == 1 || index(v, q) == 1) { v = substr(v, 2, length(v) - 2) }
+      if (v != "") { print v }
+    }
   # Status markers. The shape carries the meaning, so a line still reads in
   # a monochrome log; the colour sits on top and drops out under NO_COLOR.
   _CG_RUN: '{{if .NO_COLOR}}◉{{else}}{{"\x1b[36m◉\x1b[0m"}}{{end}}'
@@ -197,11 +211,26 @@ tasks:
 
   sqlc:
     desc: "Regenerate the sqlc bindings"
+    vars:
+      # Where sqlc writes: the `out:` paths of its config, read as proto:check
+      # reads buf's templates. A sqlc.json config is not read, and its output
+      # is left as sqlc wrote it.
+      _CG_SQLC_OUT:
+        sh: awk {{._CG_OUT_AWK | q}} sqlc.yaml sqlc.yml 2>/dev/null | sort -u | tr '\n' ' '
     preconditions:
       - sh: '{{if ._CG_SQLC_MOD}}true{{else}}command -v sqlc >/dev/null{{end}}'
         msg: "sqlc is not installed — https://docs.sqlc.dev/en/latest/overview/install.html, or set SQLC_MODULE to run it through `go run`"
     cmds:
       - '{{if ._CG_SQLC_MOD}}go run {{._CG_SQLC_MOD | q}} generate{{else}}sqlc generate{{end}} {{._CG_SQLC_FLAGS}}'
+      # Normalised like every other generator's output (see _normalise): sqlc
+      # writes one import block where goimports writes two, so a commit hook
+      # running goimports made sqlc:check fail on a tree just generated.
+      - cmd: |-
+          {{if ._CG_SQLC_OUT}}
+          if command -v goimports >/dev/null 2>&1; then
+            goimports {{._CG_GOIMPORTS_FLAGS}} -w {{range (splitList " " ._CG_SQLC_OUT | compact)}}{{q .}} {{end}}
+          fi
+          {{end}}
 
   check:
     desc: "Fail when any generated output is stale against the working tree"
@@ -232,6 +261,15 @@ tasks:
       - sh: test -n {{._CG_SQLC_DIR | q}}
         msg: "SQLC_DIR is not set — the gate needs to know which directory holds the generated bindings"
     cmds:
+      # A pathspec that names no tracked file compares two empty snapshots and
+      # reports a clean tree it never looked at — `dir/**/gen` without a
+      # trailing `/**` names directories, which hold no file of their own.
+      - cmd: |-
+          set -eu
+          if [ -z "$(git ls-files -- {{range (splitList " " ._CG_SQLC_DIR | compact)}}{{q .}} {{end}})" ]; then
+            printf '%s %s · gen · SQLC_DIR %s matches no tracked file — this gate checks nothing\n' "{{._CG_ERR}}" {{._CG_NAME | q}} {{._CG_SQLC_DIR | q}} >&2
+            exit 1
+          fi
       - task: _cg_snapshot
         vars: { PATHS: '{{._CG_SQLC_DIR}}', OUT: '{{._CG_SNAP_DIR}}/sqlc' }
       - task: sqlc
@@ -255,16 +293,7 @@ tasks:
         sh: |-
           spec={{._CG_PROTO_SPEC | q}}
           if [ -n "$spec" ]; then printf '%s' "$spec"; exit 0; fi
-          awk 'BEGIN { q = "\047" }
-               /^[ \t]*out:[ \t]*/ {
-                 v = $0
-                 sub(/^[ \t]*out:[ \t]*/, "", v)
-                 sub(/[ \t]*#.*$/, "", v)
-                 sub(/[ \t]+$/, "", v)
-                 if (v == "") { next }
-                 if (index(v, "\"") == 1 || index(v, q) == 1) { v = substr(v, 2, length(v) - 2) }
-                 if (v != "") { print v }
-               }' {{range $f := ._CG_BUF_TPL}}{{$f | q}} {{end}} 2>/dev/null | sort -u | tr '\n' ' '
+          awk {{._CG_OUT_AWK | q}} {{range $f := ._CG_BUF_TPL}}{{$f | q}} {{end}} 2>/dev/null | sort -u | tr '\n' ' '
     cmds:
       - task: _cg_snapshot
         vars: { PATHS: '{{._CG_PROTO_OUT}}', OUT: '{{._CG_SNAP_DIR}}/proto' }
