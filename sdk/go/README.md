@@ -597,8 +597,10 @@ for a capability as the server does: an operator, or a presented capability
 holding share for itself or one delegated from it, never a Biscuit; each
 row of `sdk/testdata/capability_leases.json` runs through the server's
 handler and this fake (`capabilityh/lease_fidelity_test.go`), which must
-give the row's code and limes code, or the requests the lease holds. The
-fake counts no budget, so a lease's spent amount stays zero.
+give the row's code and limes code, or the requests the lease holds. How a
+lease's requests are held against the chain's request ceilings is a row of
+`sdk/testdata/capability_lease_ceilings.json`, run the same way with
+requests through the data plane (`capabilityh/lease_ceiling_fidelity_test.go`).
 The shared data-plane scenarios (`sdk/testdata/scenarios.json`) run
 against this fake in every CI run, as they run against the server in the
 stack gate, so a scenario the fake answers differently is red where it
