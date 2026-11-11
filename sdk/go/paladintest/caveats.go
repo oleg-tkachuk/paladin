@@ -109,12 +109,6 @@ func audienceRefusal(audience []string, plane paladin.Plane) error {
 	return capabilityRefusal(connect.CodeUnauthenticated, fmt.Errorf("%w: token audience %v lacks %q", limes.ErrAudienceMismatch, audience, string(plane)))
 }
 
-// requestLimitAdmits reports whether a capability with caveats admits its
-// next request, the count-th, by limes's own ceiling.
-func requestLimitAdmits(caveats *adminv1.CapabilityCaveats, count int64) bool {
-	return requestCeiling(caveats).Admits(count)
-}
-
 // requestCeiling is the request ceiling caveats set; one that sets none
 // counts without a limit.
 func requestCeiling(caveats *adminv1.CapabilityCaveats) limes.RequestCeiling {
@@ -122,30 +116,6 @@ func requestCeiling(caveats *adminv1.CapabilityCaveats) limes.RequestCeiling {
 		return limes.RequestCeiling{Max: r.MaxRequests}
 	}
 	return limes.RequestCeiling{Unlimited: true}
-}
-
-// bumpRequestsLocked counts a request against rec and each of its ancestors,
-// or refuses it, counting nothing, when one of them has no room for it: rec
-// first, then its ancestors from the nearest.
-func (s *Server) bumpRequestsLocked(rec *capabilityRecord) error {
-	chain := []*capabilityRecord{}
-	for r := rec; r != nil; r = s.capabilities[r.msg.GetParentId()] {
-		chain = append(chain, r)
-	}
-	for i, r := range chain {
-		if requestLimitAdmits(r.msg.GetCaveats(), r.requests+1) {
-			continue
-		}
-		err := limes.ErrRequestLimitExceeded
-		if i > 0 {
-			err = fmt.Errorf("%w: ancestor %s", limes.ErrRequestLimitExceeded, r.msg.GetId())
-		}
-		return capabilityRefusal(connect.CodeResourceExhausted, err)
-	}
-	for _, r := range chain {
-		r.requests++
-	}
-	return nil
 }
 
 // limesCaveats is what of caveats limes checks an operation and its resource

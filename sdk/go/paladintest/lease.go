@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -14,8 +13,6 @@ import (
 	"github.com/oleg-tkachuk/limes/meter"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/genproto/googleapis/type/money"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -23,11 +20,10 @@ import (
 )
 
 // Lease, GetLease and SettleLease, as the fake serves them: who may lease
-// for a capability is the server's rule, and a lease is kept as the server
-// answers it — what it holds, until it is settled, topped up or its
-// capability revoked. A top-up settles the open lease and opens a new one
-// under a new id, holding what the old one had left plus the top-up. The fake counts no budget, so a lease's spent amount
-// stays zero, and no ceiling of the chain refuses it.
+// for a capability is the server's rule, checked here; the lease itself is
+// limes's, kept by the in-memory store the fake counts usage in (usage), as
+// the server's is by pgstore. A request under a lease is spent from it. The
+// fake charges no budget, so a lease's spent amount stays zero.
 
 // The server's refusals of a presented capability's lease call, word for word.
 const (
@@ -45,50 +41,25 @@ func (s capabilityService) Lease(ctx context.Context, req *adminv1.CapabilitySer
 	if err != nil {
 		return nil, err
 	}
-	unit := rec.msg.GetCaveats().GetUnlimitedBudget().GetCurrencyCode()
-	if b := rec.msg.GetCaveats().GetMaxBudget(); b != nil {
-		unit = b.GetCurrencyCode()
+	subject, err := s.usage.subject(rec.msg.GetId())
+	if err != nil {
+		return nil, limesRefusal(limesStatus(err, leaseExceptionCodes), err)
 	}
-	if a := req.GetAmount(); a != nil && a.GetCurrencyCode() != unit {
+	if a := req.GetAmount(); a != nil && a.GetCurrencyCode() != subject.UnitCode() {
 		return nil, withReason(connect.Errorf(connect.CodeInvalidArgument,
-			"amount: unit %q, the capability's is %q", a.GetCurrencyCode(), unit))
+			"amount: unit %q, the capability's is %q", a.GetCurrencyCode(), subject.UnitCode()))
 	}
-	if req.GetAmount() == nil && req.GetRequests() == 0 {
-		return nil, limesRefusal(connect.CodeInvalidArgument,
-			fmt.Errorf("lease %s: %w: lease of no amount and no requests", req.GetId(), limes.ErrInvalidRequest))
+	l, err := s.usage.store.Lease(ctx, meter.LeaseRequest{
+		Subject:  subject,
+		Amount:   limes.Nanos(nanosOf(req.GetAmount())),
+		Requests: req.GetRequests(),
+		TTL:      req.GetTtl().AsDuration(),
+	})
+	if err != nil {
+		err = fmt.Errorf("lease %s: %w", req.GetId(), err)
+		return nil, limesRefusal(limesStatus(err, leaseExceptionCodes), err)
 	}
-	for a := s.capabilities[rec.msg.GetParentId()]; a != nil; a = s.capabilities[a.msg.GetParentId()] {
-		if _, held := s.leases[a.msg.GetId()]; held {
-			return nil, limesRefusal(connect.CodeFailedPrecondition,
-				fmt.Errorf("lease %s: %w: %s holds one above it", req.GetId(), meter.ErrLeaseNested, a.msg.GetId()))
-		}
-	}
-	now := time.Now()
-	ttl := req.GetTtl().AsDuration()
-	if ttl == 0 {
-		ttl = meter.DefaultLeaseTTL
-	}
-	end := now.Add(ttl)
-	if exp := rec.msg.GetExpiresAt().AsTime(); end.After(exp) {
-		end = exp
-	}
-	// The fake counts no spend, so a lease topped up has all it held left.
-	l := &adminv1.CapabilityLease{
-		Id:           uuid.New().String(),
-		CapabilityId: req.GetId(),
-		TenantId:     rec.msg.GetSubject().GetTenantId(),
-		Amount:       &money.Money{CurrencyCode: unit},
-		Spent:        &money.Money{CurrencyCode: unit},
-		ExpiresAt:    timestamppb.New(end),
-	}
-	if open, ok := s.leases[req.GetId()]; ok {
-		l.Amount = open.GetAmount()
-		l.Requests = open.GetRequests()
-	}
-	l.Amount = addMoney(unit, l.GetAmount(), req.GetAmount())
-	l.Requests += req.GetRequests()
-	s.leases[req.GetId()] = l
-	return &adminv1.CapabilityServiceLeaseResponse{Lease: proto.CloneOf(l)}, nil
+	return &adminv1.CapabilityServiceLeaseResponse{Lease: leaseProto(l)}, nil
 }
 
 // GetLease returns the lease a capability holds.
@@ -98,11 +69,15 @@ func (s capabilityService) GetLease(ctx context.Context, req *adminv1.Capability
 	if _, err := s.leaseTargetLocked(ctx, req.GetId()); err != nil {
 		return nil, err
 	}
-	l, ok := s.leases[req.GetId()]
-	if !ok {
-		return nil, limesRefusal(connect.CodeNotFound, meter.ErrLeaseNotFound)
+	subject, err := s.usage.subject(req.GetId())
+	if err != nil {
+		return nil, limesRefusal(limesStatus(err, leaseExceptionCodes), err)
 	}
-	return &adminv1.CapabilityServiceGetLeaseResponse{Lease: proto.CloneOf(l)}, nil
+	l, err := s.usage.store.GetLease(ctx, subject.CapabilityID())
+	if err != nil {
+		return nil, limesRefusal(limesStatus(err, leaseExceptionCodes), err)
+	}
+	return &adminv1.CapabilityServiceGetLeaseResponse{Lease: leaseProto(l)}, nil
 }
 
 // SettleLease ends a capability's lease and returns it as it ended.
@@ -112,12 +87,16 @@ func (s capabilityService) SettleLease(ctx context.Context, req *adminv1.Capabil
 	if _, err := s.leaseTargetLocked(ctx, req.GetId()); err != nil {
 		return nil, err
 	}
-	l, ok := s.leases[req.GetId()]
-	if !ok {
-		return nil, limesRefusal(connect.CodeNotFound, fmt.Errorf("settle lease %s: %w", req.GetId(), meter.ErrLeaseNotFound))
+	subject, err := s.usage.subject(req.GetId())
+	if err != nil {
+		return nil, limesRefusal(limesStatus(err, leaseExceptionCodes), err)
 	}
-	delete(s.leases, req.GetId())
-	return &adminv1.CapabilityServiceSettleLeaseResponse{Lease: l}, nil
+	l, err := s.usage.store.SettleLease(ctx, meter.SettleLeaseRequest{Subject: subject})
+	if err != nil {
+		err = fmt.Errorf("settle lease %s: %w", req.GetId(), err)
+		return nil, limesRefusal(limesStatus(err, leaseExceptionCodes), err)
+	}
+	return &adminv1.CapabilityServiceSettleLeaseResponse{Lease: leaseProto(l)}, nil
 }
 
 // leaseTargetLocked is the capability a lease call names, once the caller
@@ -205,12 +184,6 @@ func limesRefusal(code connect.Code, err error) *connect.Error {
 		panic(fmt.Sprintf("paladintest: %v", derr)) // an ErrorInfo always marshals
 	}
 	return e.WithDetail(detail)
-}
-
-// addMoney is a and b, both in unit, exactly; b absent adds nothing.
-func addMoney(unit string, a, b *money.Money) *money.Money {
-	n := nanosOf(a) + nanosOf(b)
-	return &money.Money{CurrencyCode: unit, Units: n / int64(limes.NanosPerUnit), Nanos: int32(n % int64(limes.NanosPerUnit))}
 }
 
 func nanosOf(m *money.Money) int64 {

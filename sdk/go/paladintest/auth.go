@@ -170,11 +170,8 @@ func (s *Server) authenticate(procedure string, header http.Header, msg proto.Me
 		return err
 	}
 	if p != nil && countsRequest(procedure) {
-		s.mu.Lock()
-		err := s.bumpRequestsLocked(p.rec)
-		s.mu.Unlock()
-		if err != nil {
-			return err
+		if err := s.usage.bump(p.rec.msg.GetId()); err != nil {
+			return capabilityRefusal(limesStatus(err, nil), err)
 		}
 	}
 	return s.authorizeTenant(tenant, msg)

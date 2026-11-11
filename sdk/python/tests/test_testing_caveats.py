@@ -211,3 +211,24 @@ def test_a_write_refused_without_the_key_its_capability_requires() -> None:
     assert (
         _caveat_refusal(caveats, str(Op.GET), "object://t/c/k", has_idempotency_key=False) is None
     )
+
+
+def test_a_request_under_a_lease_is_spent_from_it(strict: FakePaladin) -> None:
+    """A request under a lease of requests is spent from the lease, and one
+    past what it holds is refused, as limes's store spends it (the Go fake
+    counts through limes's own store)."""
+    obj = strict.put(strict.collection(), "k", "text/plain", b"x")
+    issued = _issue(strict)
+    admin = strict.connect(bearer_token=strict.issue_bearer_token(strict.tenant)).admin.capability
+    admin.lease(pb.CapabilityServiceLeaseRequest(id=issued.capability.id, requests=1))
+    get = lambda: strict.connect(capability=issued.token).data.object.get_object(
+        object_service_pb2.GetObjectRequest(name=obj.name)
+    )
+    assert _answer(get) == ("", "", "", "")
+    held = admin.get_lease(pb.CapabilityServiceGetLeaseRequest(id=issued.capability.id)).lease
+    assert (held.requests, held.requests_spent) == (1, 1)
+    assert _answer(get)[:3] == (
+        Code.RESOURCE_EXHAUSTED.value,
+        "ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED",
+        "lease_requests_exhausted",
+    )

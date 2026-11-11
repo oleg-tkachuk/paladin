@@ -65,18 +65,20 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### The Go SDK's fake re-models metering instead of using memstore
+### The Python SDK's fake leases reserve nothing against ceilings
 
 - **Status:** Deferred.
-- **Reason:** `sdk/go/paladintest` counts requests up the ancestor chain
-  (`caveats.go`) and models budget leases (`lease.go`) by hand, beside
-  `memstore.UsageStore`, which does both as the server's store does. The
-  fake deliberately counts no spend, which memstore would, so the switch
-  needs that choice revisited first.
-- **Definition of Done:** the fake's request counts and leases go through
-  `memstore.UsageStore`, and its own counting and lease code is deleted.
-  `sdk_fake_fidelity_test.go` and `lease_fidelity_test.go` still pass.
-- **Blockers:** deciding whether the fake should count spend.
+- **Reason:** the Go fake counts and leases through limes's
+  `memstore.UsageStore`, as the server does through pgstore. The Python fake
+  has no limes to call, and models the visible part by hand: a request under
+  a lease is spent from it, and one past it refused. A lease's requests
+  are not reserved against the chain's request ceilings, so a lease is never
+  refused for want of room, and requests under it are not counted against the
+  ceilings above it.
+- **Definition of Done:** the Python fake reserves leased requests against
+  the chain's ceilings and refuses a lease past them, as
+  `memstore.UsageStore` does, and a test holds both fakes to the same answers.
+- **Blockers:** none, but no consumer has hit it.
 
 ## Deploy cutover: rename to `paladin`
 
