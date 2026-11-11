@@ -281,6 +281,7 @@ tasks:
       - task: verify:conflict-markers
       - task: verify:commit-subject
       - task: verify:mutate-script
+      - task: verify:node-version
       - task: verify:coverage-profile
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
@@ -506,6 +507,11 @@ tasks:
     desc: "scripts/mutate.sh fails on a surviving mutant and leaves the file as it was"
     cmds:
       - ./scripts/mutate.test.sh
+
+  verify:node-version:
+    desc: ".nvmrc, the console image and CI run one Node major"
+    cmds:
+      - ./scripts/node-version.test.sh
 
   verify:coverage-profile:
     desc: "scripts/coverage-profile.sh lists each block once, covered by any package that reached it"

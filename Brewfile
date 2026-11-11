@@ -22,7 +22,7 @@
 #                         data; for sdk/go, `cd backend && go install
 #                         github.com/securego/gosec/v2/cmd/gosec` installs the pin.
 # not-brew: govulncheck — go install golang.org/x/vuln/cmd/govulncheck@latest
-# not-brew: node        — nvm locally; the console image pins ARG NODE_VERSION.
+# not-brew: node        — nvm locally, from .nvmrc; the console image pins ARG NODE_VERSION.
 # not-brew: uvx         — the second binary of brew "uv" below.
 # A formula whose binary is named differently says so as `# bin: <name>`;
 # every other trailing comment is prose.

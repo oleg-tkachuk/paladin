@@ -146,7 +146,7 @@
       "matchManagers": ["gomod", "npm", "nodenv", "pep621", "custom.regex"],
       "matchUpdateTypes": ["major"],
       "enabled": false,
-      "description": "Majors are crossed by hand — a Go major can break the generated Connect stubs the frontend consumes, which no lockfile bump can tell you; a Node major is taken by CI (.github/ci/.node-version, NODE_VERSION) and the console image together; a pinned tool's or the task library's major changes what CI and the tasks run."
+      "description": "Majors are crossed by hand — a Go major can break the generated Connect stubs the frontend consumes, which no lockfile bump can tell you; a Node major is taken by CI (.github/ci/.node-version, NODE_VERSION), .nvmrc and the console image together; a pinned tool's or the task library's major changes what CI and the tasks run."
     }
   ],
   "vulnerabilityAlerts": {
