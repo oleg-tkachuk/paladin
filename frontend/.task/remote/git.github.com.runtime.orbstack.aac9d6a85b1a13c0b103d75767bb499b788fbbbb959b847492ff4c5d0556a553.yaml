@@ -57,7 +57,7 @@ tasks:
     preconditions:
       - sh: docker info >/dev/null 2>&1
         msg: "the Docker daemon is not running — start OrbStack"
-      - sh: kubectl config get-contexts -o name | grep -qx {{._RT_CTX | q}}
+      - sh: kubectl config get-contexts -o name | WANT={{._RT_CTX | q}} awk '$0 == ENVIRON["WANT"] { found = 1 } END { exit !found }'
         msg: "there is no '{{._RT_CTX}}' kube context — enable Kubernetes in OrbStack, or set K8S_CONTEXT"
     cmds:
       - printf '%s %s · local · OrbStack ready (%s)\n' "{{._RT_OK}}" {{._RT_SVC | q}} {{._RT_CTX | q}}

@@ -115,7 +115,7 @@ tasks:
           # task here follows whatever `kubectl config use-context` last set,
           # which is a different cluster tomorrow.
           if [ -n "$ctx" ]; then
-            if kubectl config get-contexts -o name 2>/dev/null | grep -qxF -- "$ctx"; then
+            if kubectl config get-contexts -o name 2>/dev/null | WANT="$ctx" awk '$0 == ENVIRON["WANT"] { found = 1 } END { exit !found }'; then
               say '{{._K8S_OK}}' "context $ctx (pinned)"
             else
               bad "K8S_CONTEXT $ctx is not in the kubeconfig"
@@ -204,6 +204,7 @@ tasks:
           match={{.ROLLOUT_MATCH | default ._K8S_MATCH_IMAGE | q}}
           selector={{.ROLLOUT_SELECTOR | default "" | q}}
           timeout={{.ROLLOUT_TIMEOUT | default "2m" | q}}
+          min={{.ROLLOUT_MIN | default "1" | q}}
           poll={{._K8S_POLL_SECONDS | q}}
           svc={{._K8S_SVC | q}}
           target=$selector
@@ -223,9 +224,16 @@ tasks:
           esac
           deadline=$(($(date +%s) + count))
 
+          # A selector matches what exists, and a first install creates the
+          # Deployments one after another: without a count to reach, the wait
+          # is over as soon as the first of them is there and has rolled.
+          case "$min" in
+            '' | *[!0-9]* | 0) printf '%s %s · k8s · ROLLOUT_MIN must be a whole number from 1, got: %s\n' "{{._K8S_ERR}}" "$svc" "$min" >&2; exit 1 ;;
+          esac
+
           # A chart label cannot hold a "+": helm's own scaffold writes "_".
           if [ "$match" = {{._K8S_MATCH_CHART | q}} ]; then
-            want="-$(printf '%s' "$version" | tr + _)"
+            want="-$(printf '%s' "$version" | awk '{ gsub(/\+/, "_"); print }')"
           else
             want=":$version"
           fi
@@ -239,6 +247,11 @@ tasks:
             fi
             behind=''
             [ -n "$names" ] || behind="    $target is not there yet$nl"
+            if [ -n "$selector" ] && [ -n "$names" ]; then
+              # shellcheck disable=SC2086 # one name per word, by construction
+              set -- $names
+              [ "$#" -ge "$min" ] || behind="    $target matches $# Deployment(s), ROLLOUT_MIN asks for $min$nl"
+            fi
             for d in $names; do
               if [ "$match" = {{._K8S_MATCH_CHART | q}} ]; then
                 have=$({{._K8S_KUBECTL}} -n "$ns" get "$d" -o jsonpath={{._K8S_CHART_PATH | q}})
@@ -249,7 +262,7 @@ tasks:
               for one in $have; do
                 case "$one" in *"$want" | *"$want@"*) ok=1 ;; esac
               done
-              [ "$ok" = 1 ] || behind="$behind    $d has $(printf '%s' "${have:-nothing}" | tr '\n' ' ')$nl"
+              [ "$ok" = 1 ] || behind="$behind    $d has $(printf '%s' "${have:-nothing}" | awk '{ printf "%s%s", sep, $0; sep = " " }')$nl"
             done
             [ -n "$behind" ] || break
             if [ "$(date +%s)" -ge "$deadline" ]; then
@@ -319,7 +332,7 @@ tasks:
       - cmd: |-
           set -eu
           ns={{._K8S_NS | q}}
-          sel=$({{._K8S_KUBECTL}} -n "$ns" get deploy/{{._K8S_DEPLOY | q}} -o go-template='{{"{{"}}range $k,$v := .spec.selector.matchLabels{{"}}"}}{{"{{"}}$k{{"}}"}}={{"{{"}}$v{{"}}"}},{{"{{"}}end{{"}}"}}' | sed 's/,$//')
+          sel=$({{._K8S_KUBECTL}} -n "$ns" get deploy/{{._K8S_DEPLOY | q}} -o go-template='{{"{{"}}range $k,$v := .spec.selector.matchLabels{{"}}"}}{{"{{"}}$k{{"}}"}}={{"{{"}}$v{{"}}"}},{{"{{"}}end{{"}}"}}' | awk '{ sub(/,$/, ""); print }')
           # A selector of matchExpressions alone leaves nothing here, and an
           # empty -l lists every pod in the namespace as if it were this one's.
           if [ -z "$sel" ]; then

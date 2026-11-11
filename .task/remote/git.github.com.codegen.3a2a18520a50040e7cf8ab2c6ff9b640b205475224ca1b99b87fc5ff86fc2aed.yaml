@@ -37,6 +37,8 @@ version: "3"
 #   GO_TOOL_MODFILE   a go.mod whose `tool` directives pin buf, sqlc and
 #                     goimports, when they are not in this module's own
 #                                                           (default none)
+#   GO_TOOLS_PINNED   1: a tool no `tool` directive pins is not there, and
+#                     PATH is never asked                  (default 0)
 #   MOCKS_PATHSPEC    git pathspec the mock gate watches   (default internal)
 #   PROTO_PATHSPEC    git pathspec the proto gate watches, when the `out:`
 #                     paths in the templates are not the right answer
@@ -117,6 +119,10 @@ vars:
   _CG_SQLC_FLAGS: '{{.SQLC_FLAGS | default ""}}'
   _CG_GOIMPORTS_FLAGS: '{{.GOIMPORTS_FLAGS | default ""}}'
   _CG_TOOL_MOD: '{{.GO_TOOL_MODFILE | default ""}}'
+  # What GO_TOOLS_PINNED may be, and what it is when unset.
+  _CG_PINNED_ON: "1"
+  _CG_PINNED_OFF: "0"
+  _CG_PINNED: '{{.GO_TOOLS_PINNED | default "0"}}'
   # Where the checks keep the working tree's state from before they
   # regenerate. Under .task/, which Task itself owns and repositories ignore.
   _CG_SNAP_DIR: .task/codegen
@@ -141,13 +147,25 @@ vars:
   # with whatever PATH holds — the pin gone, and nothing saying so.
   _CG_TOOLS: |-
     go_tool() { go tool{{if ._CG_TOOL_MOD}} -modfile={{._CG_TOOL_MOD | q}}{{end}} "$@"; }
-    have_tool() { go_tool -n "$1" >/dev/null 2>&1 || command -v "$1" >/dev/null 2>&1; }
-    run_tool() {
-      if go_tool -n "$1" >/dev/null 2>&1; then go_tool "$@"; else "$@"; fi
-    }
+    pinned() { go_tool -n "$1" >/dev/null 2>&1; }
+    # Under GO_TOOLS_PINNED=1 PATH is asked for nothing: a tool nobody pinned
+    # is missing, whatever is installed.
+    case {{._CG_PINNED | q}} in
+      {{._CG_PINNED_ON | q}})
+        absent='is not pinned by a tool directive, and GO_TOOLS_PINNED='{{._CG_PINNED_ON | q}}' leaves PATH out'
+        have_tool() { pinned "$1"; }
+        run_tool() { go_tool "$@"; } ;;
+      {{._CG_PINNED_OFF | q}})
+        absent='is not installed'
+        have_tool() { pinned "$1" || command -v "$1" >/dev/null 2>&1; }
+        run_tool() { if pinned "$1"; then go_tool "$@"; else "$@"; fi; } ;;
+      *)
+        printf '%s %s · gen · GO_TOOLS_PINNED must be %s or %s, got: %s\n' "{{._CG_ERR}}" {{._CG_NAME | q}} {{._CG_PINNED_ON | q}} {{._CG_PINNED_OFF | q}} {{._CG_PINNED | q}} >&2
+        exit 1 ;;
+    esac
     need_tool() {
       have_tool "$1" && return 0
-      printf '%s %s · gen · %s is not installed — %s\n' "{{._CG_ERR}}" {{._CG_NAME | q}} "$1" "$2" >&2
+      printf '%s %s · gen · %s %s — %s\n' "{{._CG_ERR}}" {{._CG_NAME | q}} "$1" "$absent" "$2" >&2
       exit 1
     }
     {{if ._CG_TOOL_MOD}}if [ ! -f {{._CG_TOOL_MOD | q}} ]; then
@@ -289,7 +307,8 @@ tasks:
       # reads buf's templates. A sqlc.json config is not read, and its output
       # is left as sqlc wrote it.
       _CG_SQLC_OUT:
-        sh: awk {{._CG_OUT_AWK | q}} sqlc.yaml sqlc.yml 2>/dev/null | sort -u | tr '\n' ' '
+        sh: >-
+          awk {{._CG_OUT_AWK | q}} sqlc.yaml sqlc.yml 2>/dev/null | sort -u | awk '{ printf "%s ", $0 }'
     cmds:
       # SQLC_MODULE first: it names a version outright. Without it, the pinned
       # sqlc, then PATH's.
@@ -342,7 +361,7 @@ tasks:
         sh: |-
           spec={{._CG_SQLC_DIR | q}}
           if [ -n "$spec" ]; then printf '%s' "$spec"; exit 0; fi
-          awk {{._CG_OUT_AWK | q}} sqlc.yaml sqlc.yml 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//'
+          awk {{._CG_OUT_AWK | q}} sqlc.yaml sqlc.yml 2>/dev/null | sort -u | awk '{ printf "%s%s", sep, $0; sep = " " }'
     preconditions:
       - sh: test -n {{._CG_SQLC_WATCH | q}}
         msg: "no out: path in sqlc.yaml — set SQLC_DIR to the directory that holds the generated bindings"
@@ -379,7 +398,7 @@ tasks:
         sh: |-
           spec={{._CG_PROTO_SPEC | q}}
           if [ -n "$spec" ]; then printf '%s' "$spec"; exit 0; fi
-          awk {{._CG_OUT_AWK | q}} {{range $f := ._CG_BUF_TPL}}{{$f | q}} {{end}} 2>/dev/null | sort -u | tr '\n' ' '
+          awk {{._CG_OUT_AWK | q}} {{range $f := ._CG_BUF_TPL}}{{$f | q}} {{end}} 2>/dev/null | sort -u | awk '{ printf "%s ", $0 }'
     cmds:
       - task: _cg_snapshot
         vars: { PATHS: '{{._CG_PROTO_OUT}}', OUT: '{{._CG_SNAP_DIR}}/proto' }
@@ -472,7 +491,7 @@ tasks:
           set -eu
           if ! cmp -s {{.OUT | q}} {{.OUT | q}}.after; then
             printf '%s %s · gen · %s; regenerating changed:\n' "{{._CG_ERR}}" {{._CG_NAME | q}} {{.STALE | q}} >&2
-            diff {{.OUT | q}} {{.OUT | q}}.after | sed -n 's/^[<>] [^ ]* //p' | LC_ALL=C sort -u | sed 's/^/    /' >&2
+            diff {{.OUT | q}} {{.OUT | q}}.after | awk '/^[<>] [^ ]* / { sub(/^[<>] [^ ]* /, ""); print }' | LC_ALL=C sort -u | awk '{ print "    " $0 }' >&2
             rm -f {{.OUT | q}} {{.OUT | q}}.after
             exit 1
           fi

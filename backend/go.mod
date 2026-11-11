@@ -36,7 +36,7 @@ require (
 	github.com/moby/moby/client v0.6.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nats-io/jwt/v2 v2.8.3
-	github.com/nats-io/nats-server/v2 v2.15.2
+	github.com/nats-io/nats-server/v2 v2.15.3
 	github.com/nats-io/nats.go v1.55.0
 	github.com/nats-io/nkeys v0.4.17
 	github.com/oasdiff/yaml3 v0.0.16
@@ -46,7 +46,7 @@ require (
 	github.com/oleg-tkachuk/limes/exchange v0.24.0
 	github.com/oleg-tkachuk/limes/otelmetric v0.20.1
 	github.com/oleg-tkachuk/limes/pgstore v0.76.1
-	github.com/oleg-tkachuk/paladin/sdk/go v0.145.3
+	github.com/oleg-tkachuk/paladin/sdk/go v0.145.4
 	github.com/pressly/goose/v3 v3.30.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.16.0
@@ -100,7 +100,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Microsoft/go-winio v0.6.4 // indirect
 	github.com/anthropics/anthropic-sdk-go v1.82.0 // indirect
-	github.com/antithesishq/antithesis-sdk-go v0.8.0 // indirect
+	github.com/antithesishq/antithesis-sdk-go v0.9.0-default-no-op // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.27 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.9 // indirect

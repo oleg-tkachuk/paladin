@@ -159,11 +159,11 @@ tasks:
             case "$path" in ""|*"{{"{{"}}"*|*://*|*"?ref="*|git@*) continue ;; esac
             case "$path" in /*) file=$path ;; *) file=$rootdir/$path ;; esac
             if [ -d "$file" ]; then
-              file=$(ls "$file"/[Tt]askfile.yml "$file"/[Tt]askfile.yaml "$file"/[Tt]askfile.dist.yml "$file"/[Tt]askfile.dist.yaml 2>/dev/null | head -1 || true)
+              file=$(ls "$file"/[Tt]askfile.yml "$file"/[Tt]askfile.yaml "$file"/[Tt]askfile.dist.yml "$file"/[Tt]askfile.dist.yaml 2>/dev/null | awk 'NR == 1' || true)
             fi
             [ -n "$file" ] && [ -f "$file" ] || continue
             declared=$(yq -r '.vars // {} | keys | .[]' "$file")
-            bare=$(printf '%s\n' "$declared" | grep -v '^_' | grep . || true)
+            bare=$(printf '%s\n' "$declared" | awk '!/^_/ && /./')
             # Prefixed vars and nothing else: a library module, not a component.
             if [ -z "$bare" ] && [ -n "$declared" ]; then continue; fi
             components="$components $name"
