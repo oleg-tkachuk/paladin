@@ -19,6 +19,7 @@ readonly RELEASE=paladin-core
 readonly NAMESPACE=paladin
 readonly SIGNING_SECRET="$RELEASE-auth-signing-key"
 readonly PEPPER_SECRET="$RELEASE-api-token-hmac"
+readonly SESSION_SECRET="$RELEASE-session-key"
 readonly REQUIRED_VALUES=ci/required-values.yaml
 
 for tool in helm yq; do
@@ -91,6 +92,34 @@ cases=$((cases + 1))
 secret_exists existing "$SIGNING_SECRET" && bad "existingSecret: a signing key Secret was generated anyway"
 cases=$((cases + 1))
 rbac_names existing | grep -x my-signing-key >/dev/null || bad "existingSecret: RBAC cannot read my-signing-key"
+
+# ─── session signing key ─────────────────────────────────────────────────────
+# ADR-0047: mounted as a file into the roles that mint sessions and no other,
+# and never readable through the API, so no Role names it.
+
+# mounters <name> <secret> — the Deployments that mount that Secret.
+mounters() {
+    yq -r 'select(.kind == "Deployment") | select(.spec.template.spec.volumes[]?.secret.secretName == "'"$2"'") | .metadata.name' \
+        "$scratch/$1.yaml" | sort -u | paste -sd, -
+}
+
+render session-default
+cases=$((cases + 1))
+secret_exists session-default "$SESSION_SECRET" || bad "defaults: no session key Secret was generated"
+check "defaults: only api mounts the session key" "$(mounters session-default "$SESSION_SECRET")" "$RELEASE-api"
+cases=$((cases + 1))
+rbac_names session-default | grep -x "$SESSION_SECRET" >/dev/null && bad "defaults: a Role can read the session key"
+check "defaults: the generated session key is P-256" \
+    "$(yq -r 'select(.kind == "Secret" and .metadata.name == "'"$SESSION_SECRET"'") | .data["session-key.pem"]' "$scratch/session-default.yaml" |
+        base64 -d | openssl ec -noout -text 2>/dev/null | sed -n 's/^NIST CURVE: //p')" "P-256"
+
+render session-existing --set auth.sessionKey.existingSecret=my-session-key
+cases=$((cases + 1))
+secret_exists session-existing "$SESSION_SECRET" && bad "existingSecret: a session key Secret was generated anyway"
+check "existingSecret: only api mounts it" "$(mounters session-existing my-session-key)" "$RELEASE-api"
+
+render session-off --set auth.sessionKey.generate=false
+check "no session key: nothing mounts one" "$(mounters session-off "$SESSION_SECRET")" ""
 
 # ─── API-token digest pepper ─────────────────────────────────────────────────
 # A secret of its own, never the session key (ADR-0047): generated when API

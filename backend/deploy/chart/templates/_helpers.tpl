@@ -206,6 +206,20 @@ it render exactly as before.
 {{- end -}}
 
 {{/*
+chart.sessionKey — the session signing key's Secret (ADR-0047): the one this
+chart generates, or auth.sessionKey.existingSecret. Mounted as a file into
+auth.sessionKey.roles only. Returns JSON {active, create, name, key,
+mountPath, roles}.
+*/}}
+{{- define "chart.sessionKey" -}}
+{{- $session := .Values.auth.sessionKey -}}
+{{- $name := $session.existingSecret | default (printf "%s-session-key" (include "chart.fullname" .)) -}}
+{{- $active := or $session.generate (ne $session.existingSecret "") -}}
+{{- $create := and $session.generate (eq $session.existingSecret "") -}}
+{{- dict "active" $active "create" $create "name" $name "key" $session.key "mountPath" $session.mountPath "roles" $session.roles | toJson -}}
+{{- end -}}
+
+{{/*
 chart.apiTokenHMACKey — where api_token.hmac_key comes from when API tokens
 are on and config.api_token names neither an inline key nor a Secret: a
 Secret this chart generates, or apiToken.hmacKey.existingSecret. It is the
