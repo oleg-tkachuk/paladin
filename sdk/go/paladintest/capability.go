@@ -2,6 +2,7 @@ package paladintest
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -83,9 +84,6 @@ type capabilityRecord struct {
 	// revocation is its own revocation entry, the first one written; nil
 	// while it has none.
 	revocation *adminv1.CapabilityRevocation
-	// requests is how many requests it was presented to, ancestors counting
-	// their descendants', as the server counts them against a ceiling.
-	requests int64
 }
 
 // biscuitStatusOf is the server's: a key-bound capability and one valid only
@@ -317,7 +315,9 @@ func (s *Server) revokeCapability(id string, cascade bool, entry *adminv1.Capabi
 		s.credentials[token].revoked = true
 	}
 	// The server settles a revoked capability's lease with its revoke.
-	delete(s.leases, id)
+	if err := s.usage.settle(id); err != nil {
+		panic(fmt.Sprintf("paladintest: settle the lease of revoked %s: %v", id, err)) // the fake's own record always settles
+	}
 	if entry != nil && rec.revocation == nil {
 		rec.revocation = proto.CloneOf(entry)
 	}
@@ -392,6 +392,11 @@ func (s *Server) mint(c *adminv1.Capability, now, nbf, expires time.Time, status
 	c.ExpiresAt = timestamppb.New(expires)
 	if !nbf.IsZero() {
 		c.NotBefore = timestamppb.New(nbf)
+	}
+	// On record before any token: a child limes's store refuses is never
+	// handed out.
+	if err := s.usage.record(c); err != nil {
+		return nil, limesRefusal(limesStatus(err, delegationInsertCodes), err)
 	}
 	tenant := c.GetSubject().GetTenantId()
 	res := &adminv1.CapabilityServiceIssueResponse{BiscuitStatus: status}
