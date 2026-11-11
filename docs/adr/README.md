@@ -57,7 +57,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0045](0045-the-product-restarts-at-0x.md) | The product restarts at 0.x, and a major is cut by hand | Accepted |
 | [0046](0046-rate-limits-off-the-request-path.md) | Request rate limits count in Valkey when one is configured, and in memory synced to Postgres otherwise | Accepted |
 | [0047](0047-sessions-signed-by-iam-alone.md) | Session tokens are signed with a key only the IAM role holds | Accepted |
-| [0048](0048-the-console-holds-no-token.md) | The console renders the UI, and a Go session edge holds the session | Proposed |
+| [0048](0048-the-console-holds-no-token.md) | The console renders the UI, and a Go session edge holds the session | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
