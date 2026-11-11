@@ -3,7 +3,6 @@ package app
 import (
 	"crypto/ed25519"
 	"net/http"
-	"time"
 
 	"github.com/oleg-tkachuk/limes/jwks"
 )
@@ -14,7 +13,7 @@ import (
 // `/.well-known/jwks.json` so verifiers in other planes / pods fetch
 // and cache locally without an RPC.
 //
-// Cache-Control: max-age jwksMaxAge means each verifier refreshes every 5
+// Cache-Control: max-age jwks.DefaultMaxAge means each verifier refreshes every 5
 // minutes — fast enough for rotation to propagate in a release window,
 // slow enough that a thundering herd at deploy time doesn't stampede
 // the admin pod.
@@ -24,8 +23,7 @@ import (
 // reachable without bootstrap credentials.
 func JWKSHandler(publicKeys map[string]ed25519.PublicKey) http.Handler {
 	h, err := jwks.NewHandler(jwks.HandlerConfig{
-		Keys:   func() map[string]ed25519.PublicKey { return publicKeys },
-		MaxAge: jwksMaxAge,
+		Keys: func() map[string]ed25519.PublicKey { return publicKeys },
 	})
 	if err != nil {
 		// Only a nil key source or a negative max-age fails, neither of
@@ -35,6 +33,3 @@ func JWKSHandler(publicKeys map[string]ed25519.PublicKey) http.Handler {
 	}
 	return h
 }
-
-// jwksMaxAge is how long a verifier keeps the published key set.
-const jwksMaxAge = 5 * time.Minute

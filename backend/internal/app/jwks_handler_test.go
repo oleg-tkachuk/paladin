@@ -16,7 +16,7 @@ import (
 const jwksPath = "/.well-known/jwks.json"
 
 // The handler serves the bundle's keys as a JWK Set that parses back to the
-// same keys, cacheable for jwksMaxAge.
+// same keys, cacheable for limes's jwks.DefaultMaxAge.
 func TestJWKSHandlerServesTheKeysForMaxAge(t *testing.T) {
 	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -32,7 +32,7 @@ func TestJWKSHandlerServesTheKeysForMaxAge(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusOK)
 	}
-	if got, want := res.Header.Get("Cache-Control"), fmt.Sprintf("public, max-age=%d", int64(jwksMaxAge.Seconds())); got != want {
+	if got, want := res.Header.Get("Cache-Control"), fmt.Sprintf("public, max-age=%d", int64(jwks.DefaultMaxAge.Seconds())); got != want {
 		t.Errorf("Cache-Control = %q, want %q", got, want)
 	}
 	body, err := io.ReadAll(res.Body)

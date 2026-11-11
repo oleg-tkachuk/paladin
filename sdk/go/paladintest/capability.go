@@ -52,8 +52,8 @@ const (
 	// capabilityIssuer is the issuer the fake's capabilities name.
 	capabilityIssuer = "paladintest"
 	// DefaultCapabilityTTL is how long a capability lives when Issue names no
-	// TTL: the server's default_ttl.
-	DefaultCapabilityTTL = 15 * time.Minute
+	// TTL: the server's default_ttl, which is limes's.
+	DefaultCapabilityTTL = limes.DefaultIssueTTL
 )
 
 // The server's answers, word for word, where the fake gives them.
