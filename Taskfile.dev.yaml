@@ -34,7 +34,7 @@ vars:
   # before anything this entry point could read it from, and an included file
   # cannot hand a var upward. `tasklib:bump VERSION=<tag>` moves every copy
   # and its lock together, and `tasklib:check` fails when they disagree.
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.6.2'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.7.1'
   # Pinned, and run through `uvx` rather than installed: the rules a scan
   # asserts against change between releases, so an unpinned checkov makes a
   # local run and the pipeline's disagree — a red nobody else can reproduce, or

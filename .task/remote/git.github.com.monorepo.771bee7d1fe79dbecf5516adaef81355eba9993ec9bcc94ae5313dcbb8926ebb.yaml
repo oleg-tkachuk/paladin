@@ -119,14 +119,16 @@ tasks:
     cmds: [{ task: each, vars: { TARGET: deploy } }]
 
   doctor:
-    desc: "Report a top-level var some included components declare and others do not"
+    desc: "Report a top-level var that included components can read from one another"
     # `each` runs every component as its own `task` process, so it shares
     # nothing. A root Taskfile that INCLUDES its components does: their
     # top-level vars land in one pool, a name one declares is what the others
     # read — a module's own default never applies — and with two declarations
-    # which one wins is not stable (README, Variable scoping). A name every
-    # component declares is safe; one only some declare is the shape that
-    # bites, so those are reported, with who declares them.
+    # which one wins is not stable (README, Variable scoping). Two shapes are
+    # reported, with who declares them: a name only some components declare,
+    # which the others read; and a name several declare with different
+    # values, which even its own declarer reads wrongly some of the time —
+    # measured, one run in four once the root holds a third include.
     #
     # A warning, not a failure: a name only one component uses harms nothing
     # until a module in another component reads it, and this cannot see which
@@ -149,7 +151,8 @@ tasks:
           # "<name>\t<component>" for each unprefixed top-level var, one line
           # per component declaring it; and the list of components.
           pool=$(mktemp)
-          trap 'rm -f "$pool"' EXIT
+          values=$(mktemp)
+          trap 'rm -f "$pool" "$values"' EXIT
           components=""
           includes=$(yq -r '.includes // {} | to_entries[] | .key + "\t" + ((.value | select(type == "!!str")) // .value.taskfile // "")' "$root")
           while IFS="$(printf '\t')" read -r name path; do
@@ -165,6 +168,10 @@ tasks:
             if [ -z "$bare" ] && [ -n "$declared" ]; then continue; fi
             components="$components $name"
             for var in $bare; do printf '%s\t%s\n' "$var" "$name" >> "$pool"; done
+            # "<name>\t<component>\t<value>", the value as JSON so that one
+            # spanning lines stays on one.
+            yq -r '.vars // {} | to_entries[] | .key + "\t" + (.value | @json)' "$file" \
+              | awk -F'\t' -v c="$name" '$1 !~ /^_/ { print $1 "\t" c "\t" $2 }' >> "$values"
           done <<< "$includes"
           set -- $components
           if [ "$#" -lt 2 ]; then
@@ -172,13 +179,21 @@ tasks:
             exit 0
           fi
           partial=$(awk -F'\t' -v n="$#" '{ by[$1] = by[$1] " " $2; c[$1]++ } END { for (v in c) if (c[v] < n) print v "\t" by[v] }' "$pool" | sort)
-          if [ -z "$partial" ]; then
-            printf '%s monorepo · every top-level var is declared by every component\n' "{{._MONO_OK}}"
+          clash=$(awk -F'\t' '{ by[$1] = by[$1] " " $2; if (!(($1, $3) in seen)) { seen[$1, $3] = 1; kinds[$1]++ } } END { for (v in kinds) if (kinds[v] > 1) print v "\t" by[v] }' "$values" | sort)
+          if [ -z "$partial" ] && [ -z "$clash" ]; then
+            printf '%s monorepo · no top-level var can reach one component from another\n' "{{._MONO_OK}}"
             exit 0
           fi
-          while IFS="$(printf '\t')" read -r var by; do
-            printf '%s monorepo · %s is declared at the top level of%s only — every other component reads that value; move it into the vars: of the include that reads it\n' "{{._MONO_WARN}}" "$var" "$by"
-          done <<< "$partial"
+          if [ -n "$partial" ]; then
+            while IFS="$(printf '\t')" read -r var by; do
+              printf '%s monorepo · %s is declared at the top level of%s only — every other component reads that value; move it into the vars: of the include that reads it\n' "{{._MONO_WARN}}" "$var" "$by"
+            done <<< "$partial"
+          fi
+          if [ -n "$clash" ]; then
+            while IFS="$(printf '\t')" read -r var by; do
+              printf '%s monorepo · %s is declared at the top level of%s with different values — which one a module reads is not stable, in the declaring components too; move it into the vars: of the include that reads it\n' "{{._MONO_WARN}}" "$var" "$by"
+            done <<< "$clash"
+          fi
 
   registry:check:
     desc: "Fail fast when {{._MONO_REG}} is not reachable"
