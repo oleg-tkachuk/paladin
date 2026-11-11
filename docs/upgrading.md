@@ -89,6 +89,70 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — the MCP edge's resource metadata comes from limes
+
+- With `mcp.oauth.enabled`, `mcp.oauth.resource_url` and every
+  `mcp.oauth.authorization_servers` entry must be https URLs, and at least one
+  authorization server must be named (RFC 9728 §2). Otherwise the server
+  refuses to boot. Both are identifiers: the MCP listener may stay plain http
+  behind a proxy or ingress that terminates TLS. Compose now names
+  `https://localhost:8095/mcp` and `https://localhost:8085`.
+- The protected-resource document is now also served where RFC 9728 §3.1 puts
+  it for a resource with a path, `/.well-known/oauth-protected-resource/mcp`,
+  and the `WWW-Authenticate` challenge points there. The bare
+  `/.well-known/oauth-protected-resource` still answers.
+- The document is cacheable for an hour (`Cache-Control: max-age=3600`),
+  where it was five minutes.
+- In a challenge carrying an error, `resource_metadata` now comes after
+  `error` and `error_description`. A quote in a description is escaped.
+
+## sdk/python/v0.145.4, sdk/go/v0.145.4 — the SDK fakes spend a request from its lease
+
+- Under `WithStrictAuth` / `strict_auth=True`, a request made under a
+  capability's lease of requests, or under an ancestor's, is now spent from
+  the lease, as the server spends it: `GetLease` reports it in
+  `requests_spent`. A request past what the lease holds is refused
+  `RESOURCE_EXHAUSTED` with limes code `lease_requests_exhausted`. Before,
+  the fakes counted such a request against the request ceilings and never
+  against the lease.
+- A top-up holds the requests the open lease had not yet spent, plus the
+  top-up, no longer all the requests it was opened with.
+- The Go fake now counts and leases through limes's `memstore.UsageStore`.
+  So a lease's requests are also reserved against the chain's request
+  ceilings, and a lease past them is refused, as on the server.
+
+## Unreleased — a delegation without `share` carries limes's code
+
+- `CapabilityService.Delegate` from a parent whose caveats lack `share` is
+  still `PERMISSION_DENIED`. It now carries the limes code `op_not_allowed`
+  and the capability reason in its `ErrorInfo`, as the other refusals limes
+  makes do. The message is that problem's title, no longer
+  "capability: caller lacks OpShare".
+
+## Unreleased — billing answers a failing ledger by its limes code
+
+- `BillingService` now answers `UNAVAILABLE`, worth a retry, when the charge
+  ledger's store is down or timed out (`store_unavailable`, `store_timeout`),
+  or returns a cursor it already returned. Before, all of these were
+  `INTERNAL`.
+
+## Unreleased — a credential presented twice is refused
+
+- The data, IAM and admin planes now answer `INVALID_ARGUMENT` to a call that
+  carries more than one `Authorization` header or more than one `DPoP` proof
+  (RFC 6750 §2, RFC 9449 §4.3, §7.2). Before, each reader took the first
+  value. A client that sends one of each is unaffected.
+
+## Unreleased — a zero capability duration means what it says
+
+- `capability.verifier_leeway: 0s` now gives no clock skew on `nbf` and `exp`.
+  Before, it gave limes's default of 30 seconds.
+- `capability.revocation_cache_ttl` and `capability.dpop_nonce.lifetime` must
+  now be positive, and the server refuses to boot on zero. Before, limes
+  replaced a zero with its own default (2s and 5m) without saying so. The
+  shipped configurations set both, so a deployment that keeps them is
+  unaffected.
+
 ## sdk/python/v0.145.2, sdk/go/v0.145.2 — limes v1.0.0-rc.64: striped tenant aggregates, store codes
 
 - limes migrations `042` and `043` run with the migration job: a table of
