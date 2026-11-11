@@ -45,6 +45,9 @@ import {
 } from "./fixtures/seed";
 
 const READ_RPC = "/paladin.admin.v1.BackendService/ListBackends";
+// The write tools the relay and tag specs call (backend/internal/mcp).
+const UPLOAD_TOOL = "paladin_upload_object";
+const SET_TAGS_TOOL = "paladin_set_object_tags";
 // The protocol version offered; the server answers with the one it speaks.
 const OFFERED_PROTOCOL = "2025-06-18";
 const SESSION_HEADER = "mcp-session-id";
@@ -83,6 +86,7 @@ interface RPCResponse {
     protocolVersion?: string;
     isError?: boolean;
     content?: { type: string; text?: string }[];
+    tools?: { name: string; annotations?: { readOnlyHint?: boolean } }[];
   };
   error?: { code: number; message: string };
 }
@@ -155,6 +159,21 @@ class MCPSession {
     expect(ack.ok(), await ack.text()).toBe(true);
   }
 
+  /** The tools the session's profile offers, and whether each only reads. */
+  async listTools(): Promise<{ name: string; readOnly: boolean }[]> {
+    const res = await this.post("tools/list", {});
+    expect(res.ok(), await res.text()).toBe(true);
+    const body = await rpcBody(
+      await res.text(),
+      res.headers()["content-type"] ?? "",
+    );
+    expect(body.error, JSON.stringify(body.error)).toBeUndefined();
+    return (body.result?.tools ?? []).map((t) => ({
+      name: t.name,
+      readOnly: t.annotations?.readOnlyHint ?? false,
+    }));
+  }
+
   /** A tool's result text, and whether the tool reported an error. */
   async callTool(
     name: string,
@@ -171,6 +190,27 @@ class MCPSession {
       .map((c) => c.text ?? "")
       .join("\n");
     return { isError: body.result?.isError ?? false, text };
+  }
+}
+
+/**
+ * Skips the test when the server's profile offers no tool that writes, as
+ * the dev cluster's read_only profile does (its GitOps values keep agents
+ * reading). A profile that writes and lacks one of `tools` fails the test:
+ * only a deployment that writes nothing is spared.
+ */
+async function requireWriteTools(
+  session: MCPSession,
+  ...tools: string[]
+): Promise<void> {
+  const offered = await session.listTools();
+  test.skip(
+    offered.every((t) => t.readOnly),
+    "the MCP server's profile offers no tool that writes",
+  );
+  const names = offered.map((t) => t.name);
+  for (const tool of tools) {
+    expect(names, `the profile offers ${tool}`).toContain(tool);
   }
 }
 
@@ -241,12 +281,13 @@ test.describe("MCP token exchange", () => {
     const tok = await grant(request, [SCOPE_READ, SCOPE_WRITE], MCP_RESOURCE);
     const session = new MCPSession(request, tok.access_token);
     await session.initialize();
+    await requireWriteTools(session, UPLOAD_TOOL);
 
     // A write the data plane audits, failed or not: an upload into a
     // collection no fixture creates, named for this run so its audit row is
     // the only one that carries the name. Nothing is reserved.
     const marker = `e2e-relay-${crypto.randomUUID().slice(0, UNIQUE_SUFFIX)}`;
-    const write = await session.callTool("paladin_upload_object", {
+    const write = await session.callTool(UPLOAD_TOOL, {
       parent: `tenants/${await seedAdminTenantID()}/collections/${marker}`,
       content_type: "text/plain",
       size_bytes: UPLOAD_BYTES.length,
@@ -284,6 +325,7 @@ test.describe("MCP token exchange", () => {
     const tok = await grant(request, [SCOPE_READ, SCOPE_WRITE], MCP_RESOURCE);
     const session = new MCPSession(request, tok.access_token);
     await session.initialize();
+    await requireWriteTools(session, SET_TAGS_TOOL);
 
     const read = await session.callTool("paladin_get_object", {
       name: obj.name,
@@ -294,7 +336,7 @@ test.describe("MCP token exchange", () => {
     expect(version, read.text).toBeTruthy();
 
     const marker = crypto.randomUUID();
-    const write = await session.callTool("paladin_set_object_tags", {
+    const write = await session.callTool(SET_TAGS_TOOL, {
       name: obj.name,
       resource_version: version,
       tags: { [TAG_KEY]: marker },
