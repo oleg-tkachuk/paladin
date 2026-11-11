@@ -1,6 +1,6 @@
 # ADR-0048: The console renders the UI, and a Go session edge holds the session
 
-- **Status:** Proposed 2026-11-11.
+- **Status:** Accepted 2026-11-11.
 - **Related:** [ADR-0047](0047-sessions-signed-by-iam-alone.md) (the session
   keys this builds on), [ADR-0033](0033-console-separates-platform-from-tenant-workspace.md).
 

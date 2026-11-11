@@ -77,6 +77,10 @@ data:
     {{- if $sk.active }}
     {{- $_ := set $cfg.auth "signing_key_secret" (dict "name" $sk.name "key" $sk.key) }}
     {{- end }}
+    {{- $pepper := fromJson (include "chart.apiTokenHMACKey" .) }}
+    {{- if $pepper.active }}
+    {{- $_ := set $cfg.api_token "hmac_key_secret" (dict "name" $pepper.name "key" $pepper.key) }}
+    {{- end }}
     {{- if not $cfg.auth.issuer }}
     {{- $_ := set $cfg.auth "issuer" (include "chart.fullname" .) }}
     {{- end }}

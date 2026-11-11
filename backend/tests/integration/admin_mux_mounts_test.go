@@ -126,6 +126,7 @@ func TestAdminMux_MountsEveryAdminService(t *testing.T) {
 				c.Capability.Enabled = tc.enabled
 				c.Capability.IssuerName = "test-issuer"
 				c.APIToken.Enabled = tc.enabled
+				c.APIToken.HMACKey = wiringAPITokenPepper
 			})
 
 			for _, svc := range services {

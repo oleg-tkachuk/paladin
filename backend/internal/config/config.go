@@ -254,6 +254,11 @@ func (c *Config) Validate() error {
 	if c.APIToken.HMACKey != "" && c.APIToken.HMACKeySecret != nil {
 		return fmt.Errorf("api_token: cannot specify both hmac_key and hmac_key_secret")
 	}
+	// The pepper is a secret of its own, never derived from the session
+	// signing key (ADR-0047).
+	if c.APIToken.Enabled && c.APIToken.HMACKey == "" && c.APIToken.HMACKeySecret == nil {
+		return fmt.Errorf("api_token: hmac_key or hmac_key_secret is required")
+	}
 	if c.Ingest.Webhook.SharedSecret != "" && c.Ingest.Webhook.SharedSecretRef.Name != "" {
 		return fmt.Errorf("ingest.webhook: cannot specify both shared_secret and shared_secret_ref")
 	}

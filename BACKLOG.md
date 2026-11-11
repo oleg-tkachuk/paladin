@@ -266,8 +266,6 @@ the same commit. Treat this file like a runtime invariant.
   can mint an operator session; the IAM endpoints share the `api` pods with
   the data plane.
 - **Definition of Done**, one pull request per step, each deployable alone:
-  1. The API-token pepper is its own required secret, and only a role that
-     mints requires the session key (ADR-0047 decisions 5 and 6).
   2. Sessions are ES256 with a `kid`, the IAM plane serves
      `/.well-known/jwks.json`, verifiers outside the issuer use it, and the
      private key is in a Secret only the issuing role reads; HS256 is
@@ -287,7 +285,7 @@ the same commit. Treat this file like a runtime invariant.
 
 ### Console session terminated in Go (ADR-0048)
 
-- **Status:** Blocked (ADR-0048 proposed 2026-11-11).
+- **Status:** Deferred (ADR-0048 accepted 2026-11-11).
 - **Reason:** the console's Next.js server holds the refresh token, mints
   per-plane access tokens, hands them to the browser, re-encodes every RPC
   through a hand-registered bridge, and holds the health-snapshot token.
@@ -295,7 +293,8 @@ the same commit. Treat this file like a runtime invariant.
   cookie and the tokens and forwards Connect calls as bytes; platform health
   is an admin RPC; the console's auth routes, token store, JWT decoding and
   RPC bridge are deleted.
-- **Blockers:** the owner's acceptance of ADR-0048; ADR-0047 step 4.
+- **Blockers:** ADR-0047 step 4, so the edge is never the role that holds
+  the private key.
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays

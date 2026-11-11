@@ -58,6 +58,10 @@ import (
 
 const wiringSigningKey = "wiring-test-signing-key-not-a-secret-000000000000"
 
+// wiringAPITokenPepper is api_token.hmac_key for a wiring with API tokens on:
+// a secret of its own, never derived from the signing key (ADR-0047).
+const wiringAPITokenPepper = "wiring-test-api-token-pepper-not-a-secret-000000"
+
 func wiringConfig(t *testing.T, dsn string) config.Config {
 	t.Helper()
 	cfg, err := config.Load([]string{"../../configs/config.yaml"}, zap.NewNop())

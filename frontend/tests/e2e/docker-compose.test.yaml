@@ -90,9 +90,7 @@ x-paladin-base: &paladin-base
     # /tenants/:id/m2m-tokens page untestable: every RPC behind it answers
     # Unimplemented, so a spec could only assert that the feature is absent.
     # It is a shipped page that mints bearer credentials, so the suite runs
-    # with it on. No key is needed — an empty api_token.hmac_key derives one
-    # from auth.signing_key (build_api_token.go), which is exactly the
-    # single-tenant dev posture this stack already has everywhere else.
+    # with it on. Its pepper, api_token.hmac_key, is in the baked config file.
     PALADIN_API_TOKEN_ENABLED: "true"
     # ── storage: in-compose SeaweedFS ────────────────────────
     # Two endpoints, and they are NOT interchangeable. The backend

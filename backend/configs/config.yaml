@@ -495,3 +495,6 @@ api_token:
   max_ttl: 8760h                     # cap on Issue lifetime; 1y default
   verifier_leeway: 30s               # clock-skew on expires_at
   touch_last_used: true              # bump last_used_at on verify (off for high-QPS deploys)
+  # The digest pepper, at least 32 bytes, required when enabled; never derived
+  # from auth.signing_key (ADR-0047).
+  # hmac_key_secret: {name: paladin-api-token-hmac, key: hmac_key}

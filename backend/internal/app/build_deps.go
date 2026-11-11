@@ -138,9 +138,6 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	if !ok {
 		return nil, errors.New("app: DB.Pool is not *pgxpool.Pool")
 	}
-	if cfg.Auth.SigningKey == "" {
-		return nil, errors.New("app: auth.signing_key (or signing_key_secret) is required")
-	}
 
 	// One client per backend, keyed by backend id (docs/backend-registry.md).
 	// Warmup eagerly builds every configured backend so a boot misconfiguration
@@ -235,7 +232,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	deps.Capability = cap
 
 	// API-token subsystem — additive; same disabled-by-default rule.
-	apiTok, err := BuildAPITokenBundle(cfg.APIToken, cfg.Auth.SigningKey, l, deps)
+	apiTok, err := BuildAPITokenBundle(cfg.APIToken, deps)
 	if err != nil {
 		deps.StopWatchers() // same reason as the capability branch above
 		return nil, fmt.Errorf("app: api_token bundle: %w", err)

@@ -206,6 +206,32 @@ it render exactly as before.
 {{- end -}}
 
 {{/*
+chart.apiTokenHMACKey — where api_token.hmac_key comes from when API tokens
+are on and config.api_token names neither an inline key nor a Secret: a
+Secret this chart generates, or apiToken.hmacKey.existingSecret. It is the
+digest pepper, a secret of its own rather than derived from the session key
+(ADR-0047). Returns JSON {active, create, name, key}.
+*/}}
+{{- define "chart.apiTokenHMACKey" -}}
+{{- $hk := .Values.apiToken.hmacKey -}}
+{{- $cfg := .Values.config.api_token | default dict -}}
+{{- $configured := false -}}
+{{- if or $cfg.hmac_key (and $cfg.hmac_key_secret $cfg.hmac_key_secret.name) -}}
+{{- $configured = true -}}
+{{- end -}}
+{{- $name := $hk.existingSecret | default (printf "%s-api-token-hmac" (include "chart.fullname" .)) -}}
+{{- $active := false -}}
+{{- if and $cfg.enabled (not $configured) (or $hk.generate $hk.existingSecret) -}}
+{{- $active = true -}}
+{{- end -}}
+{{- $create := false -}}
+{{- if and $active $hk.generate (not $hk.existingSecret) -}}
+{{- $create = true -}}
+{{- end -}}
+{{- dict "active" $active "create" $create "name" $name "key" $hk.key | toJson -}}
+{{- end -}}
+
+{{/*
 chart.secretReaderNames — every Secret the in-process resolver GETs: the
 static rbac.secretReader.secretNames, plus each one this chart wires itself
 and each OAuth seed client's client_secret_ref and the MCP server's,
@@ -223,6 +249,11 @@ depends on. Returns a JSON list.
 {{- end -}}
 {{- $auth := fromJson (include "chart.authSigningKey" .) -}}
 {{- if $auth.active -}}{{- $names = append $names $auth.name -}}{{- end -}}
+{{- $pepper := fromJson (include "chart.apiTokenHMACKey" .) -}}
+{{- if $pepper.active -}}{{- $names = append $names $pepper.name -}}{{- end -}}
+{{- with ((.Values.config.api_token | default dict).hmac_key_secret) -}}
+{{- if .name -}}{{- $names = append $names .name -}}{{- end -}}
+{{- end -}}
 {{- $oauth := ((.Values.config.auth | default dict).oauth | default dict) -}}
 {{- range $client := $oauth.seed_clients | default (list) -}}
 {{- with $client.client_secret_ref -}}

@@ -2630,6 +2630,32 @@
         }
       },
       "type": "object"
+    },
+    "apiToken": {
+      "additionalProperties": false,
+      "properties": {
+        "hmacKey": {
+          "additionalProperties": false,
+          "properties": {
+            "generate": {
+              "type": "boolean"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "generatedLength": {
+              "type": "integer",
+              "minimum": 32
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
   },
   "title": "values",
