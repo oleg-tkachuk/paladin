@@ -74,10 +74,12 @@ export const INGEST_URL =
   process.env.PALADIN_E2E_INGEST_URL ?? "http://localhost:8100";
 // The streamable-HTTP MCP endpoint, and the resource URL the MCP server is
 // configured as (mcp.oauth.resource_url). The resource is an identifier, not
-// an address: compose's stays the same when its port is overridden, and the
-// cluster's is reached through a port-forward.
-const COMPOSE_MCP_RESOURCE = "http://localhost:8095/mcp";
-export const MCP_URL = process.env.PALADIN_E2E_MCP_URL ?? COMPOSE_MCP_RESOURCE;
+// an address: an https one, as RFC 9728 requires, for a listener compose
+// serves over plain http; it stays the same when the port is overridden, and
+// the cluster's is reached through a port-forward.
+const COMPOSE_MCP_URL = "http://localhost:8095/mcp";
+const COMPOSE_MCP_RESOURCE = "https://localhost:8095/mcp";
+export const MCP_URL = process.env.PALADIN_E2E_MCP_URL ?? COMPOSE_MCP_URL;
 export const MCP_RESOURCE =
   process.env.PALADIN_E2E_MCP_RESOURCE ?? COMPOSE_MCP_RESOURCE;
 

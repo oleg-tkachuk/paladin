@@ -73,38 +73,28 @@ func TestRequireToken(t *testing.T) {
 	}
 }
 
-// TestWriteChallengeIncludesResourceMetadata is RequireToken's counterpart: the
-// OAuth-enabled path must still emit the discovery pointer, and must keep the
-// comma separator between parameters that RFC 9728 §5.1 requires.
+// TestWriteChallengeIncludesResourceMetadata is RequireToken's counterpart:
+// the OAuth-enabled path emits the discovery pointer (RFC 9728 §5.1) as
+// limes's exchange writes it — alone with no error, after the error's
+// parameters with one — and quotes every value as an RFC 9110 string.
 func TestWriteChallengeIncludesResourceMetadata(t *testing.T) {
 	t.Parallel()
-
-	t.Run("metadata only", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		writeChallenge(rec, "/.well-known/oauth-protected-resource", "", "")
-		want := `Bearer resource_metadata="/.well-known/oauth-protected-resource"`
-		if got := rec.Header().Get("WWW-Authenticate"); got != want {
-			t.Errorf("WWW-Authenticate = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("metadata and error", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		writeChallenge(rec, "/meta", "invalid_token", "expired")
-		got := rec.Header().Get("WWW-Authenticate")
-		want := `Bearer resource_metadata="/meta", error="invalid_token", error_description="expired"`
-		if got != want {
-			t.Errorf("WWW-Authenticate = %q, want %q", got, want)
-		}
-	})
-
-	t.Run("error without metadata omits the leading comma", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		writeChallenge(rec, "", "invalid_token", "expired")
-		got := rec.Header().Get("WWW-Authenticate")
-		want := `Bearer error="invalid_token", error_description="expired"`
-		if got != want {
-			t.Errorf("WWW-Authenticate = %q, want %q", got, want)
-		}
-	})
+	const meta = "https://paladin.example.com/.well-known/oauth-protected-resource/mcp"
+	for name, tc := range map[string]struct {
+		meta, code, desc, want string
+	}{
+		"metadata only":      {meta, "", "", `Bearer resource_metadata="` + meta + `"`},
+		"metadata and error": {meta, "invalid_token", "expired", `Bearer error="invalid_token", error_description="expired", resource_metadata="` + meta + `"`},
+		"error, no metadata": {"", "invalid_token", "expired", `Bearer error="invalid_token", error_description="expired"`},
+		"a quote is escaped": {"", "invalid_token", `the "mcp" audience`, `Bearer error="invalid_token", error_description="the \"mcp\" audience"`},
+		"neither":            {"", "", "", "Bearer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			writeChallenge(rec, tc.meta, tc.code, tc.desc)
+			if got := rec.Header().Get("WWW-Authenticate"); got != tc.want {
+				t.Errorf("WWW-Authenticate = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }

@@ -22,8 +22,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/exchange"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"go.uber.org/zap"
 
@@ -33,11 +36,6 @@ import (
 	apitoken "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
-
-// WellKnownProtectedResource is the RFC 9728 path the RS serves its
-// protected-resource metadata at, and the URL it points clients to from the
-// WWW-Authenticate challenge.
-const WellKnownProtectedResource = "/.well-known/oauth-protected-resource"
 
 // BearerToken extracts the caller's access token from a request, preferring
 // the standard `Authorization: Bearer <token>` header (what OAuth-aware MCP
@@ -59,34 +57,35 @@ func headerToken(h http.Header) string {
 // its token.
 const legacyTokenHeader = "X-Paladin-Token"
 
-// protectedResourceMetadata is the RFC 9728 document.
-type protectedResourceMetadata struct {
-	Resource               string   `json:"resource"`
-	AuthorizationServers   []string `json:"authorization_servers,omitempty"`
-	ScopesSupported        []string `json:"scopes_supported,omitempty"`
-	BearerMethodsSupported []string `json:"bearer_methods_supported"`
-}
-
 // ProtectedResourceMetadataHandler serves the RFC 9728 metadata that tells a
-// client which Authorization Server(s) issue tokens for this MCP resource.
-func ProtectedResourceMetadataHandler(cfg config.MCPOAuth) http.Handler {
-	doc := protectedResourceMetadata{
-		Resource:               cfg.ResourceURL,
-		AuthorizationServers:   cfg.AuthorizationServers,
-		ScopesSupported:        cfg.ScopesSupported,
-		BearerMethodsSupported: []string{"header"},
-	}
-	body, _ := json.MarshalIndent(doc, "", "  ")
-	return jsonDocHandler(body)
+// client which Authorization Server(s) issue tokens for this MCP resource:
+// limes's exchange.ResourceMetadata, which refuses a resource or an
+// authorization server that is not an https URL.
+func ProtectedResourceMetadataHandler(cfg config.MCPOAuth) (http.Handler, error) {
+	return exchange.NewResourceMetadataHandler(exchange.ResourceMetadata{
+		Resource:             cfg.ResourceURL,
+		AuthorizationServers: cfg.AuthorizationServers,
+		ScopesSupported:      cfg.ScopesSupported,
+	})
 }
 
-func jsonDocHandler(body []byte) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "public, max-age=300")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(body)
-	})
+// ProtectedResourceMetadataPaths are the paths the document is served at:
+// where RFC 9728 §3.1 puts it for resource — the well-known path, then the
+// resource's own — which the challenge points to, and the bare well-known
+// path, for a client that looks there.
+func ProtectedResourceMetadataPaths(resource string) ([]string, error) {
+	metadataURL, err := exchange.ResourceMetadataURL(resource)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(metadataURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Path == exchange.WellKnownProtectedResource {
+		return []string{u.Path}, nil
+	}
+	return []string{u.Path, exchange.WellKnownProtectedResource}, nil
 }
 
 // RequireBearer authenticates every request at the MCP edge and hands the
@@ -265,24 +264,7 @@ func writeChallenge(w http.ResponseWriter, resourceMetadataURL, errCode, errDesc
 // writeChallengeStatus is writeChallenge with another status: 403 for
 // insufficient_scope (RFC 6750 §3.1).
 func writeChallengeStatus(w http.ResponseWriter, status int, resourceMetadataURL, errCode, errDesc string) {
-	var b strings.Builder
-	b.WriteString("Bearer")
-	if resourceMetadataURL != "" {
-		b.WriteString(` resource_metadata="`)
-		b.WriteString(resourceMetadataURL)
-		b.WriteString(`"`)
-	}
-	if errCode != "" {
-		if resourceMetadataURL != "" {
-			b.WriteString(",")
-		}
-		b.WriteString(` error="`)
-		b.WriteString(errCode)
-		b.WriteString(`", error_description="`)
-		b.WriteString(errDesc)
-		b.WriteString(`"`)
-	}
-	w.Header().Set("WWW-Authenticate", b.String())
+	w.Header().Set("WWW-Authenticate", challenge(resourceMetadataURL, errCode, errDesc))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	payload := map[string]string{"error": "unauthorized"}
@@ -291,4 +273,31 @@ func writeChallengeStatus(w http.ResponseWriter, status int, resourceMetadataURL
 		payload["error_description"] = errDesc
 	}
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// challenge is the WWW-Authenticate value of a refusal: the Bearer scheme,
+// the error and its description when there is one (RFC 6750 §3), and the
+// metadata URL (RFC 9728 §5.1) as limes's exchange adds it. A bare "Bearer"
+// has neither.
+func challenge(resourceMetadataURL, errCode, errDesc string) string {
+	if errCode == "" {
+		if resourceMetadataURL == "" {
+			return bearerScheme
+		}
+		return exchange.ResourceChallenge(resourceMetadataURL, nil)
+	}
+	c := bearerScheme + " error=" + quotedString(errCode) + ", error_description=" + quotedString(errDesc)
+	if resourceMetadataURL == "" {
+		return c
+	}
+	return exchange.WithResourceMetadata(limes.ErrorResponse{Challenges: []string{c}}, resourceMetadataURL).Challenges[0]
+}
+
+// bearerScheme names the RFC 6750 scheme a challenge is under.
+const bearerScheme = "Bearer"
+
+// quotedString is s as an RFC 9110 quoted-string. limes quotes the values it
+// writes itself and exports no helper for the ones a caller adds.
+func quotedString(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }

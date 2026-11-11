@@ -245,11 +245,16 @@ mcp:
     # in this stack whatever the server was doing.
     sessions_url: "http://paladin-mcp:8095/sessions"
   # The MCP server is its own audience (ADR-0036): it accepts paladin-mcp
-  # tokens only and exchanges each as the seed client above. resource_url is
-  # the URL the e2e suite reaches it at.
+  # tokens only and exchanges each as the seed client above. resource_url and
+  # authorization_servers are identifiers, and https as RFC 9728 requires of
+  # them; the stack serves both over plain http on the same ports, as the
+  # cluster's pods do behind the ingress that terminates TLS. Nothing in the
+  # stack fetches them: the e2e suite reaches MCP at http://localhost:8095/mcp
+  # and names this resource in its token requests.
   oauth:
     enabled: true
-    resource_url: "http://localhost:8095/mcp"
+    resource_url: "https://localhost:8095/mcp"
+    authorization_servers: ["https://localhost:8085"]
     exchange:
       client_id: "paladin-mcp-server"
       client_secret: "compose-mcp-exchange-secret"
