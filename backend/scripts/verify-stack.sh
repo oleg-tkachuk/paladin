@@ -151,11 +151,13 @@ phase_dev_bootstrap() {
     # Minted by the shared auth task: the bash minter this called was removed
     # with the move to it, and this phase failed on the missing file from then.
     # The variables go on the command line because an include's own vars do not
-    # override ones the task declares, and command-line vars do.
+    # override ones the task declares, and command-line vars do. Through the
+    # backend's own Taskfile: an entry point runs it as a child process and
+    # hands on only a few variables, so these would fall back to defaults.
     local claims
     claims=$(jq -nc --arg t "$dev_tenant" \
         '{roles: ["platform.admin"], tenant: $t, tenant_slug: "ui-dev"}')
-    JWT=$(task -s -t "$root/Taskfile.dev.yaml" backend:auth:mint-token \
+    JWT=$(task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
         JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
         JWT_AUD=paladin-admin JWT_SUB=verify-deep JWT_CLAIMS="$claims")
     export JWT
@@ -181,12 +183,12 @@ phase_sdk() {
     local dev_tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b claims log
     claims=$(jq -nc --arg t "$dev_tenant" \
         '{roles: ["platform.admin"], tenant: $t, tenant_slug: "ui-dev"}')
-    JWT=$(task -s -t "$root/Taskfile.dev.yaml" backend:auth:mint-token \
+    JWT=$(task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
         JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
         JWT_AUD=paladin-admin JWT_SUB=verify-deep JWT_CLAIMS="$claims")
     TENANT_ID="$dev_tenant" PALADIN_HOST="$stack_data_url" PALADIN_ADMIN_HOST="$stack_admin_url" \
         BUCKET_ID=paladin-e2e JWT="$JWT" bash frontend/scripts/dev-bootstrap.sh >/dev/null
-    PALADIN_SDK_TOKEN=$(task -s -t "$root/Taskfile.dev.yaml" backend:auth:mint-token \
+    PALADIN_SDK_TOKEN=$(task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
         JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
         JWT_AUD=paladin-data JWT_SUB=verify-deep-sdk JWT_CLAIMS="$claims")
     export PALADIN_SDK_TOKEN

@@ -18,6 +18,10 @@
 #      line reach the chart push, spelled as release.yaml spells it.
 #   3. Every variable a workflow gives a component task on the command line is
 #      one `_component` hands on.
+#   4. The same for the repository's scripts: a script that needs another
+#      variable calls the component's own Taskfile, where its command line
+#      reaches the task. verify-stack.sh minted the SDK's data-plane token
+#      through Taskfile.dev.yaml, and its JWT_AUD fell back to the admin plane.
 #
 # The child is made a dry run by a stub `task` first on PATH, so nothing here
 # reaches a cluster or a registry.
@@ -38,6 +42,9 @@ readonly WORKFLOW_ENTRY=Taskfile.yaml
 readonly WORKFLOWS=.github/workflows
 # How a workflow names a component in a task: literally, or as its matrix's.
 readonly WORKFLOW_COMPONENT='(backend|frontend|\$\{COMPONENT\}):'
+# How a script starts a component task through an entry point: the entry
+# point named after -t, then the component's task.
+readonly SCRIPT_ENTRY_CALL='Taskfile(\.dev|\.local)?\.yaml"?[[:space:]]+(backend|frontend):'
 
 readonly PROBE_CONTEXT=forwarded-context-probe
 # The entry points' own declaration, which the copy rewrites.
@@ -142,6 +149,25 @@ if [ -n "$dropped" ]; then
     echo "FAIL a workflow gives a component task a variable $COMPONENT_TASK does not hand on: $(echo $dropped)" >&2
     failed=1
 fi
+
+# 4. What the repository's scripts give a component task through an entry
+# point, read as the workflows are.
+script_calls=$(git ls-files '*.sh' | while read -r script; do
+    awk '{ if (sub(/\\$/, "")) { held = held $0; next } print held $0; held = "" }' "$script" |
+        grep -E "(^|[[:space:];&|(])task[[:space:]].*$SCRIPT_ENTRY_CALL" |
+        sed -E "s/^/$(printf '%s' "$script" | sed 's/[\/&]/\\&/g'): /" || true
+done)
+while IFS= read -r call; do
+    [ -n "$call" ] || continue
+    script=${call%%: *}
+    names=$(sed -E "s/.*$SCRIPT_ENTRY_CALL//" <<<"$call" |
+        grep -oE '[[:space:]][A-Z][A-Z0-9_]*=' | grep -oE '[A-Z][A-Z0-9_]*' | sort -u || true)
+    lost=$(comm -23 <(printf '%s\n' "$names" | sed '/^$/d') <(printf '%s\n' "$forwarded"))
+    if [ -n "$lost" ]; then
+        echo "FAIL $script gives a component task, through an entry point, a variable $COMPONENT_TASK does not hand on: $(echo $lost)" >&2
+        failed=1
+    fi
+done <<<"$script_calls"
 
 if [ "$failed" -ne 0 ]; then
     echo "!!! a variable stops at the entry point: hand it on in $COMPONENT_TASK, in every entry point, and leave it undeclared in the components" >&2
