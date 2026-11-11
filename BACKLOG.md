@@ -259,28 +259,43 @@ the same commit. Treat this file like a runtime invariant.
   enough (rule of thumb: ~1M rows) that the on-the-fly aggregation is
   slower than the SLA.
 
-### Role split: `auth-server` (OAuth AS isolation)
+### Session keys held by IAM alone (ADR-0047)
 
-- **Status:** Aspirational
-- **Reason:** The OAuth 2.0 authorization-code flow has landed (ADR-0009,
-  in the iam plane), so the authorization server now has its own attack
-  surface (browser-facing /authorize, code storage, refresh
-  rotation, JWKS rotation, client registration). Isolating from the
-  iam plane lets you rotate signing keys without rolling api pods,
-  apply a tighter NetworkPolicy on the OAuth endpoints, and run
-  separate replicas for auth traffic vs request traffic.
-- **Definition of Done:**
-  - `serve auth-server` role hosting `/oauth/authorize`, `/oauth/token`,
-    `/oauth/register`, `/.well-known/oauth-authorization-server`, and
-    the JWKS of the OAuth token keys (the admin plane's
-    `/.well-known/jwks.json` serves capability keys and stays there).
-  - Independent JWKS rotation runbook.
-  - api / admin verify tokens against the auth-server's JWKS — the same
-    JWKS-verify path the planes already use.
-- **Trigger to do:** when OAuth becomes the primary auth path for at
-  least one customer. Until then, the OAuth endpoints stay in the
-  existing iam plane.
+- **Status:** In-Progress (ADR-0047 accepted 2026-11-11).
+- **Reason:** every role reads the HS256 session secret, so every verifier
+  can mint an operator session; the IAM endpoints share the `api` pods with
+  the data plane.
+- **Definition of Done**, one pull request per step, each deployable alone:
+  1. The API-token pepper is its own required secret, and only a role that
+     mints requires the session key (ADR-0047 decisions 5 and 6).
+  2. Sessions are ES256 with a `kid`, the IAM plane serves
+     `/.well-known/jwks.json`, verifiers outside the issuer use it, and the
+     private key is in a Secret only the issuing role reads; HS256 is
+     refused; `auth:mint-token`, the compose stack and the tests sign with
+     ES256 keys (decisions 1–4).
+  3. Every role's service account reads only its own Secrets (decision 8).
+  4. `serve iam` runs the IAM plane, the OAuth AS and the JWKS as its own
+     Deployment; `serve api` serves the data plane alone (decision 7).
+- **Checks that close it:** a token signed HS256, or HMAC'd with the public
+  key, is refused; a chart render shows only the issuer's Role naming the
+  private-key Secret; on the cluster,
+  `kubectl auth can-i get secret/<key> --as=system:serviceaccount:paladin:paladin-core-worker`
+  answers `no`, and so does it for every role but `iam`.
+- **Blockers:** steps 2–4 change chart values and Deployments, and
+  local-iac takes every chart release, so local-iac is prepared before each
+  of those merges.
 
+### Console session terminated in Go (ADR-0048)
+
+- **Status:** Blocked (ADR-0048 proposed 2026-11-11).
+- **Reason:** the console's Next.js server holds the refresh token, mints
+  per-plane access tokens, hands them to the browser, re-encodes every RPC
+  through a hand-registered bridge, and holds the health-snapshot token.
+- **Definition of Done:** a `serve console-edge` role holds the session
+  cookie and the tokens and forwards Connect calls as bytes; platform health
+  is an admin RPC; the console's auth routes, token store, JWT decoding and
+  RPC bridge are deleted.
+- **Blockers:** the owner's acceptance of ADR-0048; ADR-0047 step 4.
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays
@@ -334,8 +349,8 @@ the same commit. Treat this file like a runtime invariant.
   withdrawn *Phase 5b.1* above), so accepting tokens minted by an
   external IdP is **not needed now**. `auth.jwks_url` switches the planes
   (`internal/app/build_listeners_common.go`) and the MCP edge
-  (`cmd/server/serve_mcp.go`) to `auth.NewJWKSVerifier`, but nothing sets it:
-  every JWT today is HS256 minted by the IAM plane itself.
+  (`cmd/server/serve_mcp.go`) to `auth.NewJWKSVerifier`; ADR-0047 points it
+  at Paladin's own IAM, not at an external IdP.
 - **Reconsider only if:** a customer mandates SSO against their own IdP.
   The verifier reads the set and checks tokens through jwx, matching each
   token's `kid` against the active set; what remains is a rotation grace
