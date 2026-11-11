@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	connectrpc.com/otelconnect v0.12.0
-	github.com/oleg-tkachuk/paladin/sdk/go v0.145.0
+	github.com/oleg-tkachuk/paladin/sdk/go v0.145.4
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
