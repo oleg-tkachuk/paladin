@@ -212,6 +212,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// the database unreachable, is logged and answered as that, not as
 		// the server's own fault.
 		middleware.ClassifyTransient(pgerr.IsUnavailable),
+		// Ahead of every interceptor that reads a credential: a second
+		// Authorization header or DPoP proof is refused, not left to
+		// whichever reader takes the first.
+		auth.SingleCredentials(),
 		// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
 		// API-token interceptor below can authenticate them. Without this the
 		// JWT verifier rejects the bearer first with "jwt: malformed token" and

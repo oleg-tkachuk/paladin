@@ -311,6 +311,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// the database unreachable, is logged and answered as that, not as
 		// the server's own fault.
 		middleware.ClassifyTransient(pgerr.IsUnavailable),
+		// Ahead of every interceptor that reads a credential: a second
+		// Authorization header or DPoP proof is refused, not left to
+		// whichever reader takes the first.
+		auth.SingleCredentials(),
 		// Auth: a JWT (OIDC/issuer) OR an `paladin_pat_…` API key. The JWT gate verifies
 		// non-PAT bearers and lets a PAT through; apiTokData then verifies the PAT and
 		// establishes the principal. Both paths land a principal before RequireAudience.
@@ -380,6 +384,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// the database unreachable, is logged and answered as that, not as
 		// the server's own fault.
 		middleware.ClassifyTransient(pgerr.IsUnavailable),
+		// Ahead of every interceptor that reads a credential: a second
+		// Authorization header or DPoP proof is refused, not left to
+		// whichever reader takes the first.
+		auth.SingleCredentials(),
 		iamGate.Intercept,
 		apiTokIAM,
 		// A capability the MCP server exchanged acts for its user (ADR-0041);
