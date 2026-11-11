@@ -165,11 +165,11 @@ tasks:
             fi
             pins="$pins $found"
           done
-          if [ "$(printf '%s\n' $pins | sort -u | grep -c .)" -gt 1 ]; then
+          if [ "$(printf '%s\n' $pins | awk '/./ && !seen[$0]++ { n++ } END { print n + 0 }')" -gt 1 ]; then
             printf '%s\n' "{{._PNPM_ERR}} pnpm · the pins disagree:$pins" >&2
             rc=1
           fi
-          [ "$rc" = 0 ] && printf '%s\n' "{{._PNPM_OK}} pnpm · every pin at$(printf '%s\n' $pins | sort -u | head -1 | sed 's/^/ /')"
+          [ "$rc" = 0 ] && printf '%s\n' "{{._PNPM_OK}} pnpm · every pin at$(printf '%s\n' $pins | awk 'NR == 1 { print " " $0 }')"
           exit "$rc"
 
   _pin:to:
@@ -196,8 +196,8 @@ tasks:
               *) pins="$pins $found" ;;
             esac
           done
-          current=$(printf '%s\n' $pins | sort -u)
-          if [ "$(printf '%s\n' "$current" | grep -c .)" != "1" ]; then
+          current=$(printf '%s\n' $pins | awk '!seen[$0]++')
+          if [ "$(printf '%s\n' "$current" | awk '/./ { n++ } END { print n + 0 }')" != "1" ]; then
             printf '%s\n' "{{._PNPM_ERR}} pnpm · the pins disagree:$pins — reconcile with pnpm:pin:check" >&2
             exit 1
           fi
@@ -240,7 +240,7 @@ tasks:
               # matches nothing rewrites nothing and exits 0, and the line below
               # then reports a version the file does not carry - which is
               # exactly what a wrong escape in the gsub above once did.
-              left=$(awk {{._PNPM_READ_PINS | q}} "$f" | sort -u | grep -vx "$target" || true)
+              left=$(awk {{._PNPM_READ_PINS | q}} "$f" | sort -u | WANT="$target" awk '$0 != ENVIRON["WANT"]')
               if [ -n "$left" ]; then
                 printf '%s\n' "{{._PNPM_ERR}} pnpm · $f still pins $(printf '%s' $left) after the rewrite" >&2
                 exit 1

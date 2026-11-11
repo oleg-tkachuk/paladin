@@ -260,7 +260,8 @@ vars:
   _REL_SCAN: '{{.IMAGE_SCAN | default "0"}}'
   _REL_TRIVY_FLAGS: '{{.TRIVY_IMAGE_FLAGS | default ""}}'
   _REL_DIRTY:
-    sh: git status --porcelain 2>/dev/null | head -c1
+    sh: >-
+      git status --porcelain 2>/dev/null | awk 'NR == 1 { printf "%s", substr($0, 1, 1) }'
   _REL_NOW:
     sh: date +%s
   # Set when this tree is exactly a version tag: the one case git vouches for.
@@ -386,7 +387,7 @@ tasks:
             # `helm package` names the .tgz after Chart.yaml#name, and the push
             # looks for <CHART_NAME>-<version>.tgz. A mismatch is a push that
             # 404s on a file that was never written.
-            declared=$(sed -n 's/^name:[[:space:]]*//p' "$chart_dir/Chart.yaml" | head -1 | tr -d '"'"'"'"')
+            declared=$(awk '/^name:/ { sub(/^name:[[:space:]]*/, ""); gsub(/["\047]/, ""); print; exit }' "$chart_dir/Chart.yaml")
             if [ "$declared" != "$chart" ]; then
               bad "chart name mismatch: Chart.yaml says '$declared', this publishes as '$chart' — set CHART_NAME"
             else
@@ -465,7 +466,7 @@ tasks:
           lockdir={{.TASK_TEMP_DIR | default ".task" | q}}/remote
           root={{.ROOT_DIR | q}}
           case "$lockdir" in /*) at=$lockdir ;; *) at=$root/$lockdir ;; esac
-          lock=$(ls "$at"/*.checksum 2>/dev/null | head -1 || true)
+          lock=$(ls "$at"/*.checksum 2>/dev/null | awk 'NR == 1' || true)
           if [ -n "$lock" ] && git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
             if git -C "$root" check-ignore -q "$lock"; then
               say '{{._REL_WARN}}' "remote lock $lockdir is ignored by git — ignore .task/* rather than .task/, then add !$lockdir/ and commit it"
@@ -653,15 +654,16 @@ tasks:
     # wedged for hours before anyone found it. Seconds to check, hours to find.
     deps: [chart:render:_write]
     preconditions:
-      - sh: '! grep -qE -- {{._REL_GLUED_SEP | q}} {{._REL_RENDER | q}}'
+      - sh: >-
+          ! RE={{._REL_GLUED_SEP | q}} awk '$0 ~ ENVIRON["RE"] { found = 1 } END { exit !found }' {{._REL_RENDER | q}}
         msg: |-
           broken multi-doc YAML separator in the rendered chart.
           A `---` is glued to the end of the previous line, so kubectl and ArgoCD
           drop every resource after the first one.
           Fix: leave a literal blank line before `---` in the offending template
           and drop the trailing whitespace-strip on the line above it.
-          Offenders: grep -nE {{._REL_GLUED_SEP | q}} {{._REL_RENDER}}
-      - sh: test "$(grep -c '^kind:' {{._REL_RENDER | q}})" -ge {{._REL_MIN_RES | q}}
+          Offenders: awk '$0 ~ re { print FNR ": " $0 }' re={{._REL_GLUED_SEP | q}} {{._REL_RENDER}}
+      - sh: test "$(awk '/^kind:/ { n++ } END { print n + 0 }' {{._REL_RENDER | q}})" -ge {{._REL_MIN_RES | q}}
         msg: |-
           the chart rendered fewer than {{._REL_MIN_RES}} resources.
           That is the signature of documents being dropped by a separator bug
@@ -678,7 +680,7 @@ tasks:
           else
             printf '%s %s · chart · yq absent, YAML parse gate skipped\n' "{{._REL_WARN}}" {{._REL_SVC | q}}
           fi
-      - printf '%s %s · chart · renders %s resources cleanly\n' "{{._REL_OK}}" {{._REL_SVC | q}} "$(grep -c '^kind:' {{._REL_RENDER | q}})"
+      - printf '%s %s · chart · renders %s resources cleanly\n' "{{._REL_OK}}" {{._REL_SVC | q}} "$(awk '/^kind:/ { n++ } END { print n + 0 }' {{._REL_RENDER | q}})"
       - rm -f {{._REL_RENDER | q}}
 
   chart:render:_write:
