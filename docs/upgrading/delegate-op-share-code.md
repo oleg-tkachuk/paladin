@@ -1,4 +1,4 @@
-## Unreleased — a delegation without `share` carries limes's code
+## release/v0.2.0 — a delegation without `share` carries limes's code
 
 - `CapabilityService.Delegate` from a parent whose caveats lack `share` is
   still `PERMISSION_DENIED`. It now carries the limes code `op_not_allowed`

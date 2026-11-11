@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## Unreleased — the MCP edge's resource metadata comes from limes
+## release/v0.2.0 — the MCP edge's resource metadata comes from limes
 
 - With `mcp.oauth.enabled`, `mcp.oauth.resource_url` and every
   `mcp.oauth.authorization_servers` entry must be https URLs, and at least one
@@ -106,7 +106,7 @@ here.
 - In a challenge carrying an error, `resource_metadata` now comes after
   `error` and `error_description`. A quote in a description is escaped.
 
-## sdk/python/v0.145.4, sdk/go/v0.145.4 — the SDK fakes spend a request from its lease
+## release/v0.2.0, sdk/python/v0.145.4, sdk/go/v0.145.4 — the SDK fakes spend a request from its lease
 
 - Under `WithStrictAuth` / `strict_auth=True`, a request made under a
   capability's lease of requests, or under an ancestor's, is now spent from
@@ -121,7 +121,7 @@ here.
   So a lease's requests are also reserved against the chain's request
   ceilings, and a lease past them is refused, as on the server.
 
-## Unreleased — a delegation without `share` carries limes's code
+## release/v0.2.0 — a delegation without `share` carries limes's code
 
 - `CapabilityService.Delegate` from a parent whose caveats lack `share` is
   still `PERMISSION_DENIED`. It now carries the limes code `op_not_allowed`
@@ -129,21 +129,21 @@ here.
   makes do. The message is that problem's title, no longer
   "capability: caller lacks OpShare".
 
-## Unreleased — billing answers a failing ledger by its limes code
+## release/v0.2.0 — billing answers a failing ledger by its limes code
 
 - `BillingService` now answers `UNAVAILABLE`, worth a retry, when the charge
   ledger's store is down or timed out (`store_unavailable`, `store_timeout`),
   or returns a cursor it already returned. Before, all of these were
   `INTERNAL`.
 
-## Unreleased — a credential presented twice is refused
+## release/v0.2.0 — a credential presented twice is refused
 
 - The data, IAM and admin planes now answer `INVALID_ARGUMENT` to a call that
   carries more than one `Authorization` header or more than one `DPoP` proof
   (RFC 6750 §2, RFC 9449 §4.3, §7.2). Before, each reader took the first
   value. A client that sends one of each is unaffected.
 
-## Unreleased — a zero capability duration means what it says
+## release/v0.2.0 — a zero capability duration means what it says
 
 - `capability.verifier_leeway: 0s` now gives no clock skew on `nbf` and `exp`.
   Before, it gave limes's default of 30 seconds.
@@ -153,7 +153,7 @@ here.
   shipped configurations set both, so a deployment that keeps them is
   unaffected.
 
-## sdk/python/v0.145.2, sdk/go/v0.145.2 — limes v1.0.0-rc.64: striped tenant aggregates, store codes
+## release/v0.2.0, sdk/python/v0.145.2, sdk/go/v0.145.2 — limes v1.0.0-rc.64: striped tenant aggregates, store codes
 
 - limes migrations `042` and `043` run with the migration job: a table of
   stripes beside each tenant's budget, and revocations marked in one walk per
@@ -183,7 +183,7 @@ here.
   notes, actors, filters, ops and external refs. It failed as a server
   error before.
 
-## sdk/python/v0.145.1, sdk/go/v0.145.1 — the SDKs stop retrying a permanent refusal
+## release/v0.2.0, sdk/python/v0.145.1, sdk/go/v0.145.1 — the SDKs stop retrying a permanent refusal
 
 - Both SDKs' default retry no longer repeats a `ResourceExhausted` whose
   limes code the capability library holds permanent — `request_limit_exceeded`,
@@ -193,7 +193,7 @@ here.
   `Reason.Permanent` by the Go SDK's tests; the Python SDK exposes the same
   set as `paladin.errors.PERMANENT_LIMES_CODES`.
 
-## sdk/python/v0.145.1, sdk/go/v0.145.1 — capability refusals say the library's title, not its words
+## release/v0.2.0, sdk/python/v0.145.1, sdk/go/v0.145.1 — capability refusals say the library's title, not its words
 
 - A refusal from the capability library now carries the fixed title of its
   problem as its message, such as "The token does not allow this request",
@@ -214,7 +214,7 @@ here.
 - Both SDKs' fakes answer with the same titles and details, held to the
   server by `sdk/testdata/*.json`.
 
-## Unreleased — transient failures answered with their own codes
+## release/v0.2.0 — transient failures answered with their own codes
 
 - An RPC that fails because the database cannot be reached, or is shutting
   down or starting, now answers `UNAVAILABLE` with a generic message instead
@@ -235,7 +235,7 @@ here.
   (`store_unavailable`, `store_timeout`), which stay `UNAVAILABLE`; an
   uncoded error is the server's own fault and answers `INTERNAL`.
 
-## Unreleased — login and OAuth limits shared across replicas
+## release/v0.2.0 — login and OAuth limits shared across replicas
 
 - The login limits (`auth.login_rate_limit_per_subject_per_minute`,
   `auth.login_rate_limit_per_ip_per_minute`) and the `/oauth/token` limits
@@ -254,7 +254,7 @@ here.
   dispatcher and ingest no longer connect to Valkey, and the chart lets only
   api and admin out to it.
 
-## Unreleased — rate limits count off the request path
+## release/v0.2.0 — rate limits count off the request path
 
 - The tenant and token rate limits no longer write Postgres on every request
   ([ADR-0046](../adr/0046-rate-limits-off-the-request-path.md)). With the

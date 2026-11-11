@@ -1,4 +1,4 @@
-## Unreleased — login and OAuth limits shared across replicas
+## release/v0.2.0 — login and OAuth limits shared across replicas
 
 - The login limits (`auth.login_rate_limit_per_subject_per_minute`,
   `auth.login_rate_limit_per_ip_per_minute`) and the `/oauth/token` limits

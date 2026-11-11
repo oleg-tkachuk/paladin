@@ -1,4 +1,4 @@
-## sdk/python/v0.145.4, sdk/go/v0.145.4 — the SDK fakes spend a request from its lease
+## release/v0.2.0, sdk/python/v0.145.4, sdk/go/v0.145.4 — the SDK fakes spend a request from its lease
 
 - Under `WithStrictAuth` / `strict_auth=True`, a request made under a
   capability's lease of requests, or under an ancestor's, is now spent from

@@ -1,4 +1,4 @@
-## sdk/python/v0.145.1, sdk/go/v0.145.1 — capability refusals say the library's title, not its words
+## release/v0.2.0, sdk/python/v0.145.1, sdk/go/v0.145.1 — capability refusals say the library's title, not its words
 
 - A refusal from the capability library now carries the fixed title of its
   problem as its message, such as "The token does not allow this request",
